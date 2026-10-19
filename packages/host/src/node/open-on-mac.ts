@@ -11,11 +11,14 @@ import path from "node:path";
  * that fails, without checking anything out; fetches the branch; makes the
  * branch's worktree the first time, detached at its head, and after that
  * checks the head just fetched out over it, so a branch the agent
- * force-pushed or rebased opens as readily as one it pushed more to, while
+ * force-pushed or rebased opens as readily as one it pushed more to; a
+ * branch GitHub deleted once its pull request merged opens at that pull
+ * request's last head, which GitHub keeps; while
  * what Git ignores there, installed dependencies and build output among it,
  * is kept for the next run. A worktree with changes of the developer's own,
  * a tracked file edited or a file Git does not ignore added, is left as it
- * stands and said, rather than overwritten. The script runs the repository's
+ * stands and said, rather than overwritten. The first step that fails
+ * ends the bringing there, and is the only failure said. The script runs the repository's
  * run command in the worktree where this Mac has one for it and the branch
  * was brought in, and then opens a login shell there for the developer to
  * run what they like. The script deletes
@@ -44,16 +47,23 @@ function shellQuoted(word: string): string {
 }
 
 /**
- * Where a branch's worktree lives: under the state root, by repository, its
- * branch percent-encoded into one folder name, so no two branches share a
- * folder and none reaches outside it.
+ * A branch as one folder name: percent-encoded, so no two branches share a
+ * folder and none reaches outside it, with `+` in place of `%`, which no
+ * encoded name holds otherwise. A `%` in a folder breaks the `file://` URL
+ * Electron's `loadFile` makes of a path in it, which a build of Luke's own
+ * desktop loads its windows from.
  */
+function branchFolder(branch: string): string {
+  return encodeURIComponent(branch).replaceAll("%", "+");
+}
+
+/** Where a branch's worktree lives: under the state root, by repository, its branch one folder name. */
 export function worktreeFolder(stateRoot: string, repository: string, branch: string): string {
   return path.join(
     stateRoot,
     WORKTREES_FOLDER,
     ...repositoryFolders(repository),
-    encodeURIComponent(branch),
+    branchFolder(branch),
   );
 }
 
@@ -64,6 +74,8 @@ export function openOnMacScript(input: {
   readonly clone: string;
   readonly worktree: string;
   readonly branch: string;
+  /** The pull request from the branch, whose last head is opened where GitHub deleted the branch once it merged; none where it has none. */
+  readonly pullRequest?: number | null | undefined;
   /** The repository's run command on this Mac, run in the worktree before the shell opens; none where it has none. */
   readonly command?: string | null | undefined;
   /** Where the script writes its terminal's device, which Luke resizes it through; none where nothing resizes it. */
@@ -92,31 +104,47 @@ export function openOnMacScript(input: {
     `branch=${shellQuoted(input.branch)}`,
     `https=${shellQuoted(remotes.https)}`,
     `ssh=${shellQuoted(remotes.ssh)}`,
+    `legacy=${shellQuoted(path.join(path.dirname(input.worktree), encodeURIComponent(input.branch)))}`,
+    `pull=${input.pullRequest == null ? "''" : shellQuoted(String(Math.trunc(input.pullRequest)))}`,
+    // Note that every step returns on failure by hand: `set -e` is ignored in a function called from an `||` list, as this one is.
     "opened() {",
-    "  set -e",
     '  if [ ! -e "$clone/.git" ]; then',
     '    echo "▸ Cloning ${https%.git}"',
-    '    mkdir -p "$(dirname "$clone")"',
+    '    mkdir -p "$(dirname "$clone")" || return 1',
     '    rm -rf "$clone"',
     '    git clone --no-checkout --filter=blob:none "$https" "$clone" ||',
-    '      { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; }',
+    '      { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; } || return 1',
     "  fi",
-    '  cd "$clone"',
+    '  cd "$clone" || return 1',
     '  echo "▸ Fetching $branch"',
-    '  git fetch origin "$branch"',
+    '  if ! git fetch origin "$branch"; then',
+    // Note that GitHub deletes a pull request's branch once it merges, and keeps its last head under refs/pull for good.
+    '    [ -n "$pull" ] || return 1',
+    '    echo "▸ $branch is no longer on GitHub, as once its pull request merged; fetching the last head of pull request #$pull instead"',
+    '    git fetch origin "refs/pull/$pull/head" || return 1',
+    "  fi",
+    // Note that the head is read once, in the clone, as a commit every worktree of it shares, so the worktree fetches nothing of its own.
+    '  head="$(git rev-parse --verify --quiet "FETCH_HEAD^{commit}")" || return 1',
+    // Note that a worktree made under its earlier, percent-encoded folder is moved to its folder now, what it holds kept.
+    '  if [ "$legacy" != "$worktree" ] && [ ! -e "$worktree" ] && [ -e "$legacy/.git" ]; then',
+    '    echo "▸ Moving the worktree to $worktree"',
+    '    mkdir -p "$(dirname "$worktree")" || return 1',
+    '    git worktree move "$legacy" "$worktree" || return 1',
+    "  fi",
     '  if [ -e "$worktree/.git" ]; then',
-    '    cd "$worktree"',
-    // Note that a worktree keeps its own FETCH_HEAD, so it fetches the branch itself.
-    '    git fetch origin "$branch"',
-    '    if [ -n "$(git status --porcelain)" ]; then',
+    '    cd "$worktree" || return 1',
+    '    changes="$(git status --porcelain)" || return 1',
+    '    if [ -n "$changes" ]; then',
     '      echo "▸ The worktree has changes of its own; left as it stands rather than overwritten."',
     "      return 1",
     "    fi",
     // Note that a checkout of the fetched head takes the branch as it now stands, a force-push or a rebase among it; with nothing changed there it has nothing to overwrite, and it leaves ignored files alone.
-    "    git checkout --quiet --detach FETCH_HEAD",
+    '    git checkout --quiet --detach "$head" || return 1',
     "  else",
-    '    mkdir -p "$(dirname "$worktree")"',
-    '    git worktree add --detach "$worktree" FETCH_HEAD',
+    '    mkdir -p "$(dirname "$worktree")" || return 1',
+    // Note that a worktree folder deleted by hand is still registered, which would refuse it being made again.
+    "    git worktree prune",
+    '    git worktree add --detach "$worktree" "$head" || return 1',
     "  fi",
     "}",
     // Note that a failed step is said and the shell still opens, in the worktree where it stands and the clone or home where not.

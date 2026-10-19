@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
@@ -103,7 +103,7 @@ test(
     run(scratch, shell, script());
 
     assert.equal(clone, path.join(state, "clones", "octocat", "relay"));
-    assert.equal(worktree, path.join(state, "worktrees", "octocat", "relay", "luke%2Ffix-relay"));
+    assert.equal(worktree, path.join(state, "worktrees", "octocat", "relay", "luke+2Ffix-relay"));
     assert.equal(git(worktree, ["rev-parse", "HEAD"]), second);
     assert.equal(readFileSync(path.join(worktree, "README.md"), "utf8"), "second\n");
     assert.equal(readFileSync(path.join(worktree, "installed.txt"), "utf8"), "");
@@ -247,11 +247,112 @@ test(
   GIT_DEADLINE,
 );
 
-test("two branches never share a worktree, and none reaches outside the repository's folder", () => {
-  const folders = ["luke/a-b", "luke/a/b", "luke%2Fa-b"].map((branch) =>
+test(
+  "a branch GitHub deleted once its pull request merged opens at the pull request's last head",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const head = push("merged\n");
+    git(origin, ["update-ref", "refs/pull/3270/head", head]);
+    git(origin, ["checkout", "--quiet", "main"]);
+    git(origin, ["branch", "--quiet", "-D", "luke/fix-relay"]);
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+
+    const printed = run(
+      scratch,
+      shell,
+      openOnMacScript({
+        repository: "acme/app",
+        clone: cloneFolder(state, "acme/app"),
+        worktree,
+        branch: "luke/fix-relay",
+        pullRequest: 3270,
+        command: "touch ran",
+        remotes: { https: origin, ssh: origin },
+      }),
+    );
+
+    assert.match(printed, /fetching the last head of pull request #3270/u);
+    assert.doesNotMatch(printed, /Could not bring/u);
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), head);
+    assert.equal(existsSync(path.join(worktree, "ran")), true);
+    assert.equal(shellOpenedIn(scratch), worktree);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a worktree folder deleted by hand is made again",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+    const script = openOnMacScript({
+      repository: "acme/app",
+      clone: cloneFolder(state, "acme/app"),
+      worktree,
+      branch: "luke/fix-relay",
+      remotes: { https: origin, ssh: origin },
+    });
+    run(scratch, shell, script);
+    rmSync(worktree, { recursive: true, force: true });
+    const second = push("second\n");
+
+    const printed = run(scratch, shell, script);
+
+    assert.doesNotMatch(printed, /Could not bring/u);
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), second);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "a worktree made under its earlier, percent-encoded folder is moved to its folder now, what it holds kept",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const clone = cloneFolder(state, "acme/app");
+    const earlier = path.join(state, "worktrees", "acme", "app", "luke%2Ffix-relay");
+    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
+    const script = openOnMacScript({
+      repository: "acme/app",
+      clone,
+      worktree: earlier,
+      branch: "luke/fix-relay",
+      remotes: { https: origin, ssh: origin },
+    });
+    run(scratch, shell, script);
+    writeFileSync(path.join(clone, ".git", "info", "exclude"), "installed.txt\n");
+    writeFileSync(path.join(earlier, "installed.txt"), "");
+    const second = push("second\n");
+
+    run(
+      scratch,
+      shell,
+      openOnMacScript({
+        repository: "acme/app",
+        clone,
+        worktree,
+        branch: "luke/fix-relay",
+        remotes: { https: origin, ssh: origin },
+      }),
+    );
+
+    assert.equal(existsSync(earlier), false);
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), second);
+    assert.equal(readFileSync(path.join(worktree, "installed.txt"), "utf8"), "");
+    assert.equal(shellOpenedIn(scratch), worktree);
+  },
+  GIT_DEADLINE,
+);
+
+test("two branches never share a worktree, none reaches outside the repository's folder, and none holds a %", () => {
+  const folders = ["luke/a-b", "luke/a/b", "luke%2Fa-b", "luke+2Fa-b"].map((branch) =>
     worktreeFolder("/state", "acme/app", branch),
   );
 
   assert.equal(new Set(folders).size, folders.length);
-  for (const folder of folders) assert.equal(path.dirname(folder), "/state/worktrees/acme/app");
+  for (const folder of folders) {
+    assert.equal(path.dirname(folder), "/state/worktrees/acme/app");
+    assert.doesNotMatch(path.basename(folder), /%/u);
+  }
 });
