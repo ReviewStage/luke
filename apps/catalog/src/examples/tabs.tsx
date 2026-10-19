@@ -3,8 +3,10 @@ import {
   CheckIcon,
   CloseIcon,
   CodeIcon,
+  CountParts,
   DocumentIcon,
   GAP,
+  linesCount,
   Stack,
   TAB_COUNT_TONE,
   TABS_INSET,
@@ -42,12 +44,7 @@ function viewsCounting(checks: ReactNode): readonly TabItem<View>[] {
       value: VIEW.FILES,
       icon: <CodeIcon />,
       label: "Files changed",
-      count: (
-        <>
-          <TabCount tone={TAB_COUNT_TONE.COMPLETE}>+128</TabCount>{" "}
-          <TabCount tone={TAB_COUNT_TONE.DANGER}>−42</TabCount>
-        </>
-      ),
+      count: <CountParts parts={linesCount(128, 42)} />,
     },
   ];
 }

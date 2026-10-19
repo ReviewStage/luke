@@ -9,8 +9,9 @@ import { Segmented } from "./segmented.js";
 /**
  * segmented.test.ts -- a segmented control is a radio group: the chosen
  * option is the one Tab lands on, the arrows choose as they move and wrap at
- * either end, and a press on the chosen option takes it back only where the
- * control is clearable.
+ * either end, Home and End choose either end, a key held with a modifier or
+ * pressed in a disabled group does nothing, and a press on the chosen option
+ * takes it back only where the control is clearable.
  */
 
 declare global {
@@ -38,12 +39,19 @@ function render(element: ReactElement): HTMLElement {
 }
 
 /** An effort the caller holds, `clearable` as given. */
-function EffortControl({ clearable = false }: { clearable?: boolean }): React.JSX.Element {
+function EffortControl({
+  clearable = false,
+  disabled = false,
+}: {
+  clearable?: boolean;
+  disabled?: boolean;
+}): React.JSX.Element {
   const [effort, setEffort] = useState<Effort | undefined>("Medium");
   return createElement(Segmented<Effort>, {
     legend: "Effort",
     options: EFFORTS.map((value) => ({ value, label: value })),
     value: effort,
+    disabled,
     clearable,
     onChange: setEffort,
   });
@@ -70,10 +78,10 @@ function reading(page: HTMLElement): Reading {
   };
 }
 
-function pressKey(page: HTMLElement, key: string): void {
+function pressKey(page: HTMLElement, key: string, held: KeyboardEventInit = {}): void {
   const focused = document.activeElement ?? page;
   act(() => {
-    focused.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    focused.dispatchEvent(new KeyboardEvent("keydown", { ...held, key, bubbles: true }));
   });
 }
 
@@ -94,6 +102,61 @@ test("the arrows choose as they move and wrap at either end, taking the keyboard
   pressKey(page, "ArrowLeft");
   assert.deepEqual(reading(page).checked, ["Highest"]);
   assert.equal(document.activeElement?.textContent, "Highest");
+});
+
+test("↓ and ↑ choose as they move too, as in any radio group", () => {
+  const page = render(createElement(EffortControl));
+  act(() => radios(page)[1]?.focus());
+  pressKey(page, "ArrowDown");
+  assert.deepEqual(reading(page).checked, ["High"]);
+  pressKey(page, "ArrowUp");
+  pressKey(page, "ArrowUp");
+  assert.deepEqual(reading(page).checked, ["Low"]);
+  assert.equal(document.activeElement?.textContent, "Low");
+});
+
+test("Home and End choose either end, taking the keyboard along", () => {
+  const page = render(createElement(EffortControl));
+  act(() => radios(page)[1]?.focus());
+  pressKey(page, "End");
+  assert.deepEqual(reading(page), { checked: ["Highest"], tabStop: ["Highest"] });
+  assert.equal(document.activeElement?.textContent, "Highest");
+  pressKey(page, "Home");
+  assert.deepEqual(reading(page), { checked: ["Low"], tabStop: ["Low"] });
+  assert.equal(document.activeElement?.textContent, "Low");
+});
+
+test("a key held with a modifier chooses nothing", () => {
+  const page = render(createElement(EffortControl));
+  act(() => radios(page)[1]?.focus());
+  for (const held of [{ metaKey: true }, { altKey: true }, { ctrlKey: true }, { shiftKey: true }]) {
+    pressKey(page, "ArrowRight", held);
+    pressKey(page, "End", held);
+  }
+  assert.deepEqual(reading(page).checked, ["Medium"]);
+  assert.equal(document.activeElement?.textContent, "Medium");
+});
+
+test("a disabled group takes no key", () => {
+  const page = render(createElement(EffortControl, { disabled: true }));
+  for (const key of ["ArrowRight", "End"]) {
+    act(() => {
+      radios(page)[1]?.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    });
+  }
+  assert.deepEqual(reading(page).checked, ["Medium"]);
+});
+
+test("the arrows from an option a clearable press left unchosen step from that option", () => {
+  const page = render(createElement(EffortControl, { clearable: true }));
+  act(() => {
+    radios(page)[2]?.focus();
+    radios(page)[2]?.click();
+  });
+  act(() => radios(page)[2]?.click());
+  assert.deepEqual(reading(page).checked, []);
+  pressKey(page, "ArrowRight");
+  assert.deepEqual(reading(page).checked, ["Highest"]);
 });
 
 test("a press on the chosen option takes it back only where the control is clearable", () => {
