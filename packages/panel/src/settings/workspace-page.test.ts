@@ -310,10 +310,6 @@ function answer(request: Asked): Promise<Answered> {
       );
       return Promise.resolve(done(stored));
     }
-    case ACT_KIND.AUTOMATIONS_LIST:
-      if (automations === undefined)
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      return Promise.resolve(done({ automations: automations.map(automationOf) }));
     case ACT_KIND.TASKS_REPOSITORIES:
       if (repositoriesHeld !== undefined) {
         const held = repositoriesHeld;
@@ -408,7 +404,13 @@ beforeEach(() => {
   repositoriesHeld = undefined;
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({ act: (request) => answer(request) as Promise<ActOutcome> });
-  fakeActPort(workspacePort());
+  fakeActPort({
+    ...workspacePort(),
+    [ACT_KIND.AUTOMATIONS_LIST]: () =>
+      automations === undefined
+        ? Promise.reject(new Error("Not in this test."))
+        : Promise.resolve({ automations: automations.map(automationOf) }),
+  });
   handCapabilities(DESKTOP_CAPABILITIES);
 });
 

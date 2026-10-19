@@ -7,12 +7,12 @@ import {
   INTEGRATION_STATUS,
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import type { IntegrationStatuses } from "../integration-statuses.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { AgentServersButton } from "./agent-servers.js";
 
 /**
@@ -80,17 +80,11 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.INTEGRATIONS_TOOLS
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                tools: TOOLS.get(request.payload.connection ?? request.payload.provider) ?? [],
-              },
-            }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      ),
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
+  });
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_TOOLS]: (payload) =>
+      Promise.resolve({ tools: TOOLS.get(payload.connection ?? payload.provider) ?? [] }),
   });
 });
 

@@ -107,6 +107,7 @@ import {
   type ChatToolResult,
   chatDigest,
   chatRejected,
+  editAsAgent,
   postAsAgent,
   readAsAgent,
   resolveAsAgent,
@@ -515,7 +516,8 @@ export type ChatCall =
       readonly sandbox: InboxSandboxDoor;
     }
   | { readonly tool: typeof CHAT_TOOL.READ; readonly input: UnparsedWireValue }
-  | { readonly tool: typeof CHAT_TOOL.RESOLVE; readonly input: UnparsedWireValue };
+  | { readonly tool: typeof CHAT_TOOL.RESOLVE; readonly input: UnparsedWireValue }
+  | { readonly tool: typeof CHAT_TOOL.EDIT_CHANNEL; readonly input: UnparsedWireValue };
 
 /**
  * eve as a deployment that names no secret or no origin for it reaches it:
@@ -861,8 +863,6 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return planEditRejected(found.failure);
-        // An agent handed a prompt never saw the plan, so it has none to take notes on.
-        if (found.success.prompt !== null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
         const { id: agentId, taskId } = found.success;
         if (taskId === null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_TASK);
         // The plan is written as the member whose turn this is, whoever started the agent.
@@ -959,6 +959,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         if (yield* agentAway(admitted.target.userId, found.success)) {
           return chatRejected(CHAT_TOOL_REFUSAL.LEFT);
         }
+        if (call.tool === CHAT_TOOL.EDIT_CHANNEL) return yield* editAsAgent(reader, call.input);
         // A notice reaches the receiving agent's session as the deployment acting for that agent's
         // starter, whose principal its turn runs under, as the planning model's message to an
         // agent does: no bearer stands here.

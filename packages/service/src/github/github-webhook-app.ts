@@ -65,7 +65,7 @@ import { setInstallationStatus } from "./github-installations.js";
  * `installation_repositories` deliveries, a repository given or taken, are
  * answered and ignored, because no repository of an installation is held:
  * the chip lists them from GitHub each time it opens, and every start checks
- * its repository there (`github-repositories-app.ts`, `workspace-repository.ts`).
+ * its repository there (`github-procedures.ts`, `workspace-repository.ts`).
  *
  * A user revoking their authorization of the App, which GitHub also sends
  * without subscribing (`github_app_authorization`), drops that GitHub user's

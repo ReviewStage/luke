@@ -1,15 +1,7 @@
-import { auth } from "@luke/service/auth/auth";
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { resolveBrowserSessionUserId } from "@luke/service/auth/browser-session";
-import { githubConnectionApp } from "@luke/service/github/github-connection-app";
-import { githubUnlink } from "@luke/service/github/github-unlink";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
-/** Whether the bearer's account has connected its GitHub (GET). */
-export default routeFromHttpRouter(
-  githubConnectionApp({
-    resolveUserId: resolveHostedUserId,
-    resolveSessionUserId: resolveBrowserSessionUserId,
-    unlinkGitHub: githubUnlink(auth.api),
-  }),
-);
+/**
+ * Whether the bearer's account has connected its GitHub (GET), answered by the hosted oRPC router
+ * (`packages/service/src/github/github-procedures.ts`).
+ */
+export default orpcRoute;

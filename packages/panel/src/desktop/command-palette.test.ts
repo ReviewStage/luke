@@ -15,7 +15,7 @@ import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-w
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
@@ -617,13 +617,13 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
   } as const;
   const listed: (string | undefined)[] = [];
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
-      listed.push(request.payload.workspaceId);
-      const value = { automations: [automation] };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
+      listed.push(payload.workspaceId);
+      return Promise.resolve({ automations: [automation] });
     },
   });
   const tasks = tasksControl({

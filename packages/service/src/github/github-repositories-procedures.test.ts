@@ -11,11 +11,13 @@ import {
   openWorkspace,
 } from "@luke/database/testing";
 import {
+  accountBearer,
   GITHUB_REPOSITORIES_QUERY,
   githubRepositoriesAnswerSchema,
   githubRepositoryIssueAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
   HOSTED_SERVICE_PATH,
+  HostedTaskClient,
 } from "@luke/features";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
@@ -27,17 +29,21 @@ import {
 } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
-import { HttpRouter } from "effect/http";
+import { recordingHttpClient } from "@luke/wire/testing";
+import { Clock, type Context, Effect, Layer, Option, Result, type Schema } from "effect";
+import type { HttpClient } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
 import {
   type FakeGitHub,
   GITHUB_FIXTURE,
   githubReaching,
   openGithubUser,
 } from "../testing/github-app-fake.js";
-import { githubRepositoriesApp } from "./github-repositories-app.js";
+import type { GitHubApp } from "./github-app.js";
+import { githubProcedures } from "./github-procedures.js";
 
 /**
  * The repositories route over the real `GitHubApp`, a GitHub the test
@@ -145,30 +151,41 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** The group over the test's own database and the GitHub given, answering one request. */
-const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, request: Request) =>
+/** The route over the test's own database and the GitHub given: one request in, its response out. */
+const routeOver = (bearers: ReadonlyMap<string, string>, github: FakeGitHub) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
-    // The handler runs on the router's own fiber, so it is handed the test's clock: the account rows hang off it.
+    // The handler runs on oRPC's own fiber, so it is handed the test's clock: the account rows hang off it.
     const services = Layer.mergeAll(
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
     );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      githubRepositoriesApp({
+    const handled = yield* Effect.context<GitHubApp>().pipe(Effect.provide(services));
+    const handle = hostedFetch({
+      github: githubProcedures({
         resolveUserId: (incoming) =>
           Effect.succeed(
             Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
           ),
-      }).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    const response = yield* Effect.promise(() => handler(request));
-    // SAFETY: the group answers JSON; the test compares it as the wire value it is.
-    const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
-    yield* Effect.promise(() => dispose());
+        resolveSessionUserId: () => Effect.succeed(Option.none()),
+        unlinkGitHub: () => Effect.void,
+      }),
+    });
+    // SAFETY: the repositories procedures yield the database, the GitHub App, and its HTTP client alone, which is all a test provides of the web runtime's services.
+    const webServices = handled as Context.Context<WebServices>;
+    return (request: Request) => handle(request, webServices);
+  });
+
+/** The route over the test's own database and the GitHub given, answering one request. */
+const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, request: Request) =>
+  Effect.gen(function* () {
+    const route = yield* routeOver(bearers, github);
+    const response = yield* Effect.promise(() => route(request));
+    const text = yield* Effect.promise(() => response.text());
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
+    const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
 
@@ -209,7 +226,7 @@ const openAccounts = (github: FakeGitHub) =>
         new Request(url, { headers: { authorization: `Bearer ${userId}` } }),
       );
     };
-    return { owner, other, ask, read };
+    return { owner, other, bearers, ask, read };
   });
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
@@ -844,6 +861,135 @@ it.layer(getTestDB())("the repositories route", (it) => {
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
         assert.equal(github.sent.length, 0);
+      }),
+  );
+  it.effect(
+    "an unsigned caller is refused as unauthenticated before its query is read, and a refusal is the old group's bytes",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([]);
+        const { other, bearers } = yield* openAccounts(github);
+        const route = yield* routeOver(bearers, github);
+        const bytes = (url: string, headers: Record<string, string> = {}) =>
+          Effect.promise(async () => {
+            const response = await route(new Request(new URL(url, ORIGIN), { headers }));
+            return {
+              status: response.status,
+              contentType: response.headers.get("content-type"),
+              cacheControl: response.headers.get("cache-control"),
+              text: await response.text(),
+            };
+          });
+        const malformed = `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_TREE}?workspaceId=a&workspaceId=b&recursive=yes`;
+
+        assert.deepEqual(yield* bytes(malformed), {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          contentType: "application/json",
+          cacheControl: null,
+          text: '{"error":"invalid-token"}',
+        });
+        assert.deepEqual(yield* bytes(malformed, { authorization: `Bearer ${other}` }), {
+          status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+          contentType: "application/json",
+          cacheControl: null,
+          text: '{"error":"invalid-request"}',
+        });
+        assert.deepEqual(
+          yield* bytes(
+            `${HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_SKILLS}?workspaceId=elsewhere&repository=acme%2Frelay`,
+            { authorization: `Bearer ${other}` },
+          ),
+          {
+            status: HOSTED_HTTP_STATUS.NOT_FOUND,
+            contentType: "application/json",
+            cacheControl: null,
+            text: '{"error":"not-found"}',
+          },
+        );
+        assert.equal(github.sent.length, 0);
+      }),
+  );
+
+  it.effect(
+    "the desktop's client reads through the route: the listing, a folder, a repository out of reach as unreachable, and nothing from a workspace it is not in",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [{ id: 7901, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) =>
+            new URL(sent.url).pathname === "/repos/acme/relay/git/trees/main%3Asrc"
+              ? Response.json({ tree: [{ path: "invite.ts", type: "blob" }], truncated: false })
+              : undefined,
+        );
+        const { owner, other, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7901,
+          accountId: 9901,
+          accountLogin: "acme",
+        });
+        const route = yield* routeOver(bearers, github);
+        const service = recordingHttpClient((sent) => route(new Request(sent.url, sent.init)));
+        const desktopOf = (userId: string) =>
+          new HostedTaskClient({
+            serviceBaseUrl: ORIGIN,
+            credential: accountBearer({
+              readAccessToken: () => Effect.succeed(userId),
+              refreshAccount: () => Effect.void,
+              readAccountKey: () => Effect.succeed(userId),
+            }),
+          });
+        const desktop = desktopOf(owner);
+        const asked = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
+          Effect.provide(effect, service.layer);
+
+        const repositories = yield* asked(desktop.repositories(workspace));
+        const folder = yield* asked(
+          desktop.readRepositoryTree(
+            { workspaceId: workspace, repository: "acme/relay" },
+            { path: "src" },
+          ),
+        );
+        const unreached = yield* asked(
+          desktop.readRepositoryTree(
+            { workspaceId: workspace, repository: "acme/ledger" },
+            { path: "" },
+          ),
+        );
+        const stranger = yield* asked(
+          desktopOf(other).readRepositorySkills({
+            workspaceId: workspace,
+            repository: "acme/relay",
+          }),
+        );
+
+        assert.deepEqual(
+          repositories.ok
+            ? repositories.answer.repositories.map((listed) => listed.fullName)
+            : repositories,
+          ["acme/relay"],
+        );
+        assert.deepEqual(folder, {
+          folder: {
+            path: "src",
+            repository: "acme/relay",
+            branch: "main",
+            entries: [{ name: "invite.ts", kind: TASK_TREE_ENTRY.FILE }],
+            truncated: false,
+          },
+        });
+        assert.deepEqual(unreached, { refusal: TASK_FILE_REFUSAL.NOT_REACHABLE });
+        assert.equal(stranger, undefined);
+        assert.deepEqual(
+          service.requests.map((sent) => `${sent.method} ${sent.pathname}${sent.search}`),
+          [
+            `GET /api/github/repositories?workspaceId=${workspace}`,
+            `GET /api/github/repositories/tree?workspaceId=${workspace}&repository=acme%2Frelay&path=src`,
+            `GET /api/github/repositories/tree?workspaceId=${workspace}&repository=acme%2Fledger`,
+            `GET /api/github/repositories/skills?workspaceId=${workspace}&repository=acme%2Frelay`,
+          ],
+        );
       }),
   );
 });

@@ -31,17 +31,32 @@ export const NOTIFICATIONS_STATUS = {
 export type NotificationsStatus = (typeof NOTIFICATIONS_STATUS)[keyof typeof NOTIFICATIONS_STATUS];
 
 /**
+ * Who grants Luke's notifications where the panel stands: macOS for the Mac
+ * app, or the browser's permission for the site, which the page itself
+ * cannot open and the browser's own address bar changes.
+ */
+export const NOTIFICATIONS_GRANTOR = {
+  MACOS: "macos",
+  BROWSER: "browser",
+} as const;
+
+export type NotificationsGrantor =
+  (typeof NOTIFICATIONS_GRANTOR)[keyof typeof NOTIFICATIONS_GRANTOR];
+
+/**
  * Whether macOS shows Luke's notifications, the one place that grant can be
  * changed, and a notification posted now to find out.
  */
 export interface NotificationsControl {
   status: NotificationsStatus;
+  /** Who grants them, which decides the lines said of the grant and whether there is a settings page to open. */
+  grantor: NotificationsGrantor;
   /**
    * Whether this is the packaged app: a development build runs inside
    * Electron's own app, which is the name macOS lists its notifications under.
    */
   packaged: boolean;
-  /** Opens System Settings on its notifications. */
+  /** Opens System Settings on its notifications; offered only where macOS grants them. */
   onOpenSettings: () => void;
   /** Posts a notification right away, even while Luke's window is in front. */
   onTest: () => void;
