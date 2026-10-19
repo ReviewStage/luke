@@ -7,6 +7,15 @@
  * `actContract`, so the panel's act door calls a kind by its own name.
  */
 
+/** The account's asks: a sign-in begun, begun again, or cancelled, a sign-out, and the account deleted. */
+export const ACCOUNT_ACT_KIND = {
+  ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
+  ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
+  ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
+  ACCOUNT_SIGN_OUT: "account.signOut",
+  ACCOUNT_DELETE: "account.delete",
+} as const;
+
 /**
  * The account's own asks from Settings and a dictating box: its provider keys,
  * its plan template and that template's history, and a dictated clip's words.
@@ -93,6 +102,13 @@ export const ISSUE_ACT_KIND = {
   ISSUES_READ: "issues.read",
   ISSUES_CREATE: "issues.create",
   ISSUES_CHANGE: "issues.change",
+} as const;
+
+/** The settings writes: one setting, a page's settings reset, and one experiment turned on or off, each answering the settings as they then stand. */
+export const SETTINGS_ACT_KIND = {
+  SETTING_UPDATE: "setting.update",
+  SETTINGS_RESET: "settings.reset",
+  EXPERIMENT_SET: "experiment.set",
 } as const;
 
 /**
@@ -191,6 +207,7 @@ export const WORKSPACE_ACT_KIND = {
 
 /** Every kind the act port answers, one spread per domain, in alphabetical order. */
 export const PORT_ACT_KIND = {
+  ...ACCOUNT_ACT_KIND,
   ...ACCOUNT_ASK_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
@@ -198,6 +215,7 @@ export const PORT_ACT_KIND = {
   ...INTEGRATION_ACT_KIND,
   ...ISSUE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
+  ...SETTINGS_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...VOICE_RUNTIME_ACT_KIND,
   ...WORKSPACE_ACT_KIND,

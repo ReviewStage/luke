@@ -1,4 +1,3 @@
-import { ACCOUNT_PROVIDER, type AccountSnapshot } from "@luke/credentials/snapshot";
 import {
   type BrowserPage,
   browserAddressParamsSchema,
@@ -158,16 +157,7 @@ import {
 } from "@luke/features/tasks-view";
 import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
 import { formerMemberSchema, workspaceMemberSchema } from "@luke/features/workspace-wire";
-import {
-  APP_SETTING_SCHEMA,
-  type AppSettingField,
-  type AppSettingValue,
-  EXPERIMENT,
-  isAppSettingField,
-  SETTINGS_RESET_SCOPE,
-} from "@luke/settings";
 import type { UpdateSnapshot } from "@luke/settings/update";
-import type { SettingsUpdateResult } from "@luke/settings/wire";
 import type { MicrophoneRoute, MicrophoneStatus } from "@luke/voice/audio";
 import {
   EXCESS_KEYS,
@@ -203,15 +193,6 @@ import { PORT_ACT_KIND, type PortActKind } from "./contract/kinds.js";
  * vocabulary's.
  */
 export const ACT_KIND = {
-  ACCOUNT_BEGIN_SIGN_IN: "account.beginSignIn",
-  ACCOUNT_SIGN_IN_AGAIN: "account.signInAgain",
-  ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
-  ACCOUNT_SIGN_OUT: "account.signOut",
-  ACCOUNT_DELETE: "account.delete",
-  SETTING_UPDATE: "setting.update",
-  SETTINGS_RESET: "settings.reset",
-  /** One experiment turned on or off for the signed-in account, answering the settings as they then stand. */
-  EXPERIMENT_SET: "experiment.set",
   UPDATE_CHECK: "update.check",
   UPDATE_INSTALL: "update.install",
   UPDATE_OPEN_RELEASE: "update.openRelease",
@@ -617,38 +598,7 @@ const webAddress = EffectSchema.String.check(
 /** Whether `web.open` takes an address, so a link drawn as a press is one the act will open. */
 export const isWebAddress: (address: string) => boolean = EffectSchema.is(webAddress);
 
-/** A setting and a value already parsed for it, which is the pair its field types. */
-export type SettingUpdatePayload = {
-  [Field in AppSettingField]: {
-    field: Field;
-    value: AppSettingValue<Field>;
-  };
-}[AppSettingField];
-
-/**
- * The one payload whose value is parsed by the field beside it. The parsed
- * value is what the payload carries, so the router's row receives the value
- * its field's own schema admitted rather than the one that arrived — there is
- * no second guard to disagree with this one.
- */
-const settingUpdatePayload: ActSchema<SettingUpdatePayload> = {
-  read: (raw) => {
-    if (!isRecord(raw) || Object.keys(raw).some((key) => key !== "field" && key !== "value")) {
-      return malformed();
-    }
-    const value = raw;
-    const field = value.field;
-    if (!isWireString(field) || !isAppSettingField(field)) return malformed(["field"]);
-    const parsed = APP_SETTING_SCHEMA[field].guard(value.value);
-    if (!parsed.valid) return malformed(["value"]);
-    // SAFETY: the field's own schema guard admitted this value for this field.
-    return { ok: true, value: { field, value: parsed.value } as SettingUpdatePayload };
-  },
-};
-
 const answersNothing = wireResult<void>();
-const answersSettings = wireResult<SettingsUpdateResult>();
-const answersAccount = wireResult<AccountSnapshot>();
 
 /**
  * A press: a kind that carries nothing and answers nothing, which is what
@@ -682,51 +632,6 @@ const GITHUB_PAGE_PRESS = press("Could not open GitHub's connection page on this
  * row can draw rather than whatever message an exception happened to carry.
  */
 export const ACT = {
-  [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: {
-    payload: record({
-      provider: EffectSchema.Literals(Object.values(ACCOUNT_PROVIDER)),
-    }),
-    result: answersAccount,
-    refusal: "Could not start signing in on this system.",
-  },
-  [ACT_KIND.ACCOUNT_SIGN_IN_AGAIN]: {
-    payload: record({
-      provider: EffectSchema.Literals(Object.values(ACCOUNT_PROVIDER)),
-    }),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Sign-in didn't finish.",
-  },
-  [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: press("Could not cancel that sign-in on this system."),
-  [ACT_KIND.ACCOUNT_SIGN_OUT]: {
-    payload: noPayload,
-    result: answersAccount,
-    refusal: "Could not sign out on this system.",
-  },
-  [ACT_KIND.ACCOUNT_DELETE]: {
-    payload: noPayload,
-    result: answersAccount,
-    refusal: "Could not delete that account on this system.",
-  },
-  [ACT_KIND.SETTING_UPDATE]: {
-    payload: settingUpdatePayload,
-    result: answersSettings,
-    refusal: "Could not save that setting on this system.",
-  },
-  [ACT_KIND.SETTINGS_RESET]: {
-    payload: record({
-      scope: EffectSchema.Literals(Object.values(SETTINGS_RESET_SCOPE)),
-    }),
-    result: answersSettings,
-    refusal: "Could not reset those settings on this system.",
-  },
-  [ACT_KIND.EXPERIMENT_SET]: {
-    payload: record({
-      experiment: EffectSchema.Literals(Object.values(EXPERIMENT)),
-      on: EffectSchema.Boolean,
-    }),
-    result: answersSettings,
-    refusal: "Could not change that experiment on this system.",
-  },
   [ACT_KIND.UPDATE_CHECK]: {
     payload: noPayload,
     result: wireResult<UpdateSnapshot>(),

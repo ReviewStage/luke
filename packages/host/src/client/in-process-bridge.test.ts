@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { SETTING_SIDE_EFFECT } from "@luke/settings";
-import { appSettingsWire, settingsView } from "@luke/settings/testing";
-import type { AppSettings } from "@luke/settings/wire";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { Context, Effect, Option } from "effect";
+import { Context, Effect } from "effect";
 import { hostActRows } from "../act-router/host-act-rows.js";
 import {
   type ActRouter,
@@ -39,81 +35,45 @@ const REPORTER = "reporter-1";
 
 const AGENT_PLACE = { taskId: "task-1", agentId: "agent-1" };
 
-// SAFETY: the acts these tests send reach the settings rows' host alone, or
-// a refused row of the platform's, and building the rows reads none of these.
+// SAFETY: the acts these tests send reach a row of the platform's alone, and
+// building the host's rows reads none of these.
 const UNREACHED = {
-  account: {},
-  settings: {},
   tasks: {},
   codingAgents: {},
-  issues: {},
-} as unknown as HostActDependencies<symbol>;
+} as unknown as HostActDependencies;
 
-/** The settings the fake host holds, and every reporter a write reached it under. */
-interface SettingsHost {
-  readonly reporters: string[];
-  readonly settings: HostActDependencies<symbol>["settings"];
-}
-
-/** The settings rows' dependencies over a host that holds one document and accepts every write. */
-function settingsHost(reporterOf: (sender: symbol) => string): SettingsHost {
-  let held: AppSettings = appSettingsWire(settingsView());
-  const reporters: string[] = [];
-  const accepted = () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, settings: held });
-  return {
-    reporters,
-    settings: {
-      host: {
-        settingsSnapshot: () => Effect.sync(() => Option.some(held)),
-        updateSetting: (field, value, reporter) =>
-          Effect.sync(() => {
-            reporters.push(reporter);
-            held = { ...held, stored: { ...held.stored, [field]: value } };
-            return accepted();
-          }),
-        resetSettings: () => Effect.sync(accepted),
-        setExperiment: () => Effect.sync(accepted),
-      },
-      reporterOf,
-      lastSettings: () => held,
-      sideEffects: {
-        [SETTING_SIDE_EFFECT.NONE]: () => {},
-        [SETTING_SIDE_EFFECT.LOGIN_ITEM]: () => {},
-        [SETTING_SIDE_EFFECT.VOICE]: () => {},
-        [SETTING_SIDE_EFFECT.TALK_HOTKEY]: () => {},
-        [SETTING_SIDE_EFFECT.STOP_HOTKEY]: () => {},
-        [SETTING_SIDE_EFFECT.MEDIA_DUCK]: () => {},
-      },
-      stopChordHolder: () => undefined,
-    },
-  };
-}
-
-/** Every kind the host's rows leave, refused: the table of a shell that carries none of them. */
-function everyPlatformKindRefused(): PlatformActRows<symbol> {
+/**
+ * Every kind the host's rows leave, refused, but the copy, which records the
+ * reporter its window is named by: the table of a shell that carries one.
+ */
+function platformRows(
+  reporterOf: (sender: symbol) => string,
+  reporters: string[],
+): PlatformActRows<symbol> {
   const hosts = new Set<string>(Object.keys(hostActRows(UNREACHED)));
   const kinds: readonly ActKind[] = Object.values(ACT_KIND).filter(
     (kind): kind is ActKind => !hosts.has(kind) && !isPortActKind(kind),
   );
   // SAFETY: the kinds are exactly those the host's rows leave, each once.
-  return refusedRows(kinds) as unknown as PlatformActRows<symbol>;
+  const refused = refusedRows(kinds) as unknown as PlatformActRows<symbol>;
+  return {
+    ...refused,
+    [ACT_KIND.WINDOW_COPY_TEXT]: (_payload, { sender }) => {
+      reporters.push(reporterOf(sender));
+    },
+  };
 }
 
 /** A bridge over the real router and a fresh store, its acts run on the test's own services. */
 const bridgeFixture = Effect.gen(function* () {
   const services = yield* Effect.context<never>();
   const state = new AppStateStore(initialAppState(RUN, false, []), Context.empty());
-  let host: SettingsHost | undefined;
+  const reporters: string[] = [];
   const reported: string[] = [];
   const made = yield* createInProcessBridge({
     sender: Symbol("page"),
-    routerFor: (reporterOf): ActRouter<symbol> => {
-      host = settingsHost(reporterOf);
-      return createHostActRouter(
-        { ...UNREACHED, settings: host.settings },
-        everyPlatformKindRefused(),
-      );
-    },
+    routerFor: (reporterOf): ActRouter<symbol> =>
+      createHostActRouter(UNREACHED, platformRows(reporterOf, reporters)),
     run: (effect) => Effect.runPromiseWith(services)(effect),
     state,
     windowFacts: () => ({ fullScreen: false }),
@@ -121,20 +81,16 @@ const bridgeFixture = Effect.gen(function* () {
     reports: { notifyReady: () => {}, recordSurfaceEvent: () => {} },
     report: (message) => reported.push(message),
   });
-  assert.ok(host !== undefined);
   // The push's first reading is of the document as it stood, before anything subscribed.
   yield* Effect.yieldNow;
-  return { ...made, state, reporters: host.reporters, reported };
+  return { ...made, state, reporters, reported };
 });
 
-it.effect("an act round-trips through the host's rows, under the reporter the bridge minted", () =>
+it.effect("an act round-trips through the router, under the reporter the bridge minted", () =>
   Effect.gen(function* () {
     const { bridge, reporters } = yield* bridgeFixture;
     const outcome = yield* Effect.promise(() =>
-      bridge.act({
-        kind: ACT_KIND.SETTING_UPDATE,
-        payload: { field: "stopHotkey", value: "Control+Alt+S" },
-      }),
+      bridge.act({ kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: "copied" } }),
     );
     assert.ok(outcome.status === ACT_OUTCOME_STATUS.DONE);
     assert.deepEqual(reporters, [REPORTER]);

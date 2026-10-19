@@ -14,7 +14,6 @@ import {
   type PortActResult,
 } from "../contract/index.js";
 import {
-  type AccountAskProceduresDependencies,
   type ActPortDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
@@ -58,6 +57,12 @@ const ACTS = [
 
 type HostAsk = IssueProceduresDependencies["host"];
 
+// SAFETY: these tests call the issue procedures alone, and building the others reads none of these.
+const UNREACHED = { accountAsks: {}, account: {}, settings: {} } as unknown as Omit<
+  ActPortDependencies,
+  "issues"
+>;
+
 /** The params any one of the host's issue asks takes. */
 type IssueParams = Parameters<HostAsk[keyof HostAsk]>[0];
 
@@ -97,8 +102,6 @@ function windowPort(
     issueCreate: ask("create"),
     issueChange: ask("change"),
   } as HostAsk;
-  // SAFETY: no account ask is called here, so the account asks' host is never reached.
-  const accountAsks = { host: {} } as AccountAskProceduresDependencies;
   // SAFETY: these tests call the issue kinds alone, so no platform procedure is reached.
   const platform = {} as PlatformActProcedures<unknown>;
   // SAFETY: no automation, factory, or integration act is called here, so their hosts are never reached.
@@ -108,7 +111,7 @@ function windowPort(
     integrations: { host: {} },
   } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
   const handler = createActPortHandler(
-    { ...elsewhere, accountAsks, issues: { host }, workspaces: NO_WORKSPACES },
+    { ...UNREACHED, ...elsewhere, issues: { host }, workspaces: NO_WORKSPACES },
     platform,
   );
   const { port1, port2 } = new MessageChannel();

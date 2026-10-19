@@ -6,7 +6,13 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
-import { AUTOMATION_ACT_KIND, FACTORY_ACT_KIND, INTEGRATION_ACT_KIND } from "@luke/host/contract";
+import {
+  ACCOUNT_ACT_KIND,
+  AUTOMATION_ACT_KIND,
+  FACTORY_ACT_KIND,
+  INTEGRATION_ACT_KIND,
+  SETTINGS_ACT_KIND,
+} from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -787,9 +793,11 @@ let sentActs: string[] = [];
 
 /** The port kinds this window's fake refuses rather than answers with nothing. */
 const REFUSED_ON_PORT: readonly string[] = Object.values({
+  ...ACCOUNT_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
+  ...SETTINGS_ACT_KIND,
 });
 
 /**
@@ -811,7 +819,7 @@ async function handBridge(): Promise<void> {
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    // A read of the account's automations, integrations, or a Factory world is refused, as `app:act` refused it before it moved onto the port.
+    // A read of the account's automations, integrations, or a Factory world, and an account or settings act, is refused, as `app:act` refused it before it moved onto the port.
     if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });

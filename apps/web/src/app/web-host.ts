@@ -23,7 +23,11 @@
 
 import { feedbackDelivery } from "@luke/features/feedback";
 import { highlightSnippet, runModeFor } from "@luke/host";
-import { createActPortHandler, refusedPlatformProcedures } from "@luke/host/act-port";
+import {
+  type ActPortDependencies,
+  createActPortHandler,
+  refusedPlatformProcedures,
+} from "@luke/host/act-port";
 import {
   createHostActRouter,
   type HostActDependencies,
@@ -261,32 +265,11 @@ function platformRows(
 function hostRowDependencies(
   operator: OperatorClient,
   state: AppStateStore,
-  notices: HostActDependencies<WebSender>["codingAgents"]["notices"],
-  reporterOf: (sender: WebSender) => string,
-): HostActDependencies<WebSender> {
+  notices: HostActDependencies["codingAgents"]["notices"],
+): HostActDependencies {
   const host = operator.host;
   const nothing = () => undefined;
   return {
-    account: {
-      host,
-      haltSessionReplay: operator.haltSessionReplay,
-      resumeSessionReplay: operator.resumeSessionReplay,
-    },
-    settings: {
-      host,
-      reporterOf,
-      lastSettings: () => operator.settings(),
-      sideEffects: {
-        [SETTING_SIDE_EFFECT.NONE]: nothing,
-        [SETTING_SIDE_EFFECT.LOGIN_ITEM]: nothing,
-        [SETTING_SIDE_EFFECT.VOICE]: nothing,
-        [SETTING_SIDE_EFFECT.TALK_HOTKEY]: nothing,
-        [SETTING_SIDE_EFFECT.STOP_HOTKEY]: nothing,
-        [SETTING_SIDE_EFFECT.MEDIA_DUCK]: nothing,
-      },
-      // A tab claims no global key, so no chord is ever held.
-      stopChordHolder: () => undefined,
-    },
     tasks: {
       host,
       openExternal: async (url) => openTab(url),
@@ -302,6 +285,44 @@ function hostRowDependencies(
 }
 
 /**
+ * The act port's procedures' dependencies, answered for a tab: no keys, so
+ * no chord is ever held and no setting has a side effect of the tab's, and
+ * the tab itself the one window a settings write is reported under.
+ */
+function portDependencies(operator: OperatorClient, reporter: string): ActPortDependencies {
+  const host = operator.host;
+  const nothing = () => undefined;
+  return {
+    account: {
+      host,
+      haltSessionReplay: operator.haltSessionReplay,
+      resumeSessionReplay: operator.resumeSessionReplay,
+    },
+    accountAsks: { host },
+    automations: { host },
+    factory: { host },
+    integrations: { host },
+    issues: { host },
+    settings: {
+      host,
+      reporterOf: (actor) => (actor.sender === window ? reporter : undefined),
+      lastSettings: () => operator.settings(),
+      sideEffects: {
+        [SETTING_SIDE_EFFECT.NONE]: nothing,
+        [SETTING_SIDE_EFFECT.LOGIN_ITEM]: nothing,
+        [SETTING_SIDE_EFFECT.VOICE]: nothing,
+        [SETTING_SIDE_EFFECT.TALK_HOTKEY]: nothing,
+        [SETTING_SIDE_EFFECT.STOP_HOTKEY]: nothing,
+        [SETTING_SIDE_EFFECT.MEDIA_DUCK]: nothing,
+      },
+      // A tab claims no global key, so no chord is ever held.
+      stopChordHolder: () => undefined,
+    },
+    workspaces: { host, openExternal: async (url) => openTab(url) },
+  };
+}
+
+/**
  * The act port as the tab opens it: a channel in the page, the host's end
  * upgraded with the act port's handler and the panel's end answered, as the
  * desktop's window root and main open one across a process. The panel is
@@ -309,28 +330,21 @@ function hostRowDependencies(
  * panel's and trusted; the procedures' effects run on the tab's runtime.
  * Both ends close with the host's scope.
  */
-const servedActPort = (operator: OperatorClient, services: Context.Context<never>) =>
+const servedActPort = (dependencies: ActPortDependencies, services: Context.Context<never>) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const channel = new MessageChannel();
       // Every platform kind on the port is refused, since a tab carries none of them yet.
-      createActPortHandler(
+      createActPortHandler(dependencies, refusedPlatformProcedures<WebSender>()).upgrade(
+        channel.port2,
         {
-          accountAsks: { host: operator.host },
-          automations: { host: operator.host },
-          factory: { host: operator.host },
-          integrations: { host: operator.host },
-          issues: { host: operator.host },
-          workspaces: { host: operator.host, openExternal: async (url) => openTab(url) },
+          context: () => ({
+            actor: { sender: window, panel: true, voice: false, call: false },
+            trusted: true,
+            "effect/context": services,
+          }),
         },
-        refusedPlatformProcedures<WebSender>(),
-      ).upgrade(channel.port2, {
-        context: () => ({
-          actor: { sender: window, panel: true, voice: false, call: false },
-          trusted: true,
-          "effect/context": services,
-        }),
-      });
+      );
       channel.port2.start();
       return channel;
     }),
@@ -405,9 +419,9 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       };
       const made = yield* createInProcessBridge<WebSender>({
         sender: window,
-        routerFor: (reporterOf) =>
+        routerFor: () =>
           createHostActRouter(
-            hostRowDependencies(operator, state, notices, reporterOf),
+            hostRowDependencies(operator, state, notices),
             platformRows(http, doors),
           ),
         run,
@@ -418,7 +432,10 @@ const composedWeb = (run: WebHostOptions["run"]) =>
         report,
       });
       events = made.events;
-      const actPort = yield* servedActPort(operator, services);
+      const actPort = yield* servedActPort(
+        portDependencies(operator, crypto.randomUUID()),
+        services,
+      );
       return {
         bridge: made.bridge,
         actPort,
