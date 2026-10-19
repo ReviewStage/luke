@@ -55,7 +55,12 @@ let answer = PINK;
 
 const STAND_IN: DiffViewModule = {
   mount: () => ({ update: () => undefined, unmount: () => undefined }),
-  mountList: () => ({ update: () => 0, reveal: () => 0, unmount: () => undefined }),
+  mountList: () => ({
+    update: () => 0,
+    reveal: () => 0,
+    revealLine: () => 0,
+    unmount: () => undefined,
+  }),
   colourLines: (request) => {
     if (!holding) return Promise.resolve(answer(request));
     const { promise, resolve } = Promise.withResolvers<ColouredLines | undefined>();

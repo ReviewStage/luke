@@ -59,6 +59,7 @@ const TITLE = {
   [LINK_PLACE.AGENT]: "Open this agent in Luke",
   [LINK_PLACE.WORKER]: "Open this worker in Luke",
   [LINK_PLACE.CHANGES]: "Open these changes in Luke",
+  [LINK_PLACE.PULL_REQUEST_THREAD]: "Open this review comment in Luke",
   [LINK_PLACE.MESSAGE]: "Open this message in Luke",
   [LINK_PLACE.INBOX]: "Open the Inbox in Luke",
   [LINK_PLACE.INBOX_ITEM]: "Open this Inbox item in Luke",

@@ -440,6 +440,14 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   };
 }
 
+/** How many lines stand above a line a list is scrolled to, under its file's header, so the lines leading to it are read with it. */
+const REVEAL_LINES_ABOVE = 3;
+
+/** How tall one line of a list stands in a look, in pixels, as Pierre is told to lay it out. */
+function lineHeightOf(look: DiffLook): number {
+  return Number(look.fontSize) * Number(LINE_HEIGHT_RATIO[look.lineHeight]);
+}
+
 /** A note's place as Pierre takes it, its key carried as the note's own. */
 function annotationsOf(notes: readonly DiffAnnotation[]): DiffLineAnnotation<string>[] {
   return notes.map((note) => ({ side: note.side, lineNumber: note.line, metadata: note.key }));
@@ -564,7 +572,7 @@ function listOptions(
     hunkSeparators: "line-info-basic",
     stickyHeaders: true,
     itemMetrics: {
-      lineHeight: Number(drawn.fontSize) * Number(LINE_HEIGHT_RATIO[drawn.lineHeight]),
+      lineHeight: lineHeightOf(drawn),
       diffHeaderHeight: LIST_HEADER_HEIGHT,
       hunkSeparatorHeight: LIST_GAP_HEIGHT,
     },
@@ -778,6 +786,17 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     },
     reveal: (path) =>
       view.scrollTo({ type: "item", id: path, align: "start", behavior: "smooth-auto" }),
+    // Note that Pierre resolves the line against its layout again on every frame until the scroll settles, so files measured on the way do not leave it short.
+    revealLine: (path, side, line) =>
+      view.scrollTo({
+        type: "line",
+        id: path,
+        lineNumber: line,
+        side,
+        align: "start",
+        offset: lineHeightOf(latest.look) * REVEAL_LINES_ABOVE,
+        behavior: "smooth-auto",
+      }),
     unmount: () => {
       stopWatching();
       unsubscribe();
