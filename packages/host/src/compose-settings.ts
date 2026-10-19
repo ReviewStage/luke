@@ -31,7 +31,7 @@ import {
 } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, isWireBoolean, type UnparsedWireValue } from "@luke/wire";
-import { Cause, Effect, Queue, type Scope } from "effect";
+import { Cause, Effect, Option, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -61,6 +61,14 @@ const EXPERIMENT_SIGNED_OUT = "Sign in to turn on an experiment.";
 interface SettingsLinks {
   /** What authorizes the counted events and the account preferences on the signed-in account. */
   readonly credential: CallCredential;
+  /**
+   * Who the signed-in account is, as the account's session names it: the
+   * key its synced preferences and experiments are kept under, and nothing
+   * while no account is signed in.
+   */
+  readonly readAccountKey: () => Effect.Effect<string | undefined>;
+  /** Settles on the account the service names now, before a write keyed on the account. */
+  readonly confirmAccount: () => Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
   /** The standing live session ended once the voice moved, since a session keeps the voice it was created with. */
   readonly endLiveSession: Effect.Effect<void>;
@@ -134,6 +142,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       credentialsUsable: runMode.observesProviders,
       // The account source's own: a source that keeps no tokens here hands none.
       cipher: tokenCipher,
+      // Note that the link is peeked, because a read before the merge links the account must read no one rather than wait.
+      sessionAccountEmail: () =>
+        Effect.flatMap(late.peek, (links) =>
+          Option.isSome(links) ? links.value.readAccountKey() : Effect.succeed(undefined),
+        ),
       overrides,
       fileSystem,
       path,
@@ -183,7 +196,12 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
      * answer read before a write would otherwise put back the switch the
      * developer just moved.
      */
-    const experiments = experimentWriter({ client: accountPreferencesClient, store });
+    const experiments = experimentWriter({
+      client: accountPreferencesClient,
+      store,
+      readAccountKey: () => readAccountPreferenceAccountKey(),
+      confirmAccount: () => confirmAccount(),
+    });
 
     /**
      * One account-preferences action and the name its failure is reported
@@ -226,8 +244,12 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       Effect.forever,
     );
 
-    const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined, PlatformError> =>
-      Effect.map(store.readAccount(), (account) => account?.email);
+    // Note that the key is the session's, because a cookie session keeps no account in the settings file.
+    const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined> =>
+      linked((links) => links.readAccountKey());
+
+    // Note that a write keyed on the account first settles on the one the service names, because another tab may have signed in as someone else.
+    const confirmAccount = (): Effect.Effect<void> => linked((links) => links.confirmAccount());
 
     function accountPreferencesEmpty(preferences: AccountPreferences): boolean {
       return Object.keys(preferences).length === 0;
@@ -240,6 +262,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const accountPreferenceHydrationBaseline = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountEmail: string,
     ): Effect.fn.Return<AccountPreferences, PlatformError> {
+      // Note that we settle again, because an arrival whose settling failed must not hand this account another's choices.
+      yield* store.settleSessionAccount(accountEmail);
       const baseline = yield* store.accountPreferencesSyncBaseline(accountEmail);
       if (baseline !== undefined) return baseline;
       const preferences = yield* store.accountPreferences();
@@ -273,6 +297,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const hydrateAccountPreferences = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountKey: string,
     ): Effect.fn.Return<boolean, PlatformError> {
+      yield* confirmAccount();
+      if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
       const baseline = yield* accountPreferenceHydrationBaseline(accountKey);
       if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
       const writesBefore = experiments.writesSent();
@@ -331,6 +357,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           ) {
             return;
           }
+          yield* confirmAccount();
           const preferences = yield* store.accountPreferences();
           if (
             (yield* readAccountPreferenceAccountKey()) !== accountKey ||
@@ -458,9 +485,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           if (!isExperiment(named)) return yield* invalid("experiment must name one");
           if (!isWireBoolean(on)) return yield* invalid("on must be true or false");
           const experiment: Experiment = named;
-          const accountKey = yield* readAccountPreferenceAccountKey().pipe(
-            Effect.orElseSucceed(() => undefined),
-          );
+          const accountKey = yield* readAccountPreferenceAccountKey();
           if (!accountKey) return carried(yield* refusedSettings(EXPERIMENT_SIGNED_OUT));
           const result = yield* settingsWrite(
             () => experiments.write(accountKey, experiment, on),

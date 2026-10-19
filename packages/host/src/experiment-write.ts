@@ -41,8 +41,12 @@ export interface ExperimentWriter {
 export function experimentWriter(input: {
   readonly client: Pick<AccountPreferencesClient, "writeExperiments">;
   readonly store: SettingsStore;
+  /** Who is signed in now, as the account's session names them; nothing while no one is. */
+  readonly readAccountKey: () => Effect.Effect<string | undefined>;
+  /** Settles on the account the service names now, before the write keyed on it is sent. */
+  readonly confirmAccount: () => Effect.Effect<void>;
 }): ExperimentWriter {
-  const { client, store } = input;
+  const { client, store, readAccountKey, confirmAccount } = input;
   const turns = Semaphore.makeUnsafe(1);
   let sent = 0;
   const refused = (reason: string) =>
@@ -56,13 +60,19 @@ export function experimentWriter(input: {
     write: (accountEmail, experiment, on) =>
       turns.withPermits(1)(
         Effect.gen(function* () {
+          // A switch pressed for an account the service no longer names is sent for no one.
+          yield* confirmAccount();
+          if ((yield* readAccountKey()) !== accountEmail) {
+            return yield* refused(EXPERIMENT_ACCOUNT_CHANGED);
+          }
           sent += 1;
           const answer = yield* client.writeExperiments({ [experiment]: on });
           if (!answer) return yield* refused(EXPERIMENT_UNANSWERED);
           yield* store.cacheExperiments(accountEmail, answer.experiments);
           // An answer for an account that has since signed out moved no switch this window draws.
-          const account = yield* store.readAccount();
-          if (account?.email !== accountEmail) return yield* refused(EXPERIMENT_ACCOUNT_CHANGED);
+          if ((yield* readAccountKey()) !== accountEmail) {
+            return yield* refused(EXPERIMENT_ACCOUNT_CHANGED);
+          }
           return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* store.snapshot() };
         }),
       ),

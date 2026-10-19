@@ -106,6 +106,13 @@ export interface SettingsStoreOptions {
    */
   credentialsUsable?: boolean;
   /**
+   * Who is signed in, for a store handed no cipher, which keeps no account of
+   * its own (a browser's cookie session): the address the account's
+   * experiments and synced preferences are kept under. A store that keeps
+   * the account reads it off its own record and never asks this.
+   */
+  sessionAccountEmail?: () => Effect.Effect<string | undefined>;
+  /**
    * The file system `#readPersisted` and `#write` below reach the settings
    * file through, resolved once by the composer from the host's own assembly
    * rather than by a layer this class stands up for itself. It is the service
@@ -456,26 +463,40 @@ const decodeAccountTokens = Schema.decodeUnknownResult(Schema.fromJsonString(Acc
  * not a key holding `undefined` but no key at all, and a sync baseline and
  * the experiments are kept only for the account signed in, since one left by
  * another account would let that account's edits stand in for this one's.
+ * A store that keeps no account of its own (a browser's cookie session)
+ * keeps both as they are, each naming the account it is for, and reads one
+ * only for the account its session names.
  */
-function settledPersistedSettings(persisted: PersistedSettings): PersistedSettings {
+function settledPersistedSettings(
+  persisted: PersistedSettings,
+  keepsOwnAccount = true,
+): PersistedSettings {
   const { account, accountPreferencesSync, experiments, ...settings } = persisted;
+  const keptFor = (section: { readonly accountEmail: string } | undefined) =>
+    section !== undefined && (!keepsOwnAccount || section.accountEmail === account?.email);
   return {
     ...settings,
     ...(account ? { account } : undefined),
-    ...(account && accountPreferencesSync?.accountEmail === account.email
-      ? { accountPreferencesSync }
-      : undefined),
-    ...(account && experiments?.accountEmail === account.email ? { experiments } : undefined),
+    ...(keptFor(accountPreferencesSync) ? { accountPreferencesSync } : undefined),
+    ...(keptFor(experiments) ? { experiments } : undefined),
   };
 }
 
-/** The signed-in account's experiments as last cached, or none. */
-function experimentsOf(persisted: PersistedSettings): ExperimentChoices {
-  const { account, experiments } = persisted;
-  return account && experiments?.accountEmail === account.email
+/** The signed-in account's experiments as last cached, and none for anyone else or for no one. */
+function experimentsOf(
+  persisted: PersistedSettings,
+  accountEmail: string | undefined,
+): ExperimentChoices {
+  const { experiments } = persisted;
+  return accountEmail !== undefined && experiments?.accountEmail === accountEmail
     ? experiments.choices
     : NO_EXPERIMENTS;
 }
+
+/** Who a settings record is kept for, read off the record itself or named apart from it. */
+type AccountEmailOf = (persisted: PersistedSettings) => string | undefined;
+
+const STORED_ACCOUNT_EMAIL: AccountEmailOf = (persisted) => persisted.account?.email;
 
 const DECLARED_SETTINGS_FIELDS: ReadonlySet<string> = new Set(
   Object.keys(PersistedSettingsSchema.fields),
@@ -535,9 +556,10 @@ function refusalReason(source: string, error: Schema.SchemaError): string {
  */
 function parsePersistedSettingsEither(
   source: string,
+  keepsOwnAccount: boolean,
 ): Result.Result<PersistedSettings, SettingsParseRefusal> {
   return decodePersistedSettingsFile(source).pipe(
-    Result.map(settledPersistedSettings),
+    Result.map((persisted) => settledPersistedSettings(persisted, keepsOwnAccount)),
     Result.mapError((error) => new SettingsParseRefusal({ reason: refusalReason(source, error) })),
   );
 }
@@ -552,6 +574,7 @@ export class SettingsStore {
   readonly #cipher: SecretCipher | undefined;
   readonly #overrides: SettingsEnvironmentOverrides;
   readonly #credentialsUsable: boolean;
+  readonly #sessionAccountEmail: (() => Effect.Effect<string | undefined>) | undefined;
   readonly #fileSystem: FileSystem.FileSystem;
   readonly #path: Path.Path;
   /**
@@ -608,8 +631,9 @@ export class SettingsStore {
   > {
     return Effect.gen({ self: this }, function* () {
       const changed: AccountPreferenceField[] = [];
+      const signedIn = yield* this.#accountEmailOf();
       yield* this.#mutate((persisted) => {
-        if (expected && persisted.account?.email !== expected.accountEmail) return undefined;
+        if (expected && signedIn(persisted) !== expected.accountEmail) return undefined;
         const nextSettings = expected
           ? accountPreferencesWithLocalChanges(
               settings,
@@ -651,8 +675,9 @@ export class SettingsStore {
   ): Effect.Effect<boolean, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       let saved = false;
+      const signedIn = yield* this.#accountEmailOf();
       yield* this.#mutate((persisted) => {
-        if (persisted.account?.email !== accountEmail) return undefined;
+        if (signedIn(persisted) !== accountEmail) return undefined;
         saved = true;
         if (
           persisted.accountPreferencesSync?.accountEmail === accountEmail &&
@@ -679,9 +704,12 @@ export class SettingsStore {
   ): Effect.Effect<boolean, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       let changed = false;
+      const signedIn = yield* this.#accountEmailOf();
       yield* this.#mutate((persisted) => {
-        if (persisted.account?.email !== accountEmail) return undefined;
-        if (JSON.stringify(experimentsOf(persisted)) === JSON.stringify(choices)) return undefined;
+        if (signedIn(persisted) !== accountEmail) return undefined;
+        if (JSON.stringify(experimentsOf(persisted, accountEmail)) === JSON.stringify(choices)) {
+          return undefined;
+        }
         changed = true;
         return { ...persisted, experiments: { accountEmail, choices } };
       });
@@ -754,6 +782,7 @@ export class SettingsStore {
     this.#cipher = options.cipher;
     this.#overrides = options.overrides;
     this.#credentialsUsable = options.credentialsUsable ?? true;
+    this.#sessionAccountEmail = options.sessionAccountEmail;
     this.#fileSystem = options.fileSystem;
     this.#path = options.path;
   }
@@ -769,7 +798,7 @@ export class SettingsStore {
           // what would actually be heard while the persisted file remains optional.
           voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
         },
-        experiments: experimentsOf(persisted),
+        experiments: experimentsOf(persisted, (yield* this.#accountEmailOf())(persisted)),
         status: {
           // Whether a spoken turn could actually be opened: an account signed in,
           // and this run will use it. Resolved here rather than left to the panel
@@ -854,10 +883,16 @@ export class SettingsStore {
     });
   }
 
+  /**
+   * The account's departure: its record and everything kept for it go. A
+   * store that keeps no account of its own still drops what it kept for the
+   * session's account, since that account is the one leaving.
+   */
   clearAccount(): Effect.Effect<AccountSnapshot, PlatformError> {
+    const keepsOwnAccount = this.#cipher !== undefined;
     return Effect.as(
       this.#mutate((persisted) => {
-        if (!persisted.account) return undefined;
+        if (keepsOwnAccount && !persisted.account) return undefined;
         const { account: _account, ...withoutAccount } = persisted;
         const next: PersistedSettings = { ...withoutAccount };
         for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
@@ -867,6 +902,29 @@ export class SettingsStore {
       }),
       { status: ACCOUNT_STATUS.SIGNED_OUT },
     );
+  }
+
+  /**
+   * For a store that keeps no account of its own: the account its session
+   * names now. Where what the record keeps for an account (the sync baseline,
+   * the experiments) is someone else's, the account preferences beside it are
+   * theirs too and go with it, as `setAccount` drops them for another
+   * address, so one person's choices never stand in for the next one's.
+   * Asked as the account arrives, before anything is written for it. A
+   * store that keeps its own account settles this in `setAccount`.
+   */
+  settleSessionAccount(accountEmail: string): Effect.Effect<void, PlatformError> {
+    if (this.#cipher !== undefined) return Effect.void;
+    return this.#mutate((persisted) => {
+      const keptFor =
+        persisted.accountPreferencesSync?.accountEmail ?? persisted.experiments?.accountEmail;
+      if (keptFor === undefined || keptFor === accountEmail) return undefined;
+      const next: PersistedSettings = { ...persisted };
+      for (const field of ACCOUNT_PREFERENCE_FIELDS) next[field] = undefined;
+      delete next.accountPreferencesSync;
+      delete next.experiments;
+      return next;
+    });
   }
 
   /**
@@ -926,6 +984,18 @@ export class SettingsStore {
       });
       return { status: ACTION_RESULT_STATUS.ACCEPTED, settings: yield* this.snapshot() };
     });
+  }
+
+  /**
+   * Who the account's experiments and synced preferences are kept for: the
+   * account this store keeps, or, for a store that keeps none, the account
+   * the session names, read once before the record it is compared with.
+   */
+  #accountEmailOf(): Effect.Effect<AccountEmailOf> {
+    const read = this.#sessionAccountEmail;
+    if (this.#cipher !== undefined || read === undefined)
+      return Effect.succeed(STORED_ACCOUNT_EMAIL);
+    return Effect.map(read(), (email) => () => email);
   }
 
   /**
@@ -1012,7 +1082,7 @@ export class SettingsStore {
       // A corrupt settings file is replaced by the next write rather than
       // failing app start, so a refusal here falls back to defaults exactly
       // as an absent file does, and carries nothing.
-      const parsed = parsePersistedSettingsEither(source);
+      const parsed = parsePersistedSettingsEither(source, this.#cipher !== undefined);
       if (Result.isFailure(parsed)) return defaultPersistedSettings();
       this.#carried = carriedSettingsFields(source);
       return parsed.success;
