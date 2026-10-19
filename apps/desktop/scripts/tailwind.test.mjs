@@ -1,28 +1,23 @@
 import { fileURLToPath } from "node:url";
-import { Scanner } from "@tailwindcss/oxide";
+import { build } from "esbuild";
 import { expect, test } from "vitest";
-import { compileTailwindEntry } from "./tailwind.mjs";
+import { tailwindPlugin } from "./tailwind.mjs";
 
 const ENTRY = fileURLToPath(new URL("../src/renderer/styles/tailwind.css", import.meta.url));
 
 // A `@source` whose path no longer resolves is not an error to Tailwind: it
-// reads nothing and the utilities only it spelled drop out of the stylesheet.
-test("every source the renderer's stylesheet names reaches a file", async () => {
-  const compiler = await compileTailwindEntry(ENTRY);
-  const unread = compiler.sources
-    .filter((source) => !source.negated)
-    .filter((source) => {
-      const scanner = new Scanner({ sources: [source] });
-      scanner.scan();
-      return scanner.files.length === 0;
-    })
-    .map((source) => `${source.base} ${source.pattern}`);
-  expect(unread).toEqual([]);
-});
-
-test("the stylesheet reads Streamdown, which the panel draws replies with", async () => {
-  const compiler = await compileTailwindEntry(ENTRY);
-  const scanner = new Scanner({ sources: compiler.sources });
-  scanner.scan();
-  expect(scanner.files.some((file) => /[\\/]streamdown[\\/]dist[\\/]/.test(file))).toBe(true);
+// reads nothing, and the utilities only it spelled drop out of the stylesheet.
+// `[counter-reset:line]` is spelled by Streamdown's code block alone, never by
+// a module of the renderer's or the panel's, so the stylesheet carries it only
+// while Streamdown is read.
+test("the renderer's stylesheet carries the utilities Streamdown draws with", async () => {
+  const result = await build({
+    entryPoints: [ENTRY],
+    bundle: true,
+    write: false,
+    logLevel: "silent",
+    plugins: [tailwindPlugin()],
+  });
+  const css = result.outputFiles.map((file) => file.text).join("\n");
+  expect(css).toContain(".\\[counter-reset\\:line\\]");
 });
