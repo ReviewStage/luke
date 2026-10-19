@@ -19,8 +19,6 @@ import {
   Button,
   ComposeIcon,
   ConfirmDialog,
-  DIALOG_TONE,
-  type DialogQuestion,
   EllipsisIcon,
   ErrorState,
   FolderIcon,
@@ -106,7 +104,11 @@ import { LukeIdentity } from "./luke-identity.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse.js";
 import { SidebarFoot } from "./sidebar-foot.js";
-import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
+import {
+  archiveTasksQuestion,
+  type CountNoun,
+  SidebarGroupHeader,
+} from "./sidebar-group-header.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 import {
   type DrawnSection,
@@ -620,17 +622,6 @@ const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
 /** The tasks under a repository's header; an agent with no task under it is archived from its own page. */
 function groupTasks(group: RepositoryGroup): readonly TaskSummary[] {
   return group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task] : []));
-}
-
-/** What a repository's Archive tasks asks where a task under it has coding agents, which the archive stops and archives with them. */
-function archiveTasksQuestion(named: string, count: number): DialogQuestion {
-  return {
-    title: count === 1 ? "Archive task?" : `Archive ${count} tasks?`,
-    body: `Archiving the tasks in ${named} will stop and archive all their agents. Unarchiving a task brings its agents back.`,
-    verb: "Archive",
-    running: "Archiving",
-    tone: DIALOG_TONE.PRIMARY,
-  };
 }
 
 /**
@@ -1670,6 +1661,7 @@ function SidebarColumn({
                   tasks,
                   dialogs: sectionDialogs,
                   current,
+                  unread,
                   inSight: overlay.inSight,
                   folded: folds.sectionFolded,
                   onToggle: folds.toggleSection,
