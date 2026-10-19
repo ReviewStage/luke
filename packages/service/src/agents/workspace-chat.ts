@@ -26,6 +26,7 @@ import {
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatBlock,
+  type ChatJoinAnswer,
   type ChatReply,
   type ChatWriteAnswer,
   type ChatWriteRequest,
@@ -61,6 +62,7 @@ import {
 } from "./coder-host/chat-notify.js";
 import {
   channelOnWire,
+  joinWorkspaceChat,
   messageOnWire,
   readsOf,
   workspaceChatPast,
@@ -75,8 +77,12 @@ import { deploymentEve } from "./deployment-eve.js";
  * the workspace sees of its chat past the cursor, held open while nothing
  * moved (`hosted/coder-host/chat-page.ts`): the roster, the channels, the
  * messages posted or changed past the cursor, and the cursor to read on
- * from. `POST` to the same path writes as the account's own member of the
- * workspace, one of four things: a post, to the channel the window shows
+ * from. A read writes nothing: the person joins the workspace's chat first,
+ * `POST {join: true}`, which makes their member and `#general` where they
+ * are not yet, and a read of one who has not joined is not found. A read
+ * from the start joins too, since released desktops read from there without
+ * joining first. `POST` to the same path writes as the account's own member of the
+ * workspace, one of four things besides: a post, to the channel the window shows
  * by its id, a channel by `#name`, a member's DM by the member's mention
  * link, `#general` where unsaid, or a thread by the
  * place of the message it replies to, told to the members it addresses
@@ -148,6 +154,10 @@ export const readWorkspaceChat = /* @__PURE__ */ Effect.fnUntraced(function* (
   const after = readEither(seqCursorSchema)(unparsedWire(query.after ?? CHAT_CURSOR_START));
   if (Result.isFailure(after)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const reader = yield* chatAccount(userId);
+  // A released desktop never joins, so its read from the start joins for it, once per loop rather than once per read.
+  if (after.success === CHAT_CURSOR_START) {
+    yield* hostedStoreOrUnavailable(joinWorkspaceChat(reader, workspace));
+  }
   const page = yield* hostedStoreOrUnavailable(
     workspaceChatPast(reader, workspace, Number(after.success)),
   );
@@ -432,6 +442,17 @@ const editAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   if (Result.isFailure(edited)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[edited.failure]);
   return { channel: channelOnWire(edited.success) };
+});
+
+/** The person's own member of the workspace's chat and its `#general`, made where they are not yet; not found where the account is not in it. */
+export const joinWorkspaceChatAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  workspaceId: string,
+): Effect.fn.Return<ChatJoinAnswer, HostedRefusal, DatabaseServices> {
+  const joiner = yield* chatAccount(userId);
+  const self = yield* hostedStoreOrUnavailable(joinWorkspaceChat(joiner, workspaceId));
+  if (Option.isNone(self)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return { self: self.value.id };
 });
 
 /** One write to the workspace's chat as the account's own member of it: a post, an answer, a resolve, a read, or a topic channel opened or edited. */

@@ -1087,12 +1087,16 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return hostedAnswer(
-      askHosted(this.#hosted.messages.chatWrite, {
-        query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
-        body: admitted,
-      }),
-      MESSAGE_REFUSALS,
+    return Effect.map(
+      hostedAnswer(
+        askHosted(this.#hosted.messages.chatWrite, {
+          query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
+          body: admitted,
+        }),
+        MESSAGE_REFUSALS,
+      ),
+      // A join answers the joiner's member, which no write is answered with.
+      (answer) => ("self" in answer ? UNANSWERED : answer),
     );
   }
   /**
