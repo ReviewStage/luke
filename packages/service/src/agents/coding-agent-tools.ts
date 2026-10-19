@@ -24,7 +24,7 @@ import {
   turnStoppedUnderReached,
 } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
-import { listTaskSections } from "@luke/database/models/task-section-store";
+import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import {
   listTasks,
   readTask,
@@ -51,6 +51,7 @@ import { githubRepositoryFullNameSchema } from "@luke/features/github-repositori
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
+import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { describeWire } from "@luke/wire/effect";
 import { isTextUIPart } from "ai";
@@ -270,26 +271,12 @@ export const CODING_AGENT_TOOL_REFUSAL = {
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
 } as const;
 
-/** Why an archive or an unarchive changed nothing, in words the model can act on. */
-export const ARCHIVE_AGENT_REFUSAL = {
-  UNREADABLE:
-    `Not run: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered, and a reason as text of at ` +
-    `most ${CODING_AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS} characters or none.`,
-  SELF: "Not archived: that id is your own, and an agent does not archive itself; say you are done, and the developer archives you.",
-  WORKING:
-    "Not archived: that agent is still starting or working, and archiving it would stop a turn no one gets back. " +
-    "Wait until it is idle, or ask the developer, who can stop and archive it.",
-  REARCHIVED:
-    "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
-    `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
-} as const;
-
 /** Why a task's change changed nothing, in words the model can act on. */
 export const UPDATE_TASK_REFUSAL = {
   UNREADABLE:
     `Not run: name the task by the id ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered, ` +
     `and at least one change: a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a ` +
-    "repository as owner/name or null, archived, or pinned.",
+    "repository as owner/name or null, archived, pinned, or a sectionId or null.",
   OWN_TASK:
     "Not archived: that is the task you work on, and you do not archive it yourself; say you are " +
     "done, and the developer archives it. Its other changes are yours to make without archived.",
@@ -297,8 +284,8 @@ export const UPDATE_TASK_REFUSAL = {
     "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them, the archived ones too with includeArchived.`,
   ARCHIVED:
-    "Not changed: that task is archived, so it takes no new name or repository; bring it back in " +
-    "the same call with archived false, or leave it as it is.",
+    "Not changed: that task is archived, so it takes no new name, repository, or section; bring " +
+    "it back in the same call with archived false, or leave it as it is.",
   AGENTS_WORKING:
     "Not archived: an agent on that task is still starting or working, and archiving the task " +
     "archives its agents with it, which would stop a turn no one gets back. Wait until they are " +
@@ -309,6 +296,9 @@ export const UPDATE_TASK_REFUSAL = {
   GITHUB_UNANSWERED:
     "Not run: GitHub did not answer whether the workspace reaches that repository. The call " +
     "may be made again.",
+  NO_SECTION:
+    "Not run: the developer you work for keeps no section of this workspace under that id; " +
+    `${AGENT_TOOL.LIST_TASKS} names the sections.`,
 } as const;
 
 /** Why a stop changed nothing, in words the model can act on. */
@@ -590,23 +580,6 @@ const START_AGENT_INPUT = Schema.Struct({
 const readAgentRef = Schema.decodeUnknownResult(READ_AGENT_INPUT);
 const readAgentAsked = Schema.decodeUnknownResult(CODER_READ_AGENT_INPUT);
 
-const ARCHIVE_AGENT_INPUT = Schema.Struct({
-  agentId: AGENT_ID,
-  reason: Schema.optionalKey(
-    describeWire(
-      Schema.Trim.check(
-        Schema.isNonEmpty(),
-        Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS),
-      ),
-      "Why it is archived, in a short sentence the developer reads on the archived agent's " +
-        "banner beside your name, such as its pull request having merged; leave it out where " +
-        "there is nothing to say.",
-    ),
-  ),
-});
-
-const readArchive = Schema.decodeUnknownResult(ARCHIVE_AGENT_INPUT);
-
 /**
  * A task's change names the task and at least one of what the member's own
  * menu changes of it: its name, its repository, its archive, and the
@@ -643,6 +616,15 @@ const UPDATE_TASK_INPUT = Schema.Struct({
       Schema.Boolean,
       "true to pin it in the sidebar of the developer you work for, false to unpin it; their pin " +
         "alone, no other member's.",
+    ),
+  ),
+  sectionId: Schema.optionalKey(
+    describeWire(
+      Schema.NullOr(wireUuidSchema),
+      "The sidebar section the developer you work for keeps it in, by the id " +
+        `${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.CREATE_SECTION} answered; it leaves the section ` +
+        "it stood in and lands at the top of this one. null takes it out of its section, back " +
+        "under Tasks.",
     ),
   ),
 });
@@ -765,33 +747,6 @@ export const LIST_MODELS_TOOL = {
   inputSchema: Schema.Struct({}),
 } as const;
 
-export const ARCHIVE_AGENT_TOOL = {
-  name: AGENT_TOOL.ARCHIVE_AGENT,
-  description:
-    "Archive a coding agent of your workspace by its id, as the developer's Archive agent " +
-    "would, on behalf of the developer you work for: it leaves the sidebar, its task's tabs, " +
-    "and every list but the archived ones, takes no message, and is not woken, while its " +
-    "transcript, branch, and pull request are kept, and any member can unarchive it. Archive " +
-    "a helper or worker agent whose work is done, such as one whose pull request merged, or " +
-    "one the developer asked you to clean up; never a teammate's agent still in use unless " +
-    "the developer asked for it. Only an idle agent is archived: one still starting or " +
-    "running is refused, and no agent archives itself. Give a short reason, which the " +
-    "archived agent's banner shows with your name. Answers `accepted`, also for an agent " +
-    "already archived, or `rejected` and why. Then say which agent you archived and why.",
-  inputSchema: ARCHIVE_AGENT_INPUT,
-} as const;
-
-export const UNARCHIVE_AGENT_TOOL = {
-  name: AGENT_TOOL.UNARCHIVE_AGENT,
-  description:
-    "Bring an archived coding agent of your workspace back by its id, as the developer's " +
-    "Unarchive would: it stands in its task and the lists again and takes messages, its " +
-    "transcript and pull request as they were. Unarchive one archived by mistake, or one the " +
-    "developer asks for. Answers `accepted`, also for an agent not archived, or `rejected` " +
-    "and why.",
-  inputSchema: READ_AGENT_INPUT,
-} as const;
-
 export const UPDATE_TASK_TOOL = {
   name: AGENT_TOOL.UPDATE_TASK,
   description:
@@ -859,8 +814,15 @@ export const UPDATE_AGENT_REFUSAL = {
     `Not changed: name the agent by the id ${AGENT_TOOL.LIST_AGENTS} answered and at least one ` +
     `change: a title of at most ${CODING_AGENT_BOUNDS.MAX_TITLE_CHARS} characters (empty clears ` +
     "it), a model with its effort, both or neither, a contextWindow only with them, pinned, or " +
-    "disabledServers as connection names.",
+    "disabledServers as connection names, or archived, with a reason only where it is true.",
   UNAVAILABLE: "Not changed: the models could not be read just now. The call may be made again.",
+  SELF: "Not archived: that id is your own, and an agent does not archive itself; say you are done, and the developer archives you.",
+  WORKING:
+    "Not archived: that agent is still starting or working, and archiving it would stop a turn no one gets back. " +
+    "Wait until it is idle, or ask the developer, who can stop and archive it. Nothing else asked was changed.",
+  REARCHIVED:
+    "Not unarchived: that agent was archived again as it was read, so the archive standing is " +
+    `another's; read it again with ${AGENT_TOOL.LIST_AGENTS} and call again if it should still come back.`,
   PIN_ON_TASK:
     "Not changed: only an agent on no task is pinned in the sidebar; an agent on a task stands in " +
     "its task's tabs, so leave pinned out.",
@@ -877,11 +839,14 @@ function updateNamesAChange(update: {
   readonly contextWindow?: string;
   readonly pinned?: boolean;
   readonly disabledServers?: readonly string[];
+  readonly archived?: boolean;
+  readonly reason?: string;
 }): boolean {
-  const { title, model, effort, contextWindow, pinned, disabledServers } = update;
+  const { title, model, effort, contextWindow, pinned, disabledServers, archived, reason } = update;
   if ((model === undefined) !== (effort === undefined)) return false;
   if (contextWindow !== undefined && model === undefined) return false;
-  return [title, model, pinned, disabledServers].some((field) => field !== undefined);
+  if (reason !== undefined && archived !== true) return false;
+  return [title, model, pinned, disabledServers, archived].some((field) => field !== undefined);
 }
 
 /**
@@ -933,6 +898,25 @@ const UPDATE_AGENT_INPUT = Schema.Struct({
         "replaces the one standing; empty switches every server back on. Its next turn reads it.",
     ),
   ),
+  archived: Schema.optionalKey(
+    describeWire(
+      Schema.Boolean,
+      "true to archive it, as the developer's Archive agent would: it leaves the sidebar, its " +
+        "task's tabs, and every list but the archived ones, takes no message, and is not woken, " +
+        "its transcript, branch, and pull request kept; only an idle agent is archived, never " +
+        "yourself. false to bring an archived one back.",
+    ),
+  ),
+  reason: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(
+        Schema.isNonEmpty(),
+        Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ARCHIVE_REASON_CHARS),
+      ),
+      "Why it is archived, in a short sentence the developer reads on its archived banner " +
+        "beside your name, such as its pull request having merged; only with archived true.",
+    ),
+  ),
 }).check(Schema.makeFilter(updateNamesAChange));
 
 const readUpdateAsked = Schema.decodeUnknownResult(UPDATE_AGENT_INPUT);
@@ -943,12 +927,16 @@ export const UPDATE_AGENT_TOOL = {
     "Change a coding agent of your workspace by its id, as the developer's own menu, model " +
     "chip, and composer would, for the developer you work for: rename it (empty clears the " +
     "title), move it to another model and effort, and context window, from its next step, as " +
-    `${AGENT_TOOL.LIST_MODELS} lists them, pin or unpin an agent on no task in that developer's sidebar, or ` +
-    "replace the list of MCP servers switched off for it. Name at least one change; the changes " +
-    "land together or not at all. Change an " +
-    "agent when the developer asks for it, never a teammate's agent's model unless they asked. " +
-    "Answers `accepted` with the agent as it then stands, or `rejected` and why; a rejected model " +
-    "or effort lists the choices.",
+    `${AGENT_TOOL.LIST_MODELS} lists them, pin or unpin an agent on no task in that ` +
+    "developer's sidebar, replace the list of MCP servers switched off for it, or archive it " +
+    "or bring it back. Name at least one change; an archive is checked first, and the rest " +
+    "land together or not at all. Archive an idle helper agent whose work is done, such as one " +
+    "whose pull request merged, or one the developer asked you to clean up, with a short reason " +
+    "its archived banner shows beside your name; one still starting or working is refused, and " +
+    "no agent archives itself. Change a teammate's agent still in use only where the developer " +
+    "asked for it. Answers `accepted` with the agent as it then stands, whether archived among " +
+    "it, or `rejected` and why; a rejected model or effort lists the choices. Then say which " +
+    "agent you changed and how.",
   inputSchema: UPDATE_AGENT_INPUT,
 } as const;
 
@@ -992,7 +980,7 @@ export const LIST_TASKS_TOOL = {
     "workspace's sidebar, each with its id and title. Narrow it by words of a task's name with " +
     `nameContains. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
     `taskId, to narrow ${AGENT_TOOL.LIST_AGENTS} to one, or to find the task and the section ` +
-    `${AGENT_TOOL.MOVE_TASK} and ${AGENT_TOOL.DELETE_SECTION} name.`,
+    `${AGENT_TOOL.UPDATE_TASK}'s sectionId and ${AGENT_TOOL.DELETE_SECTION} name.`,
   inputSchema: LIST_TASKS_INPUT,
 } as const;
 
@@ -1692,27 +1680,6 @@ function archiverOf(caller: AgentCaller, reason: string | undefined): StoredArch
   };
 }
 
-/** An archive or an unarchive as the model reads it: the agent, whether it now stands archived, and whether it already stood so before the call. */
-function archiveAnswer(
-  agent: CodingAgent,
-  task: AgentTaskReading,
-  archived: boolean,
-  already: boolean,
-): WireRecord {
-  return {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    agent: {
-      id: agent.id,
-      title: agentName(agent),
-      model: agent.model,
-      task: task.task === null ? null : { ...task.task },
-      onYourTask: task.onYourTask,
-    },
-    archived,
-    already,
-  };
-}
-
 /**
  * Whether an agent stands idle for an archive: no line awaits its turn, its
  * newest turn is neither queued nor running, a Stop requested of it or not,
@@ -1735,75 +1702,48 @@ const idleForArchive = (agent: CodingAgent) =>
     );
   });
 
-/** One call of `archive_agent`: an idle agent of the caller's workspace archived for the caller's member, by the caller and for the reason given, or why it was not. */
-export function runArchiveAgent(
-  call: CodingAgentCall,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const asked = readArchive(input);
-  if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(ARCHIVE_AGENT_REFUSAL.UNREADABLE));
-  }
-  const { agentId, reason } = asked.success;
-  const { caller } = call;
-  if (caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
-    return Effect.succeed(agentToolRejected(ARCHIVE_AGENT_REFUSAL.SELF));
-  }
-  return orStoreRefusal(
-    Effect.gen(function* () {
-      const found = yield* workspaceAgentOf(caller, agentId);
-      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      const { agent, task } = found.value;
-      // Whether it is idle is read under its conversation's lock, so a turn queued or a message
-      // handed over meanwhile waits on the archive and is seen by it, never left running unseen.
-      const archived = yield* archiveIdleCodingAgent(
-        callerUserId(caller),
+/**
+ * An agent archived for the caller's member, by the caller and for the reason
+ * given, as the Archive agent menu archives it, only while it stands idle,
+ * read idle under its conversation's lock, so a turn queued or a message
+ * handed over meanwhile waits on the archive and is seen by it; or brought
+ * back, only the archive read cleared, so one made again since stands as its
+ * maker left it. An archive or an unarchive already standing is no refusal.
+ * Answers why nothing was changed, or nothing where the change stands.
+ */
+const archiveChange = (
+  caller: AgentCaller,
+  agent: CodingAgent,
+  archived: boolean,
+  reason: string | undefined,
+) =>
+  Effect.gen(function* () {
+    const userId = callerUserId(caller);
+    if (archived) {
+      const outcome = yield* archiveIdleCodingAgent(
+        userId,
         agent.id,
         archiverOf(caller, reason),
         idleForArchive,
       );
-      if (archived === IDLE_ARCHIVE.NOT_FOUND) {
-        return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      }
-      if (archived === IDLE_ARCHIVE.WORKING)
-        return agentToolRejected(ARCHIVE_AGENT_REFUSAL.WORKING);
-      return archiveAnswer(agent, task, true, archived === IDLE_ARCHIVE.ALREADY);
-    }),
-  );
-}
-
-/** One call of `unarchive_agent`: an archived agent of the caller's workspace brought back, as a member's Unarchive brings it. */
-export function runUnarchiveAgent(
-  call: CodingAgentCall,
-  input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
-  const asked = readAgentRef(input);
-  if (Result.isFailure(asked)) {
-    return Effect.succeed(agentToolRejected(ARCHIVE_AGENT_REFUSAL.UNREADABLE));
-  }
-  const { caller } = call;
-  return orStoreRefusal(
-    Effect.gen(function* () {
-      const found = yield* workspaceAgentOf(caller, asked.success.agentId);
-      if (Option.isNone(found)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      const { agent, task } = found.value;
-      if (agent.archivedAt === null) return archiveAnswer(agent, task, false, true);
-      const userId = callerUserId(caller);
-      // Note that only the archive read is cleared, so one made again since stands as its maker left it.
-      if (yield* unarchiveCodingAgentFrom(userId, agent.id, agent.archivedAt)) {
-        return archiveAnswer(agent, task, false, false);
-      }
-      const now = yield* readCodingAgent(userId, agent.id);
-      if (Option.isSome(now) && now.value.archivedAt === null) {
-        return archiveAnswer(agent, task, false, true);
-      }
-      return agentToolRejected(ARCHIVE_AGENT_REFUSAL.REARCHIVED);
-    }),
-  );
-}
+      if (outcome === IDLE_ARCHIVE.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
+      return outcome === IDLE_ARCHIVE.WORKING ? UPDATE_AGENT_REFUSAL.WORKING : undefined;
+    }
+    if (agent.archivedAt === null) return undefined;
+    if (yield* unarchiveCodingAgentFrom(userId, agent.id, agent.archivedAt)) return undefined;
+    const now = yield* readCodingAgent(userId, agent.id);
+    return Option.isSome(now) && now.value.archivedAt === null
+      ? undefined
+      : UPDATE_AGENT_REFUSAL.REARCHIVED;
+  });
 
 /** A task's change as the model reads it: the task as it now stands, with its mention, and whether every change named already stood before the call. */
-const taskUpdateAnswer = (userId: string, task: StoredTask["task"], already: boolean) =>
+const taskUpdateAnswer = (
+  userId: string,
+  task: StoredTask["task"],
+  already: boolean,
+  section: TaskSectionReading | null | undefined,
+) =>
   Effect.map(
     workspaceStepOf(userId, task.workspaceId),
     (step): WireRecord => ({
@@ -1815,10 +1755,44 @@ const taskUpdateAnswer = (userId: string, task: StoredTask["task"], already: boo
         archived: task.archivedAt !== undefined,
         pinned: task.pinnedAt !== undefined,
         mention: writtenMention({ kind: MENTION_KIND.TASK, taskId: task.id }, task.name, step),
+        ...(section === undefined
+          ? undefined
+          : { section: section === null ? null : { ...section } }),
       },
       already,
     }),
   );
+
+/** A sidebar section as an answer names it. */
+interface TaskSectionReading {
+  readonly id: string;
+  readonly title: string;
+}
+
+/**
+ * Where a task is asked to stand in its member's sidebar, read before
+ * anything is written: the section of the caller's workspace named, none for
+ * null, the refusal's words for a section of no workspace of the caller's,
+ * and whether the task already stands there.
+ */
+const sectionAsked = (
+  userId: string,
+  workspaceId: string,
+  taskId: string,
+  sectionId: string | null,
+) =>
+  Effect.map(listTaskSections(userId), (kept) => {
+    const section =
+      sectionId === null
+        ? null
+        : kept.sections.find((each) => each.id === sectionId && each.workspaceId === workspaceId);
+    if (section === undefined) return Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION);
+    const standing = kept.entries.find((entry) => entry.taskId === taskId)?.sectionId ?? null;
+    return Result.succeed({
+      section: section === null ? null : { id: section.id, title: section.title },
+      stands: standing === sectionId,
+    });
+  });
 
 /** Whether every change named already stands on the task as its member reads it. */
 function changesStand(task: StoredTask["task"], changes: TaskChanges): boolean {
@@ -1869,8 +1843,8 @@ export function runUpdateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { taskId, ...changes } = asked.success;
-  if (Object.keys(changes).length === 0) {
+  const { taskId, sectionId, ...changes } = asked.success;
+  if (Object.keys(changes).length === 0 && sectionId === undefined) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
   const { caller } = call;
@@ -1889,6 +1863,14 @@ export function runUpdateTask(
       ) {
         return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
       }
+      // Where it is asked to stand in the sidebar is read before anything is written.
+      const placing =
+        sectionId === undefined
+          ? undefined
+          : yield* sectionAsked(userId, workspace.value, taskId, sectionId);
+      if (placing !== undefined && Result.isFailure(placing)) {
+        return agentToolRejected(placing.failure);
+      }
       const repository =
         changes.repository === undefined
           ? undefined
@@ -1901,11 +1883,36 @@ export function runUpdateTask(
         ...changes,
         ...(repository === undefined ? undefined : { repository: repository.success }),
       };
-      const already = changesStand(read.value.task, asWritten);
+      const already = changesStand(read.value.task, asWritten) && (placing?.success.stands ?? true);
       // Note that the task's agents are archived with it, so one still at work, read under its
       // conversation's lock, refuses the archive rather than being stopped from here.
       const guard = changes.archived === true ? standsStopped : undefined;
-      const changed = yield* updateTask(userId, taskId, asWritten, undefined, guard).pipe(
+      // An archived task is moved into a section only where the same call brings it back.
+      const staysArchived = read.value.task.archivedAt !== undefined && changes.archived !== false;
+      if (placing !== undefined && !placing.success.stands && staysArchived) {
+        return agentToolRejected(UPDATE_TASK_REFUSAL.ARCHIVED);
+      }
+      // The task's change and its place in the sidebar are one transaction, so a place refused, its
+      // section deleted meanwhile, takes the change back with it.
+      const writing = Effect.gen(function* () {
+        const task =
+          Object.keys(changes).length === 0
+            ? Option.some(read.value.task)
+            : yield* updateTask(userId, taskId, asWritten, undefined, guard);
+        if (Option.isSome(task) && placing !== undefined && !placing.success.stands) {
+          // The sidebar's own write puts it in the section named, or in none, as the developer's drag does.
+          const placed = yield* writeTaskSections(userId, {
+            kind: TASK_SECTION_WRITE.PLACE,
+            taskId,
+            sectionId: placing.success.section?.id ?? null,
+          });
+          if (Option.isNone(placed)) return yield* Effect.fail(new TaskPlaceRefused());
+        }
+        return task;
+      });
+      const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
+        client.withTransaction(writing),
+      ).pipe(
         Effect.map(
           (task): Result.Result<Option.Option<StoredTask["task"]>, string> => Result.succeed(task),
         ),
@@ -1915,10 +1922,18 @@ export function runUpdateTask(
         Effect.catchTag("TaskAgentUnstopped", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.AGENTS_WORKING)),
         ),
+        Effect.catchTag("TaskPlaceRefused", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
+        ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
       if (Option.isNone(changed.success)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
-      return yield* taskUpdateAnswer(userId, changed.success.value, already);
+      return yield* taskUpdateAnswer(
+        userId,
+        changed.success.value,
+        already,
+        placing?.success.section,
+      );
     }),
   );
 }
@@ -2015,6 +2030,14 @@ export function runStopAgent(
 /** A change to an agent that found no row to write: the agent left the caller's reach as it was changed. */
 class AgentChangeLost extends Data.TaggedError("AgentChangeLost") {}
 
+/** A task's place in a section refused inside its change's transaction, its section gone meanwhile, which takes the change back. */
+class TaskPlaceRefused extends Data.TaggedError("TaskPlaceRefused") {}
+
+/** An archive or an unarchive refused inside a change's transaction, its words for the model, which takes every change back. */
+class AgentChangeRefused extends Data.TaggedError("AgentChangeRefused")<{
+  readonly refusal: string;
+}> {}
+
 /** The changes a call asks of an agent, each already read and its choice already the catalog's. */
 interface AgentChanges {
   readonly title: string | undefined;
@@ -2071,7 +2094,11 @@ export function runUpdateAgent(
     return Effect.succeed(agentToolRejected(UPDATE_AGENT_REFUSAL.UNREADABLE));
   }
   const { agentId, title, model, effort, contextWindow, pinned, disabledServers } = asked.success;
+  const { archived, reason } = asked.success;
   const { caller } = call;
+  if (archived === true && caller.kind === AGENT_CALLER.AGENT && agentId === caller.agent.id) {
+    return Effect.succeed(agentToolRejected(UPDATE_AGENT_REFUSAL.SELF));
+  }
   const userId = callerUserId(caller);
   return orStoreRefusal(
     Effect.gen(function* () {
@@ -2095,17 +2122,37 @@ export function runUpdateAgent(
       if (pinned !== undefined && found.value.agent.taskId !== null) {
         return agentToolRejected(UPDATE_AGENT_REFUSAL.PIN_ON_TASK);
       }
-      const written = yield* changedAgent(userId, agentId, {
-        title,
-        choice,
-        pinned,
-        disabledServers,
-      }).pipe(
-        Effect.map(Result.succeed),
-        Effect.catchTag("AgentChangeLost", () => Effect.succeed(Result.fail(undefined))),
+      // An archive is checked first, so one refused, its agent working, leaves every change asked unwritten.
+      // The archive and every other change are one transaction: a refused archive writes nothing, and
+      // a change that finds no row takes the archive back with it.
+      const written = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
+        client.withTransaction(
+          Effect.gen(function* () {
+            if (archived !== undefined) {
+              const refusal = yield* archiveChange(caller, found.value.agent, archived, reason);
+              if (refusal !== undefined)
+                return yield* Effect.fail(new AgentChangeRefused({ refusal }));
+            }
+            return yield* changedAgent(userId, agentId, { title, choice, pinned, disabledServers });
+          }),
+        ),
+      ).pipe(
+        Effect.map(
+          (changed): Result.Result<Option.Option<CodingAgent>, string> => Result.succeed(changed),
+        ),
+        Effect.catchTag("AgentChangeLost", () =>
+          Effect.succeed(Result.fail(CODING_AGENT_TOOL_REFUSAL.NO_AGENT)),
+        ),
+        Effect.catchTag("AgentChangeRefused", (refused) =>
+          Effect.succeed(Result.fail(refused.refusal)),
+        ),
       );
-      if (Result.isFailure(written)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
-      const agent = Option.getOrElse(written.success, () => found.value.agent);
+      if (Result.isFailure(written)) return agentToolRejected(written.failure);
+      // The agent as it now stands, its archive among it, which a change left unwritten does not answer.
+      const now = Option.isSome(written.success)
+        ? written.success
+        : yield* readCodingAgent(userId, agentId);
+      const agent = Option.getOrElse(now, () => found.value.agent);
       const step = yield* workspaceStepOf(userId, workspaceId);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
@@ -2120,6 +2167,7 @@ export function runUpdateAgent(
           task: task.task === null ? null : { ...task.task },
           onYourTask: task.onYourTask,
           mention: agentMention(agent, step),
+          archived: agent.archivedAt !== null,
           ...(pinned === undefined ? undefined : { pinned }),
         },
       };

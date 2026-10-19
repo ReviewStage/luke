@@ -1,4 +1,5 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
 import { INBOX_BLOCK } from "@luke/features/inbox-wire";
 import { WireValueSchema } from "@luke/wire";
@@ -64,8 +65,6 @@ export const CODER_TOOL = {
   READ_AGENT: AGENT_TOOL.READ_AGENT,
   MESSAGE_AGENT: AGENT_TOOL.MESSAGE_AGENT,
   START_AGENT: AGENT_TOOL.START_AGENT,
-  ARCHIVE_AGENT: AGENT_TOOL.ARCHIVE_AGENT,
-  UNARCHIVE_AGENT: AGENT_TOOL.UNARCHIVE_AGENT,
   STOP_AGENT: AGENT_TOOL.STOP_AGENT,
   UPDATE_AGENT: AGENT_TOOL.UPDATE_AGENT,
   LIST_TASKS: AGENT_TOOL.LIST_TASKS,
@@ -73,7 +72,6 @@ export const CODER_TOOL = {
   CREATE_TASK: AGENT_TOOL.CREATE_TASK,
   CREATE_SECTION: AGENT_TOOL.CREATE_SECTION,
   DELETE_SECTION: AGENT_TOOL.DELETE_SECTION,
-  MOVE_TASK: AGENT_TOOL.MOVE_TASK,
   UPDATE_TASK: AGENT_TOOL.UPDATE_TASK,
   LIST_ISSUES: AGENT_TOOL.LIST_ISSUES,
   READ_ISSUE: AGENT_TOOL.READ_ISSUE,
@@ -124,13 +122,18 @@ export function taskToolsOf(agent: Pick<CodingAgent, "taskId" | "prompt">): Read
 }
 
 /**
- * eve's provider-run web reads, which coding agents ran before they had the
- * hosted pair: no agent is offered them now, but a transcript written then
- * names them, and reads back under the same set.
+ * The tools a coding agent's transcript may name that no agent is offered
+ * now: eve's provider-run web reads, which coding agents ran before they had
+ * the hosted pair, and the archive, unarchive, and move of a task into a
+ * section since folded into `update_agent` and `update_task`. A transcript
+ * written then names them, and reads back under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
+  ARCHIVE_AGENT: RETIRED_TOOL.ARCHIVE_AGENT,
+  UNARCHIVE_AGENT: RETIRED_TOOL.UNARCHIVE_AGENT,
+  MOVE_TASK: RETIRED_TOOL.MOVE_TASK,
 } as const;
 
 /**

@@ -162,8 +162,9 @@ export function agentListCallIds(conversation: TaskConversation): readonly strin
     [
       AGENT_TOOL.START_AGENT,
       RETIRED_TOOL.START_CODING_AGENT,
-      AGENT_TOOL.ARCHIVE_AGENT,
-      AGENT_TOOL.UNARCHIVE_AGENT,
+      AGENT_TOOL.UPDATE_AGENT,
+      RETIRED_TOOL.ARCHIVE_AGENT,
+      RETIRED_TOOL.UNARCHIVE_AGENT,
     ].map((tool) => `${TOOL_PART_TYPE_PREFIX}${tool}`),
   );
   return (conversation?.messages ?? []).flatMap((message) =>

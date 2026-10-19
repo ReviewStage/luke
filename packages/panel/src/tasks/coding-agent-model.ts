@@ -1191,12 +1191,13 @@ export function startedAgentOf(part: AgentPart): string | undefined {
   return target?.kind === TOOL_TARGET.AGENT ? target.agent : undefined;
 }
 
-/** The calls that change which agents a task holds and which of them stand archived: a start, an archive, and an unarchive. */
+/** The calls that change which agents a task holds and which of them stand archived, or how one is named: a start, and a change, an archive and an unarchive among it, under every name each was made under. */
 const AGENT_LIST_TOOLS: ReadonlySet<string> = new Set([
   AGENT_TOOL.START_AGENT,
   RETIRED_TOOL.START_CODING_AGENT,
-  AGENT_TOOL.ARCHIVE_AGENT,
-  AGENT_TOOL.UNARCHIVE_AGENT,
+  AGENT_TOOL.UPDATE_AGENT,
+  RETIRED_TOOL.ARCHIVE_AGENT,
+  RETIRED_TOOL.UNARCHIVE_AGENT,
 ]);
 
 /** The answered calls of a transcript that change the task's agents or which stand archived, by call id: what the agents are read again on as each lands. */
