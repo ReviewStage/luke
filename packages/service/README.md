@@ -1546,8 +1546,7 @@ double, reading every run for the token and never finding it.
 ## Automations
 
 An automation is an account's saved coding-agent Start on one of its tasks,
-fired by a trigger (`docs/proposals/automations-research.md` is the
-research and the plan behind it). The account, the task, the trigger, the
+fired by a trigger. The account, the task, the trigger, the
 action, and the guards are an `automation` row
 (`packages/database/src/schemas/automation.ts`), the trigger, the action,
 and the guards as `@luke/features/automation-wire`'s own JSON; every

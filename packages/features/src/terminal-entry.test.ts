@@ -3,7 +3,7 @@ import { test } from "vitest";
 import { TERMINAL_ASK, TERMINAL_TARGET, terminalTarget } from "./terminal-entry.js";
 
 /**
- * The new-terminal rules, row by row (`docs/proposals/terminal-tab.md`):
+ * The new-terminal rules, row by row:
  * which agent ⌘J and New terminal mean from each place a developer can be.
  */
 

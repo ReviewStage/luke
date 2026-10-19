@@ -416,7 +416,7 @@ export const BRIDGE = {
    * How one of this panel's Browser tabs' pages stands now, each time it
    * moves: loading, loaded, titled, sent elsewhere, or failed. An event
    * rather than a slice of the document, because a page is this window's
-   * alone and nothing of it is kept (`docs/proposals/browser-tab.md`).
+   * alone and nothing of it is kept.
    */
   onBrowserState: entry({
     kind: "subscribe",
