@@ -456,6 +456,33 @@ test("a section's Archive tasks asks first where a task in it has agents, then a
   assert.deepEqual(archived, [[INVITES.id, RETRIES.id]]);
 });
 
+test("a section's Archive question goes when a task it asked about leaves the section, and archives nothing", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const archived: string[][] = [];
+  const working: TaskSummary = {
+    ...RETRIES,
+    agents: { total: 1, working: 1, agents: [], pullRequestTotal: 0, pullRequests: [] },
+  };
+  const { container, draw } = await mountSidebarRedrawn([], BOTH_IN_LAUNCH, {
+    tasks: [INVITES, working],
+    onArchiveTasks: (taskIds) => archived.push([...taskIds]),
+  });
+  openSectionMenu(container, "Launch");
+  act(() => item("Archive tasks").click());
+  assert.ok(document.querySelector('[role="alertdialog"]'), "the question is asked");
+
+  await draw({
+    sections: BOTH_IN_LAUNCH.sections,
+    entries: [
+      { taskId: INVITES.id, sectionId: LAUNCH, addedAt: 3 },
+      { taskId: RETRIES.id, sectionId: SOMEDAY, addedAt: 4 },
+    ],
+  });
+
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
+  assert.deepEqual(archived, []);
+});
+
 test("a section's Mark all as read stands while a task in it is unread, and marks every one read", async () => {
   handState(experimentsOn(EXPERIMENT.SECTIONS));
   const sidebar = await mountSidebar([], BOTH_IN_LAUNCH);

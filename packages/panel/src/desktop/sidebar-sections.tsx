@@ -389,11 +389,16 @@ function SidebarSection({
   const menu = useMenu(tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const reads = useReadMarks();
-  const archiveAll = () => tasks.onArchiveTasks(drawn.tasks.map(({ id }) => id));
+  // Note that the question is about the tasks drawn when it was asked, so it goes once any of them leaves the section, moved by another window, rather than archiving whatever stands there now.
+  const [doomed, setDoomed] = useState<readonly string[]>([]);
   const archiving = useConfirmDialog(
-    { subject: drawn.tasks.length > 0, surfaceOpen: tasks.shown },
+    {
+      subject:
+        doomed.length > 0 && doomed.every((id) => drawn.tasks.some((task) => task.id === id)),
+      surfaceOpen: tasks.shown,
+    },
     () => {
-      archiveAll();
+      tasks.onArchiveTasks(doomed);
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
     },
   );
@@ -402,8 +407,13 @@ function SidebarSection({
       for (const task of drawn.tasks.filter(context.unread)) reads.mark(task, false);
     },
     onArchive: () => {
-      if (archiveAsks(drawn.tasks)) archiving.ask();
-      else archiveAll();
+      const taskIds = drawn.tasks.map(({ id }) => id);
+      if (!archiveAsks(drawn.tasks)) {
+        tasks.onArchiveTasks(taskIds);
+        return;
+      }
+      setDoomed(taskIds);
+      archiving.ask();
     },
   });
   const glyph = sectionGlyph(section.icon);
@@ -443,7 +453,7 @@ function SidebarSection({
       )}
       <ConfirmDialog
         confirm={archiving}
-        question={archiveTasksQuestion(section.title, drawn.tasks.length)}
+        question={archiveTasksQuestion(section.title, doomed.length)}
       />
       {rows.length === 0 ? (
         folded ? null : (
