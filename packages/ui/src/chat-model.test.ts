@@ -13,11 +13,14 @@ import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import {
   type ChatNames,
+  channelLabel,
   channelThreads,
+  chatKeywords,
   chatRail,
   chatWho,
   FOR_YOU_REASON,
   forYou,
+  postsIn,
 } from "./chat-model.js";
 
 const ME = "00000000-0000-4000-8000-0000000000a1";
@@ -258,4 +261,63 @@ test("a line names an agent by its title, a task's Luke as Luke, the reader by t
       ["maria", "maria", undefined],
     ],
   );
+});
+
+test("the reader posts in a standing channel and in a direct message of their own, never in an archived channel or a direct message between two others, which is named by both", () => {
+  const between: ChatChannel = {
+    id: "dm-others",
+    kind: CHANNEL_KIND.DM,
+    members: [AGENT, MARIA],
+    archived: false,
+  };
+  const chat = { ...chatOf(0, []), channels: [GENERAL, OLD, WITH_MARIA, between] };
+  assert.deepEqual(
+    [GENERAL, OLD, WITH_MARIA, between].map((channel) => postsIn(chat, channel)),
+    [true, false, true, false],
+  );
+  assert.deepEqual(
+    [WITH_MARIA, between].map((channel) => channelLabel(chat, NAMES, channel)),
+    ["maria", "agent-2 ↔ maria"],
+  );
+});
+
+test("nothing in a direct message between two others waits on the reader, neither an open ask nor an unread line", () => {
+  const between: ChatChannel = {
+    id: "dm-others",
+    kind: CHANNEL_KIND.DM,
+    members: [AGENT, MARIA],
+    archived: false,
+  };
+  const chat = {
+    ...chatOf(0, [
+      message(1, AGENT, between.id, asking(ASK_STATUS.OPEN)),
+      message(2, MARIA, between.id),
+      message(3, MARIA, WITH_MARIA.id),
+    ]),
+    channels: [WITH_MARIA, between],
+  };
+  assert.deepEqual(
+    forYou(chat).map((entry) => entry.message.seq),
+    [3],
+  );
+});
+
+test("a dictation in the chat listens for every handle still here, each agent's title, and each standing channel's name, once each", () => {
+  const chat = {
+    ...chatOf(0, []),
+    members: [
+      ...chatOf(0, []).members,
+      { id: "gone", kind: MEMBER_KIND.HUMAN, handle: "gone-person", left: true },
+    ],
+  };
+  const words = chatKeywords(chat, NAMES);
+  assert.deepEqual(
+    ["dean", "agent-2", "luke", "maria", "Invite emails", "general", "invites", "alpha"].filter(
+      (word) => !words.includes(word),
+    ),
+    [],
+  );
+  assert.equal(words.includes("gone-person"), false, "a member who left is not listened for");
+  assert.equal(words.includes("aardvark"), false, "an archived channel is not");
+  assert.equal(new Set(words).size, words.length, "each word once");
 });

@@ -98,6 +98,7 @@ import {
 } from "../public-research.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { runCreateSection, runDeleteSection, runMoveTask } from "../task-section-tools.js";
+import { runReadTask } from "../task-tools.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
@@ -471,6 +472,7 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.UPDATE_AGENT
     | typeof CODER_TOOL.READ_PAGE
     | typeof CODER_TOOL.LIST_TASKS
+    | typeof CODER_TOOL.READ_TASK
     | typeof CODER_TOOL.CREATE_SECTION
     | typeof CODER_TOOL.DELETE_SECTION
     | typeof CODER_TOOL.MOVE_TASK
@@ -492,6 +494,7 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.UPDATE_AGENT]: runUpdateAgent,
   [CODER_TOOL.READ_PAGE]: runReadPage,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
+  [CODER_TOOL.READ_TASK]: runReadTask,
   [CODER_TOOL.CREATE_SECTION]: runCreateSection,
   [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
   [CODER_TOOL.MOVE_TASK]: runMoveTask,

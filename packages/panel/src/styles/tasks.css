@@ -1611,6 +1611,15 @@
   font-size: var(--luke-type-caption-size);
 }
 
+/* Why a file's unchanged lines could not be opened, one quiet line above
+   its first hunk, in the list's own small type (agent-changes-tab.tsx). */
+.diff-list-refused {
+  margin: 0;
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-4) var(--luke-space-40);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
 /* A changed image in Files changed's list (image-diff.tsx), under its
    header in place of lines, as its lead (diff-view/index.ts): its two sides beside each other, each on a
    checkerboard that shows what is transparent, or the after laid over the
@@ -5720,8 +5729,10 @@ button.picture-frame {
 
 /* Words under two threads in the editor stand in a mark inside another,
    which the read view draws as one mark; the inner one adds nothing, so they
-   read the same in both. */
-.plan-comment-mark .plan-comment-mark {
+   read the same in both. An open thread's mark keeps its wash and edge
+   inside another's, so the open thread reads open whether its mark is the
+   inner or the outer one. */
+.plan-comment-mark .plan-comment-mark:not([data-active="true"]) {
   padding-bottom: 0;
   border-bottom: 0;
   background: none;

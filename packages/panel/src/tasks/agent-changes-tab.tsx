@@ -12,6 +12,8 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { imageTypeOfPath } from "@luke/features/github-image";
 import type { CatalogModel } from "@luke/features/models-wire";
+import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   Button,
@@ -39,10 +41,12 @@ import {
   RotateCwIcon,
 } from "lucide-react";
 import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import {
   DIFF_SELECTION_SIDE,
+  type DiffFileTexts,
   type DiffListSelection,
   type DiffSelection,
   FILE_NOTE_LINE,
@@ -60,10 +64,15 @@ import {
   VIEWED_CHORD,
 } from "./changes-list.js";
 import {
+  blobShaOf,
   CHANGES_WORDS,
   changedFolders,
   changeMarks,
   commentLines,
+  EXPANSION_REFUSAL,
+  EXPANSION_REFUSED_WORDS,
+  type ExpansionRefusal,
+  expandable,
   fileNotice,
   filePatch,
   headerPatch,
@@ -71,6 +80,7 @@ import {
   listPatch,
   STATUS_LETTER,
   STATUS_WORDS,
+  textsOf,
   threadsOn,
 } from "./changes-model.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
@@ -134,7 +144,9 @@ import { useViewedFiles } from "./viewed-files.js";
  * and wrapped as the File tabs' settings say, their numbers left out of the
  * find and of a copy as a File tab's are; what is a diff's alone is the
  * tint of a line added or removed, the words a changed line changed, and
- * the count of unchanged lines between two hunks.
+ * the count of unchanged lines between two hunks, which open twenty at a
+ * time or all at once, read from the file at the pull request's head the
+ * first time one of its gaps is opened (`useFileTexts`).
  * Every name and line here is the repository's, so the tab is left out of
  * the screen recording (`ph-no-capture`).
  */
@@ -304,6 +316,9 @@ const ABOVE_KEY = {
   [DIFF_SELECTION_SIDE.ADDITIONS]: "above-additions",
 } as const satisfies Record<DiffSelection["side"], string>;
 
+/** The key of the line saying why a file's gaps could not be opened; a review thread's note is keyed by its page, which this never is. */
+const REFUSED_KEY = "gaps-refused";
+
 /** The key of what stands in the place of the lines of a file that draws none; a review thread's note is keyed by its page, which this never is. */
 const LEAD_KEY = "lead";
 
@@ -399,6 +414,8 @@ function entryOf(
   draw: ChangesThreads["draw"] | undefined,
   images: ImageSides | undefined,
   comment: DiffNote | undefined,
+  /** Whether the lines between its hunks may be opened, and why they could not be where a read was refused. */
+  gaps: { readonly open: boolean; readonly refused: ExpansionRefusal | undefined },
   /** Which of the file's lines show their threads while Minimize inline comments is on, and the door that shows or hides one; none while it is off. */
   minimized: FileMinimized | undefined,
 ): DiffListEntry {
@@ -465,6 +482,14 @@ function entryOf(
       content: aboveOf(unplaced, side),
     });
   }
+  if (lead === undefined && gaps.refused !== undefined) {
+    notes.unshift({
+      key: REFUSED_KEY,
+      side: DIFF_SELECTION_SIDE.ADDITIONS,
+      line: FILE_NOTE_LINE,
+      content: <p className="diff-list-refused">{EXPANSION_REFUSED_WORDS[gaps.refused]}</p>,
+    });
+  }
   if (comment !== undefined) notes.push(comment);
   const collapsed = list.collapsed(path);
   return {
@@ -472,6 +497,7 @@ function entryOf(
     patch: pictured === undefined ? listPatch(file) : headerPatch(file),
     collapsed,
     lead: lead !== undefined,
+    expandable: lead === undefined && gaps.open,
     header: (
       <FileHead
         file={file}
@@ -540,6 +566,7 @@ function useEntries(
   threads: ChangesThreads | undefined,
   images: ImageSides | undefined,
   commenting: ListCommenting | undefined,
+  texts: FileTexts,
   minimizedOf: (path: string) => FileMinimized | undefined,
 ): readonly DiffListEntry[] {
   const kept = useRef(new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>());
@@ -547,13 +574,19 @@ function useEntries(
   const entries = list.kept.map((file) => {
     const own = threads?.list.filter((thread) => thread.path === file.path) ?? [];
     const comment = commenting?.note?.path === file.path ? commenting.note.content : undefined;
+    const gaps = { open: texts.expandable(file), refused: texts.refused.get(file.path) };
     const minimized = minimizedOf(file.path);
-    const inputs = [...entryInputs(file, list, own, threads?.draw, images, comment), minimized];
+    const inputs = [
+      ...entryInputs(file, list, own, threads?.draw, images, comment),
+      gaps.open,
+      gaps.refused,
+      minimized,
+    ];
     const was = kept.current.get(file.path);
     const entry =
       was !== undefined && sameInputs(was.inputs, inputs)
         ? was.entry
-        : entryOf(file, list, own, threads?.draw, images, comment, minimized);
+        : entryOf(file, list, own, threads?.draw, images, comment, gaps, minimized);
     next.set(file.path, { inputs, entry });
     return entry;
   });
@@ -750,6 +783,128 @@ function imagesOf(
   };
 }
 
+/** The repository a pull request's page on GitHub names, as `owner/name`; none where it names none. */
+function repositoryOf(url: string): string | undefined {
+  const [owner, name] = URL.canParse(url)
+    ? new URL(url).pathname.split("/").filter((segment) => segment !== "")
+    : [];
+  return owner === undefined || name === undefined ? undefined : `${owner}/${name}`;
+}
+
+/** What a refusal of the service's read says of a file's gaps: not text, and anything else that it could not be read just now. */
+function expansionRefusalOf(refusal: TaskFileRefusal): ExpansionRefusal {
+  return refusal === TASK_FILE_REFUSAL.NOT_TEXT
+    ? EXPANSION_REFUSAL.NOT_TEXT
+    : EXPANSION_REFUSAL.UNAVAILABLE;
+}
+
+/** How Files changed opens the lines between a file's hunks: whether a file's may be, the door that reads one whole, and why any could not be. */
+interface FileTexts {
+  readonly expandable: (file: CodingAgentChangedFile) => boolean;
+  readonly read: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
+  readonly refused: ReadonlyMap<string, ExpansionRefusal>;
+}
+
+/**
+ * How Files changed reads a changed file whole, for the lines between its
+ * hunks: its text at the pull request's head, read as a File tab reads one
+ * (`TASKS_FILE`, raw, at that commit) the first time a gap of it is
+ * opened, and kept for the answer's life, and its text before turned back
+ * from that text and its patch (`textsOf`), so one read stands for both.
+ * None where the read could not be promised to reach the pull request's own
+ * files: an agent on no task, a head the service did not name, or a task
+ * whose repository is not the one the pull request is in, since the read
+ * is the task's. A file not changed in place, or a secret one, which the
+ * service never reads, offers no gap (`expandable`); and a file whose read
+ * the service refused, or whose text is not the one its patch was made
+ * against, offers none from then on, and says why.
+ */
+function useFileTexts(
+  taskId: string | null,
+  repository: string | null,
+  pullRequest: { readonly url: string; readonly headSha?: string } | null,
+  files: readonly CodingAgentChangedFile[],
+): FileTexts {
+  const { act } = useAct();
+  const [refusals, setRefusals] = useState<{
+    readonly of: unknown;
+    readonly refused: ReadonlyMap<string, ExpansionRefusal>;
+  }>({ of: pullRequest, refused: new Map() });
+  // Note that a new answer offers every gap again, since a push may have mended what was refused.
+  const refused = refusals.of === pullRequest ? refusals.refused : NONE_REFUSED;
+  const read = useMemo(() => {
+    const headSha = pullRequest?.headSha;
+    const own = pullRequest === null ? undefined : repositoryOf(pullRequest.url);
+    if (taskId === null || headSha === undefined || repository === null || own === undefined) {
+      return undefined;
+    }
+    if (repository.toLowerCase() !== own.toLowerCase()) return undefined;
+    const kept = new Map<string, Promise<DiffFileTexts | undefined>>();
+    const refuse = (path: string, why: ExpansionRefusal) =>
+      setRefusals((was) => ({
+        of: pullRequest,
+        refused: new Map(was.of === pullRequest ? was.refused : NONE_REFUSED).set(path, why),
+      }));
+    return (path: string) => {
+      const file = files.find((each) => each.path === path);
+      if (file === undefined || !expandable(file)) return Promise.resolve(undefined);
+      const held = kept.get(path);
+      if (held !== undefined) return held;
+      const reading = act(ACT_KIND.TASKS_FILE, {
+        taskId,
+        path,
+        firstLine: 1,
+        lastLine: 1,
+        raw: true,
+        ref: headSha,
+      }).then(
+        async (answer) => {
+          const texts = "text" in answer ? await checkedTextsOf(file, answer.text.text) : undefined;
+          if (texts !== undefined) return texts;
+          const why =
+            "text" in answer
+              ? EXPANSION_REFUSAL.CHANGED
+              : "refusal" in answer
+                ? expansionRefusalOf(answer.refusal)
+                : EXPANSION_REFUSAL.UNAVAILABLE;
+          refuse(path, why);
+          return undefined;
+        },
+        () => {
+          refuse(path, EXPANSION_REFUSAL.UNAVAILABLE);
+          return undefined;
+        },
+      );
+      kept.set(path, reading);
+      return reading;
+    };
+  }, [act, taskId, repository, pullRequest, files]);
+  const offered = useCallback(
+    (file: CodingAgentChangedFile) =>
+      read !== undefined && expandable(file) && !refused.has(file.path),
+    [read, refused],
+  );
+  return { expandable: offered, read, refused };
+}
+
+/**
+ * A file's texts from its text after, where that text is the very
+ * contents GitHub listed the file's patch against: the object it names
+ * (`blobSha`), where the service named one, since a push between the
+ * service's reads could leave a text whose hunks match its patch but whose
+ * lines between them do not; and its hunks at their places (`textsOf`).
+ */
+async function checkedTextsOf(
+  file: CodingAgentChangedFile,
+  after: string,
+): Promise<DiffFileTexts | undefined> {
+  if (file.blobSha !== undefined && (await blobShaOf(after)) !== file.blobSha) return undefined;
+  return textsOf(file, after);
+}
+
+/** No file's gaps refused. */
+const NONE_REFUSED: ReadonlyMap<string, ExpansionRefusal> = new Map();
+
 /** Collapse all or Expand all, for the files the filter keeps, in the bar. */
 function FoldAllButton({ list }: { list: ChangesList }): React.JSX.Element {
   const label = list.allCollapsed ? LIST_WORDS.EXPAND_ALL : LIST_WORDS.COLLAPSE_ALL;
@@ -777,6 +932,7 @@ function FilesList({
   threads,
   images,
   commenting,
+  texts,
   filterShown,
   roomy,
   boxRef,
@@ -787,6 +943,8 @@ function FilesList({
   images: ImageSides | undefined;
   /** The comment being written, and where the gutter's + opens one; none offers no +. */
   commenting: ListCommenting | undefined;
+  /** How the lines between a file's hunks are opened, and why a file's could not be. */
+  texts: FileTexts;
   /** Whether the tree, whose search is the filter, is drawn, so the filter is in sight. */
   filterShown: boolean;
   roomy: boolean;
@@ -795,7 +953,7 @@ function FilesList({
   const look = useDiffLook(roomy);
   const { settings } = useFileViewSettings();
   const minimizedOf = useMinimizedLines(settings.diffMinimizeComments);
-  const entries = useEntries(list, threads, images, commenting, minimizedOf);
+  const entries = useEntries(list, threads, images, commenting, texts, minimizedOf);
   const query = list.query.trim();
   return (
     <section className="file-tab" aria-label="Diffs of the changed files">
@@ -818,6 +976,7 @@ function FilesList({
           boxRef={boxRef}
           onComment={commenting?.open}
           selected={commenting?.note?.picked}
+          readTexts={texts.read}
         />
       )}
     </section>
@@ -964,6 +1123,8 @@ export function AgentChangesTab({
     ask();
     threads?.refresh?.();
   };
+  const taskId = control.agents?.find((each) => each.id === agentId)?.planId ?? null;
+  const texts = useFileTexts(taskId, repository, pullRequest, changed.files);
   const commenting = useListCommenting(
     agentId,
     changed.files,
@@ -1046,6 +1207,7 @@ export function AgentChangesTab({
           threads={threads}
           images={images}
           commenting={commenting}
+          texts={texts}
           filterShown={room.drawn}
           roomy={roomy}
           boxRef={setDiffBox}
