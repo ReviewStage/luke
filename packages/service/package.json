@@ -97,6 +97,7 @@
     "./agents/coder-host/transcript": "./src/agents/coder-host/transcript.js",
     "./agents/coder-host/usage": "./src/agents/coder-host/usage.js",
     "./agents/coding-agent-tools": "./src/agents/coding-agent-tools.js",
+    "./agents/messages-procedures": "./src/agents/messages-procedures.js",
     "./agents/task-section-tools": "./src/agents/task-section-tools.js",
     "./agents/task-tools": "./src/agents/task-tools.js",
     "./agents/issue-tools": "./src/agents/issue-tools.js",
