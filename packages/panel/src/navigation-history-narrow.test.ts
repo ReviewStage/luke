@@ -172,9 +172,12 @@ function unmountAll(): void {
 
 afterEach(unmountAll);
 
-/** The window standing as `start` says in a room, its history held in memory and its addresses written from its Copy link, as the root wires them. */
-function mount(room: ShellRoom, start: Standing) {
-  const held: Parameters<typeof installWindowHistory>[0] = memoryHistory();
+/** The window standing as `start` says in a room, its history held in memory, or in the history given, and its addresses written from its Copy link, as the root wires them. */
+function mount(
+  room: ShellRoom,
+  start: Standing,
+  held: Parameters<typeof installWindowHistory>[0] = memoryHistory(),
+) {
   installWindowHistory(held);
   let history: WindowHistoryLists | undefined;
   let shown: TasksControl | undefined;
@@ -232,6 +235,9 @@ function mount(room: ShellRoom, start: Standing) {
     /** The address of every step held, oldest first, and the one standing. */
     addresses: () => held.current().entries.map((entry) => entry.address),
     standingAddress: () => held.current().entries[held.current().at]?.address,
+    /** Moves the history by itself, as a browser's Back and Forward do, never through the window. */
+    moveHistory: (delta: number) => act(() => held.go(delta)),
+    held,
   };
 }
 
@@ -428,4 +434,48 @@ test("on the desktop's width none of a narrow room's panes is a step: the side p
     assert.equal(window.history().canGoBack, false);
     unmountAll();
   }
+});
+
+test("a move the history makes by itself, as a browser's Back does, takes the window to the step before and keeps the step ahead, which its Forward opens again", () => {
+  const window = mount(SHELL_ROOM.WIDE, ON_TASK);
+  window.move((held) => ({ ...held, tab: PANEL_TAB.SETTINGS, settings: ON_TASK.settings }));
+  const steps = window.addresses();
+  assert.equal(steps.length, 2);
+
+  window.moveHistory(-1);
+  assert.equal(window.at().tab, PANEL_TAB.TASKS, "the window lands on the plan");
+  assert.deepEqual(window.addresses(), steps, "and records no step");
+  assert.equal(window.standingAddress(), TASK_PATH);
+  assert.equal(window.history().canGoForward, true);
+
+  window.moveHistory(1);
+  assert.equal(window.at().tab, PANEL_TAB.SETTINGS, "Forward opens Settings again");
+  assert.deepEqual(window.addresses(), steps);
+});
+
+test("on a narrow stage a move the history makes by itself back from the side panel shuts it, as the window's own Back does", () => {
+  const window = mount(SHELL_ROOM.NARROW, ON_TASK);
+  window.press(() => window.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
+
+  window.moveHistory(-1);
+  assert.deepEqual(window.at().panel, { open: false, tab: PAGE_TAB });
+  assert.deepEqual(window.addresses(), [TASK_PATH, `${TASK_PATH}/page/page-1`]);
+  window.moveHistory(1);
+  assert.deepEqual(window.at().panel, { open: true, tab: PAGE_TAB });
+});
+
+test("a window whose history already stands on a step when it opens, as a reloaded tab's does, opens that step rather than recording where it first stood", () => {
+  const before = mount(SHELL_ROOM.NARROW, ON_TASK);
+  before.press(() => before.shown().sidePanel.onShow(DOCUMENT_TASK.id, PAGE_TAB));
+  const { held } = before;
+  unmountAll();
+
+  const reloaded = mount(SHELL_ROOM.NARROW, ON_TASK, held);
+  assert.deepEqual(
+    reloaded.at().panel,
+    { open: true, tab: PAGE_TAB },
+    "the side panel opens again",
+  );
+  assert.deepEqual(reloaded.addresses(), [TASK_PATH, `${TASK_PATH}/page/page-1`]);
+  assert.equal(reloaded.history().canGoBack, true);
 });
