@@ -6259,6 +6259,14 @@ button.picture-frame {
   left: calc(100% + var(--luke-space-2));
 }
 
+/* The web's gutter is a finger's target across (desktop.css), which its
+   count, a glyph and a figure, fills when drawn tighter than a toolbar's
+   button; its press still takes the whole target on a touch screen. */
+[data-luke-profile="web"] .comment-count {
+  --luke-control-inset: var(--luke-space-6);
+  --luke-icon-gap: var(--luke-space-4);
+}
+
 .comment-float {
   position: absolute;
   z-index: 3;
