@@ -1,0 +1,165 @@
+/* calendar.css -- a Calendar's month: its title and two steps above a
+   grid of seven columns, each a control's height square, the weekday
+   headings in the caption's type over six weeks of days in the body's
+   figures. A day lights under the pointer on a rounded face drawn behind
+   its number; a single day or a range's ends fill that face with the
+   accent, and the days between them wash the cell edge to edge, the ends
+   washing their inner half, so a range reads as one band. Today is marked
+   in the accent's ink and a dot under its number, which keeps when it is
+   filled, and a neighbouring month's days are dimmed. */
+
+@layer components {
+  .luke-calendar {
+    display: inline-flex;
+    flex-direction: column;
+    gap: var(--luke-space-8);
+  }
+
+  .luke-calendar-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--luke-control-gap);
+    padding-inline-start: var(--luke-space-6);
+  }
+
+  .luke-calendar-title {
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-label-size);
+    line-height: var(--luke-type-label-leading);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  .luke-calendar-steps {
+    display: flex;
+    gap: var(--luke-space-2);
+  }
+
+  /* Note that the grid is a table, its cells' spacing cleared to the seven
+     columns alone; its borders stay separate, since a collapsed table's
+     cells take no corners and a band rounds at a week's edge. */
+  .luke-calendar-grid {
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed;
+  }
+
+  .luke-calendar-weekday,
+  .luke-calendar-cell {
+    width: var(--luke-control-height);
+    padding: 0;
+  }
+
+  .luke-calendar-weekday {
+    height: var(--luke-control-height);
+    text-align: center;
+    color: var(--luke-color-text-subtle);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-caption-size);
+    line-height: var(--luke-type-caption-leading);
+    font-weight: var(--luke-weight-medium);
+  }
+
+  .luke-calendar-day {
+    position: relative;
+    z-index: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: var(--luke-control-height);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    /* Note that a day draws the keyboard's ring inside itself, because its
+       neighbours stand against it on every side. */
+    outline-offset: var(--luke-focus-ring-inset);
+    background: none;
+    color: var(--luke-color-text);
+    font-family: var(--luke-font-sans);
+    font-size: var(--luke-type-body-size);
+    line-height: var(--luke-type-body-leading);
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+
+  [data-luke-profile="desktop"] .luke-calendar-day {
+    cursor: default;
+  }
+
+  .luke-calendar-day:focus-visible {
+    border-radius: var(--luke-control-radius);
+  }
+
+  /* The face the pointer lights and a pick fills, behind the number. */
+  .luke-calendar-day::before {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    border-radius: var(--luke-control-radius);
+    content: "";
+    transition: background-color var(--luke-duration-hover) ease;
+  }
+
+  .luke-calendar-day:hover::before {
+    background: var(--luke-color-fill-hover);
+  }
+
+  .luke-calendar-day[data-outside="true"] {
+    color: var(--luke-color-text-subtle);
+  }
+
+  .luke-calendar-day[aria-current="date"] {
+    color: var(--luke-color-accent-text);
+    font-weight: var(--luke-weight-semibold);
+  }
+
+  /* Today's dot, in whatever ink its number is drawn. */
+  .luke-calendar-day[aria-current="date"]::after {
+    position: absolute;
+    bottom: var(--luke-space-2);
+    left: 50%;
+    width: var(--luke-space-4);
+    height: var(--luke-space-4);
+    border-radius: var(--luke-radius-full);
+    background: currentColor;
+    transform: translateX(-50%);
+    content: "";
+  }
+
+  .luke-calendar-cell[data-place="between"] {
+    background: var(--luke-color-fill-selected);
+  }
+
+  .luke-calendar-cell[data-place="start"] {
+    background: linear-gradient(to right, transparent 50%, var(--luke-color-fill-selected) 50%);
+  }
+
+  .luke-calendar-cell[data-place="end"] {
+    background: linear-gradient(to left, transparent 50%, var(--luke-color-fill-selected) 50%);
+  }
+
+  /* A band that runs on past a week's edge rounds there, so each week's
+     stretch of it reads as one piece. */
+  .luke-calendar-cell:is([data-place="between"], [data-place="start"]):last-child {
+    border-start-end-radius: var(--luke-control-radius);
+    border-end-end-radius: var(--luke-control-radius);
+  }
+
+  .luke-calendar-cell:is([data-place="between"], [data-place="end"]):first-child {
+    border-start-start-radius: var(--luke-control-radius);
+    border-end-start-radius: var(--luke-control-radius);
+  }
+
+  .luke-calendar-cell:is([data-place="single"], [data-place="start"], [data-place="end"])
+    > .luke-calendar-day {
+    color: var(--luke-color-on-accent);
+  }
+
+  .luke-calendar-cell:is([data-place="single"], [data-place="start"], [data-place="end"])
+    > .luke-calendar-day::before {
+    background: var(--luke-color-accent);
+  }
+}
