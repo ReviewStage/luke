@@ -153,6 +153,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       appVersion: identity.appVersion,
       packaged: identity.packaged,
       sends: runMode.sendsNetwork,
+      // The kernel's clock, so a count is stamped on the same clock as every other timer here.
+      now: kernel.now,
       credential,
       // The day each once-a-day count was last sent, kept in the settings
       // file so a relaunch the same day does not count it again.

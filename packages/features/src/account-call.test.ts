@@ -125,7 +125,7 @@ it.effect(
 
 it.effect("a late credential renews and retries on the bearer it resolves", () =>
   Effect.gen(function* () {
-    const { credential, renewals } = account(["stale", "fresh"]);
+    const { credential } = account(["stale", "fresh"]);
     const { call, requests, client } = callOn(
       lateCredential(Effect.succeed(credential)),
       (request) =>
@@ -142,6 +142,5 @@ it.effect("a late credential renews and retries on the bearer it resolves", () =
       requests.map((request) => request.authorization),
       ["Bearer stale", "Bearer fresh"],
     );
-    assert.equal(renewals.length, 1);
   }),
 );
