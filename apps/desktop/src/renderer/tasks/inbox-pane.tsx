@@ -28,6 +28,8 @@ import { useAutomation } from "@luke/panel/automation-directory";
 import { useMemberDirectory, usePerson } from "@luke/panel/member-directory";
 import { PictureBlock } from "@luke/panel/picture-block";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { AttachedFileChips } from "@luke/panel/tasks/attached-file-chips";
+import { AttachmentViewer } from "@luke/panel/tasks/attachment-viewer";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { REPLY_SCOPE } from "@luke/panel/tasks/reply-to-selection";
 import { useMinute } from "@luke/panel/tasks/task-time";
@@ -79,8 +81,6 @@ import {
   NOTHING_HELD,
 } from "./agent-ref";
 import { ArchivedComposerNote } from "./archived-task";
-import { AttachedFileChips } from "./attached-file-chips";
-import { AttachmentViewer } from "./attachment-viewer";
 import { CodeCardHeader, CodeLines } from "./code-pane";
 import type { ReadFileWindow } from "./file-tab";
 import { InboxAnswerBox } from "./inbox-answer-box";

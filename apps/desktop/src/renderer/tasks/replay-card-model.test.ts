@@ -17,10 +17,10 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { CALL_KIND } from "@luke/features/turn-rows";
+import { TOOL_STATE } from "@luke/panel/ai-elements/tool";
+import { messageFileChips } from "@luke/panel/tasks/attached-file-chips";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { test } from "vitest";
-import { TOOL_STATE } from "../ai-elements/tool";
-import { messageFileChips } from "./attached-file-chips";
 import { messageWords } from "./coding-agent-model";
 import {
   briefAgent,

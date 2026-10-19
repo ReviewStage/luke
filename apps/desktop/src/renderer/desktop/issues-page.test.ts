@@ -24,6 +24,7 @@ import { type SidePanelControl, useSidePanel } from "@luke/panel/tasks/use-side-
 import { lineWords } from "@luke/panel/testing/actor-line";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
+import { playMotions } from "@luke/panel/testing/pane-motion";
 import { relayout } from "@luke/panel/testing/resize-observer";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { landedBundles, onSideBundles, unlandedBundles } from "@luke/panel/testing/side-bundles";
@@ -35,7 +36,6 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { playMotions } from "#testing/pane-motion";
 import { tasksControl } from "#testing/tasks-control";
 import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab";
 import { IssuesPage } from "./issues-page";

@@ -1,7 +1,13 @@
 import type { AccountSnapshot } from "@luke/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { AppearanceSection } from "@luke/panel/settings/appearance-page";
+import { ExperimentalPage } from "@luke/panel/settings/experimental-page";
+import { MacCommandsSection } from "@luke/panel/settings/mac-commands-section";
+import { NotificationsSection } from "@luke/panel/settings/notifications-section";
 import { WindowShortcutSections } from "@luke/panel/settings/shortcuts-page";
 import { UpdatesSection } from "@luke/panel/settings/updates";
+import { ShortcutSection } from "@luke/panel/settings/voice-keys";
+import { VoiceSection } from "@luke/panel/settings/voice-page";
 import { useSettingsWrites } from "@luke/panel/settings/writes";
 import type { SettingsSearchInput } from "@luke/panel/settings-search";
 import { EXPERIMENTS, HOST_CAPABILITY, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
@@ -17,14 +23,8 @@ import type {
 } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
 import { AccountSection } from "./account-section";
-import { AppearanceSection } from "./appearance-page";
 import { CodingAgentsPage } from "./coding-agents-page";
-import { ExperimentalPage } from "./experimental-page";
 import { type IntegrationsFilter, IntegrationsSection } from "./integrations-page";
-import { MacCommandsSection } from "./mac-commands-section";
-import { NotificationsSection } from "./notifications-section";
-import { ShortcutSection } from "./voice-keys";
-import { VoiceSection } from "./voice-page";
 import { shownWorkspace, WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page";
 
 /**

@@ -15,8 +15,8 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
+import { TOOL_STATE, type ToolState } from "@luke/panel/ai-elements/tool";
 import { isRecord } from "@luke/wire";
-import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { AGENT_PART, agentParts, messageWords } from "./coding-agent-model";
 
 /**

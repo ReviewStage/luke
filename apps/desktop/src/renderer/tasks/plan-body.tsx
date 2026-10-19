@@ -10,7 +10,9 @@ import { planSections } from "@luke/features/plan-document";
 import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
 import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
+import { type LinkDrawer, MarkdownMessage, type TaskToggler } from "@luke/panel/markdown-message";
 import { useCreator } from "@luke/panel/member-directory";
+import { PlanPictures, usePlanPictureDrawer } from "@luke/panel/tasks/plan-pictures";
 import {
   copyTaskLinkItem,
   markReadItem,
@@ -18,6 +20,15 @@ import {
   renameTaskItem,
   versionHistoryItem,
 } from "@luke/panel/tasks/task-menu-items";
+import {
+  type ChaseState,
+  chaseBehind,
+  chaseOpened,
+  chaseRetargeted,
+  chaseStepped,
+  chaseView,
+  type UnitView,
+} from "@luke/panel/tasks/task-reveal";
 import { agoText, momentText, sinceText, useMinute } from "@luke/panel/tasks/task-time";
 import { TaskTitle } from "@luke/panel/tasks/task-title";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
@@ -34,7 +45,6 @@ import { actorName } from "@luke/ui/actor-model";
 import { LinkIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref";
-import { type LinkDrawer, MarkdownMessage, type TaskToggler } from "../markdown-message";
 import { DocumentByline, DocumentScroll } from "./document-frame";
 import {
   type EditAgents,
@@ -53,16 +63,6 @@ import {
   textBoxOf,
   useTextRoom,
 } from "./plan-document-editor";
-import { PlanPictures, usePlanPictureDrawer } from "./plan-pictures";
-import {
-  type ChaseState,
-  chaseBehind,
-  chaseOpened,
-  chaseRetargeted,
-  chaseStepped,
-  chaseView,
-  type UnitView,
-} from "./task-reveal";
 
 /**
  * plan-body.tsx -- the open task's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.

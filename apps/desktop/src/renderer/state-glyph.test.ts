@@ -3,11 +3,11 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
+import { TOOL_STATE, ToolLine, type ToolState } from "@luke/panel/ai-elements/tool";
 import { TerminalIcon } from "lucide-react";
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { TOOL_STATE, ToolLine, type ToolState } from "./ai-elements/tool";
 import { TaskStatusMark } from "./desktop/task-card";
 import { AgentGlyph, agentEndMark } from "./tasks/tab-look";
 

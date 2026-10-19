@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import { CALL_KIND } from "@luke/features/turn-rows";
+import { TOOL_BLOCK, TOOL_STATE } from "@luke/panel/ai-elements/tool";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { TranscriptOpeningCall, TranscriptTool } from "./transcript-blocks";
 
 /**

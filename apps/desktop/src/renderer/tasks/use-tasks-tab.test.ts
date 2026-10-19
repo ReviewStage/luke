@@ -29,6 +29,7 @@ import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
+import { CHIP_PLACE, RepositoryChip } from "@luke/panel/tasks/repository-chip";
 import { MAIN_TAB } from "@luke/panel/tasks/use-main-tabs";
 import { SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
 import { handState } from "@luke/panel/testing/app-state";
@@ -61,7 +62,6 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { CHIP_PLACE, RepositoryChip } from "./repository-chip";
 import {
   AUTOMATIONS_PAGE,
   ISSUES_PAGE,

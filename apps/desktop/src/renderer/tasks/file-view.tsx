@@ -9,6 +9,7 @@ import {
 } from "@luke/panel/desktop/hover-pane";
 import { type PaneSlide, usePaneSlide } from "@luke/panel/desktop/pane-motion";
 import type { ReadFolder } from "@luke/panel/file-tree/contract";
+import { FileBreadcrumbs } from "@luke/panel/tasks/file-breadcrumbs";
 import {
   FILE_HISTORY_STEP,
   type FileHistoryStep,
@@ -25,7 +26,6 @@ import {
 } from "@luke/ui";
 import { shownFiles } from "@luke/voice/code-pane-model";
 import { Fragment, type ReactNode, useCallback, useMemo, useRef, useState } from "react";
-import { FileBreadcrumbs } from "./file-breadcrumbs";
 import { FileMenu } from "./file-menu";
 import type { FileNotes } from "./file-note";
 import { FileTab, type ReadFileWindow } from "./file-tab";

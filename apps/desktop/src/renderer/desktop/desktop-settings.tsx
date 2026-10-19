@@ -5,6 +5,7 @@ import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { appPlatform } from "@luke/panel/app-platform";
+import { type CallCardInput, ColumnFoot } from "@luke/panel/call/call-card";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "@luke/panel/copy-link-item";
 import { ActionMenu } from "@luke/panel/desktop/action-menu";
 import type { SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
@@ -47,7 +48,6 @@ import {
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
-import { type CallCardInput, ColumnFoot } from "../call/call-card";
 import type { NavigationHistory } from "../navigation-history";
 import { TemplateVersionHistory } from "../settings/plan-template-history";
 import { PlanTemplatePage } from "../settings/plan-template-page";

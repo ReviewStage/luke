@@ -11,8 +11,8 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import { TASK_WORK_STATE, type TaskWorkState } from "@luke/features/tasks-view";
 import { CALL_KIND, CALL_WORDS, type CallKind } from "@luke/features/turn-rows";
+import { TOOL_STATE, type ToolState } from "@luke/panel/ai-elements/tool";
 import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
-import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { cardTitle, changesSidebar } from "./tool-call-model";
 
 /**

@@ -19,10 +19,12 @@ import { useSideBundles } from "@luke/panel/bundle-loader";
 import { imageFiles } from "@luke/panel/feedback-images";
 import { type IntegrationStatuses, useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
+import { AttachedFileChips, attachmentChips } from "@luke/panel/tasks/attached-file-chips";
 import { readFiles, withFiles } from "@luke/panel/tasks/attached-files";
 import { ComposerField } from "@luke/panel/tasks/composer-field";
 import { DictateButton, DictationStrip } from "@luke/panel/tasks/dictation-strip";
 import { ComposerQuoteView, ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
   BUTTON_TYPE,
@@ -37,7 +39,6 @@ import {
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useRef, useState } from "react";
-import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { useComposerPickers } from "./composer-pickers";
 import {
   type InboxDraft,
@@ -47,7 +48,6 @@ import {
   inboxReply,
   pickedWords,
 } from "./inbox-model";
-import type { SkillSource } from "./skill-picker";
 import type { TaskInboxControl } from "./use-task-inbox";
 
 /**

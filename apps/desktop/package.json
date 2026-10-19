@@ -77,8 +77,6 @@
     "posthog-js": "1.418.3",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-markdown": "10.1.0",
-    "remark-gfm": "4.0.1",
     "streamdown": "2.7.0",
     "tailwindcss": "4.3.3",
     "three": "0.186.1",

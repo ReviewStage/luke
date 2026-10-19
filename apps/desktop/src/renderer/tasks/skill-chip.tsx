@@ -1,3 +1,5 @@
+import type { SkillSource } from "@luke/panel/tasks/skill-picker";
+import { SkillRef, type SkillSubject } from "@luke/panel/tasks/skill-ref";
 import {
   holdsSlashWord,
   type SkillOption,
@@ -16,8 +18,6 @@ import {
   useState,
 } from "react";
 import type { Components, ExtraProps } from "streamdown";
-import type { SkillSource } from "./skill-picker";
-import { SkillRef, type SkillSubject } from "./skill-ref";
 import { type TranscriptElement, TranscriptWords } from "./transcript-blocks";
 
 /**

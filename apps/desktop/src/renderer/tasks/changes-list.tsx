@@ -6,6 +6,7 @@ import {
   startsCollapsed,
   treeOrder,
 } from "@luke/panel/tasks/changes-model";
+import type { DiffListDoor } from "@luke/panel/tasks/diff-list";
 import { Tooltip } from "@luke/panel/tooltip";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { IconButton } from "@luke/ui";
@@ -21,7 +22,6 @@ import {
   useState,
 } from "react";
 import { LinesChanged } from "./agent-published";
-import type { DiffListDoor } from "./diff-list";
 
 /**
  * changes-list.tsx -- how Files changed's list of files is walked: which files a filter keeps, which are collapsed, the file the keys stand on, and the keys, stage-cli's, that move between them.

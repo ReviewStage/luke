@@ -14,6 +14,14 @@ import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridg
 import { handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
+import {
+  conversationOf,
+  toolCall,
+  words,
+  worker,
+  workerCall,
+  workTurn,
+} from "@luke/panel/testing/task-work";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { ACTOR_KIND } from "@luke/ui/actor-model";
@@ -26,7 +34,6 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
-import { conversationOf, toolCall, words, worker, workerCall, workTurn } from "#testing/task-work";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { taskCards } from "../desktop/side-panel";
 import { NOTHING_HELD } from "./agent-ref";

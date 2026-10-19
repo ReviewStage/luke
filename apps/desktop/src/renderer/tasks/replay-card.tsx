@@ -11,6 +11,7 @@ import {
   PlanHeader,
   PlanIcon,
 } from "@luke/panel/ai-elements/plan";
+import { TOOL_BLOCK } from "@luke/panel/ai-elements/tool";
 import { useFindOpen } from "@luke/panel/find-in-tab";
 import { useMemberDirectory } from "@luke/panel/member-directory";
 import { SentTime } from "@luke/panel/tasks/sent-time";
@@ -38,7 +39,6 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ActorRef } from "../actor-ref";
-import { TOOL_BLOCK } from "../ai-elements/tool";
 import { lineSender, providerOf } from "./coding-agent-model";
 import { linkChip } from "./mention-chip";
 import {
