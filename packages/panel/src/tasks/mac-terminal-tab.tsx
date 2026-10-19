@@ -39,11 +39,17 @@ function said(words: string): string {
   return `\r\n\x1b[2m${words}\x1b[0m\r\n`;
 }
 
+/** An agent's pushed branch and the number of the pull request from it, where there is one. */
+interface ReadBranch {
+  readonly branch: string;
+  readonly pullRequest: number | null;
+}
+
 /**
  * The branch each agent's tab last read, by agent, with the Run press it was
  * read for, so the tab drawn again reads it only after another press.
  */
-const readBranches = new Map<string, { readonly asked: number; readonly branch: string }>();
+const readBranches = new Map<string, ReadBranch & { readonly asked: number }>();
 
 export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX.Element {
   const { macTerminal: agentId, repository, asked } = tab;
@@ -87,12 +93,14 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
     };
     const held = readBranches.get(agentId);
     // The agent's pushed branch: the one read for this press, or read now.
-    const reading: Promise<string | null> =
+    const reading: Promise<ReadBranch | null> =
       held?.asked === asked
-        ? Promise.resolve(held.branch)
+        ? Promise.resolve(held)
         : (tell("▸ Reading the agent's pushed branch…"),
           act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }).then((answer) =>
-            "failure" in answer ? null : answer.branch,
+            "failure" in answer || answer.branch === null
+              ? null
+              : { branch: answer.branch, pullRequest: answer.pullRequest?.number ?? null },
           ));
     reading
       .then((read) => {
@@ -103,10 +111,17 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
           );
           return;
         }
-        readBranches.set(agentId, { asked, branch: read });
-        setBranch(read);
+        readBranches.set(agentId, { asked, ...read });
+        setBranch(read.branch);
         const { cols, rows } = mounted.size();
-        return act(ACT_KIND.MAC_TERMINAL_OPEN, { agentId, repository, branch: read, cols, rows });
+        return act(ACT_KIND.MAC_TERMINAL_OPEN, {
+          agentId,
+          repository,
+          branch: read.branch,
+          pullRequest: read.pullRequest,
+          cols,
+          rows,
+        });
       })
       .catch((refused: Error) => tell(refused.message));
     mounted.focus();
