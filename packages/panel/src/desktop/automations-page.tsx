@@ -31,6 +31,7 @@ import {
   LIST_VARIANT,
   List,
   ListRow,
+  NO_CONTEXT_MENU,
   PAGE_FRAME,
   SETTINGS_SECTION_FRAME,
   SettingsRow,
@@ -236,7 +237,7 @@ function AutomationRow({
               automation.enabled ? `Turn off ${automation.name}` : `Turn on ${automation.name}`
             }
             onChange={(enabled) => onToggle(enabled)}
-            onContextMenu={(event) => event.stopPropagation()}
+            {...NO_CONTEXT_MENU}
           />
         }
         onPress={onOpen}

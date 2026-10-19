@@ -225,6 +225,23 @@ export interface ContextMenuProps {
   "data-long-press": "";
 }
 
+/**
+ * The props of a control inside an element carrying a context menu that
+ * keeps the menu its own press would otherwise open, as a row's switch
+ * does: a right-click on it does not reach the row, and a long press that
+ * starts on it never starts the row's hold.
+ */
+export const NO_CONTEXT_MENU = {
+  "data-no-context-menu": "",
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => event.stopPropagation(),
+} as const;
+
+/** Whether a press on `target` went down in a control inside `carrier` that keeps its menu (`NO_CONTEXT_MENU`). */
+function refusesMenu(target: EventTarget, carrier: HTMLElement): boolean {
+  const zone = target instanceof Element ? target.closest("[data-no-context-menu]") : null;
+  return zone !== null && zone !== carrier && carrier.contains(zone);
+}
+
 /** The handlers of the events a context menu hears that an element carrying it may hear for itself too. */
 export interface ContextMenuCarrier<T extends HTMLElement> {
   onContextMenu?: React.MouseEventHandler<T> | undefined;
@@ -332,6 +349,7 @@ function useTouchHold() {
         letGo();
         held.current = false;
         if (event.pointerType !== "touch" || !event.isPrimary) return;
+        if (refusesMenu(event.target, event.currentTarget)) return;
         const { currentTarget: element, pointerId, clientX: x, clientY: y } = event;
         const timer = window.setTimeout(() => {
           stopCounting();

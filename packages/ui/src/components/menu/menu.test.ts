@@ -3,7 +3,14 @@
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
-import { MENU_ITEM_MARK, Menu, type MenuEntry, MenuItem, useMenu } from "./menu.js";
+import {
+  MENU_ITEM_MARK,
+  Menu,
+  type MenuEntry,
+  MenuItem,
+  NO_CONTEXT_MENU,
+  useMenu,
+} from "./menu.js";
 
 /**
  * menu.test.ts -- a menu behaves as a system menu does: its button opens it
@@ -389,16 +396,17 @@ test("an item steered from a field is a switch for a setting, says its list stan
   expect(chosen).toEqual(["fast", "hover effort"]);
 });
 
-/** A row a right-click or a long press opens the task's menu on, whose own press is counted in `opened`. */
+/** A row a right-click or a long press opens the task's menu on, whose press is counted in `opened`, with a switch in it that keeps the menu. */
 function HeldRow({ opened }: { opened: string[] }): React.JSX.Element {
   const menu = useMenu(true);
   return createElement(
     Fragment,
     null,
     createElement(
-      "button",
-      { type: "button", onClick: () => opened.push("Row"), ...menu.contextMenu() },
-      "Row",
+      "div",
+      { role: "row", ...menu.contextMenu() },
+      createElement("button", { type: "button", onClick: () => opened.push("Row") }, "Row"),
+      createElement("button", { type: "button", role: "switch", ...NO_CONTEXT_MENU }, "Switch"),
     ),
     menu.drawn === undefined
       ? null
@@ -559,7 +567,8 @@ test("a row taken away while a touch is held on it leaves no hold behind to open
 
 test("a touch a list captures to drag its row opens nothing, dragged, lifted, or resting within the slop; the browser's own capture on the row is no drag", () => {
   const { row } = heldRow();
-  const list = row.parentElement ?? expect.fail("the row stands in its list");
+  const list =
+    row.closest('[role="row"]')?.parentElement ?? expect.fail("the row stands in its list");
   down(row, "touch");
   act(() => {
     list.dispatchEvent(pointer("pointermove", "touch", 46, 20));
@@ -583,6 +592,24 @@ test("a touch a list captures to drag its row opens nothing, dragged, lifted, or
   act(() => {
     row.dispatchEvent(pointer("gotpointercapture", "touch", 40, 20));
   });
+  wait(HELD_MS);
+  expect(openMenu()).not.toBeNull();
+});
+
+test("a switch in the row that keeps its menu opens nothing, held or right-clicked, while the row beside it still opens on a hold", () => {
+  const { row } = heldRow();
+  const toggle = button("Switch");
+  down(toggle, "touch");
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  lift(toggle, "touch");
+  act(() => {
+    toggle.dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 40, clientY: 10 }),
+    );
+  });
+  expect(openMenu()).toBeNull();
+  down(row, "touch");
   wait(HELD_MS);
   expect(openMenu()).not.toBeNull();
 });
