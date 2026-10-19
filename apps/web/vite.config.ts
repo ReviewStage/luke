@@ -17,9 +17,25 @@ const PANEL_SIDE_BUNDLES = {
   terminal: "/packages/panel/src/terminal/index.ts",
   diagram: "/packages/panel/src/diagram/index.ts",
   "diff-view": "/packages/panel/src/diff-view/index.ts",
+  // What only a tab that records or reports loads: session replay's recorder
+  // and its client, and Sentry's SDK.
+  "session-recorder": "/apps/web/src/app/session-recorder.ts",
+  "session-replay": "/posthog-js/dist/module.no-external.js",
+  sentry: "/apps/web/src/app/web-sentry-sdk.ts",
+};
+
+// Where the web app's tab reports to Sentry (`src/app/web-sentry.ts`): the
+// deployment's own DSN, environment, and commit, read from the build's
+// environment as the desktop's build reads its DSN. A build without
+// `SENTRY_DSN` writes an empty one, and the tab loads no SDK.
+const WEB_SENTRY_DEFINES = {
+  WEB_SENTRY_DSN: JSON.stringify(process.env.SENTRY_DSN ?? ""),
+  WEB_SENTRY_ENVIRONMENT: JSON.stringify(process.env.VERCEL_ENV ?? ""),
+  WEB_SENTRY_RELEASE: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA ?? ""),
 };
 
 export default defineConfig({
+  define: WEB_SENTRY_DEFINES,
   plugins: [
     react(),
     tailwindcss(),

@@ -1305,6 +1305,19 @@ The hand-off page is one of the sign-in pages above: not recorded, its
 address cut to the page itself. Your browser contacts PostHog directly, so
 PostHog sees your network address, as it does for the app's recordings.
 
+Luke in a browser, the app at tryluke.dev/app and at every link to something
+in Luke, is not one of the site's pages above: it records and reports what the
+Mac app does. It makes screen recordings as described under "Screen
+recordings", with every word masked and the same parts left out, and with
+the tab's address, which names the workspace and what it opens, replaced by
+the app's own; only the site's production build records. It sends Sentry
+reports of the errors it did not handle and of a tab that could not draw,
+and performance traces for about one page load in ten, using Sentry's
+default data collection, as described under "Crash and performance reports
+from the Mac app", where the page's address, your browser's details, and the
+addresses of the requests it made take the place of the Mac's. Your browser
+contacts PostHog and Sentry directly, so each sees your network address.
+
 A link to something in Luke, pasted into Slack, iMessage, or anywhere else
 that previews links, shows only Luke's own card: the Luke name and logo, the
 same for every link, and nothing of the task, the agent, the person, or the

@@ -6,7 +6,10 @@
  * (`tools/anti-slop/effect-edges.json`), as the desktop's `window-root.tsx`
  * is: it builds the tab's one runtime over the host's layer, which every act
  * runs on, and runs the panel's first read. The tab is drawn in the
- * account's Theme setting beside the panel (`web-appearance.tsx`).
+ * account's Theme setting beside the panel (`web-appearance.tsx`). It starts
+ * the tab's Sentry first (`web-sentry.ts`), where the build carries a DSN,
+ * and reports through it a tab that could draw nothing, as the desktop's
+ * window root does.
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -29,6 +32,7 @@ import { browserLinkPlatform, handOffToMacApp } from "./mac-app-handoff";
 import { WebAppearance } from "./web-appearance";
 import { composeWeb, WebHostTag } from "./web-host";
 import { WEB_BUNDLES } from "./web-platform";
+import { startWebSentry, type WebSentryBuild, webSentryBuild } from "./web-sentry";
 
 /** What a caller other than the page's entry hands the tab: a test's client in place of the network. */
 export interface WebAppOptions {
@@ -38,6 +42,8 @@ export interface WebAppOptions {
   readonly linkPlatform?: LinkPlatform;
   /** How the loaded link is handed to the Mac app; a navigation to the desktop's scheme where none is given. */
   readonly openMacApp?: (appLink: string) => void;
+  /** Where the tab reports to Sentry; what the build carries where none is given. */
+  readonly sentry?: WebSentryBuild;
 }
 
 /** The app as drawn: closing it takes the panel down and drains the host. */
@@ -57,6 +63,8 @@ export async function mountWebApp(
 ): Promise<WebApp | undefined> {
   // The address the tab loaded at, read before the panel's history writes its own steps into it.
   const loadedAt = location.href;
+  // Never awaited before drawing: the SDK is a chunk of its own, and the panel does not wait on it.
+  const sentry = startWebSentry(options.sentry ?? webSentryBuild());
   const httpClient = options.httpClient ?? FetchHttpClient.layer;
   // Note that an act runs only once the host stands, by which time the runtime is set.
   let runtime: ManagedRuntime.ManagedRuntime<WebHostTag | HostTag, DuplicateGatewayMethod>;
@@ -74,6 +82,8 @@ export async function mountWebApp(
     await Effect.runPromise(appStateFirstRead);
   } catch (error) {
     console.error("The tab's host could not stand or its state be read; nothing is drawn.", error);
+    // A blank tab is a failure, so it is sent as an event, not only kept as the console's breadcrumb.
+    (await sentry)?.captureUnhandled(error, "auto.browser.web_root.first_read");
     await runtime.dispose();
     return undefined;
   }

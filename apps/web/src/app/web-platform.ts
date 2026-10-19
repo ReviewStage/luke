@@ -1,5 +1,5 @@
 /**
- * web-platform.ts -- what a browser tab answers for the panel: its own clipboard, a download, a new tab, the host's event count, and nothing for the Mac's menus or bundles.
+ * web-platform.ts -- what a browser tab answers for the panel: its own clipboard, a download, a new tab, the host's event count, the masked session recording, and nothing for the Mac's menus or bundles.
  *
  * The web client's shell beside the host in the tab (`web-host.ts`), which
  * hands it where a surface event is counted. An agent's page has no
@@ -12,6 +12,7 @@ import { openTargetOf } from "@luke/features/open-address";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import type { ShellBundles } from "@luke/panel/shell-bundles";
 import { NOTIFICATIONS_GRANTOR } from "@luke/voice/settings-controls";
+import { applyWebSessionReplay } from "./web-session-replay";
 
 /**
  * Where the web serves the panel's static files, Excalidraw's fonts and the
@@ -56,11 +57,12 @@ function macAppLink(): string {
 }
 
 /**
- * The tab's platform. A browser has no menu bar, no global keys, and no
- * session recording here, so those answer nothing; focus is the tab's own,
- * so bringing the panel forward is asking the window for it; and a surface
- * event is counted by the host in the tab, as every other event is; and
- * notifications are the browser's to grant, for the site.
+ * The tab's platform. A browser has no menu bar and no global keys, so those
+ * answer nothing; focus is the tab's own, so bringing the panel forward is
+ * asking the window for it; a surface event is counted by the host in the
+ * tab, as every other event is; notifications are the browser's to grant,
+ * for the site; and session replay is the desktop's own masked recording
+ * (`web-session-replay.ts`).
  */
 export function webPlatform(counting: Pick<AppPlatform, "recordSurfaceEvent">): AppPlatform {
   return {
@@ -74,7 +76,7 @@ export function webPlatform(counting: Pick<AppPlatform, "recordSurfaceEvent">): 
     recordSurfaceEvent: counting.recordSurfaceEvent,
     openGitHub: openTab,
     openWeb: openTab,
-    applySessionReplay: ignore,
+    applySessionReplay: applyWebSessionReplay,
     macAppLink,
     notificationsGrantor: () => NOTIFICATIONS_GRANTOR.BROWSER,
   };

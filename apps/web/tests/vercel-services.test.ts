@@ -274,6 +274,16 @@ test("every path the web app is served at sends its Content Security Policy, ref
     // The installed app's manifest and its icons are the site's own files.
     assert.deepEqual(directives.get("manifest-src"), ["'self'"], route.src);
     assert.ok(directives.get("img-src")?.includes("'self'"), route.src);
+    // The tab reaches the processor for session replay, its configuration's host among it,
+    // and Sentry's ingest in the organization's region, and no script from either.
+    const connect = directives.get("connect-src") ?? [];
+    for (const host of [
+      "https://us.i.posthog.com",
+      "https://us-assets.i.posthog.com",
+      "https://*.ingest.us.sentry.io",
+    ]) {
+      assert.ok(connect.includes(host), `${route.src} connects to ${host}`);
+    }
     assert.equal(route.headers?.["X-Content-Type-Options"], "nosniff", route.src);
     assert.equal(route.headers?.["Referrer-Policy"], "strict-origin-when-cross-origin", route.src);
   }
