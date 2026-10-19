@@ -220,7 +220,7 @@ function withDraft(
   draft: Draft,
 ): readonly KeptDraft[] {
   const others = drafts.filter((kept) => !Equal.equals(kept.place, place));
-  return holds(draft) ? [...others, { place, ...draft }] : others;
+  return holds(draft) ? [...others, { ...draft, place }] : others;
 }
 
 /** A change to the drafts: one place's draft moved on from what it holds, or the drafts a predicate names let go. */

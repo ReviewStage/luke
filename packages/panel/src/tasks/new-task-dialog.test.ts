@@ -134,6 +134,7 @@ async function mount(
   };
   const links: SettingsLink[] = [];
   let registry = AtomRegistry.make();
+  let listed = control.newTask.workspaceId;
   let openAgain = (): void => undefined;
   function Owner() {
     const [open, setOpen] = useState(true);
@@ -141,6 +142,7 @@ async function mount(
     const dialog = createElement(NewTaskDialog, {
       newTask: {
         ...control.newTask,
+        workspaceId: listed,
         open,
         preset,
         repositoriesIn: () => repositories,
@@ -239,6 +241,12 @@ async function mount(
     /** Stands the dialog again over another chooser, as a workspace switch or the first workspaces read hands it. */
     rechoose: async (next: Partial<RepositoryChooser>) => {
       repositories = { ...repositories, ...next };
+      act(() => root.render(onRegistry(registry, createElement(Owner))));
+      await settle();
+    },
+    /** Stands the dialog again once the workspaces are read, listing `workspaceId`. */
+    list: async (workspaceId: string) => {
+      listed = workspaceId;
       act(() => root.render(onRegistry(registry, createElement(Owner))));
       await settle();
     },
@@ -505,6 +513,17 @@ test("words left in a card put away come back as New task opens again and after 
   assert.equal(card.field().textContent, "");
   await card.relaunch();
   assert.equal(card.field().textContent, "");
+});
+
+test("words typed before the workspaces are read stay in the box as the workspace lands, and are its draft", async () => {
+  const card = await mount();
+  card.type("Dark mode");
+  await card.list("workspace-personal");
+  assert.equal(card.field().textContent, "Dark mode");
+
+  await card.key("Escape");
+  await card.reopen();
+  assert.equal(card.field().textContent, "Dark mode");
 });
 
 test("Escape in the repository menu closes the menu and leaves the dialog standing", async () => {

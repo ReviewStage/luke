@@ -25,7 +25,13 @@ import {
 } from "@luke/ui";
 import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { DRAFT_PLACE, EMPTY_DRAFT, useDraft } from "../composer-drafts.js";
+import {
+  DRAFT_PLACE,
+  type DraftPlace,
+  EMPTY_DRAFT,
+  useDraft,
+  useDraftWriter,
+} from "../composer-drafts.js";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
@@ -174,6 +180,15 @@ function sameAsk(a: AgentAsk, b: AgentAsk): boolean {
   );
 }
 
+/** New task's draft place: its workspace, none before the workspaces are read, and the issue it was opened on. */
+function newTaskPlace(workspaceId: string | undefined, from: NewTaskIssue | undefined): DraftPlace {
+  return {
+    kind: DRAFT_PLACE.NEW_TASK,
+    workspaceId: workspaceId ?? null,
+    ...(from === undefined ? undefined : { issueId: from.id }),
+  };
+}
+
 /** Whether a key press is Shift+Tab alone, which turns the mode from the field. */
 function turnsMode(event: KeyboardEvent): boolean {
   return event.key === "Tab" && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey;
@@ -259,12 +274,19 @@ export function NewTaskComposer({
   // An issue's Start agent… asks for an agent alone, so its card stands in Agent mode and offers no Plan toggle.
   const agentOnly = newTask.preset?.agent === true;
   const mode = agentOnly ? NEW_TASK_MODE.AGENT : kept;
-  const draft = useDraft({
-    kind: DRAFT_PLACE.NEW_TASK,
-    workspaceId: workspaceId ?? null,
-    ...(from === undefined ? undefined : { issueId: from.id }),
-  });
+  const draft = useDraft(newTaskPlace(workspaceId, from));
   const { text: words, attachments } = draft.draft;
+  // Words typed before the workspaces were read become the workspace's
+  // draft once it is known, where it holds none of its own.
+  const loose = useDraft(newTaskPlace(undefined, from)).draft;
+  const writer = useDraftWriter();
+  useEffect(() => {
+    if (workspaceId === undefined || !hasWordsOrFiles(loose.text, loose.attachments)) return;
+    writer.update(newTaskPlace(workspaceId, from), (was) =>
+      hasWordsOrFiles(was.text, was.attachments) ? was : loose,
+    );
+    writer.update(newTaskPlace(undefined, from), () => EMPTY_DRAFT);
+  }, [workspaceId, from, loose, writer]);
   const [issue, setIssue] = useState<LinearIssueSummary | undefined>(undefined);
   const [chosen, setChosen] = useState<string | null | undefined>(newTask.preset?.repository);
   const [choice, choose] = useDefaultChoice(newTask);
