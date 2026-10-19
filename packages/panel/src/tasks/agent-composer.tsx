@@ -165,8 +165,8 @@ import type { AgentModelControl } from "./use-agent-model.js";
  *
  * New task's composer is this same box over a start rather than a message
  * (`new-task-composer.tsx`): its owner names what the box asks for and
- * calls its round button (`wording`), lays its Linear issue over the words
- * (`above`), stands its repository and Linear chips after the "+" (`tools`)
+ * calls its round button (`wording`), lays its issue over the words
+ * (`above`), stands its repository and Issue chips after the "+" (`tools`)
  * and its Plan toggle before the model chip (`actions`), holds Start while
  * it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
@@ -388,7 +388,7 @@ export function AgentComposer({
   maxLength?: number;
   /** What stands over the words inside the card, before the files attached: New task's Linear issue. */
   above?: ReactNode;
-  /** What stands after the "+" at the foot's left: New task's repository and Linear chips. */
+  /** What stands after the "+" at the foot's left: New task's repository and Issue chips. */
   tools?: ReactNode;
   /** What stands first among the foot's right-hand presses, before the model chip: New task's Plan toggle. */
   actions?: ReactNode;

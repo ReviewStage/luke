@@ -2625,28 +2625,28 @@ ul.actor-stack {
   --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
 }
 
-/* New task's Linear chip (`linear-issue-chip.tsx`) stands at the right end
+/* New task's Issue chip (`issue-picker-chip.tsx`) stands at the right end
    of the dialog's head row, its menu hung from its trailing edge, or after
    the repository chip in Home's card foot, hung from its leading edge;
    placed as a Settings picker's is, wide enough for an issue's title with
    its key and state after it. */
-.linear-issue-chip {
+.issue-picker-chip {
   --luke-combobox-list-max: min(280px, var(--settings-picker-list-max, 280px));
   position: relative;
   min-width: 0;
 }
 
-.linear-issue-chip .searchable-menu {
+.issue-picker-chip .searchable-menu {
   width: 420px;
   max-width: var(--settings-picker-width-max, 420px);
 }
 
-.linear-issue-chip[data-align="end"] .searchable-menu {
+.issue-picker-chip[data-align="end"] .searchable-menu {
   right: 0;
   left: auto;
 }
 
-.linear-issue-chip[data-side="above"] .searchable-menu {
+.issue-picker-chip[data-side="above"] .searchable-menu {
   top: auto;
   bottom: calc(100% + var(--luke-space-4));
 }
@@ -7086,7 +7086,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* New task's head row (`new-task-composer.tsx`, over the card): the title
-   with the repository chip, and the Linear chip at its right end. */
+   with the repository chip, and the Issue chip at its right end. */
 .new-task-head {
   display: flex;
   min-width: 0;
@@ -7172,16 +7172,16 @@ polygon.factory-campus-edge[data-edge="selected"] {
    gives way, ellipsized, where the card is narrow. */
 :is(
   .new-task-plan-toggle,
-  .new-task-composer .linear-issue-chip,
+  .new-task-composer .issue-picker-chip,
   .new-task-composer .agent-model-chip
 ) {
   display: flex;
   flex-shrink: 0;
 }
 
-/* The Linear issue picked, over the words inside the card: drawn as a
-   forked draft's chip is (`.draft-fork-chip`), its key, its title cut short,
-   its state, and the × at its end. */
+/* The issue picked, over the words inside the card: drawn as a
+   forked draft's chip is (`.draft-fork-chip`), its mark, its key, its title
+   cut short, a Linear issue's state, and the × at its end. */
 .new-task-issue {
   display: flex;
   min-width: 0;
@@ -7193,6 +7193,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   border-radius: var(--luke-radius-8);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
+}
+
+.new-task-issue > svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
 }
 
 .new-task-issue-key {

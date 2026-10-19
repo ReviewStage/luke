@@ -11,6 +11,7 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
@@ -2499,6 +2500,36 @@ test("opening Chat on a place, as a chat notice's Open in Chat does, asks first 
   assert.equal(asked.length, 1);
   act(() => asked[0]?.());
   assert.equal(tab.control().chatView.open, true);
+});
+
+test("New task reads a workspace's own issues, each by its key, only while the account has Issues on", async () => {
+  const listed = {
+    id: "3f0e6f5c-7d1a-4f6e-9a55-000000000007",
+    workspaceId: ACME.id,
+    number: 7,
+    title: "Invites expire",
+    description: "",
+    status: ISSUE_STATUS.TODO,
+    priority: ISSUE_PRIORITY.NONE,
+    creator: null,
+    archivedAt: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+  const answers = { [ACT_KIND.ISSUES_LIST]: () => Promise.resolve({ issues: [listed] }) };
+  handState({});
+  const off = mount({ shown: true, tasks: TWO_WORKSPACES }, answers, AtomRegistryModule.make());
+  const offRead = off.control().newTask.issuesIn(ACME.id);
+
+  handState(experimentsOn(EXPERIMENT.ISSUES));
+  const on = mount({ shown: true, tasks: TWO_WORKSPACES }, answers, AtomRegistryModule.make());
+  await settle();
+  const read = on.control().newTask.issuesIn(ACME.id);
+
+  assert.equal(offRead, undefined, "Issues off reads none");
+  assert.deepEqual(await read?.(), [
+    { id: listed.id, workspaceId: ACME.id, identifier: "ACME-7", title: "Invites expire" },
+  ]);
 });
 
 test("a live run reads the listed workspace's chat only while the account has Chat on", async () => {

@@ -1,11 +1,9 @@
 import type { TasklessAgent } from "@luke/features/coding-agent-wire";
-import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   LINEAR_BOUNDS,
   type LinearIssueSummary,
   linearIssueIdentifierIn,
 } from "@luke/features/linear-wire";
-import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import {
   type RepositoryPin,
   TASK_BOUNDS,
@@ -139,15 +137,20 @@ export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "
   return title === "" ? issue.identifier : title;
 }
 
-/** Where an issue's mention is written; its target is the issue's own address, so neither part is read. */
-const ISSUE_MENTION_PLACE = { workspace: "", repository: null } as const;
+/** The characters a markdown link's label escapes to stay one label. */
+const LABEL_SPECIAL = /[[\]\\]/gu;
+
+/** The characters a markdown link's target encodes so it ends where it should. */
+const TARGET_SPECIAL = /[()]/gu;
 
 /**
  * The prompt a coding agent New task starts is handed: a mention of the
- * Linear issue picked, where one was, as the app writes a Linear issue's
- * link (`[@ENG-1 Title](https://linear.app/…)`), then a blank line and the
- * words, trimmed; the issue alone where no words were written, and the words
- * alone where no issue was picked.
+ * issue picked, where one was, by its key and title over its own address,
+ * a Linear issue's as the app writes its link
+ * (`[@ENG-1 Title](https://linear.app/…)`) and one of the workspace's own
+ * over its Luke link (`[@ACME-7 Title](https://tryluke.dev/…/issue/…)`),
+ * then a blank line and the words, trimmed; the issue alone where no words
+ * were written, and the words alone where no issue was picked.
  */
 export function agentPromptOf(
   issue: Pick<LinearIssueSummary, "identifier" | "title" | "url"> | undefined,
@@ -155,11 +158,10 @@ export function agentPromptOf(
 ): string {
   const said = words.trim();
   if (issue === undefined) return said;
-  const mention = mentionMarkdown(
-    { kind: MENTION_KIND.LINK, provider: INTEGRATION_PROVIDER.LINEAR, url: issue.url },
-    `${issue.identifier} ${issue.title.trim()}`.trim(),
-    ISSUE_MENTION_PLACE,
-  );
+  const name = `${issue.identifier} ${issue.title.trim()}`.trim();
+  const label = `@${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
+  const target = issue.url.replace(TARGET_SPECIAL, (special) => (special === "(" ? "%28" : "%29"));
+  const mention = `[${label}](${target})`;
   return said === "" ? mention : `${mention}\n\n${said}`;
 }
 

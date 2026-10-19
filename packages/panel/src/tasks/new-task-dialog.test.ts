@@ -39,11 +39,11 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { NewTaskDialog } from "./new-task-dialog.js";
 import type { RepositoryChooser } from "./repository-chip.js";
-import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.js";
+import type { NewTaskAgent, NewTaskIssue, NewTaskPreset, NewTaskStart } from "./use-tasks-tab.js";
 
 /**
  * New task as the developer meets it: a card over the window whose head row
- * holds its title, the repository chip, and the Linear chip at the right,
+ * holds its title, the repository chip, and the Issue chip at the right,
  * over the composer, whose words start a coding agent in Agent mode, or the
  * plan and a call with Luke in Plan mode, with the Plan toggle at its foot. Each test
  * stands the dialog in an owner that opens it and puts it away as the tab
@@ -114,8 +114,9 @@ function keptInLukeMode(): void {
  * start's name and repository written down, with the agent it asked for;
  * `preset` is what the press that opened it chose, a repository as a
  * repository group's + does or an issue as its Start task… does, `issues`
- * the workspace's Linear issues where it has Linear connected, and `finds`
- * what its Linear answers a search or an identifier with.
+ * the workspace's Linear issues where it has Linear connected, `finds`
+ * what its Linear answers a search or an identifier with, and `own` the
+ * workspace's own issues where Issues stand on.
  */
 async function mount(
   answer: string | undefined = undefined,
@@ -123,6 +124,7 @@ async function mount(
   chooser: Partial<RepositoryChooser> = {},
   issues?: readonly LinearIssueSummary[],
   finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
+  own?: readonly NewTaskIssue[],
 ) {
   const starts: [string, string | null][] = [];
   const asks: LinearIssuesAsk[] = [];
@@ -181,6 +183,7 @@ async function mount(
                 asks.push(ask);
                 return Promise.resolve(finds(ask));
               },
+        issuesIn: () => (own === undefined ? undefined : () => Promise.resolve(own)),
       },
     });
     return createElement(
@@ -1075,28 +1078,28 @@ const ISSUES: readonly LinearIssueSummary[] = [
   },
 ];
 
-/** What the Linear chip is named, and its search field's. */
-const LINEAR_CHIP = '[aria-label="Choose from Linear"]';
+/** What the Issue chip is named, and its search field's. */
+const ISSUE_CHIP = '[aria-label="Choose an issue"]';
 const LINEAR_SEARCH = 'input[aria-label="Search issues, or paste a key or link"]';
 
-/** The Linear chip's search, open. */
+/** The Issue chip's search, open. */
 function linearSearch(): HTMLInputElement {
   return (
     document.querySelector<HTMLInputElement>(LINEAR_SEARCH) ??
-    assert.fail("the Linear chip's search is open")
+    assert.fail("the Issue chip's search is open")
   );
 }
 
-/** The Linear chip pressed, and its search as it opens. */
+/** The Issue chip pressed, and its search as it opens. */
 async function openLinear(): Promise<HTMLInputElement> {
   const chip =
-    document.querySelector<HTMLButtonElement>(LINEAR_CHIP) ?? assert.fail("the Linear chip stands");
+    document.querySelector<HTMLButtonElement>(ISSUE_CHIP) ?? assert.fail("the Issue chip stands");
   act(() => chip.click());
   await settle();
   return linearSearch();
 }
 
-/** Words typed into the Linear chip's search. */
+/** Words typed into the Issue chip's search. */
 function search(words: string): void {
   const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
@@ -1161,28 +1164,147 @@ test("with Linear connected, typing in the box lists no issues and searches no L
   }
 });
 
-test("the Linear chip stands at the right end of the head row, after the repository chip, only where the workspace has Linear connected", async () => {
+test("the Issue chip stands at the right end of the head row, after the repository chip, only where the workspace offers issues", async () => {
   const connected = await mount(undefined, undefined, {}, ISSUES);
   const withLinear = connected.controls();
   const head = connected.dialog()?.querySelector(".new-task-head");
   const placed = {
-    last: head?.lastElementChild?.querySelector(LINEAR_CHIP) !== null,
-    inFoot: connected.dialog()?.querySelector(`.prompt-input-footer ${LINEAR_CHIP}`) !== null,
+    last: head?.lastElementChild?.querySelector(ISSUE_CHIP) !== null,
+    inFoot: connected.dialog()?.querySelector(`.prompt-input-footer ${ISSUE_CHIP}`) !== null,
   };
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   const plain = await mount();
 
   assert.equal(
-    withLinear.indexOf("Choose from Linear"),
+    withLinear.indexOf("Choose an issue"),
     withLinear.indexOf("acme/web") + 1,
-    "the Linear chip follows the repository chip",
+    "the Issue chip follows the repository chip",
   );
   assert.deepEqual(placed, { last: true, inFoot: false });
-  assert.equal(plain.controls().includes("Choose from Linear"), false);
+  assert.equal(plain.controls().includes("Choose an issue"), false);
 });
 
-test("choosing an issue from the Linear chip lays it over the words as a chip and starts nothing; Return then starts an agent on a mention of it and the words, the task named by it and linked to it", async () => {
+/** The workspace's own issues, as Issues lists them. */
+const OWN_ISSUES: readonly NewTaskIssue[] = [
+  { id: "own-1", workspaceId: "workspace-2", identifier: "ACME-7", title: "Invites expire" },
+  {
+    id: "own-2",
+    workspaceId: "workspace-2",
+    identifier: "ACME-8",
+    title: "Deploy notes go missing",
+  },
+];
+
+/** Each heading the open menu stands its issues under, with the issues under it as they read. */
+function issueGroups(): Record<string, readonly string[]> {
+  return Object.fromEntries(
+    [...document.querySelectorAll('[role="listbox"] [role="group"]')].map((group) => [
+      group.getAttribute("aria-label") ?? "",
+      [...group.querySelectorAll('[role="option"]')].map((row) => row.textContent?.trim() ?? ""),
+    ]),
+  );
+}
+
+test("with no Linear connected, the Issue chip stands with its chevron and lists the workspace's own issues alone, under no heading", async () => {
+  const card = await mount(undefined, undefined, {}, undefined, () => [], OWN_ISSUES);
+  const chip = document.querySelector(ISSUE_CHIP);
+  const chevron = chip?.querySelector("svg:last-child") !== null;
+  await openLinear();
+
+  assert.ok(card.controls().includes("Choose an issue"));
+  assert.equal(chevron, true);
+  assert.deepEqual(issueGroups(), {});
+  assert.deepEqual(issueRows().rows, ["Invites expireACME-7", "Deploy notes go missingACME-8"]);
+});
+
+test("the Issue chip lists the workspace's own issues and Linear's, each under its heading, and one search narrows both", async () => {
+  const card = await mount(undefined, undefined, {}, ISSUES, () => [], OWN_ISSUES);
+  await openLinear();
+  const listed = issueGroups();
+  search("deploy");
+  await settle();
+
+  assert.deepEqual(listed, {
+    Issues: ["Invites expireACME-7", "Deploy notes go missingACME-8"],
+    Linear: [
+      "Restack the deploy queueENG-1 · Todo",
+      "Add support for stacked PRsENG-2 · In Progress",
+      "Rotate the deploy keyOPS-7",
+    ],
+  });
+  assert.deepEqual(issueGroups(), {
+    Issues: ["Deploy notes go missingACME-8"],
+    Linear: ["Restack the deploy queueENG-1 · Todo", "Rotate the deploy keyOPS-7"],
+  });
+  assert.deepEqual(card.starts, []);
+});
+
+test("a Luke link to one of the workspace's own issues pasted in the search offers that issue", async () => {
+  const linked: NewTaskIssue = {
+    id: "3f0e6f5c-7d1a-4f6e-9a55-000000000009",
+    workspaceId: "workspace-2",
+    identifier: "ACME-9",
+    title: "Billing page loads slowly",
+  };
+  await mount(undefined, undefined, {}, undefined, () => [], [...OWN_ISSUES, linked]);
+  await openLinear();
+  search(`https://tryluke.dev/acme/issue/${linked.id}`);
+  await settle();
+
+  assert.deepEqual(issueRows().rows, ["Billing page loads slowlyACME-9"]);
+});
+
+test("choosing one of the workspace's own issues lays it over the words in the Linear issue's place; Return starts an agent on a mention of it and the words, the task named by it and linked to it, and with no words an agent on the task's plan", async () => {
+  const card = await mount(undefined, undefined, {}, ISSUES, () => [], OWN_ISSUES);
+  await openLinear();
+  search("restack");
+  await settle();
+  await card.press("Enter", linearSearch());
+  const linear = issueChip();
+  await openLinear();
+  await card.press("Enter", linearSearch());
+  const chosen = { chip: issueChip(), starts: card.starts.length };
+  card.type("Make them last a week");
+  await card.key("Enter");
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.innerHTML = "";
+  const bare = await mount(undefined, undefined, {}, undefined, () => [], OWN_ISSUES);
+  await openLinear();
+  await bare.press("Enter", linearSearch());
+  await bare.key("Enter");
+
+  assert.equal(linear, "ENG-1Restack the deploy queueTodo");
+  assert.deepEqual(chosen, { chip: "ACME-7Invites expire", starts: 0 });
+  assert.deepEqual(card.starts, [["Invites expire", "acme/web"]]);
+  assert.deepEqual(card.fromWorkspaceIssues, ["own-1"]);
+  assert.deepEqual(card.fromIssues, [undefined], "one issue at a time");
+  assert.equal(
+    card.agents[0]?.prompt,
+    "[@ACME-7 Invites expire](https://tryluke.dev/workspace-2/issue/own-1)\n\nMake them last a week",
+  );
+  assert.deepEqual(bare.starts, [["Invites expire", "acme/web"]]);
+  assert.deepEqual(bare.fromWorkspaceIssues, ["own-1"]);
+  assert.deepEqual(bare.agentsAtOnce, [true]);
+  assert.deepEqual(bare.agents, [undefined]);
+});
+
+test("Plan mode with one of the workspace's own issues picked names the task by it, links it, and hands Luke the words as its brief", async () => {
+  keptInLukeMode();
+  const card = await mount(undefined, undefined, {}, undefined, () => [], OWN_ISSUES);
+  await openLinear();
+  await card.press("ArrowDown", linearSearch());
+  await card.press("Enter", linearSearch());
+  card.type("Keep the notes.");
+  await card.key("Enter");
+
+  assert.deepEqual(card.starts, [["Deploy notes go missing", "acme/web"]]);
+  assert.deepEqual(card.planned, [true]);
+  assert.deepEqual(card.fromWorkspaceIssues, ["own-2"]);
+  assert.deepEqual(card.briefs, ["Keep the notes."]);
+});
+
+test("choosing a Linear issue from the Issue chip lays it over the words as a chip and starts nothing; Return then starts an agent on a mention of it and the words, the task named by it and linked to it", async () => {
   const card = await mount(undefined, undefined, {}, ISSUES);
   const field = await openLinear();
   const listed = issueRows();
@@ -1368,7 +1490,7 @@ test("Escape closes the Linear search and leaves the card with focus on the chip
   };
   await card.key("Escape");
 
-  assert.deepEqual(afterFirst, { search: false, card: true, focus: "Choose from Linear" });
+  assert.deepEqual(afterFirst, { search: false, card: true, focus: "Choose an issue" });
   assert.equal(card.dialog(), null);
   assert.deepEqual(card.starts, []);
 });
@@ -1391,7 +1513,7 @@ test("Command-L from the words opens the Linear search, but not while an input m
   assert.ok(card.dialog());
 });
 
-test("opened on one of the workspace's issues, the card says so, starts named by the issue in its workspace, offers no Linear chip, and links the task to the issue", async () => {
+test("opened on one of the workspace's issues, the card says so, starts named by the issue in its workspace, offers no Issue chip, and links the task to the issue", async () => {
   const issue = {
     id: "issue-1",
     workspaceId: "workspace-2",
@@ -1407,7 +1529,7 @@ test("opened on one of the workspace's issues, the card says so, starts named by
   const card = await mount(undefined, { issue }, {}, [linear]);
 
   assert.match(card.dialog()?.querySelector("h2")?.textContent ?? "", /^New task from ACME-7\b/);
-  assert.equal(document.querySelector(LINEAR_CHIP), null, "no Linear chip is offered");
+  assert.equal(document.querySelector(ISSUE_CHIP), null, "no Issue chip is offered");
   await card.key("l", { metaKey: true });
   assert.equal(document.querySelector(LINEAR_SEARCH) !== null, false, "Command-L opens nothing");
   await card.key("Enter");
@@ -1423,7 +1545,10 @@ test("opened on one of the workspace's issues, the card says so, starts named by
     [true, undefined],
     "with nothing written the agent starts on the plan",
   );
-  assert.equal(card.agents[1]?.prompt, "Make them last a week");
+  assert.equal(
+    card.agents[1]?.prompt,
+    "[@ACME-7 Invites expire](https://tryluke.dev/workspace-2/issue/issue-1)\n\nMake them last a week",
+  );
   assert.deepEqual(card.fromWorkspaceIssues, ["issue-1", "issue-1"]);
   assert.deepEqual(card.fromIssues, [undefined, undefined]);
   assert.deepEqual(card.startedIn, ["workspace-2", "workspace-2"]);
