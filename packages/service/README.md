@@ -495,7 +495,9 @@ deployment's `CRON_SECRET`, compared in constant time as the sweep's is, so
 the rewrap (`src/accounts/provider-key-rewrap.ts`) runs on the deployment
 over the ring it holds and the key-encryption keys never leave Vercel. It
 unwraps each older row's data key and wraps it under the head version,
-leaving the sealed key itself untouched, and answers counts: the version,
+leaving the sealed key itself untouched, and moves members' GitHub
+personal access tokens (`github_personal_token`, sealed under the same ring
+by `src/github/github-token-app.ts`) the same way, and answers counts: the version,
 moved, already current, changed meanwhile, and unreadable. Run it again
 until nothing is changed meanwhile; once nothing names the old version,
 drop it from the list and redeploy. A row counted unreadable reads

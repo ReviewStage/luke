@@ -188,6 +188,13 @@ export const HOSTED_SERVICE_PATH = {
    * `github-connection-wire.ts` declares both bodies.
    */
   GITHUB_CONNECT_CLAIM: "/api/github/connect/claim",
+  /**
+   * The member's own classic GitHub personal access token: read what it is
+   * (GET), save one (PUT), or remove it (DELETE), while the GitHub token
+   * experiment is on for them. No answer carries the token.
+   * `github-token-wire.ts` declares every body.
+   */
+  GITHUB_TOKEN: "/api/github/token",
   /** Whether the account has connected its GitHub (GET). `github-connection-wire.ts` declares the answer. */
   GITHUB_CONNECTION: "/api/github/connection",
   /**

@@ -144,6 +144,8 @@
     "./github/github-install-app": "./src/github/github-install-app.js",
     "./github/github-installations": "./src/github/github-installations.js",
     "./github/github-refusal": "./src/github/github-refusal.js",
+    "./github/github-token": "./src/github/github-token.js",
+    "./github/github-token-app": "./src/github/github-token-app.js",
     "./github/github-unlink": "./src/github/github-unlink.js",
     "./github/github-webhook-app": "./src/github/github-webhook-app.js",
     "./github/pull-requests": "./src/github/pull-requests.js",
