@@ -13,6 +13,13 @@ import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/featu
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { OpenSettingsProvider } from "@luke/panel/open-settings";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "@luke/panel/testing/composer";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -20,13 +27,6 @@ import { Effect } from "effect";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import {
-  composerEditor,
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-  typeInComposer,
-} from "#testing/composer";
 import { tasksControl } from "#testing/tasks-control";
 import { NewTaskDialog } from "./new-task-dialog";
 import type { RepositoryChooser } from "./repository-chip";

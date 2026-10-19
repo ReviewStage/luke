@@ -1,3 +1,5 @@
+import type { AutomationTriggerKind } from "@luke/features/automation-wire";
+import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { Clock, Context, Effect, Layer, Option, Redacted } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { HostedEnvironment } from "../environment.js";
@@ -83,10 +85,10 @@ interface ServerEventProperties {
   };
   [SERVER_EVENT.INBOX_ANSWER_SEND]: Record<string, never>;
   [SERVER_EVENT.CHAT_MESSAGE_SEND]: { is_reply: boolean };
-  [SERVER_EVENT.AUTOMATION_CREATE]: { trigger_kind: string };
+  [SERVER_EVENT.AUTOMATION_CREATE]: { trigger_kind: AutomationTriggerKind };
   [SERVER_EVENT.ISSUE_CREATE]: Record<string, never>;
-  [SERVER_EVENT.INTEGRATION_CONNECTION_CREATE]: { provider: string };
-  [SERVER_EVENT.INTEGRATION_CONNECTION_DELETE]: { provider: string };
+  [SERVER_EVENT.INTEGRATION_CONNECTION_CREATE]: { provider: IntegrationProvider };
+  [SERVER_EVENT.INTEGRATION_CONNECTION_DELETE]: { provider: IntegrationProvider };
   [SERVER_EVENT.WORKSPACE_CREATE]: Record<string, never>;
 }
 

@@ -807,6 +807,11 @@ export function taskHolder(task: TaskSummary): InboxHolder {
   return { kind: INBOX_HOLDER.TASK, task };
 }
 
+/** Whether a holder is a task put away in the archive, whose items are read but not answered until it is brought back. */
+export function archivedHolder(holder: InboxHolder): boolean {
+  return holder.kind === INBOX_HOLDER.TASK && holder.task.archivedAt !== undefined;
+}
+
 /**
  * The workspace an item belongs to: its plan's, or, for an agent with no
  * plan, the agent's own, where the service named it; none where it did not,
@@ -903,13 +908,15 @@ export type InboxGrouping = (typeof INBOX_GROUPING)[keyof typeof INBOX_GROUPING]
 /**
  * Which items an Inbox lists, as the tabs under its title choose: what needs
  * the reader (`needsReader`), anything unread, anyone's, every open item, or
- * everything, open and settled.
+ * everything, open and settled; and, on the window's Inbox alone, the items
+ * of the archived tasks, which no other tab lists (`desktop-inbox.tsx`).
  */
 export const INBOX_SHOW = {
   NEEDS_YOU: "needs-you",
   UNREAD: "unread",
   OPEN: "open",
   ALL: "all",
+  ARCHIVED: "archived",
 } as const;
 
 export type InboxShow = (typeof INBOX_SHOW)[keyof typeof INBOX_SHOW];
@@ -961,12 +968,13 @@ const STATUS_KEY = {
   [INBOX_STATUS_GROUP.ANSWERED]: "status:answered",
 } as const satisfies Record<InboxStatusGroupKind, string>;
 
-/** How many items each tab lists, filtered out by the tab shown or not. */
+/** How many items each tab lists, filtered out by the tab shown or not; Archived only on an Inbox that offers it. */
 export interface InboxCounts {
   readonly [INBOX_SHOW.NEEDS_YOU]: number;
   readonly [INBOX_SHOW.UNREAD]: number;
   readonly [INBOX_SHOW.OPEN]: number;
   readonly [INBOX_SHOW.ALL]: number;
+  readonly [INBOX_SHOW.ARCHIVED]?: number;
 }
 
 /** One holder, a task or an automation, and every item it holds, as the list is handed them. */
@@ -1045,6 +1053,11 @@ export function waitsOnReader(
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
 export function needsReader(item: InboxItem, readerId: string | undefined): boolean {
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
+}
+
+/** Whether a listed item needs the reader (`needsReader`) where it stands: never on a task put away in the archive, which nothing answers until it is back. */
+export function needsYou(listed: InboxListed, readerId: string | undefined): boolean {
+  return needsReader(listed.item, readerId) && !archivedHolder(listed.holder);
 }
 
 /** What a person's group is folded by: their account's id, or one key for the reader's own. */
@@ -1151,11 +1164,11 @@ export function inboxList(
 ): InboxListView {
   const { readerId, sort = INBOX_SORT.LATEST, whose = EVERYONES } = view;
   const order = SORT_ORDER[sort];
-  const shows = (item: InboxItem) =>
-    (showsItem(view.show, item, readerId) && whoseItem(whose, item, readerId)) ||
+  const shows = (holder: InboxHolder) => (item: InboxItem) =>
+    (showsItem(view.show, { holder, item }, readerId) && whoseItem(whose, item, readerId)) ||
     item.id === view.chosen;
   const groups = tasks
-    .map(({ holder, items }) => ({ holder, items: items.filter(shows).toSorted(order) }))
+    .map(({ holder, items }) => ({ holder, items: items.filter(shows(holder)).toSorted(order) }))
     .filter((group) => group.items.length > 0)
     .toSorted((a, b) => firstOrder(a.items[0], b.items[0], order));
   if (view.grouping === INBOX_GROUPING.TASK) {
@@ -1188,16 +1201,19 @@ export function isUnread(item: InboxItem): boolean {
   return item.unread === true;
 }
 
-/** Whether a tab lists the item: Needs you the reader's own open items, Unread anyone's unread, All open every open one, and Everything all of them. */
-function showsItem(show: InboxShow, item: InboxItem, readerId: string | undefined): boolean {
+/** Whether a tab lists the item: Needs you the reader's own open items, Unread anyone's unread, All open every open one, and Everything and Archived all of them. */
+function showsItem(show: InboxShow, listed: InboxListed, readerId: string | undefined): boolean {
+  const { item } = listed;
   switch (show) {
     case INBOX_SHOW.NEEDS_YOU:
-      return needsReader(item, readerId);
+      return needsYou(listed, readerId);
     case INBOX_SHOW.UNREAD:
       return isUnread(item);
     case INBOX_SHOW.OPEN:
       return item.status === INBOX_STATUS.OPEN;
+    // Note that the Archived tab is handed the archived tasks' groups alone, every item of which it lists.
     case INBOX_SHOW.ALL:
+    case INBOX_SHOW.ARCHIVED:
       return true;
   }
 }
@@ -1209,9 +1225,10 @@ export function inboxCounts(
   whose: InboxWhose = EVERYONES,
 ): InboxCounts {
   const items = tasks
-    .flatMap((group) => group.items)
-    .filter((item) => whoseItem(whose, item, readerId));
-  const count = (show: InboxShow) => items.filter((item) => showsItem(show, item, readerId)).length;
+    .flatMap(({ holder, items }) => items.map((item) => ({ holder, item })))
+    .filter(({ item }) => whoseItem(whose, item, readerId));
+  const count = (show: InboxShow) =>
+    items.filter((listed) => showsItem(show, listed, readerId)).length;
   return {
     [INBOX_SHOW.NEEDS_YOU]: count(INBOX_SHOW.NEEDS_YOU),
     [INBOX_SHOW.UNREAD]: count(INBOX_SHOW.UNREAD),
@@ -1287,14 +1304,14 @@ export function nextNeedingYou(
   const listed = rowedItems(view, folded, chosen);
   const at = listed.findIndex(({ item }) => item.id === chosen);
   return [...listed.slice(at + 1), ...listed.slice(0, Math.max(at, 0))].find(
-    ({ item }) => needsReader(item, view.readerId) && item.id !== chosen,
+    (listed) => needsYou(listed, view.readerId) && listed.item.id !== chosen,
   );
 }
 
 /** The item that stands chosen where none is: the first listed that needs the reader, else the first listed. */
 export function firstChoice(view: InboxListView): InboxListed | undefined {
   const listed = listedItems(view);
-  return listed.find(({ item }) => needsReader(item, view.readerId)) ?? listed[0];
+  return listed.find((each) => needsYou(each, view.readerId)) ?? listed[0];
 }
 
 /** How many lines of the file a code block's card draws above and below the lines it points at. */

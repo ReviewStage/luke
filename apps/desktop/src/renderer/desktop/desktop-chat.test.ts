@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ASK_STATUS, CHAT_ASK } from "@luke/features/chat-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ChatComposer } from "@luke/panel/tasks/chat-composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
@@ -101,10 +102,12 @@ function rail(page: HTMLElement): string[] {
 /** The pane's messages as a reader hears them: each author and where it was posted, then its replies where the thread is open. */
 function stream(page: HTMLElement): string[] {
   return [...page.querySelectorAll(".chat-message, .chat-reply")].map((node) => {
-    const author = node.querySelector(".chat-author")?.textContent ?? "";
-    const where = node.querySelector(":scope > .chat-message-body > .chat-byline .chat-where");
+    // The byline reads its author, their handle, where it was posted where it says, then when.
+    const [author, , where] = node.querySelector(":scope > .chat-message-body > .chat-byline")
+      ?.children ?? [undefined];
+    const said = where === undefined || where.querySelector("time") !== null ? undefined : where;
     const indent = node.classList.contains("chat-reply") ? "  ↳ " : "";
-    return `${indent}${author}${where === null ? "" : ` ${where.textContent}`}`;
+    return `${indent}${author?.textContent ?? ""}${said === undefined ? "" : ` ${said.textContent}`}`;
   });
 }
 
@@ -148,7 +151,7 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
 test("a press on a channel shows its messages in the order posted, a thread folded under its root until a press opens it", () => {
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());
-  assert.equal(page.querySelector(".chat-head-title")?.textContent, "# teammate-invitations");
+  assert.equal(page.querySelector(".chat-head h2")?.textContent, "# teammate-invitations");
   assert.equal(railRow(page, "teammate-invitations").getAttribute("aria-current"), "page");
   assert.deepEqual(stream(page), [
     "Add teammate invitations",
@@ -275,16 +278,18 @@ test("an open choice in For you is answered by a pick and its send, which marks 
       ?.textContent?.startsWith("14 days"),
     true,
   );
-  assert.equal(
-    settled?.querySelector(".chat-ask-settled")?.textContent,
-    'Dean Stratakos: Chose "14 days".',
+  assert.ok(
+    [...(settled?.querySelectorAll("p") ?? [])].some(
+      (line) => line.textContent === 'Dean Stratakos: Chose "14 days".',
+    ),
+    "the card says who answered and how",
   );
 });
 
 test("an approval is answered by its press, and a reply typed under an opened thread lands in that thread", async () => {
   const page = mount();
   const approval = [...page.querySelectorAll<HTMLElement>('.chat-ask[data-status="open"]')].find(
-    (card) => card.querySelector(".chat-ask-kind")?.textContent === "Ask · Approval",
+    (card) => card.textContent?.startsWith("Ask · Approval"),
   );
   const approve = [...(approval?.querySelectorAll("button") ?? [])].find(
     (button) => button.textContent === "Approve",
@@ -338,7 +343,8 @@ test("a form's answer stands under its card field by field, and the reply in its
     },
   }));
   const card = [...page.querySelectorAll<HTMLElement>('.chat-ask[data-status="open"]')].find(
-    (each) => each.querySelector(".chat-ask-title")?.textContent === "Where do the seats go?",
+    (each) =>
+      [...each.querySelectorAll("p")].some((line) => line.textContent === "Where do the seats go?"),
   );
   assert.ok(card, "the form's card stands open");
   const [region, seats] = [...card.querySelectorAll<HTMLInputElement>("input")];
@@ -355,9 +361,9 @@ test("a form's answer stands under its card field by field, and the reply in its
   act(() => card.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
   await settle();
   act(() => railRow(page, "teammate-invitations").click());
-  const settled = page.querySelector('.chat-message[data-seq="51"] .chat-ask-settled');
+  const settled = page.querySelector('.chat-message[data-seq="51"] .chat-ask');
   assert.deepEqual(
-    [...(settled?.querySelectorAll(".chat-ask-values li") ?? [])].map((row) => row.textContent),
+    [...(settled?.querySelectorAll("li") ?? [])].map((row) => row.textContent),
     ["Region: US", "Seats: 12"],
   );
   act(() =>
@@ -424,4 +430,30 @@ test("until the chat is read, its wait stands centred in the window's Chat and i
   const tabWait = tab.querySelector('.task-chat [role="status"]');
   assert.ok(tabWait, "the plan's Chat tab says it is waiting");
   assert.ok(tabWait.closest(".luke-spinner-region"), "the wait fills the plan's Chat tab");
+});
+
+test("a post still out names the composer's send Sending and busy, and the box empties once it is taken", async () => {
+  const gate = Promise.withResolvers<string | undefined>();
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  act(() =>
+    root?.render(
+      createElement(ChatComposer, {
+        label: "Message #general",
+        hints: [],
+        targets: [],
+        onSend: () => gate.promise,
+      }),
+    ),
+  );
+  const box = boxNamed(container, "Message #general");
+  typeInto(box, "Shipping today.");
+  press(box, "Enter");
+  const sending = container.querySelector<HTMLButtonElement>('button[aria-label="Sending"]');
+  assert.equal(sending?.getAttribute("aria-busy"), "true");
+  act(() => gate.resolve(undefined));
+  await settle();
+  assert.ok(container.querySelector('button[aria-label="Send"]'), "the send is named Send again");
+  assert.equal(box.value, "");
 });

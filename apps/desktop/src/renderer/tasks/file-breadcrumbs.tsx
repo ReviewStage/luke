@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { TREE_LOAD_FAILED, useSideBundles } from "@luke/panel/bundle-loader";
 import type { ReadFolder } from "@luke/panel/file-tree/contract";
 import { Tooltip } from "@luke/panel/tooltip";
 import {
@@ -12,7 +13,6 @@ import {
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { TREE_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 
 /**
  * file-breadcrumbs.tsx -- a File tab's path as breadcrumbs: the repository, then each folder the file stands in, then the file, each a press that opens the tree where it stands.

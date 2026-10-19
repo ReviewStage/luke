@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
+import { landedBundles, onSideBundles } from "@luke/panel/testing/side-bundles";
 import { Effect } from "effect";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { landedBundles, onSideBundles } from "#testing/side-bundles";
 import { TaskBoard } from "./task-board";
 
 test("the whiteboard is drawn under a root the screen recording leaves out", async () => {

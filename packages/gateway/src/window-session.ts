@@ -3,18 +3,20 @@
  * every version of the app-state document.
  *
  * It carries what the renderer cannot work out for itself and nothing else.
- * The two switches are not here: the renderer already holds `shareUsageData`
- * and `sessionReplay` and is told the moment either moves, so reading them
- * live is what lets a switch turned off stop a recording where it stands —
- * and a switch turned back on start one — rather than at the next launch.
+ * There is no switch among it, because recording has none: whether a run
+ * records is the main process's answer alone, `permitted` below, and since
+ * every version of the document carries it, an answer that turns false — an
+ * account deleted mid-run — stops a recording where it stands, and one that
+ * turns true again at the next sign-in resumes it, rather than either waiting
+ * for the next launch.
  * Where a recording goes is not here either: the processor's address is fixed
  * by the build, in the renderer beside the connect policy that names it.
  */
 export interface SessionReplayBootstrap {
   /**
-   * Whether this run may record at all, whatever the switches say. False for
-   * a fixture and a capture run, which must stay deterministic and send
-   * nothing, and false after an account is deleted until the next sign-in.
+   * Whether this run may record at all. False for a fixture and a capture
+   * run, which must stay deterministic and send nothing, and false after an
+   * account is deleted until the next sign-in.
    * Being signed out is not one of the reasons: recording begins at the first
    * paint, before an account exists.
    */

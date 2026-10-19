@@ -23,18 +23,18 @@ import {
   RepositoryRemedyProvider,
 } from "@luke/panel/tasks/repository-remedy";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+} from "@luke/panel/testing/composer";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import {
-  composerEditor,
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-} from "#testing/composer";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { startFailureNote } from "./coding-agent-model";
 import { DraftAgentTab } from "./draft-agent-tab";

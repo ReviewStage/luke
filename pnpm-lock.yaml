@@ -212,36 +212,9 @@ importers:
       '@tiptap/core':
         specifier: 3.31.4
         version: 3.31.4(@tiptap/pm@3.31.4)
-      '@tiptap/extension-heading':
-        specifier: 3.31.4
-        version: 3.31.4(@tiptap/core@3.31.4)
-      '@tiptap/extension-image':
-        specifier: 3.31.4
-        version: 3.31.4(@tiptap/core@3.31.4)
-      '@tiptap/extension-list':
-        specifier: 3.31.4
-        version: 3.31.4(@tiptap/core@3.31.4)(@tiptap/pm@3.31.4)
-      '@tiptap/extension-paragraph':
-        specifier: 3.31.4
-        version: 3.31.4(@tiptap/core@3.31.4)
-      '@tiptap/extension-table':
-        specifier: 3.31.4
-        version: 3.31.4(@tiptap/core@3.31.4)(@tiptap/pm@3.31.4)
-      '@tiptap/extensions':
-        specifier: 3.31.4
-        version: 3.31.4(@tiptap/core@3.31.4)(@tiptap/pm@3.31.4)
-      '@tiptap/markdown':
-        specifier: 3.31.4
-        version: 3.31.4(@tiptap/core@3.31.4)(@tiptap/pm@3.31.4)
       '@tiptap/pm':
         specifier: 3.31.4
         version: 3.31.4
-      '@tiptap/starter-kit':
-        specifier: 3.31.4
-        version: 3.31.4
-      '@types/hast':
-        specifier: 3.0.5
-        version: 3.0.5
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -254,24 +227,6 @@ importers:
       '@types/three':
         specifier: 0.186.0
         version: 0.186.0
-      '@xterm/addon-fit':
-        specifier: 0.11.0
-        version: 0.11.0
-      '@xterm/addon-search':
-        specifier: 0.16.0
-        version: 0.16.0
-      '@xterm/addon-unicode11':
-        specifier: 0.9.0
-        version: 0.9.0
-      '@xterm/addon-web-links':
-        specifier: 0.12.0
-        version: 0.12.0
-      '@xterm/addon-webgl':
-        specifier: 0.19.0
-        version: 0.19.0
-      '@xterm/xterm':
-        specifier: 6.0.0
-        version: 6.0.0
       ai:
         specifier: 'catalog:'
         version: 7.0.135(zod@4.5.4)
@@ -293,9 +248,6 @@ importers:
       esbuild:
         specifier: 0.28.2
         version: 0.28.2
-      hast-util-to-html:
-        specifier: 9.0.5
-        version: 9.0.5
       jsdom:
         specifier: ^30.0.1
         version: 30.0.1(@noble/hashes@2.3.0)
@@ -305,9 +257,6 @@ importers:
       lucide-react:
         specifier: 1.53.0
         version: 1.53.0(@types/react@19.2.18)(react@19.2.8)
-      mermaid:
-        specifier: 11.17.2
-        version: 11.17.2
       posthog-js:
         specifier: 1.418.3
         version: 1.418.3(preact-render-to-string@6.6.5)
@@ -884,6 +833,9 @@ importers:
       '@effect/atom-react':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(react@19.2.8)(scheduler@0.27.0)
+      '@excalidraw/excalidraw':
+        specifier: 0.18.1
+        version: 0.18.1(@types/react-dom@19.2.4)(@types/react@19.2.18)(immer@11.1.18)(react-dom@19.2.8)(react@19.2.8)
       '@luke/brand':
         specifier: workspace:*
         version: link:../brand
@@ -914,15 +866,69 @@ importers:
       '@pierre/trees':
         specifier: 1.0.0-beta.6
         version: 1.0.0-beta.6(@shikijs/themes@4.5.0)(react-dom@19.2.8)(react@19.2.8)(shiki@4.5.0)
+      '@tiptap/core':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/pm@3.31.4)
+      '@tiptap/extension-heading':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/core@3.31.4)
+      '@tiptap/extension-image':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/core@3.31.4)
+      '@tiptap/extension-list':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/core@3.31.4)(@tiptap/pm@3.31.4)
+      '@tiptap/extension-paragraph':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/core@3.31.4)
+      '@tiptap/extension-table':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/core@3.31.4)(@tiptap/pm@3.31.4)
+      '@tiptap/extensions':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/core@3.31.4)(@tiptap/pm@3.31.4)
+      '@tiptap/markdown':
+        specifier: 3.31.4
+        version: 3.31.4(@tiptap/core@3.31.4)(@tiptap/pm@3.31.4)
+      '@tiptap/pm':
+        specifier: 3.31.4
+        version: 3.31.4
+      '@tiptap/starter-kit':
+        specifier: 3.31.4
+        version: 3.31.4
+      '@xterm/addon-fit':
+        specifier: 0.11.0
+        version: 0.11.0
+      '@xterm/addon-search':
+        specifier: 0.16.0
+        version: 0.16.0
+      '@xterm/addon-unicode11':
+        specifier: 0.9.0
+        version: 0.9.0
+      '@xterm/addon-web-links':
+        specifier: 0.12.0
+        version: 0.12.0
+      '@xterm/addon-webgl':
+        specifier: 0.19.0
+        version: 0.19.0
+      '@xterm/xterm':
+        specifier: 6.0.0
+        version: 6.0.0
       diff:
         specifier: 9.0.0
         version: 9.0.0
       effect:
         specifier: 'catalog:'
         version: 4.0.4
+      hast-util-to-html:
+        specifier: 9.0.5
+        version: 9.0.5
       lucide-react:
         specifier: 1.53.0
         version: 1.53.0(@types/react@19.2.18)(react@19.2.8)
+      mermaid:
+        specifier: 11.17.2
+        version: 11.17.2
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -942,6 +948,9 @@ importers:
       '@luke/gateway':
         specifier: workspace:*
         version: link:../gateway
+      '@types/hast':
+        specifier: 3.0.5
+        version: 3.0.5
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0

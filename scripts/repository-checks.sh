@@ -509,7 +509,6 @@ node --input-type=module -e '
     "apps/web/server/build-output.ts",
     "apps/web/server/api-callers.ts",
     "apps/web/server/preview-*.ts",
-    "apps/desktop/src/renderer/stylesheet.d.ts",
     "apps/desktop/src/testing/**",
     // What the desktop answers the platform door of the panel with, which
     // the window root installs: each capability as the act or the preload

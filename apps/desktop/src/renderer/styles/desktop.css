@@ -4761,7 +4761,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: var(--chat-rail-width, 248px) minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
 }
 
 .chat-rail {
@@ -4784,14 +4784,11 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-8) var(--column-inset) var(--column-inset);
 }
 
-.chat-rail-heading {
-  margin: var(--luke-space-12) 0 var(--luke-space-4);
-  padding: 0 var(--luke-space-8);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+/* Channels and direct messages each stand under their heading in the
+   headings' voice (`.section-heading`), a section's room apart, as
+   Settings' page list's groups do. */
+.chat-rail-group {
+  margin-top: var(--luke-section-gap);
 }
 
 /* The task's own Chat tab fills its column as an agent's tab does, the
@@ -4842,23 +4839,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .chat-head {
-  gap: var(--luke-space-12);
   padding-left: var(--column-inset);
-}
-
-.chat-head-title {
-  margin: 0;
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.chat-head-meta {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* The stream's body, inside the `ScrollArea` that scrolls it. */
@@ -4866,9 +4847,11 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-16) var(--column-inset);
 }
 
+/* The stream and its composer keep to the page's measure, as the Inbox's
+   thread and an agent's transcript do. */
 .chat-messages,
 .chat-replies {
-  max-width: 900px;
+  max-width: var(--luke-page-measure);
   margin: 0 auto;
   padding: 0;
   list-style: none;
@@ -4912,105 +4895,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
   opacity: 1;
 }
 
-.chat-author {
-  font-weight: var(--luke-weight-semibold);
-}
-
-.chat-handle {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-}
-
-.chat-where,
-.chat-time {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-  white-space: nowrap;
-}
-
 .chat-words {
   color: var(--luke-color-text-body);
 }
 
-.chat-code {
-  display: flex;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: var(--luke-space-6) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-radius-8);
-  color: var(--luke-color-text-muted);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-}
-
-.chat-code-lines,
-.chat-image-words,
-.chat-unknown {
-  color: var(--luke-color-text-subtle);
-}
-
-.chat-image-words,
-.chat-unknown,
-.chat-link {
-  margin: 0;
-}
-
-/* An ask draws as a card in its row, headed by what kind of ask it is. */
+/* An ask draws as a card in its row (`Card`), a step under the byline. */
 .chat-ask {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-6);
   margin-top: var(--luke-space-4);
-  padding: var(--luke-space-12) var(--luke-space-16);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-fill-hover);
-}
-
-.chat-ask-kind {
-  margin: 0;
-  color: var(--luke-color-attention);
-  font-size: var(--luke-type-caption-size);
-  font-weight: var(--luke-weight-semibold);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.chat-ask-title {
-  margin: 0;
-  font-size: var(--luke-type-dialog-size);
-  font-weight: var(--luke-weight-semibold);
-}
-
-.chat-ask-options {
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.chat-ask-option {
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-fill-hover);
-}
-
-.chat-ask-option-label {
-  font-weight: var(--luke-weight-semibold);
-}
-
-.chat-ask-recommended,
-.chat-ask-option-detail {
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-}
-
-.chat-ask-option-detail {
-  margin: var(--luke-space-2) 0 0;
 }
 
 .chat-thread {
@@ -5026,12 +4917,13 @@ polygon.factory-campus-edge[data-edge="selected"] {
   line-height: var(--luke-type-label-leading);
 }
 
-/* The composer at a place's foot, at the stream's reading measure: the box,
-   and under it a bar of what it takes with the round send at its end. */
+/* The composer at a place's foot, at the stream's reading measure: the
+   shared composer card (`PromptInput`) around the box, its foot saying what
+   the box takes with the round send at its end. */
 .chat-composer {
   position: relative;
   width: calc(100% - 2 * var(--column-inset));
-  max-width: 900px;
+  max-width: var(--luke-page-measure);
   margin: var(--luke-space-12) auto var(--luke-space-16);
 }
 
@@ -5040,59 +4932,31 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin: var(--luke-space-6) 0 0;
 }
 
-.chat-composer-box {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-12);
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-14);
-  background: var(--luke-color-fill-hover);
-}
-
-.chat-composer[data-compact="true"] .chat-composer-box {
-  padding: var(--luke-space-6) var(--luke-space-8);
-  border-radius: var(--luke-radius-10);
-}
-
+/* The box in the card, at the agent composer's insets (`.agent-composer-input`). */
 .chat-composer-field {
+  box-sizing: border-box;
   width: 100%;
   min-height: 0;
-  padding: 0;
+  padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
   border: 0;
   background: none;
   color: var(--luke-color-text);
   font: inherit;
   font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
   resize: none;
   outline: none; /* no ring: the caret marks the field */
 }
 
-.chat-composer-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-12);
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* The send stands at the bar's end, past its hints. */
-.chat-composer-bar > :last-child {
-  margin-inline-start: auto;
-}
-
-.chat-composer[data-compact="true"] .chat-composer-bar {
-  position: absolute;
-  right: var(--luke-space-8);
-  bottom: 6px;
+.chat-composer[data-compact="true"] .chat-composer-field {
+  padding: var(--luke-space-8) var(--luke-space-12) var(--luke-space-4);
 }
 
 .chat-composer-note {
   margin: var(--luke-space-6) 0 0;
 }
 
-/* The list an `@` or `#` opens stands over the box at its left. */
+/* The list an `@` or `#` opens stands over the card at its left. */
 .chat-mention-menu {
   position: absolute;
   /* It stands over the box, so the searchable menu's own top is let go. */
@@ -5103,39 +4967,17 @@ polygon.factory-campus-edge[data-edge="selected"] {
   z-index: 10;
 }
 
-/* An open ask's note line, the round send at its end where the note is what is sent. */
 /* The note's field and, where the answer is sent by one, its send beside it. */
 .chat-ask-note {
   display: flex;
   align-items: center;
   gap: var(--luke-space-8);
-  margin: var(--luke-space-4) 0 0;
+  margin: 0;
 }
 
 .chat-ask-note-field {
   flex: 1;
   min-width: 0;
-}
-
-.chat-ask-presses {
-  display: flex;
-  gap: var(--luke-space-8);
-}
-
-.chat-ask-quiet,
-.chat-ask-settled {
-  margin: 0;
-  color: var(--luke-color-text-muted);
-  font-size: var(--luke-type-body-size);
-}
-
-.chat-ask-values {
-  margin: var(--luke-space-4) 0 0;
-  padding-left: var(--luke-space-16);
-}
-
-.chat-ask-settled-note {
-  color: var(--luke-color-text);
 }
 
 /* A chat notice in an agent's transcript: a card across the column washed
@@ -5178,12 +5020,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.chat-empty {
-  margin: var(--luke-space-24) 0;
-  color: var(--luke-color-text-subtle);
-  text-align: center;
 }
 
 /* Settings ------------------------------------------------------------------- */

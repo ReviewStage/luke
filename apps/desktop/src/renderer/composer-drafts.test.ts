@@ -14,6 +14,13 @@ import { DRAFT_WORD } from "@luke/panel/draft-mark";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
 import { NO_LOOKS } from "@luke/panel/tasks/use-task-looks";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { sameTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
@@ -23,13 +30,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import {
-  composerEditor,
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-  typeInComposer,
-} from "#testing/composer";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { useDraftsOwner } from "./composer-drafts";

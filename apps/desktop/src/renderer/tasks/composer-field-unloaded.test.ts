@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { sideBundles } from "@luke/panel/bundle-loader";
+import { QUIET_COMPOSER } from "@luke/panel/testing/composer";
+import { onSideBundles } from "@luke/panel/testing/side-bundles";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { QUIET_COMPOSER } from "#testing/composer";
-import { onSideBundles } from "#testing/side-bundles";
-import { sideBundles } from "../bundle-loader";
 import { AgentComposer } from "./agent-composer";
 import { useAgentComposer } from "./use-agent-composer";
 

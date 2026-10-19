@@ -15,6 +15,7 @@ import {
   PromptInputTools,
   submitPromptInput,
 } from "@luke/panel/ai-elements/prompt-input";
+import { useSideBundles } from "@luke/panel/bundle-loader";
 import { imageFiles } from "@luke/panel/feedback-images";
 import { type IntegrationStatuses, useIntegrationStatuses } from "@luke/panel/integration-statuses";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "@luke/panel/plan-editor/contract";
@@ -36,7 +37,6 @@ import {
 import { SERVER_HANDED } from "@luke/ui/agent-servers-model";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type RefObject, useRef, useState } from "react";
-import { useSideBundles } from "../bundle-loader";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { useComposerPickers } from "./composer-pickers";
 import {

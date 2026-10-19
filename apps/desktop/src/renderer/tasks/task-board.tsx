@@ -4,6 +4,7 @@ import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
 import { ACT_KIND, type ActPayload } from "@luke/host/acts";
 import { askAct } from "@luke/panel/act";
+import { BOARD_LOAD_FAILED, useSideBundles } from "@luke/panel/bundle-loader";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
 import { SpinnerRegion } from "@luke/panel/spinner";
 import { useAppState } from "@luke/panel/use-app-state";
@@ -12,7 +13,6 @@ import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Fragment, useEffect, useRef } from "react";
-import { BOARD_LOAD_FAILED, useSideBundles } from "../bundle-loader";
 
 /**
  * task-board.tsx -- the open task's whiteboard in the Tasks tab: Excalidraw's bundle loaded once, mounted over the board main holds, and its scene saved.

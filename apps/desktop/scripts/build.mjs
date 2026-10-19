@@ -34,7 +34,7 @@ const DOCK_ICON_IMAGES = {
   "luke-icon-dark.png": "luke-icon-dark-512.png",
 };
 
-// The whiteboard bundle (`src/renderer/whiteboard/`) is Excalidraw, which
+// The whiteboard bundle (`@luke/panel`'s `whiteboard/`) is Excalidraw, which
 // reaches three things the board never uses through dynamic imports: the
 // Mermaid converter, every interface language but English, and the font
 // subsetter an SVG export embeds its fonts with (1.8 MB of WebAssembly), the
@@ -118,9 +118,9 @@ const lucideWholeOnDemand = {
 
 // Pierre's diffs writes each diff as HTML with inline styles, which the
 // panel's policy refuses and reports one by one; its import of the writer is
-// answered with the diff bundle's own (`src/renderer/diff-view/inline-styles.ts`),
+// answered with the diff bundle's own (`@luke/panel`'s `diff-view/inline-styles.ts`),
 // which carries each style where the bundle applies it through the CSSOM.
-const DIFF_MARKUP = path.join(appRoot, "src/renderer/diff-view/inline-styles.ts");
+const DIFF_MARKUP = path.join(appRoot, "../../packages/panel/src/diff-view/inline-styles.ts");
 const diffMarkupInDataAttributes = {
   name: "diff-markup-in-data-attributes",
   setup(build) {
@@ -136,8 +136,8 @@ const diffMarkupInDataAttributes = {
 // answered with a module that links the built file from beside the chunk
 // that imports it, which is where the renderer's chunks all stand. A bundler
 // that loads a chunk's stylesheets itself, as Vite does, needs none of this.
-const WHITEBOARD_STYLESHEET = path.join(appRoot, "src/renderer/whiteboard/index.css");
-const TERMINAL_STYLESHEET = path.join(appRoot, "src/renderer/terminal/index.css");
+const WHITEBOARD_STYLESHEET = path.join(appRoot, "../../packages/panel/src/whiteboard/index.css");
+const TERMINAL_STYLESHEET = path.join(appRoot, "../../packages/panel/src/terminal/index.css");
 const SIDE_STYLESHEETS = new Map([
   [WHITEBOARD_STYLESHEET, "whiteboard.css"],
   [TERMINAL_STYLESHEET, "terminal.css"],
@@ -261,7 +261,7 @@ const WINDOW_ENTRIES = {
 };
 
 // The bundles too large for any window's entry, each reached through a
-// dynamic `import()` of its own entry (`src/renderer/bundle-loader.ts`), so no
+// dynamic `import()` of its own entry (`@luke/panel`'s `bundle-loader.ts`), so no
 // window parses one before it is needed: the editors (TipTap), the whiteboard
 // (Excalidraw), a File tab's tree (Pierre's tree), a Terminal tab's screen
 // (xterm.js), a plan's diagrams (Mermaid), a Files changed diff (Pierre's
@@ -271,12 +271,12 @@ const WINDOW_ENTRIES = {
 // through dynamic imports of its own, a diagram type's layout or a language's
 // grammar, is a chunk of its own, loaded when it is drawn.
 const SIDE_BUNDLE_ENTRIES = {
-  "plan-editor": "src/renderer/plan-editor/index.ts",
-  whiteboard: "src/renderer/whiteboard/index.tsx",
+  "plan-editor": "../../packages/panel/src/plan-editor/index.ts",
+  whiteboard: "../../packages/panel/src/whiteboard/index.tsx",
   "file-tree": "../../packages/panel/src/file-tree/index.ts",
-  terminal: "src/renderer/terminal/index.ts",
-  diagram: "src/renderer/diagram/index.ts",
-  "diff-view": "src/renderer/diff-view/index.ts",
+  terminal: "../../packages/panel/src/terminal/index.ts",
+  diagram: "../../packages/panel/src/diagram/index.ts",
+  "diff-view": "../../packages/panel/src/diff-view/index.ts",
   "factory-world": "src/renderer/factory-world/scene/index.ts",
   "avatar-session": "src/renderer/avatar-session/index.ts",
   "session-recorder": "src/renderer/session-recorder/index.ts",
@@ -309,7 +309,7 @@ const LOADED_AFTER = {
 };
 
 // The worker Pierre's diffs highlights a Files changed list in
-// (`src/renderer/diff-view/index.ts`'s `highlightPool`), bundled whole as one
+// (`@luke/panel`'s `diff-view/index.ts`'s `highlightPool`), bundled whole as one
 // classic script and handed to the diff bundle as text
 // (`DIFF_HIGHLIGHT_WORKER`), which starts each worker from a `blob:`, the one
 // place the panel's policy admits a worker from. Its WebAssembly engine is

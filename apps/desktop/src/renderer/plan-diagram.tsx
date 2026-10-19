@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { DIAGRAM_REFUSED_LINE, useSideBundles } from "@luke/panel/bundle-loader";
 import { Button } from "@luke/ui";
 import {
   DIAGRAM_APPEARANCE,
@@ -9,7 +10,6 @@ import {
 } from "@luke/ui/diagram-contract";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { type ReactNode, useEffect, useReducer, useState, useSyncExternalStore } from "react";
-import { DIAGRAM_REFUSED_LINE, useSideBundles } from "./bundle-loader";
 
 /**
  * plan-diagram.tsx -- a plan's ```` ```mermaid ```` fence drawn as its diagram: the diagram bundle loaded the first time one is shown, each picture kept by its code and appearance, and the figure the read view and the editor's preview draw it in.
