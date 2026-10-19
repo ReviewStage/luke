@@ -18,6 +18,7 @@ import {
   fixtureChat,
   type Staged,
   stagedAnswer,
+  stagedChannel,
   stagedPost,
 } from "../tasks/chat-fixture.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -98,6 +99,7 @@ function mount(
           onList: () => undefined,
           onPost: (post) => stage((held) => stagedPost(held, post, AT)),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
+          onChannel: (change) => stage((held) => stagedChannel(held, change)),
         },
       }),
     });
@@ -113,7 +115,7 @@ function mount(
 function rail(page: HTMLElement): string[] {
   const nav = page.querySelector(".chat-rail");
   assert.ok(nav, "the rail is drawn");
-  return [...nav.querySelectorAll("h2, button")].map((node) => {
+  return [...nav.querySelectorAll("h2, li button")].map((node) => {
     if (node.matches("h2")) return `# ${node.textContent}`;
     const count = /(\d+) unread$/u.exec(node.textContent ?? "")?.[1];
     const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
@@ -644,5 +646,70 @@ test("in a listed workspace, an agent chosen from the @ list is written as its c
   assert.ok(
     last?.querySelector(".chat-words [data-mention-ref]"),
     "the sent message draws it as its chip",
+  );
+});
+
+/** Types into a field the way a person's typing leaves it. */
+function fill(field: HTMLInputElement | HTMLTextAreaElement, words: string): void {
+  const prototype =
+    field instanceof HTMLInputElement ? HTMLInputElement.prototype : HTMLTextAreaElement.prototype;
+  const setValue = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The card a question stands in, whichever role it asks with. */
+function openDialog(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]');
+}
+
+/** The button in the open dialog whose words are `label`. */
+function dialogButton(label: string): HTMLButtonElement {
+  const button = [...(openDialog()?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find(
+    (each) => each.textContent === label,
+  );
+  assert.ok(button, `no ${label} in the dialog`);
+  return button;
+}
+
+test("New channel opens a topic under the name typed, written as a channel's, with its purpose under its name; its menu archives it out of the rail", async () => {
+  const page = mount();
+  const create = page.querySelector<HTMLButtonElement>('button[aria-label="New channel"]');
+  assert.ok(create, "the rail offers a new channel");
+  act(() => create.click());
+  const name = openDialog()?.querySelector<HTMLInputElement>("input");
+  const purpose = openDialog()?.querySelector<HTMLTextAreaElement>("textarea");
+  assert.ok(name && purpose);
+  fill(name, "general");
+  act(() => dialogButton("Create channel").click());
+  await settle();
+  assert.match(openDialog()?.textContent ?? "", /#general is already a channel\./u);
+  fill(name, "Release Train");
+  fill(purpose, "What ships Friday");
+  act(() => dialogButton("Create channel").click());
+  await settle();
+  assert.equal(openDialog(), null);
+  act(() => railRow(page, "release-train").click());
+  assert.equal(page.querySelector(".chat-head h2")?.textContent, "# release-train");
+  assert.match(page.querySelector(".chat-head")?.textContent ?? "", /What ships Friday/u);
+
+  const actions = page.querySelector<HTMLButtonElement>(
+    '.chat-head button[aria-label="#release-train actions"]',
+  );
+  assert.ok(actions, "a topic's head offers its actions");
+  act(() => actions.click());
+  const archive = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Archive channel",
+  );
+  act(() => archive?.click());
+  act(() => dialogButton("Archive channel").click());
+  await settle();
+  assert.equal(
+    [...page.querySelectorAll(".chat-rail button")].some((row) =>
+      row.textContent?.includes("release-train"),
+    ),
+    false,
   );
 });

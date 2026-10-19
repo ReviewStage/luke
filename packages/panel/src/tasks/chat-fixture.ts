@@ -17,7 +17,7 @@ import {
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import type { TaskAgentLine } from "@luke/features/task-wire";
-import type { ChatAskAnswer, ChatPost } from "@luke/ui/chat-model";
+import type { ChatAskAnswer, ChatChannelChange, ChatPost } from "@luke/ui/chat-model";
 import { FIXTURE_TASK_ID } from "./tasks-fixture.js";
 
 /**
@@ -377,6 +377,7 @@ export type Staged = { readonly chat: FixtureChat } | { readonly refused: string
 /** What a fixture's post or answer refuses with: a place, a message, or a revision that is not the chat's. */
 const STAGED_REFUSAL = {
   NO_PLACE: "There is no such channel or member.",
+  NAME_TAKEN: "Another channel already has that name.",
   NO_MESSAGE: "That message is not in this chat.",
   STALE: "The ask changed since you read it.",
 } as const;
@@ -507,4 +508,49 @@ export function stagedAnswer(read: FixtureChat, answered: ChatAskAnswer, at: num
       ),
   );
   return { chat: { ...read, answer } };
+}
+
+/**
+ * A topic channel opened or edited in a fixture's chat, as the service
+ * takes it: a new name another channel holds, `general` among them, is
+ * refused, an edit names a topic, and a purpose of null clears it.
+ */
+export function stagedChannel(read: FixtureChat, change: ChatChannelChange): Staged {
+  const chat = read.answer;
+  const taken = (name: string, except: string | undefined) =>
+    name === GENERAL_CHANNEL ||
+    chat.channels.some((channel) => channel.name === name && channel.id !== except);
+  if ("open" in change) {
+    const { name, purpose } = change.open;
+    if (taken(name, undefined)) return { refused: STAGED_REFUSAL.NAME_TAKEN };
+    const opened: ChatChannel = {
+      id: crypto.randomUUID(),
+      kind: CHANNEL_KIND.TOPIC,
+      name,
+      archived: false,
+      ...(purpose === undefined ? undefined : { purpose }),
+    };
+    return { chat: { ...read, answer: { ...chat, channels: [...chat.channels, opened] } } };
+  }
+  const { channelId, name, purpose, archived } = change.edit;
+  const standing = chat.channels.find((channel) => channel.id === channelId);
+  if (standing?.kind !== CHANNEL_KIND.TOPIC) return { refused: STAGED_REFUSAL.NO_PLACE };
+  if (name !== undefined && taken(name, channelId)) return { refused: STAGED_REFUSAL.NAME_TAKEN };
+  const { purpose: was, ...rest } = standing;
+  const said = purpose === undefined ? was : (purpose ?? undefined);
+  const edited: ChatChannel = {
+    ...rest,
+    ...(name === undefined ? undefined : { name }),
+    ...(archived === undefined ? undefined : { archived }),
+    ...(said === undefined ? undefined : { purpose: said }),
+  };
+  return {
+    chat: {
+      ...read,
+      answer: {
+        ...chat,
+        channels: chat.channels.map((channel) => (channel.id === channelId ? edited : channel)),
+      },
+    },
+  };
 }

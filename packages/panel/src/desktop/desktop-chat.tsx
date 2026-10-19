@@ -1,13 +1,22 @@
-import { CHANNEL_KIND } from "@luke/features/chat-wire";
+import { CHANNEL_KIND, type ChatChannel } from "@luke/features/chat-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import {
+  ArchiveIcon,
   BackIcon,
+  BUTTON_SIZE,
+  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  IconButton,
+  Inline,
+  JUSTIFY,
   NAV_CURRENT,
   NavItem,
+  PencilIcon,
+  PlusIcon,
   ScrollArea,
+  useMenu,
 } from "@luke/ui";
 import {
   CHAT_PLACE,
@@ -26,6 +35,9 @@ import { ChatPane, MemberMark } from "../tasks/chat-pane.js";
 import { useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
+import { Tooltip } from "../tooltip.js";
+import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 
 /**
  * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
@@ -59,6 +71,9 @@ function mentionPlaceOf(tasks: TasksControl): MentionPlace | undefined {
 
 /** What the way back from a place to the rail says, in a narrow room. */
 const CHAT_LIST = "Chat";
+
+/** What the press that opens a topic channel is called. */
+const NEW_CHANNEL = "New channel";
 
 /** What a row's count is read as. */
 const UNREAD = "unread";
@@ -119,6 +134,7 @@ export function DesktopChat({
     () => chatNames(listed, read?.agents ?? [], accountName),
     [listed, read, accountName],
   );
+  const dialogs = useChannelDialogs(read?.answer, view.onChannel, view.open);
   if (read === undefined || view.failed) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
     const standIn = view.failed ? (
@@ -174,7 +190,17 @@ export function DesktopChat({
               </li>
             </ul>
             <section className="chat-rail-group">
-              <h2 className="section-heading">Channels</h2>
+              <Inline justify={JUSTIFY.BETWEEN} wrap={false}>
+                <h2 className="section-heading">Channels</h2>
+                <Tooltip label={NEW_CHANNEL}>
+                  <IconButton
+                    icon={<PlusIcon />}
+                    label={NEW_CHANNEL}
+                    size={BUTTON_SIZE.COMPACT}
+                    onClick={dialogs.askNew}
+                  />
+                </Tooltip>
+              </Inline>
               <ul className="sidebar-tasks">{rail.channels.map(row)}</ul>
             </section>
             {rail.direct.length === 0 ? null : (
@@ -195,6 +221,11 @@ export function DesktopChat({
         openLink={openLink}
         onPost={view.onPost}
         onAnswer={view.onAnswer}
+        channelActions={(channel) =>
+          channel.kind === CHANNEL_KIND.TOPIC && !channel.archived ? (
+            <TopicActions channel={channel} dialogs={dialogs} shown={view.open} />
+          ) : undefined
+        }
         lead={
           room === SHELL_ROOM.NARROW ? (
             <FoldingButton label={CHAT_LIST} icon={<BackIcon />} onClick={view.onList} />
@@ -202,7 +233,42 @@ export function DesktopChat({
         }
         hidden={hidden.item}
       />
+      {dialogs.dialog}
     </div>
+  );
+}
+
+/** A topic's menu at its head's end: edit its name and purpose, or archive it. */
+function TopicActions({
+  channel,
+  dialogs,
+  shown,
+}: {
+  channel: ChatChannel;
+  dialogs: ChannelDialogs;
+  shown: boolean;
+}): React.JSX.Element {
+  const menu = useMenu(shown);
+  const label = `#${channel.name ?? ""} actions`;
+  const groups: MenuAction[][] = [
+    [{ label: "Edit channel", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(channel) }],
+    [
+      {
+        label: "Archive channel",
+        icon: <ArchiveIcon />,
+        onSelect: () => dialogs.askArchive(channel),
+      },
+    ],
+  ];
+  return (
+    <>
+      <Tooltip label="Channel actions">
+        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label={label} menu={menu.drawn} groups={groups} onClose={menu.close} />
+      )}
+    </>
   );
 }
 

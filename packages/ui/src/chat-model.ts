@@ -2,12 +2,16 @@ import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
+  CHAT_BOUNDS,
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatChannel,
+  type ChatEditRequest,
   type ChatMember,
   type ChatMessage,
+  type ChatOpenRequest,
   type ChatReply,
+  GENERAL_CHANNEL,
   MEMBER_KIND,
   type postChatInputSchema,
 } from "@luke/features/chat-wire";
@@ -65,6 +69,9 @@ type ForYouReason = (typeof FOR_YOU_REASON)[keyof typeof FOR_YOU_REASON];
 
 /** A post the window sends: the words, where they go, and the message they reply to in a thread (`chat-wire.ts`'s `postChatInputSchema`). */
 export type ChatPost = typeof postChatInputSchema.Type;
+
+/** A topic channel opened, or one renamed, its purpose said or cleared, or archived or brought back, as the window writes it. */
+export type ChatChannelChange = ChatOpenRequest | ChatEditRequest;
 
 /** An answer the window sends to an ask: the message carrying it, the revision the developer read, and the answer. */
 export interface ChatAskAnswer {
@@ -382,4 +389,34 @@ export function chatKeywords(chat: ChatAnswer, names: ChatNames): readonly strin
     if (kept.size === DICTATION_BOUNDS.MAX_KEYWORDS) break;
   }
   return [...kept];
+}
+
+/** The characters a channel's name is spelled in, its first a letter or a digit (`chatChannelNameSchema`). */
+const CHANNEL_NAME = /^[a-z0-9][a-z0-9._-]*$/u;
+
+/** The most characters a channel's name may spell (`CHAT_BOUNDS.MAX_KEY_CHARS`). */
+const MAX_CHANNEL_NAME_CHARS = CHAT_BOUNDS.MAX_KEY_CHARS;
+
+/** What a channel's name as typed is written as: lower case, each run of spaces a hyphen, nothing around it. */
+export function topicName(words: string): string {
+  return words.trim().toLowerCase().replace(/\s+/gu, "-");
+}
+
+/** Why a name a person typed cannot be a topic channel's, the channel being renamed aside; nothing where it can. */
+export function topicNameProblem(
+  chat: ChatAnswer,
+  name: string,
+  renaming: string | undefined,
+): string | undefined {
+  if (name === "") return "Name the channel.";
+  if (name.length > MAX_CHANNEL_NAME_CHARS) {
+    return `A channel's name is at most ${MAX_CHANNEL_NAME_CHARS} characters.`;
+  }
+  if (!CHANNEL_NAME.test(name)) {
+    return "Use lowercase letters, numbers, dots, dashes, and underscores, starting with a letter or a number.";
+  }
+  const taken =
+    name === GENERAL_CHANNEL ||
+    chat.channels.some((channel) => channel.name === name && channel.id !== renaming);
+  return taken ? `#${name} is already a channel.` : undefined;
 }

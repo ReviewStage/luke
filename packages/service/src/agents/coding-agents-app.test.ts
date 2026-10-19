@@ -6447,6 +6447,7 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
         const topic = yield* chat.post(chat.first, {
           text: "Release notes go here.",
           to: "#releases",
+          purpose: "What ships, and when",
         });
         assert.ok("in" in topic);
         assert.equal(topic.in, "#releases");
@@ -6465,6 +6466,11 @@ it.layer(getTestDB())("the coding agent's chat tools", (it) => {
           ["#releases", CHANNEL_KIND.TOPIC],
           ["#teammate-invitations", CHANNEL_KIND.TASK],
         ]);
+        // The topic says what it is for, as its opener wrote it, to every agent that reads.
+        assert.equal(
+          read.channels.find((channel) => channel.name === "#releases")?.purpose,
+          "What ships, and when",
+        );
       }),
   );
 
@@ -8511,6 +8517,41 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.ok("posted" in plain);
         assert.deepEqual(plain.receipt.told, []);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "a person opens a topic channel with a purpose, renames it, and archives it from the window; a name another channel holds is refused",
+    () =>
+      Effect.gen(function* () {
+        const chat = yield* openWindowChat();
+        const opened = yield* chat.wrote({
+          open: { name: "release-train", purpose: "Friday's cut" },
+        });
+        assert.ok("channel" in opened);
+        assert.deepEqual(
+          [opened.channel.name, opened.channel.kind, opened.channel.purpose],
+          ["release-train", CHANNEL_KIND.TOPIC, "Friday's cut"],
+        );
+        const read = yield* chat.read;
+        assert.equal(
+          read.channels.find((channel) => channel.id === opened.channel.id)?.purpose,
+          "Friday's cut",
+        );
+        const edited = yield* chat.wrote({
+          edit: { channelId: opened.channel.id, name: "release", purpose: null },
+        });
+        assert.ok("channel" in edited);
+        assert.deepEqual([edited.channel.name, edited.channel.purpose], ["release", undefined]);
+        const archived = yield* chat.wrote({
+          edit: { channelId: opened.channel.id, archived: true },
+        });
+        assert.ok("channel" in archived);
+        assert.equal(archived.channel.archived, true);
+        assert.deepEqual(
+          yield* chat.write({ open: { name: "general" } }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
       }),
   );
 
