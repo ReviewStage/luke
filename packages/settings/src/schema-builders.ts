@@ -145,8 +145,8 @@ export function choiceSetting<
   optionSample?: (value: Value) => string | undefined;
   /** The heading a value stands under, for a choice drawn in groups; values sharing one stand together in `values`' order. */
   optionGroup?: (value: Value) => string | undefined;
-  /** A line of what a value is, under its label where the control draws one. */
-  optionDetail?: (value: Value) => string | undefined;
+  /** A short word of what a value is, at the end of its row where the control draws one. */
+  optionTag?: (value: Value) => string | undefined;
   default: Default;
   /** The word for no choice at all, required where the default is nothing. */
   absent?: string;
@@ -194,14 +194,14 @@ export function choiceSetting<
         const picture = spec.optionPicture?.(value);
         const sample = spec.optionSample?.(value);
         const group = spec.optionGroup?.(value);
-        const detail = spec.optionDetail?.(value);
+        const tag = spec.optionTag?.(value);
         return {
           value: spec.token(value),
           label: optionLabel(value),
           ...(picture === undefined ? undefined : { picture }),
           ...(sample === undefined ? undefined : { sample }),
           ...(group === undefined ? undefined : { group }),
-          ...(detail === undefined ? undefined : { detail }),
+          ...(tag === undefined ? undefined : { tag }),
         };
       }),
     stored: (token) => byToken.get(token),

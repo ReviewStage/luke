@@ -1,13 +1,15 @@
 /**
- * voice-choice.ts -- how the Voice setting offers the Live voices: in what order, under which heading, in which words, and heard from which clip.
+ * voice-choice.ts -- how the Voice setting offers the Live voices: in what order, under which heading, with which tag, and heard from which clip.
  *
  * The voices stand in groups, so thirty-odd names read as a few families
- * rather than one alphabet: OpenAI's original voices first, the default
- * among them, then each language in `LIVE_VOICE_LANGUAGE`'s order, and
- * within English each region in `LIVE_VOICE_REGION`'s. The headings and the
- * line under each name are OpenAI's own published description of the voice
- * (`@luke/live`'s `LIVE_VOICE_PROFILE`), and a voice it describes nowhere
- * says nothing rather than something guessed.
+ * rather than one alphabet: each language in `LIVE_VOICE_LANGUAGE`'s order,
+ * English first, and within a language the voices of no named region first
+ * (OpenAI's original ten, the default among them), then each region in
+ * `LIVE_VOICE_REGION`'s order. A heading names a region the way it is said,
+ * "Australian English", and each voice wears how it presents as a tag at the
+ * end of its row. Both are OpenAI's own published description of the voice
+ * (`@luke/live`'s `LIVE_VOICE_PROFILE`), and a voice it gives no presentation
+ * wears no tag rather than one guessed.
  */
 
 import {
@@ -22,9 +24,6 @@ import {
   type LiveVoiceProfile,
   type LiveVoiceRegion,
 } from "@luke/live";
-
-/** The heading over the voices OpenAI describes by no language or region. */
-const ORIGINAL_VOICES = "Original";
 
 /** A word for each value of a vocabulary, as a control reads it. */
 type Names<Value extends string> = { readonly [Each in Value]: string };
@@ -57,9 +56,8 @@ const PRESENTATION_NAME = {
 const LANGUAGE_ORDER: readonly LiveVoiceLanguage[] = Object.values(LIVE_VOICE_LANGUAGE);
 const REGION_ORDER: readonly LiveVoiceRegion[] = Object.values(LIVE_VOICE_REGION);
 
-/** Where a voice's group stands among the groups: the originals first, then by language, then by region. */
-function groupRank(profile: LiveVoiceProfile | undefined): readonly [number, number] {
-  if (profile === undefined) return [-1, -1];
+/** Where a voice's group stands among the groups: by language, then those of no region, then by region. */
+function groupRank(profile: LiveVoiceProfile): readonly [number, number] {
   const region = profile.region === undefined ? -1 : REGION_ORDER.indexOf(profile.region);
   return [LANGUAGE_ORDER.indexOf(profile.language), region];
 }
@@ -81,18 +79,17 @@ export function voiceOptionLabel(voice: LiveVoice): string {
   return voice === LIVE_DEFAULTS.VOICE ? `${name} (default)` : name;
 }
 
-/** The heading a voice stands under: its language, and its region where OpenAI names one. */
+/** The heading a voice stands under: its language, led by its region where OpenAI names one, as "Australian English". */
 export function voiceGroup(voice: LiveVoice): string {
-  const profile = LIVE_VOICE_PROFILE[voice];
-  if (profile === undefined) return ORIGINAL_VOICES;
-  const language = LANGUAGE_NAME[profile.language];
-  return profile.region === undefined ? language : `${language} · ${REGION_NAME[profile.region]}`;
+  const { language, region } = LIVE_VOICE_PROFILE[voice];
+  const languageName = LANGUAGE_NAME[language];
+  return region === undefined ? languageName : `${REGION_NAME[region]} ${languageName}`;
 }
 
-/** The line under a voice's name: how it presents, where OpenAI says. */
-export function voiceDetail(voice: LiveVoice): string | undefined {
-  const profile = LIVE_VOICE_PROFILE[voice];
-  return profile === undefined ? undefined : PRESENTATION_NAME[profile.presentation];
+/** The tag at the end of a voice's row: how it presents, where OpenAI says. */
+export function voiceTag(voice: LiveVoice): string | undefined {
+  const { presentation } = LIVE_VOICE_PROFILE[voice];
+  return presentation === undefined ? undefined : PRESENTATION_NAME[presentation];
 }
 
 /* Each voice's clip under the panel's asset base, recorded from the voice

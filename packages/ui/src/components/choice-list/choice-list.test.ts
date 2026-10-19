@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { BADGE_TONE } from "../badge/badge.js";
 import {
   CHOICE_FLOW,
   CHOICE_LOOK,
@@ -160,6 +161,28 @@ test("a press chooses a row; a press on the checked row keeps it, unless the lis
   act(() => row(cleared, "Never retry").click());
   assert.equal(heard(cleared), "never,none");
   assert.equal(row(cleared, "Never retry").getAttribute("aria-checked"), "false");
+});
+
+test("an open row's badge stands in the attention tone unless the option names its own", () => {
+  const page = render(
+    createElement(ChoiceList<Retry>, {
+      legend: "Retries",
+      options: [
+        { value: "three", label: "Retry 3 times", badge: "Recommended" },
+        { value: "never", label: "Never retry", badge: "Quiet", badgeTone: BADGE_TONE.NEUTRAL },
+      ],
+      value: [],
+      onChange: () => undefined,
+    }),
+  );
+  const tones = [...page.querySelectorAll(".luke-badge")].map((badge) => [
+    badge.textContent,
+    badge.getAttribute("data-tone"),
+  ]);
+  assert.deepEqual(tones, [
+    ["Recommended", BADGE_TONE.ATTENTION],
+    ["Quiet", BADGE_TONE.NEUTRAL],
+  ]);
 });
 
 test("a press on the checked row is heard by a list that listens for it, and changes nothing", () => {

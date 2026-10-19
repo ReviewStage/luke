@@ -201,7 +201,12 @@ test("the Voice row opens every voice under its heading, plays each as it is pic
 
   act(() => control(page, "Voice: Cedar").click());
   const headings = [...document.querySelectorAll('[role="dialog"] h3')].map((h) => h.textContent);
-  assert.deepEqual(headings.slice(0, 2), ["Original", "English · North American"]);
+  assert.deepEqual(headings.slice(0, 3), [
+    "English",
+    "North American English",
+    "Southern U.S. English",
+  ]);
+  assert.ok(headings.includes("Brazilian Portuguese"));
   assert.ok(headings.includes("Japanese"));
   assert.equal(voiceRow("Cedar").getAttribute("aria-checked"), "true");
   assert.equal(voiceRow("Willow").textContent?.includes("Feminine"), true);

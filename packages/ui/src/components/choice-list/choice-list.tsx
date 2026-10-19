@@ -96,6 +96,12 @@ export interface ChoiceOption<Value extends string> {
   detail?: string | undefined;
   /** A short word at the row's top right, the agent's "Recommended". */
   badge?: string | undefined;
+  /**
+   * The badge's tone while the list is open: the attention tone of a call to
+   * act where none is given, or the neutral one for a word that only says
+   * what the option is, as a voice's "Feminine" does.
+   */
+  badgeTone?: BadgeTone | undefined;
   /** A picture before the words, a workspace's tile. */
   mark?: ReactNode;
   /** Whether this option alone cannot be picked. */
@@ -254,7 +260,11 @@ function ChoiceRow({
         />
       ) : null}
       {option.mark === undefined ? null : <span className="luke-choice-mark">{option.mark}</span>}
-      <ChoiceWords option={option} tone={BADGE_TONE.ATTENTION} number={number} />
+      <ChoiceWords
+        option={option}
+        tone={option.badgeTone ?? BADGE_TONE.ATTENTION}
+        number={number}
+      />
     </>
   );
   // Note that each role is spelled out, because a role read off a value is one the accessibility lint cannot check.

@@ -36,10 +36,10 @@ import {
 import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
 import {
   OFFERED_VOICE_LIST,
-  voiceDetail,
   voiceGroup,
   voiceOptionLabel,
   voiceSamplePath,
+  voiceTag,
 } from "./voice-choice.js";
 import { isZoomPercent, ZOOM_ACTUAL_SIZE, ZOOM_PERCENTS } from "./zoom.js";
 
@@ -170,7 +170,7 @@ export const APP_SETTING_SCHEMA = {
     optionLabel: voiceOptionLabel,
     optionSample: voiceSamplePath,
     optionGroup: voiceGroup,
-    optionDetail: voiceDetail,
+    optionTag: voiceTag,
     guard: (value: UnparsedWireValue) => optional(value, isLiveVoice),
     default: LIVE_DEFAULTS.VOICE,
     page: SETTINGS_PAGE.VOICE,

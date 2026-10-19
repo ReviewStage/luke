@@ -3,20 +3,25 @@
  *
  * A voice is told apart by ear, which a pop-up only allows one open-pick-close
  * at a time, so the row is a chip naming the chosen value that opens a dialog
- * of them all instead: grouped under their headings, each a marked row of
- * `@luke/ui`'s `ChoiceList` with its line of detail, and a pick plays the value's
- * clip at once, a press on the picked row plays it again, and the arrow keys
- * pick and play as they walk the whole list, across its headings. The picked
- * row is scrolled into view as the dialog opens. Nothing is written while the dialog stands:
- * Done keeps the value picked, which is the one write (choosing a voice ends
- * the conversation in progress, so browsing must not), and Cancel, Escape,
- * or a press beside the card keep the value as it stood. The clip stops as
- * the dialog closes, however it closes. A play button at the dialog's foot
- * plays the picked value again, or stops whatever clip is playing.
+ * of them all instead. They stand grouped under their headings, each a marked
+ * row of `@luke/ui`'s `ChoiceList` of one line, so every row is one height,
+ * with its tag at the row's end in the neutral tone, and the list fades at
+ * the edges it scrolls past, as every scrolled list in the app does. A pick
+ * plays the value's clip at once, a press on the picked row plays it again,
+ * and the arrow keys pick and play as they walk the whole list, across its
+ * headings. The picked row is scrolled into view as the dialog opens.
+ *
+ * Nothing is written while the dialog stands: Done keeps the value picked,
+ * which is the one write (choosing a voice ends the conversation in progress,
+ * so browsing must not), and Cancel, Escape, or a press beside the card keep
+ * the value as it stood. The clip stops as the dialog closes, however it
+ * closes. A play button at the dialog's foot plays the picked value again, or
+ * stops whatever clip is playing.
  */
 
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
 import {
+  BADGE_TONE,
   BUTTON_VARIANT,
   Button,
   CHIP_LOOK,
@@ -29,6 +34,7 @@ import {
   Dialog,
   IconButton,
   PlayIcon,
+  SCROLL_FADE,
   SCROLL_SIZE,
   ScrollArea,
   SettingsRow,
@@ -45,13 +51,13 @@ import { Tooltip } from "../tooltip.js";
 import { ChangedMark } from "./marks.js";
 import { type SamplePlayer, useSamplePlayer } from "./sample-player.js";
 
-/** Each value's token, its name, the path of its clip, and where it has them, its heading and its line of detail. */
+/** Each value's token, its name, the path of its clip, and where it has them, its heading and its tag. */
 export interface SampledChoiceOption {
   value: string;
   label: string;
   sample: string;
   group?: string | undefined;
-  detail?: string | undefined;
+  tag?: string | undefined;
 }
 
 /** A run of options under one heading, in the order they stand. */
@@ -177,7 +183,7 @@ function SampledChoiceDialog({
         </>
       }
     >
-      <ScrollArea size={SCROLL_SIZE.CONTENT}>
+      <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
         <div className="sampled-choice" onKeyDownCapture={onKeyDownCapture}>
           {groups.map((group) => {
             const holdsPick = group.options.some((option) => option.value === picked);
@@ -192,10 +198,11 @@ function SampledChoiceDialog({
                 <ChoiceList
                   legend={group.heading ?? title}
                   look={CHOICE_LOOK.MARKED}
-                  options={group.options.map(({ value: token, label, detail }) => ({
+                  options={group.options.map(({ value: token, label, tag }) => ({
                     value: token,
                     label,
-                    detail,
+                    badge: tag,
+                    badgeTone: BADGE_TONE.NEUTRAL,
                   }))}
                   value={holdsPick ? [picked] : []}
                   focusRef={holdsPick ? pickedRow : undefined}

@@ -238,8 +238,8 @@ export function SchemaSettingRows({
       ];
     }
     // A set whose every value is heard, as the voices are, is chosen in a dialog that plays each as it is picked.
-    const sampled = control.options.flatMap(({ value, label, sample, group, detail }) =>
-      sample === undefined ? [] : [{ value, label, sample, group, detail }],
+    const sampled = control.options.flatMap(({ value, label, sample, group, tag }) =>
+      sample === undefined ? [] : [{ value, label, sample, group, tag }],
     );
     if (sampled.length > 0 && sampled.length === control.options.length) {
       return [

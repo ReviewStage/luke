@@ -130,8 +130,8 @@ export interface SettingOption {
   sample?: string;
   /** The heading it stands under where the set is drawn in groups, such as a voice's language. */
   group?: string;
-  /** A line of what it is, drawn under its label where the control has room for one. */
-  detail?: string;
+  /** A short word of what it is, drawn at the end of its row where the control has room for one. */
+  tag?: string;
 }
 
 /**

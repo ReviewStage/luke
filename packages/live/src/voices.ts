@@ -87,38 +87,39 @@ export const LIVE_VOICE_PRESENTATION = {
 export type LiveVoicePresentation =
   (typeof LIVE_VOICE_PRESENTATION)[keyof typeof LIVE_VOICE_PRESENTATION];
 
-/** What OpenAI publishes about one voice: its language, how it presents, and where it names one, its region. */
+/** What OpenAI publishes about one voice: its language, and where it names them, its region and how it presents. */
 export interface LiveVoiceProfile {
   language: LiveVoiceLanguage;
   region?: LiveVoiceRegion;
-  presentation: LiveVoicePresentation;
+  presentation?: LiveVoicePresentation;
 }
 
 const { ENGLISH, PORTUGUESE, FRENCH, GERMAN, HINDI, JAPANESE, KOREAN } = LIVE_VOICE_LANGUAGE;
 const { FEMININE, MASCULINE } = LIVE_VOICE_PRESENTATION;
 
-/**
- * Each voice as the "Voice options" table of OpenAI's GPT-Live guide
- * (developers.openai.com/api/docs/guides/live-conversations) describes it.
- * The guide's table covers only the voices GPT-Live added; the earlier ten
- * (alloy through verse, marin, and cedar) are described nowhere, by the guide,
- * the SDK, or any endpoint, so they stand as `undefined` rather than with a
- * language or a region guessed at.
- */
-/** What OpenAI publishes about every voice, `undefined` for a voice it describes nowhere. */
-export type LiveVoiceProfiles = { readonly [Voice in LiveVoice]: LiveVoiceProfile | undefined };
+/** What OpenAI publishes about every voice. */
+export type LiveVoiceProfiles = { readonly [Voice in LiveVoice]: LiveVoiceProfile };
 
+/**
+ * Each voice as OpenAI describes it. The "Voice options" table of the GPT-Live
+ * guide (developers.openai.com/api/docs/guides/live-conversations) covers the
+ * voices GPT-Live added: language, regional influence, and presentation. The
+ * earlier ten (alloy through verse, marin, and cedar) it leaves out, and
+ * OpenAI says of them only that they "are currently optimized for English"
+ * (the text-to-speech guide), so they stand as English with no region and no
+ * presentation, rather than with one guessed at by ear.
+ */
 export const LIVE_VOICE_PROFILE: LiveVoiceProfiles = {
-  alloy: undefined,
-  ash: undefined,
-  ballad: undefined,
-  cedar: undefined,
-  coral: undefined,
-  echo: undefined,
-  marin: undefined,
-  sage: undefined,
-  shimmer: undefined,
-  verse: undefined,
+  alloy: { language: ENGLISH },
+  ash: { language: ENGLISH },
+  ballad: { language: ENGLISH },
+  cedar: { language: ENGLISH },
+  coral: { language: ENGLISH },
+  echo: { language: ENGLISH },
+  marin: { language: ENGLISH },
+  sage: { language: ENGLISH },
+  shimmer: { language: ENGLISH },
+  verse: { language: ENGLISH },
   quartz: { language: ENGLISH, region: LIVE_VOICE_REGION.AUSTRALIAN, presentation: FEMININE },
   ripple: { language: ENGLISH, region: LIVE_VOICE_REGION.AUSTRALIAN, presentation: MASCULINE },
   vesper: { language: ENGLISH, region: LIVE_VOICE_REGION.BRITISH, presentation: MASCULINE },
