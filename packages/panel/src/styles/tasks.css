@@ -1576,6 +1576,15 @@
   font-size: var(--luke-type-caption-size);
 }
 
+/* Why a file's unchanged lines could not be opened, one quiet line above
+   its first hunk, in the list's own small type (agent-changes-tab.tsx). */
+.diff-list-refused {
+  margin: 0;
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-4) var(--luke-space-40);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
 /* A changed image in Files changed's list (image-diff.tsx), under its
    header in place of lines, as its lead (diff-view/index.ts): its two sides beside each other, each on a
    checkerboard that shows what is transparent, or the after laid over the

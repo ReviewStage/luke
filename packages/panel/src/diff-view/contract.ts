@@ -128,6 +128,8 @@ export interface DiffListFile {
    * whole of its width, which say why it has no lines or show what it is.
    */
   readonly lead: boolean;
+  /** Whether the lines between the file's hunks may be opened, its text read whole the first time one is (`DiffListProps.readTexts`). */
+  readonly expandable: boolean;
 }
 
 /** Lines lit in one file of a list: the file, by its path, and the lines. */
@@ -153,6 +155,17 @@ export interface DiffListProps {
   readonly onTopFile: (path: string) => void;
   readonly onComment?: ((picked: DiffListSelection) => void) | undefined;
   readonly selected?: DiffListSelection | undefined;
+  /** Reads a file's whole text on both sides, the first time the lines between its hunks are asked for; none offers no such lines. */
+  readonly readTexts?: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
+}
+
+/** How many unchanged lines one press of a gap's arrow opens, as GitHub's diff opens them. */
+export const GAP_LINES = 20;
+
+/** A changed file's whole text before and after, which the lines between its hunks are drawn from; none where it could not be read whole. */
+export interface DiffFileTexts {
+  readonly before: string;
+  readonly after: string;
 }
 
 /** Whether two lists light the same lines of the same file, or both none. */
