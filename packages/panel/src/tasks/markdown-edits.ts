@@ -131,8 +131,8 @@ function linkEdit(field: FieldSelection): MarkdownEdit {
     const words = PLACEHOLDER.LINK_TEXT;
     return replacing(start, end, `[${words}](${selected})`, [1, 1 + words.length]);
   }
-  // Note that a bracket in the words is escaped, so it cannot end the link's words early.
-  const words = selected === "" ? PLACEHOLDER.LINK_TEXT : selected.replace(/[[\]]/gu, "\\$&");
+  // Note that a bracket or a backslash in the words is escaped, so neither can end the link's words early.
+  const words = selected === "" ? PLACEHOLDER.LINK_TEXT : selected.replace(/[\\[\]]/gu, "\\$&");
   const at = words.length + 3;
   return replacing(start, end, `[${words}](${PLACEHOLDER.LINK_URL})`, [
     selected === "" ? 1 : at,

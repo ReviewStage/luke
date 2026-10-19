@@ -97,6 +97,12 @@ test("a link takes the selection as its words and selects the address to write, 
     "[look \\] here]([url])",
     "a bracket in the words is escaped",
   );
+  const slashed = { value: "C:\\", start: 0, end: 3 };
+  assert.equal(
+    after(slashed, markdownEdit(MARKDOWN_FORMAT.LINK, slashed)),
+    "[C:\\\\]([url])",
+    "a backslash in the words is escaped, so it cannot escape the closing bracket",
+  );
   assert.equal(
     press(MARKDOWN_FORMAT.LINK, "See [https://github.com]"),
     "See [[link text]](https://github.com)",
