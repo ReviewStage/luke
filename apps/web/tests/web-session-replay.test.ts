@@ -48,6 +48,7 @@ function drawPage(): void {
   // The tab at a task's link, with a query a sign-in might have left on it.
   history.replaceState(null, "", "/acme/plan/plan-123?code=secret-code");
   document.body.innerHTML = `
+    <meta name="description" content="Quarterly roadmap" />
     <link rel="stylesheet" href="/assets/app.css" />
     <main>
       <h1 title="feature-branch">Quarterly roadmap</h1>

@@ -61,7 +61,9 @@ const POSTHOG_HOST = "https://us.i.posthog.com";
  * no `maskAllText` for recordings, and the recorder drops an option it does
  * not know without a word, so the names are asserted against the installed
  * bundle), inputs masked by the library's default, the attributes that carry
- * words or an image asterisked while `class` and `style` still lay out, every
+ * words or an image asterisked (a `<meta>`'s `content` among them, which the
+ * web app's document carries its description in) while `class` and `style`
+ * still lay out, every
  * `href` among them but the two the replay lays out by (a stylesheet's and an
  * icon's symbol), because a link in a transcript or an Inbox item may go to
  * any page and its address can carry a token, autocapture off, since a click event carries the text of what was clicked,
@@ -81,6 +83,7 @@ const WORDS = new Set([
   "alt",
   "placeholder",
   "src",
+  "content",
 ]);
 const LAYOUT_HREFS = new Set(["link", "use"]);
 const SESSION_REPLAY_MASKING = {
