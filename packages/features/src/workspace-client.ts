@@ -5,20 +5,18 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
   accountCall,
   type CallCredential,
-  type CallRequest,
   callAnswered,
-  sendInSession,
 } from "./account-call.js";
 import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
 import type { LinearIssueSummary } from "./linear-wire.js";
-import { HOSTED_SERVICE_PATH, workspacePhotoPath } from "./service-paths.js";
+import { workspacePhotoPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -45,19 +43,15 @@ import {
   type WorkspaceMember,
   type WorkspacePhotoType,
   type WorkspacesAnswer,
-  workspaceAnswerSchema,
   workspaceCreateRequestSchema,
   workspaceGithubRequestSchema,
-  workspaceLeaveAnswerSchema,
   workspaceLeaveRequestSchema,
   workspaceLinearRequestSchema,
   workspaceMemberRemovalSchema,
   workspaceMemberRoleSchema,
-  workspaceMembersAnswerSchema,
   workspacePhotoSetRequestSchema,
   workspacePhotoTypeSchema,
   workspaceRenameRequestSchema,
-  workspacesAnswerSchema,
   workspaceTransferSchema,
 } from "./workspace-wire.js";
 
@@ -131,8 +125,6 @@ function hostedResult<Answer, Picked>(
 
 export class HostedWorkspaceClient {
   readonly #call: AccountCallEffects;
-  /** The send for the calls that write through Better Auth under the Mac's session. */
-  readonly #inSession: AccountCallEffects["send"];
   /** The hosted contract's client under the account's credential. */
   readonly #hosted: HostedClient;
   /** The hosted contract's client under the Mac's session, for the procedures that write through Better Auth. */
@@ -155,21 +147,13 @@ export class HostedWorkspaceClient {
       credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#inSession = sendInSession(
-      accountCall({
-        baseUrl: options.serviceBaseUrl,
-        credential: options.sessionCredential,
-        requestTimeoutMs: options.requestTimeoutMs,
-      }),
-      options.sessionCredential,
-    );
   }
 
   /** Every workspace the account is a member of, its first one first; nothing where the service refused or did not answer. */
   list(): Effect.Effect<WorkspacesAnswer | undefined, never, HttpClient.HttpClient> {
-    return this.#call.ask(
-      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.WORKSPACES },
-      workspacesAnswerSchema,
+    return Effect.orElseSucceed(
+      askHosted(this.#hosted.workspaces.list, undefined),
+      () => undefined,
     );
   }
 
@@ -179,13 +163,8 @@ export class HostedWorkspaceClient {
   ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(workspaceCreateRequestSchema)({ name }));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#answered(
-      {
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.WORKSPACES,
-        body: JSON.stringify(admitted),
-      },
-      workspaceAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hosted.workspaces.create, admitted),
       (answer) => answer.workspace,
     );
   }
@@ -199,15 +178,9 @@ export class HostedWorkspaceClient {
       readEither(workspaceRenameRequestSchema)({ workspaceId, name }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#answered(
-      {
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.WORKSPACES_RENAME,
-        body: JSON.stringify(admitted),
-      },
-      workspaceAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hostedInSession.workspaces.rename, admitted),
       (answer) => answer.workspace,
-      this.#inSession,
     );
   }
 
@@ -220,15 +193,9 @@ export class HostedWorkspaceClient {
       readEither(workspacePhotoSetRequestSchema)({ workspaceId, photo }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#answered(
-      {
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.WORKSPACES_PHOTO_SET,
-        body: JSON.stringify(admitted),
-      },
-      workspaceAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hostedInSession.workspaces.setPhoto, admitted),
       (answer) => answer.workspace,
-      this.#inSession,
     );
   }
 
@@ -317,10 +284,10 @@ export class HostedWorkspaceClient {
     never,
     HttpClient.HttpClient
   > {
-    const query = new URLSearchParams({ [WORKSPACE_MEMBERS_QUERY.WORKSPACE_ID]: workspaceId });
-    return this.#answered(
-      { method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS}?${query}` },
-      workspaceMembersAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hosted.workspaces.members, {
+        [WORKSPACE_MEMBERS_QUERY.WORKSPACE_ID]: workspaceId,
+      }),
       (answer) => ({ members: answer.members, former: answer.former ?? [] }),
     );
   }
@@ -361,15 +328,9 @@ export class HostedWorkspaceClient {
       readEither(workspaceMemberRemovalSchema)({ workspaceId, userId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#answered(
-      {
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_REMOVE,
-        body: JSON.stringify(admitted),
-      },
-      workspaceMembersAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hostedInSession.workspaces.removeMember, admitted),
       (answer) => answer.members,
-      this.#inSession,
     );
   }
 
@@ -383,15 +344,9 @@ export class HostedWorkspaceClient {
       readEither(workspaceMemberRoleSchema)({ workspaceId, userId, role }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#answered(
-      {
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_ROLE,
-        body: JSON.stringify(admitted),
-      },
-      workspaceMembersAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hostedInSession.workspaces.changeRole, admitted),
       (answer) => answer.members,
-      this.#inSession,
     );
   }
 
@@ -404,15 +359,9 @@ export class HostedWorkspaceClient {
       readEither(workspaceTransferSchema)({ workspaceId, userId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#answered(
-      {
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.WORKSPACES_TRANSFER,
-        body: JSON.stringify(admitted),
-      },
-      workspaceMembersAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hostedInSession.workspaces.transfer, admitted),
       (answer) => answer.members,
-      this.#inSession,
     );
   }
 
@@ -425,15 +374,9 @@ export class HostedWorkspaceClient {
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.map(
-      this.#answered(
-        {
-          method: HTTP_METHOD.POST,
-          path: HOSTED_SERVICE_PATH.WORKSPACES_LEAVE,
-          body: JSON.stringify(admitted),
-        },
-        workspaceLeaveAnswerSchema,
+      hostedResult(
+        askHosted(this.#hostedInSession.workspaces.leave, admitted),
         (answer) => answer.workspaceId,
-        this.#inSession,
       ),
       (left) => (left.ok && left.answer !== workspaceId ? UNANSWERED : left),
     );
@@ -488,22 +431,5 @@ export class HostedWorkspaceClient {
       askHosted(this.#hostedInSession.workspaceInvitations.cancel, admitted),
       (answer) => answer.invitations,
     );
-  }
-
-  /** One call's answer read under its schema and picked, or its refusal named. */
-  #answered<A, Encoded, Picked>(
-    request: CallRequest,
-    schema: Schema.Codec<A, Encoded>,
-    pick: (answer: A) => Picked,
-    send: (request: CallRequest) => ReturnType<AccountCallEffects["send"]> = this.#call.send,
-  ): Effect.Effect<WorkspaceCallResult<Picked>, never, HttpClient.HttpClient> {
-    return Effect.gen(function* () {
-      const answer = yield* send(request);
-      if (!callAnswered(answer)) return UNANSWERED;
-      const payload = unparsedWire(yield* jsonOf(answer.response));
-      if (!answer.response.ok) return refusedAs(payload);
-      const read = Result.getOrUndefined(readServiceAnswer(schema)(payload));
-      return read === undefined ? UNANSWERED : { ok: true, answer: pick(read) };
-    });
   }
 }
