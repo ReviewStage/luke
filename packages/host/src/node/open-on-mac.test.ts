@@ -716,6 +716,55 @@ test(
   GIT_DEADLINE,
 );
 
+test(
+  "an earlier Luke's clone holding a file of the developer's is kept",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    push("first\n");
+    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlierClone = cloneFolder(earlierRoot, "acme/app");
+    run(
+      scratch,
+      shell,
+      openOnMacScript({
+        repository: "acme/app",
+        clone: earlierClone,
+        worktree: worktreeFolder(earlierRoot, "acme/app", "luke/fix-relay"),
+        branch: "luke/fix-relay",
+        remotes: { https: origin, ssh: origin },
+      }),
+    );
+    git(earlierClone, [
+      "worktree",
+      "remove",
+      "--force",
+      worktreeFolder(earlierRoot, "acme/app", "luke/fix-relay"),
+    ]);
+    writeFileSync(path.join(earlierClone, "notes.txt"), "mine\n");
+    const root = path.join(state, ".luke");
+
+    run(
+      scratch,
+      shell,
+      openOnMacScript({
+        repository: "acme/app",
+        clone: cloneFolder(root, "acme/app"),
+        worktree: worktreeFolder(root, "acme/app", "luke/fix-relay"),
+        branch: "luke/fix-relay",
+        remotes: { https: origin, ssh: origin },
+        earlier: {
+          worktrees: path.join(earlierRoot, "worktrees", "acme", "app"),
+          clone: earlierClone,
+        },
+        trash: path.join(root, "trash"),
+      }),
+    );
+
+    assert.equal(readFileSync(path.join(earlierClone, "notes.txt"), "utf8"), "mine\n");
+  },
+  GIT_DEADLINE,
+);
+
 test("two branches never share a worktree, none reaches outside the repository's folder, and none holds a %", () => {
   const folders = ["luke/a-b", "luke/a/b", "luke%2Fa-b", "luke+2Fa-b"].map((branch) =>
     worktreeFolder("/state", "acme/app", branch),
