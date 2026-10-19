@@ -88,6 +88,7 @@ import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import type { EditAgents } from "./edit-ref.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
 import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
+import { EDITOR_ROOM_CLASS } from "./plan-document-editor.js";
 import { RelativeTime } from "./relative-time.js";
 import { type TaskMentionsValue, useMentionLink, useTaskMentions } from "./task-mentions.js";
 import { useMinute } from "./task-time.js";
@@ -1303,13 +1304,13 @@ export function PlanCommentLayer({
       const next = event.relatedTarget;
       // Note that a press on words that take no focus, a card's say, lets the focus go to nothing, and the press's own rule says whether it closes the thread.
       if (next === null) return;
-      if (
-        next instanceof Element &&
-        (element.contains(next) || next.closest(THREAD_ITSELF) !== null)
-      ) {
-        if (next.closest(THREAD_ITSELF) !== null) caretOpened.current = false;
+      if (next instanceof Element && next.closest(THREAD_ITSELF) !== null) {
+        caretOpened.current = false;
         return;
       }
+      // Note that the focus staying is the editor's room holding it, not the plan's body, whose title and buttons are Tab stops of their own.
+      const room = element.querySelector(`.${EDITOR_ROOM_CLASS}`);
+      if (next instanceof Node && room?.contains(next) === true) return;
       letCaretGo();
     };
     const selected = () => {

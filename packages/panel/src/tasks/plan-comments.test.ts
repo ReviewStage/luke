@@ -911,3 +911,81 @@ test("the line a thread's ask leaves is not drawn, since the mention in its word
   assert.ok(card);
   assert.equal(card.querySelectorAll(".comment-event").length, 0);
 });
+
+/** The plan's page with its text open in the editor from the Goal block's Enter, the editor's caret then stood in the open thread's words, which opens that thread. */
+async function caretInThread() {
+  installEditorLayout();
+  const control: PlanCommentsControl = {
+    planId: PLAN.id,
+    threads: THREADS,
+    read: true,
+    failed: false,
+    onRetry: () => undefined,
+    notes: new Map(),
+    start: async () => ({ note: "not in this test" }),
+    act: async () => true,
+  };
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        PlanCommentsProvider,
+        { value: control },
+        createElement(CommentFocusScope, {
+          reveal: undefined,
+          children: createElement(PlanBody, {
+            task: PLAN,
+            live: false,
+            sectionLinks: PAGE_LINKS,
+            onEdit: () => Promise.resolve({ saved: true } as const),
+          }),
+        }),
+      ),
+    ),
+  );
+  const goal = container.querySelector<HTMLElement>('[role="group"][aria-label="Goal"]');
+  assert.ok(goal);
+  act(() => goal.focus());
+  act(() => {
+    goal.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await act(async () => undefined);
+  const words = container.querySelector(`.ProseMirror mark[data-threads~="${ID.OPEN}"]`);
+  assert.ok(words?.firstChild, "the editor marks the thread's words");
+  const caret = words.firstChild;
+  act(() => {
+    window.getSelection()?.collapse(caret, 2);
+    document.dispatchEvent(new Event("selectionchange"));
+  });
+  const opened = () =>
+    container.querySelector<HTMLElement>(`.comment-card[data-thread="${ID.OPEN}"]`)?.dataset
+      .open === "true";
+  assert.ok(opened(), "the caret in the thread's words opens it");
+  return { container, opened };
+}
+
+test("Tab from the editor to another of the plan's controls closes the thread its caret opened", async () => {
+  const { container, opened } = await caretInThread();
+
+  // Note that jsdom moves no focus on a Tab, so the focus goes where Tab takes it: the line's count, the next stop after the text.
+  const count = container.querySelector<HTMLButtonElement>(".comment-count button");
+  assert.ok(count, "the line's count");
+  act(() => count.focus());
+
+  assert.equal(opened(), false);
+});
+
+test("the focus going from the editor into the thread its caret opened keeps it open", async () => {
+  const { container, opened } = await caretInThread();
+
+  const reply = container.querySelector<HTMLElement>(
+    `.comment-card[data-thread="${ID.OPEN}"] textarea`,
+  );
+  assert.ok(reply, "the thread's reply field");
+  act(() => reply.focus());
+
+  assert.ok(opened());
+});
