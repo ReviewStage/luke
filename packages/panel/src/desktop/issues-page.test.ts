@@ -26,6 +26,7 @@ import {
   type PlanEditorPlacement,
   type PlanEditorProps,
 } from "../plan-editor/contract.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab.js";
 import { lineWords } from "../testing/actor-line.js";
@@ -311,6 +312,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  room = SHELL_ROOM.WIDE;
   vi.useRealTimers();
   vi.restoreAllMocks();
   act(() => root?.unmount());
@@ -321,6 +323,9 @@ afterEach(() => {
 
 /** The window's side panel as the pages last drew it. */
 let panelNow: SidePanelControl | undefined;
+
+/** The room the window's stage gives, which a test of a phone's narrows. */
+let room: ShellRoom = SHELL_ROOM.WIDE;
 
 /** The registry every render of one mount shares, so a render again is the same window. */
 let registry = AtomRegistry.make();
@@ -342,12 +347,16 @@ function Pages({
   const [place, setPlace] = useState<IssuesPlace>(start);
   const [peeked, setPeeked] = useState<string | undefined>(undefined);
   // The window's own side panel, which the peek stands in, beside no task.
-  const sidePanel = useSidePanel(undefined, {
-    id: undefined,
-    holds: {},
-    bare: true,
-    drawsOwn: true,
-  });
+  const sidePanel = useSidePanel(
+    undefined,
+    { id: undefined, holds: {}, bare: true, drawsOwn: true },
+    undefined,
+    [],
+    [],
+    [],
+    undefined,
+    room,
+  );
   panelNow = sidePanel;
   const control = tasksControl({ workspace });
   const tasks = tasksControl({
@@ -2661,6 +2670,29 @@ test("a peek the window narrows past its room beside a column is put away, its c
   assert.ok(peekOf(page) === null, "the narrowed window put the peek away");
   assert.ok(document.activeElement === cardOf(page, issue(1).id), "its card holds the keyboard");
   assert.deepEqual(opened, []);
+});
+
+test("a peek filling a phone's window stays as the window narrows, since it never stood beside a column", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  room = SHELL_ROOM.NARROW;
+  const page = mount();
+  await settle();
+  let width = 620;
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.matches(".issues-pages") ? width : 0;
+  });
+
+  act(() => cardOf(page, issue(1).id).click());
+  await settle();
+  width = 390;
+  act(() => relayout());
+
+  assert.equal(peeking(page).title, "Fix login", "the peek still fills the window");
+  assert.equal(
+    page.querySelector(".side-panel")?.getAttribute("data-full-screen"),
+    "true",
+    "it stands full screen, as a narrow room holds it",
+  );
 });
 
 test("Archive's question asked in a peek goes with the peek as it slides out, and another workspace listed opens no peek of the last", async () => {

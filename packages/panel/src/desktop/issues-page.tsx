@@ -766,17 +766,19 @@ function IssuesPages({ tasks }: { tasks: TasksControl }): React.JSX.Element {
     pages.addEventListener("focusin", follow);
     return () => pages.removeEventListener("focusin", follow);
   }, [pages, peeking, onPeek]);
-  // Note that a window narrowed past the peek's room beside a column puts the peek away, as one that never had it opens none.
+  // Note that a window narrowed past the peek's room beside a column puts the peek away, as one that never had it opens none;
+  // a peek a narrow room holds full screen stands beside no column, so no narrowing puts it away.
   const closeNow = useRef(closePeek);
   closeNow.current = closePeek;
+  const fillsWindow = sidePanel.fullScreenOnly;
   useEffect(() => {
-    if (pages === null || !peeking) return;
+    if (pages === null || !peeking || fillsWindow) return;
     const observer = new ResizeObserver(() => {
       if (!peekFits(pages)) closeNow.current();
     });
     observer.observe(pages);
     return () => observer.disconnect();
-  }, [pages, peeking]);
+  }, [pages, peeking, fillsWindow]);
   return (
     <div ref={holdPages} className="issues-pages" data-panel-open={String(peeking)}>
       {place.kind === ISSUES_PAGE.LIST ? (
