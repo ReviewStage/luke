@@ -51,11 +51,11 @@
         },
         {
           "src": "/api/plans/([^/]+)/subagents/([^/]+)/messages",
-          "dest": "/api/default.js?route=plans/subagent-messages&id=$1&call=$2"
+          "dest": "/api/default.js?route=plans/subagent-messages&route-path=plans/$1/subagents/$2/messages&id=$1&call=$2"
         },
         {
           "src": "/api/plans/([^/]+)/messages",
-          "dest": "/api/default.js?route=plans/messages&id=$1"
+          "dest": "/api/default.js?route=plans/messages&route-path=plans/$1/messages&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/code",
@@ -139,7 +139,7 @@
         },
         {
           "src": "/api/agents/([^/]+)/subagents/([^/]+)/messages",
-          "dest": "/api/default.js?route=agents/subagent-messages&id=$1&call=$2"
+          "dest": "/api/default.js?route=agents/subagent-messages&route-path=agents/$1/subagents/$2/messages&id=$1&call=$2"
         },
         {
           "src": "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
@@ -151,7 +151,7 @@
         },
         {
           "src": "/api/agents/([^/]+)/messages",
-          "dest": "/api/default.js?route=agents/messages&id=$1"
+          "dest": "/api/default.js?route=agents/messages&route-path=agents/$1/messages&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/stop",
@@ -288,6 +288,10 @@
         {
           "src": "/api/account/provider-keys",
           "dest": "/api/default.js?route=account/provider-keys"
+        },
+        {
+          "src": "/api/admin/cost",
+          "dest": "/api/default.js?route=admin/cost"
         },
         {
           "src": "/api/admin/day",

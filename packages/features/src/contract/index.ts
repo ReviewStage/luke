@@ -6,6 +6,7 @@
  */
 
 import { automationsContract } from "./automations.js";
+import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
 
 export { HOSTED_ERRORS } from "./errors.js";
@@ -13,5 +14,6 @@ export { HOSTED_ERRORS } from "./errors.js";
 /** Every resource's procedures, one line each, in alphabetical order. */
 export const hostedContract = {
   automations: automationsContract,
+  messages: messagesContract,
   models: modelsContract,
 };

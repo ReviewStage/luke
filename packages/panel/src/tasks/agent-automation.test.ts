@@ -12,7 +12,7 @@ import {
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -91,18 +91,15 @@ let automations: readonly AutomationSummary[] = [TRIAGE];
 beforeEach(() => {
   listed = [];
   automations = [TRIAGE];
+  fakeAppBridge({
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
+  });
   fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       listed.push(payload.workspaceId ?? "");
       return Promise.resolve({ automations });
-    },
-  });
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-      }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
 });

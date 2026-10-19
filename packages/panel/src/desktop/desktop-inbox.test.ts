@@ -273,7 +273,6 @@ beforeEach(() => {
   readMarks = [];
   readMarkRefused = false;
   members = [];
-  fakeActPort({ [ACT_KIND.AUTOMATIONS_LIST]: () => Promise.resolve({ automations }) });
   fakeAppBridge({
     act: (request: Act) => {
       const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
@@ -318,12 +317,6 @@ beforeEach(() => {
             },
           },
         });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
       }
       if (request.kind === ACT_KIND.TASKS_PAGES) {
         return Promise.resolve({
@@ -377,6 +370,11 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
+  });
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: () => Promise.resolve({ automations }),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(members),
   });
 });
 

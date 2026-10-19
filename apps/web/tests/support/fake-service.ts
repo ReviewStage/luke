@@ -56,6 +56,14 @@ function json(body: WireValue, status = 200): Response {
   });
 }
 
+/** The one member of every workspace the fake service reads. */
+export const WORKSPACE_MEMBER = {
+  userId: "user-ada",
+  name: "Ada Lovelace",
+  email: "ada@example.com",
+  role: "owner",
+} as const;
+
 /** The fake service, signed in or not as it starts. */
 export function fakeService(options: { readonly signedIn: boolean }): FakeService {
   let signedIn = options.signedIn;
@@ -80,6 +88,9 @@ export function fakeService(options: { readonly signedIn: boolean }): FakeServic
     }
     if (pathname === "/api/issues" && method === "GET" && signedIn) {
       return json({ issues: [] });
+    }
+    if (pathname === "/api/workspaces/members" && method === "GET" && signedIn) {
+      return json({ members: [WORKSPACE_MEMBER] });
     }
     if (pathname === "/api/plans" && method === "GET") {
       return signedIn ? json({ plans: [LISTED_TASK] }) : json({ error: "unauthorized" }, 401);

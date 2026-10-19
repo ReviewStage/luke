@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { WORKSPACE_CALL_FAILURE } from "@luke/features";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
@@ -14,19 +13,10 @@ import {
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
   type TasksStartAnswer,
-  type TasksWorkspaceGitHubConnectAnswer,
 } from "@luke/features/tasks-view";
-import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { Effect } from "effect";
-import {
-  ACT,
-  ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  ALREADY_INVITED_REFUSAL,
-  GITHUB_LAST_SIGN_IN_REFUSAL,
-  LINEAR_UNAVAILABLE_REFUSAL,
-  WORKSPACE_NOT_PERMITTED_REFUSAL,
-} from "../acts.js";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
 import { highlightSnippet } from "../task-code.js";
 import { type ActRows, type ActSender, createActRouter } from "./router.js";
 import { tasksActRows } from "./tasks-acts.js";
@@ -45,16 +35,6 @@ const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SERVICE = "https://luke.test";
-const INVITATION = {
-  id: "inv-1",
-  email: "alan@luke.test",
-  role: WORKSPACE_ROLE.MEMBER,
-  expiresAt: "2026-10-16T12:00:00.000Z",
-  acceptUrl: "https://luke.test/accept-invitation.html?id=inv-1",
-};
-const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
-/** A workspace's photo as the window sends it: a WebP's `data:` URL. */
-const PHOTO_URL = "data:image/webp;base64,UklGRgAAAABXRUJQ";
 const ACME = {
   id: "workspace-acme",
   name: "acme",
@@ -62,20 +42,7 @@ const ACME = {
   role: WORKSPACE_ROLE.MEMBER,
   github: { login: "acme", active: true },
 };
-const GRACE = {
-  userId: "user-grace",
-  name: "Grace Hopper",
-  email: "grace@luke.test",
-  role: WORKSPACE_ROLE.MEMBER,
-};
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
-const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
-const LINEAR_ISSUE = {
-  id: "issue-1",
-  identifier: "ENG-1",
-  title: "Start a plan from Linear",
-  url: "https://linear.app/acme/issue/ENG-1",
-};
 /** The one pull request the fake host's service holds; it holds none numbered `PULL_REQUEST_NONE`, and answers nothing for any other number. */
 const PULL_REQUEST = {
   number: 42,
@@ -118,24 +85,15 @@ function fixture() {
   const opened: string[] = [];
   const view: OpenTask = { activeTaskId: TASK_ID };
   /**
-   * Whether the host refuses a workspace write as the account's role not
-   * allowing it, the install address a connection answers, whether the
-   * host names no page to connect the account's own GitHub, and the pages
-   * it names to connect and disconnect it.
+   * Whether GitHub is the account's only way to sign in, whether the host
+   * names no page to connect the account's own GitHub, and the page it
+   * names to connect it.
    */
   const host = {
-    notPermitted: false,
-    alreadyInvited: false,
     lastSignIn: false,
-    connectUrl: INSTALL_URL,
-    linearConnectUrl: LINEAR_SIGN_IN_URL,
     githubUnanswered: false,
     connectPage: CONNECT_PAGE,
   };
-  const refusal = () =>
-    host.notPermitted
-      ? ({ failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED } as const)
-      : ({ failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const);
   const start: StartScript = {
     answer: { failure: TASK_CALL_FAILURE.UNANSWERED },
     voiceReady: true,
@@ -311,100 +269,6 @@ function fixture() {
           return host.lastSignIn
             ? { failure: GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED }
             : { connection: { connected: false, login: null } };
-        }),
-      workspaceCreate: (params) =>
-        Effect.sync(() => {
-          asked.push(`create:${params.name}`);
-          return host.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } };
-        }),
-      workspaceRename: (params) =>
-        Effect.sync(() => {
-          asked.push(`rename:${params.workspaceId}:${params.name}`);
-          return host.notPermitted ? refusal() : { workspace: { ...ACME, name: params.name } };
-        }),
-      workspacePhotoSet: (params) =>
-        Effect.sync(() => {
-          asked.push(`photoSet:${params.workspaceId}:${params.photo ?? "none"}`);
-          if (host.notPermitted) return refusal();
-          return { workspace: params.photo === null ? ACME : { ...ACME, photoVersion: "v2" } };
-        }),
-      workspaceGitHubConnect: (params) =>
-        Effect.sync((): TasksWorkspaceGitHubConnectAnswer => {
-          asked.push(`connect:${params.workspaceId}`);
-          return host.notPermitted ? refusal() : { url: host.connectUrl };
-        }),
-      workspaceGitHubDisconnect: (params) =>
-        Effect.sync(() => {
-          asked.push(`disconnect:${params.workspaceId}`);
-          return host.notPermitted ? refusal() : { workspace: ACME };
-        }),
-      workspaceLinearConnect: (params) =>
-        Effect.sync((): TasksWorkspaceGitHubConnectAnswer => {
-          asked.push(`linear-connect:${params.workspaceId}`);
-          return host.notPermitted ? refusal() : { url: host.linearConnectUrl };
-        }),
-      workspaceLinearDisconnect: (params) =>
-        Effect.sync(() => {
-          asked.push(`linear-disconnect:${params.workspaceId}`);
-          return host.notPermitted ? refusal() : { workspace: ACME };
-        }),
-      workspaceLinearIssues: (params) =>
-        Effect.sync(() => {
-          asked.push(`linear-issues:${params.workspaceId}`);
-          return params.workspaceId === ACME.id
-            ? { issues: [LINEAR_ISSUE] }
-            : ({ failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const);
-        }),
-      workspaceMembers: (params) =>
-        Effect.sync(() => {
-          asked.push(`members:${params.workspaceId}`);
-          return params.workspaceId === ACME.id ? { members: [GRACE] } : refusal();
-        }),
-      workspacePhoto: (params) =>
-        Effect.sync(() => {
-          asked.push(`photo:${params.workspaceId}`);
-          return params.workspaceId === ACME.id
-            ? { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" }
-            : ({ failure: WORKSPACE_CALL_FAILURE.NOT_FOUND } as const);
-        }),
-      workspaceMemberRemove: (params) =>
-        Effect.sync(() => {
-          asked.push(`remove:${params.workspaceId}:${params.userId}`);
-          return host.notPermitted ? refusal() : { members: [] };
-        }),
-      workspaceMemberRole: (params) =>
-        Effect.sync(() => {
-          asked.push(`role:${params.workspaceId}:${params.userId}:${params.role}`);
-          return host.notPermitted ? refusal() : { members: [{ ...GRACE, role: params.role }] };
-        }),
-      workspaceTransfer: (params) =>
-        Effect.sync(() => {
-          asked.push(`transfer:${params.workspaceId}:${params.userId}`);
-          return host.notPermitted
-            ? refusal()
-            : { members: [{ ...GRACE, role: WORKSPACE_ROLE.OWNER }] };
-        }),
-      workspaceLeave: (params) =>
-        Effect.sync(() => {
-          asked.push(`leave:${params.workspaceId}`);
-          return host.notPermitted ? refusal() : ({ left: true } as const);
-        }),
-      workspaceInvitations: (params) =>
-        Effect.sync(() => {
-          asked.push(`invitations:${params.workspaceId}`);
-          return host.notPermitted ? refusal() : { invitations: [INVITATION] };
-        }),
-      workspaceInvite: (params) =>
-        Effect.sync(() => {
-          asked.push(`invite:${params.workspaceId}:${params.email}`);
-          return host.alreadyInvited
-            ? ({ failure: WORKSPACE_CALL_FAILURE.ALREADY_INVITED } as const)
-            : { invitation: INVITATION };
-        }),
-      workspaceInvitationCancel: (params) =>
-        Effect.sync(() => {
-          asked.push(`cancel:${params.workspaceId}:${params.invitationId}`);
-          return { invitations: [] };
         }),
     },
     openExternal: (url) => {
@@ -626,140 +490,6 @@ it.effect(
 );
 
 it.effect(
-  "the workspace acts reach the host from a panel and answer what it answered, and never from the voice window",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const workspace = { workspaceId: ACME.id };
-
-      const made = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_CREATE, payload: { name: "Relay Labs" } },
-        PANEL,
-      );
-      const renamed = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_RENAME, payload: { ...workspace, name: "  Acme Labs " } },
-        PANEL,
-      );
-      const photographed = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...workspace, photo: PHOTO_URL } },
-        PANEL,
-      );
-      const unphotographed = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...workspace, photo: null } },
-        PANEL,
-      );
-      const connected = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: workspace },
-        PANEL,
-      );
-      const disconnected = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, payload: workspace },
-        PANEL,
-      );
-      const members = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_MEMBERS_READ, payload: workspace },
-        PANEL,
-      );
-      const removed = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_MEMBER_REMOVE, payload: { ...workspace, userId: GRACE.userId } },
-        PANEL,
-      );
-      const left = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_LEAVE, payload: workspace },
-        PANEL,
-      );
-      const fromVoice = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_CREATE, payload: { name: "Relay Labs" } },
-        VOICE,
-      );
-
-      assert.deepEqual(made, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { ...ACME, name: "Relay Labs" },
-      });
-      assert.deepEqual(renamed, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { ...ACME, name: "Acme Labs" },
-      });
-      assert.deepEqual(photographed, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { ...ACME, photoVersion: "v2" },
-      });
-      assert.deepEqual(unphotographed, { status: ACT_OUTCOME_STATUS.DONE, value: ACME });
-      assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
-      assert.equal(disconnected.status, ACT_OUTCOME_STATUS.DONE);
-      assert.deepEqual(members, { status: ACT_OUTCOME_STATUS.DONE, value: [GRACE] });
-      assert.deepEqual(removed, { status: ACT_OUTCOME_STATUS.DONE, value: [] });
-      assert.equal(left.status, ACT_OUTCOME_STATUS.DONE);
-      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(f.asked, [
-        "create:Relay Labs",
-        `rename:${ACME.id}:Acme Labs`,
-        `photoSet:${ACME.id}:${PHOTO_URL}`,
-        `photoSet:${ACME.id}:none`,
-        `connect:${ACME.id}`,
-        `disconnect:${ACME.id}`,
-        `members:${ACME.id}`,
-        `remove:${ACME.id}:${GRACE.userId}`,
-        `leave:${ACME.id}`,
-      ]);
-      assert.deepEqual(f.opened, [INSTALL_URL]);
-    }),
-);
-
-it.effect(
-  "a member's role is changed and a workspace handed over through the host from a panel alone, each answered with the members, and one the account's role does not allow is refused in words that say so",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const role = {
-        kind: ACT_KIND.WORKSPACE_MEMBER_ROLE,
-        payload: { workspaceId: ACME.id, userId: GRACE.userId, role: WORKSPACE_ROLE.ADMIN },
-      } as const;
-      const transfer = {
-        kind: ACT_KIND.WORKSPACE_TRANSFER,
-        payload: { workspaceId: ACME.id, userId: GRACE.userId },
-      } as const;
-
-      const changed = yield* f.router.performAct(role, PANEL);
-      const handedOver = yield* f.router.performAct(transfer, PANEL);
-      const fromVoice = yield* Effect.all([
-        f.router.performAct(role, VOICE),
-        f.router.performAct(transfer, VOICE),
-      ]);
-      f.host.notPermitted = true;
-      const refused = yield* Effect.all([
-        f.router.performAct(role, PANEL),
-        f.router.performAct(transfer, PANEL),
-      ]);
-
-      assert.deepEqual(changed, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: [{ ...GRACE, role: WORKSPACE_ROLE.ADMIN }],
-      });
-      assert.deepEqual(handedOver, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: [{ ...GRACE, role: WORKSPACE_ROLE.OWNER }],
-      });
-      assert.deepEqual(fromVoice, [
-        { status: ACT_OUTCOME_STATUS.REFUSED, reason: ACT[ACT_KIND.WORKSPACE_MEMBER_ROLE].refusal },
-        { status: ACT_OUTCOME_STATUS.REFUSED, reason: ACT[ACT_KIND.WORKSPACE_TRANSFER].refusal },
-      ]);
-      const notPermitted = {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
-      };
-      assert.deepEqual(refused, [notPermitted, notPermitted]);
-      assert.deepEqual(f.asked, [
-        `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
-        `transfer:${ACME.id}:${GRACE.userId}`,
-        `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
-        `transfer:${ACME.id}:${GRACE.userId}`,
-      ]);
-    }),
-);
-
-it.effect(
   "a plan's picture is read through the host from a panel, its absence answered rather than refused, and never from the voice window",
   () =>
     Effect.gen(function* () {
@@ -837,137 +567,6 @@ it.effect(
 );
 
 it.effect(
-  "a workspace's photo is read through the host from a panel, its absence answered rather than refused, and never from the voice window",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-
-      const read = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: ACME.id } },
-        PANEL,
-      );
-      const none = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: "workspace-plain" } },
-        PANEL,
-      );
-      const fromVoice = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_PHOTO_READ, payload: { workspaceId: ACME.id } },
-        VOICE,
-      );
-
-      assert.deepEqual(read, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { contentType: WORKSPACE_PHOTO_TYPE.PNG, base64: "iVBORw0KGgo=" },
-      });
-      assert.deepEqual(none, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { failure: WORKSPACE_CALL_FAILURE.NOT_FOUND },
-      });
-      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(f.asked, [`photo:${ACME.id}`, "photo:workspace-plain"]);
-    }),
-);
-
-it.effect(
-  "an invitation is read, made, and canceled through the host from a panel alone, and an address already invited is refused in words that say so",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const panel = (act: Parameters<typeof f.router.performAct>[0]) =>
-        f.router.performAct(act, PANEL);
-      const invite = {
-        kind: ACT_KIND.WORKSPACE_INVITE,
-        payload: { workspaceId: ACME.id, email: INVITATION.email, role: WORKSPACE_ROLE.MEMBER },
-      } as const;
-
-      const read = yield* panel({
-        kind: ACT_KIND.WORKSPACE_INVITATIONS_READ,
-        payload: { workspaceId: ACME.id },
-      });
-      const made = yield* panel(invite);
-      const canceled = yield* panel({
-        kind: ACT_KIND.WORKSPACE_INVITATION_CANCEL,
-        payload: { workspaceId: ACME.id, invitationId: INVITATION.id },
-      });
-      const fromVoice = yield* f.router.performAct(invite, VOICE);
-      f.host.alreadyInvited = true;
-      const again = yield* panel(invite);
-
-      assert.deepEqual(read, { status: ACT_OUTCOME_STATUS.DONE, value: [INVITATION] });
-      assert.deepEqual(made, { status: ACT_OUTCOME_STATUS.DONE, value: INVITATION });
-      assert.deepEqual(canceled, { status: ACT_OUTCOME_STATUS.DONE, value: [] });
-      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(again, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ALREADY_INVITED_REFUSAL,
-      });
-      assert.deepEqual(f.asked, [
-        `invitations:${ACME.id}`,
-        `invite:${ACME.id}:${INVITATION.email}`,
-        `cancel:${ACME.id}:${INVITATION.id}`,
-        `invite:${ACME.id}:${INVITATION.email}`,
-      ]);
-      assert.deepEqual(f.opened, []);
-    }),
-);
-
-it.effect("a connection's install address opens only where it is GitHub's", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    f.host.connectUrl = "https://evil.test/apps/luke/installations/new";
-
-    const connected = yield* f.router.performAct(
-      { kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: { workspaceId: ACME.id } },
-      PANEL,
-    );
-
-    assert.deepEqual(connected, {
-      status: ACT_OUTCOME_STATUS.REFUSED,
-      reason: ACT[ACT_KIND.WORKSPACE_GITHUB_CONNECT].refusal,
-    });
-    assert.deepEqual(f.opened, []);
-  }),
-);
-
-it.effect(
-  "a workspace's Linear sign-in opens only an https address, and its issues are answered or refused in words that say how to mend it",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-
-      const connected = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_LINEAR_CONNECT, payload: { workspaceId: ACME.id } },
-        PANEL,
-      );
-      f.host.linearConnectUrl = "http://vercel.test/connect";
-      const plain = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_LINEAR_CONNECT, payload: { workspaceId: ACME.id } },
-        PANEL,
-      );
-      const issues = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_LINEAR_ISSUES, payload: { workspaceId: ACME.id } },
-        PANEL,
-      );
-      const none = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_LINEAR_ISSUES, payload: { workspaceId: "workspace-other" } },
-        PANEL,
-      );
-
-      assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
-      assert.deepEqual(plain, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.WORKSPACE_LINEAR_CONNECT].refusal,
-      });
-      assert.deepEqual(f.opened, [LINEAR_SIGN_IN_URL]);
-      assert.deepEqual(issues, { status: ACT_OUTCOME_STATUS.DONE, value: [LINEAR_ISSUE] });
-      assert.deepEqual(none, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: LINEAR_UNAVAILABLE_REFUSAL,
-      });
-    }),
-);
-
-it.effect(
   "a pull request is answered to a panel as the host read it, or as none, a service that did not answer is refused in its kind's own words, and the voice window is refused before the host is asked",
   () =>
     Effect.gen(function* () {
@@ -1028,63 +627,6 @@ it.effect(
         `issue:acme/relay:${ISSUE_NONE}`,
         "issue:acme/relay:9",
       ]);
-    }),
-);
-
-it.effect(
-  "a workspace write the account's role does not allow is refused in words that say so, and one unanswered in its kind's own",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      f.host.notPermitted = true;
-      const workspace = { workspaceId: ACME.id };
-
-      const refusedNow = yield* Effect.all([
-        f.router.performAct({ kind: ACT_KIND.WORKSPACE_GITHUB_CONNECT, payload: workspace }, PANEL),
-        f.router.performAct(
-          { kind: ACT_KIND.WORKSPACE_GITHUB_DISCONNECT, payload: workspace },
-          PANEL,
-        ),
-        f.router.performAct(
-          {
-            kind: ACT_KIND.WORKSPACE_MEMBER_REMOVE,
-            payload: { ...workspace, userId: GRACE.userId },
-          },
-          PANEL,
-        ),
-        f.router.performAct({ kind: ACT_KIND.WORKSPACE_LEAVE, payload: workspace }, PANEL),
-        f.router.performAct(
-          { kind: ACT_KIND.WORKSPACE_RENAME, payload: { ...workspace, name: "Acme Labs" } },
-          PANEL,
-        ),
-        f.router.performAct(
-          { kind: ACT_KIND.WORKSPACE_PHOTO_SET, payload: { ...workspace, photo: null } },
-          PANEL,
-        ),
-      ]);
-      f.host.notPermitted = false;
-      const unread = yield* f.router.performAct(
-        { kind: ACT_KIND.WORKSPACE_MEMBERS_READ, payload: { workspaceId: "workspace-gone" } },
-        PANEL,
-      );
-
-      const notPermitted = {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
-      };
-      assert.deepEqual(refusedNow, [
-        notPermitted,
-        notPermitted,
-        notPermitted,
-        notPermitted,
-        notPermitted,
-        notPermitted,
-      ]);
-      assert.deepEqual(unread, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.WORKSPACE_MEMBERS_READ].refusal,
-      });
-      assert.deepEqual(f.opened, []);
     }),
 );
 

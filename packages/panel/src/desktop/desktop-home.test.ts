@@ -181,12 +181,6 @@ beforeEach(() => {
   automationReads = [];
   installScrollIntoView();
   installEditorLayout();
-  fakeActPort({
-    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
-      automationReads.push(payload.workspaceId ?? "");
-      return Promise.resolve({ automations: [SWEEP] });
-    },
-  });
   fakeAppBridge({
     act: (request: Act) => {
       if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
@@ -196,9 +190,6 @@ beforeEach(() => {
         };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-      }
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
       }
@@ -207,6 +198,13 @@ beforeEach(() => {
         cursor: "1",
       };
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+    },
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
+    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
+      automationReads.push(payload.workspaceId ?? "");
+      return Promise.resolve({ automations: [SWEEP] });
     },
   });
 });

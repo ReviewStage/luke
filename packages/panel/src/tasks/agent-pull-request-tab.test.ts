@@ -64,7 +64,7 @@ import type { FileTreeModule } from "../file-tree/contract.js";
 import { type GitHubConnectControl, GitHubConnectProvider } from "../github-connect.js";
 import { MemberDirectory } from "../member-directory.js";
 import { rendererRuntime } from "../renderer-runtime.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -300,13 +300,10 @@ beforeEach(() => {
         images.push(request.payload.src);
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: PIXEL });
       }
-      return Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: [CHARLES] }
-          : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
-      );
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([CHARLES]) });
 });
 
 afterEach(() => {
@@ -716,6 +713,88 @@ it.effect(
       registry.dispose();
     }),
 );
+
+test("a picture GitHub linked to itself opens over the window rather than in the browser: Enlarge walks that entry's pictures from the one pressed, drawn from what was read, and Open on GitHub opens the one shown; a badge keeps its link", async () => {
+  const tab = await draw(controlAnswering());
+  await settle();
+  const description =
+    tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
+  assert.equal(
+    description.querySelector('img[alt="before and after"]')?.closest("a"),
+    null,
+    "GitHub's link to the picture itself is gone",
+  );
+  assert.ok(
+    description.querySelector('a[href^="https://review.example.com"] img[alt="Request review"]'),
+    "a badge linked elsewhere keeps its link",
+  );
+  assert.equal(description.querySelector('[aria-label="Enlarge Request review"]'), null);
+
+  const enlarge =
+    description.querySelector<HTMLButtonElement>('[aria-label="Enlarge before and after"]') ??
+    assert.fail("the upload has Enlarge");
+  act(() => enlarge.click());
+  const viewer = () =>
+    document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the viewer stands");
+  const shown = () => [
+    viewer().querySelector(".attachment-viewer-title")?.textContent,
+    viewer().querySelector(".attachment-viewer-place")?.textContent,
+  ];
+  assert.deepEqual(shown(), ["before and after.png", "1 of 2"]);
+  assert.equal(
+    viewer().querySelector("img")?.getAttribute("src"),
+    `data:${PIXEL.contentType};base64,${PIXEL.base64}`,
+  );
+  act(() => viewer().querySelector<HTMLButtonElement>('[aria-label="Next file"]')?.click());
+  assert.deepEqual(shown(), ["Overview.png", "2 of 2"]);
+  const onGitHub =
+    [...viewer().querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Open on GitHub",
+    ) ?? assert.fail("the viewer offers Open on GitHub");
+  act(() => onGitHub.click());
+  await settle();
+  assert.deepEqual(opened, [SCREENSHOT]);
+});
+
+test("in the viewer, Open on GitHub opens the upload GitHub linked a picture to, which lasts, rather than the address it is drawn from; a picture that shares its link with words keeps the link and stays out of the walk", async () => {
+  const drawnFrom = "https://user-images.githubusercontent.com/1/signed-preview.png";
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({
+          pullRequest: {
+            ...PULL_REQUEST,
+            html: [
+              `<p dir="auto"><a target="_blank" href="${UPLOAD}"><img src="${drawnFrom}" alt="upload"></a></p>`,
+              `<p dir="auto"><a href="${SCREENSHOT}"><img src="${SCREENSHOT}" alt="Overview"> the original</a></p>`,
+            ].join(""),
+          },
+        }),
+    }),
+  );
+  await settle();
+  const description =
+    tab.querySelector('[aria-label="Description"]') ?? assert.fail("the description stands");
+  assert.equal(description.querySelector('[aria-label="Enlarge Overview"]'), null);
+  act(() =>
+    (
+      description.querySelector<HTMLButtonElement>('[aria-label="Enlarge upload"]') ??
+      assert.fail("the upload has Enlarge")
+    ).click(),
+  );
+  const viewer =
+    document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the viewer stands");
+  assert.equal(viewer.querySelector(".attachment-viewer-place"), null, "it walks the upload alone");
+  act(() =>
+    (
+      [...viewer.querySelectorAll<HTMLButtonElement>("button")].find(
+        (button) => button.textContent === "Open on GitHub",
+      ) ?? assert.fail("the viewer offers Open on GitHub")
+    ).click(),
+  );
+  await settle();
+  assert.deepEqual(opened, [UPLOAD]);
+});
 
 test("the Checks tab lists the head's deployments over its checks: each environment, where it stands, and a press opening the address it serves; a head with none lists no deployments", async () => {
   const deployed: CodingAgentOverviewChecks = {

@@ -83,6 +83,45 @@ export const ISSUE_ACT_KIND = {
   ISSUES_CHANGE: "issues.change",
 } as const;
 
+/**
+ * The account's workspaces: one made under a name, answered as made, which
+ * the account owns; one renamed by its owners and admins, answered under
+ * its new name; one's photo set as a `data:` URL or removed with null by
+ * its owners and admins, answered with the photo's new version or none;
+ * one's pending invitations read, one made, answered
+ * with its accept link, and one canceled, for its owners and admins; a GitHub
+ * organization connected to one, the Luke GitHub App's install address the
+ * service answers opened in the browser, or disconnected from it; one
+ * workspace's members read; one member removed, answered with the members
+ * who remain; another member given a role, or the workspace handed to one
+ * of its admins, by its owner, each answered with the members as they then
+ * stand; and one workspace left. Every write reads the workspaces
+ * again, so they arrive on the document; a write the account's role does
+ * not allow is refused in words that say so. A workspace's photo is read
+ * apart, answered with its bytes in base64 under its media type or why
+ * there are none, since the document never carries them.
+ */
+export const WORKSPACE_ACT_KIND = {
+  WORKSPACE_CREATE: "workspace.create",
+  WORKSPACE_RENAME: "workspace.rename",
+  WORKSPACE_INVITATIONS_READ: "workspace.invitationsRead",
+  WORKSPACE_INVITE: "workspace.invite",
+  WORKSPACE_INVITATION_CANCEL: "workspace.invitationCancel",
+  WORKSPACE_GITHUB_CONNECT: "workspace.githubConnect",
+  WORKSPACE_GITHUB_DISCONNECT: "workspace.githubDisconnect",
+  WORKSPACE_LINEAR_CONNECT: "workspace.linearConnect",
+  WORKSPACE_LINEAR_DISCONNECT: "workspace.linearDisconnect",
+  WORKSPACE_LINEAR_ISSUES: "workspace.linearIssues",
+  WORKSPACE_MEMBERS_READ: "workspace.membersRead",
+  WORKSPACE_FORMER_MEMBERS_READ: "workspace.formerMembersRead",
+  WORKSPACE_MEMBER_REMOVE: "workspace.memberRemove",
+  WORKSPACE_MEMBER_ROLE: "workspace.memberRole",
+  WORKSPACE_TRANSFER: "workspace.transfer",
+  WORKSPACE_LEAVE: "workspace.leave",
+  WORKSPACE_PHOTO_READ: "workspace.photoRead",
+  WORKSPACE_PHOTO_SET: "workspace.photoSet",
+} as const;
+
 /** Every kind the act port answers, one spread per domain, in alphabetical order. */
 export const PORT_ACT_KIND = {
   ...ACCOUNT_ASK_ACT_KIND,
@@ -90,6 +129,7 @@ export const PORT_ACT_KIND = {
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...ISSUE_ACT_KIND,
+  ...WORKSPACE_ACT_KIND,
 } as const;
 
 export type PortActKind = (typeof PORT_ACT_KIND)[keyof typeof PORT_ACT_KIND];

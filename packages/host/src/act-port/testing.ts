@@ -40,6 +40,12 @@ export const UNREACHED_DEPENDENCIES: ActPortDependencies = {
   factory: { host: unreachedHost() },
   integrations: { host: unreachedHost() },
   issues: { host: unreachedHost() },
+  workspaces: {
+    host: unreachedHost(),
+    openExternal: () => {
+      throw new Error("A test reached openExternal, of a domain it does not test.");
+    },
+  },
 };
 
 const opened: MessagePort[] = [];

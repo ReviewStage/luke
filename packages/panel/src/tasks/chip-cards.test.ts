@@ -170,11 +170,7 @@ afterEach(() => {
   automationReads.length = 0;
 });
 
-function answer(request: Act): ActOutcome {
-  if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-    const beta = request.payload.workspaceId === BETA.id;
-    return { status: ACT_OUTCOME_STATUS.DONE, value: beta ? BETA_MEMBERS : MEMBERS };
-  }
+function answer(): ActOutcome {
   return { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." };
 }
 
@@ -217,10 +213,12 @@ async function drawn(text: string): Promise<HTMLElement> {
     requestAppState: () => Promise.resolve(STATE),
     act: (request: Act): Promise<ActOutcome> => {
       told.push(request);
-      return Promise.resolve(answer(request));
+      return Promise.resolve(answer());
     },
   });
   fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>
+      Promise.resolve(workspaceId === BETA.id ? BETA_MEMBERS : MEMBERS),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       automationReads.push(payload.workspaceId);
       const beta = payload.workspaceId === BETA.id;

@@ -1,9 +1,4 @@
-import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
-import { codingAgentsApp } from "@luke/service/agents/coding-agents-app";
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
-/** One coding agent's transcript past a cursor (GET), held open while the agent runs. The logic lives in `packages/service/src/agents/coding-agents-app.ts`; this file only hands it the deployment's real seams. */
-export default routeFromHttpRouter(
-  codingAgentsApp({ resolveUserId: resolveHostedUserId, eveOrigin: deploymentEveOrigin }),
-);
+/** One coding agent's transcript past a cursor (GET), held open while the agent runs, and a message sent to it (POST), answered by the hosted oRPC router (`packages/service/src/agents/messages-procedures.ts`). */
+export default orpcRoute;

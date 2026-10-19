@@ -27,7 +27,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -216,33 +216,15 @@ beforeEach(() => {
   copied = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   window.localStorage.clear();
-  fakeActPort({
-    [ACT_KIND.AUTOMATIONS_LIST]: () => {
-      if (automationsHeld) return new Promise(() => undefined);
-      if (automationsRefused) return Promise.reject(new Error("Not here."));
-      return Promise.resolve({ automations: AUTOMATIONS });
-    },
-  });
   fakeAppBridge({
     act: (request: Act) => {
       const inbox =
         request.kind === ACT_KIND.CODING_AGENTS_INBOX ||
         request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX;
       if (inbox && inboxHeld) return new Promise(() => undefined);
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && membersHeld) {
-        return new Promise((resolve) => {
-          answerMembers = () => resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-        });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && !membersRefused) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-      }
       if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
         const value: CodingAgentInboxAnswerView = { items: [SWEEP_ITEM], cursor: "1" };
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ && !formerRefused) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: FORMER });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX && !inboxRefused) {
         const value: CodingAgentInboxAnswerView = {
@@ -253,6 +235,23 @@ beforeEach(() => {
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
+  });
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: () => {
+      if (automationsHeld) return new Promise(() => undefined);
+      if (automationsRefused) return Promise.reject(refusedOnPort("Not here."));
+      return Promise.resolve({ automations: AUTOMATIONS });
+    },
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => {
+      if (membersHeld) {
+        return new Promise((resolve) => {
+          answerMembers = () => resolve(MEMBERS);
+        });
+      }
+      return membersRefused ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(MEMBERS);
+    },
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () =>
+      formerRefused ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(FORMER),
   });
 });
 
