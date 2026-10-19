@@ -222,13 +222,14 @@ afterEach(() => {
   document.head.innerHTML = "";
 });
 
-/** A task the composer started: its name, repository, workspace, whether it plans, and the agent it asked for. */
+/** A task the composer started: its name, repository, workspace, whether it plans, the agent it asked for, and the brief it handed Luke. */
 interface Started {
   readonly name: string;
   readonly repository: string | null;
   readonly workspaceId: string | undefined;
   readonly planning: boolean;
   readonly agent: NewTaskAgent | undefined;
+  readonly brief: string | undefined;
 }
 
 /** Every door the page opens, in order. */
@@ -248,7 +249,14 @@ function newTaskControl(started: Started[]): TasksControl["newTask"] {
     repositoriesIn: () => ({ ...tasksControl().repositories, recent: ["acme/relay"] }),
     readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
     start: (name, repository, workspaceId, planning, from) => {
-      started.push({ name, repository, workspaceId, planning, agent: from?.handed });
+      started.push({
+        name,
+        repository,
+        workspaceId,
+        planning,
+        agent: from?.handed,
+        brief: from?.brief,
+      });
       return Promise.resolve(undefined);
     },
   };
@@ -610,23 +618,26 @@ test("Agent mode: Return in Home's composer starts the task in the workspace Hom
   pressInComposer(page, "Enter");
   await settle();
 
-  assert.deepEqual(opened.started, [
-    {
-      name: "",
-      repository: "acme/relay",
-      workspaceId: LISTED_WORKSPACE,
-      planning: false,
-      agent: {
-        prompt: "Make the sidebar keep its folds.",
-        attachments: [],
-        choice: DEFAULT_CHOICE,
-      },
-    },
-  ]);
+  const [{ agent, ...task } = assert.fail("a task started")] = opened.started;
+  const { idempotencyKey, ...handed } = agent ?? assert.fail("an agent was asked for");
+  assert.deepEqual(task, {
+    name: "",
+    repository: "acme/relay",
+    workspaceId: LISTED_WORKSPACE,
+    planning: false,
+    brief: undefined,
+  });
+  assert.deepEqual(handed, {
+    prompt: "Make the sidebar keep its folds.",
+    attachments: [],
+    choice: DEFAULT_CHOICE,
+  });
+  assert.ok(idempotencyKey, "the agent's start carries the card's key");
+  assert.equal(opened.started.length, 1);
   assert.equal(opened.newTasks, 0, "no dialog is asked for");
 });
 
-test("Plan mode: Shift+Tab in Home's composer turns it on, and Return starts the plan and its call in the workspace Home lists, with no agent", async () => {
+test("Plan mode: Shift+Tab in Home's composer turns it on, and Return starts the plan and its call in the workspace Home lists, Untitled, handing Luke the words as its brief, with no agent", async () => {
   const { page, opened } = mount();
   await settle();
   pressInComposer(page, "Tab", { shiftKey: true });
@@ -636,11 +647,12 @@ test("Plan mode: Shift+Tab in Home's composer turns it on, and Return starts the
 
   assert.deepEqual(opened.started, [
     {
-      name: "Rethink automations",
+      name: "",
       repository: "acme/relay",
       workspaceId: LISTED_WORKSPACE,
       planning: true,
       agent: undefined,
+      brief: "Rethink automations",
     },
   ]);
 });
