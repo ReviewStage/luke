@@ -213,6 +213,20 @@ test("End date makes the date a range, the next day picked its end", async () =>
   ]);
 });
 
+test("End date switched on and closed at once writes the range it shows, to the next day", async () => {
+  const { container, editor } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="End date"]').click());
+  const shown = fieldOf(dialog, "Date").value;
+  await pressKey(dialog, "Escape");
+
+  assert.equal(shown, "Oct 23, 2026 → Oct 24, 2026");
+  assert.deepEqual(mentionsIn(editor), [
+    { name: "Oct 23, 2026 → Oct 24, 2026", target: "luke://date/2026-10-23/2026-10-24" },
+  ]);
+});
+
 test("an end picked before the start becomes the start, so the range stays in order", async () => {
   const { container, editor } = await opened();
 
@@ -224,6 +238,25 @@ test("an end picked before the start becomes the start, so the range stays in or
   assert.deepEqual(mentionsIn(editor), [
     { name: "Oct 20, 2026 → Oct 23, 2026", target: "luke://date/2026-10-20/2026-10-23" },
   ]);
+});
+
+test("the picker stays hung from its chip as the words under it scroll", async () => {
+  const { container } = await opened();
+  const chip = chipIn(container);
+  let top = 120;
+  vi.spyOn(chip, "getBoundingClientRect").mockImplementation(() => new DOMRect(40, top, 60, 20));
+
+  const dialog = await pressChip(container);
+  const hung = dialog.closest<HTMLElement>(".date-picker-anchor");
+  const before = hung?.style.top;
+  top = 60;
+  act(() => {
+    container.querySelector(".plan-document-text")?.dispatchEvent(new Event("scroll"));
+  });
+  vi.restoreAllMocks();
+
+  assert.equal(before, "120px");
+  assert.equal(hung?.style.top, "60px");
 });
 
 test("Include time puts a time on the day, spelled with the offset the reader's zone stands at then", async () => {

@@ -30,7 +30,7 @@ import {
   Text,
   TextField,
 } from "@luke/ui";
-import { type ReactNode, type RefObject, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import type { MentionNode } from "../plan-editor/contract.js";
 import { useMinute } from "./task-time.js";
 
@@ -101,7 +101,7 @@ const DATE_PICKER_WIDTH = 264;
 /** The time each end takes when Include time is switched on. */
 const DEFAULT_TIME = { START: "09:00", END: "10:00" } as const;
 
-/** The latest hour an end's time is put an hour after its start's. */
+/** The day's last hour, after which an end an hour on falls on the next day. */
 const LAST_HOUR = 23;
 
 const WORDS = {
@@ -135,10 +135,23 @@ interface Draft {
   readonly changed: boolean;
 }
 
-/** The time an hour after `time`, held to the day's last hour. */
-function hourAfter(time: string): string {
-  const [hour = "0", minute = "00"] = time.split(":");
-  return `${String(Math.min(Number(hour) + 1, LAST_HOUR)).padStart(2, "0")}:${minute}`;
+/** The day after `day`, both `YYYY-MM-DD`. */
+function dayAfter(day: string): string {
+  const next = new Date(`${day}T00:00:00.000Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
+}
+
+/**
+ * The end End date puts after `start`, always after it, so what the picker
+ * shows is the range it writes: a day's the next day, a time's an hour
+ * later, or the next day at that time where the hour is the day's last.
+ */
+function endAfter(start: DateWallMoment): DateWallMoment {
+  if (start.time === undefined) return { day: dayAfter(start.day) };
+  const [hour = "0", minute = "00"] = start.time.split(":");
+  if (Number(hour) >= LAST_HOUR) return { day: dayAfter(start.day), time: start.time };
+  return { day: start.day, time: `${String(Number(hour) + 1).padStart(2, "0")}:${minute}` };
 }
 
 /** A draft whose ends the developer changed, its words the date's own again. */
@@ -146,33 +159,40 @@ function changedTo(wall: DateWall, pickingEnd: boolean): Draft {
   return { wall, pickingEnd, words: undefined, invalid: false, changed: true };
 }
 
+/** A moment as it orders against another: its day, then its time. */
+function orderOf(moment: DateWallMoment): string {
+  return `${moment.day}T${moment.time ?? ""}`;
+}
+
 /**
  * A day picked: the start of a single day; on a range, its end where the
  * next pick sets the end, an end before the start becoming the start so the
- * range stays in order, and else its start, the end after it next.
+ * range stays in order, and one on a day-only start's own day leaving the
+ * start alone, since it names no range; and else its start, the end after
+ * it next, the end moved on where the start passed it.
  */
 function dayPicked(draft: Draft, day: string): Draft {
   const { start, end } = draft.wall;
   if (end === undefined) return changedTo({ start: { ...start, day } }, false);
   if (draft.pickingEnd) {
-    const wall =
-      day < start.day
-        ? { start: { ...start, day }, end: { ...end, day: start.day } }
-        : { start, end: { ...end, day } };
-    return changedTo(wall, false);
+    if (day < start.day) {
+      return changedTo({ start: { ...start, day }, end: { ...end, day: start.day } }, false);
+    }
+    const picked = { ...end, day };
+    return orderOf(start) < orderOf(picked)
+      ? changedTo({ start, end: picked }, false)
+      : changedTo({ start }, false);
   }
-  return changedTo({ start: { ...start, day }, end: day > end.day ? { ...end, day } : end }, true);
+  const moved = { ...start, day };
+  const kept = { ...end, day: day > end.day ? day : end.day };
+  const after = orderOf(moved) < orderOf(kept) ? kept : endAfter(moved);
+  return changedTo({ start: moved, end: after }, true);
 }
 
-/** End date switched: on, an end on the start's day, an hour after a time, which the next pick moves; off, the start alone. */
+/** End date switched: on, an end just after the start (`endAfter`), which the next pick moves; off, the start alone. */
 function endSwitched(draft: Draft, on: boolean): Draft {
   const { start } = draft.wall;
-  if (!on) return changedTo({ start }, false);
-  const end: DateWallMoment = {
-    day: start.day,
-    time: start.time === undefined ? undefined : hourAfter(start.time),
-  };
-  return changedTo({ start, end }, true);
+  return on ? changedTo({ start, end: endAfter(start) }, true) : changedTo({ start }, false);
 }
 
 /** Include time switched: on, a time on each end; off, the days alone. */
@@ -372,6 +392,11 @@ function boxIn(room: DOMRect, at: DatePickerAnchor): AnchorBox {
   };
 }
 
+/** Whether two anchor boxes stand in the same place. */
+function sameBox(a: AnchorBox, b: AnchorBox): boolean {
+  return a.left === b.left && a.top === b.top && a.width === b.width && a.height === b.height;
+}
+
 /**
  * The date picker of a place whose words stand in `room`: one opening at a
  * time, hung from where it was opened, a new opening taking the place of
@@ -389,6 +414,23 @@ export function useDatePicker(room: RefObject<HTMLElement | null>): DatePicker {
     counted.current += 1;
     setOpened({ opening, box: boxIn(placed, opening.at), key: counted.current });
   };
+  // A chip's place is read again as anything scrolls or the window resizes, so the picker stays hung from it as a box scrolls its words.
+  const at = opened?.opening.at;
+  useLayoutEffect(() => {
+    if (!(at instanceof Element)) return;
+    const follow = () => {
+      const placed = room.current?.getBoundingClientRect();
+      if (placed === undefined || !at.isConnected) return;
+      const box = boxIn(placed, at);
+      setOpened((was) => (was === undefined || sameBox(was.box, box) ? was : { ...was, box }));
+    };
+    document.addEventListener("scroll", follow, { capture: true, passive: true });
+    window.addEventListener("resize", follow);
+    return () => {
+      document.removeEventListener("scroll", follow, { capture: true });
+      window.removeEventListener("resize", follow);
+    };
+  }, [at, room]);
   const popover =
     opened === undefined ? null : (
       <div className="date-picker-anchor" style={opened.box}>
