@@ -204,8 +204,8 @@ export const CREATE_TASK_TOOL = {
   inputSchema: CREATE_TASK_INPUT,
 } as const;
 
-/** A title heading at a plan's head, which the task's name stands for. */
-const TITLE_HEADING = /^\s*#(?!#)[^\n]*(?:\n|$)/u;
+/** A # title at a plan's head, as Markdown spells one: at most three spaces in, and a space, a tab, or the line's end after the #, so `#define` or a code line is no title. */
+const TITLE_HEADING = /^(?:[ \t]*\n)*[ ]{0,3}#(?:[ \t][^\n]*)?(?:\n|$)/u;
 
 /** A plan's body as a task keeps it: without a # title at its head, which the task's name is, and its ends trimmed. */
 function planTextOf(plan: string): string {

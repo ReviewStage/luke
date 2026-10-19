@@ -1471,6 +1471,18 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.deepEqual(await tasksNamed(alice, workspaceId, name), [taskId]);
   assert.deepEqual(await tasksNamed(alice, elsewhere, name), []);
 
+  // A line opening on # that is no Markdown title is the plan's own, and stays.
+  const kept = await call(
+    CODER_TOOL.CREATE_TASK,
+    { name: "Limits", plan: "#define MAX 10\n\n## Goal\n\nUpdate limits." },
+    "call-define",
+  );
+  assert.ok(isRecord(kept.task) && isWireString(kept.task.id), JSON.stringify(kept));
+  assert.equal(
+    Option.getOrThrow(await database.run(readTask(bob, kept.task.id))).text,
+    "#define MAX 10\n\n## Goal\n\nUpdate limits.",
+  );
+
   // The same call run again, even twice at once, answers the task it made, and makes no second.
   const again = await Promise.all([
     call(CODER_TOOL.CREATE_TASK, { name }, "call-new"),
@@ -1487,7 +1499,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
   );
   assert.equal((await tasksNamed(bob, workspaceId, "Raced")).length, 1);
   assert.deepEqual(await tasksNamed(bob, workspaceId, name), [taskId]);
-  assert.equal(tasksCounted(bob), countedBefore + 2, "each task is counted once, as Bob's");
+  assert.equal(tasksCounted(bob), countedBefore + 3, "each task is counted once, as Bob's");
 
   // A start on it by its id, as any other task of the workspace.
   const started = await call(
