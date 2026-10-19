@@ -210,8 +210,10 @@ const LOOK_CSS = `
   /* The words open what the arrow opens: Pierre opens a gap's both ends
      from its words, which at the file's top or foot is not the arrow's, so
      the words let the pointer through to the arrow, whose press reaches
-     across the band. */
-  [data-separator="line-info-basic"] [data-separator-content] {
+     across the band. A gap of two arrows keeps its words' own press,
+     which opens both of its ends, so neither arrow is covered. */
+  [data-separator="line-info-basic"] [data-separator-wrapper]:not([data-separator-multi-button])
+    [data-separator-content] {
     pointer-events: none;
   }
   [data-separator="line-info-basic"] [data-separator-wrapper]:not([data-separator-multi-button])
