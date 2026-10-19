@@ -26,7 +26,7 @@ import {
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
 import { attachment } from "@luke/database/schemas/attachment";
-import { user } from "@luke/database/schemas/auth";
+import { organization, user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
@@ -45,6 +45,7 @@ import {
   type CodingAgentAttachment,
   type CodingAgentAttachmentType,
 } from "@luke/features/coding-agent-wire";
+import { type InboxItemPlace, inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -78,6 +79,9 @@ import {
   inboxResponseAsk,
   inboxResponseSchema,
 } from "@luke/features/inbox-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
+import { insideCode } from "@luke/features/mention-link";
+import { taskPictureMarkdown } from "@luke/features/plan-attachment-link";
 import {
   and,
   count,
@@ -216,6 +220,8 @@ export interface InboxNamedImage extends InboxImage {
 
 /** One file of a message's as the store writes it: its own name, its type, and its bytes. */
 interface MessageFile {
+  /** The id it is kept under, where the message's words name it by its address; minted by the database where none is given. */
+  readonly id?: string;
   readonly name: string;
   readonly contentType: CodingAgentAttachmentType;
   readonly bytes: Uint8Array;
@@ -529,14 +535,25 @@ function itemReachableBy(userId: string): SQL {
   return workspaceReachableBy(userId, ITEM_WORKSPACE);
 }
 
+/** The step a link names the agent's workspace by: its slug, or its id where it has none, as a plan's picture names it. */
+const AGENT_WORKSPACE_STEP = sql<string>`coalesce((select ${organization.slug} from ${organization} where ${organization.id} = ${AGENT_WORKSPACE}), ${AGENT_WORKSPACE})`;
+
 /** The agent's row under its own lock, where the account started it and is still a member of its workspace, which serializes one agent's posts. */
 const lockAgent = SqlSchema.findOneOption({
   Request: AgentKeySchema,
-  Result: Schema.Struct({ id: Schema.String, organizationId: Schema.String }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    organizationId: Schema.String,
+    workspaceStep: Schema.String,
+  }),
   execute: ({ userId, agentId }) =>
     Database.use((db) =>
       db
-        .select({ id: codingAgent.id, organizationId: AGENT_WORKSPACE })
+        .select({
+          id: codingAgent.id,
+          organizationId: AGENT_WORKSPACE,
+          workspaceStep: AGENT_WORKSPACE_STEP,
+        })
         .from(codingAgent)
         .where(
           and(
@@ -1651,8 +1668,11 @@ function codeAddress(block: Extract<InboxBlock, { type: typeof INBOX_BLOCK.CODE 
   return `https://github.com/${block.repo}/blob/${block.sha}/${path}${lines}`;
 }
 
-/** One block as a paragraph of a message's Markdown: its words, a link on its own line, or a code block's lines by their address; nothing for a picture, which a later step writes by its own address. */
-function blockParagraph(block: InboxBlock): string | undefined {
+/** The address a picture of the item's is written by in a message's words, by the picture's id. */
+type PictureAddress = (pictureId: string) => string;
+
+/** One block as a paragraph of a message's Markdown: its words, a link on its own line, a code block's lines by their address, or a picture by its own. */
+function blockParagraph(block: InboxBlock, addressOf: PictureAddress): string {
   switch (block.type) {
     case INBOX_BLOCK.MARKDOWN:
       return block.text;
@@ -1661,13 +1681,75 @@ function blockParagraph(block: InboxBlock): string | undefined {
     case INBOX_BLOCK.CODE:
       return codeAddress(block);
     case INBOX_BLOCK.IMAGE:
-      return undefined;
+      return taskPictureMarkdown(addressOf(block.attachmentId), block.alt);
   }
 }
 
 /** A post's blocks as its message's words: each block a paragraph of its own, in order. */
-function bodyOfBlocks(blocks: readonly InboxBlock[]): string {
-  return blocks.flatMap((block) => blockParagraph(block) ?? []).join("\n\n");
+function bodyOfBlocks(blocks: readonly InboxBlock[], addressOf: PictureAddress): string {
+  return blocks.map((block) => blockParagraph(block, addressOf)).join("\n\n");
+}
+
+/**
+ * A picture in a message's words, `![alt](destination`, its opening
+ * unescaped: the alt text the first group, the destination, bare or in
+ * angle brackets, the second; each bounded, so the scan stays linear.
+ */
+const PICTURE_IN_WORDS =
+  /(?<!\\)!\[((?:\\.|[^[\]\\\n]){0,1000})\]\([ \t]*(<[^<>\n]{1,1024}>|[^\s()<>]{1,1024})/gu;
+
+/** A line that is one picture alone, its caption in quotes where it has one: alt text the first group, destination the second. */
+const PICTURE_LINE =
+  /^[ \t]*!\[((?:\\.|[^[\]\\\n]){0,1000})\]\([ \t]*(<[^<>\n]{1,1024}>|[^\s()<>]{1,1024})(?:[ \t]+"(?:\\.|[^"\\\n]){0,1000}")?[ \t]*\)[ \t]*$/u;
+
+/** A picture's destination as the path or address it names, out of its angle brackets. */
+function destinationOf(destination: string): string {
+  return destination.startsWith("<") ? destination.slice(1, -1) : destination;
+}
+
+/**
+ * The agent's words with each picture's path written as the address of the
+ * file it was kept as, by the picture's id; a picture standing in code, or
+ * naming a path no picture was handed in for, stands as written.
+ */
+function withPictureAddresses(
+  body: string,
+  pictureOfPath: (path: string) => string | undefined,
+  addressOf: PictureAddress,
+): string {
+  return body.replace(
+    PICTURE_IN_WORDS,
+    (whole: string, _alt: string, destination: string, offset: number) => {
+      const id = insideCode(body, offset) ? undefined : pictureOfPath(destinationOf(destination));
+      if (id === undefined) return whole;
+      return `${whole.slice(0, whole.length - destination.length)}${addressOf(id)}`;
+    },
+  );
+}
+
+/** A line that is one picture handed in alone as the image block a desktop before version 5 draws it as; nothing for any other line, or a picture whose alt text an image block cannot carry. */
+function pictureBlock(
+  line: string,
+  pictureOfPath: (path: string) => string | undefined,
+): InboxBlock | undefined {
+  const [, alt = "", destination = ""] = PICTURE_LINE.exec(line) ?? [];
+  const attachmentId = pictureOfPath(destinationOf(destination));
+  const words = alt.replace(/\\(.)/gu, "$1").replace(/\s+/gu, " ").trim();
+  if (attachmentId === undefined || words === "" || words.length > INBOX_BOUNDS.MAX_ALT_CHARS) {
+    return undefined;
+  }
+  return { type: INBOX_BLOCK.IMAGE, attachmentId, alt: words };
+}
+
+/** Words as Markdown blocks: one, or as many as the bound cuts them into, and none for no words. */
+function markdownBlocks(words: string): readonly InboxBlock[] {
+  const blocks: InboxBlock[] = [];
+  const text = words.trim();
+  for (let at = 0; at < text.length; at += INBOX_BOUNDS.MAX_MARKDOWN_CHARS) {
+    const part = text.slice(at, at + INBOX_BOUNDS.MAX_MARKDOWN_CHARS);
+    if (part.trim() !== "") blocks.push({ type: INBOX_BLOCK.MARKDOWN, text: part });
+  }
+  return blocks;
 }
 
 /**
@@ -1711,17 +1793,28 @@ const memberCloseItem = SqlSchema.findOneOption({
 
 /**
  * A message's words as the blocks an item shows a desktop before version
- * 5: one Markdown block, or as many as its bound cuts it into, and none
- * for no words.
+ * 5: each line that is one picture handed in alone an image block of its
+ * own, and the words between them Markdown blocks. Note that a line in
+ * code is words, so no fence is cut in two.
  */
-function blocksOfBody(body: string): readonly InboxBlock[] {
+function blocksOfBody(
+  body: string,
+  pictureOfPath: (path: string) => string | undefined,
+): readonly InboxBlock[] {
   const blocks: InboxBlock[] = [];
-  const words = body.trim();
-  for (let at = 0; at < words.length; at += INBOX_BOUNDS.MAX_MARKDOWN_CHARS) {
-    const text = words.slice(at, at + INBOX_BOUNDS.MAX_MARKDOWN_CHARS);
-    if (text.trim() !== "") blocks.push({ type: INBOX_BLOCK.MARKDOWN, text });
+  let words: string[] = [];
+  let at = 0;
+  for (const line of body.split("\n")) {
+    const picture = insideCode(body, at) ? undefined : pictureBlock(line, pictureOfPath);
+    at += line.length + 1;
+    if (picture === undefined) {
+      words.push(line);
+      continue;
+    }
+    blocks.push(...markdownBlocks(words.join("\n")), picture);
+    words = [];
   }
-  return blocks;
+  return [...blocks, ...markdownBlocks(words.join("\n"))];
 }
 
 /**
@@ -1729,11 +1822,16 @@ function blocksOfBody(body: string): readonly InboxBlock[] {
  * then a `do` ask's steps as a numbered list, since the to-do such a
  * desktop draws for it names none of its own.
  */
-function viewBlocks(body: string, ask: InboxAsk | undefined): readonly InboxBlock[] {
+function viewBlocks(
+  body: string,
+  ask: InboxAsk | undefined,
+  pictureOfPath: (path: string) => string | undefined,
+): readonly InboxBlock[] {
+  const blocks = blocksOfBody(body, pictureOfPath);
   const steps = ask?.type === INBOX_ASK.DO ? ask.steps : [];
-  if (steps.length === 0) return blocksOfBody(body);
+  if (steps.length === 0) return blocks;
   const list = steps.map((step, at) => `${at + 1}. ${step}`).join("\n");
-  return [...blocksOfBody(body), { type: INBOX_BLOCK.MARKDOWN, text: list }];
+  return [...blocks, { type: INBOX_BLOCK.MARKDOWN, text: list }];
 }
 
 /** What a post writes on the item for a desktop before version 5: the title, the blocks, and the response that stand for what it asks, and whether the agent is to hear the answer. */
@@ -1744,18 +1842,64 @@ interface PostView {
   readonly needsReply: boolean;
 }
 
-/** One picture a post keeps as a file of its message: the id its blocks name it by, its file's own name, its type, and its bytes. */
+/** One picture a post keeps as a file of its message: the id its blocks and words name it by, its file's own name, its type, and its bytes. */
 interface PostPicture extends InboxNamedImage {
   readonly id: string;
+}
+
+/** One picture the agent's words name by its path in the agent's sandbox, as the caller read it there: the path as written, its file's own name, its type, and its bytes. */
+interface InboxBodyPicture extends InboxNamedImage {
+  readonly path: string;
 }
 
 /** A post as the store writes it, whichever tool posted it: the item's key, its view, the words of the agent's message, the ask the message ends with, and the message's pictures. */
 interface PostWrite {
   readonly key: string;
   readonly view: PostView;
-  readonly body: string;
+  /** The message's words, its pictures written by the addresses the item gives them. */
+  readonly body: (addressOf: PictureAddress) => string;
   readonly ask: InboxAsk | undefined;
   readonly pictures: readonly PostPicture[];
+}
+
+/** The agent's workspace as its locked row names it: its id, which the item's rows are written under, and the step its links name it by. */
+interface LockedWorkspace {
+  readonly organizationId: string;
+  readonly workspaceStep: string;
+}
+
+/** The item as its link names it: under the agent's task, or under the agent where it has none. */
+function itemPlace(agent: InboxAgent, itemId: string): InboxItemPlace {
+  return agent.taskId === null
+    ? { kind: LINK_PLACE.INBOX_ITEM, agentId: agent.agentId, itemId }
+    : { kind: LINK_PLACE.INBOX_ITEM, planId: agent.taskId, itemId };
+}
+
+/** The address each picture of the item is written by in a message's words (`inbox-attachment-link.ts`). */
+function pictureAddressOf(
+  agent: InboxAgent,
+  workspace: LockedWorkspace,
+  itemId: string,
+): PictureAddress {
+  const place = itemPlace(agent, itemId);
+  return (pictureId) => inboxAttachmentAddress(place, pictureId, workspace.workspaceStep);
+}
+
+/** Pictures handed in by the paths the agent's words name them by, as a post keeps them: each under an id minted for it, and the id of the first each path names. */
+interface PicturesByPath {
+  readonly kept: readonly PostPicture[];
+  readonly idOf: (path: string) => string | undefined;
+}
+
+/** The pictures handed in, each under an id minted for it, found by the path the agent's words name it by. */
+function picturesByPath(pictures: readonly InboxBodyPicture[]): PicturesByPath {
+  const kept = pictures.map(({ path: _path, ...picture }) => ({ ...picture, id: randomUUID() }));
+  const ids = new Map<string, string>();
+  pictures.forEach((picture, at) => {
+    const id = kept[at]?.id;
+    if (id !== undefined && !ids.has(picture.path)) ids.set(picture.path, id);
+  });
+  return { kept, idOf: (path) => ids.get(path) };
 }
 
 /**
@@ -1786,10 +1930,11 @@ function postColumns(view: PostView, ask: InboxAsk | undefined, now: Date) {
  */
 function keepPost(
   agent: InboxAgent,
-  organizationId: string,
+  workspace: LockedWorkspace,
   post: PostWrite,
   now: Date,
 ): InboxStoreEffect<InboxItem> {
+  const { organizationId } = workspace;
   return Effect.gen(function* () {
     const { id: itemId } = yield* upsertItem({
       ...agent,
@@ -1803,7 +1948,7 @@ function keepPost(
       itemId,
       author: INBOX_MESSAGE_AUTHOR.AGENT,
       userId: null,
-      text: post.body,
+      text: post.body(pictureAddressOf(agent, workspace, itemId)),
       ask,
       answers: null,
       clientKey: null,
@@ -1894,33 +2039,68 @@ export function postInboxItem(
           needsReply: post.needsReply ?? true,
         };
         const ask = inboxResponseAsk(post.response);
-        const write = { key: post.key, view, body: bodyOfBlocks(blocks), ask, pictures };
-        return Result.succeed(yield* keepPost(agent, locked.value.organizationId, write, now));
+        const body = (addressOf: PictureAddress) => bodyOfBlocks(blocks, addressOf);
+        const write = { key: post.key, view, body, ask, pictures };
+        return Result.succeed(yield* keepPost(agent, locked.value, write, now));
       }),
     ),
   );
 }
 
+/** A post as the tool from version 5 writes one: the item's key and title, the agent's words in Markdown, the ask they end with, if any, and whether the agent is to hear the answer. */
+interface InboxThreadPost {
+  readonly key: string;
+  readonly title: string;
+  readonly body: string;
+  readonly ask?: InboxAsk | undefined;
+  readonly needsReply?: boolean | undefined;
+}
+
+/**
+ * The agent's words that ask nothing written as its message on the thread
+ * of its item standing under the key, as its reply is, with the pictures
+ * they name kept as the message's files and written by their addresses;
+ * the item as its agent's starter then reads it.
+ */
+function followUp(
+  agent: InboxAgent,
+  workspace: LockedWorkspace,
+  itemId: string,
+  post: InboxThreadPost,
+  pictures: readonly InboxBodyPicture[],
+): InboxStoreEffect<InboxItem> {
+  return Effect.suspend(() => {
+    const { kept, idOf } = picturesByPath(pictures);
+    const text = withPictureAddresses(post.body, idOf, pictureAddressOf(agent, workspace, itemId));
+    const writer = { author: INBOX_MESSAGE_AUTHOR.AGENT } as const;
+    return writeInboxMessage(agent.userId, itemId, writer, text, kept);
+  }).pipe(
+    // The item was found under the lock on its agent, so a message that finds none is a broken contract.
+    Effect.flatMap(Effect.fromOption),
+    Effect.catchTag("NoSuchElementError", Effect.die),
+    Effect.map((written) => written.item),
+  );
+}
+
 /**
  * The agent's post written, as the tool from version 5 posts one: its
- * words in Markdown, and the ask they end with, if any. A post that asks is
- * written as `keepPost` writes one, its view the words as blocks and the
- * response nearest its ask, and refused where the agent would hold more
- * open items than the bound. A post that asks nothing is a message on the
+ * words in Markdown, and the ask they end with, if any. The pictures are
+ * those the words name by their paths in the agent's sandbox, read by the
+ * caller, each kept as a file of the agent's message under an id minted
+ * here, its path in the words written as its address. A post that asks is
+ * written as `keepPost` writes one, its view the words as blocks, each
+ * picture standing alone on its line an image block, and the response
+ * nearest its ask; it is refused where the agent would hold more open
+ * items than the bound. A post that asks nothing is a message on the
  * thread of the item standing under its key, as the agent's reply is,
- * which moves nothing of the item but its last change; under a key with no
- * item it opens a thread that waits on nobody. Refused where the agent is
- * no longer the account's.
+ * which moves nothing of the item but its last change; under a key with
+ * no item it opens a thread that waits on nobody. Refused where the agent
+ * is no longer the account's.
  */
 export function postInboxThread(
   agent: InboxAgent,
-  post: {
-    readonly key: string;
-    readonly title: string;
-    readonly body: string;
-    readonly ask?: InboxAsk | undefined;
-    readonly needsReply?: boolean | undefined;
-  },
+  post: InboxThreadPost,
+  pictures: readonly InboxBodyPicture[] = [],
 ): InboxStoreEffect<Result.Result<InboxItem, InboxPostRefusal>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
@@ -1929,34 +2109,26 @@ export function postInboxThread(
         if (Option.isNone(locked)) return Result.fail(INBOX_POST_REFUSAL.NO_AGENT);
         const standing = yield* findAgentItem({ ...agent, key: post.key });
         if (post.ask === undefined && Option.isSome(standing)) {
-          const writer = { author: INBOX_MESSAGE_AUTHOR.AGENT } as const;
-          const written = yield* writeInboxMessage(
-            agent.userId,
-            standing.value.id,
-            writer,
-            post.body,
-            [],
-          ).pipe(
-            // The item was found under the lock on its agent, so a message that finds none is a broken contract.
-            Effect.flatMap(Effect.fromOption),
-            Effect.catchTag("NoSuchElementError", Effect.die),
+          return Result.succeed(
+            yield* followUp(agent, locked.value, standing.value.id, post, pictures),
           );
-          return Result.succeed(written.item);
         }
         if (post.ask !== undefined && !(yield* roomToAsk(agent, post.key))) {
           return Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN);
         }
         const now = yield* DateTime.nowAsDate;
-        const response =
-          post.ask === undefined ? { type: INBOX_RESPONSE.NONE } : inboxAskResponse(post.ask);
+        const { kept, idOf } = yield* Effect.sync(() => picturesByPath(pictures));
         const view = {
           title: post.title,
-          blocks: viewBlocks(post.body, post.ask),
-          response,
+          blocks: viewBlocks(post.body, post.ask, idOf),
+          response:
+            post.ask === undefined ? { type: INBOX_RESPONSE.NONE } : inboxAskResponse(post.ask),
           needsReply: post.needsReply ?? true,
         };
-        const write = { key: post.key, view, body: post.body, ask: post.ask, pictures: [] };
-        return Result.succeed(yield* keepPost(agent, locked.value.organizationId, write, now));
+        const body = (addressOf: PictureAddress) =>
+          withPictureAddresses(post.body, idOf, addressOf);
+        const write = { key: post.key, view, body, ask: post.ask, pictures: kept };
+        return Result.succeed(yield* keepPost(agent, locked.value, write, now));
       }),
     ),
   );

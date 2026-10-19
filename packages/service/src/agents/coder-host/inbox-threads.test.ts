@@ -11,16 +11,19 @@ import {
   CODING_AGENT_ATTACHMENT_TYPE,
   type CodingAgentAttachment,
 } from "@luke/features/coding-agent-wire";
+import { inboxAttachmentOf } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_BLOCK,
   INBOX_FIELD,
+  INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  type InboxImageBlock,
   type InboxItem,
   type InboxPost,
 } from "@luke/features/inbox-wire";
@@ -88,6 +91,24 @@ const openAgentIn = Effect.gen(function* () {
 
 const openAgent = Effect.map(openAgentIn, ({ agent }) => agent);
 
+/** An account's workspace with one agent started in it on no task, as an automation's run starts one. */
+const openTasklessAgent = Effect.gen(function* () {
+  const userId = yield* openUser;
+  const workspaceId = yield* openWorkspace(userId);
+  const started = yield* createCodingAgent(userId, {
+    taskId: null,
+    organizationId: workspaceId,
+    idempotencyKey: randomUUID(),
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    repository: "acme/relay",
+    planSnapshot: null,
+    prompt: "Check the preview.",
+  });
+  assert.ok(Option.isSome(started));
+  return { userId, taskId: null, agentId: started.value.agent.id };
+});
+
 const COMMIT = "4f2a9c1e8b7d6a5f4e3d2c1b0a9f8e7d6c5b4a39";
 
 /** The words a post about regions carries. */
@@ -120,6 +141,16 @@ const DECIDE = {
 } as const;
 
 const TRACE = new TextEncoder().encode("TypeError: deploy is undefined\n");
+const SHOT = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+/** Every picture a message's words draw, as the item's picture its address names and the place its address names the item under. */
+function picturesIn(text: string | undefined) {
+  return [...(text ?? "").matchAll(/!\[[^\]]*\]\(([^\s)]+)/gu)].flatMap(([, address = ""]) => {
+    const picture = inboxAttachmentOf(address);
+    if (picture === undefined) return [];
+    return [{ ...picture, holder: new URL(address).pathname.split("/").slice(2, 4).join("/") }];
+  });
+}
 
 const attached = (name: string, bytes: Uint8Array): CodingAgentAttachment => ({
   name,
@@ -524,6 +555,107 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
           [INBOX_STATUS.ANSWERED, { type: INBOX_RESPONSE.NONE }, [], 1],
         );
         assert.deepEqual(plainWords(opened), ["It deploys from main."]);
+      }),
+  );
+
+  it.effect(
+    "a post's pictures are kept as files of its message, its words drawing each by its address under the item, its task's or its agent's, and a line that is a picture alone stands as an image block for a desktop before version 5",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const fromBlocks = posted(
+          yield* postInboxItem(
+            agent,
+            {
+              ...SETTINGS,
+              blocks: [
+                { type: INBOX_BLOCK.MARKDOWN, text: "The rule as it stands:" },
+                { type: INBOX_BLOCK.IMAGE, path: "shots/rule.png", alt: "The branch rule" },
+              ],
+            },
+            [{ contentType: INBOX_IMAGE_TYPE.PNG, bytes: SHOT }],
+          ),
+        );
+        const block = fromBlocks.blocks.find(
+          (each): each is InboxImageBlock => each.type === INBOX_BLOCK.IMAGE,
+        );
+        assert.ok(block);
+        const [posting] = fromBlocks.thread ?? [];
+        assert.deepEqual(picturesIn(posting?.text), [
+          {
+            itemId: fromBlocks.id,
+            attachmentId: block.attachmentId,
+            holder: `plan/${agent.taskId}`,
+          },
+        ]);
+        assert.ok(posting?.text.startsWith("The rule as it stands:\n\n![The branch rule]("));
+        assert.deepEqual(
+          posting?.files?.map((file) => [file.attachmentId, file.name]),
+          [[block.attachmentId, "rule.png"]],
+        );
+
+        const taskless = yield* openTasklessAgent;
+        const picture = {
+          path: "shots/before.png",
+          name: "before.png",
+          contentType: INBOX_IMAGE_TYPE.PNG,
+          bytes: SHOT,
+        };
+        const asked = posted(
+          yield* postInboxThread(
+            taskless,
+            {
+              key: "preview-look",
+              title: "Ship the new page?",
+              body: [
+                "The page as it was:",
+                '![The old page](shots/before.png "Before")',
+                "Named in code it stays a path: `![x](shots/before.png)`",
+              ].join("\n\n"),
+              ask: DECIDE,
+            },
+            [picture],
+          ),
+        );
+        const [question] = asked.thread ?? [];
+        const [kept] = question?.files ?? [];
+        assert.ok(kept);
+        assert.deepEqual(picturesIn(question?.text), [
+          {
+            itemId: asked.id,
+            attachmentId: kept.attachmentId,
+            holder: `agent/${taskless.agentId}`,
+          },
+        ]);
+        assert.ok(question?.text.endsWith("`![x](shots/before.png)`"));
+        assert.deepEqual(asked.blocks, [
+          { type: INBOX_BLOCK.MARKDOWN, text: "The page as it was:" },
+          { type: INBOX_BLOCK.IMAGE, attachmentId: kept.attachmentId, alt: "The old page" },
+          {
+            type: INBOX_BLOCK.MARKDOWN,
+            text: "Named in code it stays a path: `![x](shots/before.png)`",
+          },
+        ]);
+        const served = yield* readInboxAttachment(taskless.userId, asked.id, kept.attachmentId);
+        assert.deepEqual(new Uint8Array(Option.getOrThrow(served).bytes), SHOT);
+
+        yield* later;
+        const followed = posted(
+          yield* postInboxThread(
+            taskless,
+            { key: "preview-look", title: "", body: "And now: ![The new page](shots/before.png)" },
+            [picture],
+          ),
+        );
+        const said = followed.thread?.at(-1);
+        assert.equal(said?.files?.length, 1);
+        assert.deepEqual(picturesIn(said?.text), [
+          {
+            itemId: asked.id,
+            attachmentId: said?.files?.[0]?.attachmentId,
+            holder: `agent/${taskless.agentId}`,
+          },
+        ]);
       }),
   );
 
