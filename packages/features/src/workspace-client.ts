@@ -15,8 +15,9 @@ import {
   callAnswered,
   sendInSession,
 } from "./account-call.js";
+import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
-import { type LinearIssueSummary, linearIssuesAnswerSchema } from "./linear-wire.js";
+import type { LinearIssueSummary } from "./linear-wire.js";
 import { HOSTED_SERVICE_PATH, workspacePhotoPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -32,9 +33,7 @@ import {
 import {
   WORKSPACE_INVITATIONS_QUERY,
   type WorkspaceInvitation,
-  workspaceInvitationAnswerSchema,
   workspaceInvitationCancelSchema,
-  workspaceInvitationsAnswerSchema,
   workspaceInviteRequestSchema,
 } from "./workspace-invitation-wire.js";
 import {
@@ -48,11 +47,9 @@ import {
   type WorkspacesAnswer,
   workspaceAnswerSchema,
   workspaceCreateRequestSchema,
-  workspaceGithubConnectAnswerSchema,
   workspaceGithubRequestSchema,
   workspaceLeaveAnswerSchema,
   workspaceLeaveRequestSchema,
-  workspaceLinearConnectAnswerSchema,
   workspaceLinearRequestSchema,
   workspaceMemberRemovalSchema,
   workspaceMemberRoleSchema,
@@ -115,12 +112,44 @@ function refusedAs(payload: UnparsedWireValue): WorkspaceCallResult<never> {
   return failure === undefined ? UNANSWERED : { ok: false, failure };
 }
 
+/**
+ * A procedure's answer picked, or the refusal it failed with where it is one
+ * named here; unanswered for everything else.
+ */
+function hostedResult<Answer, Picked>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+  pick: (answer: Answer) => Picked,
+): Effect.Effect<WorkspaceCallResult<Picked>, never, HttpClient.HttpClient> {
+  return Effect.match(asked, {
+    onSuccess: (answer): WorkspaceCallResult<Picked> => ({ ok: true, answer: pick(answer) }),
+    onFailure: (failed): WorkspaceCallResult<Picked> => {
+      const failure = failed._tag === "HostedRefused" ? REFUSALS.get(failed.refusal) : undefined;
+      return failure === undefined ? UNANSWERED : { ok: false, failure };
+    },
+  });
+}
+
 export class HostedWorkspaceClient {
   readonly #call: AccountCallEffects;
   /** The send for the calls that write through Better Auth under the Mac's session. */
   readonly #inSession: AccountCallEffects["send"];
+  /** The hosted contract's client under the account's credential. */
+  readonly #hosted: HostedClient;
+  /** The hosted contract's client under the Mac's session, for the procedures that write through Better Auth. */
+  readonly #hostedInSession: HostedClient;
 
   constructor(options: HostedWorkspaceClientOptions) {
+    this.#hosted = hostedClient({
+      baseUrl: options.serviceBaseUrl,
+      credential: options.credential,
+      requestTimeoutMs: options.requestTimeoutMs,
+    });
+    this.#hostedInSession = hostedClient({
+      baseUrl: options.serviceBaseUrl,
+      credential: options.sessionCredential,
+      requestTimeoutMs: options.requestTimeoutMs,
+      inSession: true,
+    });
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
@@ -207,8 +236,13 @@ export class HostedWorkspaceClient {
   githubConnect(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {
-    return this.#github(HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_CONNECT, workspaceId, (body) =>
-      this.#answered(body, workspaceGithubConnectAnswerSchema, (answer) => answer.url),
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceGithubRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceGithub.connect, admitted),
+      (answer) => answer.url,
     );
   }
 
@@ -216,8 +250,13 @@ export class HostedWorkspaceClient {
   githubDisconnect(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
-    return this.#github(HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_DISCONNECT, workspaceId, (body) =>
-      this.#answered(body, workspaceAnswerSchema, (answer) => answer.workspace),
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceGithubRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceGithub.disconnect, admitted),
+      (answer) => answer.workspace,
     );
   }
 
@@ -225,8 +264,13 @@ export class HostedWorkspaceClient {
   linearConnect(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<string>, never, HttpClient.HttpClient> {
-    return this.#linear(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_CONNECT, workspaceId, (body) =>
-      this.#answered(body, workspaceLinearConnectAnswerSchema, (answer) => answer.url),
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceLinearRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceLinear.connect, admitted),
+      (answer) => answer.url,
     );
   }
 
@@ -234,8 +278,13 @@ export class HostedWorkspaceClient {
   linearDisconnect(
     workspaceId: string,
   ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
-    return this.#linear(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_DISCONNECT, workspaceId, (body) =>
-      this.#answered(body, workspaceAnswerSchema, (answer) => answer.workspace),
+    const admitted = Result.getOrUndefined(
+      readEither(workspaceLinearRequestSchema)({ workspaceId }),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedResult(
+      askHosted(this.#hosted.workspaceLinear.disconnect, admitted),
+      (answer) => answer.workspace,
     );
   }
 
@@ -253,13 +302,8 @@ export class HostedWorkspaceClient {
   > {
     const admitted = Result.getOrUndefined(readEither(linearIssuesRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#answered(
-      {
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_ISSUES,
-        body: JSON.stringify(admitted),
-      },
-      linearIssuesAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hosted.workspaceLinear.issues, admitted),
       (answer) => answer.issues,
     );
   }
@@ -405,15 +449,9 @@ export class HostedWorkspaceClient {
       readEither(workspaceInviteRequestSchema)({ workspaceId, email, role }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#answered(
-      {
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS,
-        body: JSON.stringify(admitted),
-      },
-      workspaceInvitationAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hostedInSession.workspaceInvitations.invite, admitted),
       (answer) => answer.invitation,
-      this.#inSession,
     );
   }
 
@@ -425,12 +463,11 @@ export class HostedWorkspaceClient {
     never,
     HttpClient.HttpClient
   > {
-    const query = new URLSearchParams({ [WORKSPACE_INVITATIONS_QUERY.WORKSPACE_ID]: workspaceId });
-    return this.#answered(
-      { method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS}?${query}` },
-      workspaceInvitationsAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hostedInSession.workspaceInvitations.list, {
+        [WORKSPACE_INVITATIONS_QUERY.WORKSPACE_ID]: workspaceId,
+      }),
       (answer) => answer.invitations,
-      this.#inSession,
     );
   }
 
@@ -447,46 +484,10 @@ export class HostedWorkspaceClient {
       readEither(workspaceInvitationCancelSchema)({ workspaceId, invitationId }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return this.#answered(
-      {
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL,
-        body: JSON.stringify(admitted),
-      },
-      workspaceInvitationsAnswerSchema,
+    return hostedResult(
+      askHosted(this.#hostedInSession.workspaceInvitations.cancel, admitted),
       (answer) => answer.invitations,
-      this.#inSession,
     );
-  }
-
-  /** A connect or disconnect request for the workspace; an id the service would refuse by shape never travels. */
-  #github<A>(
-    path: string,
-    workspaceId: string,
-    send: (
-      request: CallRequest,
-    ) => Effect.Effect<WorkspaceCallResult<A>, never, HttpClient.HttpClient>,
-  ): Effect.Effect<WorkspaceCallResult<A>, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(
-      readEither(workspaceGithubRequestSchema)({ workspaceId }),
-    );
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return send({ method: HTTP_METHOD.POST, path, body: JSON.stringify(admitted) });
-  }
-
-  /** A call that names one workspace's Linear, sent where the workspace's id is one the service would take. */
-  #linear<A>(
-    path: string,
-    workspaceId: string,
-    send: (
-      request: CallRequest,
-    ) => Effect.Effect<WorkspaceCallResult<A>, never, HttpClient.HttpClient>,
-  ): Effect.Effect<WorkspaceCallResult<A>, never, HttpClient.HttpClient> {
-    const admitted = Result.getOrUndefined(
-      readEither(workspaceLinearRequestSchema)({ workspaceId }),
-    );
-    if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return send({ method: HTTP_METHOD.POST, path, body: JSON.stringify(admitted) });
   }
 
   /** One call's answer read under its schema and picked, or its refusal named. */
