@@ -294,7 +294,7 @@ const standing = (
 /** The origin guard says at warn what it refused; the suite keeps those lines off its own output. */
 const quietGuard = Effect.acquireRelease(
   Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => undefined)),
-  (spy) => Effect.sync(() => spy.mockRestore()),
+  () => Effect.sync(() => vi.restoreAllMocks()),
 );
 
 const UNAVAILABLE_REFUSAL = {
