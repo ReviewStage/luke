@@ -199,6 +199,7 @@ it.layer(getTestDB())("inbox_attachment as a view over attachment", (it) => {
 
         // The database as it stood before the migration: inbox_attachment a table holding one file of each kind, and attachment without its inbox columns.
         yield* sql.unsafe(`DROP VIEW "inbox_attachment"`);
+        yield* sql.unsafe(`DROP TABLE "inbox_attachment_moved"`);
         yield* sql.unsafe(OLD_TABLE);
         yield* db.insert(inboxAttachment).values([rows.image, rows.answer, rows.message]);
         yield* sql.unsafe(`ALTER TABLE "attachment" DROP CONSTRAINT "attachment_inbox_kind"`);
@@ -225,6 +226,10 @@ it.layer(getTestDB())("inbox_attachment as a view over attachment", (it) => {
           SELECT relkind FROM pg_class WHERE oid = to_regclass('public.inbox_attachment')
         `;
         assert.equal(kind?.relkind, "v");
+        const [moved] = yield* sql<{ readonly count: number }>`
+          SELECT count(*)::int AS count FROM "inbox_attachment_moved"
+        `;
+        assert.equal(moved?.count, 3, "the old table stands renamed, holding what it held");
         assert.deepEqual(
           yield* keptFor(item.itemId),
           (

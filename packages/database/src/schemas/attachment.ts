@@ -31,7 +31,9 @@ const bound = (bytes: number) => sql.raw(String(bytes));
  * The owners move here one at a time from the tables they kept their own
  * in (`chat_attachment`, `inbox_attachment`, `plan_attachment`,
  * `conversation_attachment`). Each move copies the old table's rows here
- * under their ids, drops the table, and leaves a view over this one under
+ * under their ids, drops the table or renames it out of the way (a drop
+ * locks every table its foreign keys name, which a rename does not), and
+ * leaves a view over this one under
  * its name and its columns' names, so a run still on a deployment from
  * before the move reads and writes the rows it always did; a later
  * migration drops the view once those runs have drained. A chat message's

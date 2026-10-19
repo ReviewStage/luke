@@ -1,8 +1,9 @@
--- contract: "inbox_attachment" stays readable and writable as a view over "attachment", its "item_id" and "message_id" aliasing "inbox_item_id" and "inbox_message_id", for runs still on a deployment from before this one; a later migration drops the view once they have drained.
--- Idempotent: the copy and the drop run only while "inbox_attachment" is still a table, so a preview database that ran this under an earlier draft folder name runs it again as a no-op.
--- Both tables are locked first, "inbox_attachment" before "attachment": the order a task's move to another workspace writes them in, so no old move waits on this while holding what this waits on. Reading every inbox file's bytes took 0.3 s on production's 175 files (38 MB), so the copy under the lock is short.
+-- contract: "inbox_attachment" stays readable and writable as a view over "attachment", its "item_id" and "message_id" aliasing "inbox_item_id" and "inbox_message_id", for runs still on a deployment from before this one; the table itself stands renamed "inbox_attachment_moved", and a later migration drops it and the view once they have drained.
+-- Idempotent: the copy and the rename run only while "inbox_attachment" is still a table, so a preview database that ran this under an earlier draft folder name runs it again as a no-op.
+-- Every table this takes a lock on is locked first, in the one order every old writer takes them in, so no old writer holds one while it waits on another this holds: an account's deletion begins at "user", a task's move at "task", a thread message at "inbox_message", a post or an answer at "inbox_item", and each reaches "inbox_attachment" and "attachment" after those. The tables the new foreign keys name are held against writes, and the two attachment tables against everything, for the copy alone: reading every inbox file's bytes took 0.3 s on production's 175 files (38 MB).
 DO $$ BEGIN
 	IF (SELECT "relkind" FROM "pg_class" WHERE "oid" = to_regclass('public.inbox_attachment')) = 'r' THEN
+		LOCK TABLE "user", "task", "inbox_message", "inbox_item" IN SHARE ROW EXCLUSIVE MODE;
 		LOCK TABLE "inbox_attachment", "attachment" IN ACCESS EXCLUSIVE MODE;
 	END IF;
 END $$;--> statement-breakpoint
@@ -32,7 +33,8 @@ DO $$ BEGIN
 		INSERT INTO "attachment" ("id", "user_id", "task_id", "organization_id", "inbox_item_id", "inbox_message_id", "kind", "name", "position", "content_type", "byte_count", "bytes", "created_at")
 			SELECT "id", "user_id", "task_id", "organization_id", "item_id", "message_id", "kind", "name", "position", "content_type", "byte_count", "bytes", "created_at" FROM "inbox_attachment"
 			ON CONFLICT ("id") DO NOTHING;
-		DROP TABLE "inbox_attachment";
+		-- Renamed rather than dropped: a drop takes locks on every table its foreign keys name, past the order above, and a rename takes none. The table is dropped with the view, once no old writer stands.
+		ALTER TABLE "inbox_attachment" RENAME TO "inbox_attachment_moved";
 	END IF;
 END $$;--> statement-breakpoint
 CREATE OR REPLACE VIEW "inbox_attachment" AS
