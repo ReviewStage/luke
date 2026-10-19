@@ -28,6 +28,7 @@ import { fileURLToPath } from "node:url";
 // Node strips the types of one TypeScript file but resolves no `.js` specifier to a `.ts` one.
 import {
   LIVE_DEFAULTS,
+  LIVE_VOICE,
   LIVE_VOICE_LANGUAGE,
   LIVE_VOICE_LIST,
   LIVE_VOICE_PROFILE,
@@ -57,183 +58,183 @@ const LANGUAGE_NAME = new Map([
  */
 const SCRIPTS = new Map([
   [
-    "alloy",
+    LIVE_VOICE.ALLOY,
     {
       line: "Hey, I'm Luke. Walk me through what you're building, and I'll keep the plan tidy as we go.",
     },
   ],
   [
-    "ash",
+    LIVE_VOICE.ASH,
     {
       line: "Hi there. Tell me the problem in your own words, and we'll turn it into a plan together.",
     },
   ],
   [
-    "ballad",
+    LIVE_VOICE.BALLAD,
     {
       line: "Good to meet you. Talk it through out loud, and I'll write down every decision we make.",
     },
   ],
   [
-    "cedar",
+    LIVE_VOICE.CEDAR,
     { line: "Hey. What are we working on today? Think out loud, and I'll take the notes." },
   ],
   [
-    "coral",
+    LIVE_VOICE.CORAL,
     { line: "Hi! Got a bug, a feature, or just a hunch? Tell me, and I'll sketch out the plan." },
   ],
   [
-    "echo",
+    LIVE_VOICE.ECHO,
     {
       line: "Hey there. Start anywhere you like, and I'll shape what you say into clear next steps.",
     },
   ],
   [
-    "marin",
+    LIVE_VOICE.MARIN,
     {
       line: "Hi, I'm Luke. Tell me what you're working on, and I'll write the plan down as we talk.",
     },
   ],
   [
-    "sage",
+    LIVE_VOICE.SAGE,
     {
       line: "Hello. Let's take a breath and think it through. I'll capture the plan while you talk.",
     },
   ],
   [
-    "shimmer",
+    LIVE_VOICE.SHIMMER,
     {
       line: "Hi, I'm Luke. Describe what's on your mind, and I'll turn it into a plan you can ship.",
     },
   ],
   [
-    "verse",
+    LIVE_VOICE.VERSE,
     {
       line: "Hey, ready when you are. Talk me through the task, and I'll keep track of the details.",
     },
   ],
   [
-    "gleam",
+    LIVE_VOICE.GLEAM,
     {
       line: "Hi! Let's figure this out together. Tell me what you need, and I'll write it all up.",
     },
   ],
   [
-    "meridian",
+    LIVE_VOICE.MERIDIAN,
     {
       line: "Hey, I'm Luke. Give me the big picture first, and we'll work our way down to the details.",
     },
   ],
   [
-    "cinder",
+    LIVE_VOICE.CINDER,
     {
       line: "Well, hey there. Tell me what you're fixing, and I'll keep the plan straight for you.",
     },
   ],
   [
-    "delta",
+    LIVE_VOICE.DELTA,
     { line: "Hey there, I'm Luke. Take your time, tell me the task, and I'll write up the plan." },
   ],
   [
-    "vesper",
+    LIVE_VOICE.VESPER,
     {
       line: "Hello, I'm Luke. Tell me what you're after, and I'll keep a careful note of the plan.",
     },
   ],
   [
-    "stone",
+    LIVE_VOICE.STONE,
     {
       line: "Hi, I'm Luke. Tell me where you're stuck, and we'll work out the next step together.",
     },
   ],
   [
-    "willow",
+    LIVE_VOICE.WILLOW,
     { line: "Hello there. Talk me through your idea, and I'll shape it into a proper plan." },
   ],
   [
-    "quartz",
+    LIVE_VOICE.QUARTZ,
     { line: "Hi, I'm Luke. Tell me what's on the list today, and I'll sort it into a plan." },
   ],
   [
-    "ripple",
+    LIVE_VOICE.RIPPLE,
     { line: "G'day, I'm Luke. Run me through the job, and I'll jot the plan down as we go." },
   ],
   [
-    "beacon",
+    LIVE_VOICE.BEACON,
     { line: "Hello, I'm Luke. Share what you're working on, and I'll map out the steps with you." },
   ],
   [
-    "bossa",
+    LIVE_VOICE.BOSSA,
     {
       line: "Hi, I'm Luke. Tell me your idea, and I'll turn it into a plan.",
       signOff: "Vamos lá!",
     },
   ],
   [
-    "tempo",
+    LIVE_VOICE.TEMPO,
     {
       line: "Hey, I'm Luke. Tell me the task, and I'll have the plan drafted in no time.",
       signOff: "Bora!",
     },
   ],
   [
-    "brise",
+    LIVE_VOICE.BRISE,
     {
       line: "Hi, I'm Luke. Tell me what you're making, and I'll write the plan as we talk.",
       signOff: "À vous !",
     },
   ],
   [
-    "sillage",
+    LIVE_VOICE.SILLAGE,
     {
       line: "Hello, I'm Luke. Walk me through it, and I'll follow along with the plan.",
       signOff: "Allons-y !",
     },
   ],
   [
-    "nuri",
+    LIVE_VOICE.NURI,
     {
       line: "Hi, I'm Luke. Tell me where to start, and I'll keep the plan in order.",
       signOff: "Los geht's!",
     },
   ],
   [
-    "juni",
+    LIVE_VOICE.JUNI,
     {
       line: "Hey, I'm Luke. Share your idea, and I'll write the plan down for you.",
       signOff: "Ich höre zu!",
     },
   ],
   [
-    "flitz",
+    LIVE_VOICE.FLITZ,
     {
       line: "Hi, I'm Luke. Give me the task, and we'll have a plan before you know it.",
       signOff: "Auf geht's!",
     },
   ],
   [
-    "nira",
+    LIVE_VOICE.NIRA,
     {
       line: "Hi, I'm Luke. Tell me what you're working on, and I'll note the plan.",
       signOff: "चलिए, शुरू करते हैं!",
     },
   ],
   [
-    "harema",
+    LIVE_VOICE.HAREMA,
     {
       line: "Hi, I'm Luke. Tell me about your project, and I'll write up the plan.",
       signOff: "よろしくね！",
     },
   ],
   [
-    "shida",
+    LIVE_VOICE.SHIDA,
     {
       line: "Hello, I'm Luke. Tell me the task, and I'll lay out the plan for you.",
       signOff: "始めましょう！",
     },
   ],
   [
-    "noeul",
+    LIVE_VOICE.NOEUL,
     {
       line: "Hi, I'm Luke. Tell me what you need, and I'll write the plan with you.",
       signOff: "같이 해 봐요!",
@@ -248,6 +249,15 @@ const SCRIPTS = new Map([
  * scripts while the speech is right.
  */
 const LEAST_LIKENESS = 0.8;
+
+/**
+ * How close the end of a take's transcript must come to a voice's sign-off,
+ * judged on its own. Note that the whole line's likeness cannot say whether
+ * a sign-off was spoken, because the English before it is long enough to
+ * pass alone; and this is looser than the line's, because a transcript may
+ * drop a short phrase's accents ("Vamos la").
+ */
+const LEAST_SIGN_OFF_LIKENESS = 0.6;
 
 const LIVE_URL = "wss://api.openai.com/v1/live/sessions";
 const SAMPLE_RATE = 24_000;
@@ -299,7 +309,13 @@ function likeness(said, line) {
   return 1 - previous[b.length] / Math.max(a.length, b.length, 1);
 }
 
-/** What the voice says, its sign-off included, and the words the model is asked to say it in. */
+/** The last letters of what was said, as many as the sign-off has, where a spoken sign-off stands. */
+function endOf(said, signOff) {
+  const letters = [...lettersOf(said)];
+  return letters.slice(-[...lettersOf(signOff)].length).join("");
+}
+
+/** What the voice says, its sign-off included and apart, and the words the model is asked to say it in. */
 function scriptOf(voice) {
   const script = SCRIPTS.get(voice);
   if (script === undefined) throw new Error(`${voice}: no line to say`);
@@ -307,12 +323,14 @@ function scriptOf(voice) {
   if (script.signOff === undefined) {
     return {
       line: script.line,
+      signOff: undefined,
       instruction: `Greet the caller now in English by saying exactly this, and nothing more: ${script.line} Then pause and listen.`,
     };
   }
   const language = LANGUAGE_NAME.get(LIVE_VOICE_PROFILE[voice].language);
   return {
     line: `${script.line} ${script.signOff}`,
+    signOff: script.signOff,
     instruction: `Greet the caller now by saying exactly this in English: ${script.line} Then end with this short sign-off in ${language}, and nothing more: ${script.signOff} Then pause and listen.`,
   };
 }
@@ -480,7 +498,7 @@ function recordTake(voice, apiKey, instruction) {
 
 /** Records the voice until a take says its line, and writes it as the voice's clip. */
 async function recordVoice(voice, apiKey, scratch) {
-  const { line, instruction } = scriptOf(voice);
+  const { line, signOff, instruction } = scriptOf(voice);
   for (let take = 1; take <= TAKES_PER_VOICE; take += 1) {
     const recorded = await recordTake(voice, apiKey, instruction).catch((error) => {
       console.error(`${voice}: take ${take} failed: ${error.message}`);
@@ -489,10 +507,10 @@ async function recordVoice(voice, apiKey, scratch) {
     if (recorded === undefined) continue;
     const { pcm, transcript } = recorded;
     const alike = likeness(transcript, line);
-    if (alike < LEAST_LIKENESS || pcm.length === 0) {
-      console.error(
-        `${voice}: take ${take} said ${JSON.stringify(transcript.trim())} (${alike.toFixed(2)})`,
-      );
+    const signedOff = signOff === undefined ? 1 : likeness(endOf(transcript, signOff), signOff);
+    if (alike < LEAST_LIKENESS || signedOff < LEAST_SIGN_OFF_LIKENESS || pcm.length === 0) {
+      const scores = `${alike.toFixed(2)}, sign-off ${signedOff.toFixed(2)}`;
+      console.error(`${voice}: take ${take} said ${JSON.stringify(transcript.trim())} (${scores})`);
       continue;
     }
     const source = path.join(scratch, `${voice}.wav`);
