@@ -73,6 +73,9 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "blobSha": {
+                    "type": "string"
                   }
                 },
                 "required": [

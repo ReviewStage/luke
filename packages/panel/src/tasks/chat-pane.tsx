@@ -34,6 +34,7 @@ import {
   type ChatWho,
   channelLabel,
   channelThreads,
+  chatKeywords,
   chatTargets,
   chatWho,
   type ForYouEntry,
@@ -177,6 +178,8 @@ interface MessageContext {
   readonly names: ChatNames;
   readonly now: number;
   readonly targets: readonly ChatTarget[];
+  /** The words a dictation in the chat is likely to say. */
+  readonly keywords: readonly string[];
   readonly openLink: (url: string) => void;
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
@@ -330,6 +333,7 @@ function ThreadRow({
                 label="Reply in thread"
                 hints={[]}
                 targets={context.targets}
+                keywords={context.keywords}
                 compact
                 onSend={(text) => context.onPost({ text, replyTo: message.seq })}
               />
@@ -422,7 +426,17 @@ export function ChatPane({
   onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
 }): React.JSX.Element {
   const targets = chatTargets(chat, names);
-  const context: MessageContext = { chat, names, now, targets, openLink, onPost, onAnswer };
+  const keywords = chatKeywords(chat, names);
+  const context: MessageContext = {
+    chat,
+    names,
+    now,
+    targets,
+    keywords,
+    openLink,
+    onPost,
+    onAnswer,
+  };
   const channel = placeChannel(chat, place);
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
     const entries = forYou(chat);
@@ -482,6 +496,7 @@ export function ChatPane({
           label={`Message ${postTarget(chat, names, channel)}`}
           hints={COMPOSER_HINTS}
           targets={targets}
+          keywords={keywords}
           onSend={(text) => onPost({ text, to: postTarget(chat, names, channel) })}
         />
       ) : (

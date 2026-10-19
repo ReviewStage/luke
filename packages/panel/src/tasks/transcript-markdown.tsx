@@ -46,6 +46,12 @@ const COPY_LABEL = "Copy code";
 /** What a block whose fence names no language is labelled. */
 const PLAIN_LANGUAGE = "text";
 
+/** The language GitHub's suggested change is fenced as, and what its block's header calls it. */
+const SUGGESTION = {
+  LANGUAGE: "suggestion",
+  LABEL: "Suggested change",
+} as const;
+
 /** The language a fenced block's class names, as Streamdown hands it on. */
 const LANGUAGE_CLASS = /(?:^|\s)language-(\S+)/u;
 
@@ -195,7 +201,10 @@ function CodeRuns({ code, lines }: { code: string; lines: CodeLines | undefined 
 /**
  * A fenced block: a quiet header naming its language with a copy at its
  * right, over its lines, which keep whole and scroll sideways inside the
- * block rather than widening the transcript.
+ * block rather than widening the transcript. A ```suggestion block, a
+ * change suggested to the lines a review comment is on, is headed as
+ * GitHub heads one and drawn on the added lines' tint, since its lines
+ * are what those would read once it is taken.
  */
 function TranscriptCodeBlock({ className, node }: ComponentProps<"code"> & ExtraProps): ReactNode {
   const markdown = useContext(MarkdownSource);
@@ -206,12 +215,17 @@ function TranscriptCodeBlock({ className, node }: ComponentProps<"code"> & Extra
   const whole =
     start === undefined || end === undefined || !fenceStillOpen(markdown.slice(start, end));
   const lines = useColouredLines(language, code, whole);
+  const suggesting = language === SUGGESTION.LANGUAGE;
   return (
-    <div className="transcript-code ph-no-capture">
+    <div className="transcript-code ph-no-capture" data-suggestion={suggesting || undefined}>
       <div className="transcript-code-header">
-        <span className="transcript-code-language">
-          {language === "" ? PLAIN_LANGUAGE : language}
-        </span>
+        {suggesting ? (
+          <span className="transcript-code-suggestion">{SUGGESTION.LABEL}</span>
+        ) : (
+          <span className="transcript-code-language">
+            {language === "" ? PLAIN_LANGUAGE : language}
+          </span>
+        )}
         <CopyCodeButton code={code} />
       </div>
       <pre className="transcript-code-body">

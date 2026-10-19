@@ -28,6 +28,7 @@ import {
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL, MOVE_TASK_TOOL } from "../task-section-tools.js";
+import { READ_TASK_TOOL } from "../task-tools.js";
 import { CODER } from "./bounds.js";
 import { CHAT_TOOLS } from "./chat.js";
 import { DELEGATE_TOOL } from "./delegation.js";
@@ -161,6 +162,10 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.LIST_TASKS]: {
     description: LIST_TASKS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_TASKS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_TASK]: {
+    description: READ_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(READ_TASK_TOOL.inputSchema),
   },
   [CODER_TOOL.CREATE_SECTION]: {
     description: CREATE_SECTION_TOOL.description,

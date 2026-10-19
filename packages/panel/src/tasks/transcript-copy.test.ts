@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { firstMessageText, REPLAY_STEP_KIND } from "@luke/features/agent-replay";
+import { chatNoticeReplyLine } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_SENDER,
   type CodingAgentMessage,
 } from "@luke/features/coding-agent-wire";
+import { INBOX_REPLY, inboxAnswerMessage } from "@luke/features/inbox-wire";
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { REPLAY_PAGE } from "./replay-card-model.js";
@@ -126,6 +128,44 @@ test("a chat notice is copied under the member it tells of a message from, never
     kind: LATEST_ACTIVITY.WORDS,
     text: "Yes, base on my migration.",
   });
+});
+
+test("a notice in its whole shape is copied as the message alone under who said it, and an inbox answer without its item's key, as the tab draws both", () => {
+  const notice: CodingAgentMessage = {
+    ...said(
+      "notice",
+      MESSAGE_ROLE.USER,
+      [
+        "Chat · @agent-2 in #invitations (m 43):",
+        "Are you changing memberships?",
+        chatNoticeReplyLine(43),
+      ].join("\n\n"),
+    ),
+    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+  };
+  const answer = said(
+    "answer",
+    MESSAGE_ROLE.USER,
+    inboxAnswerMessage({ key: "ship-it", title: "Ship it?" }, { reply: INBOX_REPLY.APPROVED }),
+  );
+  const transcript = agentTranscript({
+    title: "Add teammate invitations",
+    brief: undefined,
+    chatOn: true,
+    messages: [said("plan", MESSAGE_ROLE.USER, "Build invitations."), notice, answer],
+  });
+  assert.equal(
+    transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
+    [
+      "# Add teammate invitations",
+      "## Plan",
+      "Build invitations.",
+      "## Chat from @agent-2",
+      "Are you changing memberships?",
+      "## Developer",
+      'Inbox answer on "Ship it?": Approved.',
+    ].join("\n\n") + "\n",
+  );
 });
 
 test("with Chat off, a chat notice is copied as the plain line it is drawn as, under the developer's heading, and still never as the plan", () => {

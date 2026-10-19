@@ -9,6 +9,7 @@ import {
   pageHtmlSchema,
   pageTitleSchema,
 } from "@luke/features/page-wire";
+import { isSecretFile } from "@luke/features/task-wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SandboxSession } from "eve/sandbox";
@@ -21,7 +22,6 @@ import {
   wireUuidSchema,
 } from "../core.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { isSecretFile } from "./shown-file.js";
 
 /**
  * page-tool.ts -- `show_page`, every agent's one tool for a page: an interactive HTML document written for the task and shown in the developer's side panel.

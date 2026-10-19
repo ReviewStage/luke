@@ -7,8 +7,13 @@ import {
   PATCH_OMITTED,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
+import { isSecretFile } from "@luke/features/task-wire";
 import { parsePatch } from "diff";
-import { DIFF_SELECTION_SIDE, type DiffSelection } from "../diff-view/contract.js";
+import {
+  DIFF_SELECTION_SIDE,
+  type DiffFileTexts,
+  type DiffSelection,
+} from "../diff-view/contract.js";
 import {
   FILE_MARK,
   type FileMark,
@@ -56,6 +61,9 @@ import {
  * dashes is still one removed line; the rows kept are written again as a
  * patch of their own, its header counting them, with the thread's own lines
  * selected.
+ *
+ * A comment on lines of the head alone may suggest a change to them, which
+ * starts from those lines as the file's patch holds them (`suggestedLines`).
  */
 
 /** What one row of a hunk is: a line of context, one added, one removed, or git's note on the line above it. */
@@ -106,6 +114,23 @@ export const CHANGES_WORDS = {
   TOO_NARROW_TO_SPLIT: "Needs a wider panel",
   UNPLACED_THREADS: "Comments on lines this diff does not show",
 } as const;
+
+/** Why a changed file's lines between its hunks could not be opened: not read as text, read but not the text its patch was made against, or not read at all just now. */
+export const EXPANSION_REFUSAL = {
+  NOT_TEXT: "not-text",
+  CHANGED: "changed",
+  UNAVAILABLE: "unavailable",
+} as const;
+
+export type ExpansionRefusal = (typeof EXPANSION_REFUSAL)[keyof typeof EXPANSION_REFUSAL];
+
+/** What a file whose lines between hunks could not be opened says, once, above its first hunk. */
+export const EXPANSION_REFUSED_WORDS = {
+  [EXPANSION_REFUSAL.NOT_TEXT]: "Can't load more of this file: it's too large or not plain text.",
+  [EXPANSION_REFUSAL.CHANGED]:
+    "Can't load more of this file: it changed since these changes were read.",
+  [EXPANSION_REFUSAL.UNAVAILABLE]: "Can't load more of this file just now.",
+} as const satisfies Record<ExpansionRefusal, string>;
 
 /** The letter a file wears for what became of it, as an editor's source control marks it. */
 export const STATUS_LETTER = {
@@ -634,4 +659,160 @@ export function commentLinesLabel(lines: CommentLines): string {
       : `${side === DIFF_SIDE.LEFT ? "L" : "R"}${line}`;
   if (lines.startLine === undefined) return `line ${lines.line}`;
   return `lines ${mark(lines.startLine, lines.startSide ?? lines.side)}–${mark(lines.line, lines.side)}`;
+}
+
+/** A text's lines, and whether its last line ends in a newline, as a patch counts them. */
+function linesOf(text: string) {
+  const endsInNewline = text.endsWith("\n");
+  const body = endsInNewline ? text.slice(0, -1) : text;
+  return {
+    lines: body === "" && endsInNewline ? [""] : body === "" ? [] : body.split("\n"),
+    endsInNewline,
+  };
+}
+
+/** A hunk of a patch as written: where it starts and how many lines it holds on each side, and its lines, each with its mark. */
+interface RawHunk {
+  readonly oldStart: number;
+  readonly oldLines: number;
+  readonly newStart: number;
+  readonly newLines: number;
+  readonly lines: readonly string[];
+}
+
+/** A hunk's header with its counts: where it starts on each side, and how many lines, one where a count is left out. */
+const HUNK_COUNTS = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/u;
+
+/**
+ * A patch's hunks as written, each line split at its newline alone, so a
+ * line ending in a carriage return keeps it, as the file's own text does;
+ * none for a patch that does not read as hunks.
+ */
+function rawHunks(patch: string): readonly RawHunk[] | undefined {
+  const hunks: {
+    oldStart: number;
+    oldLines: number;
+    newStart: number;
+    newLines: number;
+    lines: string[];
+  }[] = [];
+  for (const line of patch.split("\n")) {
+    const header = HUNK_COUNTS.exec(line);
+    if (header !== null) {
+      const [, oldStart = "", oldLines = "1", newStart = "", newLines = "1"] = header;
+      hunks.push({
+        oldStart: Number(oldStart),
+        oldLines: Number(oldLines),
+        newStart: Number(newStart),
+        newLines: Number(newLines),
+        lines: [],
+      });
+      continue;
+    }
+    const hunk = hunks.at(-1);
+    if (hunk === undefined) return line === "" ? hunks : undefined;
+    // Note that a line of a hunk always starts with its mark, so an empty one is the patch's end.
+    if (line === "") continue;
+    hunk.lines.push(line);
+  }
+  return hunks;
+}
+
+/**
+ * The name git gives a file's contents, its blob: the SHA-1 of its header
+ * and its bytes, which GitHub names each changed file's contents after by
+ * (`CodingAgentChangedFile.blobSha`).
+ */
+export async function blobShaOf(text: string): Promise<string> {
+  const bytes = new TextEncoder().encode(text);
+  const header = new TextEncoder().encode(`blob ${bytes.length}\0`);
+  const whole = new Uint8Array(header.length + bytes.length);
+  whole.set(header);
+  whole.set(bytes, header.length);
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-1", whole));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Whether a file's lines between its hunks can be drawn: a file changed in place or moved with changes, whose patch is drawn, and that is no secret file. */
+export function expandable(file: CodingAgentChangedFile): boolean {
+  const changedInPlace =
+    file.status === CHANGED_FILE_STATUS.MODIFIED || file.status === CHANGED_FILE_STATUS.RENAMED;
+  // Note that a secret file is never read whole, so its gaps are never offered.
+  return changedInPlace && fileNotice(file) === undefined && !isSecretFile(file.path);
+}
+
+/**
+ * A changed file's whole text before and after, from its text after alone
+ * and its patch: every line no hunk holds is the same on both sides, so the
+ * text before is the text after with each hunk turned back, its context and
+ * removed lines kept and its added lines dropped. None where the text after
+ * is not the one the patch was made against, any hunk's context or added
+ * lines differing from the text at its place, because the lines between
+ * hunks would then be drawn from another commit; and none for a file
+ * whose lines between hunks are not drawn (`expandable`).
+ */
+export function textsOf(file: CodingAgentChangedFile, after: string): DiffFileTexts | undefined {
+  const patch = file.patch;
+  if (!expandable(file) || patch === null) return undefined;
+  const hunks = rawHunks(patch);
+  if (hunks === undefined) return undefined;
+  const { lines, endsInNewline } = linesOf(after);
+  const before: string[] = [];
+  let at = 0;
+  // Which side a "No newline at end of file" marker followed: the text before's last line, or the text after's alone.
+  let beforeUnended = false;
+  let afterOnlyUnended = false;
+  for (const hunk of hunks) {
+    // A hunk adding nothing names the line before its place, as a patch does.
+    const start = hunk.newLines === 0 ? hunk.newStart : hunk.newStart - 1;
+    if (start < at || start > lines.length) return undefined;
+    before.push(...lines.slice(at, start));
+    const beforeStart = hunk.oldLines === 0 ? hunk.oldStart : hunk.oldStart - 1;
+    if (before.length !== beforeStart) return undefined;
+    at = start;
+    let previous = " ";
+    for (const line of hunk.lines) {
+      const mark = line.slice(0, 1);
+      const text = line.slice(1);
+      if (mark === "\\") {
+        if (previous === "+") afterOnlyUnended = true;
+        else beforeUnended = true;
+        continue;
+      }
+      if (mark !== "-") {
+        if (lines[at] !== text) return undefined;
+        at += 1;
+      }
+      if (mark !== "+") before.push(text);
+      previous = mark;
+    }
+  }
+  before.push(...lines.slice(at));
+  const text = before.join("\n");
+  const beforeEndsInNewline = beforeUnended ? false : afterOnlyUnended ? true : endsInNewline;
+  return { before: beforeEndsInNewline && before.length > 0 ? `${text}\n` : text, after };
+}
+
+/**
+ * The lines a comment is on as they read at the head, for a suggestion to
+ * start from: the new side's words of each line from its first to its
+ * last, as the file's patch holds them. None where either end counts on
+ * the old side, whose lines a suggestion cannot change, or where the patch
+ * holds no row for one of the lines.
+ */
+export function suggestedLines(
+  file: CodingAgentChangedFile,
+  lines: CommentLines,
+): string | undefined {
+  const first = lines.startLine ?? lines.line;
+  const sides = [lines.side, lines.startSide ?? lines.side];
+  if (file.patch === null || sides.some((side) => side !== DIFF_SIDE.RIGHT)) return undefined;
+  const hunk = (patchHunks(file.patch) ?? []).find(({ rows }) =>
+    rows.some((row) => row.newLine === lines.line),
+  );
+  const rows = (hunk?.rows ?? []).filter(
+    (row) => row.newLine !== undefined && row.newLine >= first && row.newLine <= lines.line,
+  );
+  if (rows.length !== lines.line - first + 1) return undefined;
+  return rows.map((row) => row.text).join("\n");
 }

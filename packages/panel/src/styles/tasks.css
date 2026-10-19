@@ -1585,6 +1585,15 @@
   font-size: var(--luke-type-caption-size);
 }
 
+/* Why a file's unchanged lines could not be opened, one quiet line above
+   its first hunk, in the list's own small type (agent-changes-tab.tsx). */
+.diff-list-refused {
+  margin: 0;
+  padding: var(--luke-space-4) var(--luke-space-12) var(--luke-space-4) var(--luke-space-40);
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
 /* A changed image in Files changed's list (image-diff.tsx), under its
    header in place of lines, as its lead (diff-view/index.ts): its two sides beside each other, each on a
    checkerboard that shows what is transparent, or the after laid over the
@@ -1966,6 +1975,32 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--luke-space-8);
+}
+
+/* Write and Preview at the start of the field's head, and the formatting
+   presses at its end while the words are written, as GitHub's own box
+   draws them; a narrow field wraps the presses under the choice. */
+.markdown-field-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: stretch;
+  justify-content: space-between;
+  gap: var(--luke-control-gap);
+}
+
+.markdown-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* The hairline between groups of presses. */
+.markdown-toolbar-rule {
+  width: 1px;
+  height: var(--luke-control-icon);
+  margin: 0 var(--luke-space-4);
+  background: var(--luke-color-border);
 }
 
 /* The box is the preview's frame, its words scrolling inside it in
@@ -3303,6 +3338,13 @@ ol.transcript-list {
   white-space: nowrap;
 }
 
+/* A suggested change's header names it in words rather than as a language,
+   and its lines stand on the added lines' tint. */
+.transcript-code-suggestion {
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-medium);
+}
+
 .transcript-code-body {
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
@@ -3319,6 +3361,10 @@ ol.transcript-list {
 
 .transcript-code-body > code {
   font: inherit;
+}
+
+.transcript-code[data-suggestion] .transcript-code-body {
+  background: var(--luke-color-complete-tint);
 }
 
 /* An inline span of code: the blocks' type on a subtle fill, no edge. */
@@ -5618,8 +5664,10 @@ button.picture-frame {
 
 /* Words under two threads in the editor stand in a mark inside another,
    which the read view draws as one mark; the inner one adds nothing, so they
-   read the same in both. */
-.plan-comment-mark .plan-comment-mark {
+   read the same in both. An open thread's mark keeps its wash and edge
+   inside another's, so the open thread reads open whether its mark is the
+   inner or the outer one. */
+.plan-comment-mark .plan-comment-mark:not([data-active="true"]) {
   padding-bottom: 0;
   border-bottom: 0;
   background: none;
