@@ -1,4 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
+import { ScrollArea } from "@luke/ui";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { Fragment, type ReactNode, type RefObject, useCallback, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -108,9 +109,10 @@ function keptElement(held: Map<string, HTMLDivElement>, key: string, className: 
 }
 
 /**
- * The files of `entries` drawn as one list in `look`, in a box that fills
- * the File tab's place and scrolls; while the bundle loads the place stands
- * empty, and where it failed to load it says so.
+ * The files of `entries` drawn as one list in `look`, in a `ScrollArea`
+ * that fills the File tab's place and scrolls up and down, each file's
+ * unwrapped lines scrolling sideways in Pierre's own way; while the bundle
+ * loads the place stands empty, and where it failed to load it says so.
  */
 export function PierreDiffList({
   entries,
@@ -172,14 +174,6 @@ export function PierreDiffList({
   const drawn = useRef(props);
   const latest = useRef(props);
   latest.current = props;
-  const hostRef = useCallback(
-    (element: HTMLDivElement | null) => {
-      host.current = element;
-      boxRef(element);
-    },
-    [boxRef],
-  );
-
   useEffect(() => {
     const element = host.current;
     if (module === undefined || element === null) return undefined;
@@ -211,12 +205,12 @@ export function PierreDiffList({
   if (AsyncResult.isFailure(loaded)) {
     return <p className="side-panel-empty">{DIFF_LOAD_FAILED}</p>;
   }
+  // Note that the area holds no React of its own, because Pierre draws the
+  // list into it as the scroller it virtualizes over and empties it when
+  // taken down; the headers and notes reach their slots through portals.
   return (
-    <div
-      ref={hostRef}
-      className="file-tab-lines diff-view diff-list"
-      data-diff-layout={look.layout}
-    >
+    <div ref={boxRef} className="diff-view diff-list" data-diff-layout={look.layout}>
+      <ScrollArea ref={host}>{null}</ScrollArea>
       {entries.map((entry) => (
         <Fragment key={entry.path}>
           {createPortal(entry.header, renderHeader(entry.path))}

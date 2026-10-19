@@ -164,6 +164,7 @@
     "./tasks/chat-gate": "./src/tasks/chat-gate.js",
     "./tasks/chat-toast": "./src/tasks/chat-toast.js",
     "./tasks/closed-tabs": "./src/tasks/closed-tabs.js",
+    "./tasks/code-lines": "./src/tasks/code-lines.js",
     "./tasks/coding-agent-model": "./src/tasks/coding-agent-model.js",
     "./tasks/composer-field": "./src/tasks/composer-field.js",
     "./tasks/conversation-filters": "./src/tasks/conversation-filters.js",

@@ -2,6 +2,7 @@ import type { CodeLines } from "@luke/features/tasks-view";
 import { ACT_KIND, COLOURED_CODE_MAX_CHARS, FENCE_LANGUAGE_MAX_CHARS } from "@luke/host/acts";
 import { type ActHandle, useAct } from "@luke/panel/act";
 import { CopyGlyph, copyHint, useCopyFeedback } from "@luke/panel/copy-feedback";
+import { runColours } from "@luke/panel/tasks/code-lines";
 import { Tooltip } from "@luke/panel/tooltip";
 import { IconButton } from "@luke/ui";
 import {
@@ -14,7 +15,6 @@ import {
   useState,
 } from "react";
 import type { Components, ExtraProps } from "streamdown";
-import { runColours } from "./code-pane";
 
 /**
  * transcript-markdown.tsx -- a transcript's code and tables: a fenced block drawn as the Code tab draws code, a table as a quiet grid, and an inline span on a subtle fill.
