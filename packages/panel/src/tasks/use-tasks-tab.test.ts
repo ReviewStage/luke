@@ -2559,6 +2559,21 @@ test("a channel chosen in Chat is the listed workspace's, so another workspace l
   assert.deepEqual(tab.control().chatView.place, FOR_YOU);
 });
 
+test("Chat opened stands on its rail, a place chosen or shown from elsewhere stands on that place, and the way back returns to the rail", () => {
+  const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
+  const standing = () => [tab.control().chatView.place, tab.control().chatView.listed];
+  act(() => tab.control().chatView.onOpen());
+  assert.deepEqual(standing(), [FOR_YOU, true]);
+  const channel = { kind: CHAT_PLACE.CHANNEL, channelId: "c0ffee00-0000-4000-8000-000000000001" };
+  act(() => tab.control().chatView.onChoose(channel));
+  assert.deepEqual(standing(), [channel, false]);
+  act(() => tab.control().chatView.onList());
+  assert.deepEqual(standing(), [channel, true], "the rail stands with the place still chosen");
+  act(() => tab.control().chatView.onClose());
+  act(() => tab.control().chatView.onShow(channel));
+  assert.deepEqual(standing(), [channel, false]);
+});
+
 test("a chat notification's click, listing the workspace its message waits in and opening Chat in one press, stands on that workspace's Chat", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
   act(() => tab.control().onChooseWorkspace(PERSONAL.id));

@@ -150,6 +150,7 @@ function shellProps(
       ...sidebarPatch,
     },
     room: SHELL_ROOM.WIDE,
+    settingsStep: { listed: true, onList: ignore },
     call: undefined,
     captions: {
       caption: { content: undefined, shown: false },
@@ -779,6 +780,7 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
       staged: false,
     },
     room: SHELL_ROOM.WIDE,
+    settingsStep: { listed: true, onList: ignore },
     call: {
       card: { taskName: CALL_TASK_NAME, status: undefined, microphoneMuted: false },
       speakerMuted: false,

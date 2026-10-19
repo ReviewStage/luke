@@ -101,6 +101,15 @@ export interface PlanHistoryControl {
   onChooseSection: (heading: string | undefined) => void;
   /** Closes the open revision's sections, back to every version. */
   onCloseSections: () => void;
+  /**
+   * Whether the history stands on its list rather than on the version chosen,
+   * which only a narrow room draws apart: a history opened on the plan as it
+   * stands does, one opened on a save or a version, or with a version or a
+   * section chosen, does not.
+   */
+  listed: boolean;
+  /** Goes back from the version chosen to the list. */
+  onList: () => void;
   onRetry: () => void;
   /** Reads the page of revisions older than the oldest read; answers whether it landed. */
   onLoadEarlier: () => Promise<boolean>;
@@ -125,8 +134,9 @@ interface HeldList {
  * followed, so a save landing moves the view onto it; the moment of the save
  * it was opened to find, until the pages read show which revision made it;
  * its content as read and the revision that read was for; how many times
- * it was asked for, so choosing one whose read failed reads it again; and the
- * revision whose sections are open, drawn only while it is the one chosen.
+ * it was asked for, so choosing one whose read failed reads it again; the
+ * revision whose sections are open, drawn only while it is the one chosen;
+ * and whether the list stands rather than the version.
  */
 interface HeldVersion {
   readonly taskId: string;
@@ -136,6 +146,7 @@ interface HeldVersion {
   readonly read: VersionRead;
   readonly readOf: number | undefined;
   readonly asked: number;
+  readonly listed: boolean;
 }
 
 /** The version history opened on a task: following the newest, seeking a save's revision, or where it stood before, nothing read yet. */
@@ -152,6 +163,7 @@ function openedOn(
     read: { kind: HISTORY_READ.READING },
     readOf: undefined,
     asked: 1,
+    listed: seek === undefined && returnTo === undefined,
   };
 }
 
@@ -329,7 +341,9 @@ export function usePlanHistory(input: {
           held?.taskId === taskId &&
           held.seeking === undefined &&
           (held.seq ?? newest) === chosenSeq;
-        if (same && held.read.kind !== HISTORY_READ.FAILED) return held;
+        if (same && held.read.kind !== HISTORY_READ.FAILED) {
+          return held.listed ? { ...held, listed: false } : held;
+        }
         return {
           taskId,
           seq: chosenSeq === newest ? undefined : chosenSeq,
@@ -338,19 +352,27 @@ export function usePlanHistory(input: {
           read: { kind: HISTORY_READ.READING },
           readOf: undefined,
           asked: (same ? held.asked : 0) + 1,
+          listed: false,
         };
       });
     },
     [taskId, newest],
   );
   const onRetry = useCallback(() => setRetries((was) => was + 1), []);
+  // Note that a revision's sections are listed where the versions are, so opening them keeps to the list.
   const onOpenSections = (sectionsOf: number) => {
     onSelect(sectionsOf);
-    setVersion((held) => held && { ...held, opened: { seq: sectionsOf, heading: undefined } });
+    setVersion(
+      (held) => held && { ...held, opened: { seq: sectionsOf, heading: undefined }, listed: true },
+    );
   };
   const onChooseSection = (heading: string | undefined) =>
-    setVersion((held) => held?.opened && { ...held, opened: { ...held.opened, heading } });
-  const onCloseSections = () => setVersion((held) => held && { ...held, opened: undefined });
+    setVersion(
+      (held) => held?.opened && { ...held, opened: { ...held.opened, heading }, listed: false },
+    );
+  const onCloseSections = () =>
+    setVersion((held) => held && { ...held, opened: undefined, listed: true });
+  const onList = () => setVersion((held) => held && { ...held, listed: true });
 
   const onLoadEarlier = async (): Promise<boolean> => {
     if (taskId === undefined || held?.kind !== HISTORY_READ.READY || held.earlier === undefined) {
@@ -436,6 +458,8 @@ export function usePlanHistory(input: {
     onOpenSections,
     onChooseSection,
     onCloseSections,
+    listed: chosen?.listed ?? true,
+    onList,
     onRetry,
     onLoadEarlier,
     onRestore,

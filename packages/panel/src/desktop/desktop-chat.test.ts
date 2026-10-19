@@ -11,6 +11,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { sideBundles } from "../bundle-loader.js";
+import { SHELL_ROOM } from "../shell-room.js";
 import { ChatComposer } from "../tasks/chat-composer.js";
 import {
   type FixtureChat,
@@ -77,6 +78,7 @@ function mount(
       return Promise.resolve("refused" in landed ? landed.refused : undefined);
     };
     return createElement(DesktopChat, {
+      room: SHELL_ROOM.WIDE,
       accountName: "Dean Stratakos",
       tasks: tasksControl({
         workspace,
@@ -91,6 +93,8 @@ function mount(
           onClose: () => undefined,
           onChoose: setPlace,
           onShow: setPlace,
+          listed: false,
+          onList: () => undefined,
           onPost: (post) => stage((held) => stagedPost(held, post, AT)),
           onAnswer: (answer) => stage((held) => stagedAnswer(held, answer, AT)),
         },

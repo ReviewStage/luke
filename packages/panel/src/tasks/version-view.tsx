@@ -258,6 +258,7 @@ export function VersionView({
   noun = "plan",
   section,
   task,
+  lead,
 }: {
   viewing: ViewedVersion;
   /** The restore's question, held by the history around the page (`useVersionRestore`). */
@@ -272,11 +273,14 @@ export function VersionView({
   section?: number | undefined;
   /** The task the versions are of, which their mentions are read against; none for the account's template. */
   task?: MentionedTask | undefined;
+  /** What leads the bar, as the way back to the list where the version stands alone. */
+  lead?: React.ReactNode;
 }): React.JSX.Element {
   const { line } = viewing;
   return (
     <>
       <header className="desktop-toolbar">
+        {lead}
         <div className="desktop-toolbar-heading">
           <h1 className="desktop-toolbar-title">
             <Tooltip label={momentText(line.lastEdit.at)}>

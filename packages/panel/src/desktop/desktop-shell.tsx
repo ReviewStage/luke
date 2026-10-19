@@ -26,7 +26,7 @@ import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import type { NavigationHistory, WindowHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
-import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards.js";
@@ -48,6 +48,7 @@ import { DesktopAgentPage } from "./desktop-agent-page.js";
 import { DesktopChat } from "./desktop-chat.js";
 import { DesktopFactory } from "./desktop-factory.js";
 import { DesktopInbox } from "./desktop-inbox.js";
+import type { SettingsStep } from "./desktop-settings.js";
 import { DesktopSidebar } from "./desktop-sidebar.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history.js";
@@ -145,16 +146,22 @@ const SETTINGS_SKELETON = [3, 2] as const;
  * lands where the blocks stood; and Settings' own way out, so Escape pressed
  * in that frame leaves Settings as it would once drawn, rather than falling
  * through to the task behind it. It is gone as Settings stands and offers the
- * same command itself.
+ * same command itself. A narrow room hides the column Settings will hide.
  */
-function SettingsLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+function SettingsLoading({
+  onExit,
+  hidden,
+}: {
+  onExit: () => void;
+  hidden: HiddenColumns;
+}): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
   return (
     <div className="desktop-settings">
-      <nav className="settings-pages" aria-label="Settings pages">
+      <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
       </nav>
-      <section className="settings-page" aria-label="Settings">
+      <section className="settings-page" aria-label="Settings" hidden={hidden.item}>
         <div className="desktop-drag-strip" />
         <SettingsPage title={<Skeleton width={SETTINGS_SKELETON_TITLE} />}>
           <SettingsSectionsSkeleton label="Loading Settings" sections={SETTINGS_SKELETON} />
@@ -392,7 +399,8 @@ function automationsPlaceKey(place: AutomationsPlace): string {
  * press outside it and its toggle. A stage as narrow as a phone's stands the
  * window as one pane at a time (`shell-room.ts`): the sidebar is a drawer its
  * toggle opens, with no edge to peek it out, and the side panel stands only
- * full screen. Back and forward ride the left column's title-bar row,
+ * full screen, and Settings, a version history, and Chat each show their
+ * list or the item chosen in it, one at a time. Back and forward ride the left column's title-bar row,
  * the tasks' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the tasks when nothing
  * stands behind it. New task's dialog stands over the tasks or a version
@@ -409,6 +417,7 @@ export function DesktopShell({
   history,
   sidebar,
   room,
+  settingsStep,
   call,
   captions,
   settings,
@@ -421,6 +430,8 @@ export function DesktopShell({
   sidebar: SidebarCollapse;
   /** The room the panel's stage gives; narrow, the sidebar is a drawer and the side panel stands only full screen. */
   room: ShellRoom;
+  /** Whether Settings stands on its page list or a page, which a narrow room draws one at a time. */
+  settingsStep: SettingsStep;
   /** The call card, while this window is to draw one; docked by the shell wherever the window stands. */
   call: CallCardInput | undefined;
   captions: CaptionStripProps;
@@ -525,9 +536,18 @@ export function DesktopShell({
     const exitSettings = history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.TASKS);
     return (
       <div className="desktop-shell" data-room={room}>
-        <Suspense fallback={<SettingsLoading onExit={exitSettings} />}>
+        <Suspense
+          fallback={
+            <SettingsLoading
+              onExit={exitSettings}
+              hidden={hiddenColumns(room, settingsStep.listed)}
+            />
+          }
+        >
           <DesktopSettings
             sidebar={sidebar}
+            room={room}
+            step={settingsStep}
             history={history}
             settings={settings}
             call={call}
@@ -550,6 +570,7 @@ export function DesktopShell({
           <ChipCards value={chipCards}>
             <DesktopVersionHistory
               sidebar={sidebar}
+              room={room}
               history={history}
               subject={taskVersionSubject(tasks)}
               account={account}
@@ -623,6 +644,7 @@ export function DesktopShell({
             {chatOpen ? (
               <DesktopChat
                 tasks={tasks}
+                room={room}
                 accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
               />
             ) : inboxOpen ? (

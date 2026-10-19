@@ -317,7 +317,12 @@ type StandIn =
     }
   | { readonly kind: typeof STAND_IN.FACTORY }
   | { readonly kind: typeof STAND_IN.AUTOMATIONS; readonly place: AutomationsPlace }
-  | { readonly kind: typeof STAND_IN.CHAT; readonly place: ChatPlace }
+  | {
+      readonly kind: typeof STAND_IN.CHAT;
+      readonly place: ChatPlace;
+      /** Whether the rail stands rather than the place, which only a narrow room draws apart. */
+      readonly listed: boolean;
+    }
   | { readonly kind: typeof STAND_IN.ISSUES; readonly place: IssuesPlace };
 
 /** The window's Factory: whether it stands in the task's place, and the presses that open and leave it. */
@@ -386,6 +391,14 @@ interface ChatViewControl {
   readonly onRetry: () => void;
   /** For you or the channel shown, For you until another is chosen. */
   readonly place: ChatPlace;
+  /**
+   * Whether Chat stands on its rail rather than on the place shown, which
+   * only a narrow room draws apart: Chat opened does, and a place chosen or
+   * shown does not.
+   */
+  readonly listed: boolean;
+  /** Goes back from the place shown to the rail. */
+  readonly onList: () => void;
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (place: ChatPlace) => void;
@@ -1139,7 +1152,7 @@ export function useTasksTab(input: {
   const [issuePeek, setIssuePeek] = useState<string | undefined>(undefined);
   const [standIn, setStandIn] = useState<StandIn | undefined>(() =>
     input.run.fixtureMode && input.run.profile === RUN_PROFILE.CHAT
-      ? { kind: STAND_IN.CHAT, place: FOR_YOU }
+      ? { kind: STAND_IN.CHAT, place: FOR_YOU, listed: true }
       : undefined,
   );
   const inboxView = standIn?.kind === STAND_IN.INBOX ? standIn : undefined;
@@ -1324,7 +1337,7 @@ export function useTasksTab(input: {
   if (chatWorkspace !== listedWorkspace?.id) {
     setChatWorkspace(listedWorkspace?.id);
     if (standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL) {
-      setStandIn({ kind: STAND_IN.CHAT, place: FOR_YOU });
+      setStandIn({ ...standIn, place: FOR_YOU });
     }
   }
   // The task's Chat tab on screen reads the task's plan channel, which the column below says once it knows its tab.
@@ -3123,20 +3136,25 @@ export function useTasksTab(input: {
       failed: liveRun && liveChat.failed,
       onRetry: liveChat.onRetry,
       place: standIn?.kind === STAND_IN.CHAT ? standIn.place : FOR_YOU,
+      listed: standIn?.kind === STAND_IN.CHAT ? standIn.listed : true,
+      onList: () =>
+        setStandIn((held) => (held?.kind === STAND_IN.CHAT ? { ...held, listed: true } : held)),
       onOpen: guard(() => {
         setHistoryFor(undefined);
         setStandIn((held) =>
-          held?.kind === STAND_IN.CHAT ? held : { kind: STAND_IN.CHAT, place: FOR_YOU },
+          held?.kind === STAND_IN.CHAT
+            ? held
+            : { kind: STAND_IN.CHAT, place: FOR_YOU, listed: true },
         );
       }),
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (place) =>
         setStandIn((held) =>
-          held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place } : held,
+          held?.kind === STAND_IN.CHAT ? { kind: STAND_IN.CHAT, place, listed: false } : held,
         ),
       onShow: guard((place: ChatPlace) => {
         setHistoryFor(undefined);
-        setStandIn({ kind: STAND_IN.CHAT, place });
+        setStandIn({ kind: STAND_IN.CHAT, place, listed: false });
       }),
       onPost: (post) =>
         liveRun

@@ -157,6 +157,7 @@ function Window(): React.JSX.Element {
     },
     sidebar,
     room,
+    settingsStep: { listed: true, onList: ignore },
     call: undefined,
     captions: {
       caption: { content: undefined, shown: false },

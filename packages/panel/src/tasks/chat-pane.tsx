@@ -360,12 +360,15 @@ function whereWords(chat: ChatAnswer, names: ChatNames, entry: ForYouEntry): str
 function PlaceHead({
   title,
   meta,
+  lead,
 }: {
   title: string;
   meta: string | undefined;
+  lead: React.ReactNode;
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar chat-head">
+      {lead}
       <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.DIALOG} truncate>
         {title}
       </Text>
@@ -419,6 +422,8 @@ export function ChatPane({
   openLink,
   onPost,
   onAnswer,
+  lead,
+  hidden,
 }: {
   chat: ChatAnswer;
   names: ChatNames;
@@ -431,6 +436,10 @@ export function ChatPane({
   onPost: (post: ChatPost) => Promise<string | undefined>;
   /** Answers an ask; answers why it was refused, or nothing once it is taken. */
   onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+  /** What leads the place's head: the way back to the rail, where the place stands alone. */
+  lead?: React.ReactNode;
+  /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
+  hidden?: boolean;
 }): React.JSX.Element {
   const targets = chatTargets(chat, names);
   const keywords = chatKeywords(chat, names);
@@ -449,8 +458,8 @@ export function ChatPane({
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
     const entries = forYou(chat);
     return (
-      <section className="chat-stream ph-no-capture" aria-label="For you">
-        <PlaceHead title="For you" meta={FOR_YOU_META} />
+      <section className="chat-stream ph-no-capture" aria-label="For you" hidden={hidden}>
+        <PlaceHead title="For you" meta={FOR_YOU_META} lead={lead} />
         {entries.length === 0 ? (
           <EmptyState icon={<AtSignIcon />}>{NOTHING_WAITS}</EmptyState>
         ) : (
@@ -475,8 +484,8 @@ export function ChatPane({
   const threads = channelThreads(chat, channel.id);
   const title = channelTitle(chat, names, channel);
   return (
-    <section className="chat-stream ph-no-capture" aria-label={title}>
-      <PlaceHead title={title} meta={channelMeta(chat, names, channel)} />
+    <section className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
+      <PlaceHead title={title} meta={channelMeta(chat, names, channel)} lead={lead} />
       {threads.length === 0 ? (
         <EmptyState icon={channel.kind === CHANNEL_KIND.DM ? <AtSignIcon /> : <HashIcon />}>
           {NOTHING_POSTED}
