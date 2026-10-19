@@ -121,7 +121,13 @@ test("the rail lists the measures, with Animations after them in its footer at i
 
   const [bar, rail] = Array.from(page.querySelectorAll('nav[aria-label="Admin sections"]'));
   if (bar === undefined || rail === undefined) throw new Error("No navigation");
-  expect(sectionNames(rail)).toEqual(["Overview", "Workspaces", "Users", "Animations"]);
+  expect(sectionNames(rail)).toEqual([
+    "Overview",
+    "Reliability",
+    "Workspaces",
+    "Users",
+    "Animations",
+  ]);
   const animations = Array.from(rail.querySelectorAll("a")).find(
     (link) => link.textContent === "Animations",
   );
@@ -129,6 +135,7 @@ test("the rail lists the measures, with Animations after them in its footer at i
   // The phone's bar carries the measures alone.
   expect(Array.from(bar.querySelectorAll("a"), (link) => link.getAttribute("aria-label"))).toEqual([
     "Overview",
+    "Reliability",
     "Workspaces",
     "Users",
   ]);
@@ -170,7 +177,7 @@ test("the account menu opens on its avatar, and Escape or a press outside closes
 
 test("a press on Reliability opens it as the current page, under its own address", async () => {
   const page = await openAdmin();
-  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Dashboard"));
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
 
   const reliability = page.querySelector<HTMLAnchorElement>('nav a[aria-label="Reliability"]');
   if (!reliability) throw new Error("No Reliability link");
