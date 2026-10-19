@@ -57,6 +57,7 @@ import {
   FOLD_CHORD,
   LIST_WORDS,
   useChangesList,
+  VIEWED_CHORD,
 } from "./changes-list.js";
 import {
   CHANGES_WORDS,
@@ -693,11 +694,16 @@ function ViewedBox({
   onToggle: () => void;
 }): React.JSX.Element {
   return (
-    <span className="diff-list-viewed">
-      <Checkbox checked={viewed} onChange={onToggle}>
-        {LIST_WORDS.VIEWED}
-      </Checkbox>
-    </span>
+    <Tooltip
+      label={viewed ? LIST_WORDS.UNMARK_VIEWED : LIST_WORDS.MARK_VIEWED}
+      chord={VIEWED_CHORD}
+    >
+      <span className="diff-list-viewed">
+        <Checkbox checked={viewed} onChange={onToggle}>
+          {LIST_WORDS.VIEWED}
+        </Checkbox>
+      </span>
+    </Tooltip>
   );
 }
 

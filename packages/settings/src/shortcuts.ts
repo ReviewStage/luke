@@ -179,6 +179,8 @@ export const SHORTCUT_KEY = {
   J: { accelerator: "J", glyph: "J", key: "j", code: "KeyJ" },
   I: { accelerator: "I", glyph: "I", key: "i", code: "KeyI" },
   U: { accelerator: "U", glyph: "U", key: "u", code: "KeyU" },
+  // A bare V is Files changed's own, marking the file stood on viewed, as GitHub's does.
+  V: { accelerator: "V", glyph: "V", key: "v", code: "KeyV" },
   // ⌘L is New task's own, opening its Linear chip from the name field; no app command holds it.
   L: { accelerator: "L", glyph: "L", key: "l", code: "KeyL" },
   ZERO: { accelerator: "0", glyph: "0", key: "0", code: "Digit0" },

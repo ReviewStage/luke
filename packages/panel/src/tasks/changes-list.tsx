@@ -1,6 +1,6 @@
 import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
-import { IconButton } from "@luke/ui";
+import { BUTTON_SIZE, IconButton } from "@luke/ui";
 import { ChevronRightIcon } from "lucide-react";
 import {
   type ReactNode,
@@ -69,6 +69,9 @@ export const FOLD_CHORD = {
   ALL: { key: SHORTCUT_KEY.SEMICOLON, plain: true, shift: true },
 } as const satisfies Record<string, ShortcutChord>;
 
+/** The key that marks the file stood on viewed, or unmarks it, as GitHub's own V does. */
+export const VIEWED_CHORD = { key: SHORTCUT_KEY.V, plain: true } as const satisfies ShortcutChord;
+
 /** What the list says where a filter keeps no file. */
 export const LIST_WORDS = {
   NONE_KEPT: "No changed file's path holds that.",
@@ -79,6 +82,8 @@ export const LIST_WORDS = {
   SHOW_SOURCE: "Show source",
   SHOW_IMAGE: "Show image",
   VIEWED: "Viewed",
+  MARK_VIEWED: "Mark as viewed",
+  UNMARK_VIEWED: "Mark as not viewed",
   /** How far through the files the member is, as GitHub counts it. */
   viewedOf: (viewed: number, files: number) => `${viewed} / ${files} viewed`,
 } as const;
@@ -335,6 +340,23 @@ export function useChangesList(
   };
 }
 
+/** A path as a header names it: its folder, quiet, then its name. */
+function PathParts({ path }: { path: string }): React.JSX.Element {
+  const cut = path.lastIndexOf("/") + 1;
+  return (
+    <>
+      {cut === 0 ? null : (
+        <span className="diff-list-folder">
+          <bdi>{path.slice(0, cut)}</bdi>
+        </span>
+      )}
+      <span className="diff-list-name">
+        <bdi>{path.slice(cut)}</bdi>
+      </span>
+    </>
+  );
+}
+
 /** A pointer arriving over a control, as the window says it. */
 function pointerOver(): PointerEvent {
   return new PointerEvent("pointerover", { bubbles: true, pointerType: "mouse" });
@@ -390,6 +412,7 @@ export function FileHead({
       ref={foldRef}
       icon={<ChevronRightIcon className="diff-list-fold" aria-hidden="true" />}
       label={label}
+      size={BUTTON_SIZE.COMPACT}
       aria-expanded={!collapsed}
       aria-keyshortcuts={shortcutAria(FOLD_CHORD.ONE)}
       onClick={onToggle}
@@ -439,11 +462,11 @@ export function FileHead({
         {near ? <Tooltip label={STATUS_WORDS[file.status]}>{letter}</Tooltip> : letter}
         <span className="diff-list-path">
           {file.previousPath === null ? null : (
-            <>
-              <bdi>{file.previousPath}</bdi> →{" "}
-            </>
+            <span className="diff-list-folder">
+              <bdi>{file.previousPath}</bdi> →{"\u00a0"}
+            </span>
           )}
-          <bdi>{file.path}</bdi>
+          <PathParts path={file.path} />
         </span>
         <LinesChanged additions={file.additions} deletions={file.deletions} />
         {controls}
