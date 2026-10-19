@@ -4,6 +4,8 @@ import { it } from "@effect/vitest";
 import { integrationStatusesViewSchema } from "@luke/features/integration-view";
 import { INTEGRATION_PROVIDER, INTEGRATION_STATUS } from "@luke/features/integration-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { askAct } from "@luke/panel/act";
+import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
 import { THEME } from "@luke/settings";
 import { Context, Effect, Layer, Schema } from "effect";
 import { afterEach } from "vitest";
@@ -80,4 +82,20 @@ it.effect(
         );
       }),
     ),
+);
+
+it.effect("an act that rides the act port reaches the service through the tab's own channel", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+      installAppBridge(bridge);
+      installActPort(actPort);
+
+      const listed = yield* Effect.promise(() =>
+        askAct(ACT_KIND.ISSUES_LIST, { workspaceId: "workspace-ada" }),
+      );
+
+      assert.deepEqual(listed, { issues: [] });
+    }),
+  ),
 );

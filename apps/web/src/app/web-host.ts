@@ -20,6 +20,7 @@
 
 import { feedbackDelivery } from "@luke/features/feedback";
 import { highlightSnippet, runModeFor } from "@luke/host";
+import { createActPortHandler } from "@luke/host/act-port";
 import {
   createHostActRouter,
   type HostActDependencies,
@@ -130,9 +131,11 @@ const REFUSED_KINDS = [
 /** The page every act is from: a tab holds one panel and nothing else. */
 type WebSender = Window;
 
-/** What the tab's root reads of the host once it stands: the bridge the panel acts through, and what its platform answers. */
+/** What the tab's root reads of the host once it stands: the bridge and the act port the panel acts through, and what its platform answers. */
 export interface WebHost {
   readonly bridge: AppBridge;
+  /** The panel's end of its act port, for the acts that ride oRPC (`@luke/host/contract`). */
+  readonly actPort: MessagePort;
   readonly platform: AppPlatform;
 }
 
@@ -286,10 +289,38 @@ function hostRowDependencies(
     codingAgents: { host, notices },
     integrations: { host },
     automations: { host },
-    issues: { host },
     factory: { host },
   };
 }
+
+/**
+ * The act port as the tab opens it: a channel in the page, the host's end
+ * upgraded with the act port's handler and the panel's end answered, as the
+ * desktop's window root and main open one across a process. The panel is
+ * the only page asking, from this build's own origin, so every call is the
+ * panel's and trusted; the procedures' effects run on the tab's runtime.
+ * Both ends close with the host's scope.
+ */
+const servedActPort = (operator: OperatorClient, services: Context.Context<never>) =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const channel = new MessageChannel();
+      createActPortHandler({ issues: { host: operator.host } }).upgrade(channel.port2, {
+        context: () => ({
+          actor: { sender: window, panel: true, voice: false, call: false },
+          trusted: true,
+          "effect/context": services,
+        }),
+      });
+      channel.port2.start();
+      return channel;
+    }),
+    (channel) =>
+      Effect.sync(() => {
+        channel.port1.close();
+        channel.port2.close();
+      }),
+  ).pipe(Effect.map((channel) => channel.port1));
 
 /** The host standing in the tab, its document, its bridge, and the platform beside it. */
 const composedWeb = (run: WebHostOptions["run"]) =>
@@ -365,8 +396,10 @@ const composedWeb = (run: WebHostOptions["run"]) =>
         report,
       });
       events = made.events;
+      const actPort = yield* servedActPort(operator, services);
       return {
         bridge: made.bridge,
+        actPort,
         platform: webPlatform({ recordSurfaceEvent: count }),
         operator,
       };
@@ -397,7 +430,11 @@ export function composeWeb(
   const launched = Layer.unwrap(
     Effect.map(ComposedWebTag, (web) =>
       Layer.mergeAll(
-        Layer.succeed(WebHostTag, { bridge: web.bridge, platform: web.platform }),
+        Layer.succeed(WebHostTag, {
+          bridge: web.bridge,
+          actPort: web.actPort,
+          platform: web.platform,
+        }),
         effectServiceLayer(web.operator, report),
       ).pipe(Layer.provideMerge(hostStandingLayer)),
     ),

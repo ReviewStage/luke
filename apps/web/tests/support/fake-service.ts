@@ -1,5 +1,5 @@
 /**
- * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, and nothing else, answered over a fake `HttpClient`.
+ * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, an empty issue list, and nothing else, answered over a fake `HttpClient`.
  *
  * The Slack sign-in is settled only by the settling POST, as the service
  * answers a cookie caller. The web client's host calls the origin that
@@ -77,6 +77,9 @@ export function fakeService(options: { readonly signedIn: boolean }): FakeServic
     }
     if (pathname === "/api/account/integrations/settle" && method === "POST" && signedIn) {
       return json({ integrations: { slack: "connected" } });
+    }
+    if (pathname === "/api/issues" && method === "GET" && signedIn) {
+      return json({ issues: [] });
     }
     if (pathname === "/api/plans" && method === "GET") {
       return signedIn ? json({ plans: [LISTED_TASK] }) : json({ error: "unauthorized" }, 401);

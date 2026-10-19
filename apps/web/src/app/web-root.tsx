@@ -11,7 +11,7 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import type { DuplicateGatewayMethod, HostTag } from "@luke/host/effect";
 import { App } from "@luke/panel/app";
-import { installAppBridge } from "@luke/panel/app-bridge";
+import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
 import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
@@ -57,6 +57,7 @@ export async function mountWebApp(
     const web = await runtime.runPromise(WebHostTag);
     // The address the tab was opened at is said once, as the link it is.
     installAppBridge(withLoadLink(web.bridge));
+    installActPort(web.actPort);
     installAppPlatform(web.platform);
     installShellBundles(WEB_BUNDLES);
     // The panel's back and forward are the browser's own, each step in the tab's address.
