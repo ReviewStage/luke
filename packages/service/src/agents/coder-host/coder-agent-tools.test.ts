@@ -2480,6 +2480,19 @@ test("create_section, update_task's sectionId, and delete_section keep the calle
     sectionId: growth,
   });
   assert.equal(both.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(both));
+  // An archived task takes no section, unless the same call brings it back.
+  await database.run(updateTask(teammates.userId, taskIds.invitations, { archived: true }));
+  assert.deepEqual(await move(taskIds.invitations, growth), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: UPDATE_TASK_REFUSAL.ARCHIVED,
+  });
+  const back = await call(CODER_TOOL.UPDATE_TASK, {
+    taskId: taskIds.invitations,
+    archived: false,
+    sectionId: growth,
+  });
+  assert.equal(back.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(back));
+  await move(taskIds.invitations, null, "call-out");
   assert.deepEqual(await call(CODER_TOOL.DELETE_SECTION, { sectionId: growth }), {
     status: ACTION_RESULT_STATUS.ACCEPTED,
     section: { id: growth, title: "Growth" },

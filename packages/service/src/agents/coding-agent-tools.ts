@@ -284,8 +284,8 @@ export const UPDATE_TASK_REFUSAL = {
     "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them, the archived ones too with includeArchived.`,
   ARCHIVED:
-    "Not changed: that task is archived, so it takes no new name or repository; bring it back in " +
-    "the same call with archived false, or leave it as it is.",
+    "Not changed: that task is archived, so it takes no new name, repository, or section; bring " +
+    "it back in the same call with archived false, or leave it as it is.",
   AGENTS_WORKING:
     "Not archived: an agent on that task is still starting or working, and archiving the task " +
     "archives its agents with it, which would stop a turn no one gets back. Wait until they are " +
@@ -1887,12 +1887,32 @@ export function runUpdateTask(
       // Note that the task's agents are archived with it, so one still at work, read under its
       // conversation's lock, refuses the archive rather than being stopped from here.
       const guard = changes.archived === true ? standsStopped : undefined;
-      const unchanged = Effect.succeed(Option.some(read.value.task));
-      const updating =
-        Object.keys(changes).length === 0
-          ? unchanged
-          : updateTask(userId, taskId, asWritten, undefined, guard);
-      const changed = yield* updating.pipe(
+      // An archived task is moved into a section only where the same call brings it back.
+      const staysArchived = read.value.task.archivedAt !== undefined && changes.archived !== false;
+      if (placing !== undefined && !placing.success.stands && staysArchived) {
+        return agentToolRejected(UPDATE_TASK_REFUSAL.ARCHIVED);
+      }
+      // The task's change and its place in the sidebar are one transaction, so a place refused, its
+      // section deleted meanwhile, takes the change back with it.
+      const writing = Effect.gen(function* () {
+        const task =
+          Object.keys(changes).length === 0
+            ? Option.some(read.value.task)
+            : yield* updateTask(userId, taskId, asWritten, undefined, guard);
+        if (Option.isSome(task) && placing !== undefined && !placing.success.stands) {
+          // The sidebar's own write puts it in the section named, or in none, as the developer's drag does.
+          const placed = yield* writeTaskSections(userId, {
+            kind: TASK_SECTION_WRITE.PLACE,
+            taskId,
+            sectionId: placing.success.section?.id ?? null,
+          });
+          if (Option.isNone(placed)) return yield* Effect.fail(new TaskPlaceRefused());
+        }
+        return task;
+      });
+      const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
+        client.withTransaction(writing),
+      ).pipe(
         Effect.map(
           (task): Result.Result<Option.Option<StoredTask["task"]>, string> => Result.succeed(task),
         ),
@@ -1902,18 +1922,12 @@ export function runUpdateTask(
         Effect.catchTag("TaskAgentUnstopped", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.AGENTS_WORKING)),
         ),
+        Effect.catchTag("TaskPlaceRefused", () =>
+          Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
+        ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
       if (Option.isNone(changed.success)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
-      // The sidebar's own write puts it in the section named, or in none, as the developer's drag does.
-      if (placing !== undefined && !placing.success.stands) {
-        const placed = yield* writeTaskSections(userId, {
-          kind: TASK_SECTION_WRITE.PLACE,
-          taskId,
-          sectionId: placing.success.section?.id ?? null,
-        });
-        if (Option.isNone(placed)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_SECTION);
-      }
       return yield* taskUpdateAnswer(
         userId,
         changed.success.value,
@@ -2016,6 +2030,14 @@ export function runStopAgent(
 /** A change to an agent that found no row to write: the agent left the caller's reach as it was changed. */
 class AgentChangeLost extends Data.TaggedError("AgentChangeLost") {}
 
+/** A task's place in a section refused inside its change's transaction, its section gone meanwhile, which takes the change back. */
+class TaskPlaceRefused extends Data.TaggedError("TaskPlaceRefused") {}
+
+/** An archive or an unarchive refused inside a change's transaction, its words for the model, which takes every change back. */
+class AgentChangeRefused extends Data.TaggedError("AgentChangeRefused")<{
+  readonly refusal: string;
+}> {}
+
 /** The changes a call asks of an agent, each already read and its choice already the catalog's. */
 interface AgentChanges {
   readonly title: string | undefined;
@@ -2101,20 +2123,31 @@ export function runUpdateAgent(
         return agentToolRejected(UPDATE_AGENT_REFUSAL.PIN_ON_TASK);
       }
       // An archive is checked first, so one refused, its agent working, leaves every change asked unwritten.
-      if (archived !== undefined) {
-        const archive = yield* archiveChange(caller, found.value.agent, archived, reason);
-        if (archive !== undefined) return agentToolRejected(archive);
-      }
-      const written = yield* changedAgent(userId, agentId, {
-        title,
-        choice,
-        pinned,
-        disabledServers,
-      }).pipe(
-        Effect.map(Result.succeed),
-        Effect.catchTag("AgentChangeLost", () => Effect.succeed(Result.fail(undefined))),
+      // The archive and every other change are one transaction: a refused archive writes nothing, and
+      // a change that finds no row takes the archive back with it.
+      const written = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
+        client.withTransaction(
+          Effect.gen(function* () {
+            if (archived !== undefined) {
+              const refusal = yield* archiveChange(caller, found.value.agent, archived, reason);
+              if (refusal !== undefined)
+                return yield* Effect.fail(new AgentChangeRefused({ refusal }));
+            }
+            return yield* changedAgent(userId, agentId, { title, choice, pinned, disabledServers });
+          }),
+        ),
+      ).pipe(
+        Effect.map(
+          (changed): Result.Result<Option.Option<CodingAgent>, string> => Result.succeed(changed),
+        ),
+        Effect.catchTag("AgentChangeLost", () =>
+          Effect.succeed(Result.fail(CODING_AGENT_TOOL_REFUSAL.NO_AGENT)),
+        ),
+        Effect.catchTag("AgentChangeRefused", (refused) =>
+          Effect.succeed(Result.fail(refused.refusal)),
+        ),
       );
-      if (Result.isFailure(written)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.NO_AGENT);
+      if (Result.isFailure(written)) return agentToolRejected(written.failure);
       // The agent as it now stands, its archive among it, which a change left unwritten does not answer.
       const now = Option.isSome(written.success)
         ? written.success
