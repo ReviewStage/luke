@@ -42,7 +42,7 @@ export function useChoiceKeys<Value extends string>({
     const elements = [...event.currentTarget.querySelectorAll<HTMLElement>(`[role="${role}"]`)];
     const focused =
       event.target instanceof Element ? event.target.closest(`[role="${role}"]`) : null;
-    const on = elements.findIndex((element) => element === focused);
+    const on = focused instanceof HTMLElement ? elements.indexOf(focused) : -1;
     const from = on >= 0 ? on : options.findIndex((option) => option.value === value);
     const to = choiceKeyTarget(event, from, options, role);
     const next = to === undefined ? undefined : options[to];

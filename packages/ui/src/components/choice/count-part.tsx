@@ -53,7 +53,6 @@ export function CountParts({ parts }: { parts: readonly CountPart[] }): React.JS
   return (
     <>
       {parts.map((part, at) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: a count's parts are drawn in a fixed order and never reorder.
         <Fragment key={at}>
           {at === 0 ? null : " "}
           <CountPartView part={part} />
