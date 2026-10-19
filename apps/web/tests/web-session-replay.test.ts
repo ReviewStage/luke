@@ -133,6 +133,16 @@ test("a production build with the site's key records the tab under the desktop's
   assert.equal(identify?.properties.app_name, "web");
   assert.equal(identify?.properties.$current_url, `${location.origin}/app`);
 
+  // An address on this origin leaves as the app's own; another host's whose
+  // name merely begins with this origin's leaves as it came.
+  posthog.capture("probe", {
+    here: `${location.origin}/acme/plan/plan-123`,
+    elsewhere: `${location.origin}.example.test/page`,
+  });
+  const probe = sent.find((event) => event.event === "probe");
+  assert.equal(probe?.properties.here, `${location.origin}/app`);
+  assert.equal(probe?.properties.elsewhere, `${location.origin}.example.test/page`);
+
   // An account deleted stands the recording down, and leaves the site's own
   // counting of the same project, which shares this origin's storage, as it was:
   // neither opted out nor reset.
