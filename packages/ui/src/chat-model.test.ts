@@ -423,3 +423,15 @@ test("a row previews a message as one plain line: a chip by its label, no Markdo
   });
   assert.equal(previewWords(said), "Heads up @agent-2 read memberships mock.png");
 });
+
+test("a preview keeps what is no Markdown mark as written: an identifier's underscores, a lone star, and a code span's words", () => {
+  const said = message(1, MARIA, GENERAL.id, {
+    blocks: [
+      {
+        type: CHAT_BLOCK.MARKDOWN,
+        text: "Set user_id to 2 * 3, _now_, ~~not~~ via `a_b*c` __here__",
+      },
+    ],
+  });
+  assert.equal(previewWords(said), "Set user_id to 2 * 3, now, not via a_b*c here");
+});

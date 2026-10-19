@@ -1044,6 +1044,11 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
     /^\S.*: .+/u,
     "the row previews its last message as who said it and what",
   );
+  assert.equal(
+    page.querySelector(".chat-rail li li"),
+    null,
+    "each place is one item of its group's list, never an item inside another",
+  );
   act(() => general.click());
   const head = [
     ...page.querySelectorAll<HTMLButtonElement>(".sidebar-repository-header button"),
@@ -1053,4 +1058,13 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   const channels = rail(page);
   const after = channels.indexOf("# Channels");
   assert.deepEqual(channels.slice(after, after + 3), ["# Channels", "▸ general", "# Tasks"]);
+  // Folded, a group whose places wait unread says how many at rest, as the Inbox's folder counts do, so the dot it hid is not lost.
+  const tasks = [
+    ...page.querySelectorAll<HTMLButtonElement>(".sidebar-repository-header button"),
+  ].find((each) => headName(each) === "Tasks");
+  assert.ok(tasks, "Tasks heads its group");
+  act(() => tasks.click());
+  const count = tasks.querySelector<HTMLElement>(".luke-nav-item-count");
+  assert.equal(count?.dataset["shown"], "always", "the folded group's count stands at rest");
+  assert.match(count?.textContent ?? "", /^1 unread/u);
 });

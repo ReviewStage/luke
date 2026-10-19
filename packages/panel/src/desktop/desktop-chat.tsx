@@ -137,8 +137,16 @@ const RAIL_GROUP = {
   DIRECT: "direct",
 } as const;
 
-/** A group of the rail as drawn: its key, name, glyph, places, and whether it starts folded. */
+/** Which of the rail's groups a group is among: the rail's own, or the tasks' as the sidebar groups them, each keyed apart. */
+const RAIL_SPACE = {
+  RAIL: "rail",
+  TASKS: "tasks",
+} as const;
+type RailSpace = (typeof RAIL_SPACE)[keyof typeof RAIL_SPACE];
+
+/** A group of the rail as drawn: which groups it is among, its key there, name, glyph, places, and whether it starts folded. */
 interface RailGroupShown {
+  readonly space: RailSpace;
   readonly key: string;
   readonly name: string;
   readonly glyph: React.ReactNode;
@@ -146,51 +154,73 @@ interface RailGroupShown {
   readonly foldedAtFirst: boolean;
 }
 
-/** The rail's groups in order, as the sidebar's stand: the channels, the tasks' as the sidebar groups the tasks, the archived folded, and the direct messages. */
-function railGroups(rail: ReturnType<typeof chatRail>): readonly RailGroupShown[] {
-  const groups: RailGroupShown[] = [
-    {
-      key: RAIL_GROUP.CHANNELS,
-      name: "Channels",
-      glyph: <HashIcon />,
-      rows: rail.channels,
-      foldedAtFirst: false,
-    },
-    ...rail.tasks.map((group) => ({
-      key: `tasks:${group.key}`,
-      name: group.title ?? "Tasks",
-      glyph: <DocumentIcon />,
-      rows: group.rows,
-      foldedAtFirst: false,
-    })),
-    {
-      key: RAIL_GROUP.ARCHIVED,
-      name: "Archived",
-      glyph: <ArchiveIcon />,
-      rows: rail.archived,
-      foldedAtFirst: true,
-    },
-    {
-      key: RAIL_GROUP.DIRECT,
-      name: "Direct messages",
-      glyph: <AtSignIcon />,
-      rows: rail.direct,
-      foldedAtFirst: false,
-    },
-  ];
-  return groups.filter((group) => group.rows.length > 0);
+/** The rail's groups as drawn, in three runs: those before the tasks', the tasks', and those after. */
+interface RailGroupsShown {
+  readonly lead: readonly RailGroupShown[];
+  readonly tasks: readonly RailGroupShown[];
+  readonly trail: readonly RailGroupShown[];
 }
 
-/** Which of the rail's groups stand folded, for as long as Chat stands: each as it starts until toggled. */
-function useRailFolds() {
-  const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
+/** The rail's groups in order, as the sidebar's stand: the channels, the tasks' as the sidebar groups the tasks, then the archived folded and the direct messages, each run drawn as its own list so a key is only ever its own group's. */
+function railGroups(rail: ReturnType<typeof chatRail>): RailGroupsShown {
+  const held = (group: RailGroupShown) => group.rows.length > 0;
   return {
-    folded: (key: string, atFirst: boolean) => atFirst !== toggled.has(key),
-    toggle: (key: string) =>
+    lead: [
+      {
+        space: RAIL_SPACE.RAIL,
+        key: RAIL_GROUP.CHANNELS,
+        name: "Channels",
+        glyph: <HashIcon />,
+        rows: rail.channels,
+        foldedAtFirst: false,
+      } satisfies RailGroupShown,
+    ].filter(held),
+    tasks: rail.tasks
+      .map(
+        (group): RailGroupShown => ({
+          space: RAIL_SPACE.TASKS,
+          key: group.key,
+          name: group.title ?? "Tasks",
+          glyph: <DocumentIcon />,
+          rows: group.rows,
+          foldedAtFirst: false,
+        }),
+      )
+      .filter(held),
+    trail: [
+      {
+        space: RAIL_SPACE.RAIL,
+        key: RAIL_GROUP.ARCHIVED,
+        name: "Archived",
+        glyph: <ArchiveIcon />,
+        rows: rail.archived,
+        foldedAtFirst: true,
+      } satisfies RailGroupShown,
+      {
+        space: RAIL_SPACE.RAIL,
+        key: RAIL_GROUP.DIRECT,
+        name: "Direct messages",
+        glyph: <AtSignIcon />,
+        rows: rail.direct,
+        foldedAtFirst: false,
+      } satisfies RailGroupShown,
+    ].filter(held),
+  };
+}
+
+/** Which of the rail's groups stand folded, for as long as Chat stands: each as it starts until toggled, the toggled kept apart for each space. */
+function useRailFolds() {
+  const [toggled, setToggled] = useState<Readonly<Record<RailSpace, ReadonlySet<string>>>>({
+    [RAIL_SPACE.RAIL]: new Set(),
+    [RAIL_SPACE.TASKS]: new Set(),
+  });
+  return {
+    folded: (group: RailGroupShown) => group.foldedAtFirst !== toggled[group.space].has(group.key),
+    toggle: (group: RailGroupShown) =>
       setToggled((was) => {
-        const next = new Set(was);
-        if (!next.delete(key)) next.add(key);
-        return next;
+        const next = new Set(was[group.space]);
+        if (!next.delete(group.key)) next.add(group.key);
+        return { ...was, [group.space]: next };
       }),
   };
 }
@@ -240,22 +270,20 @@ function RailRow({
     );
   const said = latest === undefined ? "" : previewWords(latest);
   return (
-    <li>
-      <PlaceRow
-        mark={mark}
-        title={title}
-        preview={
-          latest === undefined
-            ? undefined
-            : `${actorName(actorOf(latest.authorId))}${said === "" ? "" : `: ${said}`}`
-        }
-        at={latest?.postedAt}
-        now={now}
-        unread={row.unread > 0}
-        current={current}
-        onChoose={onChoose}
-      />
-    </li>
+    <PlaceRow
+      mark={mark}
+      title={title}
+      preview={
+        latest === undefined
+          ? undefined
+          : `${actorName(actorOf(latest.authorId))}${said === "" ? "" : `: ${said}`}`
+      }
+      at={latest?.postedAt}
+      now={now}
+      unread={row.unread > 0}
+      current={current}
+      onChoose={onChoose}
+    />
   );
 }
 
@@ -339,6 +367,7 @@ function RailGroup({
         folded={folded}
         count={rows.filter((each) => each.unread > 0).length}
         noun={UNREAD_NOUN}
+        steady
         onToggle={onToggle}
       />
       {drawn.length === 0 ? null : <ul className="sidebar-tasks">{drawn.map(row)}</ul>}
@@ -433,6 +462,18 @@ function ChatView({
       onChoose={() => view.onChoose({ kind: CHAT_PLACE.CHANNEL, channelId: each.channel.id })}
     />
   );
+  const group = (shown: RailGroupShown) => (
+    <RailGroup
+      key={shown.key}
+      name={shown.name}
+      glyph={shown.glyph}
+      rows={shown.rows}
+      folded={folds.folded(shown)}
+      onToggle={() => folds.toggle(shown)}
+      row={row}
+      current={(each) => shows(view.place, each)}
+    />
+  );
   return (
     <div className="chat-view">
       <nav
@@ -454,31 +495,20 @@ function ChatView({
         <ScrollArea fade={SCROLL_FADE.START}>
           <div className="chat-rail-body">
             <ul className="sidebar-tasks">
-              <li>
-                <PlaceRow
-                  mark={<AtSignIcon />}
-                  title="For you"
-                  preview={rail.forYou === 0 ? NOTHING_WAITS : waitingWords(rail.forYou)}
-                  at={undefined}
-                  now={now}
-                  unread={rail.forYou > 0}
-                  current={view.place.kind === CHAT_PLACE.FOR_YOU}
-                  onChoose={() => view.onChoose(FOR_YOU)}
-                />
-              </li>
-            </ul>
-            {groups.map((group) => (
-              <RailGroup
-                key={group.key}
-                name={group.name}
-                glyph={group.glyph}
-                rows={group.rows}
-                folded={folds.folded(group.key, group.foldedAtFirst)}
-                onToggle={() => folds.toggle(group.key)}
-                row={row}
-                current={(each) => shows(view.place, each)}
+              <PlaceRow
+                mark={<AtSignIcon />}
+                title="For you"
+                preview={rail.forYou === 0 ? NOTHING_WAITS : waitingWords(rail.forYou)}
+                at={undefined}
+                now={now}
+                unread={rail.forYou > 0}
+                current={view.place.kind === CHAT_PLACE.FOR_YOU}
+                onChoose={() => view.onChoose(FOR_YOU)}
               />
-            ))}
+            </ul>
+            {groups.lead.map(group)}
+            {groups.tasks.map(group)}
+            {groups.trail.map(group)}
           </div>
         </ScrollArea>
         {room === SHELL_ROOM.NARROW ? null : <SidebarResizeEdge edge={edge} />}
