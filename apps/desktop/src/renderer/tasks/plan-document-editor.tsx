@@ -1,5 +1,6 @@
 import { useAtom, useAtomValue } from "@effect/atom-react";
 import { decodeMention } from "@luke/features/mention-link";
+import { PLAN_COMMENT_SCOPE } from "@luke/features/plan-comment-wire";
 import {
   CONFLICT_NOTE,
   DOCUMENT_EDITOR_STATE,
@@ -109,11 +110,10 @@ function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
 export function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
-  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item.
+  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item; a comment's marked words open its thread and the editor at them alike.
   return !(
     target instanceof Element &&
-    target.closest("a, button, input, [data-mention-ref], .plan-unit-row, .plan-comment-mark") !==
-      null
+    target.closest("a, button, input, [data-mention-ref], .plan-unit-row") !== null
   );
 }
 
@@ -724,7 +724,13 @@ export function PlanDocumentEditor({
       : comments.threads.flatMap((thread) =>
           thread.anchor === undefined || !openThread(thread)
             ? []
-            : [{ thread: thread.id, ...thread.anchor }],
+            : [
+                {
+                  thread: thread.id,
+                  ...thread.anchor,
+                  block: thread.scope === PLAN_COMMENT_SCOPE.BLOCK,
+                },
+              ],
         );
   useMergedAnswers(editor, editing, task, handle);
   const module = useAtomValue(useSideBundles().planEditor);

@@ -648,6 +648,7 @@ function ThreadCard({
   onOpen,
   onClose,
   quote = false,
+  pointed = false,
 }: {
   thread: PlanCommentThread;
   open: boolean;
@@ -656,6 +657,8 @@ function ThreadCard({
   onClose: () => void;
   /** Whether the quote stands over it, as in the Comments tab, where its words are not beside it. */
   quote?: boolean;
+  /** Whether the pointer is on the thread's words, which the card at rest answers as it answers the pointer itself. */
+  pointed?: boolean;
 }): React.JSX.Element {
   const now = useMinute();
   const [sending, setSending] = useState(false);
@@ -676,8 +679,24 @@ function ThreadCard({
     const faces = [
       ...new Map(replies.map((entry) => [JSON.stringify(entry.writer), entry.writer])).values(),
     ];
+    // Note that the whole card at rest is one press that opens it, but for what is a press of its own inside it, a writer's name say; its button is the keyboard's way in.
+    const pressed = (event: React.MouseEvent<HTMLDivElement>) => {
+      const inner =
+        event.target instanceof Element
+          ? event.target.closest("a, button, [role='button'], [role='menuitem']")
+          : null;
+      if (inner === null || inner.classList.contains("comment-open")) onOpen();
+    };
     return (
-      <div className="comment-card" data-open="false" data-thread={thread.id}>
+      // biome-ignore lint/a11y/noStaticElementInteractions: the card's own button takes the keyboard, and this widens its press to the card
+      // biome-ignore lint/a11y/useKeyWithClickEvents: the card's own button takes the keyboard, and this widens its press to the card
+      <div
+        className="comment-card"
+        data-open="false"
+        data-pointed={pointed}
+        data-thread={thread.id}
+        onClick={pressed}
+      >
         {head}
         {first === undefined ? null : (
           <div className="comment-head">
@@ -688,7 +707,7 @@ function ThreadCard({
           </div>
         )}
         {/* Note that the words and the replies are one press that opens the thread, the writer's name its own. */}
-        <button type="button" className="comment-open" onClick={onOpen}>
+        <button type="button" className="comment-open">
           <span className="comment-words" data-clamped="true">
             {first?.words}
           </span>
@@ -954,6 +973,27 @@ function blockAt(
  * the bubble over words selected. Drawn inside the body, which it measures,
  * from the scroller around it, whose width says whether a margin fits.
  */
+/** The sheet naming the open thread's words in the editor, built once; a constructed sheet, since the window's policy takes no inline style. */
+let openThreadSheet: CSSStyleSheet | undefined;
+
+/** The open thread's words drawn open in the editor, as the read view draws its marks with `data-active`; none where no thread is open. */
+function editorOpenThread(thread: string | undefined): void {
+  if (!("CSSStyleSheet" in globalThis) || !("adoptedStyleSheets" in document)) return;
+  if (openThreadSheet === undefined) {
+    openThreadSheet = new CSSStyleSheet();
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, openThreadSheet];
+  }
+  // Note that a thread's id is the service's UUID, which a selector takes as it is.
+  openThreadSheet.replaceSync(
+    thread === undefined
+      ? ""
+      : `.plan-document-text .${COMMENT_MARK_CLASS}[data-threads~="${thread}"] { border-bottom-color: var(--comment-mark-active-edge); background: var(--comment-mark-active); } .plan-document-text .${COMMENT_MARK_CLASS}[data-block="true"][data-threads~="${thread}"] { background: var(--comment-mark); }`,
+  );
+}
+
+/** The thread itself and what it opened over the page, where a caret or the focus is the thread's rather than the words'. */
+const THREAD_ITSELF = '.comment-card, [role="menu"], [role="dialog"], [role="alertdialog"]';
+
 /** What a press may land on and leave the open thread open: its card, a thread's words or count, the controls that start one, and a menu or dialog it opened. */
 const KEEPS_THREAD_OPEN = [
   ".comment-card",
@@ -998,6 +1038,10 @@ export function PlanCommentLayer({
   const [anchors, setAnchors] = useState<ReadonlyMap<string, number>>(new Map());
   const [edges, setEdges] = useState<readonly BlockEdge[]>([]);
   const [hovered, setHovered] = useState<{ top: number; start: () => void } | undefined>(undefined);
+  // The thread whose words the pointer is on, whose card answers it before a press.
+  const [pointed, setPointed] = useState<string | undefined>(undefined);
+  // Whether the open thread was opened by the editor's caret standing in its words, which closes it as the caret leaves them.
+  const caretOpened = useRef(false);
   const [bubble, setBubble] = useState<
     { top: number; left: number; start: () => void } | undefined
   >(undefined);
@@ -1087,6 +1131,11 @@ export function PlanCommentLayer({
     const element = body.current;
     if (element === null) return;
     const over = (event: PointerEvent) => {
+      const marked =
+        event.target instanceof Element
+          ? event.target.closest<HTMLElement>(`.${COMMENT_MARK_CLASS}[data-threads]`)
+          : null;
+      setPointed(marked?.dataset.threads?.split(" ")[0]);
       const found = blockAt(event.target, unitClass);
       if (found === undefined) return;
       if (editor !== undefined) {
@@ -1117,9 +1166,58 @@ export function PlanCommentLayer({
         },
       });
     };
+    // In the editor, a caret standing in a thread's words opens it, and leaving them closes the one it opened.
+    const letCaretGo = () => {
+      if (!caretOpened.current) return;
+      caretOpened.current = false;
+      onActive(undefined);
+    };
+    const caretIn = (selection: Selection) => {
+      if (active === PENDING_THREAD) return;
+      const node = selection.anchorNode;
+      const at = node instanceof Element ? node : node?.parentElement;
+      if (at === null || at === undefined) return;
+      // Note that a caret in the thread itself, its reply say, takes it over, so it no longer closes as the caret leaves its words.
+      if (at.closest(THREAD_ITSELF) !== null) {
+        caretOpened.current = false;
+        return;
+      }
+      if (!element.contains(at)) {
+        letCaretGo();
+        return;
+      }
+      const threads = (
+        at.closest<HTMLElement>(`.${COMMENT_MARK_CLASS}[data-threads]`)?.dataset.threads ?? ""
+      )
+        .split(" ")
+        .filter((thread) => thread !== "" && thread !== PENDING_THREAD);
+      if (threads.length > 0) {
+        if (active !== undefined && threads.includes(active)) return;
+        caretOpened.current = true;
+        onActive(threads[0]);
+        return;
+      }
+      letCaretGo();
+    };
+    // The editor let go of by the keyboard, Tab say, lets go of the thread its caret opened, but for the thread itself taking the focus.
+    const blurred = (event: FocusEvent) => {
+      if (editor === undefined) return;
+      const next = event.relatedTarget;
+      // Note that a press on words that take no focus, a card's say, lets the focus go to nothing, and the press's own rule says whether it closes the thread.
+      if (next === null) return;
+      if (
+        next instanceof Element &&
+        (element.contains(next) || next.closest(THREAD_ITSELF) !== null)
+      ) {
+        if (next.closest(THREAD_ITSELF) !== null) caretOpened.current = false;
+        return;
+      }
+      letCaretGo();
+    };
     const selected = () => {
       const selection = window.getSelection();
       if (selection === null || selection.isCollapsed || selection.rangeCount === 0) {
+        if (editor !== undefined && selection?.isCollapsed === true) caretIn(selection);
         setBubble(undefined);
         return;
       }
@@ -1175,12 +1273,17 @@ export function PlanCommentLayer({
       setPending(undefined);
       onActive(thread);
     };
+    const left = () => setPointed(undefined);
     element.addEventListener("pointerover", over);
+    element.addEventListener("pointerleave", left);
+    element.addEventListener("focusout", blurred);
     // Note that in the editor a press places the caret, so marked words there open no thread.
     if (editor === undefined) element.addEventListener("click", pressed);
     document.addEventListener("selectionchange", selected);
     return () => {
       element.removeEventListener("pointerover", over);
+      element.removeEventListener("pointerleave", left);
+      element.removeEventListener("focusout", blurred);
       element.removeEventListener("click", pressed);
       document.removeEventListener("selectionchange", selected);
     };
@@ -1193,6 +1296,12 @@ export function PlanCommentLayer({
   useEffect(() => {
     settled.current = new Set(tops.keys());
   });
+  // The editor's marks are the editor's own, so the open thread's words are drawn open there by a rule naming them.
+  const editorActive = editor !== undefined && active !== PENDING_THREAD ? active : undefined;
+  useEffect(() => {
+    editorOpenThread(editorActive);
+    return () => editorOpenThread(undefined);
+  }, [editorActive]);
   // A press anywhere but the thread, its words, or what it opened over the page closes it; one being written stays, so its draft is never lost.
   useEffect(() => {
     if (active === undefined || active === PENDING_THREAD) return;
@@ -1227,7 +1336,8 @@ export function PlanCommentLayer({
     <div
       key={edge.thread}
       className="comment-block-edge"
-      data-active={edge.active}
+      // Note that the editor's marks never change with the open thread, so the bar reads it from the layer.
+      data-active={edge.active || edge.thread === active}
       style={{ top: edge.top, height: edge.height }}
     />
   ));
@@ -1283,6 +1393,7 @@ export function PlanCommentLayer({
                 thread={thread}
                 open={active === thread.id}
                 doors={doors}
+                pointed={pointed === thread.id}
                 onOpen={() => {
                   setPending(undefined);
                   onActive(thread.id);
@@ -1345,8 +1456,18 @@ export function PlanCommentLayer({
         );
       })}
       {shown === undefined || shownTop === undefined ? null : (
+        // Every thread on the line stands under its count, the one pressed open, so none is hidden behind another.
         <div className="comment-float" style={{ top: shownTop + 28 }}>
-          <ThreadCard thread={shown} open doors={doors} onOpen={() => undefined} onClose={close} />
+          {(counts.get(shownTop) ?? [shown]).map((thread) => (
+            <ThreadCard
+              key={thread.id}
+              thread={thread}
+              open={thread.id === active}
+              doors={doors}
+              onOpen={() => onActive(thread.id)}
+              onClose={close}
+            />
+          ))}
         </div>
       )}
       {pendingCard === null ? null : (
