@@ -5,23 +5,23 @@ import { EXPERIMENT } from "@luke/settings";
 import {
   ArchiveIcon,
   BackIcon,
-  BUTTON_SIZE,
+  DocumentIcon,
   EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
-  Inline,
-  JUSTIFY,
-  NAV_CURRENT,
-  NavItem,
+  LIST_ROW_CURRENT,
+  LIST_ROW_META,
+  ListRow,
   PencilIcon,
   PlusIcon,
+  SCROLL_FADE,
   ScrollArea,
   UnarchiveIcon,
   useMenu,
 } from "@luke/ui";
-import type { Actor } from "@luke/ui/actor-model";
+import { type Actor, actorName } from "@luke/ui/actor-model";
 import {
   CHAT_PLACE,
   type ChatPlace,
@@ -30,6 +30,7 @@ import {
   chatNames,
   chatRail,
   FOR_YOU,
+  previewWords,
 } from "@luke/ui/chat-model";
 import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
@@ -42,6 +43,7 @@ import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SpinnerRegion } from "../spinner.js";
 import { useChatActor } from "../tasks/chat-actors.js";
 import { ChatPane } from "../tasks/chat-pane.js";
+import { RelativeTime } from "../tasks/relative-time.js";
 import { useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -49,7 +51,10 @@ import { Tooltip } from "../tooltip.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
+import { SidebarResizeEdge } from "./desktop-sidebar.js";
+import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
 import { SidebarGroupHeader } from "./sidebar-group-header.js";
+import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
 
 /**
  * desktop-chat.tsx -- the window's Chat: the workspace's channels and direct messages in a rail of their own, and For you or the channel chosen read beside it.
@@ -107,47 +112,91 @@ function taskGrouping(tasks: TasksControl, sectionsOn: boolean): ChatTaskGroupin
   return { pinned, sections };
 }
 
-/** What the archived group counts. */
-const CHANNEL_NOUN = { one: "channel", many: "channels" } as const;
+/** The room the place beside the rail keeps however wide the rail is dragged, as the Inbox's item keeps beside its list. */
+const PANE_RESERVE = 560;
 
-/**
- * The archived channels, folded under the sidebar's own group header until
- * a press opens them, each opened as any channel is. Folded, the one shown
- * stays in sight, as the sidebar keeps its current task under a fold, so a
- * topic archived while it is read keeps its row.
- */
-function ArchivedChannels({
-  rows,
-  row,
-  current,
-}: {
-  rows: readonly ChatRailRow[];
-  row: (each: ChatRailRow) => React.JSX.Element;
-  current: (each: ChatRailRow) => boolean;
-}): React.JSX.Element {
-  const [folded, setFolded] = useState(true);
-  const drawn = folded ? rows.filter(current) : rows;
-  return (
-    <section className="chat-rail-group">
-      <SidebarGroupHeader
-        glyph={undefined}
-        name="Archived"
-        folded={folded}
-        count={rows.length}
-        noun={CHANNEL_NOUN}
-        steady
-        onToggle={() => setFolded((was) => !was)}
-      />
-      {drawn.length === 0 ? null : <ul className="sidebar-tasks">{drawn.map(row)}</ul>}
-    </section>
-  );
+/** The rail's width as drawn: as dragged, but never so wide the place beside it has less than its room. */
+function drawnWidth(width: number): string {
+  return `min(${width}px, max(${INBOX_LIST_WIDTH.MIN}px, 100cqw - ${PANE_RESERVE}px))`;
+}
+
+/** What a row's unread dot says to a screen reader, and what a group's count counts. */
+const UNREAD_WORDS = "Unread";
+const UNREAD_NOUN = { one: "unread", many: "unread" } as const;
+
+/** What For you's row says under its name. */
+const NOTHING_WAITS = "Nothing waits on you";
+function waitingWords(count: number): string {
+  return `${count} ${count === 1 ? "waits" : "wait"} on you`;
+}
+
+/** The keys of the rail's groups no task's group names. */
+const RAIL_GROUP = {
+  CHANNELS: "channels",
+  ARCHIVED: "archived",
+  DIRECT: "direct",
+} as const;
+
+/** A group of the rail as drawn: its key, name, glyph, places, and whether it starts folded. */
+interface RailGroupShown {
+  readonly key: string;
+  readonly name: string;
+  readonly glyph: React.ReactNode;
+  readonly rows: readonly ChatRailRow[];
+  readonly foldedAtFirst: boolean;
+}
+
+/** The rail's groups in order, as the sidebar's stand: the channels, the tasks' as the sidebar groups the tasks, the archived folded, and the direct messages. */
+function railGroups(rail: ReturnType<typeof chatRail>): readonly RailGroupShown[] {
+  const groups: RailGroupShown[] = [
+    {
+      key: RAIL_GROUP.CHANNELS,
+      name: "Channels",
+      glyph: <HashIcon />,
+      rows: rail.channels,
+      foldedAtFirst: false,
+    },
+    ...rail.tasks.map((group) => ({
+      key: `tasks:${group.key}`,
+      name: group.title ?? "Tasks",
+      glyph: <DocumentIcon />,
+      rows: group.rows,
+      foldedAtFirst: false,
+    })),
+    {
+      key: RAIL_GROUP.ARCHIVED,
+      name: "Archived",
+      glyph: <ArchiveIcon />,
+      rows: rail.archived,
+      foldedAtFirst: true,
+    },
+    {
+      key: RAIL_GROUP.DIRECT,
+      name: "Direct messages",
+      glyph: <AtSignIcon />,
+      rows: rail.direct,
+      foldedAtFirst: false,
+    },
+  ];
+  return groups.filter((group) => group.rows.length > 0);
+}
+
+/** Which of the rail's groups stand folded, for as long as Chat stands: each as it starts until toggled. */
+function useRailFolds() {
+  const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
+  return {
+    folded: (key: string, atFirst: boolean) => atFirst !== toggled.has(key),
+    toggle: (key: string) =>
+      setToggled((was) => {
+        const next = new Set(was);
+        if (!next.delete(key)) next.add(key);
+        return next;
+      }),
+  };
 }
 
 /** What the press that opens a topic channel is called. */
 const NEW_CHANNEL = "New channel";
-
-/** What a row's count is read as. */
-const UNREAD = "unread";
 
 /** What the view says where no chat is read. */
 const NO_CHAT = "Chat is not available yet.";
@@ -165,33 +214,135 @@ function RailRow({
   row,
   current,
   actorOf,
+  now,
   onChoose,
 }: {
   row: ChatRailRow;
   current: boolean;
   actorOf: (memberId: string) => Actor;
+  now: number;
   onChoose: () => void;
 }): React.JSX.Element {
   const other = row.other?.member;
+  const { latest } = row;
+  // A direct message of the reader's is named by who it is with, as the rest of the window names them; one between two others keeps both handles.
+  const title =
+    other !== undefined && row.label === row.other?.handle
+      ? actorName(actorOf(other.id))
+      : row.label;
+  const mark =
+    other !== undefined ? (
+      <ActorMark actor={actorOf(other.id)} size={ACTOR_SIZE.INLINE} />
+    ) : row.channel.kind === CHANNEL_KIND.TASK ? (
+      <DocumentIcon />
+    ) : (
+      <HashIcon />
+    );
+  const said = latest === undefined ? "" : previewWords(latest);
   return (
     <li>
-      <NavItem
-        icon={
-          other === undefined ? (
-            <HashIcon />
-          ) : (
-            <ActorMark actor={actorOf(other.id)} size={ACTOR_SIZE.INLINE} />
-          )
+      <PlaceRow
+        mark={mark}
+        title={title}
+        preview={
+          latest === undefined
+            ? undefined
+            : `${actorName(actorOf(latest.authorId))}${said === "" ? "" : `: ${said}`}`
         }
-        detail={row.sub}
-        current={current ? NAV_CURRENT.PAGE : undefined}
+        at={latest?.postedAt}
+        now={now}
         unread={row.unread > 0}
-        count={{ value: row.unread, noun: UNREAD }}
-        onClick={onChoose}
-      >
-        {row.label}
-      </NavItem>
+        current={current}
+        onChoose={onChoose}
+      />
     </li>
+  );
+}
+
+/**
+ * One place of the rail as a row of the Inbox's own list (`ListRow`): the
+ * blue dot in a gutter where something waits unread, its mark, its name in
+ * the unread weight while it does, when it last spoke at the line's end,
+ * and under it who said what last.
+ */
+function PlaceRow({
+  mark,
+  title,
+  preview,
+  at,
+  now,
+  unread,
+  current,
+  onChoose,
+}: {
+  mark: React.ReactNode;
+  title: string;
+  preview: string | undefined;
+  at: number | undefined;
+  now: number;
+  unread: boolean;
+  current: boolean;
+  onChoose: () => void;
+}): React.JSX.Element {
+  return (
+    <ListRow
+      leading={
+        <>
+          {/* Note that the gutter stands on every row, so the marks line up whether a row wears the dot or not. */}
+          <span className="inbox-row-gutter">
+            {unread ? <span className="inbox-row-unread" /> : null}
+          </span>
+          <span className="inbox-row-mark">{mark}</span>
+        </>
+      }
+      title={title}
+      description={preview}
+      meta={
+        <span className="home-row-meta">
+          {unread ? <span className="visually-hidden">{UNREAD_WORDS}</span> : null}
+          {at === undefined ? null : <RelativeTime at={at} now={now} hint={false} />}
+        </span>
+      }
+      metaAt={LIST_ROW_META.TITLE}
+      current={current ? LIST_ROW_CURRENT.PAGE : undefined}
+      unread={unread}
+      hint={{ Hint: Tooltip, label: title }}
+      onPress={onChoose}
+    />
+  );
+}
+
+/** A group of the rail under the sidebar's own group header: its name, folding, and how many of its places wait unread; folded, the place shown stays in sight. */
+function RailGroup({
+  name,
+  glyph,
+  rows,
+  folded,
+  onToggle,
+  row,
+  current,
+}: {
+  name: string;
+  glyph: React.ReactNode;
+  rows: readonly ChatRailRow[];
+  folded: boolean;
+  onToggle: () => void;
+  row: (each: ChatRailRow) => React.JSX.Element;
+  current: (each: ChatRailRow) => boolean;
+}): React.JSX.Element {
+  const drawn = folded ? rows.filter(current) : rows;
+  return (
+    <div className="sidebar-repository">
+      <SidebarGroupHeader
+        glyph={glyph}
+        name={name}
+        folded={folded}
+        count={rows.filter((each) => each.unread > 0).length}
+        noun={UNREAD_NOUN}
+        onToggle={onToggle}
+      />
+      {drawn.length === 0 ? null : <ul className="sidebar-tasks">{drawn.map(row)}</ul>}
+    </div>
   );
 }
 
@@ -238,6 +389,16 @@ function ChatView({
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const dialogs = useChannelDialogs(tasks.workspace?.id, read?.answer, view.onChannel, view.open);
   const actorOf = useChatActor(read?.answer, names);
+  const folds = useRailFolds();
+  const { width, onResize } = useChatListWidth();
+  const edge = useResizableEdge({
+    side: EDGE_SIDE.RIGHT,
+    width,
+    bounds: INBOX_LIST_WIDTH,
+    reserve: () => PANE_RESERVE,
+    label: "Resize chat list",
+    onResize,
+  });
   if (read === undefined || view.failed) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
     const standIn = view.failed ? (
@@ -261,80 +422,66 @@ function ChatView({
   const chat = read.answer;
   const rail = chatRail(chat, names, taskGrouping(tasks, sectionsOn));
   const hidden = hiddenColumns(room, view.listed);
+  const groups = railGroups(rail);
   const row = (each: ChatRailRow) => (
     <RailRow
       key={each.channel.id}
       row={each}
       current={shows(view.place, each)}
       actorOf={actorOf}
+      now={now}
       onChoose={() => view.onChoose({ kind: CHAT_PLACE.CHANNEL, channelId: each.channel.id })}
     />
   );
   return (
     <div className="chat-view">
-      <nav className="chat-rail" aria-label="Chat" hidden={hidden.list}>
+      <nav
+        className="chat-rail"
+        aria-label="Chat"
+        hidden={hidden.list}
+        style={{ width: room === SHELL_ROOM.NARROW ? undefined : drawnWidth(width) }}
+      >
         <header className="desktop-toolbar chat-rail-bar">
           <div className="desktop-toolbar-heading">
             <h1 className="desktop-toolbar-title">Chat</h1>
           </div>
+          <div className="desktop-toolbar-actions">
+            <Tooltip label={NEW_CHANNEL}>
+              <IconButton icon={<PlusIcon />} label={NEW_CHANNEL} onClick={dialogs.askNew} />
+            </Tooltip>
+          </div>
         </header>
-        <ScrollArea>
+        <ScrollArea fade={SCROLL_FADE.START}>
           <div className="chat-rail-body">
             <ul className="sidebar-tasks">
               <li>
-                <NavItem
-                  icon={<AtSignIcon />}
-                  current={view.place.kind === CHAT_PLACE.FOR_YOU ? NAV_CURRENT.PAGE : undefined}
+                <PlaceRow
+                  mark={<AtSignIcon />}
+                  title="For you"
+                  preview={rail.forYou === 0 ? NOTHING_WAITS : waitingWords(rail.forYou)}
+                  at={undefined}
+                  now={now}
                   unread={rail.forYou > 0}
-                  count={{ value: rail.forYou, noun: UNREAD }}
-                  onClick={() => view.onChoose(FOR_YOU)}
-                >
-                  For you
-                </NavItem>
+                  current={view.place.kind === CHAT_PLACE.FOR_YOU}
+                  onChoose={() => view.onChoose(FOR_YOU)}
+                />
               </li>
             </ul>
-            <section className="chat-rail-group">
-              <Inline justify={JUSTIFY.BETWEEN} wrap={false}>
-                <h2 className="section-heading">Channels</h2>
-                <Tooltip label={NEW_CHANNEL}>
-                  <IconButton
-                    icon={<PlusIcon />}
-                    label={NEW_CHANNEL}
-                    size={BUTTON_SIZE.COMPACT}
-                    onClick={dialogs.askNew}
-                  />
-                </Tooltip>
-              </Inline>
-              <ul className="sidebar-tasks">{rail.channels.map(row)}</ul>
-            </section>
-            {rail.tasks.length === 0 ? null : (
-              <section className="chat-rail-group">
-                <h2 className="section-heading">Tasks</h2>
-                {rail.tasks.map((group) => (
-                  <div key={group.key} className="chat-rail-tasks">
-                    {group.title === undefined ? null : (
-                      <h3 className="chat-rail-subheading">{group.title}</h3>
-                    )}
-                    <ul className="sidebar-tasks">{group.rows.map(row)}</ul>
-                  </div>
-                ))}
-              </section>
-            )}
-            {rail.archived.length === 0 ? null : (
-              <ArchivedChannels
-                rows={rail.archived}
+            {groups.map((group) => (
+              <RailGroup
+                key={group.key}
+                name={group.name}
+                glyph={group.glyph}
+                rows={group.rows}
+                folded={folds.folded(group.key, group.foldedAtFirst)}
+                onToggle={() => folds.toggle(group.key)}
                 row={row}
                 current={(each) => shows(view.place, each)}
               />
-            )}
-            {rail.direct.length === 0 ? null : (
-              <section className="chat-rail-group">
-                <h2 className="section-heading">Direct messages</h2>
-                <ul className="sidebar-tasks">{rail.direct.map(row)}</ul>
-              </section>
-            )}
+            ))}
           </div>
         </ScrollArea>
+        {room === SHELL_ROOM.NARROW ? null : <SidebarResizeEdge edge={edge} />}
       </nav>
       <ChatPane
         chat={chat}

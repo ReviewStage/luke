@@ -23,6 +23,7 @@ import {
   FOR_YOU_REASON,
   forYou,
   postsIn,
+  previewWords,
   topicName,
   topicNameProblem,
 } from "./chat-model.js";
@@ -408,4 +409,17 @@ test("the tasks' channels stand as the sidebar groups their tasks: pinned in the
     flat.tasks.map((group) => [group.title, group.rows.length]),
     [[undefined, 4]],
   );
+});
+
+test("a row previews a message as one plain line: a chip by its label, no Markdown marks, a picture by its words", () => {
+  const said = message(1, MARIA, GENERAL.id, {
+    blocks: [
+      {
+        type: CHAT_BLOCK.MARKDOWN,
+        text: "## Heads up\n**[@agent-2](https://tryluke.dev/acme/agent/x)** read `memberships`",
+      },
+      { type: CHAT_BLOCK.IMAGE, attachmentId: "a", alt: "mock.png" },
+    ],
+  });
+  assert.equal(previewWords(said), "Heads up @agent-2 read memberships mock.png");
 });

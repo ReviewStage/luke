@@ -134,16 +134,23 @@ function mount(
   return container;
 }
 
-/** The rail as a reader hears it: each heading, then each row's name and count, `▸ ` where shown. */
+/** The rail as a reader hears it: each group's name, then each place's name, `▸ ` where shown and ` •` where something waits unread in it. */
 function rail(page: HTMLElement): string[] {
   const nav = page.querySelector(".chat-rail");
   assert.ok(nav, "the rail is drawn");
-  return [...nav.querySelectorAll("h2, li button")].map((node) => {
-    if (node.matches("h2")) return `# ${node.textContent}`;
-    const count = /(\d+) unread$/u.exec(node.textContent ?? "")?.[1];
-    const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
-    return `${shown}${railName(node)}${count === undefined ? "" : ` (${count})`}`;
-  });
+  return [...nav.querySelectorAll(".sidebar-repository-header button, li .luke-list-row-main")].map(
+    (node) => {
+      if (node.closest(".sidebar-repository-header") !== null) return `# ${headName(node)}`;
+      const shown = node.getAttribute("aria-current") === "page" ? "▸ " : "";
+      // For you says under its name how many wait on the reader, which it is read by.
+      const waiting = /^(\d+) waits? on you$/u.exec(
+        node.querySelector(".luke-list-row-description")?.textContent ?? "",
+      )?.[1];
+      if (waiting !== undefined) return `${shown}${railName(node)} (${waiting})`;
+      const unread = node.closest("li")?.querySelector(".inbox-row-unread") ? " •" : "";
+      return `${shown}${railName(node)}${unread}`;
+    },
+  );
 }
 
 /** The pane's messages as a reader hears them: each author and where it was posted, then its replies where the thread is open. */
@@ -157,16 +164,21 @@ function stream(page: HTMLElement): string[] {
   });
 }
 
-/** A row's name: the first of its words a reader hears, before what it says after and its count. */
+/** A place's name, as its row's title says it. */
 function railName(row: Element): string {
-  const heard = [...row.children].filter((part) => part.getAttribute("aria-hidden") !== "true");
+  return row.querySelector(".luke-list-row-title")?.textContent ?? "";
+}
+
+/** A group's name: the first of its header's words a reader hears, before its count. */
+function headName(head: Element): string {
+  const heard = [...head.children].filter((part) => part.getAttribute("aria-hidden") !== "true");
   return heard[0]?.textContent ?? "";
 }
 
 function railRow(page: HTMLElement, name: string): HTMLButtonElement {
-  const row = [...page.querySelectorAll<HTMLButtonElement>(".chat-rail button")].find(
-    (each) => railName(each) === name,
-  );
+  const row = [
+    ...page.querySelectorAll<HTMLButtonElement>(".chat-rail li .luke-list-row-main"),
+  ].find((each) => railName(each) === name);
   assert.ok(row, `no row for ${name}`);
   return row;
 }
@@ -180,11 +192,11 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
     "members-schema",
     "# Tasks",
     "billing-export",
-    "teammate-invitations (4)",
+    "teammate-invitations •",
     "# Direct messages",
-    "agent-2 (1)",
-    "luke",
-    "agent-1",
+    "Invite emails •",
+    "Luke",
+    "Add teammate invitations",
     "maria",
   ]);
   assert.deepEqual(stream(page), [
@@ -730,9 +742,9 @@ test("New channel opens a topic under the name typed, written as a channel's, wi
   await settle();
   // The topic archived while it is read keeps its row in sight, under the folded archive, still the one shown.
   const archivedRows = () =>
-    [...page.querySelectorAll(".chat-rail section")]
+    [...page.querySelectorAll(".chat-rail .sidebar-repository")]
       .filter((group) => group.textContent?.startsWith("Archived"))
-      .flatMap((group) => [...group.querySelectorAll("li button")].map(railName));
+      .flatMap((group) => [...group.querySelectorAll("li .luke-list-row-main")].map(railName));
   assert.deepEqual(archivedRows(), ["release-train"]);
   assert.ok(rail(page).includes("▸ release-train"));
   act(() => railRow(page, "general").click());
@@ -964,7 +976,8 @@ test("in a listed workspace, a person is drawn with their photo from the members
   };
   const page = mount((chat) => chat, acme);
   await settle();
-  const maria = railRow(page, "maria");
+  // Her direct message is named as the members read names her, and wears her photo.
+  const maria = railRow(page, "Maria Chen");
   assert.ok(
     maria.querySelector("img[src^='https://example.com/maria.png']"),
     "her row wears her photo",
@@ -1021,4 +1034,23 @@ test("an agent the plans' summaries do not name opens its tab under the plan the
   const [link] = opened;
   assert.ok(link !== undefined && "place" in link);
   assert.deepEqual(link.place, { kind: LINK_PLACE.AGENT, planId: ELSEWHERE, agentId: ELSEWHERE });
+});
+
+test("each place's row says who spoke last and what, as an Inbox row previews its thread, and a group folds on its header, keeping the place shown in sight", () => {
+  const page = mount();
+  const general = railRow(page, "general");
+  assert.match(
+    general.querySelector(".luke-list-row-description")?.textContent ?? "",
+    /^\S.*: .+/u,
+    "the row previews its last message as who said it and what",
+  );
+  act(() => general.click());
+  const head = [
+    ...page.querySelectorAll<HTMLButtonElement>(".sidebar-repository-header button"),
+  ].find((each) => headName(each) === "Channels");
+  assert.ok(head, "Channels heads its group");
+  act(() => head.click());
+  const channels = rail(page);
+  const after = channels.indexOf("# Channels");
+  assert.deepEqual(channels.slice(after, after + 3), ["# Channels", "▸ general", "# Tasks"]);
 });

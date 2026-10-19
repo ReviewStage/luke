@@ -2,6 +2,7 @@ import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
+  CHAT_BLOCK,
   CHAT_BOUNDS,
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
@@ -137,6 +138,8 @@ export interface ChatRailRow {
   /** The other member of a direct message, for its mark. */
   readonly other: ChatWho | undefined;
   readonly unread: number;
+  /** The newest root or reply the channel holds as read, which its row previews; none in an empty one. */
+  readonly latest: ChatMessage | undefined;
 }
 
 export interface ChatRail {
@@ -327,6 +330,7 @@ export function chatRail(
       sub: who?.agent?.title ?? who?.taskName,
       other: who,
       unread: messagesIn(chat, channel.id).filter((message) => unreadBy(chat, message)).length,
+      latest: messagesIn(chat, channel.id).at(-1),
     };
   };
   const shown = chat.channels.filter((channel) => !channel.archived);
@@ -524,4 +528,29 @@ export function topicNameProblem(
     name === GENERAL_CHANNEL ||
     chat.channels.some((channel) => channel.name === name && channel.id !== renaming);
   return taken ? `#${name} is already a channel.` : undefined;
+}
+
+/** A Markdown link, kept as its label, as a preview reads one. */
+const PREVIEW_LINK = /!?\[([^\]]*)\]\([^)]*\)/gu;
+
+/** Markdown's marks a preview drops: emphasis, code ticks, headings' and quotes' leads. */
+const PREVIEW_MARKS = /[*_`~]|^\s*(?:#+|>)\s*/gmu;
+
+/** A message's words as a row previews them, one line: its Markdown read as plain words, a chip as its label; a picture alone by its words. */
+export function previewWords(message: ChatMessage): string {
+  const words = message.blocks.map((block) =>
+    block.type === CHAT_BLOCK.MARKDOWN && "text" in block
+      ? block.text
+      : block.type === CHAT_BLOCK.IMAGE && "alt" in block
+        ? block.alt
+        : block.type === CHAT_BLOCK.LINK && "label" in block
+          ? block.label
+          : "",
+  );
+  return words
+    .join(" ")
+    .replace(PREVIEW_LINK, "$1")
+    .replace(PREVIEW_MARKS, "")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
