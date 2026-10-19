@@ -12,12 +12,14 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Duration, Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { useAppKeymap } from "../app-commands.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import {
   composerEditor,
@@ -45,7 +47,8 @@ import { type MessageSender, useAgentComposer } from "./use-agent-composer.js";
  * way off takes it out, and a typed `>` line alone sends; on a touch
  * screen, whose handles may let go with no pointerup, Reply stands under a
  * selection once it rests, and with a mouse only once the pointer lets it
- * go; and on the agent's own tab, Reply stands down while a message is out.
+ * go; and on the agent's own tab, Reply stands down while a message is out;
+ * and R does what Reply does while it stands, and nothing while it does not.
  */
 
 const AGENT_WORDS = "Option A ships today. Option B waits for review.";
@@ -109,8 +112,9 @@ async function settle(): Promise<void> {
   });
 }
 
-/** An agent's tab cut to what a reply crosses: one of the agent's messages, one of the developer's, and the box. */
+/** An agent's tab cut to what a reply crosses: one of the agent's messages, one of the developer's, and the box, under the window's keymap. */
 function Tab({ sender }: { sender: MessageSender }): ReactNode {
+  useAppKeymap(true);
   const tab = useRef<HTMLElement>(null);
   const replyDoor = useRef<((words: string) => void) | undefined>(undefined);
   const composer = useAgentComposer({
@@ -229,6 +233,33 @@ test("Reply lays the selected words in where the caret stands, a line under each
     "> Option B waits for review.\n\nWhy wait?\n\n> Option A ships today.\n\nShip it.",
   ]);
   assert.deepEqual(tab.blocks(), [""], "the quotes go with the message");
+});
+
+test("R replies to the words selected as Reply does, and does nothing while no Reply stands", async () => {
+  const tab = await mounted();
+  composerEditor(tab.container).blur();
+  const pressR = () =>
+    act(() => {
+      document.body.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "r", code: "KeyR", bubbles: true, cancelable: true }),
+      );
+    });
+
+  pressR();
+  await settle();
+  assert.deepEqual(tab.blocks(), [""], "R with nothing selected lays nothing in");
+
+  tab.select(AGENT_WORDS, "Option B", "review.");
+  assert.equal(
+    tab.reply()?.getAttribute("aria-keyshortcuts"),
+    shortcutAria(APP_SHORTCUTS[APP_COMMAND.REPLY_TO_SELECTION].chord),
+    "Reply names its key",
+  );
+  pressR();
+  await settle();
+  assert.deepEqual(tab.blocks(), ["> Option B waits for review.", ""]);
+  assert.equal(tab.reply() === undefined, true, "Reply goes once R answers it");
+  assert.equal(document.activeElement, composerEditor(tab.container), "the box takes the caret");
 });
 
 test("a selection outside the agent's words, in its thought or the developer's words, is offered no Reply", async () => {

@@ -4,8 +4,9 @@
  * Every shortcut but Escape and the Inbox's J and K holds Command, the way a
  * Mac app's own chords do, so none can be the talk or stop key: those take
  * the machine, and Command chords belong to whichever app is frontmost. J
- * and K are a letter alone, as Linear's and Superhuman's are, answered only
- * where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
+ * and K are a letter alone, as Linear's and Superhuman's are, and R, which
+ * replies to an agent's words selected as GitHub's R quotes them, answered
+ * only where the press is not typing, and the menu bar never offers them. Each is a command the window runs and
  * a chord that reaches it; the menu bar shows the chord beside the command's
  * name, and a click there sends the command to the window, which runs it
  * exactly as the key does. The key itself is the renderer's to read: Chromium
@@ -65,6 +66,7 @@ export const APP_COMMAND = {
   PREVIOUS_INBOX_ITEM: "previous-inbox-item",
   NEXT_INBOX_ITEM: "next-inbox-item",
   TOGGLE_INBOX_ITEM_READ: "toggle-inbox-item-read",
+  REPLY_TO_SELECTION: "reply-to-selection",
   EXIT_AGENT_PAGE: "exit-agent-page",
   EXIT_PERSON_PAGE: "exit-person-page",
   FACTORY: "factory",
@@ -183,6 +185,7 @@ export const SHORTCUT_KEY = {
   J: { accelerator: "J", glyph: "J", key: "j", code: "KeyJ" },
   I: { accelerator: "I", glyph: "I", key: "i", code: "KeyI" },
   U: { accelerator: "U", glyph: "U", key: "u", code: "KeyU" },
+  R: { accelerator: "R", glyph: "R", key: "r", code: "KeyR" },
   // A bare V is Files changed's own, marking the file stood on viewed; no app command holds it.
   V: { accelerator: "V", glyph: "V", key: "v", code: "KeyV" },
   // ⌘L is New task's own, opening its Linear chip from the name field; no app command holds it.
@@ -430,6 +433,10 @@ export const APP_SHORTCUTS = {
     label: "Mark inbox item as read or unread",
     chord: { key: SHORTCUT_KEY.U, plain: true },
   },
+  [APP_COMMAND.REPLY_TO_SELECTION]: {
+    label: "Reply to selection",
+    chord: { key: SHORTCUT_KEY.R, plain: true },
+  },
   [APP_COMMAND.EXIT_AGENT_PAGE]: {
     label: "Exit agent page",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
@@ -520,6 +527,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.PREVIOUS_INBOX_ITEM,
       APP_COMMAND.NEXT_INBOX_ITEM,
       APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
+      APP_COMMAND.REPLY_TO_SELECTION,
       APP_COMMAND.ISSUES,
       APP_COMMAND.EXIT_ISSUES,
       APP_COMMAND.NEW_ISSUE,
