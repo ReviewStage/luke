@@ -7,7 +7,7 @@ import {
   accountInboxAnswerSchema,
 } from "@luke/features/account-inbox-wire";
 import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CALL_FAILURE, TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CHANGED_FILE_STATUS,
   CHECK_SUMMARY,
@@ -575,8 +575,14 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       events.flatMap((event) =>
         event.kind === GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED ? [event.payload] : [],
       );
+    /** Every followed transcript's page the host told, in order. */
+    const pages = () =>
+      events.flatMap((event) =>
+        event.kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED ? [event.payload] : [],
+      );
     return {
       call,
+      pages,
       asked: service.asked,
       seal: service.seal,
       sealScope: service.sealScope,
@@ -1621,5 +1627,90 @@ it.effect(
       yield* settled;
       assert.deepEqual(yield* Fiber.join(read), windowPage(failed));
       assert.equal(asked.filter((ask) => ask.startsWith("messages-now")).length, 3);
+    }),
+);
+
+const FOLLOWED = { kind: TRANSCRIPT_KIND.AGENT, agentId: AGENT_ID } as const;
+
+it.effect(
+  "a followed transcript is told page by page from the start, the next at once after one that said something, then again only as its statements move or at the edge the service names; letting it go ends the telling",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, pages, sealTranscript, pageNow: script, realtime } = yield* subject();
+      sealTranscript(SEALED_TRANSCRIPT);
+      const said = pageNow("1:0", { holds: false, text: "Reading the invites." });
+      const caught = { ...pageNow("1:0", { holds: true }), wakeIn: 3_000 };
+      script(said, caught);
+      assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED), {});
+      yield* settled;
+      assert.deepEqual(pages(), [
+        { transcript: FOLLOWED, page: windowPage(said) },
+        { transcript: FOLLOWED, page: windowPage(caught) },
+      ]);
+
+      // Rows landing read the page again; the edge the service named reads it once more.
+      transcriptRows(realtime, 1);
+      yield* settled;
+      assert.equal(pages().length, 3);
+      yield* TestClock.adjust("3 seconds");
+      yield* settled;
+      assert.equal(pages().length, 4);
+
+      const moved = pageNow("2:0", { holds: false, text: "Writing the expiry." });
+      const ended = pageNow("2:0", { holds: false });
+      script(moved, ended);
+      transcriptRows(realtime, 2);
+      yield* settled;
+      // Note that each part landing may move the statements, so the page past the last may be read more than once.
+      assert.deepEqual(pages()[4], { transcript: FOLLOWED, page: windowPage(moved) });
+      assert.deepEqual(pages().at(-1), { transcript: FOLLOWED, page: windowPage(ended) });
+      assert.deepEqual(asked.slice(0, 3), [
+        `transcript-live:${AGENT_ID}`,
+        `messages-now:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+        `messages-now:${AGENT_ID}:1:0`,
+      ]);
+      assert.equal(asked.at(-1), `messages-now:${AGENT_ID}:2:0`);
+      assert.ok(!JSON.stringify(pages()).includes("capability"));
+
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW, FOLLOWED);
+      const toldBefore = pages().length;
+      transcriptRows(realtime, 3);
+      yield* settled;
+      assert.equal(pages().length, toldBefore);
+    }),
+);
+
+it.effect(
+  "a followed transcript the account does not reach is told not found once; behind a closed gate it is told unanswered; and a sign-out lets every followed transcript go",
+  () =>
+    Effect.gen(function* () {
+      const worker = { ...FOLLOWED, callId: "call-7" };
+      const refused = yield* subject();
+      refused.sealTranscript({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, worker);
+      yield* settled;
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
+      assert.deepEqual(refused.pages(), [
+        { transcript: worker, page: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
+      ]);
+
+      const signedOut = yield* subject({ signedIn: false });
+      yield* signedOut.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      assert.deepEqual(signedOut.pages(), [
+        { transcript: FOLLOWED, page: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
+      assert.deepEqual(signedOut.asked, []);
+
+      const followed = yield* subject();
+      followed.sealTranscript(SEALED_TRANSCRIPT);
+      followed.pageNow(pageNow("1:0", { holds: true }));
+      yield* followed.call(GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW, FOLLOWED);
+      yield* settled;
+      yield* followed.reset;
+      yield* settled;
+      assert.deepEqual(followed.realtime.closed, [SEALED_TRANSCRIPT.url]);
+      assert.equal(followed.pages().length, 1);
     }),
 );

@@ -15,6 +15,10 @@ import {
   isBrowserKey,
   isBrowserPage,
 } from "@luke/features/browser-acts";
+import {
+  type CodingAgentTranscriptChanged,
+  codingAgentTranscriptChangedSchema,
+} from "@luke/features/coding-agent-view";
 import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
@@ -444,6 +448,23 @@ export const BRIDGE = {
     channel: "app:browser-focus",
     args: noArgs,
     result: result<BrowserFocus>(isBrowserFocus),
+  }),
+  /**
+   * A transcript this window follows, its next page or why there is none:
+   * sent to the windows that follow it alone, each time it moves and once,
+   * whole, as a window starts following one already followed, rather than
+   * as a slice of the document, because the document reaches every window on
+   * every change and a transcript is read by the one tab drawing it.
+   */
+  onTranscript: entry({
+    kind: "subscribe",
+    channel: "app:transcript",
+    args: noArgs,
+    result: result<CodingAgentTranscriptChanged>((value) =>
+      Result.isSuccess(
+        readEither(codingAgentTranscriptChangedSchema, { excess: EXCESS_KEYS.DROP })(value),
+      ),
+    ),
   }),
   /**
    * A Luke link the system handed the app: the panel is to open the place it

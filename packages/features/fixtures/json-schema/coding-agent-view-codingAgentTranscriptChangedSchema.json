@@ -1,0 +1,556 @@
+{
+  "type": "object",
+  "properties": {
+    "transcript": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "agent"
+              ]
+            },
+            "agentId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "kind",
+            "agentId"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "taskWorker"
+              ]
+            },
+            "taskId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "callId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "required": [
+            "kind",
+            "taskId",
+            "callId"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "page": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "messages": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "turnId": {
+                    "type": "string"
+                  },
+                  "asked": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 128
+                    },
+                    "maxItems": 20
+                  },
+                  "askedAt": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "voiceSessionId": {
+                          "type": "string",
+                          "maxLength": 128
+                        },
+                        "fromMs": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "voiceSessionId",
+                        "fromMs"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 20
+                  },
+                  "origin": {
+                    "type": "string",
+                    "enum": [
+                      "typed",
+                      "spoken",
+                      "transcript_change",
+                      "child",
+                      "child_completion"
+                    ]
+                  },
+                  "earlierOmitted": {
+                    "type": "boolean"
+                  },
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "user",
+                      "assistant",
+                      "system"
+                    ]
+                  },
+                  "parts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "sentBy": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "userId": {
+                        "type": "string"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "member",
+                          "former",
+                          "luke",
+                          "automation",
+                          "github"
+                        ]
+                      },
+                      "agent": {
+                        "type": "boolean",
+                        "enum": [
+                          true
+                        ]
+                      },
+                      "model": {
+                        "type": "string",
+                        "maxLength": 200
+                      },
+                      "agentId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 36
+                      },
+                      "taskId": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 36
+                      }
+                    },
+                    "required": [
+                      "name"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "sentAt": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "arrivedIn": {
+                    "type": "object",
+                    "properties": {
+                      "journalId": {
+                        "type": "string"
+                      },
+                      "afterStep": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "journalId",
+                      "afterStep"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "startedAt": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "finishedAt": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "model": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "effort": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "tokens": {
+                    "type": "object",
+                    "properties": {
+                      "inputTokens": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "outputTokens": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "cachedInputTokens": {
+                        "type": "number",
+                        "minimum": 0
+                      },
+                      "cacheWriteTokens": {
+                        "type": "number",
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "inputTokens",
+                      "outputTokens",
+                      "cachedInputTokens"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "ending": {
+                    "type": "string",
+                    "enum": [
+                      "stopped",
+                      "failed",
+                      "abandoned"
+                    ]
+                  },
+                  "fastRefused": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id",
+                  "role",
+                  "parts"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "earlier": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            },
+            "runStartedAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "delegations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "callId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "startedAt": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "callId",
+                  "startedAt"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "subagentTitles": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "callId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "callId",
+                  "title"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "subagents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "callId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "starting",
+                      "running",
+                      "completed",
+                      "failed",
+                      "cancelled"
+                    ]
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "effort": {
+                    "type": "string"
+                  },
+                  "startedAt": {
+                    "type": "number",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "callId",
+                  "status",
+                  "model",
+                  "effort",
+                  "startedAt"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "failureReason": {
+              "type": "string",
+              "enum": [
+                "model",
+                "sandbox",
+                "github",
+                "abandoned",
+                "provider_key",
+                "not_started",
+                "fast_own_key",
+                "fast_not_enabled",
+                "context_overflow",
+                "session_ended",
+                "other"
+              ]
+            },
+            "usage": {
+              "type": "object",
+              "properties": {
+                "inputTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "outputTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "cachedInputTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "costUsd": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "inputTokens",
+                "outputTokens"
+              ],
+              "additionalProperties": false
+            },
+            "turnUsage": {
+              "type": "object",
+              "properties": {
+                "inputTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "outputTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "cachedInputTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "costUsd": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "inputTokens",
+                "outputTokens"
+              ],
+              "additionalProperties": false
+            },
+            "context": {
+              "type": "object",
+              "properties": {
+                "windowTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "compactionThresholdTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "inputTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "outputTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "cachedInputTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "cacheWriteTokens": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "estimated": {
+                  "type": "object",
+                  "properties": {
+                    "systemPromptTokens": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "toolDefinitionTokens": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "briefTokens": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "systemPromptTokens",
+                    "toolDefinitionTokens"
+                  ],
+                  "additionalProperties": false
+                },
+                "measuredAt": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "compactedAt": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "windowTokens",
+                "compactionThresholdTokens",
+                "inputTokens",
+                "outputTokens",
+                "estimated",
+                "measuredAt"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "messages",
+            "cursor",
+            "status",
+            "title"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "failure": {
+              "type": "string",
+              "enum": [
+                "unanswered",
+                "not-found",
+                "no-repository",
+                "repository-not-reachable",
+                "github-unanswered",
+                "invalid-choice",
+                "message-too-long",
+                "agent-not-ready",
+                "agent-retired",
+                "plan-archived"
+              ]
+            }
+          },
+          "required": [
+            "failure"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "transcript",
+    "page"
+  ],
+  "additionalProperties": false
+}

@@ -258,6 +258,44 @@ export const codingAgentMessagesAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentMessagesAnswerView = typeof codingAgentMessagesAnswerViewSchema.Type;
 
+/** Whose transcript a window follows: a coding agent's, or a worker's of it, or a task's planning worker's. */
+export const TRANSCRIPT_KIND = {
+  AGENT: "agent",
+  TASK_WORKER: "taskWorker",
+} as const;
+
+/**
+ * One transcript as a window follows it: an agent's own, or one of its
+ * workers' by the delegation call that started it; or a task's planning
+ * worker's by the call that started it.
+ */
+export const codingAgentTranscriptKeySchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(TRANSCRIPT_KIND.AGENT),
+    agentId: EffectSchema.NonEmptyString,
+    callId: EffectSchema.optionalKey(codingAgentCallIdSchema),
+  }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(TRANSCRIPT_KIND.TASK_WORKER),
+    taskId: EffectSchema.NonEmptyString,
+    callId: codingAgentCallIdSchema,
+  }),
+]);
+
+export type CodingAgentTranscriptKey = typeof codingAgentTranscriptKeySchema.Type;
+
+/**
+ * A followed transcript's next page, as the window hears it pushed: the
+ * messages past the last page pushed, the first from the start, with where
+ * the agent stands as it was read; or why there is none.
+ */
+export const codingAgentTranscriptChangedSchema = EffectSchema.Struct({
+  transcript: codingAgentTranscriptKeySchema,
+  page: codingAgentMessagesAnswerViewSchema,
+});
+
+export type CodingAgentTranscriptChanged = typeof codingAgentTranscriptChangedSchema.Type;
+
 /** Messaging an agent, as the window asks it: the agent, and the message request the service takes, its key the window's own. */
 export const codingAgentMessageParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,

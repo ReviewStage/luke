@@ -48,6 +48,9 @@ export const GATEWAY_METHOD = {
   TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
   /** One page of a task's conversation as an agent's transcript is read, or a brain worker's under the call that started it, held open by the service while a turn or the worker runs; answered to the caller, never held in the view. */
   TASKS_MESSAGES: "tasks.messages",
+  /** A task's planning worker's transcript followed and let go, on the same terms as `CODING_AGENTS_TRANSCRIPT_FOLLOW`. */
+  TASKS_WORKER_TRANSCRIPT_FOLLOW: "tasks.workerTranscriptFollow",
+  TASKS_WORKER_TRANSCRIPT_UNFOLLOW: "tasks.workerTranscriptUnfollow",
   /** A window of a file of one task's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
   TASKS_FILE: "tasks.file",
   /** One folder of one task's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
@@ -136,6 +139,15 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_START: "codingAgents.start",
   /** One agent's transcript past a cursor, held open by the service while the agent runs. */
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  /**
+   * One agent's transcript, or one of its workers', followed from now until
+   * it is let go or the account signs out, over Neon Realtime. Its pages are
+   * heard as `TRANSCRIPT_CHANGED` events, never answered: the first from the
+   * start, then each one past the last; following again starts over.
+   */
+  CODING_AGENTS_TRANSCRIPT_FOLLOW: "codingAgents.transcriptFollow",
+  /** One agent's or worker's transcript let go: no more `TRANSCRIPT_CHANGED` events of it until it is followed again. */
+  CODING_AGENTS_TRANSCRIPT_UNFOLLOW: "codingAgents.transcriptUnfollow",
   /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
@@ -573,6 +585,8 @@ export const GATEWAY_EVENT = {
   TERMINAL_STATE: "terminal.state",
   /** What waits on the developer across the account, whole, each time it changes while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
+  /** A followed transcript's next page, or why there is none, each time it moves while it is followed. */
+  TRANSCRIPT_CHANGED: "transcript.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

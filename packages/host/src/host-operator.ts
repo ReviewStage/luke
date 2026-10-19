@@ -74,6 +74,8 @@ import {
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
+  type CodingAgentTranscriptChanged,
+  type CodingAgentTranscriptKey,
   type CodingAgentWorkspaceListParams,
   codingAgentAgentAnswerSchema,
   codingAgentChangesAnswerViewSchema,
@@ -98,6 +100,7 @@ import {
   codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentReviewOptionsAnswerViewSchema,
+  codingAgentTranscriptChangedSchema,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
@@ -114,6 +117,7 @@ import {
   planTemplateRevisionAnswerViewSchema,
   planTemplateRevisionsAnswerViewSchema,
   providerKeysAnswerViewSchema,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   FACTORY_WORLD_CALL_FAILURE,
@@ -668,6 +672,12 @@ export interface HostOperator {
   codingAgentAccountInboxUnfollow(): Effect.Effect<void>;
   /** What waits on the developer across the account, whole, each time it changes while it is followed. */
   onAccountInboxChanged(listener: (inbox: AccountInboxAnswer) => void): () => void;
+  /** One agent's, worker's, or planning worker's transcript, followed from now until let go or signed out, its pages heard through `onTranscriptChanged`; following again starts over. */
+  transcriptFollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+  /** One followed transcript let go: nothing more is heard of it until it is followed again. */
+  transcriptUnfollow(transcript: CodingAgentTranscriptKey): Effect.Effect<void>;
+  /** A followed transcript's next page, or why there is none, each time it moves. */
+  onTranscriptChanged(listener: (changed: CodingAgentTranscriptChanged) => void): () => void;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   codingAgentInboxAttachment(
     params: CodingAgentInboxAttachmentParams,
@@ -804,6 +814,15 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 }
 
 /** What a coding-agent call the host could not answer is drawn as. */
+/** A followed transcript as the gateway's params carry it. */
+function transcriptParams(transcript: CodingAgentTranscriptKey): WireRecord {
+  if (transcript.kind === TRANSCRIPT_KIND.TASK_WORKER) {
+    return { kind: transcript.kind, taskId: transcript.taskId, callId: transcript.callId };
+  }
+  const { kind, agentId, callId } = transcript;
+  return callId === undefined ? { kind, agentId } : { kind, agentId, callId };
+}
+
 const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
 /** An automation call that reached no answer, as every automation method answers one. */
@@ -1882,6 +1901,33 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (payload) =>
           Result.getOrUndefined(
             readEither(accountInboxAnswerSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    transcriptFollow: (transcript) =>
+      fire(
+        client.call(
+          transcript.kind === TRANSCRIPT_KIND.AGENT
+            ? GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW
+            : GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW,
+          transcriptParams(transcript),
+        ),
+      ),
+    transcriptUnfollow: (transcript) =>
+      fire(
+        client.call(
+          transcript.kind === TRANSCRIPT_KIND.AGENT
+            ? GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW
+            : GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_UNFOLLOW,
+          transcriptParams(transcript),
+        ),
+      ),
+    onTranscriptChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.TRANSCRIPT_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(codingAgentTranscriptChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
           ),
         listener,
       ),

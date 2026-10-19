@@ -15,6 +15,8 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
   type CodingAgentMessagesAnswerView,
+  codingAgentTranscriptKeySchema,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
@@ -122,6 +124,7 @@ import {
   Effect,
   Equal,
   FiberHandle,
+  FiberMap,
   Option,
   Queue,
   RcMap,
@@ -138,7 +141,12 @@ import type { HostKernel } from "./host-kernel.js";
 import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
-import { type TranscriptFollows, transcriptFollows, transcriptPast } from "./transcript-follow.js";
+import {
+  followTranscript,
+  type TranscriptFollows,
+  transcriptFollows,
+  transcriptPast,
+} from "./transcript-follow.js";
 
 /**
  * compose-tasks.ts -- the panel's named tasks, read from the service: the list, the one active task, and its document, drawn as the notetaker writes it during a call.
@@ -556,6 +564,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     openLive: dependencies.openLive ?? openRealtimeClient,
     now: kernel.now,
   });
+
+  /** The planning workers' transcripts main follows, one fiber each. */
+  const followedWorkers = yield* FiberMap.make<TaskWorkerKey>();
 
   /** The tasks whose call just said something, whose parked conversation read the loop below wakes. */
   const conversationWakes = yield* Queue.sliding<string>(1);
@@ -1223,6 +1234,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
+  /** The planning worker's transcript a follow names, or the invalid-params refusal. */
+  function workerTranscriptOf(
+    params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
+  ) {
+    return Effect.gen(function* () {
+      const sentence = "following a planning worker's transcript names its task and its call";
+      const read = readEither(codingAgentTranscriptKeySchema)(unparsedWire(params));
+      if (Result.isFailure(read) || read.success.kind !== TRANSCRIPT_KIND.TASK_WORKER) {
+        return yield* invalid(sentence);
+      }
+      return read.success;
+    });
+  }
+
   const methods: GatewayMethodTable = {
     // The workspaces are read beside the tasks rather than before them, and
     // only where the last read is stale: the first refresh after a launch or
@@ -1328,6 +1353,33 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 ),
               });
         return carried<CodingAgentMessagesAnswerView>(answer);
+      }),
+    // A planning worker's transcript is followed for main, each page told as an event.
+    [GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const transcript = yield* workerTranscriptOf(params);
+        const { taskId, callId } = transcript;
+        const key = new TaskWorkerKey({ taskId, callId });
+        const tell = (page: CodingAgentMessagesAnswerView) =>
+          Effect.sync(() =>
+            kernel.emit(GATEWAY_EVENT.TRANSCRIPT_CHANGED, carried({ transcript, page })),
+          );
+        const follow = gate()
+          ? followTranscript(
+              workerTranscripts,
+              key,
+              (after) => served(conversations.taskWorkerMessagesNow(taskId, callId, after)),
+              tell,
+            )
+          : tell({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        yield* FiberMap.run(followedWorkers, key, follow);
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { taskId, callId } = yield* workerTranscriptOf(params);
+        yield* FiberMap.remove(followedWorkers, new TaskWorkerKey({ taskId, callId }));
+        return {};
       }),
     // A file's window is answered to the File tab that asked, coloured here,
     // and held nowhere: the tab keeps the windows it has scrolled through.
@@ -2164,6 +2216,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     reset: Effect.gen(function* () {
       yield* endTaskCall(undefined);
       yield* FiberHandle.clear(conversationRead);
+      yield* FiberMap.clear(followedWorkers);
       for (const key of yield* RcMap.keys(workerTranscripts)) {
         yield* RcMap.invalidate(workerTranscripts, key);
       }

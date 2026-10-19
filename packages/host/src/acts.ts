@@ -36,6 +36,7 @@ import {
   codingAgentInboxReadStateViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentPictureParamsSchema,
+  codingAgentTranscriptKeySchema,
 } from "@luke/features/coding-agent-view";
 import {
   type FeedbackResult,
@@ -199,6 +200,14 @@ export const ACT_KIND = {
   /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   CODING_AGENTS_PICTURE: "codingAgents.picture",
+  /**
+   * An agent's, worker's, or planning worker's transcript followed by the
+   * window that asks and let go by it: its pages are pushed to that window
+   * alone on `app:transcript`, each time it moves, until the window lets it
+   * go or its page is gone.
+   */
+  CODING_AGENTS_TRANSCRIPT_FOLLOW: "codingAgents.transcriptFollow",
+  CODING_AGENTS_TRANSCRIPT_UNFOLLOW: "codingAgents.transcriptUnfollow",
   /**
    * A Browser tab's view, which main owns over the panel that asked
    * (`browser-views.ts`): opened on an address and answered how its page
@@ -578,6 +587,16 @@ export const ACT = {
       isReadable(codingAgentMessagesAnswerViewSchema),
     ),
     refusal: "Could not read that task's conversation on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_TRANSCRIPT_FOLLOW]: {
+    payload: actSchema(codingAgentTranscriptKeySchema),
+    result: answersNothing,
+    refusal: "Could not follow the transcript on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_TRANSCRIPT_UNFOLLOW]: {
+    payload: actSchema(codingAgentTranscriptKeySchema),
+    result: answersNothing,
+    refusal: "Could not let the transcript go on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX]: {
     payload: actSchema(codingAgentInboxParamsSchema),

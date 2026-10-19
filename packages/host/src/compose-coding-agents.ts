@@ -51,6 +51,7 @@ import {
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  codingAgentTranscriptKeySchema,
   codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
@@ -63,6 +64,7 @@ import {
   planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
@@ -74,7 +76,7 @@ import {
 } from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, FiberHandle, RcMap, Result, type Schema, type Scope } from "effect";
+import { Effect, FiberHandle, FiberMap, RcMap, Result, type Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { followAccountInbox } from "./account-inbox-follow.js";
 import type { AccountComposer } from "./compose-account.js";
@@ -84,6 +86,7 @@ import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import { inboxPast, type ScopeInboxes, scopeInboxes } from "./scope-inbox-follow.js";
 import {
+  followTranscript,
   type TranscriptFollows,
   TranscriptKey,
   transcriptFollows,
@@ -218,14 +221,16 @@ export function composeCodingAgents(
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
     });
-    return composed(dependencies, http, follower, { inboxes, transcripts });
+    const followed = yield* FiberMap.make<TranscriptKey>();
+    return composed(dependencies, http, follower, { inboxes, transcripts, followed });
   });
 }
 
-/** The subscriptions the windows' reads share: each plan's and agent's inbox, and each transcript. */
+/** The subscriptions the windows' reads share: each plan's and agent's inbox, and each transcript; and the transcripts main follows, one fiber each. */
 interface Follows {
   readonly inboxes: ScopeInboxes;
   readonly transcripts: TranscriptFollows;
+  readonly followed: FiberMap.FiberMap<TranscriptKey>;
 }
 
 /** The composer's one table, built from its seams; nothing here starts anything but the account inbox's follower, when main asks for it, and a scope's inbox or a transcript's subscription, while a window reads it. */
@@ -233,7 +238,7 @@ function composed(
   dependencies: CodingAgentsDependencies,
   http: HttpClient.HttpClient,
   follower: FiberHandle.FiberHandle<never>,
-  { inboxes, transcripts }: Follows,
+  { inboxes, transcripts, followed }: Follows,
 ): CodingAgentsComposer {
   const { kernel, client } = dependencies;
   const gate = gateOf(dependencies);
@@ -248,6 +253,20 @@ function composed(
     const result = readEither(schema)(unparsedWire(params));
     return Result.isFailure(result) ? invalid(sentence) : Effect.succeed(result.success);
   };
+
+  /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
+  const agentTranscriptOf = (
+    params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
+  ) =>
+    Effect.gen(function* () {
+      const sentence = "following a transcript names an agent, and a worker's call where it is one";
+      const transcript = yield* read(codingAgentTranscriptKeySchema, params, sentence);
+      if (transcript.kind !== TRANSCRIPT_KIND.AGENT) return yield* invalid(sentence);
+      return {
+        transcript,
+        key: new TranscriptKey({ agentId: transcript.agentId, callId: transcript.callId }),
+      };
+    });
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.CODING_AGENTS_MODELS]: () =>
@@ -388,6 +407,30 @@ function composed(
             })
           : UNANSWERED;
         return carried<CodingAgentMessagesAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { transcript, key } = yield* agentTranscriptOf(params);
+        const tell = (page: CodingAgentMessagesAnswerView) =>
+          Effect.sync(() =>
+            kernel.emit(GATEWAY_EVENT.TRANSCRIPT_CHANGED, carried({ transcript, page })),
+          );
+        const follow = gate()
+          ? followTranscript(
+              transcripts,
+              key,
+              (after) => asked(client.messagesNow(key.agentId, after, key.callId)),
+              tell,
+            )
+          : tell(UNANSWERED);
+        yield* FiberMap.run(followed, key, follow);
+        return {};
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { key } = yield* agentTranscriptOf(params);
+        yield* FiberMap.remove(followed, key);
+        return {};
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGE]: (params) =>
       Effect.gen(function* () {
@@ -700,6 +743,7 @@ function composed(
 
   const reset = Effect.gen(function* () {
     yield* FiberHandle.clear(follower);
+    yield* FiberMap.clear(followed);
     for (const scope of yield* RcMap.keys(inboxes)) yield* RcMap.invalidate(inboxes, scope);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
   });

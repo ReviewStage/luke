@@ -15,8 +15,10 @@ import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import {
+  CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentMessagesAnswer,
@@ -85,7 +87,7 @@ import {
   GATEWAY_METHOD,
   type GatewayMethod,
 } from "@luke/gateway";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { MESSAGE_ROLE, type WireRecord, type WireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
@@ -998,6 +1000,8 @@ interface StandingCall {
 function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
   return Effect.gen(function* () {
     const told: TasksView[] = [];
+    /** Every followed transcript's page the host told, in order. */
+    const pages: WireValue[] = [];
     const waiters: {
       wanted: (view: TasksView) => boolean;
       seen: Deferred.Deferred<TasksView>;
@@ -1011,6 +1015,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
         now: () => NOW,
         runMode: { sendsNetwork: true },
         emit: (kind, payload) => {
+          if (kind === GATEWAY_EVENT.TRANSCRIPT_CHANGED) pages.push(payload);
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) return;
           const read = readEither(tasksViewSchema)(payload);
           assert.ok(Result.isSuccess(read), "the planning event carries a view");
@@ -1051,7 +1056,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
         waiters.push({ wanted, seen });
         return Deferred.await(seen);
       });
-    return { tasks, call, told, last, viewWhere, viewLands, conversations, realtime };
+    return { tasks, call, told, pages, last, viewWhere, viewLands, conversations, realtime };
   });
 }
 
@@ -3044,5 +3049,48 @@ it.effect(
       assert.deepEqual(yield* Fiber.join(read), answered);
       assert.deepEqual(conversations.workerReads, [`${INVITES}:call-0-0:2:0`]);
       assert.deepEqual(conversations.asks, []);
+    }),
+);
+
+it.effect(
+  "a followed planning worker's transcript is told from the start, the next page at once after one that said something, then again only as its statements move; letting it go ends the telling",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, pages, conversations, realtime } = yield* subject(service);
+      conversations.workerSealed = SEALED_WORKER;
+      const transcript = { kind: TRANSCRIPT_KIND.TASK_WORKER, taskId: INVITES, callId: "call-0-0" };
+      assert.deepEqual(yield* call(GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW, transcript), {});
+      const said = workerPage(
+        [journal("worker-1", "Compared them.")],
+        CODING_AGENT_STATUS.RUNNING,
+        false,
+      );
+      const caught = workerPage([], CODING_AGENT_STATUS.RUNNING, true);
+      yield* conversations.answerWorker(said);
+      yield* conversations.answerWorker(caught);
+      yield* realtime.deliver(1);
+      const ended = workerPage([], CODING_AGENT_STATUS.COMPLETED, false);
+      yield* conversations.answerWorker(ended);
+      yield* Effect.repeat(Effect.yieldNow, { times: 100 });
+
+      const windowPage = ({ holds: _holds, ...page }: TranscriptNowAnswer) => page;
+      assert.deepEqual(pages, [
+        { transcript, page: windowPage(said) },
+        { transcript, page: windowPage(caught) },
+        { transcript, page: windowPage(ended) },
+      ]);
+      assert.deepEqual(conversations.workerReads, [
+        `${INVITES}:call-0-0:${CODING_AGENT_CURSOR_START}`,
+        `${INVITES}:call-0-0:3:0`,
+        `${INVITES}:call-0-0:3:0`,
+      ]);
+      assert.ok(!JSON.stringify(pages).includes("capability"));
+
+      yield* call(GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_UNFOLLOW, transcript);
+      yield* realtime.deliver(2);
+      yield* Effect.repeat(Effect.yieldNow, { times: 100 });
+      assert.equal(pages.length, 3);
+      assert.equal(conversations.workerReads.length, 3);
     }),
 );
