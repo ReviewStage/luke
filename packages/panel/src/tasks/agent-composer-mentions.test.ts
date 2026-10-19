@@ -1477,14 +1477,14 @@ function IssuesPage({ children }: { children: ReactNode }): ReactNode {
 }
 
 /** The box on a plan's page in a workspace with issues, Issues on or off, every message it sends written down. */
-async function issuesBox(on: boolean) {
+async function issuesBox(on: boolean, standing: Issue[] = [REFRESH_ISSUE, LINK_ISSUE]) {
   const calls = fakeAppBridgeCalls();
   fakeAppBridge({
     ...calls,
     act: (request: Act): Promise<ActOutcome> => {
       if (request.kind !== ACT_KIND.ISSUES_LIST) return calls.act?.(request) ?? Promise.reject();
       told.push(request);
-      const value = { issues: [REFRESH_ISSUE, LINK_ISSUE] };
+      const value = { issues: [...standing] };
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
     },
   });
@@ -1535,13 +1535,14 @@ test("with Issues on an @ offers the workspace's issues, found by their identifi
 });
 
 test("an @ typed again where a closed one stood reads the workspace's issues again, so one filed between them is offered", async () => {
-  const { container } = await issuesBox(true);
-  const reads = () => told.filter((each) => each.kind === ACT_KIND.ISSUES_LIST).length;
+  const standing = [REFRESH_ISSUE];
+  const { container } = await issuesBox(true, standing);
 
   typeInComposer(container, "@");
   await settle();
-  const first = reads();
-  // The word deleted, as the developer clears the box, and an @ typed where it stood.
+  const first = issuesListed(container);
+  // A teammate files an issue, then the word is deleted, as the developer clears the box, and an @ typed where it stood.
+  standing.unshift(LINK_ISSUE);
   act(() => {
     composerEditor(container).editor?.commands.clearContent(true);
   });
@@ -1549,7 +1550,11 @@ test("an @ typed again where a closed one stood reads the workspace's issues aga
   typeInComposer(container, "@");
   await settle();
 
-  assert.deepEqual([first, reads()], [1, 2]);
+  assert.deepEqual(first, ["ACME-7 Token refresh fails"]);
+  assert.deepEqual(issuesListed(container), [
+    "ACME-12 Invite by link",
+    "ACME-7 Token refresh fails",
+  ]);
 });
 
 test("with Issues off an @ offers no issue and reads none", async () => {
