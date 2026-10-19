@@ -10,6 +10,7 @@ import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
+import { workspaceInvitationsLiveStatement } from "../accounts/workspace-invitations.js";
 import { workspaceMembersLiveStatements } from "../accounts/workspace-members.js";
 import {
   agentFollowedBy,
@@ -119,6 +120,9 @@ function liveStatements() {
       Object.entries(Option.getOrThrow(workspaceMembersLiveStatements(USER_ID, randomUUID()))).map(
         ([part, query]) => [`workspace-members.${part}`, query],
       ),
+    ),
+    "workspace-invitations.invitations": Option.getOrThrow(
+      workspaceInvitationsLiveStatement(USER_ID, randomUUID()),
     ),
   };
 }

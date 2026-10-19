@@ -36,6 +36,7 @@ import {
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { taskListLiveAnswerSchema } from "@luke/features/task-list-live";
 import {
+  workspaceInvitationsLiveAnswerSchema,
   workspaceMembersLiveAnswerSchema,
   workspacesLiveAnswerSchema,
 } from "@luke/features/workspace-live";
@@ -1430,6 +1431,42 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
         });
         // A read started for another account is signed out, before the workspace is looked at.
+        assert.equal(
+          (yield* ask({ bearer: owner, forUser: outsider, path, sealing: Option.some(SCRIPTED) }))
+            .status,
+          HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        );
+      }),
+  );
+
+  it.effect(
+    "a workspace's invitations are sealed with the service's origin for its owner, refused to a member, and not found for an outsider",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = `user-${randomUUID()}`;
+        const teammate = `user-${randomUUID()}`;
+        const outsider = `user-${randomUUID()}`;
+        for (const id of [owner, teammate, outsider]) {
+          yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+        }
+        const workspaceId = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspaceId, teammate);
+        const path = `/api/live/workspace-invitations?workspaceId=${workspaceId}`;
+
+        const sealed = yield* ask({ bearer: owner, path, sealing: Option.some(SCRIPTED) });
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(workspaceInvitationsLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.origin, ORIGIN);
+        assert.ok(answer.queries.invitations.capability.includes(`"${owner}"`));
+        assert.deepEqual(yield* ask({ bearer: teammate, path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+        });
+        assert.deepEqual(yield* ask({ bearer: outsider, path, sealing: Option.some(SCRIPTED) }), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
         assert.equal(
           (yield* ask({ bearer: owner, forUser: outsider, path, sealing: Option.some(SCRIPTED) }))
             .status,
