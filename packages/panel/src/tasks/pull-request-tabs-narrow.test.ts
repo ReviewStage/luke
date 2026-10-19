@@ -5,7 +5,7 @@ import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
- * pull-request-tabs-narrow.test.ts -- the Pull request tab's row of tabs gives way in steps as the tab narrows: Review's word first, then the tabs' room, and only on the narrowest tab every tab's name at once.
+ * pull-request-tabs-narrow.test.ts -- the Pull request tab's row of tabs gives way in steps as the tab narrows: Review's word first, then the tabs' room; the tabs fold only once their names no longer fit (`choice-bar.test.ts`).
  *
  * jsdom lays nothing out and answers no container query, so the window's
  * stylesheets are laid for a tab of each width (`testing/container-width.ts`)
@@ -22,11 +22,12 @@ afterEach(() => {
 
 /** The tab's row of tabs, Review at its end, in a tab as wide as given. */
 function rowAt(width: number) {
+  laid?.remove();
   laid = layContainersAt({ "pull-request-tab": width });
   document.body.innerHTML = [
     '<div class="file-view pull-request-tab">',
     '<div class="pull-request-tabs">',
-    '<div class="luke-choice-bar" role="tablist" data-look="fill" data-fold="toolbar"></div>',
+    '<div class="luke-choice-bar" role="tablist" data-look="fill" data-fold="together"></div>',
     '<div class="pull-request-review"><button class="luke-button">',
     '<span class="pull-request-review-words">Review</span>',
     "</button></div>",
@@ -41,20 +42,15 @@ function rowAt(width: number) {
   };
 }
 
-test("a roomy tab names Review and folds nothing", () => {
+test("a roomy tab names Review and keeps the tabs' room", () => {
   assert.deepEqual(rowAt(700), { fold: "", reviewWord: true });
 }, 30_000);
 
-test("at 600px Review draws its glyph alone and the tabs keep their names and their room", () => {
+test("at 600px Review draws its glyph alone and the tabs keep their room", () => {
   assert.deepEqual(rowAt(600), { fold: "", reviewWord: false });
 }, 30_000);
 
-test("down to 480px the tabs take their room in, still named", () => {
+test("below 560px the tabs take their room in", () => {
   assert.deepEqual(rowAt(520), { fold: "tight", reviewWord: false });
-  laid?.remove();
-  assert.deepEqual(rowAt(480), { fold: "tight", reviewWord: false });
+  assert.deepEqual(rowAt(470), { fold: "tight", reviewWord: false });
 }, 60_000);
-
-test("only below 480px do the tabs fold, every one at once", () => {
-  assert.deepEqual(rowAt(470), { fold: "folded", reviewWord: false });
-}, 30_000);

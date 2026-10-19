@@ -198,7 +198,7 @@
      is chosen, because a clearable bar with none chosen would otherwise
      name none of its options. */
   @container luke-choice-bar (width < 520px) {
-    .luke-choice-bar:not([data-fold="toolbar"]):has(
+    .luke-choice-bar:not([data-fold="together"]):has(
         > :is([aria-selected="true"], [aria-checked="true"])
       )
       .luke-choice-bar-option:not([aria-selected="true"], [aria-checked="true"])
@@ -213,32 +213,31 @@
     }
   }
 
-  /* A bar that folds as its toolbar says answers the toolbar's
-     `--luke-fold` rather than its own width: `tight` takes its options' room
-     in around their words, and `folded` shows every option by its glyph
-     alone, the chosen one too, so no option is named while its neighbours
-     are not; a reader still has every name. */
-  /* biome-ignore lint/suspicious/noDuplicateCustomProperties: two values a query tests, not two declarations */
-  @container style(--luke-fold: tight) or style(--luke-fold: folded) {
-    .luke-choice-bar[data-look="fill"][data-fold="toolbar"] {
+  /* A bar folding together takes its options' room in where its toolbar
+     says `--luke-fold: tight`, and once their names no longer fit
+     (`data-folded`, measured by `choice-bar.tsx`) shows every option by its
+     glyph alone, the chosen one too, so no option is named while its
+     neighbours are not; a reader still has every name. */
+  @container style(--luke-fold: tight) {
+    .luke-choice-bar[data-look="fill"][data-fold="together"] {
       gap: 0;
     }
 
-    .luke-choice-bar[data-look="fill"][data-fold="toolbar"] .luke-choice-bar-option {
+    .luke-choice-bar[data-look="fill"][data-fold="together"] .luke-choice-bar-option {
       gap: var(--luke-space-4);
       padding-inline: var(--luke-space-6);
     }
   }
 
-  @container style(--luke-fold: folded) {
-    .luke-choice-bar[data-fold="toolbar"] .luke-choice-bar-icon + .luke-choice-bar-label {
-      position: absolute;
-      overflow: hidden;
-      width: 1px;
-      height: 1px;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
+  .luke-choice-bar[data-fold="together"][data-folded="true"]
+    .luke-choice-bar-icon
+    + .luke-choice-bar-label {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 
   /* Segmented ------------------------------------------------------------ */

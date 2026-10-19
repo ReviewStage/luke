@@ -3,10 +3,11 @@
 import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { COUNT_TONE, linesCount } from "../choice/count-part.js";
 import {
   CHOICE_BAR_FOCUS,
+  CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
   ChoiceBar,
   type ChoiceBarFocus,
@@ -22,8 +23,9 @@ import {
  * keeps the keyboard where it was when pressed; the arrows, Home, and End
  * choose as they move and take the keyboard along, ↑ and ↓ only in a radio
  * group, and neither with a modifier held nor in a disabled bar; a disabled
- * option is not chosen; a count's glyph says its state in words; and the
- * app's `data-` attributes reach the bar.
+ * option is not chosen; a count's glyph says its state in words; the
+ * app's `data-` attributes reach the bar; and a bar folding together folds
+ * every option once their names no longer fit, and unfolds once they would.
  */
 
 declare global {
@@ -328,4 +330,53 @@ test("a count's glyph says its state in words beside the count", () => {
   const checks = option(page, "Checks");
   assert.equal(checks.querySelector('[role="img"]')?.getAttribute("aria-label"), "failing");
   assert.equal(checks.textContent, "Checks×1");
+});
+
+test("a bar folding together folds every option once their names no longer fit its width, and unfolds only once the room they need stands again", () => {
+  // Note that jsdom lays nothing out, so the bar's width and the width its named options need are the test's, and so is when it resizes.
+  let room = 500;
+  const needs = 400;
+  const observers: (() => void)[] = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private readonly heard: () => void) {
+        observers.push(() => this.heard());
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => room);
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => needs);
+  const resize = (width: number) => {
+    room = width;
+    act(() => {
+      for (const heard of observers) heard();
+    });
+  };
+  const page = render(
+    createElement(ChoiceBar<View>, {
+      label: "Pull request",
+      items: ITEMS,
+      value: VIEW.CONVERSATION,
+      onChange: () => undefined,
+      look: CHOICE_BAR_LOOK.FILL,
+      fold: CHOICE_BAR_FOLD.TOGETHER,
+    }),
+  );
+  const folded = () =>
+    page.querySelector('[role="radiogroup"]')?.getAttribute("data-folded") === "true";
+  try {
+    assert.equal(folded(), false, "names that fit stand");
+    resize(300);
+    assert.equal(folded(), true, "names that no longer fit fold, every option at once");
+    resize(350);
+    assert.equal(folded(), true, "short of the room the names need, the bar stays folded");
+    resize(420);
+    assert.equal(folded(), false, "with the room they need, the names come back");
+  } finally {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  }
 });

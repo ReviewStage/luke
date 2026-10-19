@@ -2000,7 +2000,7 @@ function PullRequestTabBody({
                     value={view}
                     onChange={onView}
                     look={CHOICE_BAR_LOOK.FILL}
-                    fold={CHOICE_BAR_FOLD.TOOLBAR}
+                    fold={CHOICE_BAR_FOLD.TOGETHER}
                     panels={ids}
                   />
                   {reviewable ? (

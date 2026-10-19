@@ -18,7 +18,8 @@
  * given: a fill bar narrower than its options need scrolls sideways and
  * shows an option other than the chosen one by its glyph alone, its name
  * left to a reader who cannot see it; one standing in a toolbar beside other
- * controls folds as the toolbar says instead (`fold`), every option at once.
+ * controls folds every option at once instead, once their names no longer
+ * fit (`fold`).
  * A count is words, or parts each in
  * its own tone (`CountPart`), which holds chosen or not; a diff's lines are
  * `linesCount`'s, always green and red.
@@ -45,6 +46,7 @@ import {
   useCallback,
   useLayoutEffect,
   useRef,
+  useState,
 } from "react";
 import { CHOICE_ROLE, type ChoiceRole } from "../choice/choice-keys.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
@@ -86,13 +88,15 @@ export type ChoiceBarInset = (typeof CHOICE_BAR_INSET)[keyof typeof CHOICE_BAR_I
 /**
  * What folds a fill bar's options when the row is short of room: its own
  * width, each option but the chosen one drawn by its glyph alone below a
- * width; or its toolbar, by the `--luke-fold` it sets, as it folds its
- * buttons: `tight` takes the options' room in, and `folded` draws every
- * option by its glyph alone, the chosen one too.
+ * width; or their names not fitting (`together`), measured, every option
+ * then drawn by its glyph alone at once, the chosen one too, so none is
+ * named while the others are not. A bar folding together also takes its
+ * options' room in where its toolbar sets `--luke-fold: tight`, which it
+ * does before their names stop fitting.
  */
 export const CHOICE_BAR_FOLD = {
   OWN: "own",
-  TOOLBAR: "toolbar",
+  TOGETHER: "together",
 } as const;
 
 export type ChoiceBarFold = (typeof CHOICE_BAR_FOLD)[keyof typeof CHOICE_BAR_FOLD];
@@ -229,7 +233,58 @@ function useThumb() {
     },
     [optionRef],
   );
-  return { barRef, optionRef };
+  return { bar, barRef, optionRef };
+}
+
+/** What the options say, which a fold measured with their names stands for until it changes. */
+function namesOf(items: readonly ChoiceItem<string>[]): string {
+  return JSON.stringify(
+    items.map((item) => [
+      item.label,
+      item.count === undefined || !isParts(item.count)
+        ? item.count
+        : item.count.map((part) => part.text),
+    ]),
+  );
+}
+
+/**
+ * Whether a bar folding together draws its options by their glyphs alone:
+ * while their names do not fit its width. Note that the width the names
+ * need is measured while they are drawn and kept while they are folded,
+ * when it cannot be read, so the bar unfolds only once that much room
+ * stands; options that say something new are measured named again, before
+ * the frame is painted.
+ */
+function useFoldTogether(
+  on: boolean,
+  bar: React.RefObject<HTMLDivElement | null>,
+  names: string,
+): boolean {
+  const [folded, setFolded] = useState(false);
+  const needed = useRef(0);
+  // Note that new names are measured named again, which is all this effect is for.
+  useLayoutEffect(() => {
+    setFolded(false);
+  }, [names]);
+  useLayoutEffect(() => {
+    const element = bar.current;
+    if (!on || element === null) return undefined;
+    const measure = () => {
+      if (!folded && element.scrollWidth > element.clientWidth) {
+        needed.current = element.scrollWidth;
+        setFolded(true);
+      } else if (folded && element.clientWidth >= needed.current) {
+        setFolded(false);
+      }
+    };
+    measure();
+    if (!("ResizeObserver" in globalThis)) return undefined;
+    const resized = new ResizeObserver(measure);
+    resized.observe(element);
+    return () => resized.disconnect();
+  }, [on, folded, bar, names]);
+  return on && folded;
 }
 
 /**
@@ -340,6 +395,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     ...appAttributes
   } = props;
   const thumb = useThumb();
+  const folded = useFoldTogether(fold === CHOICE_BAR_FOLD.TOGETHER, thumb.bar, namesOf(items));
   const role = panels === undefined ? CHOICE_ROLE.RADIO : CHOICE_ROLE.TAB;
   const roving = focus === CHOICE_BAR_FOCUS.ROVING;
   const choose = (chosen: Value) => props.onChange(chosen);
@@ -365,6 +421,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
       data-size={size}
       data-inset={inset}
       data-fold={fold}
+      data-folded={folded ? "true" : undefined}
     >
       <span className="luke-choice-bar-thumb" aria-hidden="true" />
       {items.map((item) => {
