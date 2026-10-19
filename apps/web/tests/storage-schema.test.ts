@@ -85,6 +85,7 @@ const DECLARED_TABLES = [
   "organization",
   "personal_workspace",
   "plan_attachment",
+  "plan_attachment_moved",
   "plan_comment",
   "plan_comment_thread",
   "plan_page_version",

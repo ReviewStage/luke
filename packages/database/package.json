@@ -72,7 +72,6 @@
     "./schemas/issue": "./src/schemas/issue.js",
     "./schemas/mac-command": "./src/schemas/mac-command.js",
     "./schemas/personal-workspace": "./src/schemas/personal-workspace.js",
-    "./schemas/plan-attachment": "./src/schemas/plan-attachment.js",
     "./schemas/plan-comment": "./src/schemas/plan-comment.js",
     "./schemas/task": "./src/schemas/task.js",
     "./schemas/plan-page": "./src/schemas/plan-page.js",

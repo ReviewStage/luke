@@ -4,8 +4,9 @@ import {
   type CodingAgentAttachmentType,
 } from "@luke/features/coding-agent-wire";
 import { INBOX_BOUNDS } from "@luke/features/inbox-wire";
+import { PICTURE_BOUNDS } from "@luke/features/picture-wire";
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, check, index, integer, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { INBOX_ATTACHMENT_KIND, type InboxAttachmentKind } from "../storage-vocabulary.js";
 import { bytea, timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
@@ -17,6 +18,20 @@ import { task } from "./task.js";
 /** A value written into a check as SQL rather than a parameter, which a constraint cannot take. */
 const literal = (value: string) => sql.raw(`'${value}'`);
 const bound = (bytes: number) => sql.raw(String(bytes));
+
+/** The columns that each name an owner of their own kind; a row names one of them, or none but its task. */
+const ownerColumns = (table: {
+  readonly chatMessageId: AnyPgColumn;
+  readonly inboxItemId: AnyPgColumn;
+}) => [table.chatMessageId, table.inboxItemId];
+
+/** Whether the row is owned by its task alone, a plan's picture: it names a task and no owner of another kind. */
+export const ownedByTaskAlone = (table: {
+  readonly taskId: AnyPgColumn;
+  readonly chatMessageId: AnyPgColumn;
+  readonly inboxItemId: AnyPgColumn;
+}) =>
+  sql`(${table.taskId} is not null and num_nonnulls(${sql.join(ownerColumns(table), sql`, `)}) = 0)`;
 
 /**
  * attachment.ts -- one file Luke keeps for something it belongs to: its bytes, kept beside the row that owns it, whatever kind of row that is.
@@ -37,8 +52,14 @@ const bound = (bytes: number) => sql.raw(String(bytes));
  * its name and its columns' names, so a run still on a deployment from
  * before the move reads and writes the rows it always did; a later
  * migration drops the view once those runs have drained. A chat message's
- * pictures moved first, and an inbox item's files second: `chat_attachment`
- * and `inbox_attachment` are those views.
+ * pictures moved first, an inbox item's files second, and a plan's pictures
+ * third: `chat_attachment`, `inbox_attachment`, and `plan_attachment` are
+ * those views.
+ *
+ * A plan's picture is owned by its task directly: it names its task and no
+ * other owner (`ownedByTaskAlone`). Its uploader stays its account until the
+ * account is gone, and `saved_at` is when a save of the plan's text first
+ * named it, so the scheduled sweep can delete an upload no save ever did.
  *
  * An inbox item's file is a picture of an image block's, a file the
  * developer's answer carried, or a file a message on the item's thread
@@ -57,13 +78,13 @@ export const attachment = pgTable(
   "attachment",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    /** The owner's workspace, which a read is scoped to and which the row goes with. */
-    organizationId: text("organization_id")
-      .notNull()
-      .references(() => organization.id, { onDelete: "cascade" }),
+    /** The owner's workspace, which a read is scoped to and which the row goes with; null for a plan's picture kept before it moved here, whose task names its workspace. */
+    organizationId: text("organization_id").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
     /** The account it was kept for, such as an inbox item's; null for an owner that names none, and once the account is gone. */
     userId: text("user_id").references(() => user.id, { onDelete: "set null" }),
-    /** The task it belongs to, which moves it to the task's workspace; null where it belongs to none. */
+    /** The task it belongs to, which moves it to the task's workspace, and owns it where no other owner stands: a plan's picture. Null where it belongs to no task. */
     taskId: uuid("task_id").references(() => task.id, { onDelete: "cascade" }),
     /** The chat message whose image block names it; null for every other owner's. */
     chatMessageId: uuid("chat_message_id").references(() => chatMessage.id, {
@@ -87,6 +108,8 @@ export const attachment = pgTable(
     byteCount: integer("byte_count").notNull(),
     bytes: bytea("bytes").notNull(),
     createdAt: timestamptz("created_at").notNull(),
+    /** When a save of the plan's text first named it, for a plan's picture; null while none has, and for every other owner's. */
+    savedAt: timestamptz("saved_at"),
   },
   (table) => [
     // A message's pictures are read and deleted by the message.
@@ -100,15 +123,21 @@ export const attachment = pgTable(
     index("attachment_inbox_message")
       .on(table.inboxMessageId)
       .where(sql`${table.inboxMessageId} is not null`),
-    // Exactly one owner stands on a row; each new kind of owner adds its column here. An inbox message's file names its item beside its message.
+    // A task's attachments are moved with it, and a plan's pictures read, counted, and stamped by it.
+    index("attachment_task").on(table.taskId).where(sql`${table.taskId} is not null`),
+    // The sweep reads the plan uploads no save named, oldest first.
+    index("attachment_unsaved")
+      .on(table.createdAt)
+      .where(sql`${ownedByTaskAlone(table)} and ${table.savedAt} is null`),
+    // Exactly one owner stands on a row, or none but its task; each new kind of owner adds its column to `ownerColumns`. An inbox message's file names its item beside its message.
     check(
       "attachment_one_owner",
-      sql`num_nonnulls(${table.chatMessageId}, ${table.inboxItemId}) = 1 and (${table.inboxMessageId} is null or ${table.inboxItemId} is not null)`,
+      sql`(num_nonnulls(${sql.join(ownerColumns(table), sql`, `)}) = 1 or ${ownedByTaskAlone(table)}) and (${table.inboxMessageId} is null or ${table.inboxItemId} is not null)`,
     ),
     // Each owner holds its bytes to its own bound, as the table it kept before did.
     check(
       "attachment_bytes_bound",
-      sql`${table.chatMessageId} is null or octet_length(${table.bytes}) <= ${bound(CHAT_BOUNDS.MAX_IMAGE_BYTES)}`,
+      sql`(${table.chatMessageId} is null or octet_length(${table.bytes}) <= ${bound(CHAT_BOUNDS.MAX_IMAGE_BYTES)}) and (not ${ownedByTaskAlone(table)} or octet_length(${table.bytes}) <= ${bound(PICTURE_BOUNDS.MAX_BYTES)})`,
     ),
     // An inbox item's file is of a kind, held to its kind's bound, and only an answer's or a message's file has a name and a place, and only a message's names a message; no other owner's has a kind.
     check(
