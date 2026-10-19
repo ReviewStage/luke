@@ -22,6 +22,13 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-w
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
+import {
+  composerEditor,
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "@luke/panel/testing/composer";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
 import { commandKeyshortcuts } from "@luke/panel/tooltip";
@@ -33,13 +40,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import {
-  composerEditor,
-  editorBundleLanded,
-  installEditorLayout,
-  pressInComposer,
-  typeInComposer,
-} from "#testing/composer";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
 import { NewTaskDialog } from "../tasks/new-task-dialog";
 import type { InboxChoice, NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab";
