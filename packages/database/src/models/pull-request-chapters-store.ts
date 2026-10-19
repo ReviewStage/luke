@@ -19,7 +19,7 @@
  * decodes them with their wire schema.
  */
 
-import { and, desc, eq, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { Effect, type Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
@@ -205,10 +205,7 @@ const upsertClaim = SqlSchema.findAll({
             updatedAt: now,
           },
           // Note that a conflicting claim waits on the row's lock and reads it again after, so of two at once the second sees the first's fresh claim.
-          setWhere: or(
-            ne(pullRequestChapters.status, PULL_REQUEST_CHAPTERS_STATUS.GENERATING),
-            lt(pullRequestChapters.startedAt, staleBefore),
-          ),
+          setWhere: sql`${pullRequestChapters.status} <> ${PULL_REQUEST_CHAPTERS_STATUS.GENERATING} or ${pullRequestChapters.startedAt} < ${staleBefore}`,
         })
         .returning({ id: pullRequestChapters.id, claim: pullRequestChapters.claim }),
     ),
