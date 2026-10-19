@@ -189,6 +189,26 @@ const LOOK_CSS = `
   [data-utility-button] {
     margin-right: 0;
   }
+  /* A band between hunks is one surface across its width: Pierre fills
+     the band's row with the code's ground and its arrows and its words
+     with the band's, a box pasted onto a strip. Its row takes the band's
+     ground, the arrows and the words stand on it with no ground of their
+     own, and only an arrow answers the pointer; the words are words. */
+  [data-separator="line-info-basic"] [data-separator-wrapper] {
+    /* Pierre's own band ground, which a list sets (LIST_CSS). */
+    background-color: var(--diffs-bg-separator, var(--luke-color-fill-hover));
+  }
+  [data-separator="line-info-basic"] [data-expand-button],
+  [data-separator="line-info-basic"] [data-separator-content] {
+    background-color: transparent;
+    border: 0;
+  }
+  [data-separator="line-info-basic"] [data-expand-button]:hover {
+    background-color: var(--luke-color-fill-pressed);
+  }
+  [data-separator="line-info-basic"] [data-separator-content] {
+    pointer-events: none;
+  }
   /* Lines lit, a comment's or a thread's, light their own rows alone: a
      note under them, the comment being written or a thread, keeps its own
      ground rather than standing in the band. */
