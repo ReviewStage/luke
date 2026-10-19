@@ -75,6 +75,16 @@ import {
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
+import {
+  CREATE_ISSUE_TOOL,
+  LIST_ISSUES_TOOL,
+  READ_ISSUE_TOOL,
+  runCreateIssue,
+  runListIssues,
+  runReadIssue,
+  runUpdateIssue,
+  UPDATE_ISSUE_TOOL,
+} from "../issue-tools.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import {
   READ_WEB_PAGE_TOOL,
@@ -281,6 +291,10 @@ On a request to change an agent ("rename it Billing export", "switch it to Sonne
 
 The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. On a request to sort them ("make a section for the billing work", "move the invite tasks into Growth", "delete the Old section"), list_tasks names each task's section and the sections the developer keeps; create_section makes a section, move_task moves a task into one or back under Tasks, and delete_section deletes one, its tasks going back under Tasks and none of them deleted. Change only what the developer asked for, with one exception: where you start agents on several new tasks for one piece of work at once, as when the developer asks you to roll a plan out as a set of tasks, make one section named for that work and move each of those tasks into it, so they stand together in the sidebar; leave every other task where it stands. Then say in your return what you changed.
 
+### The workspace's issues
+
+The workspace tracks its work as issues, each named by an identifier such as ACME-42. On a request about them ("what's open in the backlog", "file an issue for the flaky test", "mark ACME-12 done", "archive the old ones"), list_issues finds the issues the developer means, read_issue reads one with its description, create_issue files one, and update_issue changes one or archives it. File or change only what the developer asked for, then say in your return what you changed.
+
 ### The task's chat
 
 The task's workspace has a chat, where its coding agents, the developer's team, and you talk; you speak there as @luke, and the task has a channel of its own, where its agents post. What was said there since your last turn is handed to you under [chat since the last call], and is read by then. When the developer asks you to tell the team or the task's agents something they should all see ("post in the channel that we're moving to Postgres", "tell everyone the API is frozen"), post it with post_chat, in the task's channel unless they name another channel or a member, then say briefly in your return what you posted. A message for one agent's session alone is message_coding_agent, as above. On a status question, read the task's channel with read_chat beside the agents themselves, and fold what was said there into the sentence or two you return; never read the chat out. A question for the developer on this call is queue_question, never a post: an ask in chat is for the room to answer later, and you resolve one of yours with resolve_ask once it no longer matters.
@@ -318,6 +332,7 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - read_task reads one task of the workspace by its id: its name, repository, who started it, whether it is archived, the issue it was started from, and its plan as last saved.
 - create_section makes a section in the developer's sidebar for this workspace, delete_section deletes one, its tasks going back under Tasks, and move_task moves a task into a section or back under Tasks.
 - update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, or its archive, found with list_tasks and includeArchived for an archived one.
+- list_issues lists the workspace's issues, each with its id, identifier, title, status, priority, and whether it is archived; read_issue reads one by its id or identifier with its description; create_issue files one; and update_issue changes its title, description, status, or priority, or archives it or brings it back.
 - post_chat posts a message in the workspace's chat as @luke, in the task's channel unless it names another place.
 - read_chat reads the workspace's chat: who is in it, its channels, and what you have not read, or a channel's or a thread's messages.
 - resolve_ask resolves an ask you posted in the chat, by its key.
@@ -680,6 +695,22 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
   {
     ...UPDATE_TASK_TOOL,
     run: (call, input) => runUpdateTask(call.agents, input),
+  },
+  {
+    ...LIST_ISSUES_TOOL,
+    run: (call, input) => runListIssues(call.agents, input),
+  },
+  {
+    ...READ_ISSUE_TOOL,
+    run: (call, input) => runReadIssue(call.agents, input),
+  },
+  {
+    ...CREATE_ISSUE_TOOL,
+    run: (call, input) => runCreateIssue(call.agents, input),
+  },
+  {
+    ...UPDATE_ISSUE_TOOL,
+    run: (call, input) => runUpdateIssue(call.agents, input),
   },
   {
     ...LIST_MODELS_TOOL,

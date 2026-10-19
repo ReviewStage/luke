@@ -80,6 +80,12 @@ export const CALL_KIND = {
   ARCHIVE_TASK: "archive-task",
   UNARCHIVE_TASK: "unarchive-task",
   UPDATE_TASK: "update-task",
+  /** The workspace's issues listed (`list_issues`). */
+  LIST_ISSUES: "list-issues",
+  /** One issue read (`read_issue`), filed (`create_issue`), or changed (`update_issue`), its row naming it by its identifier and title once answered. */
+  READ_ISSUE: "read-issue",
+  CREATE_ISSUE: "create-issue",
+  UPDATE_ISSUE: "update-issue",
   END_CALL: "end-call",
   SHOW_PAGE: "show-page",
   READ_PAGE: "read-page",
@@ -134,6 +140,10 @@ export const CALL_WORDS = {
   [CALL_KIND.ARCHIVE_TASK]: { verb: "Archived the task", code: false },
   [CALL_KIND.UNARCHIVE_TASK]: { verb: "Unarchived the task", code: false },
   [CALL_KIND.UPDATE_TASK]: { verb: "Updated the task", code: false },
+  [CALL_KIND.LIST_ISSUES]: { verb: "Listed the issues", code: false },
+  [CALL_KIND.READ_ISSUE]: { verb: "Read the issue", code: false },
+  [CALL_KIND.CREATE_ISSUE]: { verb: "Filed the issue", code: false },
+  [CALL_KIND.UPDATE_ISSUE]: { verb: "Updated the issue", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
   [CALL_KIND.SHOW_PAGE]: { verb: "Showed a page:", code: false },
   [CALL_KIND.READ_PAGE]: { verb: "Read the page", code: false },

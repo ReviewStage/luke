@@ -46,6 +46,11 @@ export const AGENT_TOOL = {
   MOVE_TASK: "move_task",
   // A task of the workspace renamed, given a repository, pinned, or archived, named for any agent offered `list_tasks`.
   UPDATE_TASK: "update_task",
+  // The workspace's issues, listed, read, filed, and changed, named for any agent offered `list_tasks`.
+  LIST_ISSUES: "list_issues",
+  READ_ISSUE: "read_issue",
+  CREATE_ISSUE: "create_issue",
+  UPDATE_ISSUE: "update_issue",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
   // The public reads, every role's.

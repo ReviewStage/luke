@@ -12,7 +12,7 @@ import {
   takeCodingAgentMentionedServers,
 } from "@luke/database/models/coding-agent-store";
 import { sentLineId } from "@luke/database/models/ids";
-import { createIssue } from "@luke/database/models/issue-store";
+import { createIssue, readIssue } from "@luke/database/models/issue-store";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { writePage } from "@luke/database/models/plan-pages";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
@@ -94,6 +94,7 @@ import {
   UPDATE_AGENT_REFUSAL,
   UPDATE_TASK_REFUSAL,
 } from "../coding-agent-tools.js";
+import { ISSUE_TOOL_REFUSAL } from "../issue-tools.js";
 import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
@@ -2692,5 +2693,89 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   assert.deepEqual(await call(CODER_TOOL.READ_TASK, { taskId: "not-an-id" }), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: READ_TASK_REFUSAL.UNREADABLE,
+  });
+});
+
+test("list_issues, read_issue, create_issue, and update_issue keep the caller's workspace's issues, named by id or identifier, archived and brought back, as the store then reads them, and reach no issue of another workspace", async () => {
+  const { workspaceId, elsewhere, agents } = await openWorkspaces();
+  const { caller, otherWorkspaces } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const issueOf = (answer: WireRecord) =>
+    isRecord(answer.issue) ? answer.issue : assert.fail(JSON.stringify(answer));
+  const listedIds = async (input: WireBoundaryInput) => {
+    const listed = await call(CODER_TOOL.LIST_ISSUES, input);
+    assert.ok(Array.isArray(listed.issues), JSON.stringify(listed));
+    return listed.issues.map((issue) => (isRecord(issue) ? issue.id : undefined));
+  };
+
+  const filed = await call(CODER_TOOL.CREATE_ISSUE, {
+    title: " Flaky invite test ",
+    description: "Fails one run in ten.",
+    priority: "high",
+  });
+  assert.equal(filed.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(filed));
+  const issue = issueOf(filed);
+  assert.ok(isWireString(issue.id) && isWireString(issue.identifier));
+  assert.match(issue.identifier, /^[A-Z0-9]+-1$/u);
+  assert.deepEqual(
+    [issue.title, issue.status, issue.priority, issue.archived],
+    ["Flaky invite test", "backlog", "high", false],
+  );
+  const stored = Option.getOrThrow(await database.run(readIssue(caller.userId, issue.id)));
+  assert.deepEqual([stored.workspaceId, stored.creator?.userId], [workspaceId, caller.userId]);
+  assert.deepEqual(await call(CODER_TOOL.CREATE_ISSUE, { title: "  " }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: ISSUE_TOOL_REFUSAL.UNREADABLE_CREATE,
+  });
+
+  // An issue of another workspace the starter is also in is listed, read, and changed by none of the caller's calls.
+  const theirs = Option.getOrThrow(
+    await database.run(
+      createIssue(otherWorkspaces.userId, { organizationId: elsewhere, title: "Elsewhere" }),
+    ),
+  );
+  assert.deepEqual(await listedIds({}), [issue.id]);
+  assert.deepEqual(await listedIds({ titleContains: "FLAKY" }), [issue.id]);
+  assert.deepEqual(await listedIds({ status: "done" }), []);
+  for (const tool of [CODER_TOOL.READ_ISSUE, CODER_TOOL.UPDATE_ISSUE] as const) {
+    assert.deepEqual(await call(tool, { issue: theirs.id, title: "Mine now" }), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: ISSUE_TOOL_REFUSAL.NO_ISSUE,
+    });
+  }
+  const untouched = await database.run(readIssue(otherWorkspaces.userId, theirs.id));
+  assert.equal(Option.getOrThrow(untouched).title, "Elsewhere");
+
+  // Read by its identifier, whatever its case, with what it says.
+  const read = issueOf(
+    await call(CODER_TOOL.READ_ISSUE, { issue: issue.identifier.toLowerCase() }),
+  );
+  assert.deepEqual([read.id, read.description], [issue.id, "Fails one run in ten."]);
+  assert.deepEqual(await call(CODER_TOOL.READ_ISSUE, { issue: "NOPE-1" }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: ISSUE_TOOL_REFUSAL.NO_ISSUE,
+  });
+
+  // Changed and archived, it leaves the list unless the archived are asked for, and comes back.
+  const done = issueOf(
+    await call(CODER_TOOL.UPDATE_ISSUE, {
+      issue: issue.identifier,
+      status: "done",
+      archived: true,
+    }),
+  );
+  assert.deepEqual([done.status, done.archived], ["done", true]);
+  assert.deepEqual(await listedIds({}), []);
+  assert.deepEqual(await listedIds({ includeArchived: true }), [issue.id]);
+  const back = issueOf(await call(CODER_TOOL.UPDATE_ISSUE, { issue: issue.id, archived: false }));
+  assert.equal(back.archived, false);
+  assert.equal(
+    Option.getOrThrow(await database.run(readIssue(caller.userId, issue.id))).archivedAt,
+    null,
+  );
+  assert.deepEqual(await call(CODER_TOOL.UPDATE_ISSUE, { issue: issue.id }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: ISSUE_TOOL_REFUSAL.UNREADABLE_UPDATE,
   });
 });

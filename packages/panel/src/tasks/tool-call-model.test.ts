@@ -669,6 +669,42 @@ test("the section calls read as theirs, a made section by the title asked and a 
   assert.equal(toolCallView({ ...moved, output: undefined }).subject, "");
 });
 
+test("the issue calls read as theirs, an issue by the identifier and title its answer names and by the name or title asked before then, and open nothing", () => {
+  const issue = { id: "issue-1", identifier: "ACME-4", title: "Flaky invite test" };
+  const calls = [
+    {
+      tool: "list_issues",
+      callId: "call-1",
+      input: {},
+      output: { status: "accepted", issues: [] },
+    },
+    { tool: "read_issue", callId: "call-2", input: { issue: "acme-4" }, output: { issue } },
+    {
+      tool: "create_issue",
+      callId: "call-3",
+      input: { title: "Flaky invite test" },
+      output: undefined,
+    },
+    {
+      tool: "update_issue",
+      callId: "call-4",
+      input: { issue: "ACME-4", status: "done" },
+      output: { issue },
+    },
+  ];
+
+  const rows = calls.map((call) => {
+    const view = toolCallView(call);
+    return [view.kind, view.subject, toolTarget(call)];
+  });
+  assert.deepEqual(rows, [
+    [CALL_KIND.LIST_ISSUES, "", undefined],
+    [CALL_KIND.READ_ISSUE, "ACME-4 Flaky invite test", undefined],
+    [CALL_KIND.CREATE_ISSUE, "Flaky invite test", undefined],
+    [CALL_KIND.UPDATE_ISSUE, "ACME-4 Flaky invite test", undefined],
+  ]);
+});
+
 test("what a start or a message sent another agent is read whole: a message's words, a start's prompt or its earlier task and its note, and nothing for a start on the plan or another call", () => {
   const long = "Add the refund export.\n\nKeep the CSV columns as they are.";
   assert.deepEqual(sentWords("message_agent", { agentId: "a", text: long }), {
