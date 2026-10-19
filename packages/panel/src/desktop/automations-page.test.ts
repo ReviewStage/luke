@@ -28,6 +28,7 @@ import {
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import type { AppStateSnapshot } from "@luke/host/app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -38,9 +39,9 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
 import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { handState } from "../testing/app-state.js";
+import { handState, stateWith } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { playMotions } from "../testing/pane-motion.js";
@@ -2444,7 +2445,7 @@ test("Code review is suggested under an empty list as under a full one, and a bl
   );
 });
 
-test("while Code review is off nothing is suggested, under an empty list or a full one, and a page sent to its preset starts blank", async () => {
+test("while Code review is off nothing is suggested, under an empty list or a full one, and a page sent to its preset goes back to the list", async () => {
   handState({});
   standing = [];
   const empty = mount();
@@ -2464,11 +2465,37 @@ test("while Code review is off nothing is suggested, under an empty list or a fu
 
   const sent = mountPages({ kind: AUTOMATIONS_PAGE.NEW, preset: "code-review" });
   await settle();
-  assert.deepEqual(cards(sent).slice(0, 3), ["Sharing", "Trigger", "Prompt"]);
-  assert.equal(
-    sent.querySelector<HTMLInputElement>("input[aria-label='Automation name']")?.value,
-    "",
-  );
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+  assert.equal(sent.querySelector("input[aria-label='Automation name']"), null);
+});
+
+test("a Code review draft goes back to the list once Code review turns off while it stands, asking first where it was written in, so no review is made with the experiment off", async () => {
+  const listeners = new Set<(snapshot: AppStateSnapshot) => void>();
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    requestAppState: () => Promise.resolve(stateWith(experimentsOn(EXPERIMENT.CODE_REVIEW), {})),
+    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  });
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.LIST });
+  await settle();
+  act(() => suggestion(page, "Code review").click());
+  await settle();
+  type(page.querySelector("input[aria-label='Automation name']"), "Review it all");
+
+  act(() => {
+    for (const listener of listeners) listener(stateWith({}, {}));
+  });
+  await settle();
+  assert.ok(leaveAsked(), "the leave question stands before the written draft is lost");
+  act(() => button("Leave").click());
+  await settle();
+
+  assert.deepEqual(places.at(-1), { kind: AUTOMATIONS_PAGE.LIST });
+  assert.equal(page.querySelector("input[aria-label='Automation name']"), null);
+  assert.deepEqual(creates, []);
 });
 
 test("a new automation started from the Code review suggestion is made on pull requests opened or updated, archiving its successful runs, at most five at once and fifty a day", async () => {

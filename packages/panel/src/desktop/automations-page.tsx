@@ -47,7 +47,7 @@ import {
   useMenu,
 } from "@luke/ui";
 import { ChevronRightIcon, GitPullRequestIcon, PlusIcon, ZapIcon } from "lucide-react";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { FoldingButton } from "../folding-button.js";
@@ -85,8 +85,8 @@ import { useAutomations } from "./use-automations.js";
  * suggested automations: a press opens a new automation's page filled in
  * from the suggestion's preset, to look over and Create. Code review, the
  * one suggestion, is still an experiment (`EXPERIMENT.CODE_REVIEW`), so
- * nothing is suggested, and no page opens filled in from it, while the
- * account has it off.
+ * nothing is suggested while the account has it off, and a page filled in
+ * from it goes back to the list.
  */
 
 /** What an automation's row's right-click menu is called. */
@@ -621,6 +621,13 @@ function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element
   const [made, setMade] = useState<string | undefined>(undefined);
   const back = () => view.onOpen({ kind: AUTOMATIONS_PAGE.LIST });
   const { place } = view;
+  // A new page filled in from Code review's preset goes back to the list once its experiment is off, here or
+  // on another Mac, as Factory gives the task's place back; the window's leave guard asks first where it was written in.
+  const fromPreset = place.kind === AUTOMATIONS_PAGE.NEW && place.preset !== undefined;
+  const { onOpen } = view;
+  useEffect(() => {
+    if (fromPreset && !codeReviewOn) onOpen({ kind: AUTOMATIONS_PAGE.LIST });
+  }, [fromPreset, codeReviewOn, onOpen]);
   if (place.kind === AUTOMATIONS_PAGE.LIST) {
     return <ListPage tasks={tasks} automations={automations} />;
   }
@@ -643,7 +650,7 @@ function AutomationsPages({ tasks }: { tasks: TasksControl }): React.JSX.Element
   }
   // Note that the account's first workspace is its personal one, where everything is its own.
   const offersOwner = workspace !== undefined && tasks.workspaces[0]?.id !== workspace.id;
-  // Code review, the one preset, is an experiment, so a new page opened from it while it is off starts blank.
+  // Code review, the one preset, is an experiment, so no page is filled in from it while it is off.
   const preset = place.kind === AUTOMATIONS_PAGE.NEW && codeReviewOn ? place.preset : undefined;
   const editing = opened === undefined || opened.id === made ? AUTOMATIONS_PAGE.NEW : opened.id;
   return (
