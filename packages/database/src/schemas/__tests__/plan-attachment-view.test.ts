@@ -53,7 +53,7 @@ const OLD_TABLE = `CREATE TABLE "plan_attachment" (
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1]);
 
 /** A plan in a workspace the account owns, its account, and its workspace. */
-const openPlan = Effect.gen(function* () {
+const openTask = Effect.gen(function* () {
   const db = yield* Database;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
@@ -69,7 +69,7 @@ const openPlan = Effect.gen(function* () {
   return { userId, organizationId, taskId: made.id, now };
 });
 
-type Plan = Effect.Success<typeof openPlan>;
+type Plan = Effect.Success<typeof openTask>;
 
 /** A picture of the plan's as the code before the migration wrote it. */
 const oldPicture = (plan: Plan, bytes = PNG) => ({
@@ -104,7 +104,7 @@ it.layer(getTestDB())("plan_attachment as a view over attachment", (it) => {
       Effect.gen(function* () {
         const db = yield* Database;
         const sql = yield* SqlClient.SqlClient;
-        const plan = yield* openPlan;
+        const plan = yield* openTask;
         const saved = { ...oldPicture(plan), savedAt: plan.now };
         const unsaved = oldPicture(plan);
 
@@ -141,7 +141,7 @@ it.layer(getTestDB())("plan_attachment as a view over attachment", (it) => {
     () =>
       Effect.gen(function* () {
         const db = yield* Database;
-        const plan = yield* openPlan;
+        const plan = yield* openTask;
         const kept = oldPicture(plan);
         const stray = { ...oldPicture(plan), createdAt: new Date(plan.now.getTime() - 86_400_000) };
 
