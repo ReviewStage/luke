@@ -10,6 +10,7 @@ import {
   accountAskProcedures,
 } from "./account-ask-procedures.js";
 import { type AccountProceduresDependencies, accountProcedures } from "./account-procedures.js";
+import { type AgentProceduresDependencies, agentProcedures } from "./agents-procedures.js";
 import {
   type AutomationProceduresDependencies,
   automationProcedures,
@@ -37,6 +38,7 @@ import {
 
 export type { AccountAskProceduresDependencies } from "./account-ask-procedures.js";
 export type { AccountProceduresDependencies } from "./account-procedures.js";
+export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
 export { type ActPortContext, actPortFor } from "./base.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
@@ -85,6 +87,7 @@ export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sende
 export interface ActPortDependencies {
   readonly account: AccountProceduresDependencies;
   readonly accountAsks: AccountAskProceduresDependencies;
+  readonly agents: AgentProceduresDependencies;
   readonly automations: AutomationProceduresDependencies;
   readonly factory: FactoryProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
@@ -112,6 +115,7 @@ export function createActPortHandler<Sender>(
     ...platformProcedures,
     ...accountProcedures(dependencies.account),
     ...accountAskProcedures(dependencies.accountAsks),
+    ...agentProcedures(dependencies.agents),
     ...automationProcedures(dependencies.automations),
     ...factoryProcedures(dependencies.factory),
     ...integrationProcedures(dependencies.integrations),

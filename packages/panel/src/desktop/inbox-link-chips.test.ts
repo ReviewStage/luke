@@ -13,7 +13,7 @@ import {
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -21,7 +21,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import type { InboxChoice } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, type AnyActOutcome, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -124,20 +124,20 @@ async function inbox(options: {
   /** The account's workspaces as main's document holds them; Acme and Globex unless said. */
   workspaces?: readonly Workspace[];
 }) {
-  const asked: Act[] = [];
+  const asked: AnyAct[] = [];
   const state = {
     ...signedInAs({ id: "user-sam", email: "sam@example.com", name: "Sam Okafor" }),
     tasks: { ...IDLE_TASKS_VIEW, tasks: [TASK], workspaces: options.workspaces ?? [ACME, GLOBEX] },
   };
-  const inboxOf = (items: readonly InboxItem[]): Promise<ActOutcome> =>
+  const inboxOf = (items: readonly InboxItem[]): Promise<AnyActOutcome> =>
     Promise.resolve({
       status: ACT_OUTCOME_STATUS.DONE,
       value: { items, cursor: "1" } satisfies CodingAgentInboxAnswerView,
     });
-  fakeAppBridge({
+  fakeActs({
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
-    act: (request: Act): Promise<ActOutcome> => {
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       asked.push(request);
       switch (request.kind) {
         case ACT_KIND.TASKS_PULL_REQUEST: {
@@ -223,7 +223,7 @@ function chips(container: HTMLElement): [string | null, string | null][] {
 }
 
 /** The workspaces each pull request read was asked through. */
-function readThrough(asked: readonly Act[]): string[] {
+function readThrough(asked: readonly AnyAct[]): string[] {
   return asked.flatMap((each) =>
     each.kind === ACT_KIND.TASKS_PULL_REQUEST
       ? [`${each.payload.workspaceId} ${each.payload.repository}#${each.payload.number}`]

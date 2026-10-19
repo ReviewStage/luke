@@ -21,7 +21,8 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
-import { ACT_KIND, type ActPayload } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
+import type { PortActPayload } from "@luke/host/contract";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
@@ -649,7 +650,7 @@ export function useCodingAgents(input: {
   /** One Start asked of the service on the task, held as under way until it answers. */
   const askStart = (
     on: string,
-    asked: Omit<ActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">,
+    asked: Omit<PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">,
   ): Promise<CodingAgentAgentAnswer> => {
     setStarting(true);
     return act(ACT_KIND.CODING_AGENTS_START, { taskId: on, ...asked })

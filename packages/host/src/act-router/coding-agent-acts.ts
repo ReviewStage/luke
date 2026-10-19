@@ -1,58 +1,38 @@
-import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAgentAnswer,
-  type CodingAgentAgentInboxParams,
-  type CodingAgentArchiveParams,
-  type CodingAgentChangesAnswerView,
-  type CodingAgentChatAnswerView,
-  type CodingAgentChatAttachmentParams,
-  type CodingAgentChatParams,
-  type CodingAgentChatPostParams,
-  type CodingAgentChatWriteAnswerView,
-  type CodingAgentChooseParams,
-  type CodingAgentDefaultAnswer,
-  type CodingAgentGitHubImageParams,
-  type CodingAgentGitHubImageView,
-  type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerParams,
-  type CodingAgentInboxAnswerView,
-  type CodingAgentInboxAttachmentParams,
-  type CodingAgentInboxAttachmentView,
-  type CodingAgentInboxCloseParams,
-  type CodingAgentInboxMessagedView,
-  type CodingAgentInboxMessageParams,
-  type CodingAgentInboxParams,
-  type CodingAgentInboxReadAllView,
-  type CodingAgentInboxReadStateParams,
-  type CodingAgentInboxReadStateView,
-  type CodingAgentListAnswer,
-  type CodingAgentListParams,
-  type CodingAgentMessageParams,
-  type CodingAgentMessagesAnswerView,
-  type CodingAgentMessagesParams,
-  type CodingAgentModelsAnswer,
-  type CodingAgentOverviewChecksAnswerView,
-  type CodingAgentOverviewConversationAnswerView,
-  type CodingAgentOverviewPullRequestAnswerView,
-  type CodingAgentPageAnswerView,
-  type CodingAgentPageParams,
-  type CodingAgentPictureParams,
-  type CodingAgentPinParams,
-  type CodingAgentPullRequestActionParams,
-  type CodingAgentPullRequestAnswerView,
-  type CodingAgentPullRequestParams,
-  type CodingAgentPullRequestReadParams,
-  type CodingAgentPullRequestViewedAnswerView,
-  type CodingAgentPullRequestWriteAnswerView,
-  type CodingAgentRenameParams,
-  type CodingAgentReviewOptionsAnswerView,
-  type CodingAgentServersParams,
-  type CodingAgentStartParams,
-  type CodingAgentStopParams,
-  type CodingAgentWorkspaceListParams,
+import type {
+  CodingAgentAgentInboxParams,
+  CodingAgentChangesAnswerView,
+  CodingAgentChatAnswerView,
+  CodingAgentChatAttachmentParams,
+  CodingAgentChatParams,
+  CodingAgentChatPostParams,
+  CodingAgentChatWriteAnswerView,
+  CodingAgentGitHubImageParams,
+  CodingAgentGitHubImageView,
+  CodingAgentInboxAnsweredView,
+  CodingAgentInboxAnswerParams,
+  CodingAgentInboxAnswerView,
+  CodingAgentInboxAttachmentParams,
+  CodingAgentInboxAttachmentView,
+  CodingAgentInboxCloseParams,
+  CodingAgentInboxMessagedView,
+  CodingAgentInboxMessageParams,
+  CodingAgentInboxParams,
+  CodingAgentInboxReadAllView,
+  CodingAgentInboxReadStateParams,
+  CodingAgentInboxReadStateView,
+  CodingAgentOverviewChecksAnswerView,
+  CodingAgentOverviewConversationAnswerView,
+  CodingAgentOverviewPullRequestAnswerView,
+  CodingAgentPictureParams,
+  CodingAgentPullRequestActionParams,
+  CodingAgentPullRequestAnswerView,
+  CodingAgentPullRequestParams,
+  CodingAgentPullRequestReadParams,
+  CodingAgentPullRequestViewedAnswerView,
+  CodingAgentPullRequestWriteAnswerView,
+  CodingAgentReviewOptionsAnswerView,
 } from "@luke/features/coding-agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
-import type { ModelChoice } from "@luke/features/models-wire";
 import { Effect } from "effect";
 import { ACT, ACT_KIND } from "../acts.js";
 import type { AgentNotices } from "../agent-notices.js";
@@ -64,36 +44,14 @@ import { ActRefused, type ActRows, type ActSender } from "./router.js";
  * The one check these rows make is who asked, as for every task act:
  * only a panel draws a task's agents, so every row refuses the takeover and
  * the hidden voice window. What the service answers comes back as the
- * panel's own answer; on its way it is noted by the notices
- * (`@luke/host/agent-notices`), which hold where each agent stands so an end
- * the panel is not looking at is still announced, and which task's Inbox
- * the panel shows, so an item it is looking at is not. The task's inbox is
- * answered to the panel alone: the notices watch what waits across the
- * account on a read of their own. Nothing else is held here.
+ * panel's own answer; what an agent published is noted on its way by the
+ * notices (`@luke/host/agent-notices`). The task's inbox is answered to the
+ * panel alone: the notices watch what waits across the account on a read of
+ * their own. Nothing else is held here. The core asks about an agent ride
+ * the act port (`act-port/agents-procedures.ts`).
  */
 export interface CodingAgentActsDependencies {
   host: {
-    codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
-    codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
-    codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
-    codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
-    codingAgentWorkspaceList(
-      params: CodingAgentWorkspaceListParams,
-    ): Effect.Effect<CodingAgentListAnswer>;
-    codingAgentStart(params: CodingAgentStartParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentMessages(
-      params: CodingAgentMessagesParams,
-    ): Effect.Effect<CodingAgentMessagesAnswerView>;
-    codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentServers(params: CodingAgentServersParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentArchive(params: CodingAgentArchiveParams): Effect.Effect<CodingAgentAgentAnswer>;
-    codingAgentPin(params: CodingAgentPinParams): Effect.Effect<CodingAgentAgentAnswer>;
-    /** The plan list read again, which carries every agent with no plan beside the plans. */
-    tasksRefresh(): Effect.Effect<void>;
-    codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
     codingAgentPullRequest(
       params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentPullRequestAnswerView>;
@@ -154,39 +112,11 @@ export interface CodingAgentActsDependencies {
       params: CodingAgentChatAttachmentParams,
     ): Effect.Effect<CodingAgentInboxAttachmentView>;
   };
-  /** Where every answer's agents are noted, and which agent's tab the panel shows. */
-  notices: Pick<
-    AgentNotices,
-    | "observeAgents"
-    | "observeStatus"
-    | "observeTitle"
-    | "observeMessaged"
-    | "observeModels"
-    | "observePublished"
-    | "observeTaskGone"
-    | "shown"
-    | "shownInbox"
-    | "shownChat"
-  >;
+  /** Where what an agent published is noted. */
+  notices: Pick<AgentNotices, "observePublished">;
 }
 
 export type CodingAgentActKind =
-  | typeof ACT_KIND.CODING_AGENTS_MODELS
-  | typeof ACT_KIND.CODING_AGENTS_DEFAULT_READ
-  | typeof ACT_KIND.CODING_AGENTS_DEFAULT_WRITE
-  | typeof ACT_KIND.CODING_AGENTS_LIST
-  | typeof ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
-  | typeof ACT_KIND.CODING_AGENTS_START
-  | typeof ACT_KIND.CODING_AGENTS_MESSAGES
-  | typeof ACT_KIND.CODING_AGENTS_MESSAGE
-  | typeof ACT_KIND.CODING_AGENTS_CHOOSE
-  | typeof ACT_KIND.CODING_AGENTS_RENAME
-  | typeof ACT_KIND.CODING_AGENTS_SERVERS
-  | typeof ACT_KIND.CODING_AGENTS_STOP
-  | typeof ACT_KIND.CODING_AGENTS_ARCHIVE
-  | typeof ACT_KIND.CODING_AGENTS_PIN
-  | typeof ACT_KIND.CODING_AGENTS_SHOWN
-  | typeof ACT_KIND.CODING_AGENTS_PAGE
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
   | typeof ACT_KIND.CODING_AGENTS_CHANGES
   | typeof ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST
@@ -226,98 +156,7 @@ export function codingAgentActRows(
   dependencies: CodingAgentActsDependencies,
 ): Pick<ActRows, CodingAgentActKind> {
   const { host, notices } = dependencies;
-  // Note that an agent with no plan is listed by the plan list, which is read again so its row says what the act changed.
-  const notedAgent = (answer: Effect.Effect<CodingAgentAgentAnswer>) =>
-    Effect.tap(
-      noted(answer, (value) => {
-        if ("agent" in value) notices.observeAgents([value.agent]);
-      }),
-      (value) =>
-        "agent" in value && value.agent.planId === null ? host.tasksRefresh() : Effect.void,
-    );
   return {
-    [ACT_KIND.CODING_AGENTS_MODELS]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_MODELS, sender);
-      return noted(host.codingAgentModels(), (answer) => {
-        if ("models" in answer) notices.observeModels(answer.models);
-      });
-    },
-    [ACT_KIND.CODING_AGENTS_DEFAULT_READ]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_DEFAULT_READ, sender);
-      return host.codingAgentDefaultRead();
-    },
-    [ACT_KIND.CODING_AGENTS_DEFAULT_WRITE]: (choice, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, sender);
-      return host.codingAgentDefaultWrite(choice);
-    },
-    [ACT_KIND.CODING_AGENTS_WORKSPACE_LIST]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_WORKSPACE_LIST, sender);
-      return host.codingAgentWorkspaceList(params);
-    },
-    [ACT_KIND.CODING_AGENTS_LIST]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_LIST, sender);
-      return noted(host.codingAgentList(params), (answer) => {
-        if ("agents" in answer) notices.observeAgents(answer.agents);
-        else if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) {
-          notices.observeTaskGone(params.taskId);
-        }
-      });
-    },
-    [ACT_KIND.CODING_AGENTS_START]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_START, sender);
-      return notedAgent(host.codingAgentStart(params));
-    },
-    [ACT_KIND.CODING_AGENTS_MESSAGES]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_MESSAGES, sender);
-      // A worker's page says where the worker stands and what it is called, which is no word on the agent.
-      return noted(host.codingAgentMessages(params), (answer) => {
-        if ("status" in answer && params.callId === undefined) {
-          // The title first, so an end this page carries is announced under it.
-          notices.observeTitle(params.agentId, answer.title);
-          notices.observeStatus(params.agentId, answer.status);
-        }
-      });
-    },
-    [ACT_KIND.CODING_AGENTS_MESSAGE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_MESSAGE, sender);
-      return noted(host.codingAgentMessage(params), (answer) => {
-        if ("agent" in answer) notices.observeMessaged(answer.agent);
-      });
-    },
-    [ACT_KIND.CODING_AGENTS_CHOOSE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHOOSE, sender);
-      return notedAgent(host.codingAgentChoose(params));
-    },
-    [ACT_KIND.CODING_AGENTS_RENAME]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_RENAME, sender);
-      return notedAgent(host.codingAgentRename(params));
-    },
-    [ACT_KIND.CODING_AGENTS_SERVERS]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SERVERS, sender);
-      return notedAgent(host.codingAgentServers(params));
-    },
-    [ACT_KIND.CODING_AGENTS_STOP]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_STOP, sender);
-      return notedAgent(host.codingAgentStop(params));
-    },
-    [ACT_KIND.CODING_AGENTS_ARCHIVE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_ARCHIVE, sender);
-      return notedAgent(host.codingAgentArchive(params));
-    },
-    [ACT_KIND.CODING_AGENTS_PIN]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PIN, sender);
-      return notedAgent(host.codingAgentPin(params));
-    },
-    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxTaskId, chatShown }, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
-      notices.shown(agentId);
-      notices.shownInbox(inboxTaskId);
-      notices.shownChat(chatShown ?? null);
-    },
-    [ACT_KIND.CODING_AGENTS_PAGE]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PAGE, sender);
-      return host.codingAgentPage(params);
-    },
     [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST, sender);
       // Note that a read of another pull request by its number is no word on what the agent itself published.

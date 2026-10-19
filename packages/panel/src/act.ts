@@ -25,19 +25,24 @@ import { actPort, appBridge } from "./app-bridge.js";
 /** Any kind a window may ask: one `app:act` carries, or one its act port answers. */
 type AnyActKind = ActKind | PortActKind;
 
+/**
+ * What each kind takes and answers, from whichever side declares it, keyed by
+ * the kind. Note that a kind's own entry is looked up by its key rather than
+ * chosen by a conditional over every kind, which TypeScript would distribute
+ * over the whole union at each generic signature that names it.
+ */
+type AnyActPayloads = { readonly [Kind in ActKind]: ActPayload<Kind> } & {
+  readonly [Kind in PortActKind]: PortActPayload<Kind>;
+};
+type AnyActResults = { readonly [Kind in ActKind]: ActResultFor<Kind> } & {
+  readonly [Kind in PortActKind]: PortActResult<Kind>;
+};
+
 /** What a kind takes, from whichever side declares it. */
-type AnyActPayload<Kind extends AnyActKind> = Kind extends PortActKind
-  ? PortActPayload<Kind>
-  : Kind extends ActKind
-    ? ActPayload<Kind>
-    : never;
+type AnyActPayload<Kind extends AnyActKind> = AnyActPayloads[Kind];
 
 /** What a kind answers, from whichever side declares it. */
-type AnyActResult<Kind extends AnyActKind> = Kind extends PortActKind
-  ? PortActResult<Kind>
-  : Kind extends ActKind
-    ? ActResultFor<Kind>
-    : never;
+type AnyActResult<Kind extends AnyActKind> = AnyActResults[Kind];
 
 /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
 type ActArguments<Kind extends AnyActKind> =

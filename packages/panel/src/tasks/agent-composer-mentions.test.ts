@@ -31,7 +31,7 @@ import {
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
@@ -40,7 +40,13 @@ import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActs,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import {
@@ -193,7 +199,7 @@ const MEMBERS: readonly WorkspaceMember[] = [
 ];
 
 /** Every act the panel told the main process, in order. */
-const told: Act[] = [];
+const told: AnyAct[] = [];
 
 /** The repository the task's tree is read from now. */
 let standing = "acme/relay";
@@ -210,57 +216,66 @@ const roots: Root[] = [];
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
+/** What main answers the box's acts with, on `app:act` or the act port, every one told. */
+function answer(request: AnyAct): Promise<AnyActOutcome> {
+  told.push(request);
+  return Promise.resolve(
+    request.kind === ACT_KIND.INTEGRATIONS_STATUS
+      ? {
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            integrations: LINEAR_CONNECTED,
+          },
+        }
+      : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
+        ? {
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: {
+              tools: [
+                { name: "list_issues", description: "List the team's issues." },
+                { name: "get_issue", description: "Read one issue." },
+                { name: "list/issues", description: "A name no mention can carry." },
+                {
+                  name: "list\ud800",
+                  description: "A name that is no string of characters.",
+                },
+                { name: "..", description: "A name an address resolves away." },
+              ],
+            },
+          }
+        : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+            ? {
+                status: ACT_OUTCOME_STATUS.DONE,
+                value: {
+                  agents: workspaceAnswer(request.payload),
+                },
+              }
+            : request.kind === ACT_KIND.TASKS_TREE
+              ? {
+                  status: ACT_OUTCOME_STATUS.DONE,
+                  value: {
+                    folder: {
+                      path: "",
+                      repository: standing,
+                      branch: "main",
+                      entries: TREES.get(standing) ?? [],
+                      truncated: false,
+                    },
+                  },
+                }
+              : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+  );
+}
+
 beforeEach(() => {
   standing = "acme/relay";
   told.length = 0;
   installScrollIntoView();
   installEditorLayout();
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
-    [ACT_KIND.INTEGRATIONS_STATUS]: () => Promise.resolve({ integrations: LINEAR_CONNECTED }),
-    [ACT_KIND.INTEGRATIONS_TOOLS]: () =>
-      Promise.resolve({
-        tools: [
-          { name: "list_issues", description: "List the team's issues." },
-          { name: "get_issue", description: "Read one issue." },
-          { name: "list/issues", description: "A name no mention can carry." },
-          {
-            name: "list\ud800",
-            description: "A name that is no string of characters.",
-          },
-          { name: "..", description: "A name an address resolves away." },
-        ],
-      }),
-  });
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      told.push(request);
-      return Promise.resolve(
-        request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                agents: workspaceAnswer(request.payload),
-              },
-            }
-          : request.kind === ACT_KIND.TASKS_TREE
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: {
-                  folder: {
-                    path: "",
-                    repository: standing,
-                    branch: "main",
-                    entries: TREES.get(standing) ?? [],
-                    truncated: false,
-                  },
-                },
-              }
-            : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      );
-    },
-  });
+  fakeActs({ act: answer });
 });
 
 afterEach(() => {
@@ -1475,11 +1490,11 @@ const issuesRead: string[] = [];
 /** The box on a plan's page in a workspace with issues, Issues on or off, every message it sends written down. */
 async function issuesBox(on: boolean, standing: Issue[] = [REFRESH_ISSUE, LINK_ISSUE]) {
   issuesRead.length = 0;
-  fakeActPort({
-    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
-    [ACT_KIND.ISSUES_LIST]: (payload) => {
-      issuesRead.push(payload.workspaceId);
-      return Promise.resolve({ issues: [...standing] });
+  fakeActs({
+    act: (request) => {
+      if (request.kind !== ACT_KIND.ISSUES_LIST) return answer(request);
+      issuesRead.push(request.payload.workspaceId);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { issues: [...standing] } });
     },
   });
   handState({ [EXPERIMENT.ISSUES]: on });

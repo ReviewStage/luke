@@ -63,6 +63,46 @@ export const AUTOMATION_ACT_KIND = {
 } as const;
 
 /**
+ * A task's coding agents, the core of what the Tasks tab asks of them: the
+ * models, the default, the lists, an agent started, read, messaged, changed,
+ * and shown, and an agent's page.
+ */
+export const AGENT_ACT_KIND = {
+  /**
+   * A task's coding agents, asked of the service: the models one may run
+   * on, the account's default among them read and written, the task's
+   * agents with their status, one started under the press's own key, one's
+   * transcript past a cursor (held open by the service while the agent
+   * runs), one sent a message naming how it reaches a turn under way, one
+   * given another model and effort for its next step, one renamed, one stopped, one
+   * archived (a turn it still runs stopped first) or brought back. The
+   * window holds what it draws; nothing here does.
+   */
+  CODING_AGENTS_MODELS: "codingAgents.models",
+  CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
+  CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  CODING_AGENTS_LIST: "codingAgents.list",
+  /** One workspace's agents, newest started first: what an automation's Same agent is chosen from. */
+  CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
+  CODING_AGENTS_START: "codingAgents.start",
+  CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  CODING_AGENTS_MESSAGE: "codingAgents.message",
+  CODING_AGENTS_CHOOSE: "codingAgents.choose",
+  CODING_AGENTS_RENAME: "codingAgents.rename",
+  CODING_AGENTS_SERVERS: "codingAgents.servers",
+  CODING_AGENTS_STOP: "codingAgents.stop",
+  CODING_AGENTS_ARCHIVE: "codingAgents.archive",
+  CODING_AGENTS_PIN: "codingAgents.pin",
+  /**
+   * Which agent's tab the panel shows, or none, and which task's Inbox tab,
+   * or none: what main's notification of an agent's end or of an inbox item
+   * is held back by, and what clears an agent's tab's unseen dot.
+   */
+  CODING_AGENTS_SHOWN: "codingAgents.shown",
+  CODING_AGENTS_PAGE: "codingAgents.page",
+} as const;
+
+/**
  * Luke's avatar as the windows reach it: the panel's word on it, starting,
  * live on its first frame, or ended and why, taken from the panel alone; and
  * the video tile's Video off, Video on, and Restart video, Luke's avatar asked
@@ -209,6 +249,7 @@ export const WORKSPACE_ACT_KIND = {
 export const PORT_ACT_KIND = {
   ...ACCOUNT_ACT_KIND,
   ...ACCOUNT_ASK_ACT_KIND,
+  ...AGENT_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
   ...AVATAR_ACT_KIND,
   ...FACTORY_ACT_KIND,
