@@ -89,8 +89,26 @@ test("a range joins two ends of one kind, the second perhaps a time alone on the
     start: "2026-10-19",
     end: "2026-10-23",
   });
+  assert.deepEqual(dateOfWords("next fri at 3pm to 5pm", NOW, LOS_ANGELES), {
+    start: "2026-10-30T15:00-07:00",
+    end: "2026-10-30T17:00-07:00",
+  });
   assert.equal(dateOfWords("fri 3pm to mon", NOW, LOS_ANGELES), undefined);
   assert.equal(dateOfWords("tomorrow to today", NOW, LOS_ANGELES), undefined);
+});
+
+test("a range's end written as a day of the month alone is that day after its start, in the next month where it must be", () => {
+  assert.deepEqual(dateOfWords("oct 20 to 24", NOW, LOS_ANGELES), {
+    start: "2026-10-20",
+    end: "2026-10-24",
+  });
+  assert.deepEqual(dateOfWords("oct 28 - 3rd", NOW, LOS_ANGELES), {
+    start: "2026-10-28",
+    end: "2026-11-03",
+  });
+  assert.equal(dateOfWords("oct 28 to 28", NOW, LOS_ANGELES)?.end, "2026-11-28");
+  assert.equal(dateOfWords("jan 30 to 30", NOW, LOS_ANGELES), undefined);
+  assert.equal(dateOfWords("tomorrow 3pm to 24", NOW, LOS_ANGELES), undefined);
 });
 
 test("a range whose end read from today falls before its start is read from its start", () => {

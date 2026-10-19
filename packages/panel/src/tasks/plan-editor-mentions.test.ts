@@ -194,21 +194,21 @@ test("Enter writes the highlighted row as its mention, drawn in the editor as it
   assert.equal(task.container.querySelector(".mention-menu"), null);
 });
 
-test("words after an @ that read as a time on a day, four of them, offer it first, and Enter draws it as a chip saying it from today", async () => {
+test("words after an @ that read as a time on a day, up to six of them, offer it first, and Enter draws it as a chip saying it from today", async () => {
   vi.useFakeTimers({ now: Date.parse("2026-10-19T12:00:00Z"), toFake: ["Date"] });
   try {
     const task = await opened();
 
-    await task.typeAtEnd(" Ship @next fri at 3pm");
+    await task.typeAtEnd(" Ship @next fri at 3pm to 5pm");
     const offered = listed(task.container)[0];
     task.press("Enter");
     await act(async () => undefined);
 
     const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
-    assert.deepEqual(offered, ["Dates", ["Oct 30 3:00 PM"]]);
+    assert.deepEqual(offered, ["Dates", ["Oct 30 3:00 PM → 5:00 PM"]]);
     assert.deepEqual(
       chips.map((chip) => chip.textContent),
-      ["Oct 30 3:00 PM"],
+      ["Oct 30 3:00 PM → 5:00 PM"],
     );
   } finally {
     vi.useRealTimers();

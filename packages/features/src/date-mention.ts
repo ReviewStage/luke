@@ -22,7 +22,8 @@ import { DateTime, Option } from "effect";
  * days, weeks, or months from today, a month and its day, an ISO day, and
  * a US month/day, each with a time after it or not (`3pm`, `at 9:30am`,
  * `15:00`, `noon`), and two of them joined by `to`, `until`, `-`, or `→`
- * for a range, the second perhaps a time alone on the first's day. A word
+ * for a range, the second perhaps a time alone on the first's day, or a
+ * day of the month alone after a day (`oct 20 to 24`). A word
  * only partly typed reads as the day it can only be, once enough of it
  * stands to tell it from a name (`tomo`, `fri`).
  */
@@ -305,6 +306,17 @@ function splitTime(words: string): { readonly rest: string; readonly clock: Cloc
   return clock === undefined ? undefined : { rest: rest.trim(), clock };
 }
 
+/** A range's end written as its day of the month alone, `oct 20 to 24`: that day in its start's month, or the next month's where it is not after the start. */
+function dayAfter(words: string, start: Day): Day | undefined {
+  const bare = /^(\d{1,2})(?:st|nd|rd|th)?$/u.exec(words);
+  if (bare === null) return undefined;
+  const day = Number(bare[1]);
+  const same = realDay(start.year, start.month, day);
+  if (same !== undefined && daysBetween(start, same) > 0) return same;
+  const next = monthsOn({ ...start, day: 1 }, 1);
+  return realDay(next.year, next.month, day);
+}
+
 /** One end of a range: a day and perhaps a time, a time alone standing on `alone`, today where it is not a range's end. */
 function momentOf(words: string, today: Day, alone: Day): Moment | undefined {
   const timed = splitTime(words);
@@ -385,9 +397,14 @@ export function dateOfWords(words: string, now: number, zone: string): DateSpan 
   const from = spelled(start, zone);
   if (from === undefined || second === undefined)
     return from === undefined ? undefined : { start: from };
+  const shortened = start.clock === undefined ? dayAfter(second, start.day) : undefined;
   // Note that an end read from today that falls before the start is read again from the start, so on a Saturday `fri to mon` runs from Friday to the Monday after it.
   const to = [today, start.day]
-    .map((counted) => momentOf(second, counted, start.day))
+    .map((counted) =>
+      shortened === undefined
+        ? momentOf(second, counted, start.day)
+        : { day: shortened, clock: undefined },
+    )
     .map((end) => (end === undefined ? undefined : spelled(end, zone)))
     .find((end) => end !== undefined && isDateRange(from, end));
   return to === undefined ? undefined : { start: from, end: to };
