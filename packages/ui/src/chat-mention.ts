@@ -1,3 +1,4 @@
+import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import { CHAT_BOUNDS, CHAT_TARGET_SIGIL } from "@luke/features/chat-wire";
 import { insideCode } from "./skill-mention.js";
 
@@ -24,11 +25,13 @@ export interface ChatMention {
   readonly query: string;
 }
 
-/** A member or a channel as the composer offers it: its sigil, its handle or name, and a muted line of what it stands for. */
+/** A member or a channel as the composer offers it: its sigil, its handle or name, a muted line of what it stands for, and, for a person or an agent, the mention a chip writes it as. */
 export interface ChatTarget {
   readonly sigil: ChatSigil;
   readonly name: string;
   readonly detail: string | undefined;
+  /** The mention a box that draws chips writes the member as; none for a channel or Luke, written as their word. */
+  readonly mention?: ChatMemberMention | undefined;
 }
 
 /** The characters a handle or a channel's name is spelled in, by its sigil (`chat-wire.ts`'s grammars). */
