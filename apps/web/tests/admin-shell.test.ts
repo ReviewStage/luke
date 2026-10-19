@@ -143,3 +143,37 @@ test("the account menu opens on its avatar, and Escape or a press outside closes
   });
   expect(trigger.getAttribute("aria-expanded")).toBe("false");
 });
+
+test("a press on Reliability opens it as the current page, under its own address", async () => {
+  const page = await openAdmin();
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Dashboard"));
+
+  const reliability = page.querySelector<HTMLAnchorElement>('nav a[aria-label="Reliability"]');
+  if (!reliability) throw new Error("No Reliability link");
+  await act(async () => {
+    reliability.click();
+  });
+
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Reliability"));
+  expect(currentSections(page)).toEqual(["Reliability", "Reliability"]);
+  expect(saysLoading(page)).toBe(true);
+  expect(window.location.search).toBe("?view=reliability");
+});
+
+test("a quarter's address opens Reliability on the month, the longest window it reads", async () => {
+  const page = await openAdmin("/admin?view=reliability&days=90");
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Reliability"));
+
+  const asked = vi
+    .mocked(globalThis.fetch)
+    .mock.calls.map(
+      ([input]) =>
+        new URL(input instanceof Request ? input.url : String(input), window.location.href),
+    )
+    .filter((url) => url.pathname === "/api/admin/reliability");
+  expect(asked.map((url) => url.search)).toContain("");
+  const windows = page.querySelector('[role="radiogroup"][aria-label="Window in days"]');
+  const radios = Array.from(windows?.querySelectorAll('[role="radio"]') ?? []);
+  expect(radios.map((radio) => radio.textContent)).toEqual(["7d", "30d"]);
+  expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "true"]);
+});

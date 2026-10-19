@@ -59,6 +59,8 @@ export const SKELETON_PLOT = {
   USAGE: "h-48",
   SIGNUPS: "h-40",
   SIGN_IN_METHODS: "h-30",
+  FAILURE_RATES: "h-56",
+  BREAKDOWN: "h-40",
 } as const;
 
 type SkeletonPlot = (typeof SKELETON_PLOT)[keyof typeof SKELETON_PLOT];
@@ -86,10 +88,11 @@ interface SkeletonTextLine {
 /** One region of a loading page, in the order the page stacks them. */
 export type SkeletonShape =
   | { kind: typeof SKELETON_SHAPE.HEADING; label: string }
-  | { kind: typeof SKELETON_SHAPE.STAT_GROUP }
+  /** A stat group of `cards`, or the overview's three where none is given. */
+  | { kind: typeof SKELETON_SHAPE.STAT_GROUP; cards?: number }
   | { kind: typeof SKELETON_SHAPE.STAT_CARDS; count: 1 | 2 | 4; columns: 1 | 2 | 4 }
-  /** One chart card, or the pair a page sets side by side. */
-  | { kind: typeof SKELETON_SHAPE.CHART; plots: readonly SkeletonPlot[] }
+  /** One chart card, or the pair a page sets side by side, wide and narrow unless `even`. */
+  | { kind: typeof SKELETON_SHAPE.CHART; plots: readonly SkeletonPlot[]; even?: boolean }
   | { kind: typeof SKELETON_SHAPE.CALENDAR }
   | { kind: typeof SKELETON_SHAPE.RETENTION }
   | {
@@ -99,7 +102,8 @@ export type SkeletonShape =
     }
   /** Lines of body text, each as wide as the share of the line given. */
   | { kind: typeof SKELETON_SHAPE.LINES; bones: readonly string[] }
-  | { kind: typeof SKELETON_SHAPE.HEALTH }
+  /** The health pair, its list of `rows` providers. */
+  | { kind: typeof SKELETON_SHAPE.HEALTH; rows: number }
   | {
       kind: typeof SKELETON_SHAPE.MASTHEAD;
       avatar?: boolean;
@@ -112,15 +116,19 @@ function bones(count: number): readonly number[] {
   return Array.from({ length: count }, (_, index) => index);
 }
 
+/** Two chart cards of equal width side by side, as the Reliability breakdowns stand. */
+export const CHART_PAIR_EVEN = "grid gap-3 min-[720px]:grid-cols-2";
+
 const STAT_CARDS_GRID = {
   1: "grid gap-3",
   2: "grid grid-cols-2 gap-3",
 } as const;
 
-/** Only the sign-in methods chart has no trend across from its heading. */
+/** The bar charts carry a trend across from their heading; the failure rates carry a legend under the plot instead. */
 function SkeletonChartCard({ plot }: { plot: SkeletonPlot }): React.JSX.Element {
+  const trended = plot === SKELETON_PLOT.USAGE || plot === SKELETON_PLOT.SIGNUPS;
   return (
-    <ChartFrameSkeleton aside={plot !== SKELETON_PLOT.SIGN_IN_METHODS} legend={false} plot={plot} />
+    <ChartFrameSkeleton aside={trended} legend={plot === SKELETON_PLOT.FAILURE_RATES} plot={plot} />
   );
 }
 
@@ -184,7 +192,7 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
     case SKELETON_SHAPE.STAT_GROUP:
       return (
         <StatGroup>
-          {bones(STAT_GROUP_COLUMNS).map((card) => (
+          {bones(shape.cards ?? STAT_GROUP_COLUMNS).map((card) => (
             <MetricCardSkeleton key={card} grouped />
           ))}
         </StatGroup>
@@ -220,12 +228,14 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
         <div
           className={
             shape.plots.length > 1
-              ? "grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
+              ? shape.even
+                ? CHART_PAIR_EVEN
+                : "grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
               : undefined
           }
         >
-          {shape.plots.map((plot) => (
-            <SkeletonChartCard key={plot} plot={plot} />
+          {shape.plots.map((plot, index) => (
+            <SkeletonChartCard key={index} plot={plot} />
           ))}
         </div>
       );
@@ -264,7 +274,7 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
           </MetricCardSkeleton>
           <MetricCardSkeleton hint={false}>
             <List label="Integrations">
-              {bones(5).map((row) => (
+              {bones(shape.rows).map((row) => (
                 <ListRow key={row} title={<Bone width="192px" />} meta={<Bone width="96px" />} />
               ))}
             </List>
