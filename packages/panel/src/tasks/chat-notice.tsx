@@ -15,7 +15,8 @@ import {
 } from "@luke/ui/chat-model";
 import type { ChatNoticeMetadata } from "@luke/wire";
 import type { ReactNode } from "react";
-import { MemberMark } from "./chat-pane.js";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useChatActor } from "./chat-actors.js";
 import { RelativeTime } from "./relative-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -33,6 +34,14 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * what the notice's own metadata says, the sender and the place, and the
  * body is the notice's words, with nothing to open.
  */
+
+/** No names, for a notice read before the chat is: its sender is drawn as someone until the chat lands. */
+const NO_NAMES: ChatNames = {
+  agents: new Map(),
+  tasks: new Map(),
+  agentTasks: new Map(),
+  selfName: undefined,
+};
 
 /** What Open in Chat is called. */
 const OPEN_IN_CHAT = "Open in Chat";
@@ -77,6 +86,7 @@ export function ChatNoticeCard({
     held === undefined
       ? undefined
       : doors?.chat.channels.find((each) => each.id === held.channelId);
+  const actorOf = useChatActor(doors?.chat, doors?.names ?? NO_NAMES);
   const who =
     held === undefined || doors === undefined
       ? undefined
@@ -100,7 +110,9 @@ export function ChatNoticeCard({
       <header className="chat-notice-head">
         {from ?? (
           <>
-            {who === undefined ? null : <MemberMark who={who} small />}
+            {who?.member === undefined ? null : (
+              <ActorMark actor={actorOf(who.member.id)} size={ACTOR_SIZE.INLINE} />
+            )}
             <span className="chat-notice-from">@{notice.from}</span>
           </>
         )}

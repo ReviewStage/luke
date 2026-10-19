@@ -21,6 +21,7 @@ import {
   UnarchiveIcon,
   useMenu,
 } from "@luke/ui";
+import type { Actor } from "@luke/ui/actor-model";
 import {
   CHAT_PLACE,
   type ChatPlace,
@@ -33,10 +34,14 @@ import {
 import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FoldingButton } from "../folding-button.js";
+import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SpinnerRegion } from "../spinner.js";
-import { ChatPane, MemberMark } from "../tasks/chat-pane.js";
+import { useChatActor } from "../tasks/chat-actors.js";
+import { ChatPane } from "../tasks/chat-pane.js";
 import { useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -159,16 +164,25 @@ function shows(place: ChatPlace, row: ChatRailRow): boolean {
 function RailRow({
   row,
   current,
+  actorOf,
   onChoose,
 }: {
   row: ChatRailRow;
   current: boolean;
+  actorOf: (memberId: string) => Actor;
   onChoose: () => void;
 }): React.JSX.Element {
+  const other = row.other?.member;
   return (
     <li>
       <NavItem
-        icon={row.other === undefined ? <HashIcon /> : <MemberMark who={row.other} small />}
+        icon={
+          other === undefined ? (
+            <HashIcon />
+          ) : (
+            <ActorMark actor={actorOf(other.id)} size={ACTOR_SIZE.INLINE} />
+          )
+        }
         detail={row.sub}
         current={current ? NAV_CURRENT.PAGE : undefined}
         unread={row.unread > 0}
@@ -181,8 +195,29 @@ function RailRow({
   );
 }
 
-/** The window's Chat, in the plan's place: the rail, and the place chosen beside it. */
-export function DesktopChat({
+/**
+ * The window's Chat, in the plan's place: the rail, and the place chosen
+ * beside it, inside the listed workspace's members read, as the Inbox
+ * stands, so every member is drawn with their photo and card and a link
+ * names its workspace.
+ */
+export function DesktopChat(props: {
+  tasks: TasksControl;
+  room: ShellRoom;
+  accountName: string | undefined;
+}): React.JSX.Element {
+  const { tasks } = props;
+  return (
+    <LinkWorkspaceProvider value={tasks.workspace?.slug ?? tasks.workspace?.id}>
+      <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
+        <ChatView {...props} />
+      </MemberDirectory>
+    </LinkWorkspaceProvider>
+  );
+}
+
+/** The rail and the place chosen, read against the members around it. */
+function ChatView({
   tasks,
   room,
   accountName,
@@ -202,6 +237,7 @@ export function DesktopChat({
   );
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const dialogs = useChannelDialogs(tasks.workspace?.id, read?.answer, view.onChannel, view.open);
+  const actorOf = useChatActor(read?.answer, names);
   if (read === undefined || view.failed) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
     const standIn = view.failed ? (
@@ -230,6 +266,7 @@ export function DesktopChat({
       key={each.channel.id}
       row={each}
       current={shows(view.place, each)}
+      actorOf={actorOf}
       onChoose={() => view.onChoose({ kind: CHAT_PLACE.CHANNEL, channelId: each.channel.id })}
     />
   );

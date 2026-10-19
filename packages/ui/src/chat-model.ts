@@ -95,6 +95,8 @@ const CHANNEL_ORDER = {
 export interface ChatNames {
   readonly agents: ReadonlyMap<string, TaskAgentLine>;
   readonly tasks: ReadonlyMap<string, string>;
+  /** The task each agent a plan's summary names works on, by the agent's id. */
+  readonly agentTasks: ReadonlyMap<string, string>;
   readonly selfName: string | undefined;
 }
 
@@ -108,6 +110,11 @@ export function chatNames(
   return {
     agents: new Map(lines.map((line) => [line.id, line])),
     tasks: new Map(tasks.map((task) => [task.id, task.name])),
+    agentTasks: new Map(
+      tasks.flatMap((task) =>
+        (task.agents?.agents ?? []).map((line) => [line.id, task.id] as const),
+      ),
+    ),
     selfName,
   };
 }

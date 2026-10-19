@@ -11,10 +11,6 @@ import {
   Inline,
   PlusIcon,
   SUBMIT_STATE,
-  TEXT_ELEMENT,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
 } from "@luke/ui";
 import {
   type ChatMention,
@@ -146,8 +142,6 @@ function MentionMenu({
 interface ChatComposerProps {
   /** What the box asks for while empty, which names it for assistive technology too. */
   readonly label: string;
-  /** What the bar says the box takes, each a short line. */
-  readonly hints: readonly string[];
   /** What an `@` or `#` offers. */
   readonly targets: readonly ChatTarget[];
   /** The words a dictation here is likely to say (`chatKeywords`). */
@@ -175,15 +169,13 @@ export function ChatComposer(props: ChatComposerProps): React.JSX.Element {
   );
 }
 
-/** The bar under the box: the parts it leads with (the + of pictures), what it takes, then the parts the box hands it (dictation's), then the round send. */
+/** The bar under the box, as the agent box's and the Inbox's stand: the parts it leads with (the + of pictures), then the parts the box hands it (dictation's) and the round send at its end. */
 function ComposerFoot({
-  hints,
   sending,
   empty,
   lead,
   children,
 }: {
-  hints: readonly string[];
   sending: boolean;
   empty: boolean;
   lead?: React.ReactNode;
@@ -191,22 +183,7 @@ function ComposerFoot({
 }): React.JSX.Element {
   return (
     <PromptInputFooter>
-      <PromptInputTools>
-        {lead}
-        <Inline gap={GAP.FIELD} wrap={false}>
-          {hints.map((hint) => (
-            <Text
-              key={hint}
-              as={TEXT_ELEMENT.SPAN}
-              variant={TEXT_VARIANT.CAPTION}
-              tone={TEXT_TONE.SUBTLE}
-              truncate
-            >
-              {hint}
-            </Text>
-          ))}
-        </Inline>
-      </PromptInputTools>
+      <PromptInputTools>{lead}</PromptInputTools>
       <Inline gap={GAP.TIGHT} wrap={false}>
         {children}
         <Tooltip label={SEND}>
@@ -303,7 +280,6 @@ const NO_SKILLS: ReadonlySet<string> = new Set();
 /** The box on the agent box's editor: `@` and `#` open the chat's list over it, and the microphone lays a dictation in at the caret. */
 function EditorChatComposer({
   label,
-  hints,
   targets,
   keywords,
   compact,
@@ -424,7 +400,6 @@ function EditorChatComposer({
           </PromptInputFooter>
         ) : (
           <ComposerFoot
-            hints={hints}
             sending={sending}
             empty={empty || reading}
             lead={
@@ -469,7 +444,6 @@ function EditorChatComposer({
 /** The plain box a bundle that failed to load leaves: a textarea whose `@` or `#` word opens the same list. */
 function PlainChatComposer({
   label,
-  hints,
   targets,
   compact,
   onSend,
@@ -592,7 +566,7 @@ function PlainChatComposer({
           onKeyDown={onKeyDown}
           onBlur={() => setCaret(undefined)}
         />
-        <ComposerFoot hints={hints} sending={sending} empty={empty} />
+        <ComposerFoot sending={sending} empty={empty} />
       </PromptInput>
       {note === undefined ? null : (
         <p className="error-message chat-composer-note" role="alert">

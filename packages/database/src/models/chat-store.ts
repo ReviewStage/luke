@@ -1345,6 +1345,42 @@ export function roster(
   });
 }
 
+const findAgentMemberTasks = SqlSchema.findAll({
+  Request: OrganizationKeySchema,
+  Result: Schema.Struct({ agentId: Schema.String, taskId: Schema.String }),
+  execute: ({ organizationId }) =>
+    Database.use((db) =>
+      db
+        .select({ agentId: codingAgent.id, taskId: codingAgent.taskId })
+        .from(chatMember)
+        .innerJoin(codingAgent, eq(codingAgent.id, chatMember.agentId))
+        .where(
+          and(
+            eq(chatMember.organizationId, organizationId),
+            eq(chatMember.kind, MEMBER_KIND.AGENT),
+            isNotNull(codingAgent.taskId),
+          ),
+        ),
+    ),
+});
+
+/**
+ * The task each agent member of the workspace works on, by the agent's id,
+ * every agent's rather than the few a task's summary names, so a window
+ * draws an agent's line under its task and opens its tab there; none for
+ * an agent on no task, and none where the account is not in the workspace.
+ */
+export function agentMemberTasks(
+  userId: string,
+  organizationId: string,
+): ChatStoreEffect<ReadonlyMap<string, string>> {
+  return Effect.gen(function* () {
+    if (!(yield* isWorkspaceMember(userId, organizationId))) return new Map();
+    const rows = yield* findAgentMemberTasks({ organizationId });
+    return new Map(rows.map((row) => [row.agentId, row.taskId]));
+  });
+}
+
 /** Every channel of the workspace, the archived ones among them, in the order they were made; none where the account is not in it. */
 export function channelsOf(
   userId: string,

@@ -556,6 +556,7 @@ export const chatMemberSchema = EffectSchema.Struct({
   handle: EffectSchema.String,
   userId: EffectSchema.optionalKey(EffectSchema.String),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
+  /** The plan a planner is Luke on, or the plan an agent works on; absent for a person, an agent on no plan, and from a service before agents named theirs. */
   planId: EffectSchema.optionalKey(wireUuidSchema),
   left: EffectSchema.Boolean,
 });

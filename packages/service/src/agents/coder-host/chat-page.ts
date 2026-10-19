@@ -1,4 +1,5 @@
 import {
+  agentMemberTasks,
   type ChatChannelRow,
   type ChatMemberRow,
   type ChatMessageRow,
@@ -51,15 +52,16 @@ function chatCursorOf(seq: number): string {
   return String(seq + 1);
 }
 
-/** A member as the window reads one. */
-function memberOnWire(row: ChatMemberRow): ChatMember {
+/** A member as the window reads one: a Luke on his plan, and an agent on the plan it works on, where `agentTasks` names one. */
+function memberOnWire(row: ChatMemberRow, agentTasks: ReadonlyMap<string, string>): ChatMember {
+  const planId = row.taskId ?? (row.agentId === null ? undefined : agentTasks.get(row.agentId));
   return {
     id: row.id,
     kind: row.kind,
     handle: row.handle,
     ...(row.userId === null ? undefined : { userId: row.userId }),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-    ...(row.taskId === null ? undefined : { planId: row.taskId }),
+    ...(planId === undefined ? undefined : { planId }),
     left: row.leftAt !== null,
   };
 }
@@ -183,6 +185,7 @@ export function workspaceChatPast(
     const past = yield* chatPast(userId, organizationId, self.value.id, after);
     if (Option.isNone(past)) return Option.none();
     const members = yield* roster(userId, organizationId);
+    const agentTasks = yield* agentMemberTasks(userId, organizationId);
     const channels = yield* channelsOf(userId, organizationId);
     const reader = members.find((member) => member.id === self.value.id) ?? self.value;
     const reads = yield* channelReads(userId, organizationId, reader.id);
@@ -190,7 +193,7 @@ export function workspaceChatPast(
       self: reader.id,
       readSeq: reader.readSeq,
       ...readsPast(reader.readSeq, reads),
-      members: members.map(memberOnWire),
+      members: members.map((member) => memberOnWire(member, agentTasks)),
       channels: channels.map(channelOnWire),
       messages: past.value.messages.map(messageOnWire),
       cursor: chatCursorOf(past.value.cursor),

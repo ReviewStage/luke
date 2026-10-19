@@ -14,9 +14,6 @@ import {
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import {
-  AVATAR_SHAPE,
-  AVATAR_SIZE,
-  Avatar,
   EmptyState,
   ScrollArea,
   TEXT_BUTTON_TONE,
@@ -25,8 +22,8 @@ import {
   TEXT_VARIANT,
   Text,
   TextButton,
-  WingFace,
 } from "@luke/ui";
+import { ACTOR_KIND, type Actor, distinctActors } from "@luke/ui/actor-model";
 import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
   CHAT_PLACE,
@@ -35,7 +32,6 @@ import {
   type ChatPlace,
   type ChatPost,
   type ChatThread,
-  type ChatWho,
   channelLabel,
   channelThreads,
   chatKeywords,
@@ -50,14 +46,16 @@ import {
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
 import { AtSignIcon, HashIcon } from "lucide-react";
 import { useCallback, useState } from "react";
+import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
 import { PictureBlock } from "../picture-block.js";
+import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
+import { useChatActor } from "./chat-actors.js";
 import { AskCard } from "./chat-ask.js";
 import { ChatComposer } from "./chat-composer.js";
 import { FileRef } from "./file-ref.js";
 import { LinkBlock } from "./inbox-pane.js";
 import { RelativeTime } from "./relative-time.js";
-import { AgentGlyph } from "./tab-look.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
 /**
@@ -112,34 +110,7 @@ const CHANNEL_META = {
 function threadToggleWords(open: boolean, count: number): string {
   if (open) return "Hide thread";
   if (count === 0) return "Reply";
-  return `View thread · ${count === 1 ? "1 reply" : `${count} replies`}`;
-}
-
-/** What the composer at a channel's foot says it takes. */
-const COMPOSER_HINTS = ["@ mention an agent, Luke, or a teammate", "# link a channel"] as const;
-
-/** The mark a member's lines lead with, on a square: an agent's glyph, Luke's face, a person's letter on their hue. */
-export function MemberMark({ who, small }: { who: ChatWho; small?: boolean }): React.JSX.Element {
-  const kind = who.member?.kind;
-  const glyph =
-    kind === MEMBER_KIND.AGENT ? (
-      // Note that the mark is the agent's harness at rest, since a line says who wrote it, not where its agent stands now.
-      <AgentGlyph agent={who.agent === undefined ? undefined : { model: who.agent.model }} />
-    ) : kind === MEMBER_KIND.LUKE ? (
-      <WingFace />
-    ) : undefined;
-  return (
-    <span className="chat-mark" data-kind={kind ?? "unknown"}>
-      <Avatar
-        id={who.member?.userId ?? who.member?.id ?? who.name}
-        name={who.name}
-        glyph={glyph}
-        shape={AVATAR_SHAPE.SQUARE}
-        size={small === true ? AVATAR_SIZE.STACK : AVATAR_SIZE.ACCOUNT}
-        decorative
-      />
-    </span>
-  );
+  return count === 1 ? "1 reply" : `${count} replies`;
 }
 
 /** A code block by what it points at: the file and its lines, named as a transcript names them, with nothing to open them from here. */
@@ -245,6 +216,8 @@ interface MessageContext {
   readonly keywords: readonly string[];
   /** The workspace a chip's link is written in. */
   readonly mentionPlace: MentionPlace | undefined;
+  /** The actor a member is drawn as, by the member's id (`chat-actors.ts`). */
+  readonly actorOf: (memberId: string) => Actor;
   readonly openLink: (url: string) => void;
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
@@ -281,14 +254,18 @@ function Body({
 }
 
 /** The line over a message's body: its author, its handle, where it was posted where that is said, and when. */
+/** The line over a message's words, as an Inbox comment's head is: its author by name, their card on it, where it was said, and when. */
 function Byline({
-  who,
+  actor,
+  handle,
   at,
   where,
   now,
   action,
 }: {
-  who: ChatWho;
+  actor: Actor;
+  /** An agent's handle, said quietly after its title, since two agents may share a title and the chat names them by it. */
+  handle: string | undefined;
   at: number;
   where: string | undefined;
   now: number;
@@ -297,38 +274,50 @@ function Byline({
 }): React.JSX.Element {
   return (
     <div className="chat-byline">
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-        {who.name}
-      </Text>
-      <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED}>
-        @{who.handle}
-      </Text>
-      {where === undefined ? null : (
-        <Text
-          as={TEXT_ELEMENT.SPAN}
-          variant={TEXT_VARIANT.CAPTION}
-          tone={TEXT_TONE.SUBTLE}
-          truncate
-        >
-          {where}
-        </Text>
-      )}
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
-        <RelativeTime at={at} now={now} />
-      </Text>
+      <span className="chat-byline-name">
+        {actor.kind === ACTOR_KIND.AGENT && actor.agentId !== undefined ? (
+          <SendingAgent actor={actor} agentId={actor.agentId} nameOnly />
+        ) : (
+          <ActorRef actor={actor} nameOnly />
+        )}
+      </span>
+      {handle === undefined ? null : <span className="chat-byline-handle">@{handle}</span>}
+      {where === undefined ? null : <span className="chat-byline-where">{where}</span>}
+      <RelativeTime at={at} now={now} />
       {action}
     </div>
   );
 }
 
-/** One message of a thread: a smaller mark, its byline, and its body. */
+/** An agent author's handle, which tells two agents of one title apart; none for a person or Luke, named by who they are. */
+function agentHandle(context: MessageContext, memberId: string): string | undefined {
+  const member = context.chat.members.find((each) => each.id === memberId);
+  return member?.kind === MEMBER_KIND.AGENT ? member.handle : undefined;
+}
+
+/** The face a message leads with, in a column of its own: the author's photo, Luke, or the agent's harness, as a list row draws them. */
+function Face({ actor }: { actor: Actor }): React.JSX.Element {
+  return (
+    <span className="chat-face">
+      <ActorMark actor={actor} size={ACTOR_SIZE.ROW} />
+    </span>
+  );
+}
+
+/** One message of a thread: its face, its byline, and its body. */
 function Reply({ message, context }: { message: ChatMessage; context: MessageContext }) {
-  const who = chatWho(context.chat, context.names, message.authorId);
+  const actor = context.actorOf(message.authorId);
   return (
     <li className="chat-reply" data-seq={message.seq}>
-      <MemberMark who={who} small />
+      <Face actor={actor} />
       <div className="chat-message-body">
-        <Byline who={who} at={message.postedAt} where={undefined} now={context.now} />
+        <Byline
+          actor={actor}
+          handle={agentHandle(context, message.authorId)}
+          at={message.postedAt}
+          where={undefined}
+          now={context.now}
+        />
         <Body message={message} context={context} />
       </div>
     </li>
@@ -347,8 +336,10 @@ function ThreadRow({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const { message, replies } = thread;
-  const who = chatWho(context.chat, context.names, message.authorId);
+  const actor = context.actorOf(message.authorId);
   const home = context.chat.channels.find((channel) => channel.id === message.channelId);
+  // The thread's repliers lead its press by their faces, each once, as a comment thread at rest names them.
+  const repliers = distinctActors(replies.map((reply) => context.actorOf(reply.authorId)));
   // A thread in a channel the reader cannot post in reads as it stands, with no box to reply in.
   const canReply = home === undefined || postsIn(context.chat, home);
   const toggle = (
@@ -357,6 +348,7 @@ function ThreadRow({
       aria-expanded={open}
       onClick={() => setOpen((was) => !was)}
     >
+      {replies.length > 0 && !open ? <ActorStack actors={repliers} drawn={3} /> : null}
       {threadToggleWords(open, replies.length)}
     </TextButton>
   );
@@ -365,9 +357,15 @@ function ThreadRow({
   if (quiet && !canReply) {
     return (
       <li className="chat-message" data-seq={message.seq}>
-        <MemberMark who={who} />
+        <Face actor={actor} />
         <div className="chat-message-body">
-          <Byline who={who} at={message.postedAt} where={where} now={context.now} />
+          <Byline
+            actor={actor}
+            handle={agentHandle(context, message.authorId)}
+            at={message.postedAt}
+            where={where}
+            now={context.now}
+          />
           <Body message={message} context={context} />
         </div>
       </li>
@@ -375,10 +373,11 @@ function ThreadRow({
   }
   return (
     <li className="chat-message" data-seq={message.seq}>
-      <MemberMark who={who} />
+      <Face actor={actor} />
       <div className="chat-message-body">
         <Byline
-          who={who}
+          actor={actor}
+          handle={agentHandle(context, message.authorId)}
           at={message.postedAt}
           where={where}
           now={context.now}
@@ -398,7 +397,6 @@ function ThreadRow({
             {open && canReply ? (
               <ChatComposer
                 label="Reply in thread"
-                hints={[]}
                 targets={context.targets}
                 keywords={context.keywords}
                 place={context.mentionPlace}
@@ -528,7 +526,9 @@ export function ChatPane({
 }): React.JSX.Element {
   const targets = chatTargets(chat, names);
   const keywords = chatKeywords(chat, names);
+  const actorOf = useChatActor(chat, names);
   const context: MessageContext = {
+    actorOf,
     chat,
     names,
     now,
@@ -602,7 +602,6 @@ export function ChatPane({
         <ChatComposer
           key={channel.id}
           label={`Message ${postTarget(chat, names, channel)}`}
-          hints={COMPOSER_HINTS}
           targets={targets}
           keywords={keywords}
           place={mentionPlace}
