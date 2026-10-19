@@ -431,9 +431,30 @@ export function fileNotice(file: CodingAgentChangedFile): string | undefined {
     : CHANGES_WORDS.NO_HUNKS;
 }
 
-/** Each changed file's row mark in the tree. */
-export function changeMarks(files: readonly CodingAgentChangedFile[]): readonly FileMark[] {
-  return files.map((file) => ({ path: file.path, status: STATUS_MARK[file.status] }));
+/**
+ * Each changed file's row mark in the tree: what became of it, the lines it
+ * adds and removes, and, where Files changed knows them, how many review
+ * threads stand on it, every one counted, resolved or not, as stage-cli's
+ * tree counts them, and whether the member marked it viewed.
+ */
+export function changeMarks(
+  files: readonly CodingAgentChangedFile[],
+  beside: {
+    readonly threads?: readonly ReviewThread[] | undefined;
+    readonly viewed?: ((path: string) => boolean) | undefined;
+  } = {},
+): readonly FileMark[] {
+  const threads = new Map<string, number>();
+  for (const thread of beside.threads ?? []) {
+    threads.set(thread.path, (threads.get(thread.path) ?? 0) + 1);
+  }
+  return files.map((file) => ({
+    path: file.path,
+    status: STATUS_MARK[file.status],
+    lines: { additions: file.additions, deletions: file.deletions },
+    threads: threads.get(file.path) ?? 0,
+    viewed: beside.viewed?.(file.path),
+  }));
 }
 
 /** The lines every file adds and removes, summed. */

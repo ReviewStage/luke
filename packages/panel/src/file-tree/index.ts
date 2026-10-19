@@ -1,4 +1,9 @@
-import { createFileTreeIconResolver, FileTree, getBuiltInSpriteSheet } from "@pierre/trees";
+import {
+  createFileTreeIconResolver,
+  FileTree,
+  type FileTreeRowDecorationRenderer,
+  getBuiltInSpriteSheet,
+} from "@pierre/trees";
 import type {
   FileMark,
   FileTreeHandle,
@@ -15,6 +20,7 @@ import {
   repositoryPath,
   treePath,
 } from "./folder-browser.js";
+import { dress, pressedToggle, rowDecoration } from "./row-marks.js";
 
 /**
  * index.ts -- the file tree bundle: Pierre's tree mounted beside a File tab, listed a folder at a time, a file opened on its press.
@@ -45,7 +51,10 @@ import {
  * open. Each stands in the repository's place while it is asked for, so the
  * folders opened there are as they were when it is let go. A change set's
  * tree marks each file's row with what became of it, through Pierre's own
- * git status, in whichever of them stands.
+ * git status, in whichever of them stands, and a pull request's draws at
+ * each file's row's end its review threads, its lines, and its Viewed
+ * toggle (`row-marks.ts`), a press on which marks the file rather than
+ * opening it.
  *
  * A breadcrumb's tree is this same tree, mounted under the crumb over the
  * folder the crumb stands in, with its rows counted out as they change so
@@ -63,18 +72,14 @@ const ROW = {
 } as const;
 
 /**
- * How both trees draw: compact rows, each file's type in colour, a lone
- * folder sharing its parent's row, and the window's thin scrollbar
- * (`styles/desktop.css`), whose colour inherits into Pierre's shadow root
- * and whose width does not, so it is set there on the scroller and on the
- * box Pierre measures that scroller's gutter from.
+ * How both trees draw: compact rows, each file's type in colour, and a lone
+ * folder sharing its parent's row; the rest of their look is the sheet each
+ * is dressed in (`row-marks.ts`).
  */
 const TREE_LOOK = {
   flattenEmptyDirectories: true,
   density: "compact",
   icons: "complete",
-  unsafeCSS:
-    "[data-file-tree-virtualized-scroll], [data-file-tree-scrollbar-measure] { scrollbar-width: thin; }",
 } as const;
 
 /** The slot Pierre resolves a file's type icon for, and the type of a file no rule names. */
@@ -158,9 +163,18 @@ interface View {
   readonly frame: HTMLElement;
 }
 
-/** A tree drawn into a frame of its own over the paths given, Pierre's names for them. */
-function viewOf(paths: readonly string[], expansion: "open" | "closed"): View {
-  const tree = new FileTree({ ...TREE_LOOK, paths, initialExpansion: expansion });
+/** A tree drawn into a frame of its own over the paths given, Pierre's names for them, each row's end drawn by `decorate`. */
+function viewOf(
+  paths: readonly string[],
+  expansion: "open" | "closed",
+  decorate: FileTreeRowDecorationRenderer,
+): View {
+  const tree = new FileTree({
+    ...TREE_LOOK,
+    paths,
+    initialExpansion: expansion,
+    renderRowDecoration: decorate,
+  });
   const frame = document.createElement("div");
   frame.className = "file-tree-view";
   tree.render({ containerWrapper: frame });
@@ -214,6 +228,7 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   let query = "";
   let marked: string | undefined;
   let marks: readonly FileMark[] = [];
+  let markOf = new Map<string, FileMark>();
   let taken = false;
   // The reveal asked before the tree is drawn.
   let waiting: { path: string; options: RevealOptions } | undefined;
@@ -222,6 +237,10 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   const cut = notice(CUT_SHORT, undefined);
   cut.classList.add("file-tree-cut");
 
+  // Each file's row ends as its mark says; a folder's says nothing more.
+  const decorate: FileTreeRowDecorationRenderer = ({ item }) =>
+    item.kind === "file" ? rowDecoration(markOf.get(repositoryPath(item.path))) : null;
+
   // The tree standing now, drawn with the search held: the files Luke
   // showed while the filter is on, the whole repository while a search
   // stands and it was handed, the folders listed so far otherwise; or the
@@ -229,11 +248,11 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   const standing = (): View | undefined => {
     if (browse === undefined) return undefined;
     if (only !== undefined) {
-      shown ??= framed(viewOf(only, "open"));
+      shown ??= framed(viewOf(only, "open", decorate));
       return shown;
     }
     if (query.trim() === "" || everything === undefined) return browse;
-    whole ??= framed(viewOf(everything, "closed"));
+    whole ??= framed(viewOf(everything, "closed", decorate));
     return whole;
   };
   // A view made after the tree was drawn joins it, the tab's file marked.
@@ -241,6 +260,7 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     if (marked !== undefined) markAlone(view.tree, marked, false);
     view.tree.setGitStatus(marks);
     empty.before(view.frame);
+    dress(view.tree);
     return view;
   };
   const present = () => {
@@ -255,10 +275,11 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   };
 
   const draw = () => {
-    browse = viewOf([], "closed");
+    browse = viewOf([], "closed", decorate);
     browse.tree.setGitStatus(marks);
     empty.hidden = true;
     host.replaceChildren(browse.frame, empty);
+    dress(browse.tree);
     // Note that a search stands over folders still being listed, so whether
     // it matches anything is asked again as each listing lands.
     const tree = browse.tree;
@@ -293,11 +314,23 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     if (row?.dataset.itemType !== ROW.FILE || path === undefined) return;
     props.onOpen(repositoryPath(path), event.metaKey || event.ctrlKey);
   };
+  // Note that a press on a Viewed toggle is heard on its way down, before
+  // the row it stands in, so it goes no further: the row neither opens nor
+  // takes the keyboard.
+  const onToggle = (event: MouseEvent) => {
+    const path = pressedToggle(event);
+    if (path === undefined || props.onViewed === undefined) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.type === "click") props.onViewed(repositoryPath(path));
+  };
   const onKey = (event: KeyboardEvent) => {
     const path = standing()?.tree.getFocusedPath() ?? null;
     if (event.key !== "Enter" || path === null || path.endsWith("/")) return;
     props.onOpen(repositoryPath(path), event.metaKey || event.ctrlKey);
   };
+  host.addEventListener("mousedown", onToggle, true);
+  host.addEventListener("click", onToggle, true);
   host.addEventListener("click", onClick);
   host.addEventListener("keydown", onKey);
   list();
@@ -329,10 +362,20 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     },
     mark: (asked) => {
       marks = asked;
-      for (const view of [browse, shown, whole]) view?.tree.setGitStatus(marks);
+      markOf = new Map(asked.map((mark) => [mark.path, mark]));
+      // Note that Pierre draws its rows again for a change of status alone,
+      // so a change to what else a mark carries is drawn by asking it to.
+      for (const view of [browse, shown, whole]) {
+        if (view === undefined) continue;
+        view.tree.setGitStatus(marks);
+        view.tree.setComposition(view.tree.getComposition());
+        dress(view.tree);
+      }
     },
     unmount: () => {
       taken = true;
+      host.removeEventListener("mousedown", onToggle, true);
+      host.removeEventListener("click", onToggle, true);
       host.removeEventListener("click", onClick);
       host.removeEventListener("keydown", onKey);
       unheard?.();

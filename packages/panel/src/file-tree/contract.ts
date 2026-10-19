@@ -50,10 +50,25 @@ export const FILE_MARK = {
 
 export type FileMarkStatus = (typeof FILE_MARK)[keyof typeof FILE_MARK];
 
-/** One file's mark: its path and what became of it. */
+/**
+ * One file's mark: its path and what became of it, and, for a pull
+ * request's file, what Files changed knows of it beside: the lines it adds
+ * and removes, how many review threads stand on it, and whether the member
+ * marked it viewed, each drawn at the end of its row where given.
+ */
 export interface FileMark {
   readonly path: string;
   readonly status: FileMarkStatus;
+  /** The lines it adds and removes, drawn compact where the row has room. */
+  readonly lines?: { readonly additions: number; readonly deletions: number } | undefined;
+  /** How many review threads stand on it, drawn by a speech mark where any do. */
+  readonly threads?: number | undefined;
+  /**
+   * Whether the member marked it viewed, which dims its row and draws its
+   * Viewed toggle ticked, the toggle drawn otherwise only while the row is
+   * hovered; none draws no toggle, as before the marks are read.
+   */
+  readonly viewed?: boolean | undefined;
 }
 
 /** What the tab hands the tree when it mounts it. */
@@ -66,6 +81,12 @@ export interface FileTreeProps {
   readonly readFolder: ReadFolder;
   /** A file chosen in the tree, by a press or Return: open it, in a tab of its own where ⌘ was held. */
   readonly onOpen: (path: string, newTab: boolean) => void;
+  /**
+   * A file's Viewed toggle pressed on its row: mark it viewed, or not, as
+   * its header's box does. The press opens nothing, and the tree's keyboard
+   * stays where it stood.
+   */
+  readonly onViewed?: (path: string) => void;
   /**
    * How many rows the repository's tree shows, each time a folder listed,
    * opened, or closed changes it, which a breadcrumb's tree sizes its box
@@ -104,8 +125,8 @@ export interface FileTreeHandle {
   readonly within: (entries: readonly FolderEntry[]) => void;
   /**
    * Marks each file's row with what became of it, as an editor's source
-   * control does, and each folder above one as holding a change; none
-   * marks nothing.
+   * control does, and each folder above one as holding a change, each file's
+   * row drawing too whatever else its mark carries; none marks nothing.
    */
   readonly mark: (marks: readonly FileMark[]) => void;
   readonly unmount: () => void;
