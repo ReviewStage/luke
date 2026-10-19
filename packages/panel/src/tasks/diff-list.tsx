@@ -62,6 +62,8 @@ export interface DiffListEntry {
   readonly lead: boolean;
   /** Whether the lines between its hunks may be opened. */
   readonly expandable: boolean;
+  /** Its whole text before and after, where it is drawn whole. */
+  readonly whole?: DiffFileTexts | undefined;
   readonly header: ReactNode;
   readonly notes: readonly DiffNote[];
 }
@@ -167,6 +169,7 @@ function listFileOf(entry: DiffListEntry): DiffListFile {
     collapsed: entry.collapsed,
     lead: entry.lead,
     expandable: entry.expandable,
+    whole: entry.whole,
     annotations: entry.notes.map(placeOf),
   };
   LIST_FILES.set(entry, file);
@@ -187,6 +190,7 @@ function sameFiles(a: readonly DiffListFile[], b: readonly DiffListFile[]): bool
           file.collapsed === other.collapsed &&
           file.lead === other.lead &&
           file.expandable === other.expandable &&
+          file.whole === other.whole &&
           sameNotes(file.annotations, other.annotations))
       );
     })

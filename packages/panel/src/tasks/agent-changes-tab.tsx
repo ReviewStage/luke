@@ -15,6 +15,7 @@ import type { CatalogModel } from "@luke/features/models-wire";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
+  BUTTON_SIZE,
   Button,
   Checkbox,
   CopyIcon,
@@ -26,6 +27,8 @@ import {
   HoverCardHead,
   HoverCardNote,
   IconButton,
+  TEXT_BUTTON_TONE,
+  TextButton,
 } from "@luke/ui";
 import { fileName } from "@luke/voice/code-pane-model";
 import {
@@ -34,8 +37,10 @@ import {
   ClipboardCopyIcon,
   CodeIcon,
   FileDiffIcon,
+  FoldVerticalIcon,
   ImageIcon,
   RotateCwIcon,
+  UnfoldVerticalIcon,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
@@ -83,6 +88,7 @@ import {
   textsOf,
   threadsOn,
   treeOrder,
+  wholeable,
 } from "./changes-model.js";
 import { ChangesStrip } from "./changes-strip.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
@@ -486,6 +492,8 @@ function entryOf(
   /** Which of the file's lines show their threads while Minimize inline comments is on, and the door that shows or hides one; none while it is off. */
   minimized: FileMinimized | undefined,
   hover: ThreadHover | undefined,
+  /** The file drawn whole, where it is, whether it may be, and the door that draws it so or back to its changes. */
+  whole: FileWhole,
 ): DiffListEntry {
   const path = file.path;
   const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
@@ -494,7 +502,9 @@ function entryOf(
   const pictured = image !== undefined && !source && imageDrawable(file, image) ? image : undefined;
   // Note that a pictured file draws no lines, so its threads stand above it, as on a binary file.
   const drawnAs = pictured === undefined ? file : { ...file, patch: null };
-  const { placed, above } = threadsOn(threads, drawnAs);
+  // A file drawn whole draws every one of its lines, so its threads are placed on them.
+  const drawnWhole = pictured === undefined && !emptyWhole(whole.texts) ? whole.texts : undefined;
+  const { placed, above } = threadsOn(threads, drawnAs, drawnWhole);
   const notes: DiffNote[] =
     minimized === undefined
       ? placed.map((each) => ({
@@ -524,12 +534,30 @@ function entryOf(
     );
   };
   // A pictured image, or a file with no hunks, stands as what is drawn in the place of its lines.
-  const notice = fileNotice(file);
+  // A file that only moved, drawn whole, shows its lines rather than saying it only moved.
+  const notice = drawnWhole === undefined ? fileNotice(file) : undefined;
+  // A file that only moved offers its lines from what it says, its read waiting for the press.
+  const shown =
+    notice === CHANGES_WORDS.UNCHANGED_CONTENTS && whole.offered && whole.texts === undefined ? (
+      <>
+        {" · "}
+        <TextButton
+          tone={TEXT_BUTTON_TONE.LINK}
+          aria-label={`${LIST_WORDS.SHOW_FILE}: ${path}`}
+          onClick={whole.toggle}
+        >
+          {LIST_WORDS.SHOW_FILE}
+        </TextButton>
+      </>
+    ) : null;
   const lead =
     pictured !== undefined ? (
       <ImageDiff file={file} sides={pictured} />
     ) : notice === undefined ? undefined : (
-      <p className="diff-list-notice">{notice}</p>
+      <p className="diff-list-notice">
+        {notice}
+        {shown}
+      </p>
     );
   if (lead !== undefined) {
     notes.unshift({
@@ -570,6 +598,7 @@ function entryOf(
     collapsed,
     lead: lead !== undefined,
     expandable: lead === undefined && gaps.open,
+    whole: lead === undefined ? whole.texts : undefined,
     header: (
       <FileHead
         file={file}
@@ -577,6 +606,9 @@ function entryOf(
           <>
             {image === undefined || fileNotice(file) !== undefined ? null : (
               <SourceToggle source={source} onToggle={() => list.toggleSource(path)} />
+            )}
+            {!whole.offered || pictured !== undefined ? null : (
+              <WholeToggle whole={whole.texts !== undefined} onToggle={whole.toggle} />
             )}
             {list.viewed === undefined || list.markViewed === undefined ? null : (
               <ViewedBox viewed={list.viewed(path)} onToggle={() => list.markViewed?.(path)} />
@@ -644,6 +676,7 @@ function useEntries(
   texts: FileTexts,
   minimizedOf: (path: string) => FileMinimized | undefined,
   hover: ThreadHover | undefined,
+  wholeOf: (file: CodingAgentChangedFile) => FileWhole,
 ): readonly DiffListEntry[] {
   const kept = useRef(new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>());
   const next = new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>();
@@ -652,23 +685,90 @@ function useEntries(
     const comments = commenting?.notes.get(file.path) ?? NO_NOTES;
     const gaps = { open: texts.expandable(file), refused: texts.refused.get(file.path) };
     const minimized = minimizedOf(file.path);
+    const whole = wholeOf(file);
     const inputs = [
       ...entryInputs(file, list, own, threads?.draw, images, comments),
       gaps.open,
       gaps.refused,
       minimized,
       own.length === 0 ? undefined : hover,
+      whole.texts,
+      whole.offered,
+      whole.toggle,
     ];
     const was = kept.current.get(file.path);
     const entry =
       was !== undefined && sameInputs(was.inputs, inputs)
         ? was.entry
-        : entryOf(file, list, own, threads?.draw, images, comments, gaps, minimized, hover);
+        : entryOf(file, list, own, threads?.draw, images, comments, gaps, minimized, hover, whole);
     next.set(file.path, { inputs, entry });
     return entry;
   });
   kept.current = next;
   return entries;
+}
+
+/** A file drawn whole: its texts where it is, whether it may be, and the door that draws it whole or back to its changes. */
+interface FileWhole {
+  readonly texts: DiffFileTexts | undefined;
+  readonly offered: boolean;
+  readonly toggle: () => void;
+}
+
+/** Whether a file drawn whole has no line to draw, which keeps saying what it is rather than drawing nothing. */
+function emptyWhole(texts: DiffFileTexts | undefined): boolean {
+  return texts !== undefined && texts.before === "" && texts.after === "";
+}
+
+/** No file drawn whole. */
+const NONE_WHOLE: ReadonlyMap<string, DiffFileTexts> = new Map();
+
+/**
+ * Which files are drawn whole, as stage-cli's Expand full file draws one:
+ * a file's texts read as its gaps read them (`FileTexts`'s door, once and
+ * kept), every unchanged line then drawn among its changes, until Collapse
+ * to changes; every file back to its changes with a new answer. A file whose
+ * gaps never open is never offered, and one whose read is refused stays as
+ * it is, its refusal said as a gap's is.
+ */
+function useWholeFiles(texts: FileTexts): (file: CodingAgentChangedFile) => FileWhole {
+  const { read, refused } = texts;
+  const [held, setHeld] = useState<{
+    readonly of: unknown;
+    readonly files: ReadonlyMap<string, DiffFileTexts>;
+  }>({ of: read, files: NONE_WHOLE });
+  const files = held.of === read ? held.files : NONE_WHOLE;
+  const latest = useRef({ read, files });
+  latest.current = { read, files };
+  const toggle = useCallback((path: string) => {
+    const { read, files } = latest.current;
+    const held = (next: ReadonlyMap<string, DiffFileTexts>) => setHeld({ of: read, files: next });
+    if (files.has(path)) {
+      const next = new Map(files);
+      next.delete(path);
+      held(next);
+      return;
+    }
+    read?.(path).then(
+      (whole) => {
+        // Note that a read of an earlier answer is dropped, which would draw that answer's files over this one's.
+        if (whole !== undefined && latest.current.read === read) {
+          held(new Map(latest.current.files).set(path, whole));
+        }
+      },
+      () => undefined,
+    );
+  }, []);
+  const doors = useRef(new Map<string, () => void>());
+  return (file) => {
+    const door = doors.current.get(file.path) ?? (() => toggle(file.path));
+    doors.current.set(file.path, door);
+    return {
+      texts: files.get(file.path),
+      offered: read !== undefined && wholeable(file) && !refused.has(file.path),
+      toggle: door,
+    };
+  };
 }
 
 /** The lines that show their threads while Minimize inline comments is on: by file, by side, by line. */
@@ -904,6 +1004,28 @@ function ViewedBox({
   );
 }
 
+/** A file's turn between its changes alone and the whole file, at the end of its header, as stage-cli's is. */
+function WholeToggle({
+  whole,
+  onToggle,
+}: {
+  whole: boolean;
+  onToggle: () => void;
+}): React.JSX.Element {
+  const label = whole ? LIST_WORDS.COLLAPSE_TO_CHANGES : LIST_WORDS.EXPAND_WHOLE;
+  return (
+    <Tooltip label={label}>
+      <IconButton
+        icon={whole ? <FoldVerticalIcon /> : <UnfoldVerticalIcon />}
+        label={label}
+        size={BUTTON_SIZE.COMPACT}
+        pressed={whole}
+        onClick={onToggle}
+      />
+    </Tooltip>
+  );
+}
+
 /** An SVG's turn between its picture and its source's lines, at the end of its header. */
 function SourceToggle({
   source,
@@ -1011,7 +1133,7 @@ function useFileTexts(
       }));
     return (path: string) => {
       const file = files.find((each) => each.path === path);
-      if (file === undefined || !expandable(file)) return Promise.resolve(undefined);
+      if (file === undefined || !wholeable(file)) return Promise.resolve(undefined);
       const held = kept.get(path);
       if (held !== undefined) return held;
       const reading = act(ACT_KIND.TASKS_FILE, {
@@ -1117,8 +1239,18 @@ function FilesList({
   const look = useDiffLook(roomy);
   const { settings } = useFileViewSettings();
   const minimizedOf = useMinimizedLines(settings.diffMinimizeComments);
+  const wholeOf = useWholeFiles(texts);
   const resting = useThreadHover();
-  const entries = useEntries(list, threads, images, commenting, texts, minimizedOf, resting.hover);
+  const entries = useEntries(
+    list,
+    threads,
+    images,
+    commenting,
+    texts,
+    minimizedOf,
+    resting.hover,
+    wholeOf,
+  );
   const query = list.query.trim();
   return (
     <section className="file-tab" aria-label="Diffs of the changed files">

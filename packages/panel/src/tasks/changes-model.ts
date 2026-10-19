@@ -398,6 +398,22 @@ function drawnLines(file: CodingAgentChangedFile): DrawnLines {
   return lines;
 }
 
+/** Each whole file's lines, counted once for its texts. */
+const WHOLE_LINES = new WeakMap<DiffFileTexts, DrawnLines>();
+
+/** The lines a file drawn whole draws a row for: every line of each side's text. */
+function wholeLines(whole: DiffFileTexts): DrawnLines {
+  const kept = WHOLE_LINES.get(whole);
+  if (kept !== undefined) return kept;
+  const numbered = (text: string) => new Set(linesOf(text).lines.map((_line, index) => index + 1));
+  const lines = {
+    [DIFF_SIDE.LEFT]: numbered(whole.before),
+    [DIFF_SIDE.RIGHT]: numbered(whole.after),
+  };
+  WHOLE_LINES.set(whole, lines);
+  return lines;
+}
+
 /** The lines a file's diff draws a row for, read off its patch. */
 function linesDrawnBy(file: CodingAgentChangedFile): DrawnLines {
   const patch = fileNotice(file) === undefined ? file.patch : null;
@@ -419,18 +435,22 @@ function linesDrawnBy(file: CodingAgentChangedFile): DrawnLines {
  * at the top of the diff, in the order the pull request holds them, those
  * it draws none for: a thread whose line a later push took away, outdated;
  * one on a line no hunk shows; and every one on a file whose diff is not
- * drawn, binary, too large, or empty. Each is keyed by its first comment's
- * page, which no other thread shares; one with no comment is drawn nowhere.
+ * drawn, binary, too large, or empty. A file drawn whole draws a row for
+ * every one of its lines, so its threads stand on any of them. Each is keyed
+ * by its first comment's page, which no other thread shares; one with no
+ * comment is drawn nowhere.
  */
 export function threadsOn(
   threads: readonly ReviewThread[],
   file: CodingAgentChangedFile,
+  /** The file's texts where it is drawn whole; none where it draws its patch. */
+  whole?: DiffFileTexts | undefined,
 ): FileThreads {
   const placed: PlacedThread[] = [];
   const above: PlacedThread[] = [];
   // Note that a file no thread is on reads none of its lines, which would parse its patch.
   if (!threads.some((thread) => thread.path === file.path)) return { placed, above };
-  const lines = drawnLines(file);
+  const lines = whole === undefined ? drawnLines(file) : wholeLines(whole);
   for (const thread of threads) {
     const key = thread.comments[0]?.url;
     if (thread.path !== file.path || key === undefined) continue;
@@ -762,6 +782,16 @@ export function expandable(file: CodingAgentChangedFile): boolean {
   return changedInPlace && fileNotice(file) === undefined && !isSecretFile(file.path);
 }
 
+/** Whether a file only moved, its contents as they were: a rename whose patch holds no hunk. */
+function movedOnly(file: CodingAgentChangedFile): boolean {
+  return file.status === CHANGED_FILE_STATUS.RENAMED && file.patch?.trim() === "";
+}
+
+/** Whether a file can be drawn whole: one whose gaps open (`expandable`), or one that only moved, all of whose lines stand unchanged; never a secret one. */
+export function wholeable(file: CodingAgentChangedFile): boolean {
+  return expandable(file) || (movedOnly(file) && !isSecretFile(file.path));
+}
+
 /**
  * A changed file's whole text before and after, from its text after alone
  * and its patch: every line no hunk holds is the same on both sides, so the
@@ -773,6 +803,8 @@ export function expandable(file: CodingAgentChangedFile): boolean {
  * whose lines between hunks are not drawn (`expandable`).
  */
 export function textsOf(file: CodingAgentChangedFile, after: string): DiffFileTexts | undefined {
+  // A file that only moved stood before as it stands now.
+  if (movedOnly(file) && wholeable(file)) return { before: after, after };
   const patch = file.patch;
   if (!expandable(file) || patch === null) return undefined;
   const hunks = rawHunks(patch);

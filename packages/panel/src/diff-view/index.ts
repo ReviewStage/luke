@@ -36,6 +36,7 @@ import {
 import { type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
+import { wholeOf } from "./whole-diff.js";
 
 /**
  * index.ts -- the diff bundle: a patch drawn by Pierre's diffs as every diff setting says, in the panel's colours.
@@ -694,16 +695,22 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         held.file.lead === file.lead &&
         held.file.collapsed === file.collapsed &&
         held.file.expandable === file.expandable &&
+        held.file.whole === file.whole &&
         sameNotes(held.file.annotations, file.annotations)
       ) {
         return held.item;
       }
       const read =
-        held?.file.patch === file.patch && held.file.lead === file.lead ? held.read : patchOf(file);
+        held?.file.patch === file.patch &&
+        held.file.lead === file.lead &&
+        held.file.whole === undefined
+          ? held.read
+          : patchOf(file);
       const item: CodeViewDiffItem<string> = {
         id: file.path,
         type: "diff",
-        fileDiff: drawnAs(read, file.expandable),
+        fileDiff:
+          file.whole === undefined ? drawnAs(read, file.expandable) : wholeOf(read, file.whole),
         collapsed: file.collapsed,
         annotations: annotationsOf(file.annotations),
         version: (held?.item.version ?? 0) + 1,
