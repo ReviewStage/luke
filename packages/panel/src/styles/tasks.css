@@ -6232,13 +6232,13 @@ button.picture-frame {
 }
 
 /* A screen with no hover stands the tools in the time's place at rest, as
-   under the pointer. */
+   under the pointer; a thread's event line, offering no tools, keeps it. */
 @media (hover: none) {
   .comment-tools {
     opacity: 1;
   }
 
-  .comment-head-end > .comment-time {
+  .comment-head-end:has(> .comment-tools) > .comment-time {
     opacity: 0;
     pointer-events: none;
   }

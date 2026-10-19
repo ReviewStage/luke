@@ -21,7 +21,8 @@ import { layContainersAt } from "../testing/container-width.js";
  * row offering its acts to the row in hand keeps its metadata on a touch
  * screen, its acts in its menu, but for the open row, which shows them as
  * the hovered row does. A failed agent's tab keeps its mark rather than its
- * ×, and a transcript's floating bar stays hidden. jsdom answers no media
+ * ×, a thread's event line keeps its time, and a transcript's floating bar
+ * stays hidden. jsdom answers no media
  * query, so the sheets are laid for a touch screen or a mouse
  * (`testing/container-width.ts`), and each group is drawn in the markup its
  * component draws.
@@ -220,6 +221,30 @@ test("on a touch screen a comment's time gives its place to the tools, as under 
 
   assert.ok(faded(time));
   assert.equal(getComputedStyle(time).pointerEvents, "none");
+});
+
+test("on a touch screen a thread's event line, offering no tools, keeps its time", () => {
+  layFor(true);
+  const time = drawn(
+    {
+      className: "comment-event",
+      children: [
+        {
+          className: "comment-head",
+          children: [
+            {
+              tag: "span",
+              className: "comment-head-end",
+              children: [{ tag: "span", className: "comment-time" }],
+            },
+          ],
+        },
+      ],
+    },
+    ".comment-time",
+  );
+
+  assert.equal(getComputedStyle(time).opacity, "1");
 });
 
 test("on a touch screen a failed agent's tab keeps its mark rather than its ×", () => {

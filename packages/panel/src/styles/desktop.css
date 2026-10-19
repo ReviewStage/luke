@@ -6475,10 +6475,20 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* A screen with no hover shows every tab's × at rest, over its label's
    faded end as under the pointer, but a marked tab's, whose mark keeps the
-   place, its Close in its menu. */
+   place, its Close in its menu. Note that a tap leaves its tab matching
+   `:hover` until the next one, so a marked tab's mark holds against the
+   swap below. */
 @media (hover: none) {
   .tab[data-marked="false"] .tab-close {
     opacity: 1;
+  }
+
+  .tab[data-marked="true"]:hover .tab-end-mark {
+    opacity: 1;
+  }
+
+  .tab[data-marked="true"]:hover .tab-close {
+    opacity: 0;
   }
 }
 
