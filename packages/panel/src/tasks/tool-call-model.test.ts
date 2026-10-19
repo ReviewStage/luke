@@ -611,6 +611,24 @@ test("a stop names the agent its answer titles and opens that agent's tab, which
   assert.equal(toolTarget(refused), undefined);
 });
 
+test("a task read names the task its answer names, nothing before the answer, and opens nothing", () => {
+  const read = {
+    tool: "read_task",
+    callId: "call-1",
+    input: { taskId: "task-1" },
+    output: {
+      status: "accepted",
+      task: { id: "task-1", name: "Bill by seat" },
+      plan: { text: "# Bill by seat", saved: true, leftOutChars: 0 },
+    },
+  };
+
+  const view = toolCallView(read);
+  assert.deepEqual([view.kind, view.subject], [CALL_KIND.READ_TASK, "Bill by seat"]);
+  assert.equal(toolTarget(read), undefined);
+  assert.equal(toolCallView({ ...read, output: undefined }).subject, "");
+});
+
 test("the section calls read as theirs, a made section by the title asked and a deleted one and a moved task by what the answer names, and open nothing", () => {
   const made = {
     tool: "create_section",

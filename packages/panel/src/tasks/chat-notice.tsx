@@ -1,4 +1,10 @@
-import { CHANNEL_KIND, CHAT_BLOCK, type ChatAnswer, knownBlock } from "@luke/features/chat-wire";
+import {
+  CHANNEL_KIND,
+  CHAT_BLOCK,
+  type ChatAnswer,
+  chatNoticeWords,
+  knownBlock,
+} from "@luke/features/chat-wire";
 import { Button } from "@luke/ui";
 import {
   CHAT_PLACE,
@@ -8,6 +14,7 @@ import {
   chatWho,
 } from "@luke/ui/chat-model";
 import type { ChatNoticeMetadata } from "@luke/wire";
+import type { ReactNode } from "react";
 import { MemberMark } from "./chat-pane.js";
 import { RelativeTime } from "./relative-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -51,14 +58,17 @@ export function ChatNoticeCard({
   messageId,
   notice,
   words,
+  from,
   doors,
   now,
 }: {
   /** The transcript line the notice wrote, which a link to it finds the card by. */
   messageId: string;
   notice: ChatNoticeMetadata;
-  /** The notice's own words, drawn where the chat the window holds does not carry the message. */
+  /** The notice's own words, drawn where the chat the window holds does not carry the message, without the lines that are the agent's alone (`chatNoticeWords`). */
   words: string;
+  /** Who posted, drawn in the handle's place: another coding agent's own chip; none to name the poster by their mark and handle. */
+  from?: ReactNode | undefined;
   doors: ChatNoticeDoors | undefined;
   now: number;
 }): React.JSX.Element {
@@ -79,7 +89,7 @@ export function ChatNoticeCard({
         : `in #${channelLabel(doors.chat, doors.names, channel)}`;
   // Note that a message of no Markdown, a link or a picture alone, keeps the notice's own words.
   const fromChat = held === undefined ? "" : heldWords(held);
-  const shownWords = fromChat === "" ? words : fromChat;
+  const shownWords = fromChat === "" ? chatNoticeWords(words) : fromChat;
   return (
     <section
       className="chat-notice"
@@ -88,8 +98,12 @@ export function ChatNoticeCard({
       data-message-id={messageId}
     >
       <header className="chat-notice-head">
-        {who === undefined ? null : <MemberMark who={who} small />}
-        <span className="chat-notice-from">@{notice.from}</span>
+        {from ?? (
+          <>
+            {who === undefined ? null : <MemberMark who={who} small />}
+            <span className="chat-notice-from">@{notice.from}</span>
+          </>
+        )}
         <span className="chat-notice-place">
           {where === undefined ? null : `${where} · `}m {notice.chat_seq}
           {held === undefined ? null : (

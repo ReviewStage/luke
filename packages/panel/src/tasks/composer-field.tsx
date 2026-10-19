@@ -64,6 +64,8 @@ export interface ComposerFieldMentions {
   readonly chip: (mention: MentionNode) => ReactNode;
   /** The mention words pasted whole stand for; nothing for words that paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
+  /** The `#` word's report, where the box names channels; none where it names none, read as it mounts. */
+  readonly onChannelTrigger?: ((trigger: ComposerTrigger | undefined) => void) | undefined;
 }
 
 export function ComposerField({
@@ -184,6 +186,10 @@ export function ComposerField({
               onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
               drawMention: (element, mention) => draw(element, { mention }),
               pasted: (words) => latest.current.mentions?.pasted(words),
+              onChannelTrigger:
+                now.mentions.onChannelTrigger === undefined
+                  ? undefined
+                  : (trigger) => latest.current.mentions?.onChannelTrigger?.(trigger),
             },
     });
     editor.current = mounted;

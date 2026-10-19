@@ -20,6 +20,8 @@ import {
   type PullRequestActionRequest,
   type PullRequestWriteAnswer,
 } from "@luke/features/pull-request-write-wire";
+import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
+import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -43,6 +45,7 @@ import { relayout } from "../testing/resize-observer.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import type { ChangesThreads } from "./agent-changes-tab.js";
+import { blobShaOf } from "./changes-model.js";
 
 /**
  * agent-changes-tab.test.ts -- a Files changed view hands the diff bundle
@@ -232,21 +235,25 @@ function InboxBeside({ onNext }: { onNext: () => void }): null {
 /** One registry for the tests' draws, so a draw again keeps the view's state as the panel would. */
 let registry = AtomRegistry.make();
 
+/** How a test draws the view: its threads, its tree, what stands beside it, the task's repository, and the agents as the panel holds them. */
+interface DrawOptions {
+  readonly threads?: ChangesThreads;
+  readonly treeOpen?: boolean;
+  readonly beside?: ReactElement;
+  readonly repository?: string;
+  readonly control?: typeof control;
+  /** Whether a find looks through the tab, which draws its folds' closed bodies hidden. */
+  readonly finding?: boolean;
+}
+
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
-async function redraw(
-  options: {
-    threads?: ChangesThreads;
-    treeOpen?: boolean;
-    beside?: ReactElement;
-    finding?: boolean;
-  } = {},
-): Promise<DiffListProps> {
+async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
   const { AgentChangesTab } = await import("./agent-changes-tab.js");
   const tab = createElement(AgentChangesTab, {
     agentId: AGENT.id,
-    control,
+    control: options.control ?? control,
     shown: true,
-    repository: "acme/relay",
+    repository: options.repository ?? "acme/relay",
     tree: { open: options.treeOpen ?? false, onToggle: () => undefined },
     threads: options.threads,
   });
@@ -269,14 +276,7 @@ async function redraw(
 }
 
 /** Draws the agent's Files changed view afresh, its read landed, and answers what the list was last drawn with. */
-async function drawTab(
-  options: {
-    threads?: ChangesThreads;
-    treeOpen?: boolean;
-    beside?: ReactElement;
-    finding?: boolean;
-  } = {},
-): Promise<DiffListProps> {
+async function drawTab(options: DrawOptions = {}): Promise<DiffListProps> {
   act(() => root?.unmount());
   document.body.innerHTML = "";
   registry = AtomRegistry.make();
@@ -1516,4 +1516,198 @@ test("a press anywhere on a header's row folds its file, and \u2325 with a press
     folds().every(([, collapsed]) => !collapsed),
     "and every file unfolds",
   );
+});
+
+/** The seats file at the pull request's head, ten lines, its fifth changed, and its patch as GitHub sends it. */
+const HEAD_TEXT = `${["1", "2", "3", "4", "five", "6", "7", "8", "9", "10"].join("\n")}\n`;
+const BASE_TEXT = HEAD_TEXT.replace("five", "5");
+const HEAD_PATCH = "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8";
+
+/** Answers each read of a file whole as given, keeping every read asked. */
+function answerFileReads(answer: (path: string) => TasksFileAnswer): Act[] {
+  const asked: Act[] = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      asked.push(request);
+      const outcome: ActOutcome = {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,
+      };
+      return Promise.resolve(outcome);
+    },
+  });
+  handSettings();
+  return asked;
+}
+
+test("a changed file is read whole at the pull request's head the first time its gaps are opened, once, its text before turned back from it", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/new.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+  ];
+  const asked = answerFileReads((path) => ({
+    text: { path, repository: "acme/relay", branch: "a".repeat(40), text: HEAD_TEXT },
+  }));
+  const props = await drawTab();
+  const readTexts = props.readTexts ?? assert.fail("the list is handed a way to read files whole");
+  assert.equal(asked.length, 0, "nothing is read before a gap is opened");
+
+  assert.deepEqual(await readTexts("src/seats.ts"), { before: BASE_TEXT, after: HEAD_TEXT });
+  await readTexts("src/seats.ts");
+  assert.equal(await readTexts("src/new.ts"), undefined, "an added file has no gaps to open");
+  assert.deepEqual(
+    asked.flatMap((request) => (request.kind === ACT_KIND.TASKS_FILE ? [request.payload] : [])),
+    [
+      {
+        taskId: AGENT.planId,
+        path: "src/seats.ts",
+        firstLine: 1,
+        lastLine: 1,
+        raw: true,
+        ref: "a".repeat(40),
+      },
+    ],
+  );
+});
+
+test("a file the service will not read whole, or whose text is not the one its patch was made against, opens no gap", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/moved.ts", { patch: HEAD_PATCH }),
+  ];
+  answerFileReads((path) =>
+    path === "src/seats.ts"
+      ? { refusal: TASK_FILE_REFUSAL.MISSING }
+      : { text: { path, repository: "acme/relay", branch: "a".repeat(40), text: BASE_TEXT } },
+  );
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  assert.equal(await readTexts("src/seats.ts"), undefined);
+  assert.equal(await readTexts("src/moved.ts"), undefined);
+});
+
+test("no file is read whole for an agent on no task, a head not named, or a task whose repository is not the pull request's", async () => {
+  files = [changed("src/seats.ts", { patch: HEAD_PATCH })];
+  commits = { headSha: "a".repeat(40) };
+  assert.equal(
+    (await drawTab({ repository: "acme/other" })).readTexts,
+    undefined,
+    "another repository",
+  );
+  const taskless = codingAgentsControl({
+    agents: [{ ...AGENT, planId: null }],
+    agentIds: [AGENT.id],
+    models: [],
+    readChanges: control.readChanges,
+  });
+  assert.equal((await drawTab({ control: taskless })).readTexts, undefined, "no task");
+  commits = {};
+  assert.equal((await drawTab()).readTexts, undefined, "no head");
+  commits = { headSha: "a".repeat(40) };
+  assert.notEqual(
+    (await drawTab({ repository: "ACME/Relay" })).readTexts,
+    undefined,
+    "the same repository, whatever its case",
+  );
+});
+
+test("a file whose gaps are never read whole offers none: a secret one, and one not changed in place", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("config/.env.local", { patch: HEAD_PATCH }),
+    changed("src/new.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+  ];
+  answerFileReads((path) => ({
+    text: { path, repository: "acme/relay", branch: "a".repeat(40), text: HEAD_TEXT },
+  }));
+  const props = await drawTab();
+  assert.deepEqual(
+    props.files.map((file) => [file.path, file.expandable]),
+    [
+      ["config/.env.local", false],
+      ["src/new.ts", false],
+      ["src/seats.ts", true],
+    ],
+  );
+});
+
+test("a file whose read is refused closes its gaps and says why, once, above its first hunk", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/moved.ts", { patch: HEAD_PATCH }),
+  ];
+  answerFileReads((path) =>
+    path === "src/seats.ts"
+      ? { refusal: TASK_FILE_REFUSAL.NOT_TEXT }
+      : { text: { path, repository: "acme/relay", branch: "a".repeat(40), text: BASE_TEXT } },
+  );
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  await readTexts("src/seats.ts");
+  await readTexts("src/moved.ts");
+  await flush();
+  const drawn = lastDrawn();
+  assert.deepEqual(
+    drawn.files.map((file) => [file.path, file.expandable]),
+    [
+      ["src/moved.ts", false],
+      ["src/seats.ts", false],
+    ],
+  );
+  const why = (path: string) => {
+    const key = drawn.files.find((file) => file.path === path)?.annotations[0]?.key ?? "";
+    return drawn.renderAnnotation(path, key).textContent;
+  };
+  assert.equal(
+    why("src/seats.ts"),
+    "Can't load more of this file: it's too large or not plain text.",
+  );
+  assert.equal(
+    why("src/moved.ts"),
+    "Can't load more of this file: it changed since these changes were read.",
+  );
+});
+
+test("a gap's arrow under the pointer hangs its hint: the next twenty lines of a long gap and \u21e7 for all, or the whole of a short one", async () => {
+  files = [changed("src/seats.ts")];
+  await drawTab();
+  const hintOver = (long: boolean) => {
+    const wrapper = listBox().appendChild(document.createElement("div"));
+    wrapper.setAttribute("data-separator-wrapper", "");
+    const arrow = wrapper.appendChild(document.createElement("div"));
+    arrow.setAttribute("data-expand-button", "");
+    if (long)
+      wrapper.appendChild(document.createElement("div")).setAttribute("data-expand-all-button", "");
+    act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+    const words = document.querySelector('[role="tooltip"]')?.textContent;
+    act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+    wrapper.remove();
+    return words;
+  };
+  assert.equal(hintOver(true), "Show 20 more lines\u21e7-click for all");
+  assert.equal(hintOver(false), "Show these lines");
+});
+
+test("a file read whole that is not the contents GitHub listed its patch against opens no gap, though its hunks match", async () => {
+  commits = { headSha: "a".repeat(40) };
+  const listedAs = await blobShaOf(HEAD_TEXT);
+  // The same hunks, with a line far from them changed by a later push.
+  const pushed = HEAD_TEXT.replace("10", "ten");
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH, blobSha: listedAs }),
+    changed("src/moved.ts", { patch: HEAD_PATCH, blobSha: listedAs }),
+  ];
+  answerFileReads((path) => ({
+    text: {
+      path,
+      repository: "acme/relay",
+      branch: "a".repeat(40),
+      text: path === "src/seats.ts" ? HEAD_TEXT : pushed,
+    },
+  }));
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  assert.deepEqual(await readTexts("src/seats.ts"), { before: BASE_TEXT, after: HEAD_TEXT });
+  assert.equal(await readTexts("src/moved.ts"), undefined);
 });
