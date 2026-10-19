@@ -57,6 +57,7 @@ const DECLARED_TABLES = [
   "coding_agent",
   "coding_agent_delegation",
   "conversation_attachment",
+  "conversation_attachment_moved",
   "conversations",
   "github_connect_intent",
   "github_install_intent",

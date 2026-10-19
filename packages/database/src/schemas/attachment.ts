@@ -67,10 +67,11 @@ export const ownedByTaskAlone = (table: {
  * migration drops the view once those runs have drained. A chat message's
  * pictures moved first, an inbox item's files second, and a plan's pictures
  * third: `chat_attachment`, `inbox_attachment`, and `plan_attachment` are
- * those views. The pictures a conversation's tools answered move last, and
- * their columns stand here a deployment ahead of the move: adding their
- * foreign key locks `conversations`, which an agent's every turn writes, so
- * it is done where no copy waits on a conversation's row.
+ * those views, as is `conversation_attachment`, for the pictures a
+ * conversation's tools answered, which moved last. Their columns stood here
+ * a deployment ahead of their move: adding their foreign key locks
+ * `conversations`, which an agent's every turn writes, so it was done where
+ * no copy waited on a conversation's row.
  *
  * A conversation's picture is keyed by the SHA-256 of its bytes within its
  * conversation, so the same picture answered twice is one row, and keeps
