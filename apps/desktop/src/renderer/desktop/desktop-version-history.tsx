@@ -12,8 +12,10 @@ import { LINK_COPY, useCopyToast } from "@luke/panel/copy-feedback";
 import { ActionMenu, type MenuAction } from "@luke/panel/desktop/action-menu";
 import type { SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { FIND_PAGE, PageFind } from "@luke/panel/find-in-tab";
+import type { NavigationHistory } from "@luke/panel/navigation-history";
 import { Shortcut } from "@luke/panel/shortcut";
 import { BusyLabel } from "@luke/panel/spinner";
+import { centreWithin } from "@luke/panel/tasks/code-pane";
 import { DocumentScroll } from "@luke/panel/tasks/document-frame";
 import {
   type ChangedSection,
@@ -30,6 +32,7 @@ import {
   versionDiff,
 } from "@luke/panel/tasks/plan-history-model";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
+import type { MentionedTask } from "@luke/panel/tasks/task-mentions";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import {
   HISTORY_READ,
@@ -37,7 +40,9 @@ import {
   type PlanHistoryControl,
   type ViewedVersion,
 } from "@luke/panel/tasks/use-plan-history";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { useFormerMembers, useWorkspaceMembers } from "@luke/panel/tasks/use-workspace-members";
+import { useVersionRestore, VersionSkeleton, VersionView } from "@luke/panel/tasks/version-view";
 import { commandKeyshortcuts, Tooltip } from "@luke/panel/tooltip";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import type { DialogConfirm } from "@luke/ui";
@@ -66,11 +71,6 @@ import { type Actor, actorName } from "@luke/ui/actor-model";
 import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import { ArrowUpRightIcon, FileDiffIcon, LinkIcon, RotateCcwIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { NavigationHistory } from "../navigation-history";
-import { centreWithin } from "../tasks/code-pane";
-import type { MentionedTask } from "../tasks/task-mentions";
-import type { TasksControl } from "../tasks/use-tasks-tab";
-import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/version-view";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 
 /**

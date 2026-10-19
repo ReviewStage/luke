@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { NewTaskDialog } from "@luke/panel/tasks/new-task-dialog";
 import type { RepositoryChooser } from "@luke/panel/tasks/repository-chip";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { editorBundleLanded, installEditorLayout } from "@luke/panel/testing/composer";
@@ -13,7 +14,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import { NewTaskDialog } from "./new-task-dialog";
 
 /**
  * new-task-workspace.test.ts -- New task says where the task will start,

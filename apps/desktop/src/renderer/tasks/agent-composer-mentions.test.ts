@@ -32,7 +32,16 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import { AgentComposer } from "@luke/panel/tasks/agent-composer";
 import type { SkillSource } from "@luke/panel/tasks/skill-picker";
+import {
+  mentionablePullRequests,
+  TaskMentions,
+  type TaskMentionsValue,
+  tasklessMentions,
+  useMentionAgentsReader,
+} from "@luke/panel/tasks/task-mentions";
+import { TranscriptWords } from "@luke/panel/tasks/transcript-blocks";
 import { type MessageSender, useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
@@ -55,15 +64,6 @@ import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
-import { AgentComposer } from "./agent-composer";
-import {
-  mentionablePullRequests,
-  TaskMentions,
-  type TaskMentionsValue,
-  tasklessMentions,
-  useMentionAgentsReader,
-} from "./task-mentions";
-import { TranscriptWords } from "./transcript-blocks";
 
 /**
  * `@` in an agent's message box and its transcript, on a task's page and

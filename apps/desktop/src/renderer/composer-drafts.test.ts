@@ -11,6 +11,7 @@ import {
 } from "@luke/features/inbox-wire";
 import type { Task } from "@luke/features/task-wire";
 import { useDraftsOwner } from "@luke/panel/composer-drafts";
+import { SidebarTask } from "@luke/panel/desktop/task-actions";
 import { DRAFT_WORD } from "@luke/panel/draft-mark";
 import {
   type AgentComposerControl,
@@ -41,7 +42,6 @@ import { sidebarProps } from "#testing/desktop-sidebar";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "#testing/tasks-control";
 import { DesktopSidebar } from "./desktop/desktop-sidebar";
 import { DesktopTasks } from "./desktop/desktop-tasks";
-import { SidebarTask } from "./desktop/task-actions";
 
 /**
  * A draft as the developer meets it: words typed in one task's agent's box

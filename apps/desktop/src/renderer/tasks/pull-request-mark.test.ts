@@ -8,13 +8,13 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { PullRequestLine } from "@luke/panel/desktop/task-card";
+import { ChangesCard } from "@luke/panel/tasks/agent-changes-tab";
 import { PublishedRow } from "@luke/panel/tasks/agent-published";
+import { agentSubject, NOTHING_HELD } from "@luke/panel/tasks/agent-ref";
 import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { PullRequestLine } from "../desktop/task-card";
-import { ChangesCard } from "./agent-changes-tab";
-import { agentSubject, NOTHING_HELD } from "./agent-ref";
 
 /**
  * pull-request-mark.test.ts -- a pull request reads the same wherever the

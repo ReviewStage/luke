@@ -5,6 +5,8 @@ import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-w
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { PlanBody } from "@luke/panel/tasks/plan-body";
+import { TaskMentions, type TaskMentionsValue } from "@luke/panel/tasks/task-mentions";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { editorBundleLanded, installEditorLayout } from "@luke/panel/testing/composer";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
@@ -15,8 +17,6 @@ import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { PlanBody } from "./plan-body";
-import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
 
 /**
  * `@` in the plan's editor over the real editor bundle: the word typed

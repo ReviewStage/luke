@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { DesktopFactory } from "@luke/panel/desktop/desktop-factory";
 import { fakeAppBridge, fakeAppBridgeCalls } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -15,7 +16,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import { DesktopFactory } from "../desktop/desktop-factory";
 
 /**
  * world-picker.test.ts -- the Factory toolbar's picker: the board first and what the page opens on, each world the build offers after it, a world chosen standing in the board's place until the board is chosen again, the choice kept while Factory closes and opens in the same session, the development build's test pattern offered in no packaged app, and nothing of it standing where Factory's experiment is off.

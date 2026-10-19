@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { ASK_STATUS, CHAT_ASK } from "@luke/features/chat-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { DesktopChat, TaskChatTab } from "@luke/panel/desktop/desktop-chat";
 import { ChatComposer } from "@luke/panel/tasks/chat-composer";
 import {
   type FixtureChat,
@@ -20,7 +21,6 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import { DesktopChat, TaskChatTab } from "./desktop-chat";
 
 /** The moment the fixture's messages are stamped before. */
 const AT = Date.parse("2026-10-14T10:00:00Z");

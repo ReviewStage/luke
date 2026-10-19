@@ -9,8 +9,12 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { LIVE_CLOSE_REASON } from "@luke/live";
+import { TaskCard } from "@luke/panel/desktop/task-card";
+import { ChangesCard } from "@luke/panel/tasks/agent-changes-tab";
+import { agentSubject, NOTHING_HELD } from "@luke/panel/tasks/agent-ref";
 import { AgentTabCard, cardCorner } from "@luke/panel/tasks/agent-tab-card";
 import { CallEnded } from "@luke/panel/tasks/call-card";
+import { SentWords, SkillFiles } from "@luke/panel/tasks/skill-chip";
 import type { SkillSource } from "@luke/panel/tasks/skill-picker";
 import { TurnCard } from "@luke/panel/tasks/turn-card";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
@@ -18,10 +22,6 @@ import { Effect } from "effect";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { TaskCard } from "./desktop/task-card";
-import { ChangesCard } from "./tasks/agent-changes-tab";
-import { agentSubject, NOTHING_HELD } from "./tasks/agent-ref";
-import { SentWords, SkillFiles } from "./tasks/skill-chip";
 
 /**
  * hover-card.test.ts -- every hover card heads itself alike: a task's, a

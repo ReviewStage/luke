@@ -12,6 +12,8 @@ import {
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { AgentComposer } from "@luke/panel/tasks/agent-composer";
+import { AGENT_LEAD, AgentMessage, AgentTab } from "@luke/panel/tasks/agent-tab";
 import { ReplyToSelection } from "@luke/panel/tasks/reply-to-selection";
 import { type MessageSender, useAgentComposer } from "@luke/panel/tasks/use-agent-composer";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
@@ -32,8 +34,6 @@ import { act, createElement, type ReactNode, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { AgentComposer } from "./agent-composer";
-import { AGENT_LEAD, AgentMessage, AgentTab } from "./agent-tab";
 
 /**
  * Words selected in an agent's message, answered from its box: Reply stands

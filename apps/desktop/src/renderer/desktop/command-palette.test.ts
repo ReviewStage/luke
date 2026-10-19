@@ -21,9 +21,12 @@ import {
   useAppCommand,
   useMenuCommands,
 } from "@luke/panel/app-commands";
+import { ListedAutomations } from "@luke/panel/desktop/listed-automations";
+import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "@luke/panel/links-at-hand";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { SIDE_PANEL_TAB, type SidePanelControl } from "@luke/panel/tasks/use-side-panel";
 import { useTaskLooks } from "@luke/panel/tasks/use-task-looks";
+import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DESKTOP_CAPABILITIES, handState } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -45,11 +48,8 @@ import { afterEach, beforeEach, test } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { sidebarProps } from "#testing/desktop-sidebar";
 import { codingAgentsControl, tasksControl } from "#testing/tasks-control";
-import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand";
-import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { CommandPalette } from "./command-palette";
 import { DesktopSidebar } from "./desktop-sidebar";
-import { ListedAutomations } from "./listed-automations";
 import { panelEntries } from "./side-panel";
 
 /** Where the palette sent the window: each tab and each Settings page it asked for, in order. */

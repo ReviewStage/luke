@@ -9,11 +9,28 @@ import { LINK_PLACE, type LinkPlace } from "@luke/features/luke-link";
 import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { useCopyLinkItem } from "@luke/panel/copy-link-item";
+import { useAgentArchive } from "@luke/panel/desktop/agent-archive";
+import {
+  type AddEntry,
+  AddTabButton,
+  DoorsTab,
+  type TabDoors,
+  type TabLook,
+  type TabPin,
+  type TabViews,
+  type TranscriptCopier,
+  type TranscriptRead,
+  useTranscriptCopier,
+} from "@luke/panel/desktop/strip-tabs";
 import { TabStrip } from "@luke/panel/desktop/tab-strip";
 import { RetryButton } from "@luke/panel/retry-button";
 import { SpinnerRegion } from "@luke/panel/spinner";
+import { agentCardReading } from "@luke/panel/tasks/agent-ref";
+import { AgentTab } from "@luke/panel/tasks/agent-tab";
 import { AgentTabCard } from "@luke/panel/tasks/agent-tab-card";
+import type { ChatNoticeDoors } from "@luke/panel/tasks/chat-notice";
 import { agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
+import { agentForkDoors, ForkProvider } from "@luke/panel/tasks/fork-action";
 import type { AgentFork } from "@luke/panel/tasks/fork-model";
 import { NEEDS_YOU } from "@luke/panel/tasks/inbox-model";
 import { agentEndMark, TAB_KIND, tabLook } from "@luke/panel/tasks/tab-look";
@@ -31,25 +48,8 @@ import { INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
 import { useEffect, useRef } from "react";
-import { agentCardReading } from "../tasks/agent-ref";
-import { AgentTab } from "../tasks/agent-tab";
-import type { ChatNoticeDoors } from "../tasks/chat-notice";
 import { DraftAgentTab } from "../tasks/draft-agent-tab";
-import { agentForkDoors, ForkProvider } from "../tasks/fork-action";
-import { useAgentArchive } from "./agent-archive";
 import type { TaskCards } from "./side-panel";
-import {
-  type AddEntry,
-  AddTabButton,
-  DoorsTab,
-  type TabDoors,
-  type TabLook,
-  type TabPin,
-  type TabViews,
-  type TranscriptCopier,
-  type TranscriptRead,
-  useTranscriptCopier,
-} from "./strip-tabs";
 
 /**
  * main-tabs.tsx -- the task's column's tabs: the plan's own, each coding agent's, the draft agent's, and the Inbox's after it, the "+" that opens one, and what an agent's or the draft's tab shows in the column.

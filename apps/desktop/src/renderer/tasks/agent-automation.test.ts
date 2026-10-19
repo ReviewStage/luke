@@ -15,6 +15,7 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-w
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { AutomationDirectory } from "@luke/panel/automation-directory";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import { AgentRef, agentCardReading, NOTHING_HELD } from "@luke/panel/tasks/agent-ref";
 import { agentActor } from "@luke/panel/tasks/coding-agent-model";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -22,7 +23,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { AgentRef, agentCardReading, NOTHING_HELD } from "./agent-ref";
 
 /**
  * agent-automation.test.ts -- an agent an automation's run started says so

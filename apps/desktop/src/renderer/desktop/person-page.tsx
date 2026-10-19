@@ -11,9 +11,12 @@ import { useAutomations } from "@luke/panel/desktop/use-automations";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { useOpenSettings } from "@luke/panel/open-settings";
+import { lineSubject } from "@luke/panel/tasks/agent-ref";
 import { holderName, INBOX_HOLDER, type InboxListed } from "@luke/panel/tasks/inbox-model";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import { AUTOMATIONS_PAGE, type TasksControl } from "@luke/panel/tasks/use-tasks-tab";
+import { useWaitingItems } from "@luke/panel/tasks/use-waiting-items";
 import { Tooltip } from "@luke/panel/tooltip";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
@@ -55,10 +58,7 @@ import {
 } from "@luke/ui/person-page-model";
 import { EllipsisIcon, LinkIcon, ListFilterIcon, MailIcon, UsersIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { lineSubject } from "../tasks/agent-ref";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
-import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { useWaitingItems } from "../tasks/use-waiting-items";
 import { RecentRow } from "./desktop-home";
 
 /**

@@ -21,6 +21,7 @@ import {
   type PlanEditorProps,
 } from "@luke/panel/plan-editor/contract";
 import { type SidePanelControl, useSidePanel } from "@luke/panel/tasks/use-side-panel";
+import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "@luke/panel/tasks/use-tasks-tab";
 import { lineWords } from "@luke/panel/testing/actor-line";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -37,7 +38,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
 import { tasksControl } from "#testing/tasks-control";
-import { ISSUES_PAGE, type IssuesPlace, type NewTaskIssue } from "../tasks/use-tasks-tab";
 import { IssuesPage } from "./issues-page";
 
 /**

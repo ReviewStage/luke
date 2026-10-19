@@ -13,6 +13,7 @@ import {
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { MemberDirectory } from "@luke/panel/member-directory";
+import { TranscriptWords } from "@luke/panel/tasks/transcript-blocks";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { signedInAs } from "@luke/panel/testing/app-state";
@@ -23,7 +24,6 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { TranscriptWords } from "./transcript-blocks";
 
 /**
  * place-link-chips.test.ts -- a link to a place in Luke written in words,

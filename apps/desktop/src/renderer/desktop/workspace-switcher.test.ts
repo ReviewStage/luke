@@ -2,14 +2,14 @@
 
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
+import { WorkspaceSwitcher } from "@luke/panel/desktop/workspace-switcher";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import type { TasksControl } from "../tasks/use-tasks-tab";
-import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
  * The sidebar's head as the developer meets it: the workspace listed, by its

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { TranscriptWords } from "@luke/panel/tasks/transcript-blocks";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { markdownHtmlParserLanded } from "@luke/panel/testing/markdown";
@@ -11,7 +12,6 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
-import { TranscriptWords } from "./transcript-blocks";
 
 /**
  * A link pressed in written words: a Luke link, a task's drawn as its chip,

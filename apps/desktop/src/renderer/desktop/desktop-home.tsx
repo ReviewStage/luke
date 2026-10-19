@@ -1,5 +1,6 @@
 import type { TaskSummary } from "@luke/features/task-wire";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "@luke/panel/actor-ref";
+import { TaskStatusMark } from "@luke/panel/desktop/task-card";
 import { useRowKeys } from "@luke/panel/desktop/use-row-keys";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
 import { RepositoryPicture } from "@luke/panel/repository-picture";
@@ -11,8 +12,11 @@ import {
   needsReader,
   waitsOnReader,
 } from "@luke/panel/tasks/inbox-model";
+import { NewTaskComposer } from "@luke/panel/tasks/new-task-composer";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { useMinute } from "@luke/panel/tasks/task-time";
+import type { TasksControl } from "@luke/panel/tasks/use-tasks-tab";
+import { useWaitingItems } from "@luke/panel/tasks/use-waiting-items";
 import {
   DetailPage,
   ErrorState,
@@ -34,10 +38,6 @@ import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { InboxItemRow, InboxListSkeleton } from "../tasks/inbox-list";
-import { NewTaskComposer } from "../tasks/new-task-composer";
-import type { TasksControl } from "../tasks/use-tasks-tab";
-import { useWaitingItems } from "../tasks/use-waiting-items";
-import { TaskStatusMark } from "./task-card";
 
 /**
  * desktop-home.tsx -- the home page: the column the window rests on with no task open, opening on New task's composer and saying what needs the developer and the tasks saved latest.

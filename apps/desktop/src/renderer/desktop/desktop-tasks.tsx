@@ -7,11 +7,18 @@ import { useAct } from "@luke/panel/act";
 import { useAppCommand } from "@luke/panel/app-commands";
 import { AutomationDirectory } from "@luke/panel/automation-directory";
 import { LinkWorkspaceProvider } from "@luke/panel/copy-link-item";
+import { TaskChatTab } from "@luke/panel/desktop/desktop-chat";
 import { useTaskInboxShow } from "@luke/panel/desktop/folded-groups";
+import { StartAgentButton } from "@luke/panel/desktop/start-agent-button";
+import { useStrandedTaskBanner } from "@luke/panel/desktop/stranded-task-banner";
+import { useTabViews } from "@luke/panel/desktop/strip-tabs";
+import { TaskActions } from "@luke/panel/desktop/task-actions";
+import { taskCardOf } from "@luke/panel/desktop/task-card";
 import { FIND_PAGE, FindScope, PageFind } from "@luke/panel/find-in-tab";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { NOT_FOUND_THING, NotFound } from "@luke/panel/not-found";
 import { SPINNER_SIZE, Spinner } from "@luke/panel/spinner";
+import { AgentCard, agentSubject } from "@luke/panel/tasks/agent-ref";
 import { ArchivedBanner } from "@luke/panel/tasks/archived-task";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
 import { agentActor, agentTabLabel } from "@luke/panel/tasks/coding-agent-model";
@@ -28,10 +35,21 @@ import {
   taskHolder,
 } from "@luke/panel/tasks/inbox-model";
 import { inboxNext, useInboxPager } from "@luke/panel/tasks/inbox-pager";
+import { type InboxCodeDoors, InboxPane } from "@luke/panel/tasks/inbox-pane";
+import { PlanBody, type SectionLinks } from "@luke/panel/tasks/plan-body";
+import { CommentFocusScope } from "@luke/panel/tasks/plan-comments";
 import { CHIP_PLACE, RepositoryChip } from "@luke/panel/tasks/repository-chip";
+import { SkillFiles } from "@luke/panel/tasks/skill-chip";
+import {
+  mentionablePullRequests,
+  TaskMentions,
+  type TaskMentionsValue,
+  useMentionAgentsReader,
+} from "@luke/panel/tasks/task-mentions";
 import { taskLinkPlace } from "@luke/panel/tasks/task-menu-items";
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { CallBar } from "@luke/panel/tasks/tasks-parts";
+import { TerminalCommands, useOpenTerminal } from "@luke/panel/tasks/terminal-commands";
 import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
 import { useInboxReadMarks, useReadOnOpen } from "@luke/panel/tasks/use-inbox-read-marks";
 import { MAIN_TAB, type MainTab } from "@luke/panel/tasks/use-main-tabs";
@@ -43,6 +61,7 @@ import {
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
 import { type TaskInboxControl, useTaskInbox } from "@luke/panel/tasks/use-task-inbox";
 import { type TaskLooks, useReadMarks } from "@luke/panel/tasks/use-task-looks";
+import { AUTOMATIONS_PAGE, type TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { workRowsOf } from "@luke/panel/tasks/work-model";
 import { useCapability, useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
@@ -63,21 +82,7 @@ import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luk
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
-import { AgentCard, agentSubject } from "../tasks/agent-ref";
 import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list";
-import { type InboxCodeDoors, InboxPane } from "../tasks/inbox-pane";
-import { PlanBody, type SectionLinks } from "../tasks/plan-body";
-import { CommentFocusScope } from "../tasks/plan-comments";
-import { SkillFiles } from "../tasks/skill-chip";
-import {
-  mentionablePullRequests,
-  TaskMentions,
-  type TaskMentionsValue,
-  useMentionAgentsReader,
-} from "../tasks/task-mentions";
-import { TerminalCommands, useOpenTerminal } from "../tasks/terminal-commands";
-import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
-import { TaskChatTab } from "./desktop-chat";
 import { DesktopHome } from "./desktop-home";
 import { AgentPane, MainTabStrip, mainTabLabel } from "./main-tabs";
 import {
@@ -89,11 +94,6 @@ import {
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel";
-import { StartAgentButton } from "./start-agent-button";
-import { useStrandedTaskBanner } from "./stranded-task-banner";
-import { useTabViews } from "./strip-tabs";
-import { TaskActions } from "./task-actions";
-import { taskCardOf } from "./task-card";
 import {
   SummaryButton,
   type SummaryPin,

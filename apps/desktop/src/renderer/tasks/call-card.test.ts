@@ -2,12 +2,12 @@
 
 import assert from "node:assert/strict";
 import type { TaskCodeShowing } from "@luke/features/tasks-view";
+import { CodePane } from "@luke/panel/tasks/code-pane";
 import { RUN_CARD } from "@luke/panel/tasks/turn-card";
 import { TRANSCRIPT_REGION, type TranscriptCallRow } from "@luke/voice/transcript-model";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { CodePane } from "./code-pane";
 import { TaskCall } from "./task-call";
 
 /**

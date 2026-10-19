@@ -10,6 +10,8 @@ import {
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import type { AppStateSnapshot } from "@luke/host/app-state";
+import { NOTHING_HELD } from "@luke/panel/tasks/agent-ref";
+import { AGENT_LEAD, AgentMessage } from "@luke/panel/tasks/agent-tab";
 import { fixtureChat } from "@luke/panel/tasks/chat-fixture";
 import { TOOL_TARGET, type ToolTarget } from "@luke/panel/tasks/tool-call-model";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
@@ -27,8 +29,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
 import { taskCards } from "../desktop/side-panel";
-import { NOTHING_HELD } from "./agent-ref";
-import { AGENT_LEAD, AgentMessage } from "./agent-tab";
 
 /**
  * agent-tab.test.ts -- a call about something the window draws in a tab of

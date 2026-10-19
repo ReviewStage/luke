@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
+import { TaskMentions, type TaskMentionsValue } from "@luke/panel/tasks/task-mentions";
+import { TranscriptWords } from "@luke/panel/tasks/transcript-blocks";
 import { OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
@@ -15,8 +17,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { fakeAppPlatform } from "#testing/app-platform";
-import { TaskMentions, type TaskMentionsValue } from "./task-mentions";
-import { TranscriptWords } from "./transcript-blocks";
 
 /**
  * agent-written-mentions.test.ts -- the mentions a coding agent is told to

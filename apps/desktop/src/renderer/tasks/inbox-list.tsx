@@ -19,6 +19,12 @@ import { SidebarGroupHeader } from "@luke/panel/desktop/sidebar-group-header";
 import { EDGE_SIDE, useResizableEdge } from "@luke/panel/desktop/use-resizable-edge";
 import { DraftMark } from "@luke/panel/draft-mark";
 import { useMemberDirectory } from "@luke/panel/member-directory";
+import {
+  AgentMarkRef,
+  type AgentSubject,
+  lineSubject,
+  tasklessSubject,
+} from "@luke/panel/tasks/agent-ref";
 import { providerOf } from "@luke/panel/tasks/coding-agent-model";
 import {
   INBOX_COLUMNS,
@@ -56,6 +62,13 @@ import {
   needsYou as needsYouOf,
   readersItem,
 } from "@luke/panel/tasks/inbox-model";
+import {
+  RowMedia,
+  type RowMediaReads,
+  useRowMediaAsks,
+  useRowMediaReads,
+} from "@luke/panel/tasks/inbox-row-media";
+import { ReadAgentModel } from "@luke/panel/tasks/mentioned-agent-card";
 import { RelativeTime } from "@luke/panel/tasks/relative-time";
 import { markReadItem } from "@luke/panel/tasks/task-menu-items";
 import { useMinute } from "@luke/panel/tasks/task-time";
@@ -115,9 +128,6 @@ import {
 } from "lucide-react";
 import { useCallback, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar";
-import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref";
-import { RowMedia, type RowMediaReads, useRowMediaAsks, useRowMediaReads } from "./inbox-row-media";
-import { ReadAgentModel } from "./mentioned-agent-card";
 
 /**
  * inbox-list.tsx -- the Inbox's list of items: one row each, under its task's group header or in one run, with what the list shows and how at its head.

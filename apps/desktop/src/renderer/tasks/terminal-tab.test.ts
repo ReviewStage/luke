@@ -22,6 +22,8 @@ import {
 import { runAppCommand } from "@luke/panel/app-commands";
 import { SIDE_BUNDLES, type SideBundles, sideBundles } from "@luke/panel/bundle-loader";
 import { FindScope } from "@luke/panel/find-in-tab";
+import { TerminalCardFoot } from "@luke/panel/tasks/terminal-shells";
+import { TerminalTab } from "@luke/panel/tasks/terminal-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { bundleLanded, onSideBundles } from "@luke/panel/testing/side-bundles";
@@ -34,8 +36,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { TerminalCardFoot } from "./terminal-shells";
-import { TerminalTab } from "./terminal-tab";
 
 /**
  * An agent's Terminal tab as the developer meets it: a shell in the agent's

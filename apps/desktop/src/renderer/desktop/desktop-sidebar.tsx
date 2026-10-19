@@ -23,11 +23,19 @@ import { SIDEBAR_WIDTH, type SidebarCollapse } from "@luke/panel/desktop/sidebar
 import { SidebarFoot } from "@luke/panel/desktop/sidebar-foot";
 import { type CountNoun, SidebarGroupHeader } from "@luke/panel/desktop/sidebar-group-header";
 import {
+  type DrawnSection,
+  PINNED_DROP_ZONE,
+  SidebarSections,
+  TASKS_DROP_ZONE,
+  useSectionDialogs,
+} from "@luke/panel/desktop/sidebar-sections";
+import {
   SidebarSectionHead,
   TaskViewOptions,
   useTaskViewCommands,
   ViewChips,
 } from "@luke/panel/desktop/sidebar-task-view";
+import { SidebarTask } from "@luke/panel/desktop/task-actions";
 import { useArchivedView, useTaskListView } from "@luke/panel/desktop/task-list-view";
 import {
   EDGE_SIDE,
@@ -35,7 +43,9 @@ import {
   useResizableEdge,
 } from "@luke/panel/desktop/use-resizable-edge";
 import { useRowDrag } from "@luke/panel/desktop/use-row-drag";
+import { WorkspaceSwitcher } from "@luke/panel/desktop/workspace-switcher";
 import { MemberDirectory, useMemberDirectory } from "@luke/panel/member-directory";
+import type { NavigationHistory } from "@luke/panel/navigation-history";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { RepositoryPicture } from "@luke/panel/repository-picture";
 import { Shortcut } from "@luke/panel/shortcut";
@@ -46,6 +56,7 @@ import { type SettledWaiting, useSettledWaiting } from "@luke/panel/tasks/inbox-
 import { useMinute } from "@luke/panel/tasks/task-time";
 import { inColumn, type PinnedTab } from "@luke/panel/tasks/use-side-panel";
 import { useUnreadTasks } from "@luke/panel/tasks/use-task-looks";
+import { AUTOMATIONS_PAGE, type TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { commandKeyshortcuts, Tooltip } from "@luke/panel/tooltip";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
@@ -118,18 +129,7 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useRef } from "react";
-import type { NavigationHistory } from "../navigation-history";
-import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab";
-import {
-  type DrawnSection,
-  PINNED_DROP_ZONE,
-  SidebarSections,
-  TASKS_DROP_ZONE,
-  useSectionDialogs,
-} from "./sidebar-sections";
-import { SidebarTask } from "./task-actions";
-import { WorkspaceSwitcher } from "./workspace-switcher";
 
 /**
  * What the sidebar leaves the work column beside it, in CSS pixels: the

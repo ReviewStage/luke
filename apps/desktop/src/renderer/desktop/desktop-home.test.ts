@@ -20,6 +20,9 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ListedAutomations } from "@luke/panel/desktop/listed-automations";
+import { NewTaskDialog } from "@luke/panel/tasks/new-task-dialog";
+import type { InboxChoice, NewTaskAgent, TasksControl } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { handState } from "@luke/panel/testing/app-state";
 import {
@@ -41,10 +44,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { tasksControl, waitingOf } from "#testing/tasks-control";
-import { NewTaskDialog } from "../tasks/new-task-dialog";
-import type { InboxChoice, NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab";
 import { DesktopHome } from "./desktop-home";
-import { ListedAutomations } from "./listed-automations";
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const DAY = 86_400_000;

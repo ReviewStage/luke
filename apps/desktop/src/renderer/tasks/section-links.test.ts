@@ -9,6 +9,7 @@ import {
 } from "@luke/features/mention-link";
 import type { Task } from "@luke/features/task-wire";
 import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { PlanBody, type SectionLinks } from "@luke/panel/tasks/plan-body";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { DOCUMENT_TASK } from "@luke/panel/testing/document-task";
 import { onSideBundles, unlandedBundles } from "@luke/panel/testing/side-bundles";
@@ -16,7 +17,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "#testing/app-platform";
-import { PlanBody, type SectionLinks } from "./plan-body";
 
 /**
  * A task's sections' links on its own page: a mention of a section drawn as

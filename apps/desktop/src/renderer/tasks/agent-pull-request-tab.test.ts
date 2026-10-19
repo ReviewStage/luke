@@ -55,6 +55,7 @@ import {
 import { type GitHubConnectControl, GitHubConnectProvider } from "@luke/panel/github-connect";
 import { MemberDirectory } from "@luke/panel/member-directory";
 import { rendererRuntime } from "@luke/panel/renderer-runtime";
+import { AgentPullRequestTab } from "@luke/panel/tasks/agent-pull-request-tab";
 import { TAB_KIND, tabLook } from "@luke/panel/tasks/tab-look";
 import {
   type PullRequestReader,
@@ -77,7 +78,6 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { DESKTOP_LINKS, fakeAppPlatform } from "#testing/app-platform";
 import { codingAgentsControl } from "#testing/tasks-control";
-import { AgentPullRequestTab } from "./agent-pull-request-tab";
 
 /**
  * agent-pull-request-tab.test.ts -- an agent's Pull request tab draws its

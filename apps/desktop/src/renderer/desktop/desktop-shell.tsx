@@ -5,18 +5,32 @@ import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "@luke/panel
 import { CaptionStrip, type CaptionStripProps } from "@luke/panel/caption-strip";
 import { READING_AUTOMATIONS } from "@luke/panel/desktop/automation-words";
 import { useColumnDock } from "@luke/panel/desktop/column-dock";
+import { DesktopChat } from "@luke/panel/desktop/desktop-chat";
+import { DesktopFactory } from "@luke/panel/desktop/desktop-factory";
 import { useFloatDismiss } from "@luke/panel/desktop/hover-pane";
 import { OfflineMark, useOffline } from "@luke/panel/desktop/offline-mark";
 import { PaneGlide } from "@luke/panel/desktop/pane-motion";
 import { SIDEBAR_OVERLAY, type SidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
+import { taskCardOf } from "@luke/panel/desktop/task-card";
 import { useWindowTitle } from "@luke/panel/desktop/window-title";
 import { ExperimentTag } from "@luke/panel/experiment-marks";
 import { FIND_PAGE, PageFind } from "@luke/panel/find-in-tab";
+import type { NavigationHistory, WindowHistory } from "@luke/panel/navigation-history";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
+import type { SettingsPanelProps } from "@luke/panel/settings/settings-panel";
 import { SignInGate } from "@luke/panel/sign-in-gate";
 import { useChatOn } from "@luke/panel/tasks/chat-gate";
+import { ChipCards, type TaskFocus, WorkspaceDirectory } from "@luke/panel/tasks/chip-cards";
+import { MentionedAgents } from "@luke/panel/tasks/mentioned-agent-card";
+import { NewTaskDialog } from "@luke/panel/tasks/new-task-dialog";
 import { SIDE_PANEL_TAB } from "@luke/panel/tasks/use-side-panel";
 import { useTaskLooks } from "@luke/panel/tasks/use-task-looks";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  ISSUES_PAGE,
+  type TasksControl,
+} from "@luke/panel/tasks/use-tasks-tab";
 import { Tooltip } from "@luke/panel/tooltip";
 import { useExperiment } from "@luke/panel/use-app-state";
 import { EXPERIMENT } from "@luke/settings";
@@ -37,27 +51,13 @@ import {
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
-import type { NavigationHistory, WindowHistory } from "../navigation-history";
-import type { SettingsPanelProps } from "../settings/settings-panel";
-import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards";
-import { MentionedAgents } from "../tasks/mentioned-agent-card";
-import { NewTaskDialog } from "../tasks/new-task-dialog";
-import {
-  AUTOMATIONS_PAGE,
-  type AutomationsPlace,
-  ISSUES_PAGE,
-  type TasksControl,
-} from "../tasks/use-tasks-tab";
 import { DesktopAgentPage } from "./desktop-agent-page";
-import { DesktopChat } from "./desktop-chat";
-import { DesktopFactory } from "./desktop-factory";
 import { DesktopInbox } from "./desktop-inbox";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopTasks } from "./desktop-tasks";
 import { DesktopVersionHistory, taskVersionSubject } from "./desktop-version-history";
 import { PersonPage } from "./person-page";
 import { SidePanelToggle } from "./side-panel";
-import { taskCardOf } from "./task-card";
 import { useSummaryPin } from "./task-summary";
 
 /**
@@ -79,7 +79,9 @@ const DesktopSettings = lazy(() =>
  * the chunk loads is the pages' own empty frame, for a frame.
  */
 const AutomationsPage = lazy(() =>
-  import("./automations-page").then((loaded) => ({ default: loaded.AutomationsPage })),
+  import("@luke/panel/desktop/automations-page").then((loaded) => ({
+    default: loaded.AutomationsPage,
+  })),
 );
 
 /**

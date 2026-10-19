@@ -27,27 +27,33 @@ import { useCallCardVideo } from "@luke/panel/call/panel-avatar";
 import { useWindowFocused } from "@luke/panel/call/use-window-focused";
 import { useDraftsOwner } from "@luke/panel/composer-drafts";
 import { type FailedRunPlace, useFailedRunToasts } from "@luke/panel/desktop/failed-runs";
+import { ListedAutomations } from "@luke/panel/desktop/listed-automations";
 import { useSidebarCollapse } from "@luke/panel/desktop/sidebar-collapse";
 import { FeedbackDialog } from "@luke/panel/feedback-dialog";
 import { GitHubConnectProvider } from "@luke/panel/github-connect";
 import { useKeyboardModality } from "@luke/panel/keyboard-modality";
 import { useLastSignIn } from "@luke/panel/last-sign-in";
+import { PageWorkspaceProvider, useCopyLink } from "@luke/panel/links-at-hand";
 import { prefetchMarkdownHtmlParser } from "@luke/panel/markdown-html-parser";
+import { useHistoryMouseButtons, useWindowHistory } from "@luke/panel/navigation-history";
 import { OpenFeedbackProvider } from "@luke/panel/open-feedback";
 import { OpenSettingsProvider } from "@luke/panel/open-settings";
 import { PANEL_TAB, type PanelTab } from "@luke/panel/panel-tabs";
 import { OpenPersonProvider } from "@luke/panel/person-door";
 import { shownSettingsView } from "@luke/panel/settings/pages";
+import { settingsRowsInput } from "@luke/panel/settings/settings-panel";
 import { followSettingsLink, useSettingsWorkspace } from "@luke/panel/settings-link";
 import { type AgentPlace, useAgentEndToasts } from "@luke/panel/tasks/agent-end-toast";
 import { useChatToasts } from "@luke/panel/tasks/chat-toast";
 import { useInboxSettlingOwner } from "@luke/panel/tasks/inbox-settling";
 import { useInboxToasts } from "@luke/panel/tasks/inbox-toast";
+import { MessageRevealProvider } from "@luke/panel/tasks/message-links";
 import {
   type RepositoryRemedyDoors,
   RepositoryRemedyProvider,
 } from "@luke/panel/tasks/repository-remedy";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "@luke/panel/tasks/use-open-link";
+import { useLeaveGuard, useTasksTab } from "@luke/panel/tasks/use-tasks-tab";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "@luke/panel/toast";
 import { useUpdatedToast } from "@luke/panel/update-toast";
 import { useAppState, useExperiment } from "@luke/panel/use-app-state";
@@ -85,12 +91,6 @@ import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
-import { ListedAutomations } from "./desktop/listed-automations";
-import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand";
-import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
-import { settingsRowsInput } from "./settings/settings-panel";
-import { MessageRevealProvider } from "./tasks/message-links";
-import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab";
 
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];

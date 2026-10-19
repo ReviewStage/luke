@@ -12,7 +12,9 @@ import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { OpenSettingsProvider } from "@luke/panel/open-settings";
+import { NewTaskDialog } from "@luke/panel/tasks/new-task-dialog";
 import type { RepositoryChooser } from "@luke/panel/tasks/repository-chip";
+import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "@luke/panel/tasks/use-tasks-tab";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import {
   composerEditor,
@@ -29,8 +31,6 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import { NewTaskDialog } from "./new-task-dialog";
-import type { NewTaskAgent, NewTaskPreset, NewTaskStart } from "./use-tasks-tab";
 
 /**
  * New task as the developer meets it: a card over the window holding the

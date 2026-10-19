@@ -5,6 +5,7 @@ import { FEEDBACK_KIND } from "@luke/features/feedback";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { FeedbackDialog } from "@luke/panel/feedback-dialog";
 import { AttachmentViewer } from "@luke/panel/tasks/attachment-viewer";
+import { NewTaskDialog } from "@luke/panel/tasks/new-task-dialog";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { installScrollIntoView } from "@luke/panel/testing/scroll-into-view";
@@ -15,7 +16,6 @@ import { act, createElement, Fragment, type ReactElement, useState } from "react
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { tasksControl } from "#testing/tasks-control";
-import { NewTaskDialog } from "./tasks/new-task-dialog";
 
 /**
  * Every modal over the window as the developer meets it: opened from a
