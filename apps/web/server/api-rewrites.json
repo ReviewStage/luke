@@ -145,15 +145,15 @@
   },
   {
     "src": "/api/agents/([^/]+)/pull-request",
-    "dest": "/api/default.js?route=agents/pull-request&id=$1"
+    "dest": "/api/default.js?route=agents/pull-request&route-path=agents/$1/pull-request&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/pull-request/action",
-    "dest": "/api/default.js?route=agents/pull-request-action&id=$1"
+    "dest": "/api/default.js?route=agents/pull-request-action&route-path=agents/$1/pull-request/action&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/pull-request/viewed",
-    "dest": "/api/default.js?route=agents/pull-request-viewed&id=$1"
+    "dest": "/api/default.js?route=agents/pull-request-viewed&route-path=agents/$1/pull-request/viewed&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/changes",
@@ -161,15 +161,15 @@
   },
   {
     "src": "/api/agents/([^/]+)/overview/pull-request",
-    "dest": "/api/default.js?route=agents/overview-pull-request&id=$1"
+    "dest": "/api/default.js?route=agents/overview-pull-request&route-path=agents/$1/overview/pull-request&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/overview/checks",
-    "dest": "/api/default.js?route=agents/overview-checks&id=$1"
+    "dest": "/api/default.js?route=agents/overview-checks&route-path=agents/$1/overview/checks&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/overview/conversation",
-    "dest": "/api/default.js?route=agents/overview-conversation&id=$1"
+    "dest": "/api/default.js?route=agents/overview-conversation&route-path=agents/$1/overview/conversation&id=$1"
   },
   {
     "src": "/api/agents/([^/]+)/github-image",
