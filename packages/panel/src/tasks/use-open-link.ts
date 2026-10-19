@@ -1,7 +1,11 @@
 import { LINK_PLACE, type LinkPlace, type ReadLink, readLink } from "@luke/features/luke-link";
 import { decodeMention, MENTION_KIND, type PlanMention } from "@luke/features/mention-link";
 import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
-import { listedPullRequestOf, pullRequestAgentOf } from "@luke/ui/pull-request-link";
+import {
+  listedPullRequestOf,
+  pullRequestAgentOf,
+  repositoryPullRequestOf,
+} from "@luke/ui/pull-request-link";
 import {
   createContext,
   createElement,
@@ -36,8 +40,9 @@ import { appPlatform } from "../app-platform.js";
  * (`OpenHereProvider`), as the window's Inbox opens a file, a page, or a pull
  * request of the item's task in the panel beside the item rather than
  * leaving for the task, and a task, or an agent with no task, opens a pull
- * request one of its agents opened in that agent's Pull request tab rather
- * than on GitHub (`openPullRequestsHere`). Past the place, the window opens
+ * request one of its agents opened in that agent's Pull request tab, and any
+ * other pull request of its repository in a Pull request tab by its number,
+ * rather than on GitHub (`openPullRequestsHere`). Past the place, the window opens
  * a pull request any listed task's agent opened in that agent's Pull request
  * tab, on its task (`ListedPullRequestsProvider`), wherever it is pressed:
  * Factory, Chat, a version, a task's card, or another task. Inside a pull
@@ -79,19 +84,24 @@ export function PullRequestsOnGitHub({ children }: { children: ReactNode }): Rea
 }
 
 /**
- * A place's opener for its agents' pull requests: a link to the page on
- * GitHub of one of them, however it is spelled, opens through `open`, the
- * agent's Pull request tab, and any other link is the window's. `drawn` is
- * the agents whose tabs the place draws, none before they are read. Note that
- * an agent's pull request whose tab the place no longer draws, an archived
- * agent's on a task, is the window's, since claiming it would open nothing.
+ * A place's opener for the pull requests of its repository: a link to the
+ * page on GitHub of one of its agents' pull requests, however it is spelled,
+ * opens through `open`, the agent's Pull request tab; a link to any other
+ * pull request of `repository`, such as one an agent opened before moving to
+ * another branch, opens through `open` too, by its number, in a Pull request
+ * tab of the first of the place's agents; and any other link is the window's.
+ * `drawn` is the agents whose tabs the place draws, none before they are
+ * read. Note that an agent's pull request whose tab the place no longer
+ * draws, an archived agent's on a task, is not that agent's to open, since
+ * claiming it would open nothing.
  */
 export function openPullRequestsHere(
   agents: {
     readonly pullRequests: ReadonlyMap<string, { readonly url: string }>;
     readonly agentIds: readonly string[] | undefined;
   },
-  open: (agentId: string) => void,
+  open: (agentId: string, number?: number) => void,
+  repository?: string | null,
 ): OpenHere {
   return (href) => {
     const { pullRequests, agentIds: drawn } = agents;
@@ -99,8 +109,18 @@ export function openPullRequestsHere(
       drawn === undefined || drawn.includes(agentId) ? [{ agentId, url }] : [],
     );
     const agentId = pullRequestAgentOf(href, opened);
-    if (agentId === undefined) return false;
-    open(agentId);
+    if (agentId !== undefined) {
+      open(agentId);
+      return true;
+    }
+    const number = repositoryPullRequestOf(href, repository);
+    if (number === undefined) return false;
+    // A page under an agent's own pull request's, its files say, is still that agent's.
+    const owner = opened.find((each) => repositoryPullRequestOf(each.url, repository) === number);
+    const first = owner?.agentId ?? drawn?.[0];
+    if (first === undefined) return false;
+    if (owner === undefined) open(first, number);
+    else open(first);
     return true;
   };
 }

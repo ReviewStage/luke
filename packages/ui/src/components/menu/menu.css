@@ -8,6 +8,12 @@
    never inside it. */
 
 @layer components {
+  /* Held, an element a long press opens a menu on shows the menu rather
+     than iOS's own callout over a link or a picture in it. */
+  [data-long-press] {
+    -webkit-touch-callout: none;
+  }
+
   .luke-menu {
     position: fixed;
     z-index: 20;

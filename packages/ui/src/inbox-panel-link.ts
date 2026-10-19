@@ -1,6 +1,10 @@
 import { LINK_PLACE, readLink } from "@luke/features/luke-link";
 import { decodeMention, MENTION_KIND, type MentionLines } from "@luke/features/mention-link";
-import { type OpenedPullRequest, pullRequestAgentOf } from "./pull-request-link.js";
+import {
+  type OpenedPullRequest,
+  pullRequestAgentOf,
+  repositoryPullRequestOf,
+} from "./pull-request-link.js";
 
 /**
  * inbox-panel-link.ts -- which links pressed on an Inbox item open in the panel beside it, and as what.
@@ -15,7 +19,8 @@ import { type OpenedPullRequest, pullRequestAgentOf } from "./pull-request-link.
  * What the panel beside an Inbox item opens of a link pressed on the item:
  * a file of the task's repository, a page of the task, an agent's Pull
  * request tab as a Luke link names it, or that tab on its conversation as
- * the pull request's own page on GitHub names it.
+ * the pull request's own page on GitHub names it, by its number where it is
+ * another pull request of the task's repository.
  */
 export const INBOX_PANEL_TARGET = {
   FILE: "file",
@@ -32,13 +37,19 @@ export type InboxPanelTarget =
     }
   | { readonly kind: typeof INBOX_PANEL_TARGET.PAGE; readonly pageId: string }
   | { readonly kind: typeof INBOX_PANEL_TARGET.CHANGES; readonly agentId: string }
-  | { readonly kind: typeof INBOX_PANEL_TARGET.PULL_REQUEST; readonly agentId: string };
+  | {
+      readonly kind: typeof INBOX_PANEL_TARGET.PULL_REQUEST;
+      readonly agentId: string;
+      /** The pull request's number, where it is one of the repository's none of the agents opened from the branch it stands on. */
+      readonly number?: number;
+    };
 
-/** What holds the item: its task, none for an agent with no task, the task's repository, and each of its agents' pull requests by its page on GitHub. */
+/** What holds the item: its task, none for an agent with no task, the task's repository, each of its agents' pull requests by its page on GitHub, and its agents, the first of which shows any other pull request of the repository. */
 export interface InboxPanelPlace {
   readonly taskId: string | undefined;
   readonly repository: string | null;
   readonly pullRequests: readonly OpenedPullRequest[];
+  readonly agentIds?: readonly string[] | undefined;
 }
 
 /**
@@ -69,6 +80,13 @@ export function inboxPanelTarget(
     return { kind: INBOX_PANEL_TARGET.PULL_REQUEST, agentId };
   }
   if (place.taskId === undefined || place.repository === null) return undefined;
+  const number = repositoryPullRequestOf(href, place.repository);
+  const first = place.agentIds?.[0];
+  if (number !== undefined) {
+    return first === undefined
+      ? undefined
+      : { kind: INBOX_PANEL_TARGET.PULL_REQUEST, agentId: first, number };
+  }
   const mention = decodeMention(href, place.repository);
   return mention?.kind === MENTION_KIND.FILE
     ? { kind: INBOX_PANEL_TARGET.FILE, path: mention.path, lines: mention.lines }

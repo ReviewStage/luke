@@ -869,3 +869,24 @@ export function suggestedLines(
   if (rows.length !== lines.line - first + 1) return undefined;
   return rows.map((row) => row.text).join("\n");
 }
+
+/**
+ * Where a line of a file stands in the order its diff draws its rows: its
+ * row's place among every hunk's rows, the old side's line found among the
+ * rows that hold it, as a pick's ends are (`commentLines`); none for a line
+ * no row stands for.
+ */
+export function rowPlace(
+  file: CodingAgentChangedFile,
+  side: DiffSelection["side"],
+  line: number,
+): number | undefined {
+  if (file.patch === null) return undefined;
+  const rows = (patchHunks(file.patch) ?? []).flatMap((hunk) => hunk.rows);
+  const at = rows.findIndex((row) =>
+    side === DIFF_SELECTION_SIDE.DELETIONS
+      ? row.kind !== DIFF_ROW.ADDED && row.oldLine === line
+      : row.newLine === line,
+  );
+  return at === -1 ? undefined : at;
+}

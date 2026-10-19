@@ -610,7 +610,7 @@ export function SidebarTask({
                   onOpen();
                 }
           }
-          onContextMenu={rename.editing ? undefined : showMenu}
+          contextMenu={rename.editing ? undefined : showMenu}
           actionsAt={LIST_ROW_ACTIONS.HOVER}
           actions={
             rename.editing ? null : (

@@ -237,6 +237,9 @@ let changes: (readonly [string, PullRequestActionRequest])[] = [];
 let changeAnswer: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
 /** What the service waits on before it answers a change, where a test holds it; none answers at once. */
 let changeHeld: Promise<void> | undefined;
+/** The number of the pull request each change named, none where it was the agent's own. */
+let changeNumbers: (number | undefined)[] = [];
+
 /** What Files changed handed the diff bundle's list, mount first, each draw after it. */
 let lists: DiffListProps[] = [];
 
@@ -248,6 +251,7 @@ beforeEach(() => {
   images = [];
   previews = [];
   changes = [];
+  changeNumbers = [];
   changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
   lists = [];
   changeHeld = undefined;
@@ -258,6 +262,7 @@ beforeEach(() => {
       if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
         changes.push([request.payload.agentId, request.payload.request]);
+        changeNumbers.push(request.payload.number);
         const answer = changeAnswer;
         return (changeHeld ?? Promise.resolve()).then(() => ({
           status: ACT_OUTCOME_STATUS.DONE,
@@ -2759,6 +2764,55 @@ test("a reply GitHub refuses says so under its thread in GitHub's own words, its
   assert.equal(withoutId.querySelector(".pull-request-thread-actions"), null);
 });
 
+test("a tab naming another pull request of the agent's repository by its number reads that one, counts its own lines, and changes it rather than the agent's own", async () => {
+  const asked: unknown[] = [];
+  const url = "https://github.com/acme/relay/pull/41";
+  const earlier = {
+    ...published(PULL_REQUEST_STATE.OPEN),
+    number: 41,
+    title: "Lay the invitations' base",
+    url,
+    additions: 9,
+    deletions: 2,
+  };
+  const recorded =
+    <A>(kind: string, answer: A) =>
+    (agentId: string, number?: number) => {
+      asked.push([kind, agentId, number]);
+      return Promise.resolve(answer);
+    };
+  const control = {
+    ...controlAnswering({
+      pullRequest: recorded("pull request", {
+        pullRequest: { ...PULL_REQUEST, number: 41, title: earlier.title, url },
+      }),
+      conversation: recorded("conversation", { pullRequest: CONVERSATION }),
+    }),
+    numberedPullRequests: new Map([[AGENT.id, new Map([[41, earlier]])]]),
+  };
+  const tab = await drawn(
+    createElement(AgentPullRequestTab, {
+      agentId: AGENT.id,
+      number: 41,
+      control,
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: false, onToggle: () => undefined },
+      view: PULL_REQUEST_VIEW.CONVERSATION,
+      onView: () => undefined,
+    }),
+  );
+
+  assert.deepEqual(asked, [
+    ["pull request", AGENT.id, 41],
+    ["conversation", AGENT.id, 41],
+  ]);
+  assert.equal(tabCount(tab, "Files changed"), "+9 −2");
+  await pressAction(tab, "Close pull request");
+  assert.deepEqual(changes, [[AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }]]);
+  assert.deepEqual(changeNumbers, [41]);
+});
+
 test("an open pull request's pill offers Close and a closed one's Reopen, each asked of the service for the agent", async () => {
   const open = await draw(controlAnswering());
   await pressAction(open, "Close pull request");
@@ -2942,6 +2996,117 @@ test("Files changed draws each review thread under its line, its comments throug
     note.querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
     "1 comment by Charles Pan · 1 open, hide",
   );
+});
+
+test("the pointer resting on a review thread in Files changed lights the lines it is on, and leaving it lets them go; a minimized chip lights the widest of its threads' lines, and again once the pointer comes back from a thread it shows", async () => {
+  const review = {
+    kind: CONVERSATION_ENTRY.REVIEW,
+    by: CHARLES_ON_GITHUB,
+    state: REVIEW_STATE.COMMENTED,
+    html: null,
+    body: "",
+    at: 2_500,
+    url: `${PAGE}#pullrequestreview-9`,
+    threads: [
+      thread(),
+      thread({
+        // A first line above the patch's hunk, which no drawn row holds.
+        startLine: 3,
+        originalStartLine: 3,
+        comments: [
+          { ...(thread().comments[0] ?? assert.fail("a comment")), url: `${PAGE}#discussion_r2` },
+        ],
+      }),
+    ],
+  } as const;
+  handSettings();
+  // The View settings popover opens on the window's appearance.
+  vi.stubGlobal("matchMedia", () => ({ matches: false }));
+  const tab = await draw(
+    controlAnswering(
+      {
+        conversation: () =>
+          Promise.resolve({ pullRequest: { ...CONVERSATION, conversation: [review] } }),
+      },
+      PULL_REQUEST_STATE.OPEN,
+      () =>
+        Promise.resolve({
+          pullRequest: { url: PAGE, headSha: READ_HEAD, truncated: false, files: [INVITE_FILE] },
+        }),
+    ),
+  );
+  await act(async () => option(tab, "Files changed").click());
+  await settle();
+  const note = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
+    INVITE_FILE.path,
+    `${PAGE}#discussion_r1`,
+  );
+  const drawnThread =
+    note.querySelector<HTMLElement>(".pull-request-thread-comment") ??
+    assert.fail("the thread is drawn");
+
+  act(() => {
+    drawnThread.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  });
+  assert.deepEqual(lists.at(-1)?.selected, {
+    path: INVITE_FILE.path,
+    selection: {
+      start: 12,
+      side: DIFF_SELECTION_SIDE.ADDITIONS,
+      end: 13,
+      endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+    },
+  });
+  act(() => {
+    drawnThread.dispatchEvent(
+      new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body }),
+    );
+  });
+  assert.equal(lists.at(-1)?.selected, undefined, "its lines are let go");
+
+  act(() => tab.querySelector<HTMLButtonElement>('button[aria-label="View settings"]')?.click());
+  await settle();
+  const minimize =
+    [...document.querySelectorAll<HTMLButtonElement>('[role="switch"]')].find(
+      (each) => each.getAttribute("aria-label") === "Minimize inline comments",
+    ) ?? assert.fail("the diff settings offer Minimize inline comments");
+  act(() => minimize.click());
+  await settle();
+  const chip =
+    note.querySelector<HTMLElement>(".diff-thread-chip") ??
+    assert.fail("the threads are minimized");
+  const litFrom = () => lists.at(-1)?.selected?.selection.start;
+  act(() => {
+    chip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  });
+  assert.equal(
+    litFrom(),
+    3,
+    "the chip lights the widest of its threads' lines, 3–13, though no drawn row holds line 3",
+  );
+
+  act(() => chip.click());
+  await settle();
+  const shown =
+    [
+      ...note.querySelectorAll<HTMLElement>(
+        ".diff-thread-chip-threads .pull-request-thread-comment",
+      ),
+    ].find((each) => each.textContent?.includes("once")) ??
+    assert.fail("the chip shows the thread on lines 12–13");
+  act(() => {
+    shown.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+  });
+  assert.equal(litFrom(), 12, "a thread shown under the chip lights its own lines");
+  act(() => {
+    shown.dispatchEvent(
+      new MouseEvent("mouseout", {
+        bubbles: true,
+        relatedTarget: note.querySelector(".diff-thread-chip"),
+      }),
+    );
+  });
+  assert.equal(litFrom(), 3, "back on the chip, the chip's lines light again");
 });
 
 test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {
@@ -3191,7 +3356,23 @@ async function pickLines(selection: DiffListSelection["selection"]): Promise<HTM
   const onComment = drawn.onComment ?? assert.fail("the gutter offers a comment");
   act(() => onComment({ path: INVITE_FILE.path, selection }));
   await settle();
-  return (lists.at(-1) ?? drawn).renderAnnotation(INVITE_FILE.path, "line-comment");
+  return commentNotes().at(-1)?.element ?? assert.fail("the pick opens a comment");
+}
+
+/** The comments the files' last draw stands under their lines, in the order they were opened: each note's place and the element drawn in it. */
+function commentNotes() {
+  const drawn = lists.at(-1);
+  if (drawn === undefined) return [];
+  return drawn.files
+    .flatMap((file) =>
+      file.annotations.map((note) => ({
+        path: file.path,
+        side: note.side,
+        line: note.line,
+        element: drawn.renderAnnotation(file.path, note.key),
+      })),
+    )
+    .filter((note) => note.element.querySelector(".line-comment") !== null);
 }
 
 /** Writes the comment's words as the member would. */
@@ -3217,9 +3398,7 @@ function commentOffer(comment: HTMLElement, label: string): HTMLButtonElement {
 
 /** Whether the files' last draw stands a comment under a line. */
 function commentDrawn(): boolean {
-  return (lists.at(-1)?.files ?? []).some((file) =>
-    file.annotations.some((note) => note.key === "line-comment"),
-  );
+  return commentNotes().length > 0;
 }
 
 test("the gutter's + opens a comment under the last line picked, however the pick was dragged, its lines lit; Add single comment sends it for the agent at the head the files were read at, after which it closes and lets its words go", async () => {
@@ -3234,8 +3413,8 @@ test("the gutter's + opens a comment under the last line picked, however the pic
 
   assert.equal(comment.querySelector(".line-comment-head")?.textContent, "Comment on lines 12–13");
   assert.deepEqual(
-    lists.at(-1)?.files[0]?.annotations.find((note) => note.key === "line-comment"),
-    { key: "line-comment", side: DIFF_SELECTION_SIDE.ADDITIONS, line: 13 },
+    commentNotes().map(({ path, side, line }) => ({ path, side, line })),
+    [{ path: INVITE_FILE.path, side: DIFF_SELECTION_SIDE.ADDITIONS, line: 13 }],
   );
   assert.equal(lists.at(-1)?.selected?.path, INVITE_FILE.path);
   assert.deepEqual(
@@ -3273,6 +3452,107 @@ test("the gutter's + opens a comment under the last line picked, however the pic
   });
   assert.equal(again.querySelector("textarea")?.value, "", "its words were let go");
   assert.equal(again.querySelector(".line-comment-head")?.textContent, "Comment on line 12");
+});
+
+test("several comments stand open at once, each under its own lines with its own words, the last opened lit; one closed unsent comes back with its words, and lines ending where an open one ends move it rather than open another", async () => {
+  await drawCommentable();
+  const added = {
+    start: 12,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  };
+  const removed = {
+    start: 12,
+    side: DIFF_SELECTION_SIDE.DELETIONS,
+    end: 12,
+    endSide: DIFF_SELECTION_SIDE.DELETIONS,
+  };
+  writeLineComment(await pickLines(added), "Why twice?");
+  writeLineComment(await pickLines(removed), "Gone?");
+
+  const heads = () =>
+    commentNotes().map((note) => note.element.querySelector(".line-comment-head")?.textContent);
+  const words = () => commentNotes().map((note) => note.element.querySelector("textarea")?.value);
+  assert.deepEqual(heads(), ["Comment on lines 12–13", "Comment on line 12"]);
+  assert.deepEqual(words(), ["Why twice?", "Gone?"]);
+  assert.deepEqual(lists.at(-1)?.selected, { path: INVITE_FILE.path, selection: removed });
+
+  const [first] = commentNotes();
+  act(() => commentOffer(first?.element ?? assert.fail("the first stands"), "Cancel").click());
+  await settle();
+  assert.deepEqual(heads(), ["Comment on line 12"], "Cancel closes that comment alone");
+  assert.deepEqual(lists.at(-1)?.selected, { path: INVITE_FILE.path, selection: removed });
+
+  await pickLines({ ...added, start: 13 });
+  assert.deepEqual(heads(), ["Comment on line 12", "Comment on line 13"]);
+  assert.deepEqual(words(), ["Gone?", "Why twice?"], "the words written there come back");
+  await pickLines(added);
+  assert.deepEqual(
+    heads(),
+    ["Comment on line 12", "Comment on lines 12–13"],
+    "lines ending on the same line move the comment there",
+  );
+});
+
+test("a comment opened on lines takes the keyboard once the list stands its note in the window", async () => {
+  await drawCommentable();
+  const comment = await pickLines({
+    start: 13,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  });
+  const field =
+    comment.querySelector<HTMLTextAreaElement>("textarea") ?? assert.fail("the comment has words");
+  assert.notEqual(document.activeElement, field, "a note not yet in the window takes nothing");
+
+  document.body.append(comment);
+  await settle();
+  assert.equal(document.activeElement, field);
+});
+
+test("code selected as text on lines GitHub takes a comment on is offered a Comment press, which opens a comment on those lines; elsewhere, or once let go, nothing is offered", async () => {
+  const { tab } = await drawCommentable();
+  const tellText = lists.at(-1)?.onSelectText ?? assert.fail("the list hears selected text");
+  const rect = { top: 120, left: 40, right: 200, bottom: 160 };
+  const offer = () => tab.querySelector<HTMLButtonElement>(".diff-list-offer button");
+
+  act(() =>
+    tellText({
+      picked: {
+        path: INVITE_FILE.path,
+        selection: {
+          start: 30,
+          side: DIFF_SELECTION_SIDE.ADDITIONS,
+          end: 31,
+          endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+        },
+      },
+      rect,
+    }),
+  );
+  assert.equal(offer(), null, "lines no hunk holds are offered nothing");
+
+  const selection = {
+    start: 12,
+    side: DIFF_SELECTION_SIDE.ADDITIONS,
+    end: 13,
+    endSide: DIFF_SELECTION_SIDE.ADDITIONS,
+  };
+  act(() => tellText({ picked: { path: INVITE_FILE.path, selection }, rect }));
+  assert.equal(offer()?.getAttribute("aria-label"), "Comment on lines 12–13");
+  act(() => tellText(undefined));
+  assert.equal(offer(), null, "a selection let go takes its offer with it");
+
+  act(() => tellText({ picked: { path: INVITE_FILE.path, selection }, rect }));
+  act(() => offer()?.click());
+  await settle();
+  assert.equal(offer(), null);
+  assert.deepEqual(
+    commentNotes().map((note) => note.element.querySelector(".line-comment-head")?.textContent),
+    ["Comment on lines 12–13"],
+  );
 });
 
 /** The comment's formatting press named `label`, where its toolbar offers one. */

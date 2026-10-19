@@ -133,7 +133,9 @@ import type { AgentModelControl } from "./use-agent-model.js";
  * (`use-dictation.ts`, `dictation-strip.tsx`). Why a dictation left nothing
  * is said in the same note a file's refusal is.
  *
- * An `@` at the start of a word, on a task's page, opens the list of what
+ * An `@` at the start of a word, on a task's page, or on any box whose
+ * owner hands its mentions (`task-mentions.tsx`), as New task's does for
+ * its workspace, opens the list of what
  * the message can mention, the task's repository's files and folders, the
  * plan's sections, the pages agents showed on it, its other coding agents,
  * the repository's skills, and the account's connected MCP servers and
@@ -167,8 +169,9 @@ import type { AgentModelControl } from "./use-agent-model.js";
  * (`above`), stands its repository and Linear chips after the "+" (`tools`)
  * and its Plan toggle before the model chip (`actions`), holds Start while
  * it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
- * says what Escape does (`onLeave`), and offers no MCP servers, so the
- * box draws no servers' button.
+ * says what Escape does (`onLeave`), hands its workspace's mentions and
+ * the chosen repository's skills to its `@` and `/` lists, and offers no MCP servers'
+ * switches, so the box draws no servers' button.
  */
 
 /** What the box's note says while the editor bundle could not be loaded. */

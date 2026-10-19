@@ -85,7 +85,7 @@ function SettingsPageRow({
         current={current ? NAV_CURRENT.PAGE : undefined}
         mark={note ? <AttentionMark note={note} /> : undefined}
         onClick={onOpen}
-        onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
+        contextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
       >
         {page.title}
       </NavItem>

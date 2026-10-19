@@ -1,8 +1,8 @@
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
-  atPointer,
   BUTTON_SIZE,
   CloseIcon,
+  type ContextMenuProps,
   cssCustomProperties,
   IconButton,
   MENU_ALIGN,
@@ -335,8 +335,9 @@ export function TabStrip({
  * it. A label cut short is said whole in the tab's hint, before what
  * `tooltip` adds and an unread tab's news; `card`, while given, hangs in the
  * hint's place whether or not the label is cut short, and says the whole
- * name itself. `onMenu` opens the tab's own actions where it says, from a
- * right-click or the keyboard's menu keys. A `quiet` tab draws no fill at
+ * name itself. `contextMenu` (`useMenu`'s) opens the tab's own actions
+ * from a right-click or a long press, and `onMenu` opens them where it
+ * says from the keyboard's menu keys. A `quiet` tab draws no fill at
  * rest, chosen or not, and the hover fill under the pointer: a lone tab,
  * always the chosen one, need not be told from the others. An `anchored`
  * tab stands at the strip's start for good, never moved.
@@ -357,6 +358,7 @@ export function Tab({
   anchored = false,
   onSelect,
   onClose,
+  contextMenu,
   onMenu,
 }: {
   icon: React.JSX.Element;
@@ -379,6 +381,7 @@ export function Tab({
   anchored?: boolean;
   onSelect: () => void;
   onClose?: (() => void) | undefined;
+  contextMenu?: ContextMenuProps | undefined;
   onMenu?: ((placement: MenuPlacement, opener: HTMLElement) => void) | undefined;
 }): React.JSX.Element {
   // Whether the label is cut short: a label renamed, or the task's one tab
@@ -402,18 +405,7 @@ export function Tab({
       aria-description={unread ? UNREAD_TAB_NOTE : undefined}
       tabIndex={selected ? 0 : -1}
       onClick={onSelect}
-      onContextMenu={
-        onMenu === undefined
-          ? undefined
-          : (event) => {
-              event.preventDefault();
-              // A menu key the system turned into a right-click says no point
-              // of its own, and hangs the menu under the whole tab.
-              const fromKeyboard = event.clientX === 0 && event.clientY === 0;
-              const at = fromKeyboard ? underTab(event.currentTarget) : atPointer(event);
-              onMenu(at, event.currentTarget);
-            }
-      }
+      {...contextMenu}
       onKeyDown={(event) => {
         if (onMenu !== undefined && opensMenu(event)) {
           event.preventDefault();
@@ -483,7 +475,7 @@ export function Tab({
 export function MenuTab({
   groups,
   ...tab
-}: Omit<React.ComponentProps<typeof Tab>, "onMenu"> & {
+}: Omit<React.ComponentProps<typeof Tab>, "contextMenu" | "onMenu"> & {
   groups: MenuAction[][];
 }): React.JSX.Element {
   const menu = useMenu(true);
@@ -495,6 +487,8 @@ export function MenuTab({
           menu.close(false);
           tab.onSelect();
         }}
+        // A menu key the system turned into a right-click says no point of its own, and hangs the menu under the whole tab.
+        contextMenu={menu.contextMenu(undefined, underTab)}
         onMenu={menu.show}
       />
       {menu.drawn === undefined ? null : (

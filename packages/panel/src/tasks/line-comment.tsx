@@ -25,9 +25,10 @@ import { PullRequestWriteNote, usePullRequestWrites, WRITE_NOTE } from "./pull-r
  * and closes, and the tab reads the conversation again, which draws the
  * comment on its line and counts the pending review; GitHub's refusal
  * stands under it in GitHub's words, beside Refresh changes, since a head
- * pushed since is the likeliest why. The words are the view's, kept by the
- * file, so a comment scrolled out of the list and back loses nothing. On
- * lines of the head alone, the new side's, its toolbar offers a suggestion,
+ * pushed since is the likeliest why. The words are the view's, kept by its
+ * file and lines, so a comment scrolled out of the list and back loses
+ * nothing, and several stand open at once across lines and files
+ * (`comment-drafts.ts`). On lines of the head alone, the new side's, its toolbar offers a suggestion,
  * GitHub's ```suggestion block holding those lines as they read now.
  */
 
@@ -64,6 +65,7 @@ export function LineComment({
   body,
   onBody,
   suggestion,
+  onActive,
   onClose,
   onWritten,
   onRefresh,
@@ -78,6 +80,8 @@ export function LineComment({
   onBody: (body: string) => void;
   /** The lines as they read at the head, which the comment offers to suggest a change to; none where they are not the head's own (`suggestedLines`). */
   suggestion: string | undefined;
+  /** Told the comment took the keyboard, which lights its lines among the comments open. */
+  onActive?: (() => void) | undefined;
   onClose: () => void;
   /** Reads the tab again once GitHub answered. */
   onWritten: () => void;
@@ -104,14 +108,30 @@ export function LineComment({
   };
   const first = holding ? REVIEW_COMMENT_MODE.REVIEW : REVIEW_COMMENT_MODE.SINGLE;
 
+  // Note that the list stands a new comment's note in the file only once it
+  // draws again, after this comment is drawn, so the words take the keyboard
+  // once they stand in the window.
   useEffect(() => {
-    field.current?.focus();
+    const area = field.current;
+    if (area === null) return undefined;
+    if (area.isConnected) {
+      area.focus();
+      return undefined;
+    }
+    const standing = new MutationObserver(() => {
+      if (!area.isConnected) return;
+      standing.disconnect();
+      area.focus();
+    });
+    standing.observe(document.body, { childList: true, subtree: true });
+    return () => standing.disconnect();
   }, []);
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: Escape anywhere in the comment lets it go, as it does in GitHub's own.
     <div
       className="line-comment"
+      onFocus={onActive}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || sending) return;
         event.preventDefault();

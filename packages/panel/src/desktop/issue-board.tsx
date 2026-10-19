@@ -219,7 +219,7 @@ function IssueCard({
         className="sidebar-task"
         aria-current={peeked ? true : undefined}
         onClick={(event) => onOpen(openingOf(event))}
-        onContextMenu={menu.contextMenu()}
+        {...menu.contextMenu()}
         onKeyDown={(event) => {
           // Note that ⌘Return is taken before the button's own Return, which would peek it.
           if (!pageKey(event)) return menu.keyMenu(event);

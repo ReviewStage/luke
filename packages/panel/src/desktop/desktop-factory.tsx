@@ -389,7 +389,7 @@ function FactoryRow({
           unread={waiting}
           hint={{ Hint: RowHint, label: words }}
           onPress={onOpen}
-          onContextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
+          contextMenu={copyLink === undefined ? undefined : menu.contextMenu()}
         />
       </RowHintOptions>
       {menu.drawn === undefined || copyLink === undefined ? null : (

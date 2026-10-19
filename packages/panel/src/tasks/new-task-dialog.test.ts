@@ -9,7 +9,9 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -20,6 +22,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
+import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -245,7 +248,7 @@ async function mount(
       await settle();
     },
     /** Stands the dialog again once the workspaces are read, listing `workspaceId`. */
-    list: async (workspaceId: string) => {
+    list: async (workspaceId: string | undefined) => {
       listed = workspaceId;
       act(() => root.render(onRegistry(registry, createElement(Owner))));
       await settle();
@@ -402,6 +405,150 @@ test("Shift+Return is a new line, and the agent is handed both lines", async () 
   assert.equal(card.agents[0]?.prompt, "Fix the refresh\nand add a test");
 });
 
+test("once a repository is chosen, an @ offers its files, read through the workspace, and the row chosen is drawn as its chip and handed to the agent as its link", async () => {
+  const told: Act[] = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      told.push(request);
+      return Promise.resolve(
+        request.kind === ACT_KIND.TASKS_TREE
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: {
+                folder: {
+                  path: "",
+                  repository: "acme/web",
+                  branch: "main",
+                  entries: [{ name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE }],
+                  truncated: false,
+                },
+              },
+            }
+          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      );
+    },
+  });
+  const started: (NewTaskAgent | undefined)[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const control = tasksControl();
+  const draw = (recent: readonly string[]) =>
+    act(() =>
+      root.render(
+        createElement(NewTaskDialog, {
+          newTask: {
+            ...control.newTask,
+            open: true,
+            workspaceId: "workspace-acme",
+            repositoriesIn: () => ({ ...control.repositories, recent }),
+            start: (...asked) => {
+              started.push(asked[4]?.handed);
+              return Promise.resolve(undefined);
+            },
+          },
+        }),
+      ),
+    );
+  // The card opens with no repository, and the words are begun before one is chosen.
+  draw([]);
+  await settle();
+  typeInComposer(document, "Follow ");
+  draw(["acme/web"]);
+  await settle();
+  const focused = document.activeElement === composerEditor(document);
+
+  typeInComposer(document, "@roll");
+  await settle();
+  const offered = [...document.querySelectorAll(".mention-menu .luke-combobox-option-label")].map(
+    (row) => row.textContent,
+  );
+  pressInComposer(document, "Enter");
+  await settle();
+  const chips = [...composerEditor(document).querySelectorAll("[data-mention-ref]")];
+  pressInComposer(document, "Enter");
+  await settle();
+
+  assert.ok(focused, "the words keep the caret as the repository is chosen");
+  assert.deepEqual(offered, ["rollout-store.ts"]);
+  assert.deepEqual(
+    told.filter((each) => each.kind === ACT_KIND.TASKS_TREE).map((each) => each.payload),
+    [{ workspaceId: "workspace-acme", repository: "acme/web", path: "", recursive: true }],
+  );
+  assert.deepEqual(
+    chips.map((chip) => chip.textContent),
+    ["rollout-store.ts"],
+  );
+  const file = { kind: MENTION_KIND.FILE, path: "apps/web/rollout-store.ts" } as const;
+  assert.equal(
+    started[0]?.prompt,
+    `Follow ${mentionMarkdown(file, "rollout-store.ts", { workspace: "workspace-acme", repository: "acme/web" })}`,
+  );
+});
+
+test("a skill chosen from the / list is its chip, which opens its SKILL.md in the chosen repository on GitHub", async () => {
+  const told: Act[] = [];
+  fakeAppPlatform(DESKTOP_LINKS);
+  fakeAppBridge({
+    act: (request: Act) => {
+      told.push(request);
+      return Promise.resolve(
+        request.kind === ACT_KIND.TASKS_SKILLS
+          ? {
+              status: ACT_OUTCOME_STATUS.DONE,
+              value: {
+                skills: {
+                  repository: "acme/web",
+                  branch: "main",
+                  skills: [
+                    {
+                      name: "release",
+                      description: "Cut a release.",
+                      path: ".agents/skills/release/SKILL.md",
+                    },
+                  ],
+                },
+              },
+            }
+          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+      );
+    },
+  });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const control = tasksControl();
+  act(() =>
+    root.render(
+      createElement(NewTaskDialog, {
+        newTask: {
+          ...control.newTask,
+          open: true,
+          workspaceId: "workspace-acme",
+          repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
+        },
+      }),
+    ),
+  );
+  await settle();
+
+  typeInComposer(document, "/rel");
+  await settle();
+  pressInComposer(document, "Enter");
+  await settle();
+  const chip =
+    composerEditor(document).querySelector<HTMLElement>(".skill-chip[data-opens]") ??
+    assert.fail("the skill is a chip that opens");
+  act(() => chip.click());
+
+  assert.deepEqual(
+    told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
+    [{ url: "https://github.com/acme/web/blob/HEAD/.agents/skills/release/SKILL.md" }],
+  );
+});
+
 test("Plan mode: Shift+Tab turns it on, the model chip stands down, and Start begins the plan and its call, Untitled, handing Luke the words as its brief", async () => {
   const card = await mount();
   await card.key("Tab", { shiftKey: true });
@@ -515,8 +662,13 @@ test("words left in a card put away come back as New task opens again and after 
   assert.equal(card.field().textContent, "");
 });
 
-test("words typed before the workspaces are read stay in the box as the workspace lands, and are its draft", async () => {
+test("words typed before the workspaces are read stay in the box as the workspace lands, over its older draft, and are its draft", async () => {
   const card = await mount();
+  await card.list("workspace-personal");
+  card.type("Fix login");
+  await card.relaunch();
+  await card.list(undefined);
+  assert.equal(card.field().textContent, "");
   card.type("Dark mode");
   await card.list("workspace-personal");
   assert.equal(card.field().textContent, "Dark mode");

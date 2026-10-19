@@ -12,6 +12,7 @@ import { fakeAppPlatform } from "../testing/app-platform.js";
 import {
   ListedPullRequestsProvider,
   OpenLinkProvider,
+  openPullRequestsHere,
   PullRequestsOnGitHub,
 } from "./use-open-link.js";
 
@@ -108,4 +109,20 @@ test("inside a pull request's own tab, a link to it opens on GitHub", () => {
     press(URL, (row) => createElement(PullRequestsOnGitHub, null, row)),
     { places: [], github: [URL] },
   );
+});
+
+test("on a task, its agent's pull request opens in its own Pull request tab, any other of the task's repository in the first agent's by its number, and another repository's is the window's", () => {
+  const opened: unknown[] = [];
+  const openHere = openPullRequestsHere(
+    { pullRequests: new Map([[AGENT, { url: URL }]]), agentIds: [AGENT] },
+    (agentId, number) => opened.push([agentId, number]),
+    "acme/relay",
+  );
+  assert.equal(openHere(`${URL}/files`), true);
+  assert.equal(openHere("https://github.com/acme/relay/pull/41"), true);
+  assert.equal(openHere("https://github.com/acme/other/pull/41"), false);
+  assert.deepEqual(opened, [
+    [AGENT, undefined],
+    [AGENT, 41],
+  ]);
 });

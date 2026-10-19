@@ -89,6 +89,7 @@ import {
   runUpdateAgent,
   runUpdateTask,
 } from "../coding-agent-tools.js";
+import { runCreateIssue, runListIssues, runReadIssue, runUpdateIssue } from "../issue-tools.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -477,6 +478,10 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.DELETE_SECTION
     | typeof CODER_TOOL.MOVE_TASK
     | typeof CODER_TOOL.UPDATE_TASK
+    | typeof CODER_TOOL.LIST_ISSUES
+    | typeof CODER_TOOL.READ_ISSUE
+    | typeof CODER_TOOL.CREATE_ISSUE
+    | typeof CODER_TOOL.UPDATE_ISSUE
     | typeof CODER_TOOL.LIST_MODELS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
@@ -499,6 +504,10 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
   [CODER_TOOL.MOVE_TASK]: runMoveTask,
   [CODER_TOOL.UPDATE_TASK]: runUpdateTask,
+  [CODER_TOOL.LIST_ISSUES]: runListIssues,
+  [CODER_TOOL.READ_ISSUE]: runReadIssue,
+  [CODER_TOOL.CREATE_ISSUE]: runCreateIssue,
+  [CODER_TOOL.UPDATE_ISSUE]: runUpdateIssue,
   [CODER_TOOL.LIST_MODELS]: runListModels,
 } as const;
 

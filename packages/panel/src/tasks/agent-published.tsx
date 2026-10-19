@@ -131,7 +131,7 @@ export function BranchChip({
               menu.close(false);
               doors.openGitHub(url);
             }}
-            onContextMenu={menu.contextMenu()}
+            {...menu.contextMenu()}
           >
             <GitBranchIcon aria-hidden="true" />
             <ChipName mono>{branch}</ChipName>
@@ -215,7 +215,7 @@ export function PublishedRow({
                 if (inPanel === undefined) doors.openGitHub(pullRequest.url);
                 else inPanel();
               }}
-              onContextMenu={actions.length === 0 ? undefined : menu.contextMenu()}
+              contextMenu={actions.length === 0 ? undefined : menu.contextMenu()}
             />
           </RowHintOptions>
         </List>

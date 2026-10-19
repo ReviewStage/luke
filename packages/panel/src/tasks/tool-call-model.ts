@@ -633,6 +633,21 @@ function answeredCall(
   return { ...namedCall(kind, input, output, undefined), subject: stringAt(named, field) ?? "" };
 }
 
+/** An issue's call, named by the identifier and title its answer names; before the answer, by the name it was asked by, or the title a filing asked for. */
+function issueCall(
+  kind: CallKind,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView {
+  const issue = isRecord(output) ? output.issue : undefined;
+  const identifier = stringAt(issue, "identifier");
+  const title = stringAt(issue, "title");
+  const answered =
+    identifier === undefined || title === undefined ? undefined : `${identifier} ${title}`;
+  const asked = stringAt(input, "issue") ?? stringAt(input, "title") ?? "";
+  return { ...namedCall(kind, input, output, undefined), subject: answered ?? asked };
+}
+
 /** How a task's change is said on its row: archived or unarchived where it named its archive, which is what such a call is for, and updated otherwise. */
 function taskUpdateKind(input: WireValue | undefined): CallKind {
   const archived = isRecord(input) ? input.archived : undefined;
@@ -774,6 +789,14 @@ function tasksToolView(
       return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
     case AGENT_TOOL.UPDATE_TASK:
       return answeredCall(taskUpdateKind(input), input, output, "task", "name");
+    case AGENT_TOOL.LIST_ISSUES:
+      return namedCall(CALL_KIND.LIST_ISSUES, input, output, undefined);
+    case AGENT_TOOL.READ_ISSUE:
+      return issueCall(CALL_KIND.READ_ISSUE, input, output);
+    case AGENT_TOOL.CREATE_ISSUE:
+      return issueCall(CALL_KIND.CREATE_ISSUE, input, output);
+    case AGENT_TOOL.UPDATE_ISSUE:
+      return issueCall(CALL_KIND.UPDATE_ISSUE, input, output);
     case AGENT_TOOL.END_CALL:
       return namedCall(CALL_KIND.END_CALL, input, output, undefined);
     case EVE_TOOL.TASK_WAIT:

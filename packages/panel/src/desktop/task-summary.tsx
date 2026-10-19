@@ -1,5 +1,6 @@
 import type { CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
+  type ContextMenuProps,
   HoverCard,
   HoverCardHead,
   HoverCardNote,
@@ -540,11 +541,11 @@ export function summaryHolds(
 function SummaryRow({
   entry,
   onPick,
-  onContextMenu,
+  contextMenu,
 }: {
   entry: SummaryEntry;
   onPick: () => void;
-  onContextMenu?: (event: React.MouseEvent<HTMLElement>) => void;
+  contextMenu?: ContextMenuProps | undefined;
 }) {
   return (
     <RowHintOptions card={entry.card} cardBeside>
@@ -555,7 +556,7 @@ function SummaryRow({
         meta={entry.endMark}
         hint={entry.card === undefined ? undefined : { Hint: RowHint, label: entry.row.label }}
         onPress={onPick}
-        onContextMenu={onContextMenu}
+        contextMenu={contextMenu}
       />
     </RowHintOptions>
   );
@@ -580,7 +581,7 @@ function AgentSummaryRow({
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   return (
     <>
-      <SummaryRow entry={entry} onPick={onPick} onContextMenu={menu.contextMenu()} />
+      <SummaryRow entry={entry} onPick={onPick} contextMenu={menu.contextMenu()} />
       {menu.drawn === undefined ? null : (
         <ActionMenu
           label="Agent actions"

@@ -751,6 +751,10 @@ export interface TasksControl {
     readDefault: () => Promise<CodingAgentDefaultAnswer>;
     /** Puts the dialog away with nothing started. */
     onClose: () => void;
+    /** The tasks the window lists, archived ones among them, which name the agents an `@` in the composer offers. */
+    tasks: readonly { readonly id: string; readonly name: string }[];
+    /** Opens a task or a section a mention in the composer names, as the window's own opener does. */
+    onShowMention: (mention: PlanMention) => void;
     /**
      * The read of a workspace's Linear issues, where that workspace has
      * Linear connected; none where it has not, which leaves the name a plain
@@ -1570,8 +1574,16 @@ export function useTasksTab(input: {
           pullRequestLabelOf(pullRequest),
         ]),
       ),
+      numbered: new Map(
+        [...agents.numberedPullRequests].map(([agentId, numbered]) => [
+          agentId,
+          new Map(
+            [...numbered].map(([number, pullRequest]) => [number, pullRequestLabelOf(pullRequest)]),
+          ),
+        ]),
+      ),
     }),
-    [agents.agents, agents.models, agents.pullRequests],
+    [agents.agents, agents.models, agents.pullRequests, agents.numberedPullRequests],
   );
   const { onRenamePins } = sidePanel;
   useEffect(() => {
@@ -3242,6 +3254,8 @@ export function useTasksTab(input: {
       readModels: agents.readModels,
       readDefault: agents.readDefault,
       onClose: () => setNewTaskAsk(undefined),
+      tasks: [...sidebar.pinned, ...sidebar.rest, ...sidebar.archived],
+      onShowMention: guard(showMention),
       linearIssuesIn,
     },
     onLeaveTask: guard(() => leaveTask()),

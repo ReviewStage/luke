@@ -1,5 +1,6 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
 import { ChevronRightIcon } from "../../face/glyphs.js";
+import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 
 /**
  * nav-item.tsx -- a place in a column of places: its glyph, its name, and what stands at its end, a count, a mark, or its chord.
@@ -122,7 +123,8 @@ export type NavItemProps = HintProps & {
   /** The menu it drops, from `useMenu().trigger()`, in place of `onClick`. */
   menu?: NavMenuTrigger | undefined;
   onClick?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
-  onContextMenu?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  /** The menu a right-click or a long press opens on it (`useMenu`'s `contextMenu`). */
+  contextMenu?: ContextMenuProps | undefined;
   onKeyDown?: ((event: KeyboardEvent<HTMLButtonElement>) => void) | undefined;
   disabled?: boolean | undefined;
   /** Whether a pointer's press leaves the focus where it is. */
@@ -257,13 +259,12 @@ export function NavItem({
       aria-keyshortcuts={props["aria-keyshortcuts"]}
       onPointerEnter={props.onPointerEnter}
       onPointerLeave={props.onPointerLeave}
-      onPointerDown={props.onPointerDown}
       // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.
       onMouseDown={keepFocus === true ? preventFocusMove : undefined}
       onFocus={props.onFocus}
       onBlur={props.onBlur}
       onClick={menu?.onClick ?? onClick}
-      onContextMenu={props.onContextMenu}
+      {...withContextMenu(props.contextMenu, { onPointerDown: props.onPointerDown })}
       onKeyDown={props.onKeyDown}
     >
       {said(icon) ? <Glyph icon={icon} folds={folds} /> : null}

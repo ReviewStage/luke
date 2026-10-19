@@ -39,8 +39,10 @@ import { useOpenTask } from "./use-open-link.js";
  * The page of an agent no task holds, as an automation's run starts one,
  * hands the same through `tasklessMentions`: its repository's files, its
  * skills, and the servers, with no plan's sections, since there is no task.
- * Either hands the workspace's coding agents too, read as an `@` list
- * opens through `useMentionAgentsReader`, each named by its task.
+ * New task's composer hands the same for its workspace, its repository's
+ * once one is chosen on its chip (`new-task-composer.tsx`). Each
+ * hands the workspace's coding agents too, read as an `@` list opens
+ * through `useMentionAgentsReader`, each named by its task.
  *
  * The page also carries a mention made elsewhere on it into the agent's
  * message box drawn there: the box drawn now takes it in (`useMentionBox`),
@@ -88,13 +90,15 @@ const MentionBoxContext = createContext<MentionBoxes | undefined>(undefined);
  * Hands every place under it the task's page's mentions. Note that the text
  * is the plan's saved words, never an open editor's, because the agent is
  * handed the sections of the plan as saved, and a section the box offered
- * that the send cannot find would reach the agent as gone.
+ * that the send cannot find would reach the agent as gone. None hands
+ * nothing, as no page does, so an owner whose mentions come and go keeps
+ * what it draws under them mounted.
  */
 export function TaskMentions({
   value,
   children,
 }: {
-  value: TaskMentionsValue;
+  value: TaskMentionsValue | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   const [box, stand] = useState<MentionBox | undefined>(undefined);
@@ -120,11 +124,11 @@ const NO_ANCHORS: ReadonlySet<string> = new Set();
 /** What a press on a task's chip does with no opener at hand, as in a test of one surface: nothing. */
 const OPEN_NOTHING = (): void => undefined;
 
-/** A place no task holds, as an agent an automation started stands in: its workspace's slug, which a mention is written under, its id, which its repository is read through, and the repository. */
+/** A place no task holds, as an agent an automation started stands in: its workspace's slug, which a mention is written under, its id, which its repository is read through, and the repository, null where none is chosen yet, as in New task. */
 export interface TasklessPlace {
   readonly workspace: string;
   readonly workspaceId: string;
-  readonly repository: string;
+  readonly repository: string | null;
 }
 
 /**

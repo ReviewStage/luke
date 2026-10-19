@@ -217,7 +217,7 @@ function ShellRow({
         }
         current={shown ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={renaming ? undefined : () => session.onChoose(shell.id)}
-        onContextMenu={renaming ? undefined : menu.contextMenu(row)}
+        contextMenu={renaming ? undefined : menu.contextMenu(row)}
         actionsAt={LIST_ROW_ACTIONS.HOVER}
         menuOpen={menu.open !== undefined}
         actions={

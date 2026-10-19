@@ -711,7 +711,7 @@ function RepositorySection({
         }
         tooltip={repository === null || label === repository ? undefined : repository}
         menuOpen={menu.open !== undefined}
-        onContextMenu={actionGroups.length === 0 ? undefined : menu.contextMenu(ellipsis)}
+        contextMenu={actionGroups.length === 0 ? undefined : menu.contextMenu(ellipsis)}
         onToggle={() => folds.toggle(repository)}
         actions={
           <>

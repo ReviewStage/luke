@@ -538,6 +538,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
       taskId,
       repository: chosenTask?.repository ?? null,
       pullRequests,
+      agentIds: named.agentIds,
     });
     if (target === undefined || panelFor === undefined) return false;
     switch (target.kind) {
@@ -560,7 +561,13 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
         sidePanel.onChoose({ changes: target.agentId });
         return true;
       case INBOX_PANEL_TARGET.PULL_REQUEST:
-        showPullRequest(sidePanel, named, target.agentId, PULL_REQUEST_VIEW.CONVERSATION);
+        showPullRequest(
+          sidePanel,
+          named,
+          target.agentId,
+          PULL_REQUEST_VIEW.CONVERSATION,
+          target.number,
+        );
         return true;
     }
   };

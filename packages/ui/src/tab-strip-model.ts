@@ -80,10 +80,14 @@ export interface FileStripTab {
  * One agent's Pull request tab, named by the agent whose pull request it
  * shows: its overview and its changed files. It is spelled `changes`, as
  * the tab that showed the files alone was, so what an earlier version kept
- * and pinned of it still reads.
+ * and pinned of it still reads. A tab naming a `number` shows that pull
+ * request of the agent's repository rather than the one from the branch
+ * the agent stands on, such as one it opened before moving to another
+ * branch, or one no agent opened.
  */
 export interface ChangesStripTab {
   readonly changes: string;
+  readonly number?: number;
 }
 
 /** One agent's Terminal tab, named by the agent in whose sandbox its shells run. */
@@ -208,7 +212,7 @@ export function sameTab(a: StripTab, b: StripTab): boolean {
   }
   if (isDraftTab(a)) return isDraftTab(b) && a.draft === b.draft;
   if (isFileTab(a)) return isFileTab(b) && a.file === b.file;
-  if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes;
+  if (isChangesTab(a)) return isChangesTab(b) && a.changes === b.changes && a.number === b.number;
   if (isTerminalTab(a)) return isTerminalTab(b) && a.terminal === b.terminal;
   if (isPageTab(a)) return isPageTab(b) && a.page === b.page;
   if (isMacTerminalTab(a)) return isMacTerminalTab(b) && a.macTerminal === b.macTerminal;
@@ -232,10 +236,29 @@ function terminalKey(agentId: string): string {
 }
 
 /**
+ * The key each Pull request tab naming a pull request by its number is
+ * drawn under, by agent and then by number, made the first time it is asked
+ * for. Note that it is not the agent's id, which the agent's own Pull
+ * request tab is keyed by in the same strip.
+ */
+const numberedKeys = new Map<string, Map<number, string>>();
+
+function numberedKey(agentId: string, number: number): string {
+  const ofAgent = numberedKeys.get(agentId) ?? new Map<number, string>();
+  numberedKeys.set(agentId, ofAgent);
+  const held = ofAgent.get(number);
+  if (held !== undefined) return held;
+  const made = crypto.randomUUID();
+  ofAgent.set(number, made);
+  return made;
+}
+
+/**
  * A tab's key for a list that draws one element per tab: a word tab's word,
  * the agent's, call's, or draft's own id, which no word spells, or the
  * file's path. A Changes tab is keyed by its agent's id, which no other tab
- * of the side panel, the one strip it stands in, is keyed by, a Terminal tab
+ * of the side panel, the one strip it stands in, is keyed by, one naming a
+ * pull request by its number by a key made for the two (`numberedKey`), a Terminal tab
  * by a key made for its agent (`terminalKey`), a page's by the page's
  * own id, and a Browser tab's by the id it was opened under.
  */
@@ -245,7 +268,9 @@ export function tabKey(tab: StripTab): string {
   if (isMacTerminalTab(tab)) return terminalKey(`mac:${tab.macTerminal}`);
   if (isDraftTab(tab)) return tab.draft;
   if (isFileTab(tab)) return tab.file;
-  if (isChangesTab(tab)) return tab.changes;
+  if (isChangesTab(tab)) {
+    return tab.number === undefined ? tab.changes : numberedKey(tab.changes, tab.number);
+  }
   if (isPageTab(tab)) return tab.page;
   if (isBrowserTab(tab)) return tab.browser;
   return isSubagentTab(tab) ? tab.subagent : tab;

@@ -138,7 +138,7 @@ export function SidebarAgent({
           menu.close(false);
           onOpen();
         }}
-        onContextMenu={groups.length === 0 ? undefined : menu.contextMenu(row)}
+        contextMenu={groups.length === 0 ? undefined : menu.contextMenu(row)}
       />
       {menu.drawn === undefined ? null : (
         <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />

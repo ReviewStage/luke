@@ -1,4 +1,4 @@
-import { NAV_COUNT_SHOWN, NAV_ITEM_VARIANT, NavItem } from "@luke/ui";
+import { type ContextMenuProps, NAV_COUNT_SHOWN, NAV_ITEM_VARIANT, NavItem } from "@luke/ui";
 import type { ReactNode } from "react";
 import { Tooltip } from "../tooltip.js";
 
@@ -49,7 +49,7 @@ export function SidebarGroupHeader({
   tooltip,
   card,
   menuOpen = false,
-  onContextMenu,
+  contextMenu,
   onToggle,
 }: {
   /** The group's glyph, or nothing, for a header that draws its name alone. */
@@ -70,7 +70,8 @@ export function SidebarGroupHeader({
   card?: React.ReactNode;
   /** Whether a menu the header opened stands, which keeps it ringed and its actions shown. */
   menuOpen?: boolean;
-  onContextMenu?: ((event: React.MouseEvent<HTMLDivElement>) => void) | undefined;
+  /** The menu a right-click or a long press opens on the header (`useMenu`'s `contextMenu`). */
+  contextMenu?: ContextMenuProps | undefined;
   onToggle: () => void;
 }): React.JSX.Element {
   // Note that a steady count says nothing at none, because "0 need you" is no news.
@@ -80,7 +81,7 @@ export function SidebarGroupHeader({
     <div
       className="sidebar-repository-header"
       data-menu-open={menuOpen ? "true" : undefined}
-      onContextMenu={onContextMenu}
+      {...contextMenu}
     >
       <Tooltip label={tooltip ?? (card === undefined ? undefined : name)} card={card}>
         <NavItem

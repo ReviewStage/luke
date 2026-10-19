@@ -95,7 +95,7 @@ export function MenuRow({
       <div
         className={row === undefined ? "settings-row menu-row" : "menu-row"}
         {...(anchor ? searchAnchorProps(anchor) : undefined)}
-        onContextMenu={acting ? menu.contextMenu(door) : undefined}
+        {...(acting ? menu.contextMenu(door) : undefined)}
       >
         {row === undefined ? (
           <>

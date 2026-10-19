@@ -42,6 +42,7 @@ import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useGitHubConnection } from "../github-connect.js";
 import { Tooltip } from "../tooltip.js";
 import { PULL_REQUEST_TONE, PullRequestMark } from "./pull-request-mark.js";
+import { pullRequestAsked, usePullRequestNumber } from "./pull-request-number.js";
 
 /**
  * pull-request-writes.tsx -- the changes a member makes to an agent's pull request from its Pull request tab, and what the tab says of each: the pill's menu of where the pull request stands, and the line under the bar where GitHub would not take one.
@@ -189,6 +190,7 @@ export function noteOf(
  */
 export function usePullRequestWrites(agentId: string, onWritten: () => void): PullRequestWrites {
   const { act } = useAct();
+  const number = usePullRequestNumber();
   const [pending, setPending] = useState<PullRequestAction | undefined>(undefined);
   const [note, setNote] = useState<WriteNote | undefined>(undefined);
   // Note that the one out is held in a ref as well, because two presses in one frame both read the state from before either.
@@ -199,7 +201,10 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
       out.current = true;
       setPending(request.action);
       setNote(undefined);
-      return act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, { agentId, request })
+      return act(ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION, {
+        ...pullRequestAsked(agentId, number),
+        request,
+      })
         .catch(
           (): CodingAgentPullRequestWriteAnswerView => ({
             failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
@@ -218,7 +223,7 @@ export function usePullRequestWrites(agentId: string, onWritten: () => void): Pu
           return outcomeOf(note);
         });
     },
-    [act, agentId, onWritten],
+    [act, agentId, number, onWritten],
   );
   const dismiss = useCallback(() => setNote(undefined), []);
   return { pending, note, write, dismiss };

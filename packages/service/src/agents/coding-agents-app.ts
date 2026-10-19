@@ -44,6 +44,7 @@ import {
   type PullRequestMerging,
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
+import { githubPullRequestNumberSchema } from "@luke/features/github-repositories-wire";
 import {
   INBOX_BOUNDS,
   INBOX_CURSOR_START,
@@ -151,6 +152,7 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { reachedAgent, resolvedUserId, uuidOf } from "./agent-reach.js";
 import { accountInboxPast, agentInboxPast, taskInboxPast } from "./coder-host/inbox-page.js";
 import {
+  agentPullRequestOfNumber,
   agentPullRequestReach,
   type PublishedCache,
   PublishedKey,
@@ -360,6 +362,7 @@ const QUERY = {
   ATTACHMENT: "attachment",
   PICTURE: "picture",
   SRC: "src",
+  NUMBER: "number",
 } as const;
 
 /** An answer is a note, a few short fields, and the files a message may carry: the note's bound at JSON's widest escape, the files, and room for the rest. */
@@ -851,6 +854,64 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
+/** The pull request number the request names under `number`, or none where it names none; refused where it names one off the wire's shape or more than one. */
+const pullRequestNumberOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<number | undefined, HostedRefusal> {
+  const named = new URL(request.url).searchParams.getAll(QUERY.NUMBER);
+  if (named.length === 0) return undefined;
+  const read =
+    named.length === 1
+      ? readEither(githubPullRequestNumberSchema)(unparsedWire(Number(named[0])))
+      : undefined;
+  if (read === undefined || Result.isFailure(read)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return read.success;
+});
+
+/**
+ * What a read of the agent's Pull request tab is about: the pull request of
+ * the agent's repository the request names by its number (`number`), read
+ * afresh, as a tab showing a pull request other than the agent's own asks;
+ * else what the agent published, from the instance's kept answers.
+ */
+const askedPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
+  published: PublishedCache,
+  userId: string,
+  agent: CodingAgent,
+  request: Request,
+): Effect.fn.Return<CodingAgentPullRequestAnswer, HostedRefusal, AgentsServices> {
+  const number = yield* pullRequestNumberOf(request);
+  if (number === undefined) return yield* keptPublished(published, userId, agent);
+  return yield* agentPullRequestOfNumber(userId, agent, number).pipe(
+    Effect.catch((failure) => {
+      switch (failure._tag) {
+        case "RepositoryNotReachable":
+          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+        case "SqlError":
+        case "EffectDrizzleQueryError":
+        case "SchemaError":
+          return hostedStoreOrUnavailable(Effect.fail(failure));
+        default:
+          return githubReadOrRefusal(Effect.fail(failure));
+      }
+    }),
+  );
+});
+
+/** The pull request a read or a change of the agent's Pull request tab is about (`askedPublished`), null where there is none. */
+const askedPullRequest = (
+  published: PublishedCache,
+  userId: string,
+  agent: CodingAgent,
+  request: Request,
+) =>
+  Effect.map(
+    askedPublished(published, userId, agent, request),
+    (answer): CodingAgentPullRequest | null => answer.pullRequest,
+  );
+
 /**
  * The instance's kept answers for the agent let go, every member's and on
  * either side of its end, so the next ask on this instance reads GitHub
@@ -866,7 +927,7 @@ const forgetPublished = (published: PublishedCache, agentId: string) =>
     ),
   );
 
-/** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
+/** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers; or, where the request names a number, that pull request of its repository (`askedPublished`). */
 const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpoint")(function* (
   seams: CodingAgentsAppSeams,
   published: PublishedCache,
@@ -877,7 +938,7 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* reachedAgent(seams, request);
-  const answer = yield* keptPublished(published, userId, agent);
+  const answer = yield* askedPublished(published, userId, agent, request);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
 
@@ -899,7 +960,7 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* reachedAgent(seams, request);
-  const { pullRequest } = yield* keptPublished(published, userId, agent);
+  const pullRequest = yield* askedPullRequest(published, userId, agent, request);
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const listed = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
@@ -965,7 +1026,7 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* reachedAgent(seams, request);
-  const { pullRequest } = yield* keptPublished(published, userId, agent);
+  const pullRequest = yield* askedPullRequest(published, userId, agent, request);
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const part = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
@@ -1231,7 +1292,7 @@ const pullRequestActionEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullReques
     const body = yield* readJsonBodyEffect(MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES);
     const asked = readEither(pullRequestActionRequestSchema)(body);
     if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    const { pullRequest } = yield* keptPublished(published, userId, agent);
+    const pullRequest = yield* askedPullRequest(published, userId, agent, request);
     if (pullRequest === null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     const written = yield* memberPullRequestWrite(
       userId,
@@ -1261,7 +1322,7 @@ const pullRequestViewedEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullReques
     }
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
     const { userId, agent } = yield* reachedAgent(seams, request);
-    const { pullRequest } = yield* keptPublished(published, userId, agent);
+    const pullRequest = yield* askedPullRequest(published, userId, agent, request);
     if (pullRequest === null) {
       const none: PullRequestViewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
       return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, none);

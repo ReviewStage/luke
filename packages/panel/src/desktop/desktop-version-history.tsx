@@ -255,7 +255,7 @@ function RevisionRow({
         meta={<RelativeTime at={lastEdit.at} now={now} />}
         current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={onSelect}
-        onContextMenu={offered ? showMenu : undefined}
+        contextMenu={offered ? showMenu : undefined}
         actionsAt={LIST_ROW_ACTIONS.HOVER}
         menuOpen={menu.open !== undefined}
         actions={
@@ -343,7 +343,7 @@ function SectionRow({
         meta={word}
         current={selected ? LIST_ROW_CURRENT.ITEM : undefined}
         onPress={onSelect}
-        onContextMenu={source === undefined ? undefined : menu.contextMenu()}
+        contextMenu={source === undefined ? undefined : menu.contextMenu()}
       />
       {menu.drawn === undefined || source === undefined ? null : (
         <ActionMenu
