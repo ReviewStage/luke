@@ -1105,7 +1105,7 @@ function useListLanding(
     landing === undefined || onLanded === undefined
       ? undefined
       : {
-          threadId: landing.threadId,
+          target: landing.threadId,
           ask: landing.ask,
           frames: LANDING_FRAMES,
           ready: (card: HTMLElement) => standsIn(box.current, card),

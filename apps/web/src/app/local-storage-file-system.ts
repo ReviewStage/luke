@@ -15,8 +15,8 @@ import { Effect, type Layer, Option, Schema } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import { systemError } from "effect/PlatformError";
 
-/** The one localStorage entry the tab's files are kept under. */
-const FILES_KEY = "luke.host.files";
+/** The one localStorage entry the tab's files are kept under, which another tab's write is heard by. */
+export const FILES_KEY = "luke.host.files";
 
 type Files = Readonly<Record<string, string>>;
 

@@ -168,6 +168,7 @@ function namingWords(repository: string, taskLink: string | null): string {
 - A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`.${ownTask}
 - Another coding agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](https://tryluke.dev/acme/plan/<task-id>/agent/<agent-id>)\`.
 - An issue of your workspace's Issues, by its link under the workspace: \`[@ACME-42 Token refresh fails](https://tryluke.dev/acme/issue/<issue-id>)\`.
+- A date, which opens nothing, by its day, or its time with the offset it is at, and a range by both ends joined by a slash, its words the date in full: \`[@Oct 20, 2026](luke://date/2026-10-20)\`, \`[@Oct 20, 2026, 3:00 PM PDT](luke://date/2026-10-20T15:00-07:00)\`, \`[@Oct 20, 2026 → Oct 24, 2026](luke://date/2026-10-20/2026-10-24)\`.
 
 Name an MCP server or a skill in words, never as a mention.`;
 }

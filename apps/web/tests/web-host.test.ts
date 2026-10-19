@@ -9,7 +9,7 @@ import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
 import { THEME } from "@luke/settings";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Context, Effect, Layer, Schema } from "effect";
-import { afterEach } from "vitest";
+import { afterEach, vi } from "vitest";
 import { composeWeb, WebHostTag } from "../src/app/web-host";
 import { fakeService, WORKSPACE_MEMBER } from "./support/fake-service";
 
@@ -115,4 +115,38 @@ it.effect("a workspace act rides the tab's act port to the service and back", ()
       assert.deepEqual(members, [WORKSPACE_MEMBER]);
     }),
   ),
+);
+
+it.effect(
+  "a setting another tab writes reaches this tab's state when the browser says the files changed",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const reader = yield* standingHost(fakeService({ signedIn: false }));
+        const writer = yield* standingHost(fakeService({ signedIn: false }));
+        assert.equal(
+          (yield* Effect.promise(() => reader.bridge.requestAppState())).settings?.stored.theme,
+          undefined,
+        );
+
+        const written = yield* Effect.promise(() =>
+          writer.bridge.act({
+            kind: ACT_KIND.SETTING_UPDATE,
+            payload: { field: "theme", value: THEME.DARK },
+          }),
+        );
+        assert.equal(written.status, ACT_OUTCOME_STATUS.DONE);
+        // The browser tells every tab but the writer's; jsdom holds one window, so the event is
+        // said here as the browser would, again until the reader has heard it.
+        yield* Effect.promise(() =>
+          vi.waitFor(async () => {
+            window.dispatchEvent(
+              new StorageEvent("storage", { key: "luke.host.files", storageArea: localStorage }),
+            );
+            const state = await reader.bridge.requestAppState();
+            assert.equal(state.settings?.stored.theme, THEME.DARK);
+          }),
+        );
+      }),
+    ),
 );

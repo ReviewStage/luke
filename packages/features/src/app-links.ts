@@ -5,8 +5,8 @@ import { type ReadLink, readLink } from "@luke/features/luke-link";
  * app-links.ts -- a Luke link the system hands the app: the place it names, and the links that arrive before a window can open them.
  *
  * A link to anything in Luke is the same address on the web and in the app
- * (`@luke/features/luke-link`); the browser's "Open in Luke" page hands it
- * to the app in the app's own scheme (`@luke/features/link-home`), which
+ * (`@luke/features/luke-link`); the web app, served at that address, hands
+ * it to the app in the app's own scheme (`@luke/features/link-home`), which
  * the bundle registers with macOS (`scripts/electron-builder-config.mjs`'s
  * `protocols`). macOS delivers it as `open-url`, the link that launched the
  * app among them, which arrives before any window stands; a second launch
