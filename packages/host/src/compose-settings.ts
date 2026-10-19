@@ -22,12 +22,15 @@ import {
   APP_SETTING_FIELDS,
   APP_SETTING_SCHEMA,
   type AppSettingField,
+  accountPreferencesToPush,
+  accountPreferencesToWrite,
   EXPERIMENT_COUNTED_AS,
   type Experiment,
   isAppSettingField,
   isExperiment,
   isSettingsResetScope,
   settingAnalytics,
+  snapshotAccountPreferences,
 } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, isWireBoolean, type UnparsedWireValue } from "@luke/wire";
@@ -251,10 +254,6 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     // Note that a write keyed on the account first settles on the one the service names, because another tab may have signed in as someone else.
     const confirmAccount = (): Effect.Effect<void> => linked((links) => links.confirmAccount());
 
-    function accountPreferencesEmpty(preferences: AccountPreferences): boolean {
-      return Object.keys(preferences).length === 0;
-    }
-
     function accountPreferencesSame(left: AccountPreferences, right: AccountPreferences): boolean {
       return JSON.stringify(left) === JSON.stringify(right);
     }
@@ -312,24 +311,13 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         emitSettingsSnapshot(yield* store.snapshot());
       }
 
-      if (!remote.hasStoredSnapshot) {
-        const preferences = yield* store.accountPreferences();
-        if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
-        if (!accountPreferencesEmpty(preferences)) {
-          const written = yield* accountPreferencesClient.writePreferences(preferences);
-          if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
-        }
-        if (!(yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences))) {
-          return false;
-        }
-        accountPreferencesHydratedAccount = accountKey;
-        return true;
-      }
-
-      const saved = yield* store.applyAccountPreferences(remote.preferences, {
-        accountEmail: accountKey,
-        preferences: baseline,
-      });
+      // Note that a shared part never written is no snapshot to take, so this Mac's own stands in for it, while the link part, written apart, is merged either way.
+      const local = yield* store.accountPreferences();
+      if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+      const saved = yield* store.applyAccountPreferences(
+        snapshotAccountPreferences(remote.preferences, remote.hasStoredSnapshot, local),
+        { accountEmail: accountKey, preferences: baseline },
+      );
       if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
       accountPreferencesHydratedAccount = accountKey;
       const preferences = yield* store.accountPreferences();
@@ -338,7 +326,9 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
         yield* applyAccountPreferenceSideEffects(saved, saved.changed);
       }
       if (!accountPreferencesSame(preferences, remote.preferences)) {
-        const written = yield* accountPreferencesClient.writePreferences(preferences);
+        const written = yield* accountPreferencesClient.writePreferences(
+          accountPreferencesToWrite(preferences, baseline),
+        );
         if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return true;
       }
       yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences);
@@ -359,13 +349,16 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           }
           yield* confirmAccount();
           const preferences = yield* store.accountPreferences();
+          const baseline = yield* store.accountPreferencesSyncBaseline(accountKey);
           if (
             (yield* readAccountPreferenceAccountKey()) !== accountKey ||
             accountPreferencesHydratedAccount !== accountKey
           ) {
             return;
           }
-          const written = yield* accountPreferencesClient.writePreferences(preferences);
+          const written = yield* accountPreferencesClient.writePreferences(
+            accountPreferencesToPush(preferences, baseline),
+          );
           if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return;
           yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences);
         }),

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fixedBearer } from "@luke/features";
+import { LINK_OPEN } from "@luke/features/link-open";
 import { EXPERIMENT } from "@luke/settings";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect } from "effect";
@@ -106,4 +107,71 @@ it.effect("writes an experiment's switch as a patch of that experiment alone", (
       experiments: { [EXPERIMENT.FACTORY]: true },
     });
   }),
+);
+
+it.effect(
+  "writes the link choice as a part of its own beside the voice, and reads it back from there",
+  () =>
+    Effect.gen(function* () {
+      const { requests, fetchLike } = service([
+        () =>
+          new Response(JSON.stringify({ ...PREFERENCES_ANSWER, linkOpen: LINK_OPEN.MAC_APP }), {
+            status: 200,
+          }),
+      ]);
+
+      const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences(
+        {
+          voice: "marin",
+          linkOpen: LINK_OPEN.MAC_APP,
+        },
+      );
+      assert.deepEqual(answer?.preferences, { voice: "marin", linkOpen: LINK_OPEN.MAC_APP });
+
+      // Note that the shared part a build from before the choice writes back whole carries none of it.
+      const [request] = requests;
+      assert.deepEqual(JSON.parse(String(request?.init?.body)), {
+        preferences: { voice: "marin" },
+        linkOpen: LINK_OPEN.MAC_APP,
+      });
+    }),
+);
+
+it.effect("sends no link part from a device that never chose, so it clears no other's choice", () =>
+  Effect.gen(function* () {
+    const { requests, fetchLike } = service([
+      () => new Response(JSON.stringify(PREFERENCES_ANSWER), { status: 200 }),
+    ]);
+
+    yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences({
+      voice: "marin",
+    });
+
+    const [request] = requests;
+    assert.deepEqual(JSON.parse(String(request?.init?.body)), { preferences: { voice: "marin" } });
+  }),
+);
+
+it.effect(
+  "reads the voice past a preference it does not know, in the shared part or a part of its own",
+  () =>
+    Effect.gen(function* () {
+      const { fetchLike } = service([
+        () =>
+          new Response(
+            JSON.stringify({
+              preferences: { voice: "marin", newer: "choice" },
+              linkOpen: "a-newer-place",
+              updatedAt: PREFERENCES_ANSWER.updatedAt,
+            }),
+            { status: 200 },
+          ),
+      ]);
+
+      const answer = yield* client({
+        httpClient: fakeHttpClientLayer(fetchLike),
+      }).readPreferences();
+      assert.deepEqual(answer?.preferences, { voice: "marin" });
+      assert.equal(answer?.hasStoredSnapshot, true);
+    }),
 );

@@ -16,6 +16,7 @@ import {
 } from "@luke/database/models/plan-template-revisions";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
+import { LINK_OPEN } from "@luke/features/link-open";
 import { EXPERIMENT } from "@luke/settings";
 import {
   HTTP_METHOD,
@@ -36,13 +37,16 @@ import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integr
 import { accountApp } from "./account-app.js";
 
 /**
- * The experiments part of the account's preferences snapshot, answered by
- * the account group the way its function answers it, over a real dialect:
- * none until the account chooses, a write that merges its keys over what
- * stood and leaves the other parts as they were, a key this deployment does
- * not list passed over rather than refused, and only a value that is not a
- * record of choices refused. The bearer names the account and nothing else
- * does.
+ * The parts of the account's preferences snapshot that stand beside the
+ * shared one, answered by the account group the way its function answers
+ * it, over a real dialect. The experiments: none until the account chooses,
+ * a write that merges its keys over what stood and leaves the other parts as
+ * they were, a key this deployment does not list passed over rather than
+ * refused, and only a value that is not a record of choices refused. The
+ * link choice: none until the account chooses, written on its own without
+ * moving the instant a Mac reads as a snapshot to take, left standing by the
+ * shared part a build that predates it writes back whole, and refused where
+ * it names no choice. The bearer names the account and nothing else does.
  *
  * Synthetic accounts and bearers throughout.
  */
@@ -185,6 +189,58 @@ it.layer(getTestDB())("the preferences snapshot's experiments part", (it) => {
       const { owner, other, ask } = yield* openAccounts;
       yield* ask(request(owner, { experiments: { [EXPERIMENT.FACTORY]: true } }));
       assert.deepEqual(partOf(yield* ask(request(other)), "experiments"), {});
+    }),
+  );
+});
+
+it.layer(getTestDB())("the preferences snapshot's link part", (it) => {
+  it.effect("is absent until the account chooses, and a write of it alone moves no instant", () =>
+    Effect.gen(function* () {
+      const { owner, other, ask } = yield* openAccounts;
+      assert.equal(partOf(yield* ask(request(owner)), "linkOpen"), undefined);
+
+      const chosen = yield* ask(request(owner, { linkOpen: LINK_OPEN.MAC_APP }));
+      assert.equal(partOf(chosen, "linkOpen"), LINK_OPEN.MAC_APP);
+      assert.deepEqual(partOf(chosen, "preferences"), {});
+      // Note that a Mac reads the instant as a snapshot to take over its own voice, which this write carried none of.
+      assert.equal(partOf(chosen, "updatedAt"), undefined);
+      assert.equal(partOf(yield* ask(request(other)), "linkOpen"), undefined);
+    }),
+  );
+
+  it.effect("stands through the shared part a build that predates it writes back whole", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts;
+      yield* ask(request(owner, { preferences: { voice: "cedar" }, linkOpen: LINK_OPEN.MAC_APP }));
+
+      const olderBuild = yield* ask(request(owner, { preferences: { voice: "marin" } }));
+      assert.deepEqual(partOf(olderBuild, "preferences"), { voice: "marin" });
+      assert.equal(partOf(olderBuild, "linkOpen"), LINK_OPEN.MAC_APP);
+
+      const backToBrowser = yield* ask(request(owner, { linkOpen: LINK_OPEN.BROWSER }));
+      assert.equal(partOf(backToBrowser, "linkOpen"), LINK_OPEN.BROWSER);
+    }),
+  );
+
+  it.effect("the shared part passes over a preference this deployment does not know", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts;
+      const newer = yield* ask(request(owner, { preferences: { voice: "cedar", newer: true } }));
+      assert.deepEqual(partOf(newer, "preferences"), { voice: "cedar" });
+    }),
+  );
+
+  it.effect("refuses a link part naming no choice, and keeps what stood", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts;
+      yield* ask(request(owner, { linkOpen: LINK_OPEN.MAC_APP }));
+
+      const refused = yield* ask(request(owner, { linkOpen: "elsewhere" }));
+      assert.deepEqual(refused, {
+        status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+        body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
+      });
+      assert.equal(partOf(yield* ask(request(owner)), "linkOpen"), LINK_OPEN.MAC_APP);
     }),
   );
 });

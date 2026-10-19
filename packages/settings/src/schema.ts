@@ -1,3 +1,4 @@
+import { isLinkOpen, LINK_OPEN, LINK_OPEN_LABEL, LINK_OPEN_LIST } from "@luke/features/link-open";
 import {
   DEFAULT_VIDEO_AVATAR,
   isVideoAvatar,
@@ -96,6 +97,9 @@ const microphoneRouteDrawn = (view: SettingsVisibility): boolean =>
 /** Signed in with Video calls on: an avatar is a choice only while calls can show one. */
 const videoCallsDrawn = (view: SettingsVisibility): boolean =>
   view.accountDrawn && experimentOn(view.settings.experiments, EXPERIMENT.VIDEO_CALLS);
+
+/** Signed in: a choice the account carries is drawn only while there is an account to carry it. */
+const accountDrawn = (view: SettingsVisibility): boolean => view.accountDrawn;
 
 export const APP_SETTING_SCHEMA = {
   theme: choiceSetting({
@@ -206,6 +210,30 @@ export const APP_SETTING_SCHEMA = {
     order: 40,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
     visible: videoCallsDrawn,
+  }),
+  /*
+   * Where a Luke link opened in a browser goes: it stays on the web, or the
+   * web hands it to Luke for Mac (`@luke/features/link-open`). The account's,
+   * so the web reads it on a signed-in load; it rides the preferences
+   * snapshot as a part of its own rather than the shared one, so a build
+   * that predates it neither refuses the snapshot nor clears the choice.
+   */
+  linkOpen: choiceSetting({
+    field: "linkOpen",
+    id: APP_SETTING_ID.LINK_OPEN,
+    label: "Open Luke links in",
+    detail: "Luke for Mac takes the links you open in a browser on a Mac with Luke installed.",
+    values: LINK_OPEN_LIST,
+    token: (choice) => choice,
+    optionLabel: (choice) => LINK_OPEN_LABEL[choice],
+    guard: (value: UnparsedWireValue) => optional(value, isLinkOpen),
+    default: LINK_OPEN.BROWSER,
+    page: SETTINGS_PAGE.ACCOUNT,
+    section: SETTING_SECTION.LINKS,
+    order: 300,
+    // Nothing to run per write: a web page reads the choice as it loads.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    visible: accountDrawn,
   }),
   voiceCaptions: toggleSetting({
     field: "voiceCaptions",
