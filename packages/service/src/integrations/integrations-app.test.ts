@@ -22,8 +22,10 @@ import { Clock, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { type HttpClient, HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { vi } from "vitest";
 import { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { cookieOriginGuard } from "../http/origin-guard.js";
 import {
   GITHUB_APP_SETTINGS,
   openGithubUser,
@@ -73,6 +75,26 @@ const SLACK = INTEGRATION_PROVIDER.SLACK;
 const SLACK_CONNECTOR = { SLACK_CONNECTOR_UID: "oauth/slack" } as const;
 const NOTION = INTEGRATION_PROVIDER.NOTION;
 const NOTION_CONNECTOR = { NOTION_CONNECTOR_UID: "oauth/notion" } as const;
+
+/** The deployment the origin guard reads its own origins from. */
+const DEPLOYMENT = { VERCEL_ENV: "production", BETTER_AUTH_URL: ORIGIN } as const;
+const FOREIGN_ORIGIN = "https://evil.example";
+
+/** The name of the session cookie a browser signed in to an account sends, as the suite's resolver reads it. */
+const SESSION_COOKIE = "better-auth.session_token";
+
+function sessionCookieOf(userId: string): string {
+  return `${SESSION_COOKIE}=${userId}`;
+}
+
+/** A request to the group: the account its bearer names, or the account a browser's session cookie names, and the page it came from. */
+interface Sent {
+  readonly method?: string;
+  readonly userId?: string;
+  readonly cookieOf?: string;
+  readonly origin?: string;
+  readonly body?: string;
+}
 
 /** The accounts a statuses answer names, as the wire spells them. */
 function accountsIn(body: WireBoundaryInput): readonly IntegrationAccount[] {
@@ -154,9 +176,14 @@ const standing = (
     );
     const app = HttpRouter.toWebHandler(
       integrationsApp({
+        // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
         resolveUserId: (incoming) =>
           Effect.succeed(
-            Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
+            incoming.headers.has("authorization")
+              ? Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", ""))
+              : Option.fromNullishOr(
+                  incoming.headers.get("cookie")?.replace(`${SESSION_COOKIE}=`, ""),
+                ),
           ),
         readConnections: readIntegrationConnections,
         readSignIn: readIntegrationSignIn,
@@ -178,17 +205,22 @@ const standing = (
       { disableLogger: true },
     );
     yield* Effect.addFinalizer(() => Effect.promise(() => app.dispose()));
-    const fetch = (path: string, init: { method?: string; userId?: string; body?: string } = {}) =>
-      Effect.promise(() =>
-        app.handler(
-          new Request(new URL(path, ORIGIN), {
-            method: init.method ?? "GET",
-            headers: init.userId === undefined ? {} : { authorization: `Bearer ${init.userId}` },
-            ...(init.body !== undefined ? { body: init.body } : undefined),
-          }),
-        ),
-      );
-    const ask = (path: string, init: { method?: string; userId?: string; body?: string }) =>
+    // Every request meets the deployment's origin guard first, as `routeFromHttpRouter` hands it to the group.
+    const refuseCrossSite = cookieOriginGuard(DEPLOYMENT);
+    const fetch = (path: string, init: Sent = {}) =>
+      Effect.promise(() => {
+        const headers = new Headers();
+        if (init.userId !== undefined) headers.set("authorization", `Bearer ${init.userId}`);
+        if (init.cookieOf !== undefined) headers.set("cookie", sessionCookieOf(init.cookieOf));
+        if (init.origin !== undefined) headers.set("origin", init.origin);
+        const request = new Request(new URL(path, ORIGIN), {
+          method: init.method ?? "GET",
+          headers,
+          ...(init.body !== undefined ? { body: init.body } : undefined),
+        });
+        return Promise.resolve(refuseCrossSite(request) ?? app.handler(request));
+      });
+    const ask = (path: string, init: Sent) =>
       Effect.gen(function* () {
         const response = yield* fetch(path, init);
         // SAFETY: the group answers JSON; the test compares it as the wire value it is.
@@ -258,6 +290,12 @@ const standing = (
         }),
     };
   });
+
+/** The origin guard says at warn what it refused; the suite keeps those lines off its own output. */
+const quietGuard = Effect.acquireRelease(
+  Effect.sync(() => vi.spyOn(console, "warn").mockImplementation(() => undefined)),
+  () => Effect.sync(() => vi.restoreAllMocks()),
+);
 
 const UNAVAILABLE_REFUSAL = {
   status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
@@ -336,6 +374,112 @@ it.layer(getTestDB())("the integrations an account is offered", (it) => {
         }
         assert.equal(yield* group.slackStatus(first), INTEGRATION_STATUS.DISCONNECTED);
         assert.equal(yield* group.slackStatus(lapsed), INTEGRATION_STATUS.EXPIRED);
+      }),
+  );
+
+  it.effect(
+    "a read a session cookie names settles nothing, so a sign-in stays pending until a bearer's read settles it",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(SLACK_CONNECTOR);
+        const account = yield* openAccount("ren@cookie-read.example");
+        assert.equal((yield* group.connectSlack(account)).status, HOSTED_HTTP_STATUS.OK);
+
+        const browsed = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, {
+          cookieOf: account,
+          origin: FOREIGN_ORIGIN,
+        });
+        assert.equal(browsed.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(statusIn(browsed.body, SLACK), INTEGRATION_STATUS.PENDING);
+        assert.deepEqual(accountsIn(browsed.body), [
+          { provider: SLACK, connection: SLACK, status: INTEGRATION_STATUS.PENDING },
+        ]);
+        assert.equal(yield* group.slackStatus(account), INTEGRATION_STATUS.CONNECTED);
+      }),
+  );
+
+  it.effect(
+    "a read a session cookie names leaves a sign-in Connect says was cancelled for the bearer's read to end and say so",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(SLACK_CONNECTOR, undefined, undefined, {
+          declines: true,
+          ends: { kind: CONNECT_SIGN_IN_RESULT.CANCELED },
+        });
+        const account = yield* openAccount("noa@cookie-read.example");
+        assert.equal((yield* group.connectSlack(account)).status, HOSTED_HTTP_STATUS.OK);
+
+        const browsed = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, {
+          cookieOf: account,
+        });
+        assert.equal(statusIn(browsed.body, SLACK), INTEGRATION_STATUS.PENDING);
+        assert.equal(
+          Schema.decodeUnknownSync(integrationStatusesAnswerSchema)(browsed.body).signInFailures,
+          undefined,
+        );
+        const read = yield* group.slackRead(account);
+        assert.equal(read.status, INTEGRATION_STATUS.DISCONNECTED);
+        assert.deepEqual(read.failures, [
+          { provider: SLACK, connection: SLACK, reason: INTEGRATION_SIGN_IN_FAILURE.CANCELED },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a settle a session cookie carries from the deployment's own page settles every sign-in under way, and one from a foreign page is refused before it settles anything",
+    () =>
+      Effect.gen(function* () {
+        yield* quietGuard;
+        const group = yield* standing(SLACK_CONNECTOR);
+        const account = yield* openAccount("kim@cookie-settle.example");
+        assert.equal((yield* group.connectSlack(account)).status, HOSTED_HTTP_STATUS.OK);
+        const settle = (origin: string) =>
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_SETTLE, {
+            method: "POST",
+            cookieOf: account,
+            origin,
+          });
+        const browsedSlack = Effect.map(
+          group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, { cookieOf: account }),
+          ({ body }) => statusIn(body, SLACK),
+        );
+
+        assert.deepEqual(yield* settle(FOREIGN_ORIGIN), {
+          status: HOSTED_HTTP_STATUS.FORBIDDEN,
+          body: { error: HOSTED_API_ERROR.NOT_PERMITTED },
+        });
+        assert.equal(yield* browsedSlack, INTEGRATION_STATUS.PENDING);
+
+        const settled = yield* settle(ORIGIN);
+        assert.equal(settled.status, HOSTED_HTTP_STATUS.OK);
+        assert.equal(statusIn(settled.body, SLACK), INTEGRATION_STATUS.CONNECTED);
+        assert.equal(yield* browsedSlack, INTEGRATION_STATUS.CONNECTED);
+      }),
+  );
+
+  it.effect(
+    "a session cookie's GET of the settle path, as a landing that names it in `route-path` arrives, is refused and settles nothing",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing(SLACK_CONNECTOR);
+        const account = yield* openAccount("ola@cookie-landing.example");
+        assert.equal((yield* group.connectSlack(account)).status, HOSTED_HTTP_STATUS.OK);
+
+        // The dispatcher hands a request the path its `route-path` names, whatever key the platform landed it on (`apps/web/server/function-dispatch.ts`).
+        assert.deepEqual(
+          yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS_SETTLE, {
+            cookieOf: account,
+            origin: FOREIGN_ORIGIN,
+          }),
+          {
+            status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+            body: { error: HOSTED_API_ERROR.METHOD_NOT_ALLOWED },
+          },
+        );
+        const browsed = yield* group.ask(HOSTED_SERVICE_PATH.ACCOUNT_INTEGRATIONS, {
+          cookieOf: account,
+        });
+        assert.equal(statusIn(browsed.body, SLACK), INTEGRATION_STATUS.PENDING);
       }),
   );
 

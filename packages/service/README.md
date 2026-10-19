@@ -586,7 +586,8 @@ more than one sees exactly what it saw before:
   Luke account holds but one whose first sign-in ended without a grant, the
   providers it may add another account at, and each failure; each
   status `connected`, `pending`, `expired`, `disconnected`, or
-  `unavailable` (no connector for it on this deployment). A sign-in still
+  `unavailable` (no connector for it on this deployment). For a caller
+  that carries a bearer, as the desktop does, a sign-in still
   under way, begun within the last fifteen minutes, is settled here by
   asking Connect for a token afresh, and stands `pending` until it settles,
   over an `expired` row as over none. One with no token yet is asked after
@@ -599,6 +600,19 @@ more than one sees exactly what it saw before:
   `signInFailures`, `reason` `canceled` or `error`, with the first line of
   Connect's error message, cut to 200 characters, where it is shaped like no
   credential (`credentialFreeLine` in `src/integrations/mcp-tools.ts`).
+  A caller with only the browser's session cookie is answered where each
+  row stands as stored, a sign-in within its window `pending`, and nothing
+  is settled, ended, or labelled, and Connect is not asked: a Lax cookie
+  rides a link another site sends the browser on, which must not settle
+  the account's sign-in or spend its one `signInFailures` notice. The
+  endpoint reads the `Authorization` header itself (`hostedCarriesBearer`
+  in `src/http/http-effect.ts`), since every function holding the group
+  answers every path it declares.
+- `POST /api/account/integrations/settle` settles every sign-in under way as
+  the bearer's read does, for any caller, and answers that read's body. A
+  cookie's POST is held to the deployment's own pages by
+  `src/http/origin-guard.ts` first, so a page of the web client settles
+  here; any other method is refused.
 - `POST /api/account/integrations/{provider}/connect` asks Connect's
   `startAuthorization` for the account under its row's subject, with
   `/api/account/integrations/connected?state=…` as the callback, records the

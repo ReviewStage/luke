@@ -270,6 +270,10 @@
           "dest": "/api/default.js?route=account/integrations/connected"
         },
         {
+          "src": "/api/account/integrations/settle",
+          "dest": "/api/default.js?route=account/integrations/settle"
+        },
+        {
           "src": "/api/account/plan-template",
           "dest": "/api/default.js?route=account/plan-template"
         },
