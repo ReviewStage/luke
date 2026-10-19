@@ -16,7 +16,7 @@ import { user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations, turns } from "@luke/database/schemas/storage";
 import { hostedUsage, voiceSessionUsage } from "@luke/database/schemas/usage";
-import { voiceAvatarSessions } from "@luke/database/schemas/voice";
+import { voiceAvatarSessions, voiceSessions } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import {
   and,
@@ -164,23 +164,30 @@ const SecondsRowSchema = Schema.Struct({
 
 const VOICE_DAY = utcDayOfEpochMs(voiceSessionUsage.recordedAt);
 
+/**
+ * The billed seconds by the Live model each session ran on, which its
+ * session row keeps; a row gone with its task, or written before the model
+ * was kept, answers none.
+ */
 const findVoiceSeconds = SqlSchema.findAll({
   Request: UsageFilterSchema,
-  Result: SecondsRowSchema,
+  Result: Schema.Struct({ ...SecondsRowSchema.fields, model: Schema.NullOr(Schema.String) }),
   execute: (filter) =>
     Database.use((db) =>
       db
         .select({
           day: VOICE_DAY,
           userId: voiceSessionUsage.userId,
+          model: voiceSessions.model,
           seconds: sum(voiceSessionUsage.seconds),
         })
         .from(voiceSessionUsage)
         .innerJoin(user, eq(user.id, voiceSessionUsage.userId))
+        .leftJoin(voiceSessions, eq(voiceSessions.liveSessionId, voiceSessionUsage.sessionId))
         .where(
           and(gte(voiceSessionUsage.recordedAt, filter.fetchStart.getTime()), keptAccounts(filter)),
         )
-        .groupBy(VOICE_DAY, voiceSessionUsage.userId),
+        .groupBy(VOICE_DAY, voiceSessionUsage.userId, voiceSessions.model),
     ),
 });
 
@@ -287,9 +294,14 @@ const findAccounts = SqlSchema.findAll({
 
 function secondsRows(
   source: AdminCostSecondsRow["source"],
-  rows: readonly (typeof SecondsRowSchema.Type)[],
+  rows: readonly (typeof SecondsRowSchema.Type & { model?: string | null })[],
 ): AdminCostSecondsRow[] {
-  return rows.map((row) => ({ ...row, source, seconds: row.seconds ?? 0 }));
+  return rows.map((row) => ({
+    ...row,
+    source,
+    model: row.model ?? null,
+    seconds: row.seconds ?? 0,
+  }));
 }
 
 /**

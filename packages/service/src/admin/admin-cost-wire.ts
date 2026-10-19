@@ -113,7 +113,10 @@ export interface AdminCost {
   };
   voice: {
     minutes: number;
+    /** The priced minutes' dollars. */
     spendUsd: number;
+    /** Minutes on a Live model the list prices do not name, in no dollar figure. */
+    unpricedMinutes: number;
   };
   daily: AdminCostDay[];
   byModel: AdminCostModel[];

@@ -42,6 +42,7 @@ const MODEL = {
   BASE: "anthropic/model-test",
   FAST: "anthropic/model-test-fast",
   UNLISTED: "openai/unlisted-test",
+  CHEAP: "openai/cheap-test",
 } as const;
 
 /** A dollar per million input tokens and two per million output, the fast version twice that. */
@@ -59,6 +60,13 @@ const OFFERED: readonly OfferedModel[] = [
     provider: "anthropic",
     efforts: ["high"],
     pricing: { inputUsd: 0.000_002, outputUsd: 0.000_004 },
+  },
+  {
+    id: MODEL.CHEAP,
+    name: "Cheap",
+    provider: "openai",
+    efforts: ["low"],
+    pricing: { inputUsd: 0.000_000_4, outputUsd: 0.000_001 },
   },
 ];
 
@@ -129,7 +137,7 @@ test("a refused fast share is priced at its base model, and an unlisted model's 
 test("a catalog that could not be read leaves every model token unpriced, and seconds still priced", () => {
   const usage: AdminCostUsage = {
     tokens: [tokens({ day: TODAY, userId: "a", model: MODEL.BASE, inputTokens: MILLION })],
-    seconds: [{ day: TODAY, source: COST_SOURCE.VOICE, userId: "a", seconds: 120 }],
+    seconds: [{ day: TODAY, source: COST_SOURCE.VOICE, userId: "a", model: null, seconds: 120 }],
     merged: [],
   };
   const cost = buildAdminCost({
@@ -145,7 +153,30 @@ test("a catalog that could not be read leaves every model token unpriced, and se
   assert.equal(cost.totals.unpricedTokens, MILLION);
   // Two minutes of gpt-live-1 at five cents a minute.
   assert.equal(cost.totals.spendUsd, 0.1);
-  assert.deepEqual(cost.voice, { minutes: 2, spendUsd: 0.1 });
+  assert.deepEqual(cost.voice, { minutes: 2, spendUsd: 0.1, unpricedMinutes: 0 });
+});
+
+test("a voice session on a Live model the list prices do not name stays unpriced", () => {
+  const cost = built({
+    seconds: [
+      { day: TODAY, source: COST_SOURCE.VOICE, userId: "a", model: "gpt-live-1", seconds: 60 },
+      { day: TODAY, source: COST_SOURCE.VOICE, userId: "a", model: "gpt-live-next", seconds: 120 },
+    ],
+  });
+
+  assert.deepEqual(cost.voice, { minutes: 3, spendUsd: 0.05, unpricedMinutes: 2 });
+  assert.equal(cost.totals.spendUsd, 0.05);
+});
+
+test("many groups too small to round to a millionth of a dollar still add up", () => {
+  const cost = built({
+    tokens: Array.from({ length: 1_000 }, (_, index) =>
+      tokens({ day: TODAY, userId: `user-${index}`, model: MODEL.CHEAP, inputTokens: 1 }),
+    ),
+  });
+
+  // A thousand single tokens at forty cents per million, each under a millionth of a dollar.
+  assert.equal(cost.totals.spendUsd.toFixed(6), "0.000400");
 });
 
 test("the days are zero-filled and stacked by source, and the totals are folded from them", () => {
@@ -163,8 +194,8 @@ test("the days are zero-filled and stacked by source, and the totals are folded 
       tokens({ day: LONG_AGO, userId: "a", model: MODEL.BASE, inputTokens: 100 * MILLION }),
     ],
     seconds: [
-      { day: TODAY, source: COST_SOURCE.DICTATION, userId: "a", seconds: 600 },
-      { day: TODAY, source: COST_SOURCE.AVATAR, userId: "a", seconds: 300 },
+      { day: TODAY, source: COST_SOURCE.DICTATION, userId: "a", model: null, seconds: 600 },
+      { day: TODAY, source: COST_SOURCE.AVATAR, userId: "a", model: null, seconds: 300 },
     ],
   });
 

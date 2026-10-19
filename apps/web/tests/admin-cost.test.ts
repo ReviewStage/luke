@@ -39,7 +39,7 @@ function cost(overrides: Partial<AdminCost> = {}): AdminCost {
     },
     perAccount: { accounts: 4, meanUsd: 4.0025, medianUsd: 1.5 },
     perMergedPullRequest: { mergedPullRequests: 2, spendUsd: 8.005 },
-    voice: { minutes: 10, spendUsd: 0.5 },
+    voice: { minutes: 10, spendUsd: 0.5, unpricedMinutes: 0 },
     daily: [DAY],
     byModel: [
       {

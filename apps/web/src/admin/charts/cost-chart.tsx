@@ -43,13 +43,6 @@ const SWATCH = {
   [COST_SOURCE.AVATAR]: "bg-(--luke-color-chart-5)",
 } as const;
 
-const CENTS = 100;
-
-/** The tooltip reads a bar's own value, so a day's dollars ride rounded to the cent. */
-function toCents(value: number): number {
-  return Math.round(value * CENTS) / CENTS;
-}
-
 function CostLegend(): React.JSX.Element {
   return (
     <span className="flex flex-wrap gap-x-4 gap-y-1">
@@ -93,7 +86,7 @@ export function CostChart({
   const partialDay = partialDayKey(daily, generatedAt);
   const data = daily.map((day) => ({
     day: day.day,
-    ...Object.fromEntries(SOURCES.map((source) => [source, toCents(day[source])])),
+    ...Object.fromEntries(SOURCES.map((source) => [source, day[source]])),
   }));
   return (
     <ChartFrame title={title} legend={<CostLegend />}>

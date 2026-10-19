@@ -2,7 +2,8 @@
  * admin-cost.ts -- what the hosted service spends, priced at read time from the usage its own tables keep.
  *
  * Every number here is list price: the tokens a turn recorded, priced at AI
- * Gateway's catalog by the coding agent's own pricer (`usageOfTurns`), and
+ * Gateway's catalog by the coding agent's own pricer (`costOfTurns`, behind
+ * `usageOfTurns`), and
  * the seconds of voice, dictation, and avatar time the service metered,
  * priced per second at the providers' published list prices below. No turn
  * records whose key paid for it — a coding agent's step on the account's own
@@ -17,7 +18,7 @@
  */
 
 import { Clock, Effect } from "effect";
-import { usageOfTurns } from "../agents/coder-host/usage.js";
+import { costOfTurns } from "../agents/coder-host/usage.js";
 import { DAY_MS } from "../core.js";
 import type { OfferedModel } from "../providers/model-catalog.js";
 import {
@@ -67,6 +68,12 @@ export interface AdminCostSecondsRow {
   day: string;
   source: SecondsCostSource;
   userId: string;
+  /**
+   * The Live model a voice session ran on, as its session row keeps it; null
+   * for dictation and the avatar, and for a voice session whose row is gone
+   * or predates the column, which ran on the deployment's default.
+   */
+  model: string | null;
   seconds: number;
 }
 
@@ -114,9 +121,9 @@ export function costWindowKeys(now: number, windowDays: AdminMetricsWindow): Cos
   };
 }
 
-/** One token group's price by the coding agent's own pricer, which prices a refused fast share at its base model. */
+/** One token group's price, unrounded, by the coding agent's own pricer, which prices a refused fast share at its base model. */
 function priceTokenRow(row: AdminCostTokenRow, offered: readonly OfferedModel[]): PricedCostRow {
-  const priced = usageOfTurns(
+  const usd = costOfTurns(
     [
       {
         model: row.model,
@@ -137,20 +144,27 @@ function priceTokenRow(row: AdminCostTokenRow, offered: readonly OfferedModel[])
     source: row.source,
     userId: row.userId,
     model: row.model,
-    usd: priced?.costUsd,
+    usd,
     tokens: row.inputTokens + row.outputTokens,
     seconds: 0,
   };
 }
 
+/**
+ * One group of seconds at its list price. A voice session that ran on a Live
+ * model other than the one the table prices is left unpriced, as a token
+ * model the catalog does not price is, rather than priced at the wrong rate.
+ */
 function priceSecondsRow(row: AdminCostSecondsRow): PricedCostRow {
   const price = SECONDS_LIST_PRICE[row.source];
+  const model = row.model ?? price.model;
   return {
     day: row.day,
     source: row.source,
     userId: row.userId,
-    model: price.model,
-    usd: (row.seconds / SECONDS_PER_MINUTE) * price.usdPerMinute,
+    model,
+    usd:
+      model === price.model ? (row.seconds / SECONDS_PER_MINUTE) * price.usdPerMinute : undefined,
     tokens: 0,
     seconds: row.seconds,
   };
@@ -354,6 +368,9 @@ export function buildAdminCost(input: {
     voice: {
       minutes: sum(voiceRows.map((row) => row.seconds)) / SECONDS_PER_MINUTE,
       spendUsd: sum(voiceRows.map((row) => row.usd ?? 0)),
+      unpricedMinutes:
+        sum(voiceRows.filter((row) => row.usd === undefined).map((row) => row.seconds)) /
+        SECONDS_PER_MINUTE,
     },
     daily: dailySpend(input.priced, keys.window),
     byModel: spendByModel(input.priced, window),

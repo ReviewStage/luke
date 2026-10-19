@@ -217,7 +217,9 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
       const db = yield* Database;
       const owner = yield* openAccount();
 
+      const liveSessionId = randomUUID();
       yield* db.insert(voiceSessionUsage).values([
+        { sessionId: liveSessionId, userId: owner, seconds: 45, recordedAt: AT_TODAY.getTime() },
         { sessionId: randomUUID(), userId: owner, seconds: 90, recordedAt: AT_TODAY.getTime() },
         { sessionId: randomUUID(), userId: owner, seconds: 30, recordedAt: AT_TODAY.getTime() },
         { sessionId: randomUUID(), userId: owner, seconds: 500, recordedAt: AT_LONG_AGO.getTime() },
@@ -230,8 +232,9 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
         .insert(voiceSessions)
         .values({
           userId: owner,
-          liveSessionId: randomUUID(),
+          liveSessionId,
           delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+          model: "gpt-live-test",
         })
         .returning({ id: voiceSessions.id });
       yield* db.insert(voiceAvatarSessions).values([
@@ -299,12 +302,20 @@ it.layer(getTestDB())("the Cost screen's reads", (it) => {
       });
 
       const seconds = [...usage.seconds].sort((left, right) =>
-        left.source.localeCompare(right.source),
+        `${left.source}${left.model}`.localeCompare(`${right.source}${right.model}`),
       );
+      // The session whose row names its Live model is told apart from those whose rows are gone.
       assert.deepEqual(seconds, [
-        { day: TODAY, source: COST_SOURCE.AVATAR, userId: owner, seconds: 61 },
-        { day: YESTERDAY, source: COST_SOURCE.DICTATION, userId: owner, seconds: 42 },
-        { day: TODAY, source: COST_SOURCE.VOICE, userId: owner, seconds: 120 },
+        { day: TODAY, source: COST_SOURCE.AVATAR, userId: owner, model: null, seconds: 61 },
+        { day: YESTERDAY, source: COST_SOURCE.DICTATION, userId: owner, model: null, seconds: 42 },
+        {
+          day: TODAY,
+          source: COST_SOURCE.VOICE,
+          userId: owner,
+          model: "gpt-live-test",
+          seconds: 45,
+        },
+        { day: TODAY, source: COST_SOURCE.VOICE, userId: owner, model: null, seconds: 120 },
       ]);
       assert.deepEqual(usage.merged, [{ day: YESTERDAY, userId: owner, merged: 2 }]);
     }),

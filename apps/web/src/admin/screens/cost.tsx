@@ -274,7 +274,11 @@ export function CostScreen({
               <StatCard
                 label="Voice minutes"
                 value={formatNumber(Math.round(cost.voice.minutes))}
-                hint={`${formatUsd(cost.voice.spendUsd)} · ${cost.prices.voice.model}`}
+                hint={
+                  cost.voice.unpricedMinutes === 0
+                    ? `${formatUsd(cost.voice.spendUsd)} · ${cost.prices.voice.model}`
+                    : `${formatUsd(cost.voice.spendUsd)} · ${formatNumber(Math.round(cost.voice.unpricedMinutes))} min on an unpriced model`
+                }
                 grouped
               />
             </StatGroup>
