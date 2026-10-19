@@ -82,7 +82,9 @@ import { useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
+import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { DraftMark } from "../draft-mark.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
@@ -1229,18 +1231,26 @@ interface DesktopSidebarProps {
  * New task, heading the list: a press opens the New task dialog at once, as
  * the menu bar's and the chord's New task do, whose name field also
  * searches the workspace's Linear issues where Linear is connected
- * (`new-task-dialog.tsx`).
+ * (`new-task-dialog.tsx`). While words left in its card wait as the
+ * workspace's draft, it wears the Draft pencil at its end, which its chord
+ * takes the place of while it is hovered; none while the card or Home,
+ * whose composer shows those words, is open, as a task open wears none.
  */
 function NewTaskButton({
   tasks,
+  shown,
   onNewTask,
 }: {
   tasks: TasksControl;
+  /** Whether New task's words are in sight: its card open, or Home shown. */
+  shown: boolean;
   onNewTask: () => void;
 }): React.JSX.Element {
+  const drafted = useNewTaskDrafted(tasks.newTask.workspaceId) && tasks.signedIn && !shown;
   return (
     <NavItem
       icon={<ComposeIcon />}
+      mark={drafted ? <DraftMark /> : undefined}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_TASK)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} />}
       disabled={!tasks.signedIn}
@@ -1598,7 +1608,11 @@ function SidebarColumn({
       )}
 
       <div className="sidebar-places">
-        <NewTaskButton tasks={tasks} onNewTask={chosen(newTask)} />
+        <NewTaskButton
+          tasks={tasks}
+          shown={tasks.newTask.open || atHome}
+          onNewTask={chosen(newTask)}
+        />
         {/* Search is a second door to the command palette, drawn as New task
           is, since it heads the list the same way. */}
         <NavItem

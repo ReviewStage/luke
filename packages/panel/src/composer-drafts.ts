@@ -465,3 +465,22 @@ export function useDraftWriter(): DraftWriter {
 export function usePlanDrafted(taskId: string): boolean {
   return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
 }
+
+/**
+ * Whether New task holds a draft in a workspace, none before the workspaces
+ * are read, which the sidebar's New task row marks with the pencil
+ * (`draft-mark.tsx`): the words its own card keeps there, never those of a
+ * card opened on one of the workspace's issues, which that press alone
+ * brings back. Note that it answers a boolean, so the row draws again only
+ * as the draft comes or goes, never on each word typed.
+ */
+export function useNewTaskDrafted(workspaceId: string | undefined): boolean {
+  return useAtomValue(draftsAtom, (drafts) =>
+    drafts.some(
+      ({ place }) =>
+        place.kind === DRAFT_PLACE.NEW_TASK &&
+        place.workspaceId === (workspaceId ?? null) &&
+        !("issueId" in place),
+    ),
+  );
+}
