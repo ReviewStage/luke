@@ -61,6 +61,12 @@ const EXPERIMENT_SIGNED_OUT = "Sign in to turn on an experiment.";
 interface SettingsLinks {
   /** What authorizes the counted events and the account preferences on the signed-in account. */
   readonly credential: CallCredential;
+  /**
+   * Who the signed-in account is, as the account's session names it: the
+   * key its synced preferences and experiments are kept under, and nothing
+   * while no account is signed in.
+   */
+  readonly readAccountKey: () => Effect.Effect<string | undefined>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
   /** The standing live session ended once the voice moved, since a session keeps the voice it was created with. */
   readonly endLiveSession: Effect.Effect<void>;
@@ -134,6 +140,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       credentialsUsable: runMode.observesProviders,
       // The account source's own: a source that keeps no tokens here hands none.
       cipher: tokenCipher,
+      // Who is signed in where the source keeps no account here, as its session names them.
+      sessionAccountEmail: () => readAccountPreferenceAccountKey(),
       overrides,
       fileSystem,
       path,
@@ -183,7 +191,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
      * answer read before a write would otherwise put back the switch the
      * developer just moved.
      */
-    const experiments = experimentWriter({ client: accountPreferencesClient, store });
+    const experiments = experimentWriter({
+      client: accountPreferencesClient,
+      store,
+      readAccountKey: () => readAccountPreferenceAccountKey(),
+    });
 
     /**
      * One account-preferences action and the name its failure is reported
@@ -226,8 +238,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       Effect.forever,
     );
 
-    const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined, PlatformError> =>
-      Effect.map(store.readAccount(), (account) => account?.email);
+    // Note that the key is the session's, not the settings file's account,
+    // because a source that keeps no account here (a browser's cookie
+    // session) still names who is signed in.
+    const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined> =>
+      linked((links) => links.readAccountKey());
 
     function accountPreferencesEmpty(preferences: AccountPreferences): boolean {
       return Object.keys(preferences).length === 0;
@@ -458,9 +473,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           if (!isExperiment(named)) return yield* invalid("experiment must name one");
           if (!isWireBoolean(on)) return yield* invalid("on must be true or false");
           const experiment: Experiment = named;
-          const accountKey = yield* readAccountPreferenceAccountKey().pipe(
-            Effect.orElseSucceed(() => undefined),
-          );
+          const accountKey = yield* readAccountPreferenceAccountKey();
           if (!accountKey) return carried(yield* refusedSettings(EXPERIMENT_SIGNED_OUT));
           const result = yield* settingsWrite(
             () => experiments.write(accountKey, experiment, on),

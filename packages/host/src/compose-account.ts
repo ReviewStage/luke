@@ -201,12 +201,12 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
    */
   let sessionReplayEndedByDeletion = false;
 
-  const sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }> = Effect.gen(
-    function* () {
-      const signedIn = session.snapshot().status === ACCOUNT_STATUS.SIGNED_IN;
-      const accountId = signedIn
-        ? (yield* Effect.orDie(settings.store.readAccount()))?.id
-        : undefined;
+  // The id is the session's own, so a source that keeps no account in the
+  // settings file (a browser's cookie session) still names who is recorded.
+  const sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }> = Effect.sync(
+    () => {
+      const account = session.snapshot();
+      const accountId = account.status === ACCOUNT_STATUS.SIGNED_IN ? account.id : undefined;
       return {
         permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
         ...(accountId ? { accountId } : undefined),
@@ -214,14 +214,10 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     },
   );
 
-  let sessionReplayGeneration = 0;
-  // The account is read asynchronously, and a sign-out reports the transition
-  // before it clears the stored account, so a late answer must not restart
-  // recording under the person who just left.
-  const emitSessionReplay: Effect.Effect<void> = Effect.gen(function* () {
-    const generation = ++sessionReplayGeneration;
-    const replay = yield* sessionReplayState;
-    if (generation !== sessionReplayGeneration) return;
+  // Note that the answer is read from the session as it stands, with nothing
+  // to wait on, so no late answer can restart recording under the person
+  // who just left.
+  const emitSessionReplay: Effect.Effect<void> = Effect.map(sessionReplayState, (replay) => {
     kernel.emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
   });
 

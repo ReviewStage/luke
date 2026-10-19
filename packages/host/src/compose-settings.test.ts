@@ -56,6 +56,7 @@ it.effect(
       const settings = yield* Effect.provide(composeSettings(), machine);
       yield* settings.link({
         credential: NO_CREDENTIAL,
+        readAccountKey: () => Effect.succeed(undefined),
         setVoice: () => Effect.void,
         endLiveSession: Effect.void,
       });
