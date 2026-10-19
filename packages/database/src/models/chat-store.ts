@@ -44,6 +44,7 @@ import {
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError, queryBuilder } from "../core/query.js";
+import { attachment } from "../schemas/attachment.js";
 import { member, organization, user } from "../schemas/auth.js";
 import {
   chatAttachment,
@@ -2556,6 +2557,13 @@ export interface ChatImageWrite extends ChatImage {
   readonly id: string;
 }
 
+/**
+ * A picture's row in both the tables it is kept in while chat's pictures
+ * move to the one `attachment` table: `chat_attachment`, which every read
+ * still names, and `attachment`, under the same id, which the reads move to
+ * once every deployment that wrote only the first has drained. Each write
+ * and delete below names both, so the two hold the same pictures.
+ */
 const insertAttachment = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
@@ -2576,6 +2584,36 @@ const insertAttachment = SqlSchema.void({
     ),
 });
 
+/**
+ * The picture's `chat_attachment` row copied into `attachment`, as it was
+ * kept there rather than as the write handed it in: a post retried under
+ * its key reads its file again, which may have changed since the first
+ * write kept it, and `chat_attachment` keeps the first, so the copy does too.
+ */
+const copySharedAttachment = SqlSchema.void({
+  Request: Schema.Struct({ id: Schema.String, messageId: Schema.String }),
+  execute: ({ id, messageId }) =>
+    Database.use((db) =>
+      db
+        .insert(attachment)
+        .select(
+          queryBuilder
+            .select({
+              id: chatAttachment.id,
+              organizationId: chatAttachment.organizationId,
+              chatMessageId: chatAttachment.messageId,
+              contentType: chatAttachment.contentType,
+              byteCount: chatAttachment.byteCount,
+              bytes: chatAttachment.bytes,
+              createdAt: chatAttachment.createdAt,
+            })
+            .from(chatAttachment)
+            .where(and(eq(chatAttachment.id, id), eq(chatAttachment.messageId, messageId))),
+        )
+        .onConflictDoNothing(),
+    ),
+});
+
 /** The message's attachments no id named any longer, deleted. */
 const deleteOtherAttachments = SqlSchema.void({
   Request: Schema.Struct({ messageId: Schema.String, kept: Schema.Array(Schema.String) }),
@@ -2590,6 +2628,20 @@ const deleteOtherAttachments = SqlSchema.void({
                 eq(chatAttachment.messageId, messageId),
                 notInArray(chatAttachment.id, [...kept]),
               ),
+        ),
+    ),
+});
+
+const deleteOtherSharedAttachments = SqlSchema.void({
+  Request: Schema.Struct({ messageId: Schema.String, kept: Schema.Array(Schema.String) }),
+  execute: ({ messageId, kept }) =>
+    Database.use((db) =>
+      db
+        .delete(attachment)
+        .where(
+          kept.length === 0
+            ? eq(attachment.chatMessageId, messageId)
+            : and(eq(attachment.chatMessageId, messageId), notInArray(attachment.id, [...kept])),
         ),
     ),
 });
@@ -2673,17 +2725,22 @@ export function attachMessageImages(
       const named = namedPictures(message.value.blocks);
       if (!images.every((image) => named.has(image.id))) return false;
       const now = yield* DateTime.nowAsDate;
-      yield* deleteOtherAttachments({ messageId, kept: images.map((image) => image.id) });
+      const kept = images.map((image) => image.id);
+      yield* deleteOtherAttachments({ messageId, kept });
+      yield* deleteOtherSharedAttachments({ messageId, kept });
       yield* Effect.forEach(images, (image) =>
-        insertAttachment({
-          id: image.id,
-          organizationId,
-          messageId,
-          contentType: image.contentType,
-          byteCount: image.bytes.byteLength,
-          bytes: image.bytes,
-          now,
-        }),
+        Effect.andThen(
+          insertAttachment({
+            id: image.id,
+            organizationId,
+            messageId,
+            contentType: image.contentType,
+            byteCount: image.bytes.byteLength,
+            bytes: image.bytes,
+            now,
+          }),
+          copySharedAttachment({ id: image.id, messageId }),
+        ),
       );
       return true;
     }),
@@ -2920,6 +2977,26 @@ const moveAttachments = SqlSchema.void({
     ),
 });
 
+/** The channel's pictures moved to the workspace in `attachment` too (`insertAttachment`). */
+const moveSharedAttachments = SqlSchema.void({
+  Request: Schema.Struct({ channelId: Schema.String, organizationId: Schema.String }),
+  execute: ({ channelId, organizationId }) =>
+    Database.use((db) =>
+      db
+        .update(attachment)
+        .set({ organizationId })
+        .where(
+          inArray(
+            attachment.chatMessageId,
+            queryBuilder
+              .select({ id: chatMessage.id })
+              .from(chatMessage)
+              .where(eq(chatMessage.channelId, channelId)),
+          ),
+        ),
+    ),
+});
+
 const advanceSequence = SqlSchema.void({
   Request: Schema.Struct({ organizationId: Schema.String, by: Schema.Number }),
   execute: ({ organizationId, by }) =>
@@ -3111,6 +3188,7 @@ export function moveTaskChat(taskId: string, organizationId: string): ChatStoreE
         });
       }
       yield* moveAttachments({ channelId: channel.value.id, organizationId });
+      yield* moveSharedAttachments({ channelId: channel.value.id, organizationId });
       yield* advanceSequence({ organizationId, by: 2 * messages.length });
     }),
   );

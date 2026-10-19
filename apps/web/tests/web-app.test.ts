@@ -2,42 +2,59 @@
 import assert from "node:assert/strict";
 import "@luke/panel/testing/match-media";
 import "@luke/panel/testing/resize-observer";
-import { ACT_KIND } from "@luke/host/acts";
-import { askAct } from "@luke/panel/act";
-import { act } from "react";
-import { test } from "vitest";
-import { mountWebApp } from "../src/app/web-root";
+import { afterEach, test, vi } from "vitest";
+import { mountWebApp, type WebApp } from "../src/app/web-root";
+import { type FakeService, fakeService, LISTED_TASK } from "./support/fake-service";
 
 /**
- * The web app's root on its fixture bridge: the panel drawn in a tab from the
- * fixture run's document, before any host runs there.
+ * The web app's root signed out: the shared host in the tab reads the
+ * cookie session, finds none, and the panel draws its own sign-in with the
+ * way to the Mac app beside it; and a return to the tab after the cookie
+ * changed, another tab having signed in, reads the session again and opens
+ * Home on the account's tasks. One mount per file, because the panel's
+ * state read is the tab's once.
  */
 
-declare global {
-  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+let app: WebApp | undefined;
+
+/** How many session reads the tab has begun so far. */
+function sessionReads(service: FakeService): number {
+  return service.seen().filter((request) => request.path === "/api/auth/get-session").length;
 }
 
-test("the web root draws the panel's Home over the fixture's tasks", async () => {
-  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
-  const root = document.createElement("div");
-  document.body.append(root);
-
-  await act(() => mountWebApp(root));
-
-  const home = root.querySelector('section[aria-label="Home"]');
-  assert.ok(home !== null, "the panel opens on Home");
-  assert.match(root.textContent ?? "", /Ada Lovelace/);
+afterEach(async () => {
+  await app?.close();
+  localStorage.clear();
 });
 
-test("the web root refuses a kind its act port answers in the fixture's own words", async () => {
-  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+test("signed out, the panel draws its sign-in; a return after another tab signed in opens Home", async () => {
+  const service = fakeService({ signedIn: false });
   const root = document.createElement("div");
   document.body.append(root);
 
-  await act(() => mountWebApp(root));
+  app = await mountWebApp(root, { httpClient: service.layer });
 
-  await assert.rejects(
-    askAct(ACT_KIND.SETTING_UPDATE, { field: "zoom", value: 110 }),
-    (error) => error instanceof Error && error.message === "The web app does not act yet.",
+  assert.ok(app !== undefined, "the host stands");
+  await vi.waitFor(() =>
+    assert.ok(root.querySelector("section.sign-in-gate") !== null, "the panel draws its sign-in"),
   );
+  const toMac = [...root.querySelectorAll("a")].find(
+    (link) => link.textContent === "Open in the Mac app",
+  );
+  assert.match(toMac?.getAttribute("href") ?? "", /^tryluke:/u);
+
+  // The launch reads the session again once the host stands; that read must
+  // have begun before the cookie changes, or it alone would sign the tab in
+  // and the return below would prove nothing. A return to the tab while a
+  // read is still out joins it, so the tab is returned to until a read begun
+  // after the change lands.
+  await vi.waitFor(() => assert.ok(sessionReads(service) >= 2, "the launch's reads have begun"));
+
+  // Another tab signed in: the cookie names someone now, and this tab is focused again.
+  service.setSession(true);
+  await vi.waitFor(() => {
+    window.dispatchEvent(new Event("focus"));
+    assert.ok(root.querySelector("section.sign-in-gate") === null, "the sign-in is gone");
+    assert.match(root.textContent ?? "", new RegExp(LISTED_TASK.name, "u"));
+  }, 5_000);
 });

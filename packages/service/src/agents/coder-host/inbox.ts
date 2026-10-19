@@ -101,7 +101,7 @@ export const INBOX_TOOLS = {
       "response is what you ask of them: choice (two to six options, each a short label and an optional detail; name the " +
       "label you recommend; multiple lets them pick several), approval (a yes or no on one step you propose), text (an open " +
       "answer in their words), task (a to-do: something only they can do by hand, such as changing a GitHub setting, adding a secret, " +
-      "or testing by hand what you could not test yourself: say exactly what to do in the blocks), form (one to eight typed fields, text, number, select with its options, or " +
+      "or testing by hand what you could not test yourself: say exactly what to do in the blocks), form (one to eight typed fields, text, number, select with its options and the one you recommend, or " +
       "boolean, each named by its label and required where it must be filled; never ask for a credential or a secret in a " +
       "form, since the answer reaches your transcript: that is a to-do the developer does by hand), or none (something they " +
       "should know or look at; they acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a to-do you only " +
@@ -191,6 +191,8 @@ export const INBOX_REFUSAL = {
   FIELD_LABELS: "Not posted: a form names each field by a label of its own.",
   SELECT_OPTIONS:
     "Not posted: a select field offers its options, each once, and no other field offers options.",
+  SELECT_RECOMMENDATION:
+    "Not posted: a select field's recommended names one of its options, and no other field recommends one.",
   CODE_REPOSITORY:
     "Not posted: a code block points at lines of your own repository, named as owner/name.",
   CODE_LINES: `Not posted: a code block's endLine is at or after its startLine, and it spans at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines.`,
@@ -303,7 +305,7 @@ function choiceRefusal(choice: InboxChoice): string | undefined {
   return undefined;
 }
 
-/** A form's own refusal: a label used twice, a select with no options or one twice, or options on a field that takes none. */
+/** A form's own refusal: a label used twice, a select with no options or one twice, options on a field that takes none, or a recommendation naming none of a select's options. */
 function formRefusal(form: InboxForm): string | undefined {
   if (!distinct(form.fields.map((field) => field.label))) return INBOX_REFUSAL.FIELD_LABELS;
   for (const field of form.fields) {
@@ -311,6 +313,12 @@ function formRefusal(form: InboxForm): string | undefined {
     const options = field.options;
     if (select ? options === undefined || !distinct(options) : options !== undefined) {
       return INBOX_REFUSAL.SELECT_OPTIONS;
+    }
+    if (
+      field.recommended !== undefined &&
+      !(select && options?.includes(field.recommended) === true)
+    ) {
+      return INBOX_REFUSAL.SELECT_RECOMMENDATION;
     }
   }
   return undefined;

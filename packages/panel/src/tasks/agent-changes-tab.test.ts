@@ -170,6 +170,7 @@ const standIn: DiffViewModule = {
     return {
       update: (next) => drawn.push(next),
       reveal: (path) => revealed.push(path),
+      revealLine: (path, side, line) => revealed.push(`${path}:${side}:${line}`),
       unmount: () => undefined,
     };
   },

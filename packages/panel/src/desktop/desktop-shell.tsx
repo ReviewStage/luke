@@ -19,6 +19,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { lazy, Suspense, useEffect, useMemo, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
+import { appPlatform } from "../app-platform.js";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "../call/call-card.js";
 import { CaptionStrip, type CaptionStripProps } from "../caption-strip.js";
 import { ExperimentTag } from "../experiment-marks.js";
@@ -504,6 +505,7 @@ export function DesktopShell({
     },
   };
   if (gated) {
+    const macAppLink = appPlatform().macAppLink?.();
     return (
       <ScrollArea>
         <div className="desktop-onboarding">
@@ -513,6 +515,7 @@ export function DesktopShell({
             {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
             {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
             {...(gates.lastSignIn ? { lastUsed: gates.lastSignIn } : undefined)}
+            {...(macAppLink === undefined ? undefined : { macAppLink })}
             onBegin={gates.onBeginSignIn}
             onCancel={gates.onCancelSignIn}
           />

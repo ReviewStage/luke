@@ -2908,9 +2908,29 @@
   white-space: nowrap;
 }
 
-.pull-request-thread-head > .pull-request-quiet {
+.pull-request-thread-head > .pull-request-quiet,
+.pull-request-thread-where > .pull-request-quiet {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+/* A thread's file and lines, which take it to them in Files changed
+   (`ThreadCard`), laid out as the head's own row. */
+.pull-request-thread-where {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+/* A thread's ⋯ stands at the end of its head, before the chevron. */
+.pull-request-thread-menu {
+  display: flex;
+  margin-left: auto;
+}
+
+.pull-request-thread-menu + .pull-request-thread-turn {
+  margin-left: 0;
 }
 
 /* Whether a thread was resolved or outdated, in the quiet badge a bot's
