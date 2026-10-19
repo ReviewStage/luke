@@ -1296,9 +1296,7 @@ export function CommandPalette({
       settingRows(settings.rows, land),
     ],
   } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
-  // Note that an issue opens on its page as the Issues page's own openPage
-  // does it: a peek standing beside the list is put away, filling the window
-  // or not, so going back shows the list rather than the old peek.
+  // Note that an issue opens as the Issues page's openPage opens it, the list's peek put away, so going back shows the list.
   const openIssue = (issueId: string) =>
     onTasks(() => {
       const { issuesView, sidePanel } = tasks;
