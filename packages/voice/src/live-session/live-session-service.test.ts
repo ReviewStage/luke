@@ -942,6 +942,61 @@ it.effect("a call whose every word an ask carried asks nothing more as it ends",
 );
 
 it.effect(
+  "a correction that joins a line an ask already carried reaches the brain once as the call ends, and only its new words are the line",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Make invites expire after two days.", 0, 1_200);
+      sideband.delegation("item_1", 1_300);
+      yield* settle();
+      // Said within the gap of the line before, so it joins that line's row rather than opening one.
+      sideband.input(" No, three days.", 2_500, 3_400);
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
+      const ending = yield* Effect.forkChild(f.service.endSession(), { startImmediately: true });
+      yield* settle();
+      sideband.closedBy("close_requested", 4);
+      yield* Fiber.join(ending);
+
+      assert.equal(f.brain.asks.length, 2);
+      const last = f.brain.asks[1];
+      assert.ok(last?.question.endsWith("Their line: No, three days."));
+      assert.equal(last?.sessionId, "sess-1");
+      // The row stays the first ask's: the hang-up's ask has no row of its own to attach.
+      assert.deepEqual(
+        f.record.attached.map((attach) => attach.delegationId),
+        ["item_1"],
+      );
+    }),
+);
+
+it.effect(
+  "words that land on an ask's line while the brain is being asked are that ask's, and the hang-up asks nothing more",
+  () =>
+    Effect.gen(function* () {
+      const brain = new FakeBrain();
+      brain.answerWhen = yield* Deferred.make<void>();
+      const f = yield* fixture(brain);
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Make invites expire", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      // The API delivers a delegation ahead of the deltas it is about.
+      sideband.input(" after three days.", 800, 1_400);
+      yield* settle();
+      yield* Deferred.succeed(brain.answerWhen, undefined);
+      yield* settle();
+      const ending = yield* Effect.forkChild(f.service.endSession(), { startImmediately: true });
+      yield* settle();
+      sideband.closedBy("close_requested", 4);
+      yield* Fiber.join(ending);
+      assert.equal(f.brain.asks.length, 1);
+    }),
+);
+
+it.effect(
   "the session closing of its own hands on the developer's undelegated words too, and a session let go of, or whose socket dropped, for its peer to attach to again hands on nothing",
   () =>
     Effect.gen(function* () {

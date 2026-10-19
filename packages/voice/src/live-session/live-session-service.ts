@@ -367,6 +367,14 @@ interface StandingSession {
    */
   readonly askedRows: Set<string>;
   /**
+   * How much of each asked row's text its ask carried, as the row stood once
+   * the ask was handed over: a row's text only grows by appending, so the
+   * words it gains after that mark are new, and the call's end hands them on
+   * though the row is an ask's. A row of an ask still with the brain has no
+   * mark yet, and that ask takes whatever lands on it meanwhile.
+   */
+  readonly askedText: Map<string, number>;
+  /**
    * The asks whose brain call is still out, by delegation: each keeps the span
    * it was composed over and the rows it has claimed, so a row a late delta
    * opens by its offset is claimed for it, by the next delegation's compose or
@@ -847,18 +855,31 @@ export class LiveSessionService {
       for (const open of session.openAsks.values()) this.#claimLate(session, open);
       const context = session.ledger.askContext(session.lastDelegationOffsetMs);
       const rows = askRowsOf(context, session.askedRows, Number.POSITIVE_INFINITY);
-      const last = rows.at(-1);
+      // A row no ask claimed is unheard whole; an asked row only for the words it gained after its
+      // ask carried it, such as a correction that joined it in the last seconds of the call.
+      const unheard = context.turns.flatMap((turn) => {
+        if (turn.speaker !== TRANSCRIPT_SPEAKER.USER) return [];
+        if (!session.askedRows.has(turn.rowId)) return [turn.text];
+        const carried = session.askedText.get(turn.rowId);
+        const gained = carried === undefined ? "" : turn.text.slice(carried);
+        return gained.trim() === "" ? [] : [gained];
+      });
+      const last = unheard.at(-1);
       if (last === undefined) return;
-      this.#claim(session, rows, last.endMs);
+      this.#claim(session, rows, session.lastDelegationOffsetMs);
+      this.#markAsked(
+        session,
+        context.turns.map((turn) => turn.rowId),
+      );
       session.revisions += 1;
       const submissionId = this.#options.createId();
       const submission = yield* this.#brain.submitAsk({
         submissionId,
-        question: [renderAskContext(context), `${UNHEARD_ASK_NOTE} ${last.text.trim()}`].join("\n"),
+        question: [renderAskContext(context), `${UNHEARD_ASK_NOTE} ${last.trim()}`].join("\n"),
         sessionId: session.sessionId,
         revision: session.revisions,
       });
-      if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) return;
+      if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED || rows.length === 0) return;
       yield* this.#attachAsk(
         session,
         submissionId,
@@ -1048,6 +1069,7 @@ export class LiveSessionService {
         idleReported: false,
         idleTimer: undefined,
         askedRows: new Set(),
+        askedText: new Map(),
         settled: yield* Deferred.make<SidebandCloseResult>(),
         torn: yield* Deferred.make<void>(),
         released: yield* Deferred.make<void>(),
@@ -1249,6 +1271,16 @@ export class LiveSessionService {
     open.rows.push(...late);
   }
 
+  /** Each row named is carried as it stands now: only words it gains from here are new to the brain. */
+  #markAsked(session: StandingSession, rowIds: readonly string[]): void {
+    for (const rowId of rowIds) {
+      const row = session.ledger.row(rowId);
+      if (row !== undefined && session.askedRows.has(rowId)) {
+        session.askedText.set(rowId, row.text.length);
+      }
+    }
+  }
+
   /** The rows are the delegation's from here: no later delegation is about them, and the session's span moves past them and the offset. */
   #claim(session: StandingSession, rows: readonly TranscriptUtterance[], offsetMs: number): void {
     for (const row of rows) session.askedRows.add(row.rowId);
@@ -1357,10 +1389,8 @@ export class LiveSessionService {
     // A follow-up with no row of its own, its words on a row already an ask's, moves the session
     // past that row's end as the row's own delegation did, so the next delegation does not read
     // the row again; one whose ask begins after the offset leaves the row the next delegation's.
-    const spanMs =
-      rows.length === 0 && session.askedRows.has(ask.rowId)
-        ? Math.max(offsetMs, ask.endMs)
-        : offsetMs;
+    const followUp = rows.length === 0 && session.askedRows.has(ask.rowId);
+    const spanMs = followUp ? Math.max(offsetMs, ask.endMs) : offsetMs;
     this.#claim(session, rows, spanMs);
     const open: OpenAsk = { sinceMs, offsetMs, rows: [...rows] };
     session.openAsks.set(delegationId, open);
@@ -1387,6 +1417,12 @@ export class LiveSessionService {
       // that starts by the offset, which is this delegation's and no one else's.
       this.#claimLate(session, open);
       session.openAsks.delete(delegationId);
+      // What the ask carried is its rows as they stand now, a follow-up's row among them: the words
+      // that landed while the brain was being asked are the ask's, and only later ones are new.
+      this.#markAsked(session, [
+        ...open.rows.map((row) => row.rowId),
+        ...(followUp ? [ask.rowId] : []),
+      ]);
       const rowIds = [...open.rows]
         .sort((left, right) => left.startMs - right.startMs)
         .map((row) => row.rowId);
