@@ -225,13 +225,17 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
   assert.equal(servedFile("/changelog"), "/changelog.html");
   assert.equal(servedFile("/changelog/page/2"), "/changelog/page/2.html");
   assert.equal(servedFile("/admin"), "/admin.html");
-  assert.match(
-    servedFile("/api/plans/x/board") ?? "",
-    /^\/api\/default\.js\?route=plans\/board&id=x$/u,
-  );
-  assert.match(servedFile("/api/inbox/i1") ?? "", /^\/api\/default\.js\?route=inbox\/item&id=i1$/u);
-  assert.match(servedFile("/api/automations/x1/runs") ?? "", /route=automations\/runs&id=x1$/u);
-  assert.match(servedFile("/api/agents/a1") ?? "", /route=agents\/agent&id=a1$/u);
+  // An API path still reaches its function's route, however that route's rewrite spells the rest.
+  for (const [path, route] of [
+    ["/api/plans/x/board", "plans/board"],
+    ["/api/inbox/i1", "inbox/item"],
+    ["/api/automations/x1/runs", "automations/runs"],
+    ["/api/agents/a1", "agents/agent"],
+  ] as const) {
+    const served = new URL(servedFile(path) ?? "/", "https://tryluke.dev");
+    assert.match(served.pathname, /^\/api\//u, path);
+    assert.equal(served.searchParams.get("route"), route, path);
+  }
   // The landing page, the sign-in, a static file, and a path naming no place are the build's own files.
   for (const path of [
     "/",
