@@ -260,6 +260,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const accountPreferenceHydrationBaseline = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountEmail: string,
     ): Effect.fn.Return<AccountPreferences, PlatformError> {
+      // Note that the arrival already settled whose the local preferences
+      // are; asked again here, where it is a no-op once settled, because an
+      // arrival whose settling did not land must not hand another account's
+      // choices to this one, and a failure here stops the action instead.
+      yield* store.settleSessionAccount(accountEmail);
       const baseline = yield* store.accountPreferencesSyncBaseline(accountEmail);
       if (baseline !== undefined) return baseline;
       const preferences = yield* store.accountPreferences();

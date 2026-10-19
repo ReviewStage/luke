@@ -4,7 +4,7 @@ import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { accountCall, HOSTED_SERVICE_PATH } from "@luke/features";
+import { accountCall, HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
 import { LIVE_VOICE } from "@luke/live";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
@@ -31,6 +31,7 @@ import { AccountSource, AppIdentity, Environment } from "./effect/seams.js";
 import { hostKernelOver } from "./host-kernel.js";
 import { runModeFor } from "./run-mode.js";
 import { SettingsStore } from "./settings-store.js";
+import { fixedAccountSource } from "./testing/fixed-account-source.js";
 
 /**
  * The cookie source over a scripted service on the tab's own origin. A
@@ -511,3 +512,71 @@ describe("a settings store that keeps no account of its own", () => {
       }).pipe(Effect.orDie, Effect.provide([NodeFileSystem.layer, NodePath.layer])),
   );
 });
+
+it.effect(
+  "hydrates no other account's local preferences into an account whose arrival never settled",
+  () => {
+    const ADA = "ada@example.com";
+    const BOB = "bob@example.com";
+    const written: string[] = [];
+    /** Bob's service: no saved snapshot yet, and every write kept. */
+    const service: typeof globalThis.fetch = async (input, init) => {
+      const request = new Request(input, init);
+      if (request.method === HTTP_METHOD.PUT) written.push(await request.text());
+      return jsonResponse({ preferences: {}, experiments: {} });
+    };
+    return Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("luke-cookie-unsettled-");
+      // The file as Ada left it: her voice, and the baseline that names her.
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* fileSystem.writeFileString(
+        path.join(stateRoot, "settings.json"),
+        JSON.stringify({
+          version: 2,
+          voice: LIVE_VOICE.CEDAR,
+          accountPreferencesSync: { accountEmail: ADA, preferences: { voice: LIVE_VOICE.CEDAR } },
+        }),
+      );
+      const machine = Layer.mergeAll(
+        Layer.succeed(
+          HostKernelTag,
+          hostKernelOver({
+            stateRoot,
+            runMode: runModeFor({ capture: false, fixture: false }),
+            accountBaseUrl: ACCOUNT_BASE_URL,
+            now: () => 0,
+            createId: () => "id",
+            report: () => undefined,
+            emit: () => undefined,
+          }),
+        ),
+        Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
+        Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+        // A source keeping no account here, whose arrival settled nothing.
+        fixedAccountSource(),
+        NodeFileSystem.layer,
+        NodePath.layer,
+      );
+      const settings = yield* Effect.provide(composeSettings(), machine);
+      yield* settings.link({
+        credential: NO_CREDENTIAL,
+        readAccountKey: () => Effect.succeed(BOB),
+        setVoice: () => Effect.void,
+        endLiveSession: Effect.void,
+      });
+      yield* settings.lifetime;
+
+      yield* settings.reconcileAccountPreferences();
+      const baseline = Effect.orDie(settings.store.accountPreferencesSyncBaseline(BOB));
+      yield* until(() => Effect.map(baseline, (kept) => kept !== undefined));
+
+      assert.deepEqual(yield* baseline, {});
+      assert.equal(yield* Effect.orDie(settings.store.get("voice")), undefined);
+      assert.ok(written.every((body) => !body.includes(LIVE_VOICE.CEDAR)));
+    }).pipe(
+      Effect.provideService(FetchHttpClient.Fetch, service),
+      Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+    );
+  },
+);
