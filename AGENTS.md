@@ -391,7 +391,8 @@ Conventional Branch 1.1.0 (https://conventionalbranch.org/), both exactly.
 
 Do not rebase onto or merge in `main` to bring a branch up to date unless the
 user asks or the branch cannot go on without it: a conflict GitHub reports,
-or a change on `main` the work needs. Being behind `main` is not a reason: CI
+a change on `main` the work needs, or the merge queue dropping the PR because
+of a change on `main`. Being behind `main` is not a reason: CI
 runs on the PR's merge with `main`, and the merge queue tests each PR against
 the latest `main` before it lands, so an up-to-date branch buys nothing and
 costs a rebuild, a re-run of CI, and a force-push. This holds before a push,
