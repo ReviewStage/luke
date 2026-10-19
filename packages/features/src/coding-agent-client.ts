@@ -9,13 +9,16 @@ import { Effect, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
   type CallAnswer,
+  type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
-import type { AccountToken } from "./account-token.js";
+import {
+  ACCOUNT_INBOX_ARCHIVED,
+  ACCOUNT_INBOX_QUERY,
+  accountInboxAnswerSchema,
+} from "./account-inbox-wire.js";
 import {
   CHAT_QUERY,
   type ChatWriteRequest,
@@ -197,7 +200,9 @@ const HELD_READ_TIMEOUT_MS = 35_000;
  */
 const START_TIMEOUT_MS = 120_000;
 
-export interface HostedCodingAgentClientOptions extends AccountToken {
+export interface HostedCodingAgentClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -330,7 +335,7 @@ export class HostedCodingAgentClient {
   readonly #start: AccountCallEffects;
 
   constructor(options: HostedCodingAgentClientOptions) {
-    const credential = accountBearer(options);
+    const { credential } = options;
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential,
@@ -732,9 +737,10 @@ export class HostedCodingAgentClient {
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   pullRequest(
     agentId: string,
+    number?: number,
   ): Effect.Effect<CodingAgentPullRequestAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestPath(agentId) }),
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestPath(agentId, number) }),
       (answer) => readAnswer(answer, codingAgentPullRequestAnswerSchema, ROW_REFUSALS),
     );
   }
@@ -742,9 +748,10 @@ export class HostedCodingAgentClient {
   /** One agent's changes: the files of its pull request as GitHub holds them now. */
   changes(
     agentId: string,
+    number?: number,
   ): Effect.Effect<CodingAgentChangesAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentChangesPath(agentId) }),
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentChangesPath(agentId, number) }),
       (answer) => readAnswer(answer, codingAgentChangesAnswerSchema, ROW_REFUSALS),
     );
   }
@@ -752,9 +759,13 @@ export class HostedCodingAgentClient {
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   overviewPullRequest(
     agentId: string,
+    number?: number,
   ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewPullRequestPath(agentId) }),
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: agentOverviewPullRequestPath(agentId, number),
+      }),
       (answer) => readAnswer(answer, codingAgentOverviewPullRequestAnswerSchema, ROW_REFUSALS),
     );
   }
@@ -772,9 +783,10 @@ export class HostedCodingAgentClient {
   /** The checks on one agent's pull request's head as GitHub holds them now. */
   overviewChecks(
     agentId: string,
+    number?: number,
   ): Effect.Effect<CodingAgentOverviewChecksAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewChecksPath(agentId) }),
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewChecksPath(agentId, number) }),
       (answer) => readAnswer(answer, codingAgentOverviewChecksAnswerSchema, ROW_REFUSALS),
     );
   }
@@ -782,9 +794,13 @@ export class HostedCodingAgentClient {
   /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them now. */
   overviewConversation(
     agentId: string,
+    number?: number,
   ): Effect.Effect<CodingAgentOverviewConversationAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewConversationPath(agentId) }),
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: agentOverviewConversationPath(agentId, number),
+      }),
       (answer) => readAnswer(answer, codingAgentOverviewConversationAnswerSchema, ROW_REFUSALS),
     );
   }
@@ -811,14 +827,17 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed. */
+  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed, and every task holding items, the archived ones among them for the Inbox's Archived tab. */
   accountInbox(
     after: string,
   ): Effect.Effect<CodingAgentAccountInboxAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
       this.#held.send({
         method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({ after })}`,
+        path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({
+          [ACCOUNT_INBOX_QUERY.AFTER]: after,
+          [ACCOUNT_INBOX_QUERY.ARCHIVED]: ACCOUNT_INBOX_ARCHIVED.INCLUDE,
+        })}`,
       }),
       (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
     );
@@ -879,13 +898,14 @@ export class HostedCodingAgentClient {
   pullRequestAction(
     agentId: string,
     request: PullRequestActionRequest,
+    number?: number,
   ): Effect.Effect<CodingAgentPullRequestWriteAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(pullRequestActionRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return Effect.flatMap(
       this.#call.send({
         method: HTTP_METHOD.POST,
-        path: agentPullRequestActionPath(agentId),
+        path: agentPullRequestActionPath(agentId, number),
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, pullRequestWriteAnswerSchema, ROW_REFUSALS),
@@ -895,9 +915,13 @@ export class HostedCodingAgentClient {
   /** Which of the agent's pull request's files the member marked viewed on GitHub, read on their own sign-in. */
   pullRequestViewed(
     agentId: string,
+    number?: number,
   ): Effect.Effect<CodingAgentPullRequestViewedAnswerView, never, HttpClient.HttpClient> {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestViewedPath(agentId) }),
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: agentPullRequestViewedPath(agentId, number),
+      }),
       (answer) => readAnswer(answer, pullRequestViewedAnswerSchema, ROW_REFUSALS),
     );
   }

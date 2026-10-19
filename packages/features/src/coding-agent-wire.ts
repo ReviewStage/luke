@@ -548,7 +548,9 @@ export type CodingAgentArchiver =
  * Who archived an agent, as its banner and card say it: a member, or Luke or
  * another agent on a member's behalf, the member absent once their account
  * is gone, the agent by its id and its title as it stood then, and the
- * reason it was archived for where one was given.
+ * reason it was archived for where one was given. `withTask` marks an agent
+ * a member archived by archiving its task, which brings it back with the
+ * task; a build from before it reads the archive as the member's own.
  */
 export const codingAgentArchivedBySchema = EffectSchema.Struct({
   by: EffectSchema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
@@ -557,6 +559,7 @@ export const codingAgentArchivedBySchema = EffectSchema.Struct({
     EffectSchema.Struct({ id: wireUuidSchema, name: EffectSchema.String }),
   ),
   reason: EffectSchema.optionalKey(EffectSchema.String),
+  withTask: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
 export type CodingAgentArchivedBy = typeof codingAgentArchivedBySchema.Type;
@@ -833,6 +836,13 @@ export const CHANGES_BOUNDS = {
 /** A commit as GitHub names it: forty hex digits. */
 const commitShaSchema = EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f]{40}$/u));
 
+/**
+ * One changed file as GitHub lists it: its path, where it moved from, what
+ * became of it, the lines it adds and removes, its patch or why none, and
+ * the git object its contents after are (`blobSha`), which a reader of the
+ * file whole checks it read the very contents the patch was made against;
+ * absent from a service before it, and for a file with no contents after.
+ */
 const changedFileSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   previousPath: EffectSchema.NullOr(EffectSchema.String),
@@ -841,6 +851,7 @@ const changedFileSchema = EffectSchema.Struct({
   deletions: countedNumber,
   patch: EffectSchema.NullOr(EffectSchema.String),
   omitted: EffectSchema.NullOr(EffectSchema.Literals(Object.values(PATCH_OMITTED))),
+  blobSha: EffectSchema.optionalKey(commitShaSchema),
 });
 
 export type CodingAgentChangedFile = typeof changedFileSchema.Type;

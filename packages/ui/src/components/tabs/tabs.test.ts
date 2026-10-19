@@ -10,7 +10,8 @@ import { TAB_COUNT_TONE, TabCount, Tabs } from "./tabs.js";
  * tabs.test.ts -- a row of tabs is a tablist: the selected tab is the one
  * Tab lands on and the one its panel is shown for, a press or an arrow
  * shows another and takes the keyboard there, wrapping at either end, and
- * Home and End go to the ends. A count's glyph says its state in words.
+ * Home and End go to the ends; ↑ and ↓, and a key held with a modifier, are
+ * not the row's. A count's glyph says its state in words.
  */
 
 declare global {
@@ -110,10 +111,10 @@ function reading(page: HTMLElement): Reading {
   };
 }
 
-function pressKey(page: HTMLElement, key: string): void {
+function pressKey(page: HTMLElement, key: string, held: KeyboardEventInit = {}): void {
   const focused = document.activeElement ?? page;
   act(() => {
-    focused.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    focused.dispatchEvent(new KeyboardEvent("keydown", { ...held, key, bubbles: true }));
   });
 }
 
@@ -168,6 +169,23 @@ test("Home and End go to either end of the row", () => {
   pressKey(page, "End");
   assert.deepEqual(reading(page).selected, ["Files"]);
   assert.equal(reading(page).focused, "Files");
+});
+
+test("↑ and ↓, and a key held with a modifier, leave the row as it is", () => {
+  const page = render(createElement(PullRequestViews));
+  act(() => tabs(page)[1]?.focus());
+  pressKey(page, "ArrowDown");
+  pressKey(page, "ArrowUp");
+  for (const held of [{ metaKey: true }, { altKey: true }, { ctrlKey: true }, { shiftKey: true }]) {
+    pressKey(page, "ArrowRight", held);
+    pressKey(page, "Home", held);
+  }
+  assert.deepEqual(reading(page), {
+    selected: ["Checks"],
+    tabStop: ["Checks"],
+    focused: "Checks",
+    shown: ["Checks view"],
+  });
 });
 
 test("a count's glyph says its state in words beside the count", () => {

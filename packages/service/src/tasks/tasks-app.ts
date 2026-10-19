@@ -1,7 +1,9 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { askRecord } from "@luke/database/models/asks";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { childTitlesOf } from "@luke/database/models/child-titles";
 import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
+import { hostedStore } from "@luke/database/models/hosted-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readIssue } from "@luke/database/models/issue-store";
 import {
@@ -11,7 +13,7 @@ import {
 } from "@luke/database/models/plan-attachments";
 import { listPages, readPageVersion } from "@luke/database/models/plan-pages";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
-import { standingSessionsNamed } from "@luke/database/models/recorded-session";
+import { conversationOwnerOf, standingSessionsNamed } from "@luke/database/models/recorded-session";
 import {
   createTask,
   deleteTask,
@@ -51,8 +53,17 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Data, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { STOP_REFUSAL, stopConversation } from "../agents/brain-host/brain-ask.js";
+import { EVE_MOUNT } from "../agents/brain-host/eve-sessions.js";
 import { MAXIMUM_START_BODY_BYTES, startRequestedAgent } from "../agents/coder-host/start.js";
-import { type EveReach, eveFor, stoppedForGood, summaryOf } from "../agents/coder-host/stop.js";
+import {
+  type EveReach,
+  eveFor,
+  standsStopped,
+  stoppedForGood,
+  stopsForGood,
+  summaryOf,
+} from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
 import {
   CURSOR_START,
@@ -61,7 +72,7 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "../agents/coder-host/transcript.js";
-import { retireSessions } from "../agents/retire-sessions.js";
+import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import {
   TASK_LIST_ARCHIVED,
@@ -79,7 +90,6 @@ import {
   HOSTED_BYTES_HEADERS,
   HOSTED_REFUSAL,
   type HostedRefusal,
-  hostedBearerOnly,
   hostedJsonResponse,
   hostedNotFoundRoute,
   hostedRefusing,
@@ -136,7 +146,8 @@ import { readTaskCode, readTaskWork } from "./task-work-store.js";
  * `GET /api/plans/{id}` is the window opening a task, a read that moves
  * nothing: the list stands newest started first whatever is opened. Its
  * `DELETE` stops every coding agent of the task first, through the one Stop
- * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the task. Each
+ * (`packages/service/src/agents/coder-host/stop.ts`), and only then deletes the task, as
+ * its archive stops them before it archives them with the task. Each
  * row of the list carries what the task's coding agents are doing and what
  * they published, in brief, where it has any (`packages/service/src/agents/task-agents.ts`). A pin
  * and an archive are changes like a rename, though a pin is the asking
@@ -221,6 +232,8 @@ const TASKS_PATH = {
   RESTORE: "/api/plans/restore",
   /** POST saves the developer's edit of the document; the rewrite moves the path's id into the `id` query. */
   EDIT: "/api/plans/edit",
+  /** POST stops everything Luke has running or waiting on the task; the rewrite moves the path's id into the `id` query. */
+  STOP: "/api/plans/stop",
   /** GET lists the task's pages; the rewrite moves the path's id into the `id` query. */
   PAGES: "/api/plans/pages",
   /** GET reads one version of one page; the rewrite moves the path's ids and number into the `id`, `page`, and `version` queries. */
@@ -524,7 +537,7 @@ const startedAgentOn = (
   task: Task,
   agent: TaskAgentStart,
 ): Effect.Effect<TaskStartAnswer, never, TasksServices> =>
-  startRequestedAgent(eveFor(seams, request), userId, task.id, agent).pipe(
+  startRequestedAgent(eveFor(seams, request, userId), userId, task.id, agent).pipe(
     Effect.map((started): TaskStartAnswer => ({ plan: task, agent: started.agent })),
     Effect.catch((refusal) =>
       Effect.gen(function* () {
@@ -543,9 +556,9 @@ const startedAgentOn = (
  * its workspaces; POST starts one with an empty document, its repository
  * confirmed and its Linear issue and its own issue read first, and, where it
  * names an agent, starts that agent on it: a start naming an agent and no
- * repository is refused as an agent's Start on such a task is, and one
- * carrying no bearer, which the agent's session is opened over, as
- * unauthenticated, both before anything is written; one whose agent's key
+ * repository is refused as an agent's Start on such a task is, before
+ * anything is written, and the agent's session is opened as the request's
+ * own caller (`coder-host/stop.ts`'s `eveFor`); one whose agent's key
  * already started an agent in the workspace answers that agent's task and
  * the agent (`startedBefore`).
  */
@@ -578,8 +591,6 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   if (Result.isFailure(started)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { agent } = started.success;
   if (agent !== undefined) {
-    // Note that the agent's session is opened over the developer's bearer, so a cookie's start is refused before anything is written.
-    yield* hostedBearerOnly(request);
     if (started.success.repository === undefined || started.success.repository === null) {
       return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
     }
@@ -634,8 +645,19 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
  * move is confirmed in the workspace the task moves to, and a move confirms
  * the repository the row names under its lock, so one changed meanwhile is
  * the one confirmed.
+ *
+ * An archive stops every coding agent of the plan first, as a Stop and an
+ * agent's own archive stop one, then archives them with the plan under its
+ * lock (`updateTask`), each read again under its conversation's lock. An
+ * eve that refuses a Stop, an agent still coming up or with a message
+ * awaiting its turn, which no Stop can name yet, or one handed a message
+ * after it was stopped, leaves the plan and every agent standing and the
+ * archive refused as not ready, so it is asked again a moment later.
  */
 const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: TasksAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
   userId: string,
   taskId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
@@ -653,6 +675,18 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       : Effect.succeed(organizationId);
   const repository =
     "repository" in changes ? yield* reachableRepository(workspace, changes.repository) : undefined;
+  const archiving = changes.archived === true;
+  if (archiving) {
+    const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
+    // Every agent is read before any is stopped, so an archive refused as not ready cancels no one's work.
+    const ready = yield* Effect.forEach(agents, stopsForGood);
+    if (ready.includes(false)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+    yield* Effect.forEach(
+      agents,
+      (agent) => stoppedForGood(seams, writer, request, userId, agent),
+      { discard: true },
+    );
+  }
   const task = yield* updateTask(
     userId,
     taskId,
@@ -665,11 +699,14 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       ...("archived" in changes ? { archived: changes.archived } : undefined),
     },
     organizationId === undefined ? undefined : movedRepositoryReached(organizationId),
+    archiving ? standsStopped : undefined,
   ).pipe(
     Effect.catch((failure) =>
       failure._tag === "MoveRefused"
         ? Effect.fail(failure.refusal)
-        : hostedStoreOrArchived(Effect.fail(failure)),
+        : failure._tag === "TaskAgentUnstopped"
+          ? Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY)
+          : hostedStoreOrArchived(Effect.fail(failure)),
     ),
   );
   if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -690,10 +727,14 @@ const ONE_TASK_METHODS: ReadonlySet<string> = new Set([
  * that no Stop can name yet, or an agent started while the others were
  * stopped, leaves the task standing and refused.
  *
- * It takes the developer's bearer alone (`hostedBearerOnly`), because the
- * Stops and the retires reach eve over it: a browser's session cookie
- * carries none eve takes, so a cookie's delete of an idle task would go on
- * with every session of it left standing.
+ * The Stops and the retires reach eve as the request's own caller
+ * (`coder-host/stop.ts`'s `eveFor`): over the developer's bearer, or, for a
+ * browser's session cookie, as the deployment acting for the account the
+ * cookie named, which eve's door admits for a cancel and a retire on a
+ * session that account reaches, so a cookie's delete retires the task's
+ * sessions as a bearer's does. A cookie's delete on a deployment that cannot
+ * reach eve as itself is refused as unavailable before anything is stopped
+ * (`retiringReach`), where a bearer's goes on with its retires a courtesy.
  */
 const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: TasksAppSeams,
@@ -702,11 +743,11 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   taskId: string,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
-  yield* hostedBearerOnly(request);
+  const eveAt = yield* retiringReach(seams, request, userId);
   const agents = yield* hostedStoreOrUnavailable(
     listCodingAgents(userId, taskId, { includeArchived: true }),
   );
-  yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, agent), {
+  yield* Effect.forEach(agents, (agent) => stoppedForGood(seams, writer, request, userId, agent), {
     discard: true,
   });
   const stopped = new Set(agents.map(({ id }) => id));
@@ -718,7 +759,7 @@ const deleteEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       // agent started meanwhile refuses retires nothing.
       beforeDelete: (conversationIds) =>
         Effect.flatMap(standingSessionsNamed(conversationIds), (sessions) =>
-          retireSessions((mount) => eveFor(seams, request, mount), sessions),
+          retireSessions(eveAt, sessions),
         ),
     }).pipe(Effect.catchTag("TaskAgentUnstopped", () => Effect.succeed(undefined))),
   );
@@ -747,7 +788,9 @@ const oneEndpoint = /* @__PURE__ */ Effect.fn("web/taskEndpoint")(function* (
       plan: opened.value.task,
     } satisfies TaskAnswer);
   }
-  if (incoming.method === HTTP_METHOD.PATCH) return yield* updateEndpoint(userId, taskId);
+  if (incoming.method === HTTP_METHOD.PATCH) {
+    return yield* updateEndpoint(seams, writer, request, userId, taskId);
+  }
   return yield* deleteEndpoint(seams, writer, request, userId, taskId);
 });
 
@@ -1187,6 +1230,38 @@ const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function*
   }
 });
 
+/** POST stops the turn Luke is running on the task, call or no call, under its conversation's owner, through eve as the request's own caller (`eveFor`). */
+const stopEndpoint = /* @__PURE__ */ Effect.fn("web/planStopEndpoint")(function* (
+  seams: TasksAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST)
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const taskId = yield* idOf(request, TASK_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const { conversationId } = yield* reachedTask(userId, taskId);
+  const owner = Option.getOrUndefined(
+    conversationId === undefined
+      ? Option.none()
+      : yield* hostedStoreOrUnavailable(conversationOwnerOf(conversationId)),
+  );
+  if (conversationId === undefined || owner === undefined)
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {});
+  const eve = yield* eveFor(seams, request, userId, EVE_MOUNT.TASKS);
+  const stopSeams = { store: hostedStore(), asks: askRecord(), writer: yield* writer, eve };
+  const stopped = yield* hostedStoreOrUnavailable(
+    stopConversation(stopSeams, owner, conversationId),
+  );
+  const refused =
+    stopped !== undefined &&
+    Result.isFailure(stopped) &&
+    stopped.failure.refusal === STOP_REFUSAL.UPSTREAM;
+  if (refused) return yield* Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {});
+});
+
 /** GET lists the task's pages, the most recently written first; a task id the account does not own answers none, as the history does. */
 const pagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskPagesEndpoint")(function* (
   seams: TasksAppSeams,
@@ -1315,6 +1390,7 @@ export function tasksApp(seams: TasksAppSeams): WebRoutes<TasksAppServices> {
     HttpRouter.add(ANY_METHOD, TASKS_PATH.REVISION, hostedRefusing(revisionEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.RESTORE, hostedRefusing(restoreEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.EDIT, hostedRefusing(editEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, TASKS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.PAGES, hostedRefusing(pagesEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.PAGE, hostedRefusing(pageEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.ATTACHMENTS, hostedRefusing(attachmentsEndpoint(seams))),

@@ -10,10 +10,12 @@ import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
 import { runModeFor } from "../run-mode.js";
+import { recordingReporter } from "../testing/recording-reporter.js";
 import {
   AppStateStore,
   bootstrapPatch,
   initialAppState,
+  publishAppStateChanges,
   voiceWindowGone,
   voiceWindowState,
   windowAppState,
@@ -176,9 +178,19 @@ it("recording is what the host permitted less what an account's end stood down",
   assert.deepEqual(sessionReplayBootstrap(app.snapshot()), {
     permitted: true,
     appVersion: "1.2.3",
+    packaged: true,
     accountId: "person",
   });
   app.update({ sessionReplay: { ...app.snapshot().sessionReplay, halted: true } });
+  assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
+});
+
+it("an unpackaged run never records, whatever the host permitted", () => {
+  const app = new AppStateStore(
+    initialAppState({ ...RUN, packaged: false }, true, []),
+    Context.empty(),
+  );
+  app.update({ sessionReplay: { permitted: true, accountId: "person", halted: false } });
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
 });
 
@@ -238,3 +250,27 @@ it("the voice and call windows are sent the document, and answered their first r
   assert.equal(panel.tasks.conversation?.cursor, "1:1");
   assert.deepEqual(sent.run, held.run);
 });
+
+it.effect(
+  "a push that dies is reported, to Sentry as well, and the next change is still pushed",
+  () => {
+    const sentry = recordingReporter();
+    return Effect.gen(function* () {
+      const app = store();
+      const reported: string[] = [];
+      let pushes = 0;
+      const publish = () =>
+        Effect.suspend(() => {
+          pushes += 1;
+          return pushes === 1 ? Effect.die(new Error("the window went away")) : Effect.void;
+        });
+      yield* publishAppStateChanges(app, publish, (message) => reported.push(message));
+      yield* Effect.yieldNow;
+      app.update({ audio: { microphoneStatus: MICROPHONE_STATUS.GRANTED } });
+      yield* Effect.yieldNow;
+      assert.equal(pushes, 2);
+      assert.deepEqual(reported, ["the app-state push to windows failed: the window went away"]);
+      assert.deepEqual(sentry.reported, ["the window went away"]);
+    }).pipe(Effect.scoped, Effect.provide(sentry.layer));
+  },
+);

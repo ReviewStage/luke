@@ -127,13 +127,15 @@ function AccountMenu(): React.JSX.Element {
   );
 }
 
-/** A row a right-click opens the task's menu on, at the pointer. */
+/** A row a right-click, or a touch held on it, opens the task's menu on, at the pointer. */
 function RightClickRow(): React.JSX.Element {
   const menu = useMenu(true);
   return (
     <>
-      <button type="button" className="catalog-menu-row" onContextMenu={menu.contextMenu()}>
-        <Text tone={TEXT_TONE.MUTED}>Right-click anywhere in this row.</Text>
+      <button type="button" className="catalog-menu-row" {...menu.contextMenu()}>
+        <Text tone={TEXT_TONE.MUTED}>
+          Right-click anywhere in this row, or hold it on a touch screen.
+        </Text>
       </button>
       {menu.drawn && (
         <Menu label="Task actions" menu={menu.drawn} groups={TASK_ACTIONS} onClose={menu.close} />

@@ -18,6 +18,10 @@ const HOME = "https://tryluke.dev/acme";
 const LINKS: readonly (readonly [LinkPlace, string])[] = [
   [{ kind: LINK_PLACE.TASK, planId: TASK }, `${HOME}/plan/${TASK}`],
   [{ kind: LINK_PLACE.SECTION, planId: TASK, anchor: "rollout" }, `${HOME}/plan/${TASK}#rollout`],
+  [
+    { kind: LINK_PLACE.COMMENT, planId: TASK, threadId: OTHER },
+    `${HOME}/plan/${TASK}?comment=${OTHER}`,
+  ],
   [{ kind: LINK_PLACE.VERSION, planId: TASK, revision: 12 }, `${HOME}/plan/${TASK}/version/12`],
   [{ kind: LINK_PLACE.PAGE, planId: TASK, pageId: OTHER }, `${HOME}/plan/${TASK}/page/${OTHER}`],
   [{ kind: LINK_PLACE.CALL, planId: TASK }, `${HOME}/plan/${TASK}/call`],
@@ -100,6 +104,22 @@ test("a link pasted with a trailing slash, a query, or a fragment its kind has n
     workspace: "acme",
     place: { kind: LINK_PLACE.INBOX_ITEM, agentId: AGENT, itemId: OTHER },
   });
+});
+
+test("a task's link names one of its comment threads by its comment query alone, any other query being the address's own", () => {
+  assert.deepEqual(readLink(`${HOME}/task/${TASK}/?from=slack&comment=${OTHER}#rollout`)?.place, {
+    kind: LINK_PLACE.COMMENT,
+    planId: TASK,
+    threadId: OTHER,
+  });
+  assert.deepEqual(readLink(`${HOME}/plan/${TASK}?comment=${OTHER}&comment=${AGENT}`)?.place, {
+    kind: LINK_PLACE.TASK,
+    planId: TASK,
+  });
+  assert.equal(
+    appLinkOf(`${HOME}/plan/${TASK}?comment=${OTHER}&from=slack`),
+    `tryluke://tryluke.dev/acme/plan/${TASK}?comment=${OTHER}`,
+  );
 });
 
 test("a task's own link, or a section's, is read under /task/ and with a slash after its id, as under /plan/", () => {

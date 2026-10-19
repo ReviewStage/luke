@@ -20,8 +20,8 @@
 # build from: the three apps, every package (the services' workspace closure
 # is all of them bar `host` and `credentials`, which is not worth a list that
 # could go stale), the dependency patches, the install's own files, the shared
-# compiler options, the documents the web app prerenders, and `vercel.json`
-# and this script. `scripts/preview-address.sh` reads the same list, so a
+# compiler options, the documents the web app prerenders, `vercel.json`, this
+# script, and the eve services' source-map step (`eve-source-maps.sh`). `scripts/preview-address.sh` reads the same list, so a
 # skipped commit is known to serve what its nearest built ancestor serves.
 #
 # Note that since the project's Root Directory became the repository root
@@ -51,6 +51,7 @@ DEPLOYED_PATHS=(
     :/PRIVACY.md
     :/vercel.json
     :/scripts/vercel-ignore.sh
+    :/scripts/eve-source-maps.sh
 )
 
 if [[ ${1:-} == --paths ]]; then

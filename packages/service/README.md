@@ -341,13 +341,37 @@ never falls to the cookie beside it, because Better Auth's bearer plugin
 leaves the cookie standing under any header it did not sign. So a page on the
 deployment's own origin reaches the account routes the desktop does, its
 state-changing requests held to that origin by `src/http/origin-guard.ts`
-first, but for the work that reaches eve over the caller's own bearer, which
-eve's channels take alone: an agent's Start, message, and Stop, an inbox
-answer handed to its agent, and a manual automation run are refused at eve
-for a cookie, and the two deletes, a task's and the account's, refuse a
-cookie themselves (`hostedBearerOnly` in `src/http/http-effect.ts`), since
-each ends the eve sessions of what it deletes over that bearer and a refusal
-there would go unnoticed. What acts for one device rather than the account
+first. eve's channels take no cookie, so the work that reaches eve picks
+its caller per request in one place (`src/agents/coder-host/stop.ts`'s
+`eveFor`): a request that carries an `Authorization` header reaches eve over
+that bearer as it came, as every desktop request does, and one that carries
+none, whose account the cookie named, reaches eve as the deployment acting
+for that account, under the deployment's own `CRON_SECRET` with the account
+in `x-luke-account`. The account is always the one the route resolved from
+that request, never one the request or a row names, and a deployment with
+no secret or no eve origin answers such a request unavailable, a delete
+included: a cookie's delete composes eve before it stops or erases anything
+and is refused where it cannot (`src/agents/retire-sessions.ts`'s
+`retiringReach`), while a bearer's goes on with its retires a courtesy, as
+it always has. The channels'
+door holds the deployment to what its actor admits
+(`src/agents/brain-host/auth.ts`): on the coding agents' channel the typed
+opening and line it already carried for the voice brain, which is an
+agent's Start, a message, an inbox answer, and a manual automation run, on
+Luke's channel a typed ask, which a comment mentioning him hands over
+(`src/tasks/comment-ask.ts`), and on both channels a cancel, which is an
+agent's Stop, its Archive, a task's archive, and Luke's Stop on a plan, and a
+reset, which is how the two deletes, a task's and the account's, retire the
+eve sessions of what they delete (`src/agents/retire-sessions.ts`); each only
+on a session or a conversation the account reaches, as the door holds every
+caller. A typed message is minted at either door as the account's own
+principal, the very identity its bearer would be admitted as, with the
+deployment named only in its `luke:carrier` attribute, because eve steers a
+running turn, and folds the messages that waited into one turn, only by that
+identity: a comment's ask of Luke from a browser waits behind a call's spoken
+turn, which runs as the deployment, and joins the member's own typed turn,
+exactly as the desktop's over the bearer does, and a teammate's runs as the
+teammate, never as the plan's owner. What acts for one device rather than the account
 takes the bearer alone: the Mac's commands (`resolveHostedBearerUserId`), and
 eve's channels, which resolve with `hostedUserId`, as the voice and terminal
 relays resolve with `userIdForAuthorization`. Because a tab opened on a byte route now
@@ -587,7 +611,8 @@ more than one sees exactly what it saw before:
   Luke account holds but one whose first sign-in ended without a grant, the
   providers it may add another account at, and each failure; each
   status `connected`, `pending`, `expired`, `disconnected`, or
-  `unavailable` (no connector for it on this deployment). A sign-in still
+  `unavailable` (no connector for it on this deployment). For a caller
+  that carries a bearer, as the desktop does, a sign-in still
   under way, begun within the last fifteen minutes, is settled here by
   asking Connect for a token afresh, and stands `pending` until it settles,
   over an `expired` row as over none. One with no token yet is asked after
@@ -600,6 +625,19 @@ more than one sees exactly what it saw before:
   `signInFailures`, `reason` `canceled` or `error`, with the first line of
   Connect's error message, cut to 200 characters, where it is shaped like no
   credential (`credentialFreeLine` in `src/integrations/mcp-tools.ts`).
+  A caller with only the browser's session cookie is answered where each
+  row stands as stored, a sign-in within its window `pending`, and nothing
+  is settled, ended, or labelled, and Connect is not asked: a Lax cookie
+  rides a link another site sends the browser on, which must not settle
+  the account's sign-in or spend its one `signInFailures` notice. The
+  endpoint reads the `Authorization` header itself (`hostedCarriesBearer`
+  in `src/http/http-effect.ts`), since every function holding the group
+  answers every path it declares.
+- `POST /api/account/integrations/settle` settles every sign-in under way as
+  the bearer's read does, for any caller, and answers that read's body. A
+  cookie's POST is held to the deployment's own pages by
+  `src/http/origin-guard.ts` first, so a page of the web client settles
+  here; any other method is refused.
 - `POST /api/account/integrations/{provider}/connect` asks Connect's
   `startAuthorization` for the account under its row's subject, with
   `/api/account/integrations/connected?state=…` as the callback, records the
@@ -1025,11 +1063,13 @@ files is `src/agents/coder-host/`: the same door and conversation
 admission as the hosted brain's (`src/agents/brain-host/door.ts`,
 `src/agents/brain-host/conversation.ts`), with the developer's own bearer the caller
 the channel walks in for the desktop's routes (`src/agents/coder-host/channel.ts`): a
-Start and a Stop come from a route still holding it, and a follow-up
+Start and a Stop come from a route holding it, and a follow-up
 steers; the deployment acting for the account is admitted for the two things
 the voice brain does there on the developer's behalf, a typed opening that
 starts an agent and a typed line that steers one, each minted as the
-developer's own principal with the deployment named as its carrier. The agent (`apps/dev/agent.ts`) runs none of eve's default
+developer's own principal with the deployment named as its carrier, and the
+same route reached on a browser's session cookie alone walks in as that
+deployment for the cookie's account, a Stop and a delete's retire with it. The agent (`apps/dev/agent.ts`) runs none of eve's default
 tools and authors its own under `apps/dev/tools/`, which is exactly the set the
 store writer registers (`src/agents/coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, and `glob`, the code extension's `apply_patch` and `grep` from
@@ -1065,30 +1105,45 @@ acting for the agent's starter, kept under the sending agent's name
 agent or one of another workspace refuses; `start_agent`, which starts
 another on its own task, or on another task of its workspace by the
 `taskId` that `list_tasks` answers, by the Start button's own path, telling
-it which agent started it; `archive_agent` and `unarchive_agent`, which
-archive an idle agent of the workspace, never itself or one still working,
-on the rule the Archive agent menu keeps for the agent's starter, recording
-the archiving agent and its reason on the archived agent's row
-(`archived_by`), and bring one back; `stop_agent`, which stops the turn
+it which agent started it; `stop_agent`, which stops the turn
 under way of an agent of the workspace, never itself or an archived one, by
 the Stop button's own path (`src/agents/coder-host/stop.ts`), the agent
-staying available and an idle one answered as idle; `read_page`, a page shown on any task
+staying available and an idle one answered as idle; `update_agent`, which
+renames an agent of the workspace, moves it to another model and effort the
+catalog takes, pins one on no task for the starter, or switches its MCP
+servers, every change asked in one transaction, and archives an idle agent
+of the workspace, never itself or one still working, on the rule the Archive
+agent menu keeps for the agent's starter, recording the archiving agent and
+its reason on the archived agent's row (`archived_by`), or brings one back; `read_page`, a page shown on any task
 of the workspace by its id, its HTML cut on a line to a bound, which a
 mention of a page points the agent at; `list_tasks`, the workspace's
 open tasks, and its archived ones too where asked, each with the sidebar
-section the agent's starter keeps it in, and those sections;
-`create_section`, `delete_section`, and `move_task`
+section the agent's starter keeps it in, and those sections; `read_task`
+and `create_task` (`src/agents/task-tools.ts`), which read one task of the
+workspace with its plan, its brief, and the issue it was started from, and
+make one for the starter, on the repository named or the agent's own,
+confirmed through the workspace's installation, with a brief and a plan to
+start from and no agent on it, under an id drawn from eve's key for the
+call (`src/agents/called-id.ts`), so a call run again makes one, which
+`start_agent` then starts on by its id;
+`create_section` and `delete_section`
 (`src/agents/task-section-tools.ts`), which make and delete the starter's
-own sections of the workspace's sidebar and move a task into one or out of
-them by the sidebar's own write (`PUT /api/task-sections`), a section made
-under an id drawn from eve's key for the call, so a call run again makes
-one; `update_task`, which renames a task of the workspace, sets or clears
-its repository (confirmed through the workspace's installation), pins it
-for the agent's starter, or archives it or brings it back, by the task
+own sections of the workspace's sidebar by the sidebar's own write
+(`PUT /api/task-sections`), a section made under an id drawn from eve's key
+for the call, so a call run again makes one; `update_task`, which renames a
+task of the workspace, sets or clears its repository (confirmed through the
+workspace's installation), pins it for the agent's starter, moves it into
+one of the starter's sections or out of them by that same write, or
+archives it or brings it back, by the task
 menu's own path (`updateTask`, as `src/tasks/tasks-app.ts`'s PATCH runs it)
 for that starter, never archiving the task the agent works on, stopping no
 agent, as the menu's archive stops none, and recording no reason, since a
-task's archive keeps only when it stands from; and `list_models`, the models and efforts the agent's starter may
+task's archive keeps only when it stands from; `list_issues`, `read_issue`,
+`create_issue`, and `update_issue` (`src/agents/issue-tools.ts`), which list,
+read, file, change, archive, and bring back the issues of the agent's
+workspace, named by id or by identifier, as its starter, through the store
+`/api/issues` writes by (`issue-store.ts`), an issue of another workspace
+reading as none; and `list_models`, the models and efforts the agent's starter may
 start one on and their default, read from the one source a start is checked
 against (`accountModelChoices` in `src/agents/coder-host/start.ts`), so a
 choice it lists is one `start_agent` takes. A list, a read, or a start of an agent, a list of tasks,
@@ -1839,9 +1894,10 @@ whole text against the base it was made on (`saveDeveloperEdit`), saved
 where the text still holds that base, laid over what Luke wrote meanwhile
 where it can be, and answered as a conflict with the text as it stands, with
 nothing saved, where it cannot (`packages/features/src/plan-edit.ts`); a
-restore above is the second. A call's notetaker
-(`src/tasks/plan-scribe.ts`) and a coding agent's `edit_plan`
-(`src/agents/coder-host/plan-edit.ts`) answer with notes
+restore above is the second. Luke's own `edit_plan`
+(`src/agents/brain-host/plan-edit.ts`, run as an eve task from
+`apps/luke/tools/edit_plan.ts`, on a call or off one) and a coding agent's
+`edit_plan` (`src/agents/coder-host/plan-edit.ts`) answer with notes
 (`packages/features/src/plan-template.ts`): a point added under a heading, a
 phrase corrected, or a line struck. `saveNotes` takes them in order over the
 text as it stands, passing over a note that names a phrase the plan does not
@@ -1853,6 +1909,10 @@ a task deleted meanwhile, which a save never recreates because it is an
 each leaving the prior document in place.
 `readTask` is the read Luke starts and resumes from, with the
 conversation `attachTaskConversation` associated, and it moves nothing.
+
+`POST /api/plans/{id}/stop` stops the turn Luke is running on a task, the stop
+key's and the Call tab's Stop's one action, through `stopAsk` under the
+conversation's owner. Hanging up a call stops nothing.
 `src/tasks/tasks.test.ts` and `apps/web/tests/tasks-app.test.ts` hold both halves
 against a real dialect.
 
@@ -1871,11 +1931,15 @@ research reads beside it, `queue_question`
 how a question reaches the voice while the turn still runs, and the
 tools about coding agents (`src/agents/coding-agent-tools.ts`), the same
 `list_agents`, `read_agent`, `message_agent`, `start_agent`,
-`stop_agent`, `archive_agent`, `unarchive_agent`, `list_tasks`, `update_task`,
-and `list_models` every coding agent is offered, and the same
-`create_section`, `delete_section`, and `move_task`
+`stop_agent`, `update_agent`,
+`list_tasks`, `update_task`, and `list_models` every coding agent is
+offered, the same `read_task` and `create_task`
+(`src/agents/task-tools.ts`), and the same
+`create_section` and `delete_section`
 (`src/agents/task-section-tools.ts`), which keep the call's member's own
-sidebar sections: a list
+sidebar sections, and `list_issues`, `read_issue`, `create_issue`, and
+`update_issue` (`src/agents/issue-tools.ts`), which keep the workspace's
+issues: a list
 of the task's workspace's agents, on any task and by any member, with each
 agent's status, task, and what it published, narrowed to this task or
 another where asked (`src/agents/workspace-agents.ts`), one agent's recent
@@ -2476,9 +2540,9 @@ and never re-sent, and a write that fails after the socket closed is
 reported. `src/voice/exchange-attachment.ts` is what the function passes:
 the task's conversation resolved at the session's start, under whichever
 member of its workspace opened it, the function's writer, eve reached as the
-deployment for the calling account, and the plan's
-notetaker (`src/tasks/plan-scribe.ts`), which runs only where the
-deployment holds the OpenAI key.
+deployment for the calling account. No notetaker stands beside the call:
+Luke writes the plan himself through his `edit_plan`, and a developer's
+words no ask carried are handed to him as one last ask as the call ends.
 
 eve is reached as the deployment acting for the one account the session
 resolved at its handshake, since the function holds no bearer of the
@@ -2486,17 +2550,28 @@ account's by the time a delegation arrives. It calls eve's session routes
 under the deployment's `CRON_SECRET` as its bearer with the account in
 `x-luke-account`, and the eve door's first authenticator admits that pair as
 a principal of the deployment's own type — the deployment's one id, the
-account as its attribute — for a message naming a kind of turn its table,
-`DEPLOYMENT_TURNS` in `src/agents/brain-host/channel.ts`, admits (a spoken
-turn), for a cancel of a turn in a session, which is how the stop key's
-`stopAsk` and the hook's carried Stop reach eve, and for a GET of a session's
+account as its attribute — for a spoken message, which its table,
+`DEPLOYMENT_TURNS` in `src/agents/brain-host/channel.ts`, admits, for a
+cancel of a turn in a session, which is how the stop key's `stopAsk` and
+the hook's carried Stop reach eve, and for a GET of a session's
 event stream, which the live brain listens to from its tail so it reads a
 spoken ask's turn the moment eve tells an event rather than only on its
 250 ms poll (the poll stays, for a stream refused or dropped), and nothing
 else: any other route or kind of turn carrying the secret is refused outright
 rather than passed to the account authenticator behind it. The stream read is
 the brain's channel's alone; the coder channel's deployment, which presents
-the account, is refused it. Which account a request acts
+the account, is refused it. The table admits a typed message too, which a
+hosted route a browser reached on its session cookie alone carries for a
+comment's ask of Luke (`src/tasks/comment-ask.ts`): it is minted as the
+account's own principal instead, the deployment named only as its carrier,
+so it never joins the call's spoken turn, nor a spoken ask its turn. The door
+admits that typed message from anything that holds the secret, since one
+secret proves no more than that something holding it acted, so what keeps
+the deployment's typed asks of Luke to a comment's is the code: no code path
+but the comment hand-over sends one. The voice function's eve client is
+typed to send a spoken ask and nothing else
+(`src/voice/deployment-exchange.ts`), and the brain host's carried Stop and a
+delete's retire are typed to cancel and to reset alone. Which account a request acts
 for is one accessor over both principal types, and the door's ownership
 checks and the host's admission read that answer, so the deployment can open
 a turn only on a conversation the named account reaches, and cancel one or

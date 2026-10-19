@@ -45,12 +45,11 @@ import { mergedMethods } from "./effect/composer.js";
 import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
 import { HostKernelTag, HostService } from "./effect/kernel.js";
 import {
+  type AccountSource,
   type AppIdentity,
   type Environment,
   Reporter,
-  type SecretCipher,
   ShutdownSignal,
-  type SignInConsent,
   TerminalSocket,
   VoiceSocket,
 } from "./effect/seams.js";
@@ -90,10 +89,9 @@ type HostAssemblyRequirements =
   | Reporter
   | VoiceSocket
   | Environment
-  | SecretCipher
   | AppIdentity
   | ShutdownSignal
-  | SignInConsent
+  | AccountSource
   | FileSystem.FileSystem
   | Path.Path
   | HttpClient.HttpClient;
@@ -155,25 +153,28 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     });
     const workspaceClient = new HostedWorkspaceClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      ...account.token,
-      ...account.sessionToken,
+      credential: account.credential,
+      sessionCredential: account.sessionCredential,
     });
     const codingAgentClient = new HostedCodingAgentClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      ...account.token,
+      credential: account.credential,
     });
     const tasks = yield* composeTasks({
       kernel,
       account,
       endTaskCall: (taskId) => live.service.endTaskCall(taskId),
       client: Object.assign(
-        new HostedTaskClient({ serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token }),
+        new HostedTaskClient({
+          serviceBaseUrl: kernel.hostedServiceBaseUrl,
+          credential: account.credential,
+        }),
         {
           workspaces: workspaceClient,
           github: new HostedGitHubConnectionClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            ...account.token,
-            ...account.sessionToken,
+            credential: account.credential,
+            sessionCredential: account.sessionCredential,
           }),
         },
       ),
@@ -189,7 +190,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       client: new HostedAutomationClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
+        credential: account.credential,
       }),
     });
     const issues = yield* composeIssues({
@@ -197,7 +198,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       client: new HostedIssueClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
+        credential: account.credential,
       }),
     });
     const factory = yield* composeFactory({
@@ -205,7 +206,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       client: new HostedFactoryWorldClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
+        credential: account.credential,
       }),
     });
     const integrations = yield* composeIntegrations({
@@ -213,7 +214,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       account,
       client: new HostedIntegrationsClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        ...account.token,
+        credential: account.credential,
       }),
       // Note that a refusal's reason is not reported, because it may carry the address.
       openExternal: (url) =>
@@ -232,7 +233,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           ),
           client: new HostedMacCommandClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            ...account.token,
+            credential: account.credential,
           }),
         })
       : unavailableConcern(HOST_PLATFORM_CONCERN.MAC_COMMANDS);
@@ -245,7 +246,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           account,
           client: new HostedTerminalClient({
             serviceBaseUrl: kernel.hostedServiceBaseUrl,
-            ...account.token,
+            credential: account.credential,
           }),
           openSocket: yield* TerminalSocket,
         })
@@ -281,7 +282,9 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     // composer's own set-once, so a reader that awaits its links suspends
     // until this has run rather than reading nothing.
     yield* settings.link({
-      refreshAccount: account.session.renewOnce,
+      credential: account.credential,
+      readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
+      confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
       setVoice: (voice) =>
         Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
       endLiveSession: Effect.suspend(() =>

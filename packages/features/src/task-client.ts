@@ -9,11 +9,10 @@ import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
+  type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
 import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.js";
 import { startRefusedAs } from "./coding-agent-client.js";
 import type { CodingAgentAgentAnswer } from "./coding-agent-view.js";
@@ -36,6 +35,14 @@ import {
 import { pictureTypeSchema } from "./picture-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL, planAttachmentAnswerSchema } from "./plan-attachment-wire.js";
 import {
+  type PlanCommentActionRequest,
+  type PlanCommentStartRequest,
+  planCommentActionRequestSchema,
+  planCommentStartRequestSchema,
+  planCommentsAnswerSchema,
+  planCommentThreadAnswerSchema,
+} from "./plan-comment-wire.js";
+import {
   type PlanEditAnswer,
   type PlanEditRequest,
   planEditAnswerSchema,
@@ -45,6 +52,8 @@ import {
   HOSTED_SERVICE_PATH,
   planAttachmentPath,
   planAttachmentsPath,
+  planCommentsPath,
+  planCommentThreadPath,
   planEditPath,
   planPageVersionPath,
   planRevisionPath,
@@ -61,6 +70,7 @@ import {
   taskPath,
   taskRestorePath,
   taskSkillsPath,
+  taskStopPath,
   taskTranscriptPath,
   taskTreePath,
   taskWorkPath,
@@ -113,12 +123,15 @@ import {
 } from "./task-wire.js";
 import {
   PICTURE_KEEP_FAILURE,
+  PLAN_COMMENT_CALL_FAILURE,
   type RepositoryCallFailure,
   type RepositoryListFailure,
   type StartCallFailure,
   TASK_CALL_FAILURE,
   type TaskCallFailure,
   type TaskCodeAnswer,
+  type TasksCommentAnswer,
+  type TasksCommentsAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TaskWorkAnswer,
@@ -151,13 +164,24 @@ export type TaskCallResult<Answer, Failure> =
   | { readonly ok: true; readonly answer: Answer }
   | { readonly ok: false; readonly failure: Failure };
 
-export interface HostedTaskClientOptions extends AccountToken {
+export interface HostedTaskClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
 }
 
 const UNANSWERED = { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+
+/** How long a held read may stand: the service's hold, and room for the answer to travel after it. */
+const HELD_READ_TIMEOUT_MS = 35_000;
+
+/** A comment call that answered nothing to draw. */
+const COMMENT_UNANSWERED = { failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED } as const;
+
+/** A comment call refused because the plan is not the account's to read or write. */
+const COMMENT_NOT_FOUND = { failure: PLAN_COMMENT_CALL_FAILURE.NOT_FOUND } as const;
 
 /** The list with the archived tasks among it, each flagged, which this build sorts into its own place. */
 const LIST_WITH_ARCHIVED_PATH = `${HOSTED_SERVICE_PATH.TASKS}?${new URLSearchParams({
@@ -215,9 +239,10 @@ function refusedAs<Failure extends TaskCallFailure>(
 export class HostedTaskClient {
   readonly #call: AccountCallEffects;
   readonly #start: AccountCallEffects;
+  readonly #held: AccountCallEffects;
 
   constructor(options: HostedTaskClientOptions) {
-    const credential = accountBearer(options);
+    const { credential } = options;
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential,
@@ -227,6 +252,71 @@ export class HostedTaskClient {
       baseUrl: options.serviceBaseUrl,
       credential,
       requestTimeoutMs: AGENT_START_TIMEOUT_MS,
+    });
+    this.#held = accountCall({
+      baseUrl: options.serviceBaseUrl,
+      credential,
+      requestTimeoutMs: HELD_READ_TIMEOUT_MS,
+    });
+  }
+
+  /** The plan's comment threads past the cursor, held by the service while nothing changed; not found where the plan is not the account's. */
+  comments(
+    planId: string,
+    after: string,
+  ): Effect.Effect<TasksCommentsAnswer, never, HttpClient.HttpClient> {
+    const send = this.#held.send;
+    return Effect.gen(function* () {
+      const answer = yield* send({
+        method: HTTP_METHOD.GET,
+        path: planCommentsPath(planId, after),
+      });
+      if (!callAnswered(answer)) return COMMENT_UNANSWERED;
+      const payload = unparsedWire(yield* jsonOf(answer.response));
+      if (!answer.response.ok) return commentRefusal(payload);
+      return (
+        Result.getOrUndefined(readServiceAnswer(planCommentsAnswerSchema)(payload)) ??
+        COMMENT_UNANSWERED
+      );
+    });
+  }
+
+  /** A thread started on the plan with its first comment, answered as it stands, or why not; a request the service would refuse by shape travels nowhere. */
+  startComment(
+    planId: string,
+    request: PlanCommentStartRequest,
+  ): Effect.Effect<TasksCommentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planCommentStartRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(COMMENT_UNANSWERED);
+    return this.#commentWrite(planCommentsPath(planId), admitted);
+  }
+
+  /** One thing done to one thread of the plan, answered with the thread as it stands, its deletion, or why not. */
+  actOnComment(
+    planId: string,
+    threadId: string,
+    request: PlanCommentActionRequest,
+  ): Effect.Effect<TasksCommentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planCommentActionRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(COMMENT_UNANSWERED);
+    return this.#commentWrite(planCommentThreadPath(planId, threadId), admitted);
+  }
+
+  /** A write to the plan's comments, its answer read as the thread answer's wire has it. */
+  #commentWrite(
+    path: string,
+    body: PlanCommentStartRequest | PlanCommentActionRequest,
+  ): Effect.Effect<TasksCommentAnswer, never, HttpClient.HttpClient> {
+    const send = this.#call.send;
+    return Effect.gen(function* () {
+      const answer = yield* send({ method: HTTP_METHOD.POST, path, body: JSON.stringify(body) });
+      if (!callAnswered(answer)) return COMMENT_UNANSWERED;
+      const payload = unparsedWire(yield* jsonOf(answer.response));
+      if (!answer.response.ok) return commentRefusal(payload);
+      return (
+        Result.getOrUndefined(readServiceAnswer(planCommentThreadAnswerSchema)(payload)) ??
+        COMMENT_UNANSWERED
+      );
     });
   }
 
@@ -647,6 +737,11 @@ export class HostedTaskClient {
     );
   }
 
+  /** Stops the turn Luke is running on a task. */
+  stopWork(taskId: string): Effect.Effect<void, never, HttpClient.HttpClient> {
+    return Effect.asVoid(this.#call.send({ method: HTTP_METHOD.POST, path: taskStopPath(taskId) }));
+  }
+
   /** Puts one revision of a plan back as its content, answering the task as it now stands, or nothing where the service did not restore it. */
   restore(
     taskId: string,
@@ -840,6 +935,12 @@ function taskStartedOf(started: TaskStartAnswer): TaskStarted {
     return { task: started.plan, agent: startRefusedAs(started.agentRefusal) };
   }
   return { task: started.plan };
+}
+
+/** A refused comment call: not found where the service said so, unanswered for anything else. */
+function commentRefusal(payload: UnparsedWireValue) {
+  const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
+  return refusal === HOSTED_API_ERROR.NOT_FOUND ? COMMENT_NOT_FOUND : COMMENT_UNANSWERED;
 }
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */

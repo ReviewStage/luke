@@ -51,7 +51,12 @@ import { listMessagesPast, sentLineStands } from "@luke/database/models/message-
 import { writePage } from "@luke/database/models/plan-pages";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
-import { openTaskConversation, savePlanText, updateTask } from "@luke/database/models/task-store";
+import {
+  openTaskConversation,
+  readTask,
+  savePlanText,
+  updateTask,
+} from "@luke/database/models/task-store";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { member, user } from "@luke/database/schemas/auth";
@@ -67,7 +72,11 @@ import {
   startTask,
 } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
-import { ACCOUNT_CHAT_REASON, accountInboxAnswerSchema } from "@luke/features/account-inbox-wire";
+import {
+  ACCOUNT_CHAT_REASON,
+  ACCOUNT_INBOX_ARCHIVED,
+  accountInboxAnswerSchema,
+} from "@luke/features/account-inbox-wire";
 import {
   firstMessageParts,
   firstMessageText,
@@ -97,6 +106,9 @@ import {
   CHAT_IMAGE_TYPE,
   CHAT_REPLY,
   chatAnswerSchema,
+  chatNoticeAsksLine,
+  chatNoticeReplyLine,
+  chatNoticeWords,
   chatWriteAnswerSchema,
   MEMBER_KIND,
   mentionedHandles,
@@ -172,6 +184,7 @@ import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { afterEach, type TestContext, vi } from "vitest";
+import { requestUserId } from "../auth/bearer.js";
 import {
   ACTION_RESULT_STATUS,
   AssistantMessageBuilder,
@@ -280,6 +293,8 @@ const AGENT_OVERVIEW = [
 const TASK = "/api/plans/plan";
 /** The account's tasks, served by the tasks group, each naming its agents in brief. */
 const TASKS = "/api/plans";
+/** Luke's Stop on a task, served by the tasks group, which reaches the brain's eve as the request's caller. */
+const TASK_STOP = "/api/plans/stop";
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
 
@@ -379,7 +394,17 @@ type SendAnswer =
   | typeof EVE_SEND_OUTCOME.RETIRED
   | typeof EVE_SEND_OUTCOME.FAILED;
 
-/** eve as the group reaches it, answering from a script and writing down every open, send, and cancel. */
+/** The cookie a browser signed in to the account sends, as the faked auth service reads it. */
+function sessionCookieOf(userId: string): string {
+  return `better-auth.session_token=${userId}`;
+}
+
+/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
+function deploymentFor(account: string): string {
+  return `deployment for ${account}`;
+}
+
+/** eve as the group reaches it, answering from a script and writing down every open, send, cancel, and retire, with who asked it. */
 function fakeEve(
   options: {
     readonly reachable?: boolean;
@@ -390,8 +415,12 @@ function fakeEve(
   const opened: Opened[] = [];
   const sent: Sent[] = [];
   const cancelled: (readonly [string, string])[] = [];
+  /** Who asked each cancel, in order: the request's bearer, or the deployment acting for an account. */
+  const cancelledAs: string[] = [];
   /** Every session eve was asked to retire, in order. */
   const reset: string[] = [];
+  /** Who asked each retire, in order, as `cancelledAs` writes it. */
+  const resetAs: string[] = [];
   let sessions = 0;
   let deliveries = 0;
   const eve = (authorization: string): EveSessions => ({
@@ -436,6 +465,7 @@ function fakeEve(
     cancel: (sessionId, eveTurnId) =>
       Effect.sync(() => {
         cancelled.push([sessionId, eveTurnId]);
+        cancelledAs.push(authorization);
         return options.cancels === false
           ? { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 403 }
           : { outcome: EVE_CANCEL_OUTCOME.ACCEPTED };
@@ -443,11 +473,12 @@ function fakeEve(
     reset: (sessionId) =>
       Effect.sync(() => {
         reset.push(sessionId);
+        resetAs.push(authorization);
         return { outcome: EVE_RESET_OUTCOME.RESET };
       }),
     stream: () => Stream.empty,
   });
-  return { eve, opened, sent, cancelled, reset };
+  return { eve, opened, sent, cancelled, cancelledAs, reset, resetAs };
 }
 
 /** The deployment's environment with no key of its own, which a test gives the one it reads. */
@@ -499,15 +530,27 @@ const standing = (
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
       ANALYTICS.layer,
     );
+    // Every account behind a bearer is signed in on a browser of its own too, whose cookie names it.
+    const sessions = new Map(
+      [...bearers.values()].map((userId) => [sessionCookieOf(userId), userId]),
+    );
     const seams = {
+      // The account read as `resolveHostedUserId` reads it: the bearer where one is carried, else the session cookie.
       resolveUserId: (incoming: Request) =>
-        Effect.succeed(
-          Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+        requestUserId(
+          incoming,
+          (input) => {
+            const sub = bearers.get(input.headers.get("authorization") ?? "");
+            return Effect.succeed(sub === undefined ? undefined : { sub });
+          },
+          (input) =>
+            Effect.succeed(Option.fromNullishOr(sessions.get(input.headers.get("cookie") ?? ""))),
         ),
       eveOrigin: () => ORIGIN,
       eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
-      // The deployment acting for an agent's starter, which the fake writes down as the starter's bearer.
-      eveAs: (starter: string) => eve.eve(`Bearer ${starter}`),
+      // The deployment acting for an account, an agent's starter for a chat notice or the account a
+      // cookie named, which the fake writes down apart from any bearer.
+      eveAs: (account: string) => eve.eve(deploymentFor(account)),
       workspaces: yield* fakeWorkspaceSeams,
       summaryModel,
     };
@@ -525,12 +568,12 @@ const standing = (
     yield* Effect.addFinalizer(() =>
       Effect.promise(() => Promise.all([agents.dispose(), tasks.dispose(), chat.dispose()])),
     );
-    /** The response as the function answers it, for the one route that answers bytes; a task's own path and the list land on the tasks group, and the chat's on the chat's. */
+    /** The response as the function answers it, for the one route that answers bytes; a task's own path, the list, and Luke's Stop land on the tasks group, and the chat's on the chat's. */
     const fetch = (request: Request) =>
       Effect.promise(() => {
         const { pathname } = new URL(request.url);
         if (pathname === CHAT) return chat.handler(request);
-        return pathname === TASK || pathname === TASKS
+        return pathname === TASK || pathname === TASKS || pathname === TASK_STOP
           ? tasks.handler(request)
           : agents.handler(request);
       });
@@ -559,6 +602,9 @@ function request(
     attachment?: string;
     picture?: string;
     src?: string;
+    number?: string;
+    /** A browser's session cookie, sent beside the bearer or, with no account named, in its place. */
+    cookie?: string;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
@@ -569,9 +615,13 @@ function request(
   if (init.attachment !== undefined) url.searchParams.set("attachment", init.attachment);
   if (init.picture !== undefined) url.searchParams.set("picture", init.picture);
   if (init.src !== undefined) url.searchParams.set("src", init.src);
+  if (init.number !== undefined) url.searchParams.set("number", init.number);
+  const headers = new Headers();
+  if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
+  if (init.cookie !== undefined) headers.set("cookie", init.cookie);
   return new Request(url, {
     method: init.method ?? "GET",
-    headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
+    headers,
     ...(init.body === undefined ? undefined : { body: JSON.stringify(init.body) }),
   });
 }
@@ -803,6 +853,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
 
         assert.equal(deleted.status, HOSTED_HTTP_STATUS.OK);
         assert.deepEqual(eve.reset, [sessionId]);
+        assert.deepEqual(eve.resetAs, [`Bearer ${other}`], "a bearer's delete retires over it");
       }),
   );
 
@@ -1002,6 +1053,64 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.deepEqual(
           eve.opened.map((opened) => [opened.authorization, opened.message.message]),
           [[`Bearer ${owner}`, prompt]],
+        );
+      }),
+  );
+
+  it.effect(
+    "over a browser's session cookie an agent's Start and a task's start naming an agent open the session as the deployment acting for the cookie's account, which no other account's cookie reaches",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, eve, ask } = yield* openTask();
+        const cookie = sessionCookieOf(owner);
+        const prompt = "Expire invitations after a week.";
+
+        const started = yield* ask(
+          request(TASK_AGENTS, undefined, {
+            method: "POST",
+            id: task.id,
+            cookie,
+            body: { idempotencyKey: randomUUID() },
+          }),
+        );
+        const withTask = yield* ask(
+          request(TASKS, undefined, {
+            method: "POST",
+            cookie,
+            body: {
+              workspaceId: task.workspaceId,
+              repository: RELAY_FULL_NAME,
+              agent: { idempotencyKey: randomUUID(), prompt },
+            },
+          }),
+        );
+        const stranger = yield* ask(
+          request(TASK_AGENTS, undefined, {
+            method: "POST",
+            id: task.id,
+            cookie: sessionCookieOf(other),
+            body: { idempotencyKey: randomUUID() },
+          }),
+        );
+
+        assert.equal(
+          readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).agent.planId,
+          task.id,
+        );
+        assert.equal(
+          readAnswer(taskStartAnswerSchema, HOSTED_HTTP_STATUS.CREATED, withTask).agentRefusal,
+          undefined,
+        );
+        assert.deepEqual(
+          stranger,
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          eve.opened.map((opened) => [opened.authorization, opened.message.message]),
+          [
+            [deploymentFor(owner), SNAPSHOT],
+            [deploymentFor(owner), prompt],
+          ],
         );
       }),
   );
@@ -1854,6 +1963,108 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   );
 
   it.effect(
+    "a Pull request tab naming another pull request of the agent's repository by its number reads and changes that one, and the agent's own where it names none",
+    () =>
+      Effect.gen(function* () {
+        const earlier = {
+          number: 11,
+          branch: "luke/teammate-invitations-base",
+          headSha: "beef0001",
+        };
+        const repository: RepositoryScript = (sent) => {
+          const path = `/repos/${RELAY.owner}/${RELAY.name}`;
+          switch (new URL(sent.url).pathname) {
+            case `${path}/pulls/${earlier.number}`:
+              return Response.json({
+                number: earlier.number,
+                title: "Lay the invitations' base",
+                html_url: `https://github.com/${RELAY_FULL_NAME}/pull/${earlier.number}`,
+                state: "open",
+                draft: false,
+                merged: false,
+                merged_at: null,
+                additions: 9,
+                deletions: 2,
+                changed_files: 3,
+                body: "The base.",
+                body_html: "<p>The base.</p>",
+                base: { ref: "main" },
+                head: { ref: earlier.branch, sha: earlier.headSha },
+                created_at: "2026-10-14T09:00:00Z",
+                mergeable_state: "clean",
+                user: null,
+                requested_reviewers: [],
+              });
+            case `${path}/commits/${earlier.headSha}/check-runs`:
+            case `${path}/commits/refs%2Fpull%2F${earlier.number}%2Fhead/check-runs`:
+              return Response.json({ check_runs: [] });
+            case `${path}/commits/${earlier.headSha}/status`:
+            case `${path}/commits/refs%2Fpull%2F${earlier.number}%2Fhead/status`:
+              return Response.json({ statuses: [] });
+            default:
+              return publishedPullRequest(sent);
+          }
+        };
+        const { owner, other, agent, calls, ask } = yield* published({ repository });
+        const header = (number?: string) =>
+          Effect.map(
+            ask(
+              request(AGENT_OVERVIEW_PULL_REQUEST, owner, {
+                id: agent.id,
+                ...(number === undefined ? undefined : { number }),
+              }),
+            ),
+            (answered) =>
+              readAnswer(
+                codingAgentOverviewPullRequestAnswerSchema,
+                HOSTED_HTTP_STATUS.OK,
+                answered,
+              ).pullRequest?.title,
+          );
+
+        assert.equal(yield* header(String(earlier.number)), "Lay the invitations' base");
+        assert.equal(yield* header(), "Expire teammate invitations");
+        const named = readAnswer(
+          codingAgentPullRequestAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(AGENT_PULL_REQUEST, owner, { id: agent.id, number: String(earlier.number) }),
+          ),
+        );
+        assert.deepEqual(
+          [named.branch, named.pullRequest?.number, named.pullRequest?.additions],
+          [earlier.branch, earlier.number, 9],
+        );
+        const before = calls.length;
+        const ready = yield* ask(
+          request(AGENT_PULL_REQUEST_ACTION, other, {
+            method: "POST",
+            id: agent.id,
+            number: String(earlier.number),
+            body: { action: "ready-for-review" },
+          }),
+        );
+        assert.deepEqual(ready, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(
+          calls
+            .slice(before)
+            .filter((call) => !call.query.includes("mutation"))
+            .map((call) => call.variables.number),
+          [earlier.number],
+        );
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        assert.deepEqual(
+          yield* ask(request(AGENT_OVERVIEW_PULL_REQUEST, owner, { id: agent.id, number: "0" })),
+          invalid,
+        );
+        assert.deepEqual(
+          yield* ask(request(AGENT_OVERVIEW_PULL_REQUEST, owner, { id: agent.id, number: "x" })),
+          invalid,
+        );
+      }),
+  );
+
+  it.effect(
     "a merge naming no head, or a head that is no commit, is refused before anything reaches GitHub",
     () =>
       Effect.gen(function* () {
@@ -2601,6 +2812,53 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   );
 
   it.effect(
+    "each changed file names the git object its contents after are, which a read of it whole is checked against; a removed file names none",
+    () =>
+      Effect.gen(function* () {
+        const headed = publishedPullRequestDrafted(() => false, LINE_HEAD);
+        const blob = "b".repeat(40);
+        const listed: RepositoryScript = (sent) =>
+          new URL(sent.url).pathname.endsWith(`/pulls/${PUBLISHED.number}/files`)
+            ? Response.json([
+                {
+                  filename: "src/seats.ts",
+                  status: "modified",
+                  additions: 1,
+                  deletions: 1,
+                  changes: 2,
+                  patch: "@@ -1 +1 @@\n-a\n+b",
+                  sha: blob,
+                },
+                {
+                  filename: "src/gone.ts",
+                  status: "removed",
+                  additions: 0,
+                  deletions: 1,
+                  changes: 1,
+                  patch: "@@ -1 +0,0 @@\n-a",
+                  sha: "0".repeat(40),
+                },
+              ])
+            : headed(sent);
+        const { owner, agent, ask } = yield* published({ repository: listed });
+
+        const changes = readAnswer(
+          codingAgentChangesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_CHANGES, owner, { id: agent.id })),
+        );
+
+        assert.deepEqual(
+          changes.pullRequest?.files.map((file) => [file.path, file.blobSha]),
+          [
+            ["src/seats.ts", blob],
+            ["src/gone.ts", undefined],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
     "a teammate reads which files they viewed on GitHub, every page of them, and marks and unmarks one, each on their own GitHub token",
     () =>
       Effect.gen(function* () {
@@ -3196,6 +3454,269 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
 
+  /** Where an agent's Stop lands. */
+  const AGENT_STOP = "/api/agents/stop";
+
+  /** Luke's turn under way on the task's own conversation, its session recorded, as a typed ask leaves one: the session it runs in. */
+  const lukeRunning = (owner: string, taskId: string) =>
+    Effect.gen(function* () {
+      const { conversationId } = Option.getOrThrow(yield* openTaskConversation(owner, taskId));
+      const target = { userId: owner, conversationId };
+      const sessionId = `wrun_${randomUUID()}`;
+      assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
+      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+      const turnId = randomUUID();
+      yield* writer.enqueueTurn(target, { turnId, origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+      yield* writer.consume(target, {
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        conversationId: sessionKey(conversationId),
+        turnId,
+        sequence: 1,
+        origin: BRAIN_TURN_ORIGIN.TYPED,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: 0,
+      });
+      return sessionId;
+    });
+
+  it.effect(
+    "over a browser's session cookie a message reaches the agent as the deployment acting for the cookie's account, and over the bearer as ever over the bearer",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask, sessionId } = yield* startedAgent(eve, { running: false });
+        const message = (text: string) => ({ text, clientKey: randomUUID() });
+
+        const overCookie = yield* ask(
+          request(AGENT_MESSAGES, undefined, {
+            method: "POST",
+            id: agent.id,
+            cookie: sessionCookieOf(owner),
+            body: message("Use the new table."),
+          }),
+        );
+        const overBearer = yield* ask(messageAs(owner, agent.id, message("And drop the old one.")));
+
+        assert.equal(
+          overCookie.status,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          JSON.stringify(overCookie.body),
+        );
+        assert.equal(
+          overBearer.status,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          JSON.stringify(overBearer.body),
+        );
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId, each.message.message]),
+          [
+            [deploymentFor(owner), sessionId, "Use the new table."],
+            [`Bearer ${owner}`, sessionId, "And drop the old one."],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "over a browser's session cookie a Stop, an Archive, and the task's archive each cancel the turn under way as the deployment acting for the cookie's account",
+    () =>
+      Effect.gen(function* () {
+        const stopped = yield* startedAgent(fakeEve(), { running: true });
+        const archived = yield* startedAgent(fakeEve(), { running: true });
+        const withTask = yield* startedAgent(fakeEve(), { running: true });
+
+        const stop = yield* stopped.ask(
+          request(AGENT_STOP, undefined, {
+            method: "POST",
+            id: stopped.agent.id,
+            cookie: sessionCookieOf(stopped.owner),
+          }),
+        );
+        const archive = yield* archived.ask(
+          request(AGENT, undefined, {
+            method: "PATCH",
+            id: archived.agent.id,
+            cookie: sessionCookieOf(archived.owner),
+            body: { archived: true },
+          }),
+        );
+        const taskArchive = yield* withTask.ask(
+          request(TASK, undefined, {
+            method: "PATCH",
+            id: withTask.task.id,
+            cookie: sessionCookieOf(withTask.owner),
+            body: { archived: true },
+          }),
+        );
+
+        assert.deepEqual(
+          [stop.status, archive.status, taskArchive.status],
+          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
+        );
+        for (const { eve, owner, sessionId } of [stopped, archived, withTask]) {
+          assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+          assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
+        }
+        assert.notEqual(
+          Option.getOrThrow(yield* readCodingAgent(archived.owner, archived.agent.id)).archivedAt,
+          null,
+        );
+      }),
+  );
+
+  it.effect(
+    "over a browser's session cookie a task's delete stops its agent and retires its own session and the agent's as the deployment acting for the cookie's account, before the task goes",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, ask, sessionId } = yield* startedAgent(eve, { running: true });
+        const taskSession = yield* lukeRunning(owner, task.id);
+
+        const deleted = yield* ask(
+          request(TASK, undefined, {
+            method: "DELETE",
+            id: task.id,
+            cookie: sessionCookieOf(owner),
+          }),
+        );
+
+        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
+        assert.deepEqual(eve.reset.toSorted(), [taskSession, sessionId].toSorted());
+        assert.deepEqual(eve.resetAs, [deploymentFor(owner), deploymentFor(owner)]);
+        assert.ok(Option.isNone(yield* readTask(owner, task.id)));
+      }),
+  );
+
+  it.effect(
+    "over a browser's session cookie Luke's Stop on the task cancels his turn under way as the deployment acting for the cookie's account",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, task, ask } = yield* openTask({ eve });
+        const taskSession = yield* lukeRunning(owner, task.id);
+
+        const stopped = yield* ask(
+          request(TASK_STOP, undefined, {
+            method: "POST",
+            id: task.id,
+            cookie: sessionCookieOf(owner),
+          }),
+        );
+
+        assert.deepEqual(stopped, { status: HOSTED_HTTP_STATUS.OK, body: {} });
+        assert.deepEqual(eve.cancelled, [[taskSession, "turn_0"]]);
+        assert.deepEqual(eve.cancelledAs, [deploymentFor(owner)]);
+      }),
+  );
+
+  it.effect(
+    "a teammate's session cookie messages and stops the owner's agent, stops Luke on the owner's task, and deletes it, each as the deployment acting for the teammate and never for the owner the rows name",
+    () =>
+      Effect.gen(function* () {
+        // An idle agent of the owner's, which the teammate messages.
+        const messaged = yield* startedAgent(fakeEve(), { running: false });
+        yield* joinWorkspace(messaged.task.workspaceId, messaged.other);
+        // A running agent of the owner's, and Luke at work on its task, which the teammate stops and then deletes.
+        const stopped = yield* startedAgent(fakeEve(), { running: true });
+        yield* joinWorkspace(stopped.task.workspaceId, stopped.other);
+        const taskSession = yield* lukeRunning(stopped.owner, stopped.task.id);
+        const teammate = sessionCookieOf(stopped.other);
+
+        const sent = yield* messaged.ask(
+          request(AGENT_MESSAGES, undefined, {
+            method: "POST",
+            id: messaged.agent.id,
+            cookie: sessionCookieOf(messaged.other),
+            body: { text: "Use the new table.", clientKey: randomUUID() },
+          }),
+        );
+        const agentStop = yield* stopped.ask(
+          request(AGENT_STOP, undefined, {
+            method: "POST",
+            id: stopped.agent.id,
+            cookie: teammate,
+          }),
+        );
+        const lukeStop = yield* stopped.ask(
+          request(TASK_STOP, undefined, { method: "POST", id: stopped.task.id, cookie: teammate }),
+        );
+        const deleted = yield* stopped.ask(
+          request(TASK, undefined, { method: "DELETE", id: stopped.task.id, cookie: teammate }),
+        );
+
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.ACCEPTED, JSON.stringify(sent.body));
+        assert.deepEqual(
+          messaged.eve.sent.map((each) => [each.authorization, each.sessionId]),
+          [[deploymentFor(messaged.other), messaged.sessionId]],
+        );
+        assert.deepEqual(
+          [agentStop.status, lukeStop.status],
+          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.OK],
+        );
+        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } });
+        assert.deepEqual(stopped.eve.cancelled, [
+          [stopped.sessionId, "turn_0"],
+          [taskSession, "turn_0"],
+        ]);
+        assert.deepEqual(stopped.eve.cancelledAs, [
+          deploymentFor(stopped.other),
+          deploymentFor(stopped.other),
+        ]);
+        assert.deepEqual(stopped.eve.reset.toSorted(), [taskSession, stopped.sessionId].toSorted());
+        assert.deepEqual(stopped.eve.resetAs, [
+          deploymentFor(stopped.other),
+          deploymentFor(stopped.other),
+        ]);
+      }),
+  );
+
+  it.effect(
+    "another account's session cookie reaches none of an agent's or its task's controls, which answer as nothing there and ask eve nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, agent, ask } = yield* startedAgent(eve, { running: true });
+        yield* lukeRunning(owner, task.id);
+        const cookie = sessionCookieOf(other);
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        for (const asked of [
+          request(AGENT_MESSAGES, undefined, {
+            method: "POST",
+            id: agent.id,
+            cookie,
+            body: { text: "Push to main.", clientKey: randomUUID() },
+          }),
+          request(AGENT_STOP, undefined, { method: "POST", id: agent.id, cookie }),
+          request(AGENT, undefined, {
+            method: "PATCH",
+            id: agent.id,
+            cookie,
+            body: { archived: true },
+          }),
+          request(TASK, undefined, {
+            method: "PATCH",
+            id: task.id,
+            cookie,
+            body: { archived: true },
+          }),
+          request(TASK, undefined, { method: "DELETE", id: task.id, cookie }),
+          request(TASK_STOP, undefined, { method: "POST", id: task.id, cookie }),
+        ]) {
+          const { pathname } = new URL(asked.url);
+          assert.deepEqual(yield* ask(asked), notFound, `${asked.method} ${pathname}`);
+        }
+        assert.deepEqual(
+          [eve.sent, eve.cancelled, eve.reset],
+          [[], [], []],
+          "the owner's Start is all eve heard",
+        );
+        assert.ok(Option.isSome(yield* readTask(owner, task.id)));
+      }),
+  );
+
   it.effect(
     "a member's Archive of a teammate's agent records the member on it, which its summary names, and an Unarchive clears it",
     () =>
@@ -3216,6 +3737,62 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
         assert.equal(archived.archivedBy?.agent, undefined);
         const back = yield* changed(false);
         assert.deepEqual([back.archivedAt, back.archivedBy], [undefined, undefined]);
+      }),
+  );
+
+  it.effect(
+    "a member's archive of a plan stops its running agent first and archives it with the plan, a message to it is refused as the plan's, and the plan's unarchive brings it back",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, agent, ask, eve, sessionId } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        yield* joinWorkspace(task.workspaceId, other);
+        const marked = (archived: boolean) =>
+          Effect.map(
+            ask(request(TASK, other, { method: "PATCH", id: task.id, body: { archived } })),
+            (answered) => answered.status,
+          );
+        const archiveNow = () =>
+          Effect.map(readCodingAgent(owner, agent.id), (read) => {
+            const stored = Option.getOrThrow(read);
+            return { archived: stored.archivedAt !== null, by: stored.archivedBy };
+          });
+
+        assert.equal(yield* marked(true), HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.deepEqual(yield* archiveNow(), {
+          archived: true,
+          by: { by: CODING_AGENT_ARCHIVER.MEMBER, userId: other, withTask: true },
+        });
+        assert.deepEqual(
+          yield* ask(messageAs(owner, agent.id, { text: "Carry on.", clientKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED),
+        );
+
+        assert.equal(yield* marked(false), HOSTED_HTTP_STATUS.OK);
+        assert.deepEqual(yield* archiveNow(), { archived: false, by: null });
+      }),
+  );
+
+  it.effect(
+    "a plan's archive is refused as not ready while one of its agents holds a message awaiting its turn, which no Stop can name yet, before any Stop is sent, and leaves the plan and the agent standing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, agent, ask, sent, eve } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        yield* sent("Rename the subject line too.");
+
+        assert.deepEqual(
+          yield* ask(
+            request(TASK, owner, { method: "PATCH", id: task.id, body: { archived: true } }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
+        );
+        assert.equal(Option.getOrThrow(yield* readTask(owner, task.id)).task.archivedAt, undefined);
+        assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, agent.id)).archivedAt, null);
+        assert.deepEqual(eve.cancelled, []);
       }),
   );
 
@@ -4331,6 +4908,50 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
   } as const;
 
   it.effect(
+    "over a browser's session cookie an answer to an item and a message on its thread reach its agent as the deployment acting for the cookie's account",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, ask, post, sessionId } = yield* openInbox(eve);
+        const posted = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(posted));
+        const cookie = sessionCookieOf(owner);
+
+        const answered = yield* ask(
+          request(INBOX_ITEM, undefined, {
+            method: "POST",
+            id: posted.success.id,
+            cookie,
+            body: {
+              revision: posted.success.revision,
+              clientKey: randomUUID(),
+              reply: INBOX_REPLY.ANSWERED,
+              note: "Keep it short.",
+            },
+          }),
+        );
+        const messaged = yield* ask(
+          request(INBOX_MESSAGES, undefined, {
+            method: "POST",
+            id: posted.success.id,
+            cookie,
+            body: { text: "Say when it expires, too.", clientKey: randomUUID() },
+          }),
+        );
+
+        assert.equal(answered.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(answered.body));
+        assert.equal(messaged.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(messaged.body));
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId]),
+          [
+            [deploymentFor(owner), sessionId],
+            [deploymentFor(owner), sessionId],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
     "the account's inbox answers every open item across its plans with the agent that posted it, and leaves out settled items, an archived plan's, and another account's",
     () =>
       Effect.gen(function* () {
@@ -4374,6 +4995,51 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.deepEqual(
           yield* ask(request(ACCOUNT_INBOX, undefined)),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+      }),
+  );
+
+  it.effect(
+    "an archived plan's items are put away with it: its open item waits nowhere, the plan is listed among those holding items only where archived=include asks, an answer to the item is refused as archived, and unarchiving brings the item back as it stood",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask, post, answer, waiting } = yield* openInbox();
+        const posted = yield* post(QUESTION);
+        assert.ok(Result.isSuccess(posted));
+        const archivedToo = () =>
+          Effect.map(
+            ask(request(ACCOUNT_INBOX, owner, { archived: ACCOUNT_INBOX_ARCHIVED.INCLUDE })),
+            (answered) => readAnswer(accountInboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        assert.deepEqual(
+          (yield* archivedToo()).plans.map((plan) => plan.planId),
+          [task.id],
+        );
+
+        yield* updateTask(owner, task.id, { archived: true });
+        const standing = yield* waiting();
+        assert.deepEqual(standing.items, []);
+        assert.deepEqual(standing.plans, []);
+        const included = yield* archivedToo();
+        assert.deepEqual(included.items, [], "an archived plan's open item still waits on nobody");
+        assert.deepEqual(
+          included.plans.map((plan) => [plan.planId, plan.items]),
+          [[task.id, 1]],
+        );
+        assert.deepEqual(
+          yield* answer(posted.success.id, {
+            revision: posted.success.revision,
+            clientKey: randomUUID(),
+            reply: INBOX_REPLY.ANSWERED,
+            note: "Keep it short.",
+          }),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED),
+        );
+
+        yield* updateTask(owner, task.id, { archived: false });
+        assert.deepEqual(
+          (yield* waiting()).items.map((item) => [item.id, item.revision]),
+          [[posted.success.id, posted.success.revision]],
         );
       }),
   );
@@ -5062,6 +5728,11 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
           chat_seq: sent.message.seq,
           from: "agent-1",
         });
+        // The window reads the notice back as the words posted alone, its head and closing lines its own.
+        const noticeLine = notice.message.parts.flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        );
+        assert.deepEqual(noticeLine.map(chatNoticeWords), ["The invite table is mine."]);
         assert.deepEqual(
           (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
           // An agent's notice names it by its handle, and by its member's agent and the model that agent posted under.
@@ -5366,6 +6037,61 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         [false, true],
       );
     }),
+  );
+
+  it.effect(
+    "a post past a notice's bound is cut in its words alone, so the notice stays within a message's bound and ends on its closing lines whole, an ask's among them",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openChat(eve);
+        // Three blocks a little short of their bound each run past what one notice may carry.
+        const block = (fill: string) => `@agent-2 ${fill.repeat(7_900)}`;
+        const blocks = ["a", "b", "c"].map((fill) => ({
+          type: CHAT_BLOCK.MARKDOWN,
+          text: block(fill),
+        }));
+        const told = (ask: boolean) =>
+          Effect.gen(function* () {
+            const post = {
+              authorMemberId: chat.first.member.id,
+              to: { channelId: chat.channel.id },
+              blocks,
+              mentions: ["agent-2"],
+              clientKey: randomUUID(),
+            };
+            const seq = ask
+              ? yield* Effect.gen(function* () {
+                  const posted = Result.getOrThrow(
+                    yield* postAsk(chat.owner, chat.workspace, {
+                      ...post,
+                      key: "long-ask",
+                      ask: { response: { type: CHAT_ASK.TEXT } },
+                    }),
+                  );
+                  yield* tellMessage(chat.telling, posted.message, posted.unresolved).pipe(
+                    Effect.provide(chat.github.layer),
+                  );
+                  return posted.message.seq;
+                })
+              : (yield* postChat(chat.telling, post).pipe(Effect.provide(chat.github.layer)))
+                  .message.seq;
+            yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+            return { seq, text: String(eve.sent.at(-1)?.message.message) };
+          });
+        for (const ask of [false, true]) {
+          const { seq, text } = yield* told(ask);
+          assert.ok(text.length <= CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS, String(text.length));
+          const closings = [
+            ...(ask ? [chatNoticeAsksLine(CHAT_ASK.TEXT)] : []),
+            chatNoticeReplyLine(seq),
+          ].join("\n\n");
+          assert.ok(text.endsWith(`\n\n${closings}`), text.slice(-200));
+          const words = chatNoticeWords(text);
+          assert.ok(words.startsWith(block("a")), "the words are cut from their end");
+          assert.equal(words.includes("Reply with"), false);
+        }
+      }),
   );
 
   it.effect(
@@ -7686,7 +8412,7 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         });
         assert.deepEqual(
           eve.sent.map((each) => [each.authorization, each.sessionId]),
-          [[`Bearer ${chat.owner}`, chat.sessionId]],
+          [[deploymentFor(chat.owner), chat.sessionId]],
         );
         const page = yield* listMessagesPast(
           chat.target.userId,
@@ -7736,13 +8462,46 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
         assert.deepEqual(fromTeammate.receipt.told, ["agent-1"]);
         assert.deepEqual(
           eve.sent.map((each) => each.authorization),
-          [`Bearer ${chat.owner}`, `Bearer ${chat.owner}`],
+          [deploymentFor(chat.owner), deploymentFor(chat.owner)],
         );
         // A plain post in a channel tells nobody.
         const plain = yield* chat.wrote({ text: "Morning, all.", clientKey: randomUUID() });
         assert.ok("posted" in plain);
         assert.deepEqual(plain.receipt.told, []);
         assert.equal(eve.sent.length, 2);
+      }),
+  );
+
+  it.effect(
+    "a person's post that names an agent by its mention link tells the agent, which reads the link as the agent's own @handle",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const chat = yield* openWindowChat(eve);
+        const named = mentionMarkdown(
+          { kind: MENTION_KIND.AGENT, agentId: chat.agent.agentId ?? "" },
+          "Fix the login",
+          { workspace: "acme", repository: null },
+        );
+        const sent = yield* chat.wrote({
+          text: `${named} take the table, please.`,
+          clientKey: randomUUID(),
+        });
+        assert.ok("posted" in sent);
+        assert.deepEqual(sent.receipt, { told: ["agent-1"], held: [], left: [], unresolved: [] });
+        assert.equal(eve.sent.length, 1);
+        const notice = JSON.stringify(eve.sent.map(({ message }) => message.message));
+        assert.match(notice, /@agent-1 take the table, please\./u);
+        assert.doesNotMatch(notice, /tryluke\.dev/u);
+        // A chip naming no member comes back unresolved under its label, as a handle does, without its `@`.
+        const ghost = mentionMarkdown(
+          { kind: MENTION_KIND.AGENT, agentId: randomUUID() },
+          "Ghost",
+          { workspace: "acme", repository: null },
+        );
+        const unknown = yield* chat.wrote({ text: `${ghost}, anyone?`, clientKey: randomUUID() });
+        assert.ok("posted" in unknown);
+        assert.deepEqual(unknown.receipt.unresolved, ["Ghost"]);
       }),
   );
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { loopbackConsent } from "@luke/credentials/node";
+import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { GATEWAY_ERROR, GATEWAY_METHOD } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -31,7 +32,9 @@ import {
   hostCapabilities,
   NOT_ON_THIS_PLATFORM,
 } from "./host-concerns.js";
+import { oauthAccountSourceLayer } from "./oauth-account-source.js";
 import { runModeFor } from "./run-mode.js";
+import { fixedAccountSource } from "./testing/fixed-account-source.js";
 import { scriptedSpawner } from "./testing/scripted-spawner.js";
 
 /**
@@ -41,7 +44,11 @@ import { scriptedSpawner } from "./testing/scripted-spawner.js";
  * desktop's, built with all of them, answers.
  */
 
-/** Every seam a host stands on whatever it was built with, the kernel over them. */
+/**
+ * Every seam a host stands on whatever it was built with, the kernel over
+ * them. The account source is each test's own, so none of the desktop's
+ * source's seams are here.
+ */
 const machineOver = (stateRoot: string) =>
   Layer.provideMerge(
     hostKernelLayer,
@@ -50,21 +57,28 @@ const machineOver = (stateRoot: string) =>
       Layer.succeed(RunMode, runModeFor({ capture: false, fixture: true })),
       Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
       Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-      Layer.succeed(SecretCipher, {
-        isAvailable: () => false,
-        encrypt: (plainText) => new TextEncoder().encode(plainText),
-        decrypt: (cipherText) => new TextDecoder().decode(cipherText),
-      }),
       Layer.succeed(IdSource, { create: () => "id" }),
       reporterLayer(() => undefined),
       Layer.succeed(ShutdownSignal, { notify: undefined }),
       Layer.succeed(VoiceSocket, scriptedOpenSocket([]).openSocket),
-      Layer.succeed(SignInConsent, { open: loopbackConsent }),
       NodeFileSystem.layer,
       NodePath.layer,
       noNetwork,
     ),
   );
+
+/** The desktop's own account source, over its cipher and its loopback consent. */
+const desktopAccountSource = Layer.provide(
+  oauthAccountSourceLayer,
+  Layer.merge(
+    Layer.succeed(SecretCipher, {
+      isAvailable: () => false,
+      encrypt: (plainText) => new TextEncoder().encode(plainText),
+      decrypt: (cipherText) => new TextDecoder().decode(cipherText),
+    }),
+    Layer.succeed(SignInConsent, { open: loopbackConsent }),
+  ),
+);
 
 /** A client offering one capability of its own, as a browser might. */
 const CLIENT: readonly ClientCapability[] = [HOST_CAPABILITY.NOTIFICATIONS];
@@ -88,7 +102,7 @@ describe("the host's platform concerns", () => {
       // here on the missing service.
       const browser = hostStandingLayer.pipe(
         Layer.provideMerge(hostAssemblyLayer([])),
-        Layer.provide(machineOver(stateRoot)),
+        Layer.provide(Layer.merge(machineOver(stateRoot), fixedAccountSource())),
       );
 
       const asked = yield* Effect.provide(askedOfStandingHost, browser);
@@ -115,6 +129,7 @@ describe("the host's platform concerns", () => {
         Layer.provide(
           Layer.mergeAll(
             machineOver(stateRoot),
+            desktopAccountSource,
             scriptedSpawner(() => ({ exitCode: 0 })).layer,
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
           ),
@@ -137,6 +152,33 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
       ]);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+  );
+});
+
+describe("the host's account source", () => {
+  it.effect("another source than the desktop's stands with no sign-in consent or cipher", () =>
+    Effect.gen(function* () {
+      const stateRoot = yield* temporaryDirectoryScoped("luke-host-account-source-");
+      const account = {
+        status: ACCOUNT_STATUS.SIGNED_IN,
+        email: "dev@example.com",
+        provider: ACCOUNT_PROVIDER.GITHUB,
+      } as const;
+      // Note that nothing here provides a `SignInConsent` or a `SecretCipher`:
+      // they are the desktop's source's own requirements, so the assembly's
+      // type asks for neither, and a build that reached for one would die here.
+      const host = hostStandingLayer.pipe(
+        Layer.provideMerge(hostAssemblyLayer([])),
+        Layer.provide(Layer.merge(machineOver(stateRoot), fixedAccountSource({ account }))),
+      );
+
+      const answered = yield* Effect.provide(
+        Effect.flatMap(HostTag, ({ gateway }) => gateway.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT)),
+        host,
+      );
+
+      assert.deepEqual(answered, { ok: true, result: { account } });
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   );
 });

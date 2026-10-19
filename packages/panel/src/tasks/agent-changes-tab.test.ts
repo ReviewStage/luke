@@ -1,0 +1,2186 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentPullRequestViewedAnswerView,
+} from "@luke/features/coding-agent-view";
+import {
+  CHANGED_FILE_STATUS,
+  CODING_AGENT_STATUS,
+  type CodingAgentChangedFile,
+  type CodingAgentSummary,
+  DIFF_SIDE,
+  PATCH_OMITTED,
+} from "@luke/features/coding-agent-wire";
+import {
+  FILE_VIEWED_STATE,
+  PULL_REQUEST_ACTION,
+  PULL_REQUEST_WRITE_OUTCOME,
+  type PullRequestActionRequest,
+  type PullRequestWriteAnswer,
+} from "@luke/features/pull-request-write-wire";
+import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
+import type { TasksFileAnswer } from "@luke/features/tasks-view";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { DIFF_LAYOUT } from "@luke/settings/diff-view";
+import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
+import {
+  APP_COMMAND,
+  FILES_CHANGED_KEYS,
+  FILES_CHANGED_SHORTCUTS,
+  type ShortcutChord,
+} from "@luke/settings/shortcuts";
+import { DisclosureFind } from "@luke/ui";
+import { Effect } from "effect";
+import * as AtomRegistry from "effect/reactivity/AtomRegistry";
+import { act, createElement, type ReactElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { appBridge } from "../app-bridge.js";
+import { useAppCommand, useAppKeymap } from "../app-commands.js";
+import type { SideBundles } from "../bundle-loader.js";
+import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
+import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
+import { findRanges, reveal } from "../find-matches.js";
+import { OpenSettingsProvider } from "../open-settings.js";
+import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
+import { handSettings } from "../testing/app-state.js";
+import { onRegistry } from "../testing/copy-feedback.js";
+import { relayout } from "../testing/resize-observer.js";
+import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
+import { codingAgentsControl } from "../testing/tasks-control.js";
+import type { ChangesThreads } from "./agent-changes-tab.js";
+import { blobShaOf } from "./changes-model.js";
+import type { TreeShown } from "./file-view.js";
+
+/**
+ * agent-changes-tab.test.ts -- a Files changed view hands the diff bundle
+ * every file as one list, in the tree's order, each file's patch headed as
+ * git writes one, a filter narrowing it, deleted files and lockfiles
+ * folded, each fold and all of them turned by its controls and stage-cli's
+ * keys, which J and K step through only inside the view; and how the File
+ * tabs' settings draw it: unified with its changed words marked until told
+ * otherwise, split once Split is chosen in its View settings, tinted whole
+ * once Changed words is Off, each choice kept for the next view, its ⋯
+ * holding actions alone; a diff too narrow to split is drawn unified, its
+ * layout saying so, the choice kept for a wider one. The settings are the app's own, read off the
+ * document main hands the window and written back through it
+ * (`handSettings`). The bundle, a chunk of its own the panel imports, is
+ * stood in for at its importer, which records what it was handed. Synthetic
+ * files only.
+ */
+
+const AGENT: CodingAgentSummary = {
+  id: "1e3c5a7b-9d2f-4b6e-8a1c-3e5f7a9b1d2c",
+  planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: "Seat limit",
+  createdAt: 1,
+  status: CODING_AGENT_STATUS.COMPLETED,
+  turnId: null,
+};
+
+const PATCH = [
+  "@@ -1,2 +1,3 @@",
+  " const kept = true;",
+  "-const seats = 3;",
+  "+const seats = 42;",
+  "+const extra = 1;",
+].join("\n");
+
+const PAGE = "https://github.com/acme/relay/pull/7";
+
+/** A changed file of the pull request, modified with the seats patch unless told otherwise. */
+function changed(
+  path: string,
+  overrides: Partial<CodingAgentChangedFile> = {},
+): CodingAgentChangedFile {
+  return {
+    path,
+    previousPath: null,
+    status: CHANGED_FILE_STATUS.MODIFIED,
+    additions: 2,
+    deletions: 1,
+    omitted: null,
+    patch: PATCH,
+    ...overrides,
+  };
+}
+
+/** The commits the service names for a pull request's changed images, each where it named one. */
+interface ImageCommits {
+  readonly headSha?: string;
+  readonly baseSha?: string;
+}
+
+/** The commits the service names for the pull request's changed images; none unless a test names them. */
+let commits: ImageCommits = {};
+
+/** The pull request's files, in the order GitHub lists them, which is not the tree's. */
+let files: CodingAgentChangedFile[] = [changed("src/seats.ts")];
+
+/** How the service answers the read of the member's viewed marks; unanswered unless a test answers it. */
+let viewedAnswer: CodingAgentPullRequestViewedAnswerView = {
+  failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+};
+/** How many times the marks were read. */
+let viewedReads = 0;
+/** What the next read of the marks waits on, where a test holds it; none answers at once. */
+let viewedHeld: Promise<void> | undefined;
+
+const control = codingAgentsControl({
+  agents: [AGENT],
+  agentIds: [AGENT.id],
+  models: [],
+  readPullRequestViewed: () => {
+    viewedReads += 1;
+    const answer = viewedAnswer;
+    return (viewedHeld ?? Promise.resolve()).then(() => answer);
+  },
+  readChanges: () =>
+    Promise.resolve({
+      pullRequest: {
+        url: "https://github.com/acme/relay/pull/7",
+        ...commits,
+        truncated: false,
+        files,
+        reviewers: [],
+        comments: [],
+      },
+    }),
+});
+
+/** What the stand-in bundle was handed, mount first, each draw after it. */
+let drawn: DiffListProps[] = [];
+/** The files the list was scrolled to, in order. */
+let revealed: string[] = [];
+/** How wide the box the diff is drawn in lays out, in pixels. */
+let boxWidth = 900;
+let root: Root | undefined;
+
+const standIn: DiffViewModule = {
+  colourLines: () => Promise.resolve(undefined),
+  mount: () => ({ update: () => undefined, unmount: () => undefined }),
+  mountList: (_host, props) => {
+    drawn.push(props);
+    return {
+      update: (next) => drawn.push(next),
+      reveal: (path) => revealed.push(path),
+      unmount: () => undefined,
+    };
+  },
+};
+
+/** The doors each tree the view mounted opens a chosen file through, the latest last. */
+let treeOpens: Array<(path: string, newTab: boolean) => void> = [];
+/** What each tree the view mounted was handed, the latest last. */
+let treeProps: FileTreeProps[] = [];
+/** The marks the trees were handed, the latest last. */
+let treeMarks: Array<readonly FileMark[]> = [];
+
+/** The tree bundle, stood in for: it draws nothing and keeps the doors and the marks it is handed. */
+const treeStandIn: FileTreeModule = {
+  mount: (_host, props) => {
+    treeOpens.push(props.onOpen);
+    treeProps.push(props);
+    const nothing = () => undefined;
+    return {
+      reveal: nothing,
+      search: nothing,
+      only: nothing,
+      within: nothing,
+      mark: (marks) => treeMarks.push(marks),
+      unmount: nothing,
+    };
+  },
+  fileIcon: () => ({ symbol: "", type: "" }),
+};
+
+let bundles: SideBundles;
+
+beforeAll(async () => {
+  bundles = await Effect.runPromise(
+    landedBundles({
+      diffView: () => Promise.resolve(standIn),
+      fileTree: () => Promise.resolve(treeStandIn),
+    }),
+  );
+});
+
+beforeEach(() => {
+  drawn = [];
+  revealed = [];
+  treeOpens = [];
+  treeProps = [];
+  treeMarks = [];
+  files = [changed("src/seats.ts")];
+  commits = {};
+  viewedAnswer = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+  viewedReads = 0;
+  viewedHeld = undefined;
+  boxWidth = 900;
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const width = this.classList.contains("diff-view") ? boxWidth : 0;
+    return new DOMRect(0, 0, width, 0);
+  });
+  fakeAppBridge({});
+  handSettings();
+});
+
+afterEach(() => {
+  watched.clear();
+  vi.unstubAllGlobals();
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+  vi.restoreAllMocks();
+});
+
+/** The window's keymap with the Inbox's J offered, as the Inbox offers it while it stands, counting each run. */
+function InboxBeside({ onNext }: { onNext: () => void }): null {
+  useAppKeymap(true);
+  useAppCommand(APP_COMMAND.NEXT_INBOX_ITEM, onNext);
+  return null;
+}
+
+/** One registry for the tests' draws, so a draw again keeps the view's state as the panel would. */
+let registry = AtomRegistry.make();
+
+/** How a test draws the view: its threads, its tree, what stands beside it, the task's repository, and the agents as the panel holds them. */
+interface DrawOptions {
+  readonly threads?: ChangesThreads;
+  readonly treeOpen?: boolean;
+  /** The tree as the panel holds it, in `treeOpen`'s place: its toggle and its width. */
+  readonly tree?: TreeShown;
+  readonly beside?: ReactElement;
+  readonly repository?: string;
+  readonly control?: typeof control;
+  /** Whether a find looks through the tab, which draws its folds' closed bodies hidden. */
+  readonly finding?: boolean;
+  /** Whether the view is the Pull request tab's chosen one; it is unless told. */
+  readonly shown?: boolean;
+  /** The window's way to open Settings at a place; nothing unless told. */
+  readonly openSettings?: (link: SettingsLink) => void;
+}
+
+/** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
+async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
+  const { AgentChangesTab } = await import("./agent-changes-tab.js");
+  const tab = createElement(AgentChangesTab, {
+    agentId: AGENT.id,
+    control: options.control ?? control,
+    shown: options.shown ?? true,
+    repository: options.repository ?? "acme/relay",
+    tree: options.tree ?? { open: options.treeOpen ?? false, onToggle: () => undefined },
+    threads: options.threads,
+  });
+  act(() =>
+    root?.render(
+      onRegistry(
+        registry,
+        onSideBundles(
+          bundles,
+          createElement(OpenSettingsProvider, {
+            value: options.openSettings ?? (() => undefined),
+            children: createElement(DisclosureFind, {
+              finding: options.finding ?? false,
+              children: createElement("div", null, tab, options.beside ?? null),
+            }),
+          }),
+        ),
+      ),
+    ),
+  );
+  await flush();
+  return lastDrawn();
+}
+
+/** Draws the agent's Files changed view afresh, its read landed, and answers what the list was last drawn with. */
+async function drawTab(options: DrawOptions = {}): Promise<DiffListProps> {
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+  registry = AtomRegistry.make();
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  return redraw(options);
+}
+
+function lastDrawn(): DiffListProps {
+  return drawn.at(-1) ?? assert.fail("the files are drawn");
+}
+
+/** The paths the list was last drawn with, each marked folded or not. */
+function folds(): Array<[string, boolean]> {
+  return lastDrawn().files.map((file) => [file.path, file.collapsed]);
+}
+
+/** Presses a key on `target`, answering whether something took it. */
+function press(target: Element, init: KeyboardEventInit): boolean {
+  const event = new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init });
+  act(() => target.dispatchEvent(event));
+  return event.defaultPrevented;
+}
+
+/** The box the list is drawn in, inside the view. */
+function listBox(): HTMLElement {
+  return document.querySelector<HTMLElement>(".diff-list") ?? assert.fail("the list is drawn");
+}
+
+/** The header the view drew for a file, as the bundle stands it at the head of the file. */
+function header(path: string): HTMLElement {
+  const slot = lastDrawn().renderHeader(path);
+  return slot.querySelector<HTMLElement>(".diff-list-head") ?? assert.fail(`${path} has a header`);
+}
+
+/** Types into the tree's search field as the developer would. */
+function typeSearch(words: string): void {
+  const field =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
+    assert.fail("the tree's search stands");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The ⋯'s items, the menu opened. */
+function menuItems(): readonly HTMLButtonElement[] {
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  return [...document.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
+}
+
+/** Lets the document a settings write sends back land and be drawn. */
+async function flush(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+}
+
+/** Picks a value of a View settings pop-up by its row's name, and lets it be drawn. */
+async function pick(popover: HTMLElement, row: string, value: string): Promise<void> {
+  const trigger =
+    [...popover.querySelectorAll<HTMLButtonElement>("[aria-haspopup]")].find((each) =>
+      each.getAttribute("aria-label")?.startsWith(row),
+    ) ?? assert.fail(`the settings offer ${row}`);
+  act(() => trigger.click());
+  const option =
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (each) => each.textContent === value,
+    ) ?? assert.fail(`${row} offers ${value}`);
+  act(() => option.click());
+  await flush();
+}
+
+/** How a diff is drawn until told otherwise: today's File tab look, and stage-cli's for what is new. */
+const DEFAULT_LOOK = {
+  layout: "unified",
+  indicators: "bars",
+  inlineDiff: "word-alt",
+  backgrounds: true,
+  lineNumbers: true,
+  wrap: true,
+  themes: { dark: "github-dark-default", light: "github-light-default" },
+  font: "sf-mono",
+  fontSize: "11.5",
+  lineHeight: "normal",
+  ligatures: false,
+};
+
+/** Opens the bar's View settings, the window in the appearance given, answering the popover. */
+function openSettings(appearance: "light" | "dark" = "light"): HTMLElement {
+  // The popover opens on the window's appearance, which the test's window does not answer.
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes(appearance) }));
+  const button = document.querySelector<HTMLButtonElement>('button[aria-label="View settings"]');
+  act(() => button?.click());
+  return (
+    document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("the view settings open")
+  );
+}
+
+/** The popover's control of a name: a segment by its words, or a switch by its label. */
+function settingControl(popover: HTMLElement, selector: string, name: string): HTMLButtonElement {
+  const found = [...popover.querySelectorAll<HTMLButtonElement>(selector)].find(
+    (each) => each.textContent === name || each.getAttribute("aria-label") === name,
+  );
+  return found ?? assert.fail(`the settings offer ${name}`);
+}
+
+test("every file is handed over whole as git writes it, in the tree's order, drawn as today's File tab look until told otherwise", async () => {
+  files = [changed("src/seats.ts"), changed("README.md"), changed("src/billing/plan.ts")];
+  const props = await drawTab();
+
+  assert.deepEqual(
+    props.files.map((file) => file.path),
+    ["src/billing/plan.ts", "src/seats.ts", "README.md"],
+  );
+  assert.equal(
+    props.files[1]?.patch,
+    `diff --git a/src/seats.ts b/src/seats.ts\n--- a/src/seats.ts\n+++ b/src/seats.ts\n${PATCH}\n`,
+  );
+  assert.deepEqual(props.look, DEFAULT_LOOK);
+});
+
+test("a file with no hunks to draw stands in the list as what is said in their place: why, and its review threads", async () => {
+  files = [
+    changed("logo.png", { omitted: PATCH_OMITTED.BINARY, patch: null, additions: 0, deletions: 0 }),
+  ];
+  const props = await drawTab({
+    threads: {
+      list: [{ ...seatsThread(2, "why-binary"), path: "logo.png" }],
+      draw: (thread) => createElement("p", null, thread.comments[0]?.body),
+    },
+  });
+
+  const [file] = props.files;
+  assert.equal(file?.patch, "diff --git a/logo.png b/logo.png\n--- a/logo.png\n+++ b/logo.png\n");
+  assert.equal(file?.lead, true);
+  assert.deepEqual(file?.annotations, [{ key: "lead", side: "additions", line: 0 }]);
+  const lead = props.renderAnnotation("logo.png", "lead");
+  assert.equal(lead.querySelector(".diff-list-notice")?.textContent, "Binary file not shown.");
+  assert.equal(
+    lead.querySelector('[aria-label="Comments on lines this diff does not show"]')?.textContent,
+    "why-binary",
+  );
+  assert.equal(
+    header("logo.png").querySelector(".diff-list-notice"),
+    null,
+    "the header is one row",
+  );
+});
+
+test("deleted files and lockfiles start folded, and a file's fold and Collapse all turn them", async () => {
+  files = [
+    changed("src/seats.ts"),
+    changed("src/old.ts", { status: CHANGED_FILE_STATUS.DELETED }),
+    changed("pnpm-lock.yaml"),
+  ];
+  await drawTab();
+  assert.deepEqual(folds(), [
+    ["src/old.ts", true],
+    ["src/seats.ts", false],
+    ["pnpm-lock.yaml", true],
+  ]);
+
+  act(() =>
+    header("src/old.ts")
+      .querySelector<HTMLButtonElement>('button[aria-label="Expand file"]')
+      ?.click(),
+  );
+  await flush();
+  assert.deepEqual(folds()[0], ["src/old.ts", false]);
+
+  const foldAll = () =>
+    document.querySelector<HTMLButtonElement>(
+      'button[aria-label="Collapse all files"], button[aria-label="Expand all files"]',
+    ) ?? assert.fail("the bar offers Collapse all");
+  assert.equal(foldAll().getAttribute("aria-label"), "Collapse all files");
+  act(() => foldAll().click());
+  await flush();
+  assert.ok(folds().every(([, collapsed]) => collapsed));
+
+  assert.equal(foldAll().getAttribute("aria-label"), "Expand all files");
+  act(() => foldAll().click());
+  await flush();
+  assert.ok(folds().every(([, collapsed]) => !collapsed));
+});
+
+test("the tree's search narrows the list, said over it while the tree is hidden, until cleared", async () => {
+  files = [changed("src/seats.ts"), changed("src/billing/plan.ts"), changed("README.md")];
+  await drawTab({ treeOpen: true });
+
+  typeSearch("BILLING");
+  await flush();
+  assert.deepEqual(
+    lastDrawn().files.map((file) => file.path),
+    ["src/billing/plan.ts"],
+  );
+
+  await redraw({ treeOpen: false });
+  const notice = [...document.querySelectorAll(".file-tab-notice")].find((each) =>
+    each.textContent?.includes("Only files whose path holds"),
+  );
+  assert.match(notice?.textContent ?? "", /BILLING/u);
+  act(() => notice?.querySelector("button")?.click());
+  await flush();
+  assert.equal(lastDrawn().files.length, 3);
+});
+
+test("with the file stood on filtered out, the bar names the file the list scrolls to", async () => {
+  files = [changed("src/a.ts"), changed("lib/b.ts"), changed("lib/c.ts")];
+  await drawTab({ treeOpen: true });
+  act(() => header("src/a.ts").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  assert.ok(header("src/a.ts").hasAttribute("data-standing"));
+
+  typeSearch("lib");
+  await flush();
+  act(() => lastDrawn().onTopFile("lib/c.ts"));
+  assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /c\.ts/u);
+});
+
+test("a file the filter leaves out, chosen in a tree of every changed file, clears the filter and is scrolled to", async () => {
+  files = [changed("src/seats.ts"), changed("src/billing/plan.ts"), changed("README.md")];
+  await drawTab({ treeOpen: true });
+  typeSearch("billing");
+  await flush();
+  assert.deepEqual(
+    lastDrawn().files.map((file) => file.path),
+    ["src/billing/plan.ts"],
+  );
+
+  const open = treeOpens.at(-1) ?? assert.fail("a tree is mounted");
+  act(() => open("README.md", false));
+  await flush();
+
+  assert.equal(lastDrawn().files.length, 3, "the filter is cleared");
+  assert.deepEqual(revealed, ["README.md"]);
+  assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /README\.md/u);
+});
+
+/** A tree as the panel holds it, open as given, counting its toggles and keeping the widths asked for. */
+function heldTree(open: boolean, width = 300) {
+  const widths: number[] = [];
+  const held = { toggles: 0, widths };
+  const tree: TreeShown = {
+    open,
+    onToggle: () => {
+      held.toggles += 1;
+    },
+    width: { width, onResize: (asked) => held.widths.push(asked) },
+  };
+  return { tree, held };
+}
+
+test("⇧F inside the view shows or hides the tree, as its toggle does, and is no key while typing", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  const { tree, held } = heldTree(true);
+  await drawTab({ tree });
+
+  assert.equal(press(listBox(), { key: "F", shiftKey: true }), true);
+  const field = document.querySelector<HTMLInputElement>(".file-tree-search input");
+  assert.equal(
+    press(field ?? assert.fail("the search field is drawn"), { key: "F", shiftKey: true }),
+    false,
+  );
+  assert.equal(held.toggles, 1);
+});
+
+test("the tree stands as wide as the panel keeps it, and its edge asks for another width", async () => {
+  files = [changed("a.ts")];
+  const { tree, held } = heldTree(true, 360);
+  await drawTab({ tree });
+
+  const pane = document.querySelector<HTMLElement>(".file-tree-pane") ?? assert.fail("a tree");
+  assert.equal(pane.style.getPropertyValue("--file-tree-width"), "360px");
+  const edge = pane.querySelector<HTMLElement>('[role="separator"]') ?? assert.fail("an edge");
+  assert.equal(edge.getAttribute("aria-label"), "Resize files");
+  press(edge, { key: "Enter" });
+  assert.deepEqual(held.widths, [264], "Enter puts back the tree's own width");
+});
+
+test("while the tree is hidden a strip stands in its place, a mark for each file, and resting on it peeks the tree", async () => {
+  viewedAnswer = MARKED;
+  files = [
+    changed("c.ts"),
+    changed("a.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+    changed("b.ts", { status: CHANGED_FILE_STATUS.DELETED }),
+  ];
+  const { tree } = heldTree(false);
+  await drawTab({ tree });
+
+  const strip = document.querySelector<HTMLElement>(".file-tree-strip") ?? assert.fail("a strip");
+  assert.deepEqual(
+    [...strip.children].map((mark) => [
+      mark.getAttribute("data-status"),
+      mark.hasAttribute("data-viewed"),
+      mark.hasAttribute("data-current"),
+    ]),
+    [
+      ["added", true, true],
+      ["deleted", false, false],
+      ["modified", false, false],
+    ],
+  );
+  assert.equal(document.querySelector(".file-tree-pane"), null);
+
+  act(() => strip.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
+  await flush();
+  assert.equal(document.querySelector(".file-view")?.getAttribute("data-pane-over"), "peek");
+  assert.notEqual(document.querySelector(".file-tree-pane"), null, "the tree peeks out");
+});
+
+test("J and K step through the files inside the view, ; and ⇧; fold, and Escape lets go of the file", async () => {
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+  const box = listBox();
+
+  assert.ok(press(box, { key: "j" }), "J is the view's");
+  assert.deepEqual(revealed, ["a.ts"], "a first press stands on the file at the top");
+  press(box, { key: "j" });
+  press(box, { key: "j" });
+  press(box, { key: "k" });
+  assert.deepEqual(revealed, ["a.ts", "b.ts", "c.ts", "b.ts"]);
+  assert.ok(header("b.ts").hasAttribute("data-standing"));
+  assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /b\.ts/u);
+
+  press(box, { key: ";", code: "Semicolon" });
+  await flush();
+  assert.deepEqual(folds(), [
+    ["a.ts", false],
+    ["b.ts", true],
+    ["c.ts", false],
+  ]);
+  press(box, { key: ":", code: "Semicolon", shiftKey: true });
+  await flush();
+  assert.ok(folds().every(([, collapsed]) => collapsed));
+
+  assert.ok(press(box, { key: "Escape" }), "Escape lets go of the file stood on");
+  assert.equal(header("b.ts").hasAttribute("data-standing"), false);
+  assert.equal(press(box, { key: "Escape" }), false, "with none stood on, Escape is the window's");
+});
+
+test("a J press draws again only the files it stood on and off, and leaves every other file's header and notes as they were drawn", async () => {
+  const paths = ["a.ts", "b.ts", "c.ts", "d.ts"];
+  files = paths.map((path) => changed(path));
+  // Each file holds a thread, so a file drawn anew is counted by the thread drawn on it.
+  const drawnFor: string[] = [];
+  const threads: ChangesThreads = {
+    list: paths.map((path) => ({ ...seatsThread(2, path), path })),
+    draw: (thread) => {
+      drawnFor.push(thread.path);
+      return createElement("p", null, thread.path);
+    },
+  };
+  await drawTab({ threads });
+  const box = listBox();
+  press(box, { key: "j" });
+  await flush();
+  drawnFor.length = 0;
+
+  press(box, { key: "j" });
+  await flush();
+  assert.deepEqual(
+    [...new Set(drawnFor)].sort(),
+    ["a.ts", "b.ts"],
+    "only the file stood off and the file stood on",
+  );
+  assert.ok(header("b.ts").hasAttribute("data-standing"));
+  assert.equal(header("a.ts").hasAttribute("data-standing"), false);
+});
+
+test("a file's header mounts its hints as the keyboard comes to its fold, which keeps the focus", async () => {
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const fold = header("a.ts").querySelector("button") ?? assert.fail("the fold stands");
+  assert.equal(
+    fold.getAttribute("aria-keyshortcuts"),
+    ";",
+    "the fold names its key before its hint is mounted",
+  );
+  document.documentElement.dataset.keyboard = "true";
+  try {
+    act(() => fold.focus());
+    await flush();
+    const focused = document.activeElement;
+    assert.ok(header("a.ts").contains(focused), "the focus stays on the header's fold");
+    assert.equal(focused?.getAttribute("aria-label"), "Collapse file");
+  } finally {
+    delete document.documentElement.dataset.keyboard;
+  }
+});
+
+test("the pointer's first arrival on a header's letter hangs its hint, though the hint is mounted by that arrival", async () => {
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const letter = () =>
+    header("a.ts").querySelector(".file-view-status") ?? assert.fail("the letter stands");
+  act(() => letter().dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  await flush();
+  const hint = letter().getAttribute("aria-describedby");
+  assert.ok(hint !== null, "the letter is described by its hint");
+  assert.equal(document.getElementById(hint)?.textContent, "Modified");
+});
+
+test("J outside Files changed is still the Inbox's, and inside it is the view's alone", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  let inboxNext = 0;
+  await drawTab({ beside: createElement(InboxBeside, { onNext: () => (inboxNext += 1) }) });
+
+  press(document.body, { key: "j" });
+  assert.equal(inboxNext, 1, "outside the view J runs the Inbox's next item");
+  assert.deepEqual(revealed, []);
+
+  press(listBox(), { key: "j" });
+  assert.equal(inboxNext, 1, "inside it J goes no further");
+  assert.deepEqual(revealed, ["a.ts"]);
+});
+
+test("a key typed into the tree's search is the field's", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab({ treeOpen: true });
+  const field =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
+    assert.fail("the tree's search stands");
+
+  assert.equal(press(field, { key: "j" }), false);
+  assert.deepEqual(revealed, []);
+});
+
+/** A press of a chord as the keyboard sends it: the key's character and place, Shift where the chord holds it. */
+function chordPress(chord: ShortcutChord): KeyboardEventInit {
+  return { key: chord.key.key, code: chord.key.code, shiftKey: chord.shift === true };
+}
+
+/** `?` as a US keyboard sends it: ⇧ on the slash key. */
+const QUESTION_MARK: KeyboardEventInit = { key: "?", code: "Slash", shiftKey: true };
+
+/** The sheet of the view's keys, where it stands. */
+function keysSheet(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+}
+
+test("every key of Files changed's table answers inside the view", async () => {
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
+  await drawTab();
+
+  const unanswered = FILES_CHANGED_KEYS.filter((key) => {
+    // Each key is pressed with a file stood on, which Escape needs.
+    press(listBox(), { key: "j" });
+    return !press(listBox(), chordPress(FILES_CHANGED_SHORTCUTS[key].chord));
+  });
+  assert.deepEqual(unanswered, []);
+});
+
+test("? inside the view opens a sheet of its keys by group, which Escape or ? again puts away", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab();
+
+  assert.ok(press(listBox(), QUESTION_MARK), "? is the view's");
+  const sheet = keysSheet() ?? assert.fail("the sheet opens");
+  assert.equal(
+    document.getElementById(sheet.getAttribute("aria-labelledby") ?? "")?.textContent,
+    "Keyboard shortcuts",
+  );
+  const groups = [...sheet.querySelectorAll("section[aria-labelledby]")].map((section) => [
+    document.getElementById(section.getAttribute("aria-labelledby") ?? "")?.textContent,
+    [...section.querySelectorAll(".luke-settings-row")].map((row) => [
+      row.querySelector(".luke-settings-row-label")?.textContent,
+      row.querySelector("kbd")?.textContent,
+    ]),
+  ]);
+  assert.deepEqual(groups, [
+    ["General", [["Show keyboard shortcuts", "⇧/"]]],
+    [
+      "Navigation",
+      [
+        ["Next file", "J"],
+        ["Previous file", "K"],
+        ["Collapse or expand file", ";"],
+        ["Collapse or expand all files", "⇧;"],
+        ["Clear file focus", "Esc"],
+      ],
+    ],
+    [
+      "Review",
+      [
+        ["Toggle viewed and go to next file", "V"],
+        ["Minimize or show inline comments", "I"],
+      ],
+    ],
+    ["Panels", [["Show or hide file tree", "⇧F"]]],
+  ]);
+
+  press(sheet, { key: "Escape" });
+  assert.equal(keysSheet(), null, "Escape puts the sheet away");
+  press(listBox(), QUESTION_MARK);
+  press(keysSheet() ?? assert.fail("the sheet opens again"), QUESTION_MARK);
+  assert.equal(keysSheet(), null, "? again puts it away");
+});
+
+test("the sheet goes with the view when another of the Pull request tab's views is chosen, and stays away on coming back", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab();
+  press(listBox(), QUESTION_MARK);
+  assert.ok(keysSheet(), "the sheet opens");
+
+  await redraw({ shown: false });
+  assert.equal(keysSheet(), null, "hidden with the view");
+  await redraw({ shown: true });
+  assert.equal(keysSheet(), null, "not opened again by coming back");
+});
+
+test("? outside Files changed, or typed into its tree's search, opens no sheet", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab({
+    treeOpen: true,
+    beside: createElement(InboxBeside, { onNext: () => undefined }),
+  });
+  const field =
+    document.querySelector<HTMLInputElement>('input[aria-label="Search files"]') ??
+    assert.fail("the tree's search stands");
+
+  assert.equal(press(document.body, QUESTION_MARK), false, "outside the view ? is nobody's");
+  assert.equal(press(field, QUESTION_MARK), false, "in the search ? is typed");
+  assert.equal(keysSheet(), null);
+});
+
+test("View settings groups its rows under Diff, Lines, and Text, shows one appearance's theme at a time, and opens Settings at its Diffs from its foot", async () => {
+  const opened: SettingsLink[] = [];
+  await drawTab({ openSettings: (link) => opened.push(link) });
+  const popover = openSettings("dark");
+
+  const groups = [...popover.querySelectorAll<HTMLElement>(".view-settings-group")].map((group) => [
+    group.querySelector("h3")?.textContent,
+    [...group.querySelectorAll('[role="switch"], [role="radiogroup"], [aria-haspopup]')].map(
+      // A pop-up's name ends with the value it names, which is not the row's.
+      (control) => control.getAttribute("aria-label")?.split(": ")[0],
+    ),
+  ]);
+  assert.deepEqual(groups, [
+    ["Diff", ["Layout", "Changed words", "Indicators", "Backgrounds"]],
+    ["Lines", ["Word wrap", "Line numbers", "Minimize inline comments"]],
+    ["Text", ["Syntax theme", "For dark mode", "Font", "Font size", "Line height", "Ligatures"]],
+  ]);
+  assert.match(popover.textContent ?? "", /Or press I in the list/u, "Minimize names its key");
+
+  act(() => settingControl(popover, '[role="radio"]', "Light").click());
+  assert.ok(
+    popover.querySelector('[aria-label^="For light mode"]') !== null &&
+      popover.querySelector('[aria-label^="For dark mode"]') === null,
+    "the other appearance's theme is a press away",
+  );
+
+  const foot = [...popover.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === "All diff and code settings\u2026",
+  );
+  act(() => foot?.click());
+  assert.deepEqual(opened, [
+    { page: SETTINGS_VIEW.APPEARANCE, section: SETTINGS_SECTION.APPEARANCE_DIFFS },
+  ]);
+  assert.equal(document.querySelector('[role="dialog"]'), null, "and the popover closes");
+});
+
+test("the diff settings set the layout, the indicators, and a switch for every diff, kept for the next view", async () => {
+  await drawTab();
+  const popover = openSettings();
+
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  act(() => settingControl(popover, '[role="radio"]', "Classic (+/-)").click());
+  act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
+  act(() => settingControl(popover, '[role="switch"]', "Backgrounds").click());
+  await flush();
+
+  const expected = {
+    ...DEFAULT_LOOK,
+    layout: "split",
+    indicators: "classic",
+    ligatures: true,
+    backgrounds: false,
+  };
+  assert.deepEqual(lastDrawn().look, expected);
+  assert.deepEqual((await drawTab()).look, expected);
+});
+
+test("the ⋯ holds the view's actions alone, Copy path among them, its looks set in View settings", async () => {
+  files = [changed("src/seats.ts")];
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
+  await drawTab();
+
+  const items = menuItems();
+  assert.deepEqual(
+    items.map((item) => item.textContent),
+    ["Copy file name", "Copy path", "Copy patch", "Download patch", "Refresh changes"],
+  );
+  act(() => items[1]?.click());
+  await flush();
+  assert.deepEqual(copied, ["src/seats.ts"]);
+});
+
+test("Split draws the diff side by side, which the next view keeps", async () => {
+  await drawTab();
+
+  const popover = openSettings();
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  await flush();
+  assert.equal(lastDrawn().look.layout, "split");
+
+  assert.equal((await drawTab()).look.layout, "split");
+});
+
+test("with Changed words Off a changed line is tinted whole, for this view and the next", async () => {
+  await drawTab();
+
+  await pick(openSettings(), "Changed words", "Off");
+  assert.equal(lastDrawn().look.inlineDiff, "none");
+
+  assert.equal((await drawTab()).look.inlineDiff, "none");
+});
+
+test("a list too narrow to split is drawn unified with its settings saying so, and split again once there is room", async () => {
+  handSettings({ diffLayout: DIFF_LAYOUT.SPLIT });
+  await drawTab();
+  assert.equal(lastDrawn().look.layout, "split");
+
+  boxWidth = 480;
+  act(() => relayout());
+  assert.equal(lastDrawn().look.layout, "unified");
+  assert.match(openSettings().textContent ?? "", /Needs a wider panel/u);
+
+  boxWidth = 900;
+  act(() => relayout());
+  assert.equal(lastDrawn().look.layout, "split");
+});
+
+test("a setting is drawn as written while its write is out, so a press reads the one before it", async () => {
+  await drawTab();
+
+  const popover = openSettings();
+  act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
+
+  assert.equal(lastDrawn().look.ligatures, true, "drawn before the document comes back");
+  await flush();
+  assert.equal(lastDrawn().look.ligatures, true);
+});
+
+/** Holds every settings write unanswered, and the window's document unchanged, until a test answers one. */
+function holdSettingWrites(): Array<(outcome: ActOutcome) => void> {
+  const held: Array<(outcome: ActOutcome) => void> = [];
+  const before = appBridge().act;
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: (request: Act) =>
+      request.kind === ACT_KIND.SETTING_UPDATE
+        ? new Promise((resolve) => held.push(resolve))
+        : before(request),
+  });
+  return held;
+}
+
+test("a write answered while a later one to the same setting is out leaves the later one drawn", async () => {
+  await drawTab();
+  const held = holdSettingWrites();
+  const popover = openSettings();
+
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  act(() => settingControl(popover, '[role="radio"]', "Unified").click());
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+  await flush();
+
+  assert.equal(lastDrawn().look.layout, "split");
+});
+
+test("a refused write is said under its row, and the row can be pressed again", async () => {
+  await drawTab();
+  const held = holdSettingWrites();
+  const popover = openSettings();
+
+  act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
+  held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not save that setting." });
+  await flush();
+
+  const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
+  assert.equal(ligatures.getAttribute("aria-invalid"), "true", "the refusal is said");
+  assert.match(
+    (ligatures.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .map((id) => document.getElementById(id)?.textContent ?? "")
+      .join(" "),
+    /Could not save that setting/u,
+    "under its own row",
+  );
+  assert.equal(ligatures.disabled, false);
+  assert.equal(lastDrawn().look.ligatures, false);
+});
+
+/** A review thread on the seats file, on its new side's line, or outdated where its line is gone. */
+function seatsThread(line: number | null, words: string) {
+  return {
+    path: "src/seats.ts",
+    line,
+    startLine: null,
+    originalLine: 2,
+    originalStartLine: null,
+    side: DIFF_SIDE.RIGHT,
+    startSide: null,
+    diffHunk: PATCH,
+    resolved: false,
+    outdated: line === null,
+    comments: [
+      {
+        by: { login: "octo", bot: false },
+        html: null,
+        body: words,
+        at: 1,
+        url: `${PAGE}#${words}`,
+      },
+    ],
+    more: 0,
+  };
+}
+
+test("a review thread is drawn under its line in its file, and one a push outdated stands above the file's first hunk", async () => {
+  const threads: ChangesThreads = {
+    list: [seatsThread(2, "why-42"), seatsThread(null, "was-3")],
+    draw: (thread) => createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+  };
+  const props = await drawTab({ threads });
+
+  const [outdated, current] = props.files[0]?.annotations ?? [];
+  assert.deepEqual(current, { key: `${PAGE}#why-42`, side: "additions", line: 2 });
+  assert.equal(props.renderAnnotation("src/seats.ts", `${PAGE}#why-42`).textContent, "why-42");
+  assert.equal(outdated?.side, "additions");
+  assert.equal(outdated?.line, 0);
+  const above = props.renderAnnotation("src/seats.ts", outdated?.key ?? "");
+  assert.equal(
+    above.querySelector('[aria-label="Comments on lines this diff does not show"]')?.textContent,
+    "was-3",
+  );
+});
+
+test("Refresh changes reads the review threads again with the files, so the two describe the same push", async () => {
+  let threadReads = 0;
+  await drawTab({
+    threads: {
+      list: [],
+      draw: () => null,
+      refresh: () => {
+        threadReads += 1;
+      },
+    },
+  });
+
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+
+  assert.equal(threadReads, 1);
+});
+
+/** What an intersection observer is told of an element coming into view, as far as the view reads it. */
+type InView = (entries: readonly { readonly isIntersecting: boolean }[]) => void;
+
+/** Every element an intersection observer watches, with the observer's callback, as the window would report one coming into view. */
+const watched = new Map<Element, InView>();
+
+/** An intersection observer that reports an element in view only once something calls `comeIntoView`, and only an element a document holds. */
+class StandInIntersectionObserver {
+  readonly #callback: InView;
+  constructor(callback: InView) {
+    this.#callback = callback;
+  }
+  observe(target: Element): void {
+    watched.set(target, this.#callback);
+  }
+  disconnect(): void {
+    for (const [target, callback] of watched)
+      if (callback === this.#callback) watched.delete(target);
+  }
+}
+
+/** Reports every watched element a document holds as in view, as Pierre standing its file near the view would. */
+function comeIntoView(): void {
+  for (const [target, callback] of [...watched]) {
+    if (!target.isConnected) continue;
+    act(() => callback([{ isIntersecting: true }]));
+  }
+}
+
+/** The images the service was asked for, by address, each answered with a picture of its own. */
+function answerImages(refusing: Set<string> = new Set()): string[] {
+  const asked: string[] = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      }
+      asked.push(request.payload.src);
+      if (refusing.has(request.payload.src)) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Unreachable." });
+      }
+      return Promise.resolve({
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { contentType: "image/png", base64: btoa(request.payload.src) },
+      });
+    },
+  });
+  handSettings();
+  return asked;
+}
+
+/** Stands what a file draws in the place of its lines where Pierre would, in the document near the view, and lets its pictures be read. */
+async function standNearView(path: string): Promise<HTMLElement> {
+  const file = lastDrawn().files.find((each) => each.path === path);
+  assert.equal(file?.lead, true, `${path} is drawn as its lead`);
+  const slot = lastDrawn().renderAnnotation(path, "lead");
+  document.body.append(slot);
+  comeIntoView();
+  await flush();
+  return slot;
+}
+
+const HEAD_SHA = "1".repeat(40);
+const MERGE_BASE_SHA = "2".repeat(40);
+
+test("a changed image is read at the merge base and the head only once it comes near the view, and drawn before and after", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  const asked = answerImages();
+  commits = { headSha: HEAD_SHA, baseSha: MERGE_BASE_SHA };
+  files = [
+    changed("assets/logo.png", {
+      previousPath: "assets/old logo.png",
+      status: CHANGED_FILE_STATUS.RENAMED,
+      omitted: PATCH_OMITTED.BINARY,
+      patch: null,
+    }),
+  ];
+  const props = await drawTab();
+
+  assert.equal(
+    props.files[0]?.patch,
+    "diff --git a/assets/old logo.png b/assets/logo.png\n--- a/assets/old logo.png\n+++ b/assets/logo.png\n",
+  );
+  assert.deepEqual(asked, [], "nothing is read before Pierre stands the file near the view");
+
+  const slot = await standNearView("assets/logo.png");
+  assert.deepEqual(asked, [
+    `https://raw.githubusercontent.com/acme/relay/${MERGE_BASE_SHA}/assets/old%20logo.png`,
+    `https://raw.githubusercontent.com/acme/relay/${HEAD_SHA}/assets/logo.png`,
+  ]);
+  const pictures = [...slot.querySelectorAll<HTMLImageElement>("img")];
+  assert.deepEqual(
+    pictures.map((picture) => picture.alt),
+    ["Before", "After"],
+  );
+  assert.equal(pictures[1]?.src, `data:image/png;base64,${btoa(asked[1] ?? "")}`);
+
+  const swipe = [...slot.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+    (each) => each.textContent === "Swipe",
+  );
+  act(() => swipe?.click());
+  assert.ok(slot.querySelector('input[aria-label="Swipe between the two"]'));
+  assert.equal(slot.querySelectorAll(".image-diff-stack img").length, 2);
+});
+
+test("a changed image whose merge base the service could not read draws its after alone, saying the before is unavailable", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  const asked = answerImages();
+  commits = { headSha: "3".repeat(40) };
+  files = [changed("logo.webp", { omitted: PATCH_OMITTED.BINARY, patch: null })];
+  await drawTab();
+
+  const slot = await standNearView("logo.webp");
+  assert.deepEqual(asked, [
+    `https://raw.githubusercontent.com/acme/relay/${"3".repeat(40)}/logo.webp`,
+  ]);
+  assert.equal(slot.querySelectorAll("img").length, 1);
+  assert.match(slot.textContent ?? "", /Previous version unavailable/u);
+});
+
+test("an SVG is drawn as a picture until its source is asked for, and its lines then", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  answerImages();
+  commits = { headSha: "4".repeat(40), baseSha: "5".repeat(40) };
+  files = [changed("icon.svg")];
+  await drawTab();
+  assert.equal(
+    lastDrawn().files[0]?.patch,
+    "diff --git a/icon.svg b/icon.svg\n--- a/icon.svg\n+++ b/icon.svg\n",
+  );
+
+  act(() =>
+    header("icon.svg")
+      .querySelector<HTMLButtonElement>('button[aria-label="Show source"]')
+      ?.click(),
+  );
+  await flush();
+  assert.match(lastDrawn().files[0]?.patch ?? "", /@@ -1,2 \+1,3 @@/u);
+});
+
+test("an image of a service that names no commits is a binary file, as before", async () => {
+  files = [changed("logo.png", { omitted: PATCH_OMITTED.BINARY, patch: null })];
+  await drawTab();
+
+  assert.equal(
+    lastDrawn().renderAnnotation("logo.png", "lead").querySelector(".diff-list-notice")
+      ?.textContent,
+    "Binary file not shown.",
+  );
+});
+
+test("an image side whose read did not land is asked for again when the changes are read again", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  const after = `https://raw.githubusercontent.com/acme/relay/${"6".repeat(40)}/logo.png`;
+  const refusing = new Set([after]);
+  const asked = answerImages(refusing);
+  commits = { headSha: "6".repeat(40) };
+  files = [
+    changed("logo.png", {
+      status: CHANGED_FILE_STATUS.ADDED,
+      omitted: PATCH_OMITTED.BINARY,
+      patch: null,
+    }),
+  ];
+  await drawTab();
+  let slot = await standNearView("logo.png");
+  assert.match(slot.textContent ?? "", /could not be shown/u);
+
+  refusing.clear();
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+  slot = await standNearView("logo.png");
+
+  assert.deepEqual(asked, [after, after]);
+  assert.equal(slot.querySelector("img")?.alt, "Added");
+});
+
+test("an SVG moved with its contents unchanged offers no source, having no lines to show", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  answerImages();
+  commits = { headSha: "7".repeat(40), baseSha: "8".repeat(40) };
+  files = [
+    changed("logo.svg", {
+      previousPath: "icon.svg",
+      status: CHANGED_FILE_STATUS.RENAMED,
+      additions: 0,
+      deletions: 0,
+      patch: "",
+    }),
+  ];
+  await drawTab();
+
+  assert.equal(lastDrawn().files[0]?.lead, true, "it is drawn as its pictures");
+  assert.equal(
+    header("logo.svg").querySelector('button[aria-label="Show source"]') === null,
+    true,
+    "no Show source is offered",
+  );
+});
+
+test("the comparison chosen for an image, and how far it is faded, outlast Refresh changes", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  answerImages();
+  commits = { headSha: "9".repeat(40), baseSha: "a".repeat(40) };
+  files = [changed("logo.png", { omitted: PATCH_OMITTED.BINARY, patch: null })];
+  await drawTab();
+  let slot = await standNearView("logo.png");
+  const onion = [...slot.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+    (each) => each.textContent === "Onion skin",
+  );
+  act(() => onion?.click());
+  const fade = () =>
+    slot.querySelector<HTMLInputElement>('input[aria-label="Fade the after over the before"]') ??
+    assert.fail("the fade's slider stands");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(fade(), "80");
+    fade().dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+  slot = await standNearView("logo.png");
+
+  assert.equal(fade().value, "80");
+});
+
+test("after Refresh changes an image far from the view reads nothing until it comes near again", async () => {
+  vi.stubGlobal("IntersectionObserver", StandInIntersectionObserver);
+  const asked = answerImages();
+  commits = { headSha: "b".repeat(40) };
+  files = [
+    changed("logo.png", {
+      status: CHANGED_FILE_STATUS.ADDED,
+      omitted: PATCH_OMITTED.BINARY,
+      patch: null,
+    }),
+  ];
+  await drawTab();
+  const slot = await standNearView("logo.png");
+  assert.equal(asked.length, 1);
+  // Pierre takes the file's place away as it scrolls far from the view.
+  slot.remove();
+
+  commits = { headSha: "c".repeat(40) };
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+  comeIntoView();
+  await flush();
+  assert.equal(asked.length, 1, "nothing is read while the file is far from the view");
+
+  await standNearView("logo.png");
+  assert.deepEqual(
+    asked.at(-1),
+    `https://raw.githubusercontent.com/acme/relay/${"c".repeat(40)}/logo.png`,
+  );
+});
+
+/** The viewed marks the service names: the seats file viewed, the plan viewed and changed since, the readme not. */
+const MARKED: CodingAgentPullRequestViewedAnswerView = {
+  outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+  files: [
+    { path: "a.ts", state: FILE_VIEWED_STATE.VIEWED },
+    { path: "b.ts", state: FILE_VIEWED_STATE.DISMISSED },
+    { path: "c.ts", state: FILE_VIEWED_STATE.UNVIEWED },
+  ],
+};
+
+/** Every mark asked of the service, answered as `answer` says. */
+function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionRequest[] {
+  const asked: PullRequestActionRequest[] = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      }
+      asked.push(request.payload.request);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer() });
+    },
+  });
+  handSettings();
+  return asked;
+}
+
+/** The Viewed box in a file's header. */
+function viewedBox(path: string): HTMLInputElement {
+  return (
+    header(path).querySelector<HTMLInputElement>('.diff-list-viewed input[type="checkbox"]') ??
+    assert.fail(`${path} offers a Viewed box`)
+  );
+}
+
+test("the member's viewed marks tick their files, count toward the foot's progress, and fold them; a file changed since reads not viewed", async () => {
+  viewedAnswer = MARKED;
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+
+  assert.deepEqual(
+    ["a.ts", "b.ts", "c.ts"].map((path) => viewedBox(path).checked),
+    [true, false, false],
+  );
+  assert.deepEqual(folds(), [
+    ["a.ts", true],
+    ["b.ts", false],
+    ["c.ts", false],
+  ]);
+  assert.match(document.querySelector(".file-tree-foot")?.textContent ?? "", /1 \/ 3 viewed/u);
+});
+
+test("ticking a file's box marks it viewed on GitHub at once and folds it; one GitHub refuses goes back and says why", async () => {
+  viewedAnswer = MARKED;
+  let refuse = false;
+  const asked = answerMarks(() =>
+    refuse
+      ? { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Pull request is locked." }
+      : { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE },
+  );
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+
+  act(() => viewedBox("c.ts").click());
+  await flush();
+  assert.equal(viewedBox("c.ts").checked, true);
+  assert.deepEqual(folds()[2], ["c.ts", true]);
+  assert.match(document.querySelector(".file-tree-foot")?.textContent ?? "", /2 \/ 3 viewed/u);
+
+  refuse = true;
+  act(() => viewedBox("a.ts").click());
+  await flush();
+  assert.equal(viewedBox("a.ts").checked, true, "a refused unmark leaves the mark standing");
+  assert.match(
+    document.querySelector('[role="alert"]')?.textContent ?? "",
+    /Pull request is locked\./u,
+  );
+  assert.deepEqual(asked, [
+    { action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "c.ts" },
+    { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: "a.ts" },
+  ]);
+});
+
+test("V marks the file the keys stand on viewed and steps on to the next, and is no key at all until the marks are read", async () => {
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  const asked = answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  await drawTab();
+  assert.equal(press(listBox(), { key: "v" }), false, "with no marks read V is not the list's");
+
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
+  await drawTab();
+  press(listBox(), { key: "j" });
+  press(listBox(), { key: "v" });
+  await flush();
+
+  assert.deepEqual(asked, [{ action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "a.ts" }]);
+  assert.ok(header("b.ts").hasAttribute("data-standing"));
+  assert.equal(viewedBox("a.ts").checked, true);
+});
+
+/** The marks the tree was last handed, by path. */
+function lastMarks(): ReadonlyMap<string, FileMark> {
+  return new Map((treeMarks.at(-1) ?? []).map((mark) => [mark.path, mark]));
+}
+
+test("each tree row is handed its file's lines, how many review threads stand on it, resolved or not, and whether it is viewed", async () => {
+  viewedAnswer = MARKED;
+  files = [changed("a.ts"), changed("b.ts", { additions: 0, deletions: 7 }), changed("c.ts")];
+  const threads: ChangesThreads = {
+    list: [
+      { ...seatsThread(2, "one"), path: "a.ts" },
+      { ...seatsThread(2, "two"), path: "a.ts", resolved: true },
+      { ...seatsThread(null, "three"), path: "c.ts" },
+    ],
+    draw: () => null,
+  };
+  await drawTab({ threads, treeOpen: true });
+
+  const marks = lastMarks();
+  assert.deepEqual(
+    ["a.ts", "b.ts", "c.ts"].map((path) => {
+      const mark = marks.get(path);
+      return [mark?.threads, mark?.lines, mark?.viewed];
+    }),
+    [
+      [2, { additions: 2, deletions: 1 }, true],
+      [0, { additions: 0, deletions: 7 }, false],
+      [1, { additions: 2, deletions: 1 }, false],
+    ],
+  );
+});
+
+test("a tree row's Viewed toggle marks its file viewed on GitHub as its header's box does, folding it, and the row is handed the mark", async () => {
+  viewedAnswer = MARKED;
+  const asked = answerMarks(() => ({ outcome: PULL_REQUEST_WRITE_OUTCOME.DONE }));
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab({ treeOpen: true });
+
+  const onViewed = treeProps.at(-1)?.onViewed ?? assert.fail("the tree is handed a Viewed door");
+  act(() => onViewed("c.ts"));
+  await flush();
+
+  assert.deepEqual(asked, [{ action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "c.ts" }]);
+  assert.equal(viewedBox("c.ts").checked, true);
+  assert.deepEqual(folds()[2], ["c.ts", true]);
+  assert.equal(lastMarks().get("c.ts")?.viewed, true);
+});
+
+test("no tree row draws a Viewed toggle until the marks are read", async () => {
+  files = [changed("a.ts")];
+  await drawTab({ treeOpen: true });
+
+  assert.equal(lastMarks().get("a.ts")?.viewed, undefined);
+});
+
+test("a member with no GitHub sign-in is offered one, and no Viewed box stands until the marks are read", async () => {
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
+  files = [changed("a.ts")];
+  await drawTab();
+
+  assert.equal(header("a.ts").querySelector(".diff-list-viewed") === null, true);
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /Sign in with GitHub/u);
+});
+
+test("the marks are read again with the files on Refresh changes, so the two describe the same push", async () => {
+  viewedAnswer = MARKED;
+  files = [changed("a.ts")];
+  await drawTab();
+  assert.equal(viewedReads, 1);
+
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+
+  assert.equal(viewedReads, 2);
+});
+
+/** Every mark asked of the service, each held until the test answers it. */
+function holdMarks(): Array<{
+  readonly request: PullRequestActionRequest;
+  readonly answer: (answer: PullRequestWriteAnswer) => void;
+}> {
+  const held: Array<{
+    readonly request: PullRequestActionRequest;
+    readonly answer: (answer: PullRequestWriteAnswer) => void;
+  }> = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      }
+      const answered = Promise.withResolvers<ActOutcome>();
+      held.push({
+        request: request.payload.request,
+        answer: (value) => answered.resolve({ status: ACT_OUTCOME_STATUS.DONE, value }),
+      });
+      return answered.promise;
+    },
+  });
+  handSettings();
+  return held;
+}
+
+const DONE: PullRequestWriteAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE };
+
+test("presses on one file go to GitHub one at a time, the last of them winning, whatever order GitHub could have answered them in", async () => {
+  viewedAnswer = MARKED;
+  const held = holdMarks();
+  files = [changed("c.ts")];
+  await drawTab();
+
+  act(() => viewedBox("c.ts").click());
+  act(() => viewedBox("c.ts").click());
+  await flush();
+  assert.equal(held.length, 1, "the second press waits for the first");
+  assert.equal(viewedBox("c.ts").checked, false);
+
+  held[0]?.answer(DONE);
+  await flush();
+  assert.deepEqual(
+    held.map((each) => each.request),
+    [
+      { action: PULL_REQUEST_ACTION.MARK_FILE_VIEWED, path: "c.ts" },
+      { action: PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED, path: "c.ts" },
+    ],
+  );
+  held[1]?.answer(DONE);
+  await flush();
+  assert.equal(viewedBox("c.ts").checked, false);
+  assert.match(document.querySelector(".file-tree-foot")?.textContent ?? "", /0 \/ 1 viewed/u);
+});
+
+test("a read asked before a mark settled never undoes it, and a read that does not answer takes the boxes away", async () => {
+  viewedAnswer = MARKED;
+  const held = holdMarks();
+  files = [changed("c.ts")];
+  await drawTab();
+
+  // A refresh's read stays out while the member marks the file and GitHub takes it.
+  const reading = Promise.withResolvers<void>();
+  viewedHeld = reading.promise;
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+  act(() => viewedBox("c.ts").click());
+  await flush();
+  held[0]?.answer(DONE);
+  await flush();
+  reading.resolve();
+  await flush();
+  assert.equal(viewedBox("c.ts").checked, true, "the read from before the mark leaves it standing");
+
+  viewedHeld = undefined;
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED };
+  act(() => options?.click());
+  const again = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => again?.click());
+  await flush();
+  assert.equal(header("c.ts").querySelector(".diff-list-viewed") === null, true);
+});
+
+test("unmarking a deleted file opens it, and a press GitHub refuses puts back the fold chosen before", async () => {
+  viewedAnswer = {
+    outcome: PULL_REQUEST_WRITE_OUTCOME.DONE,
+    files: [{ path: "old.ts", state: FILE_VIEWED_STATE.VIEWED }],
+  };
+  let refuse = false;
+  answerMarks(() =>
+    refuse ? { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Locked." } : DONE,
+  );
+  files = [changed("old.ts", { status: CHANGED_FILE_STATUS.DELETED }), changed("new.ts")];
+  await drawTab();
+  assert.deepEqual(folds()[1], ["old.ts", true]);
+
+  act(() => viewedBox("old.ts").click());
+  await flush();
+  assert.deepEqual(folds()[1], ["old.ts", false], "unmarked, the deleted file opens");
+
+  refuse = true;
+  act(() => viewedBox("new.ts").click());
+  await flush();
+  assert.deepEqual(folds()[0], ["new.ts", false], "a refused mark leaves the file as it was");
+});
+
+const REFUSED: PullRequestWriteAnswer = {
+  outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
+  words: "Try again later.",
+};
+
+test("a mark GitHub took stands where the press queued after it is refused, as GitHub holds it", async () => {
+  viewedAnswer = MARKED;
+  const held = holdMarks();
+  files = [changed("c.ts")];
+  await drawTab();
+
+  act(() => viewedBox("c.ts").click());
+  act(() => viewedBox("c.ts").click());
+  held[0]?.answer(DONE);
+  await flush();
+  held[1]?.answer(REFUSED);
+  await flush();
+
+  assert.equal(viewedBox("c.ts").checked, true);
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? "", /Try again later\./u);
+});
+
+test("a last press GitHub was never asked for is sent even where the press before it was refused", async () => {
+  viewedAnswer = MARKED;
+  const held = holdMarks();
+  files = [changed("c.ts")];
+  await drawTab();
+
+  act(() => viewedBox("c.ts").click());
+  act(() => viewedBox("c.ts").click());
+  act(() => viewedBox("c.ts").click());
+  held[0]?.answer(REFUSED);
+  await flush();
+  // The last press, a mark GitHub was never asked for, is taken where GitHub answers it.
+  held.at(-1)?.answer(DONE);
+  await flush();
+
+  assert.equal(viewedBox("c.ts").checked, true);
+  assert.equal(document.querySelector('[role="alert"]') === null, true);
+});
+
+test("a refused mark leaves a fold chosen since, as Collapse all chose it", async () => {
+  viewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
+  const held = holdMarks();
+  files = [changed("a.ts"), changed("b.ts")];
+  await drawTab();
+
+  act(() => viewedBox("a.ts").click());
+  await flush();
+  const foldAll =
+    document.querySelector<HTMLButtonElement>('button[aria-label="Collapse all files"]') ??
+    assert.fail("the bar offers Collapse all");
+  act(() => foldAll.click());
+  await flush();
+  held[0]?.answer(REFUSED);
+  await flush();
+
+  assert.deepEqual(folds(), [
+    ["a.ts", true],
+    ["b.ts", true],
+  ]);
+});
+
+test("I turns Minimize inline comments on and off inside Files changed, each line's threads then one chip that a find still reads and opens", async () => {
+  // Each thread drawn as a resolved one is, folded closed under its head.
+  const threads: ChangesThreads = {
+    list: [seatsThread(2, "why-42")],
+    draw: (thread) =>
+      createElement(
+        "details",
+        { className: "drawn-card" },
+        createElement("summary", null, "head"),
+        createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+      ),
+  };
+  await drawTab({ threads });
+  const note = () => lastDrawn().renderAnnotation("src/seats.ts", `${PAGE}#why-42`);
+  assert.equal(note().querySelector(".drawn-thread")?.textContent, "why-42");
+
+  press(listBox(), { key: "i" });
+  await flush();
+  const chip =
+    note().querySelector<HTMLElement>(".diff-thread-chip") ?? assert.fail("a chip stands");
+  assert.equal(chip.getAttribute("aria-label"), "1 comment by octo · 1 open, show");
+  assert.equal(note().querySelector(".drawn-thread"), null, "minimized, the thread is put away");
+  press(document.body, { key: "i" });
+  await flush();
+  assert.ok(note().querySelector(".diff-thread-chip"), "outside the view, I is not the view's");
+
+  // A find looking through the tab reads the put-away thread's words, and opens the line it brings into view.
+  await redraw({ threads, finding: true });
+  const slot = note();
+  document.body.append(slot);
+  const [match] = findRanges(slot, "why-42");
+  assert.ok(match, "the find reads the minimized thread");
+  // Note that jsdom lays nothing out, so a range is measured where the find scrolls it into view as standing nowhere.
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+  act(() => reveal(match, slot));
+  await flush();
+  assert.equal(
+    note().querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
+    "1 comment by octo · 1 open, hide",
+  );
+  assert.equal(
+    note().querySelector<HTMLDetailsElement>(".drawn-card")?.open,
+    true,
+    "the found words' own fold stays open",
+  );
+
+  press(listBox(), { key: "i" });
+  await flush();
+  assert.equal(note().querySelector(".diff-thread-chip"), null, "I again draws every thread whole");
+});
+
+test("minimized, the threads on no line take a row of their own for their chip, which has no line to float over", async () => {
+  const threads: ChangesThreads = {
+    list: [seatsThread(2, "why-42"), seatsThread(null, "was-3")],
+    draw: (thread) => createElement("p", null, thread.comments[0]?.body),
+  };
+  await drawTab({ threads });
+  press(listBox(), { key: "i" });
+  await flush();
+  const [outdated, current] = lastDrawn().files[0]?.annotations ?? [];
+  const chipOf = (key: string | undefined) =>
+    lastDrawn()
+      .renderAnnotation("src/seats.ts", key ?? "")
+      .querySelector(".diff-thread-chip-row");
+  assert.equal(chipOf(outdated?.key)?.hasAttribute("data-above"), true, "above the diff");
+  assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
+});
+
+test("a header copies the path it names on a press, the path a file moved from apart from the one it moved to", async () => {
+  files = [
+    changed("src/seats.ts"),
+    changed("src/plan.ts", {
+      status: CHANGED_FILE_STATUS.RENAMED,
+      previousPath: "src/old/plan.ts",
+    }),
+  ];
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
+  await drawTab();
+  const copyButton = (path: string, name: string) =>
+    [...header(path).querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+      button.getAttribute("aria-label")?.startsWith(name),
+    ) ?? assert.fail(`${path} offers ${name}`);
+  act(() => copyButton("src/seats.ts", "Copy path").click());
+  act(() => copyButton("src/plan.ts", "Copy old path").click());
+  act(() => copyButton("src/plan.ts", "Copy new path").click());
+  await flush();
+  assert.deepEqual(copied, ["src/seats.ts", "src/old/plan.ts", "src/plan.ts"]);
+  assert.deepEqual(
+    folds().map(([, collapsed]) => collapsed),
+    [false, false],
+    "a copy folds nothing",
+  );
+});
+
+test("a press anywhere on a header's row folds its file, and \u2325 with a press on the fold folds every file", async () => {
+  files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
+  await drawTab();
+  const row = (path: string) =>
+    header(path).querySelector<HTMLElement>(".diff-list-head-row") ?? assert.fail("the row stands");
+  act(() => row("b.ts").dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  await flush();
+  assert.deepEqual(folds(), [
+    ["a.ts", false],
+    ["b.ts", true],
+    ["c.ts", false],
+  ]);
+
+  const fold =
+    header("a.ts").querySelector<HTMLButtonElement>("button") ?? assert.fail("the fold stands");
+  act(() => fold.dispatchEvent(new MouseEvent("click", { bubbles: true, altKey: true })));
+  await flush();
+  assert.ok(
+    folds().every(([, collapsed]) => collapsed),
+    "every file folds",
+  );
+  act(() => {
+    const again = header("a.ts").querySelector<HTMLButtonElement>("button");
+    again?.dispatchEvent(new MouseEvent("click", { bubbles: true, altKey: true }));
+  });
+  await flush();
+  assert.ok(
+    folds().every(([, collapsed]) => !collapsed),
+    "and every file unfolds",
+  );
+});
+
+/** The seats file at the pull request's head, ten lines, its fifth changed, and its patch as GitHub sends it. */
+const HEAD_TEXT = `${["1", "2", "3", "4", "five", "6", "7", "8", "9", "10"].join("\n")}\n`;
+const BASE_TEXT = HEAD_TEXT.replace("five", "5");
+const HEAD_PATCH = "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8";
+
+/** Answers each read of a file whole as given, keeping every read asked. */
+function answerFileReads(answer: (path: string) => TasksFileAnswer): Act[] {
+  const asked: Act[] = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      asked.push(request);
+      const outcome: ActOutcome = {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,
+      };
+      return Promise.resolve(outcome);
+    },
+  });
+  handSettings();
+  return asked;
+}
+
+test("a changed file is read whole at the pull request's head the first time its gaps are opened, once, its text before turned back from it", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/new.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+  ];
+  const asked = answerFileReads((path) => ({
+    text: { path, repository: "acme/relay", branch: "a".repeat(40), text: HEAD_TEXT },
+  }));
+  const props = await drawTab();
+  const readTexts = props.readTexts ?? assert.fail("the list is handed a way to read files whole");
+  assert.equal(asked.length, 0, "nothing is read before a gap is opened");
+
+  assert.deepEqual(await readTexts("src/seats.ts"), { before: BASE_TEXT, after: HEAD_TEXT });
+  await readTexts("src/seats.ts");
+  assert.equal(await readTexts("src/new.ts"), undefined, "an added file has no gaps to open");
+  assert.deepEqual(
+    asked.flatMap((request) => (request.kind === ACT_KIND.TASKS_FILE ? [request.payload] : [])),
+    [
+      {
+        taskId: AGENT.planId,
+        path: "src/seats.ts",
+        firstLine: 1,
+        lastLine: 1,
+        raw: true,
+        ref: "a".repeat(40),
+      },
+    ],
+  );
+});
+
+test("a file the service will not read whole, or whose text is not the one its patch was made against, opens no gap", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/moved.ts", { patch: HEAD_PATCH }),
+  ];
+  answerFileReads((path) =>
+    path === "src/seats.ts"
+      ? { refusal: TASK_FILE_REFUSAL.MISSING }
+      : { text: { path, repository: "acme/relay", branch: "a".repeat(40), text: BASE_TEXT } },
+  );
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  assert.equal(await readTexts("src/seats.ts"), undefined);
+  assert.equal(await readTexts("src/moved.ts"), undefined);
+});
+
+test("no file is read whole for an agent on no task, a head not named, or a task whose repository is not the pull request's", async () => {
+  files = [changed("src/seats.ts", { patch: HEAD_PATCH })];
+  commits = { headSha: "a".repeat(40) };
+  assert.equal(
+    (await drawTab({ repository: "acme/other" })).readTexts,
+    undefined,
+    "another repository",
+  );
+  const taskless = codingAgentsControl({
+    agents: [{ ...AGENT, planId: null }],
+    agentIds: [AGENT.id],
+    models: [],
+    readChanges: control.readChanges,
+  });
+  assert.equal((await drawTab({ control: taskless })).readTexts, undefined, "no task");
+  commits = {};
+  assert.equal((await drawTab()).readTexts, undefined, "no head");
+  commits = { headSha: "a".repeat(40) };
+  assert.notEqual(
+    (await drawTab({ repository: "ACME/Relay" })).readTexts,
+    undefined,
+    "the same repository, whatever its case",
+  );
+});
+
+test("a file whose gaps are never read whole offers none: a secret one, and one not changed in place", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("config/.env.local", { patch: HEAD_PATCH }),
+    changed("src/new.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+  ];
+  answerFileReads((path) => ({
+    text: { path, repository: "acme/relay", branch: "a".repeat(40), text: HEAD_TEXT },
+  }));
+  const props = await drawTab();
+  assert.deepEqual(
+    props.files.map((file) => [file.path, file.expandable]),
+    [
+      ["config/.env.local", false],
+      ["src/new.ts", false],
+      ["src/seats.ts", true],
+    ],
+  );
+});
+
+test("a file whose read is refused closes its gaps and says why, once, above its first hunk", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/moved.ts", { patch: HEAD_PATCH }),
+  ];
+  answerFileReads((path) =>
+    path === "src/seats.ts"
+      ? { refusal: TASK_FILE_REFUSAL.NOT_TEXT }
+      : { text: { path, repository: "acme/relay", branch: "a".repeat(40), text: BASE_TEXT } },
+  );
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  await readTexts("src/seats.ts");
+  await readTexts("src/moved.ts");
+  await flush();
+  const drawn = lastDrawn();
+  assert.deepEqual(
+    drawn.files.map((file) => [file.path, file.expandable]),
+    [
+      ["src/moved.ts", false],
+      ["src/seats.ts", false],
+    ],
+  );
+  const why = (path: string) => {
+    const key = drawn.files.find((file) => file.path === path)?.annotations[0]?.key ?? "";
+    return drawn.renderAnnotation(path, key).textContent;
+  };
+  assert.equal(
+    why("src/seats.ts"),
+    "Can't load more of this file: it's too large or not plain text.",
+  );
+  assert.equal(
+    why("src/moved.ts"),
+    "Can't load more of this file: it changed since these changes were read.",
+  );
+});
+
+test("a gap's arrow under the pointer hangs its hint: the next twenty lines of a long gap and \u21e7 for all, or the whole of a short one", async () => {
+  files = [changed("src/seats.ts")];
+  await drawTab();
+  const hintOver = (long: boolean) => {
+    const wrapper = listBox().appendChild(document.createElement("div"));
+    wrapper.setAttribute("data-separator-wrapper", "");
+    const arrow = wrapper.appendChild(document.createElement("div"));
+    arrow.setAttribute("data-expand-button", "");
+    if (long)
+      wrapper.appendChild(document.createElement("div")).setAttribute("data-expand-all-button", "");
+    act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+    const words = document.querySelector('[role="tooltip"]')?.textContent;
+    act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+    wrapper.remove();
+    return words;
+  };
+  assert.equal(hintOver(true), "Show 20 more lines\u21e7-click for all");
+  assert.equal(hintOver(false), "Show these lines");
+});
+
+test("a file read whole that is not the contents GitHub listed its patch against opens no gap, though its hunks match", async () => {
+  commits = { headSha: "a".repeat(40) };
+  const listedAs = await blobShaOf(HEAD_TEXT);
+  // The same hunks, with a line far from them changed by a later push.
+  const pushed = HEAD_TEXT.replace("10", "ten");
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH, blobSha: listedAs }),
+    changed("src/moved.ts", { patch: HEAD_PATCH, blobSha: listedAs }),
+  ];
+  answerFileReads((path) => ({
+    text: {
+      path,
+      repository: "acme/relay",
+      branch: "a".repeat(40),
+      text: path === "src/seats.ts" ? HEAD_TEXT : pushed,
+    },
+  }));
+  const readTexts = (await drawTab()).readTexts ?? assert.fail("the list reads files whole");
+  assert.deepEqual(await readTexts("src/seats.ts"), { before: BASE_TEXT, after: HEAD_TEXT });
+  assert.equal(await readTexts("src/moved.ts"), undefined);
+});
+
+test("a file that only moved, shown whole, draws its review threads on their lines, and one of no line keeps saying it moved", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/moved.ts", {
+      status: CHANGED_FILE_STATUS.RENAMED,
+      previousPath: "src/old.ts",
+      patch: "",
+    }),
+    changed("src/empty.ts", {
+      status: CHANGED_FILE_STATUS.RENAMED,
+      previousPath: "src/was-empty.ts",
+      patch: "",
+    }),
+  ];
+  answerFileReads((path) => ({
+    text: {
+      path,
+      repository: "acme/relay",
+      branch: "a".repeat(40),
+      text: path === "src/empty.ts" ? "" : HEAD_TEXT,
+    },
+  }));
+  const threads: ChangesThreads = {
+    list: [{ ...seatsThread(2, "on-2"), path: "src/moved.ts" }],
+    draw: (thread) => createElement("p", null, thread.comments[0]?.body),
+  };
+  await drawTab({ threads });
+  const drawnAs = (path: string) => lastDrawn().files.find((file) => file.path === path);
+  assert.deepEqual(drawnAs("src/moved.ts")?.annotations, [
+    { key: "lead", side: "additions", line: 0 },
+  ]);
+
+  for (const path of ["src/moved.ts", "src/empty.ts"]) {
+    const lead = lastDrawn().renderAnnotation(path, "lead");
+    document.body.append(lead);
+    await flush();
+    const show = lead.querySelector<HTMLButtonElement>(`button[aria-label="Show file: ${path}"]`);
+    act(() => show?.click());
+    await flush();
+  }
+
+  assert.deepEqual(drawnAs("src/moved.ts")?.annotations, [
+    { key: `${PAGE}#on-2`, side: "additions", line: 2 },
+  ]);
+  assert.equal(drawnAs("src/empty.ts")?.lead, true, "a file of no line says it moved still");
+  assert.equal(
+    lastDrawn()
+      .renderAnnotation("src/empty.ts", "lead")
+      .querySelector('button[aria-label^="Show file"]'),
+    null,
+    "with nothing more to show",
+  );
+});
+
+test("a whole file read for an earlier answer, landing after a refresh, leaves the files expanded since as they are", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/plan.ts", { patch: HEAD_PATCH }),
+  ];
+  const held: Array<() => void> = [];
+  fakeAppBridge({
+    act: (request: Act) => {
+      const value =
+        request.kind === ACT_KIND.TASKS_FILE
+          ? {
+              text: {
+                path: request.payload.path,
+                repository: "acme/relay",
+                branch: "a".repeat(40),
+                text: HEAD_TEXT,
+              },
+            }
+          : undefined;
+      const outcome: ActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
+      // The first file's read is held until the test lets it land.
+      if (request.kind === ACT_KIND.TASKS_FILE && request.payload.path === "src/seats.ts") {
+        return new Promise((resolve) => held.push(() => resolve(outcome)));
+      }
+      return Promise.resolve(outcome);
+    },
+  });
+  handSettings();
+  await drawTab();
+  const expand = (path: string) =>
+    [...header(path).querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.getAttribute("aria-label") === "Expand full file",
+    );
+
+  act(() => expand("src/seats.ts")?.click());
+  await flush();
+  const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
+  act(() => options?.click());
+  const refresh = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.textContent?.includes("Refresh changes"),
+  );
+  act(() => refresh?.click());
+  await flush();
+  act(() => expand("src/plan.ts")?.click());
+  await flush();
+  assert.notEqual(lastDrawn().files.find((file) => file.path === "src/plan.ts")?.whole, undefined);
+
+  for (const land of held) land();
+  await flush();
+
+  const whole = (path: string) => lastDrawn().files.find((file) => file.path === path)?.whole;
+  assert.notEqual(whole("src/plan.ts"), undefined, "the file expanded since stays whole");
+  assert.equal(whole("src/seats.ts"), undefined, "and the earlier answer's read is dropped");
+});
+
+test("a file's header draws the whole file on Expand full file, read once, and back to its changes; a file that only moved shows its lines, from Show file, rather than saying so", async () => {
+  commits = { headSha: "a".repeat(40) };
+  files = [
+    changed("src/seats.ts", { patch: HEAD_PATCH }),
+    changed("src/moved.ts", {
+      status: CHANGED_FILE_STATUS.RENAMED,
+      previousPath: "src/old.ts",
+      patch: "",
+    }),
+    changed("src/new.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+  ];
+  const asked = answerFileReads((path) => ({
+    text: { path, repository: "acme/relay", branch: "a".repeat(40), text: HEAD_TEXT },
+  }));
+  await drawTab();
+  const toggle = (path: string) =>
+    [...header(path).querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+      ["Expand full file", "Collapse to changes"].includes(button.getAttribute("aria-label") ?? ""),
+    );
+  assert.equal(toggle("src/new.ts"), undefined, "an added file has nothing to expand");
+  const drawnAs = (path: string) => lastDrawn().files.find((file) => file.path === path);
+  assert.equal(drawnAs("src/moved.ts")?.lead, true, "a file that only moved says so");
+
+  act(() => toggle("src/seats.ts")?.click());
+  await flush();
+  assert.deepEqual(drawnAs("src/seats.ts")?.whole, { before: BASE_TEXT, after: HEAD_TEXT });
+  const lead = lastDrawn().renderAnnotation("src/moved.ts", "lead");
+  document.body.append(lead);
+  await flush();
+  const showFile = lead.querySelector<HTMLButtonElement>(
+    'button[aria-label="Show file: src/moved.ts"]',
+  );
+  assert.ok(showFile, "what a file that only moved says offers its lines");
+  act(() => showFile.click());
+  await flush();
+  assert.deepEqual(drawnAs("src/moved.ts")?.whole, { before: HEAD_TEXT, after: HEAD_TEXT });
+  assert.equal(drawnAs("src/moved.ts")?.lead, false, "and once whole, shows its lines");
+
+  act(() => toggle("src/seats.ts")?.click());
+  await flush();
+  assert.equal(
+    drawnAs("src/seats.ts")?.whole,
+    undefined,
+    "Collapse to changes draws its hunks again",
+  );
+  act(() => toggle("src/seats.ts")?.click());
+  await flush();
+  assert.equal(
+    asked.filter((request) => request.kind === ACT_KIND.TASKS_FILE).length,
+    2,
+    "each file is read once",
+  );
+});

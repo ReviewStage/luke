@@ -15,6 +15,7 @@ import { CHAT_TOOL } from "./chat-wire.js";
 import { CODING_AGENT_DELEGATE_TOOL, CODING_AGENT_TODOS_TOOL } from "./coding-agent-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
+import { PLAN_COMMENT_TOOL } from "./plan-comment-wire.js";
 
 /** Every tool Luke authors or declares for a model, by the name the model calls it by. */
 export const AGENT_TOOL = {
@@ -33,16 +34,21 @@ export const AGENT_TOOL = {
   READ_AGENT: "read_agent",
   MESSAGE_AGENT: "message_agent",
   START_AGENT: "start_agent",
-  ARCHIVE_AGENT: "archive_agent",
-  UNARCHIVE_AGENT: "unarchive_agent",
   STOP_AGENT: "stop_agent",
+  UPDATE_AGENT: "update_agent",
   LIST_TASKS: "list_tasks",
+  READ_TASK: "read_task",
+  CREATE_TASK: "create_task",
   // The sections the member keeps tasks in in the workspace's sidebar, named for any agent offered `list_tasks`.
   CREATE_SECTION: "create_section",
   DELETE_SECTION: "delete_section",
-  MOVE_TASK: "move_task",
   // A task of the workspace renamed, given a repository, pinned, or archived, named for any agent offered `list_tasks`.
   UPDATE_TASK: "update_task",
+  // The workspace's issues, listed, read, filed, and changed, named for any agent offered `list_tasks`.
+  LIST_ISSUES: "list_issues",
+  READ_ISSUE: "read_issue",
+  CREATE_ISSUE: "create_issue",
+  UPDATE_ISSUE: "update_issue",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
   // The public reads, every role's.
@@ -74,6 +80,11 @@ export const AGENT_TOOL = {
   LOAD_SKILL: "load_skill",
   // An interactive page shown in the plan's side panel, and a read of one by its id.
   SHOW_PAGE: SHOW_PAGE_TOOL_NAME,
+  // The plan's comment threads, read and answered by the planning model and every coding agent on the task.
+  READ_COMMENTS: PLAN_COMMENT_TOOL.READ,
+  REPLY_TO_COMMENT: PLAN_COMMENT_TOOL.REPLY,
+  RESOLVE_THREAD: PLAN_COMMENT_TOOL.RESOLVE,
+  REOPEN_THREAD: PLAN_COMMENT_TOOL.REOPEN,
   READ_PAGE: "read_page",
   // Pictures from a coding agent's sandbox, shown in its transcript.
   SHOW_IMAGE: "show_image",
@@ -120,4 +131,8 @@ export const RETIRED_TOOL = {
   READ_CODING_AGENT: "read_coding_agent",
   MESSAGE_CODING_AGENT: "message_coding_agent",
   START_CODING_AGENT: "start_coding_agent",
+  // Folded into `update_agent` (`archived`, `reason`) and `update_task` (`sectionId`).
+  ARCHIVE_AGENT: "archive_agent",
+  UNARCHIVE_AGENT: "unarchive_agent",
+  MOVE_TASK: "move_task",
 } as const;

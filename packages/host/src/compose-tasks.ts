@@ -9,6 +9,7 @@ import {
   WORKSPACE_CALL_FAILURE,
   type WorkspaceCallResult,
 } from "@luke/features";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -22,7 +23,7 @@ import {
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
 import { SHOW_PAGE_TOOL_NAME } from "@luke/features/page-wire";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
@@ -30,6 +31,8 @@ import {
   TASKS_READ,
   type TaskCodeShowing,
   type TaskShownCode,
+  type TasksCommentAnswer,
+  type TasksCommentsAnswer,
   type TasksDocument,
   type TasksEditAnswer,
   type TasksFileAnswer,
@@ -61,6 +64,9 @@ import {
   type TaskWorkTurn,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
+  tasksCommentActParamsSchema,
+  tasksCommentStartParamsSchema,
+  tasksCommentsParamsSchema,
   tasksEditParamsSchema,
   tasksFileParamsSchema,
   tasksIssueParamsSchema,
@@ -105,7 +111,7 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@luke/gateway";
-import { unparsedWire } from "@luke/wire";
+import { isRecord, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
   Clock,
@@ -192,6 +198,23 @@ import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
 const TRANSCRIPT_SETTLE = Duration.seconds(5);
 
 /**
+ * How long after the open Untitled task's brain settles a turn the list is
+ * read again, for the name the service may give it as one of its first
+ * turns completes (`brain-host/task-title.ts`): the naming call is made once
+ * the turn is recorded settled and usually answers in a second or two.
+ */
+const NAME_SETTLE = Duration.seconds(5);
+
+/**
+ * How long after a turn that wrote the plan stops writing the plan is read
+ * once more. Note that a turn holds open until its saves settle, except one
+ * stopped or failed with a save under way: eve then gives the save's task
+ * up to thirty seconds to unwind, and a save already in its step lands
+ * meanwhile with nothing on the conversation to say so.
+ */
+const PLAN_EDIT_UNWIND = Duration.seconds(30);
+
+/**
  * How long the conversation's read waits after one the service did not
  * answer: the first wait, doubling on each read that fails again, up to the
  * longest.
@@ -214,6 +237,22 @@ const CONVERSATION_WRITING: ReadonlySet<CodingAgentStatus> = new Set([
 class ConversationUnanswered extends Data.TaggedError("ConversationUnanswered")<{
   readonly failure: CodingAgentCallFailure;
 }> {}
+
+/** How the SDK spells the type of a part that calls Luke's plan edit. */
+const PLAN_EDIT_PART_TYPE = `tool-${AGENT_TOOL.EDIT_PLAN}`;
+
+/**
+ * Whether a page carries a turn that wrote the plan. Note that the call's
+ * part is journaled with its receipt and the save lands as a task after it,
+ * so the document is read again on every page that carries the call, which
+ * the turn's later steps amend, once more when the turn stops writing, and
+ * again once a save cut off with the turn has had time to land.
+ */
+function pageWritesDocument(page: CodingAgentMessagesAnswer): boolean {
+  return page.messages.some((message) =>
+    message.parts.some((part) => isRecord(part) && part.type === PLAN_EDIT_PART_TYPE),
+  );
+}
 
 /** Whether a page says the brain, or a worker of its, may still add to the conversation. */
 function conversationWriting(page: CodingAgentMessagesAnswer): boolean {
@@ -304,7 +343,11 @@ export type TasksClient = Pick<
   | "readPageVersion"
   | "readPicture"
   | "keepPicture"
+  | "comments"
+  | "startComment"
+  | "actOnComment"
   | "restore"
+  | "stopWork"
   | "repositories"
   | "setRepository"
   | "move"
@@ -472,8 +515,20 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /** The tasks whose pages a settled `show_page` may have moved, read one at a time by the loop below. */
   const pageReads = yield* Queue.sliding<string>(1);
 
+  /** The tasks whose plan one of Luke's plan edits may have moved, read one at a time by the loop below. */
+  const documentReads = yield* Queue.sliding<string>(1);
+
+  /** The tasks whose turn stopped writing after a plan edit, whose plan the loop below reads again once a save cut off with it has had time to land. */
+  const editUnwindReads = yield* Queue.sliding<string>(1);
+
   /** The tasks a call just ended about, whose transcript and work are read again by the loop below. */
   const callEndReads = yield* Queue.sliding<string>(1);
+
+  /** The tasks whose brain just settled a turn, whose new name the loop below reads the list again for. */
+  const nameReads = yield* Queue.sliding<string>(1);
+
+  /** The code a call showed, coloured and drawn in the order shown by the loop below. */
+  const codeShows = yield* Queue.unbounded<{ taskId: string; shown: TaskShownCode }>();
 
   /** The one read of the open task's conversation; running another interrupts it. */
   const conversationRead = yield* FiberHandle.make<void>();
@@ -747,8 +802,11 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /** A code shown as the Code tab's card draws it: the lines around those pointed at, coloured. */
-  function showingOf({ code, ...shown }: TaskShownCode): TaskCodeShowing {
-    return { ...shown, code: highlightCode(codeExcerpt(code)) };
+  function showingOf({ code, ...shown }: TaskShownCode): Effect.Effect<TaskCodeShowing> {
+    return Effect.map(highlightCode(codeExcerpt(code)), (coloured) => ({
+      ...shown,
+      code: coloured,
+    }));
   }
 
   /**
@@ -757,12 +815,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * rather than coloured again, because the task's work is read again on
    * every refresh and colouring the windows is what costs.
    */
-  function withShownCode(recorded: readonly TaskShownCode[]): TaskCodeShowing[] {
-    const held = view.shownCode ?? [];
-    const byCall = new Map(held.map((showing) => [showing.callId, showing]));
-    const read = recorded.map((shown) => byCall.get(shown.callId) ?? showingOf(shown));
-    const recordedCalls = new Set(recorded.map((shown) => shown.callId));
-    return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
+  function withShownCode(recorded: readonly TaskShownCode[]): Effect.Effect<TaskCodeShowing[]> {
+    const byCall = new Map((view.shownCode ?? []).map((showing) => [showing.callId, showing]));
+    return Effect.map(
+      Effect.forEach(recorded, (shown) => {
+        const held = byCall.get(shown.callId);
+        return held === undefined ? showingOf(shown) : Effect.succeed(held);
+      }),
+      (read) => {
+        const recordedCalls = new Set(recorded.map((shown) => shown.callId));
+        const held = view.shownCode ?? [];
+        return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
+      },
+    );
   }
 
   /**
@@ -799,12 +864,13 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         write({ workStatus: TASKS_READ.FAILED });
         return;
       }
+      const shownCode = yield* withShownCode(stored.code ?? []);
+      if (view.activeTaskId !== taskId) return;
       const work = withPage(stored.turns);
       const oldest = work[0]?.turnId;
       const olderHeld =
         oldest !== undefined && !stored.turns.some((turn) => turn.turnId === oldest);
       const workEarlier = olderHeld ? view.workEarlier : stored.earlier;
-      const shownCode = withShownCode(stored.code ?? []);
       writeWork({
         ...(work.length === 0 ? undefined : { work }),
         ...(workEarlier === undefined ? undefined : { workEarlier }),
@@ -866,11 +932,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    * newest page, or past the cursor held, then past each page's cursor while
    * the page says it is still written or the call woke it meanwhile. A read
    * the service did not answer is asked again after the backoff; a task it
-   * no longer holds, or a gate that closed, ends the follow.
+   * no longer holds, or a gate that closed, ends the follow. A follow of an
+   * Untitled task that finds a turn settled, one it saw the brain writing or
+   * one a settled page carries words of, asks for the list again, for the
+   * name the turn may have given the task, and draws it on the open document.
    */
   function followConversation(taskId: string, newest: boolean) {
     return Effect.gen(function* () {
       let after = newest ? undefined : view.conversation?.cursor;
+      let wasWriting = view.conversation !== undefined && conversationWriting(view.conversation);
+      let edited = false;
       while (gate() && view.activeTaskId === taskId) {
         conversationWoken = false;
         const page = yield* askConversation(taskId, after === undefined ? {} : { after }).pipe(
@@ -883,7 +954,22 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         if (Option.isNone(page) || view.activeTaskId !== taskId) return;
         write({ conversation: withForwardPage(page.value) });
-        if (!conversationWriting(page.value) && !conversationWoken) return;
+        const writing = conversationWriting(page.value);
+        const untitled = view.tasks.some(
+          (row) => row.id === taskId && row.name === UNTITLED_TASK_NAME,
+        );
+        // A turn that settled before this follow's first page is caught by the page's words.
+        const settledTurn = wasWriting || page.value.messages.length > 0;
+        if (!writing && settledTurn && untitled) Queue.offerUnsafe(nameReads, taskId);
+        wasWriting = writing;
+        // Luke's plan edits land with no call standing as well as with one, so the document is
+        // read again off the conversation's own follow rather than off the call's frames.
+        edited ||= pageWritesDocument(page.value);
+        if (pageWritesDocument(page.value) || (edited && !writing)) {
+          Queue.offerUnsafe(documentReads, taskId);
+        }
+        if (edited && !writing) Queue.offerUnsafe(editUnwindReads, taskId);
+        if (!writing && !conversationWoken) return;
         after = page.value.cursor;
       }
     });
@@ -957,12 +1043,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (paged || stopped) Queue.offerUnsafe(pageReads, taskId);
   }
 
+  /** Whether code shown about a task is still for the screen: the task is open and the call's code is not drawn already, since a call's code told again is the showing already drawn. */
+  function showsCode(taskId: string, shown: TaskShownCode): boolean {
+    if (view.activeTaskId !== taskId) return false;
+    return !(view.shownCode ?? []).some((showing) => showing.callId === shown.callId);
+  }
+
   function showCode(taskId: string, shown: TaskShownCode): void {
-    if (view.activeTaskId !== taskId) return;
-    const held = view.shownCode ?? [];
-    // A call's code told again is the showing already drawn.
-    if (held.some((showing) => showing.callId === shown.callId)) return;
-    write({ shownCode: [...held, showingOf(shown)] });
+    if (showsCode(taskId, shown)) Queue.offerUnsafe(codeShows, { taskId, shown });
+  }
+
+  /**
+   * Colours a code shown and draws it after the rest, where it is still for
+   * the screen both as the loop takes it and once coloured.
+   */
+  function drawShownCode({ taskId, shown }: { taskId: string; shown: TaskShownCode }) {
+    if (!showsCode(taskId, shown)) return Effect.void;
+    return Effect.flatMap(showingOf(shown), (showing) =>
+      Effect.sync(() => {
+        if (showsCode(taskId, shown)) write({ shownCode: [...(view.shownCode ?? []), showing] });
+      }),
+    );
   }
 
   function showWork(taskId: string, turn: TaskWorkTurn): void {
@@ -985,6 +1086,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (view.activeTaskId !== taskId) return;
     Queue.offerUnsafe(callEndReads, taskId);
     wakeConversation(taskId);
+  }
+
+  /** The open document of `taskId` given the name its row of the list now reads, where the two differ. */
+  function nameHeldAsListed(taskId: string): void {
+    const held = heldTaskOf(taskId);
+    const listed = view.tasks.find((row) => row.id === taskId);
+    if (held === undefined || listed === undefined || listed.name === held.name) return;
+    write({ document: { status: TASKS_READ.READY, task: { ...held, name: listed.name } } });
   }
 
   /** Draws `task` as the service answered it, in the list's row and in the open document where it is the one held. */
@@ -1199,7 +1308,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return carried<TasksFileAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
         return carried<TasksFileAnswer>(
-          "file" in answer ? { file: highlightFile(answer.file) } : answer,
+          "file" in answer ? { file: yield* highlightFile(answer.file) } : answer,
         );
       }),
     // A folder's listing is answered to the tree that asked and held nowhere:
@@ -1350,6 +1459,36 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksPictureAnswer>(picture);
       }),
+    // A plan's comments are read past the window's cursor, held by the service while nothing changed.
+    [GATEWAY_METHOD.TASKS_COMMENTS]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksCommentsParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("reading a plan's comments names the plan and a cursor");
+        if (!gate()) return carried<TasksCommentsAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        const answer = yield* served(client.comments(read.success.planId, read.success.after));
+        return carried<TasksCommentsAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.TASKS_COMMENT_START]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksCommentStartParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("starting a comment names a plan and the thread");
+        if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        const answer = yield* served(client.startComment(read.success.planId, read.success.start));
+        return carried<TasksCommentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.TASKS_COMMENT_ACT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksCommentActParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("changing a comment names a plan, a thread, and what to do");
+        if (!gate()) return carried<TasksCommentAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        const answer = yield* served(
+          client.actOnComment(read.success.planId, read.success.threadId, read.success.action),
+        );
+        return carried<TasksCommentAnswer>(answer);
+      }),
     // The picture is kept and its id answered to the editor that took it;
     // the plan's text names it once the editor lays its address in.
     [GATEWAY_METHOD.TASKS_PICTURE_KEEP]: (params) =>
@@ -1381,6 +1520,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             return { restored: true };
           }),
         );
+      }),
+    // Stopping Luke reads nothing back: the conversation's follow hears his turn end.
+    [GATEWAY_METHOD.TASKS_STOP_WORK]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksPagesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("stopping Luke names a task");
+        if (gate()) yield* served(client.stopWork(read.success.taskId));
+        return {};
       }),
     // Leaving the task returns to the list, which was read when the tab
     // showed, and leaves its call standing, as opening another task does.
@@ -1971,15 +2118,42 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }),
       );
     }),
-    // The board and page reads a settled draw or page asks for, the
-    // transcript and work reads a call's end asks for, and the wake of a
+    // The code a call shows, coloured in turn, the board and page reads a
+    // settled draw or page asks for, the document
+    // reads one of Luke's plan edits asks for, now and once a save cut off
+    // with its turn has had time to land, the
+    // transcript and work reads a call's end asks for, the list read a
+    // settled turn asks for, for the name it may have given, and the wake of a
     // parked conversation read the call's words ask for; every other read of
     // the tasks is an ask's.
     lifetime: Effect.gen(function* () {
       yield* Effect.forkScoped(
+        Effect.forever(Effect.flatMap(Queue.take(codeShows), drawShownCode)),
+      );
+      yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(boardReads), (taskId) =>
             gate() ? serial(readBoard(taskId)) : Effect.void,
+          ),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(documentReads), (taskId) =>
+            gate() && view.activeTaskId === taskId ? serial(readDocument(taskId)) : Effect.void,
+          ),
+        ),
+      );
+      // Each read waits from its own turn's end, so a turn settling while another's wait stands is not held behind it.
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(editUnwindReads), (taskId) =>
+            Effect.forkScoped(
+              Effect.andThen(
+                Effect.sleep(PLAN_EDIT_UNWIND),
+                Effect.sync(() => Queue.offerUnsafe(documentReads, taskId)),
+              ),
+            ),
           ),
         ),
       );
@@ -2003,6 +2177,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             );
             return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
           }),
+        ),
+      );
+      yield* Effect.forkScoped(
+        Effect.forever(
+          Effect.flatMap(Queue.take(nameReads), (taskId) =>
+            Effect.andThen(
+              Effect.sleep(NAME_SETTLE),
+              Effect.suspend(() =>
+                gate()
+                  ? serial(
+                      Effect.andThen(
+                        readList,
+                        Effect.sync(() => nameHeldAsListed(taskId)),
+                      ),
+                    )
+                  : Effect.void,
+              ),
+            ),
+          ),
         ),
       );
       // Note that a read still following is left alone, because it already

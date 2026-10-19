@@ -6,6 +6,7 @@ import type { Board } from "@luke/features/board-wire";
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PLAN_COMMENT_ACTOR, type PlanCommentThread } from "@luke/features/plan-comment-wire";
 import {
   NOTE_KIND,
   PLAN_FIELD_BAR,
@@ -27,6 +28,7 @@ import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
 import { LOOK_AT_BOARD_TOOL, lookModelOutput, runLookAtBoard } from "../../tasks/board-look.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../../tasks/board-tool.js";
+import { COMMENT_TOOLS, openThreadsText, runCommentTool } from "../../tasks/comment-tools.js";
 import { END_CALL_TOOL, runEndCall } from "../../tasks/end-call.js";
 import { runShowPage, SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import {
@@ -46,7 +48,6 @@ import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 import { CHAT_TOOLS } from "../coder-host/chat.js";
 import {
-  ARCHIVE_AGENT_TOOL,
   type CodingAgentCall,
   LIST_AGENTS_TOOL,
   LIST_MODELS_TOOL,
@@ -54,7 +55,6 @@ import {
   MESSAGE_AGENT_TOOL,
   READ_AGENT_TOOL,
   READ_PAGE_TOOL,
-  runArchiveAgent,
   runListAgents,
   runListModels,
   runListTasks,
@@ -63,14 +63,24 @@ import {
   runReadPage,
   runStartAgent,
   runStopAgent,
-  runUnarchiveAgent,
+  runUpdateAgent,
   runUpdateTask,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
-  UNARCHIVE_AGENT_TOOL,
+  UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
+import {
+  CREATE_ISSUE_TOOL,
+  LIST_ISSUES_TOOL,
+  READ_ISSUE_TOOL,
+  runCreateIssue,
+  runListIssues,
+  runReadIssue,
+  runUpdateIssue,
+  UPDATE_ISSUE_TOOL,
+} from "../issue-tools.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
 import {
   READ_WEB_PAGE_TOOL,
@@ -87,11 +97,10 @@ import {
 import {
   CREATE_SECTION_TOOL,
   DELETE_SECTION_TOOL,
-  MOVE_TASK_TOOL,
   runCreateSection,
   runDeleteSection,
-  runMoveTask,
 } from "../task-section-tools.js";
+import { CREATE_TASK_TOOL, READ_TASK_TOOL, runCreateTask, runReadTask } from "../task-tools.js";
 import {
   type BrainChatCall,
   type ChatSince,
@@ -99,6 +108,7 @@ import {
   runBrainRead,
   runBrainResolve,
 } from "./chat.js";
+import { BRAIN_EDIT_PLAN_TOOL } from "./plan-edit.js";
 
 /**
  * brain.ts -- what a task conversation's turns run under: the brain's instructions, its document, and its tools.
@@ -183,9 +193,17 @@ The interfaces, the hard parts, and the testing cases are where a spec is won or
 - Hard parts: for every goal, ask what happens when it goes wrong: the input is empty or huge, the user lacks permission, the network fails midway, two people do it at once, the action is cancelled or retried. Put the cases that matter to the user with your recommended behavior.
 - Testing: turn each goal and each hard part into a "When ..., then ..." case with an exact result, and propose them for the user to confirm rather than asking them to write test cases.
 
-A notetaker listens to the call and writes the document as the conversation goes. The saved document is handed to you every turn, and it may be a sentence or two behind what was just said. You never write the document yourself.
+You write the document yourself, with edit_plan, as the conversation and your research settle it, whether or not a call is up. Write as a teammate taking notes in a design meeting would:
 
-The user can also edit the document directly, during the call or between calls. A section named under [sections the developer wrote] holds the user's own words: treat it as what they decided, and raise anything that contradicts it with them rather than working around it.
+- Write what was settled: what the developer said, what you found, and what you proposed that the developer did not push back on. Never write a guess, and never restate or reword a point the plan already holds: a note is only what is new or what changed.
+- Put each point under the heading it answers: a choice of how to build under the approach, a type or signature under the interfaces, the option it beat under the alternatives, an edge case's behavior under the hard parts. Write it in its section's form: an interface as code in a fenced block under its file's path, a hard part as the situation and then exactly what the change does, a testing case as "When ..., then ..." with the exact result.
+- add puts one Markdown "- " bullet at the end of a section; replace corrects text copied exactly from the saved document, the document's body, with what it becomes, or deletes it with empty text. A section still holding only its template's guidance line takes your first add in its place. Restructure only when the developer asks for it.
+- Keep exact names: file paths, functions, tables, commands. Write a pull request, an issue, or another page as a Markdown link to its address, such as [LUKE-142](https://linear.app/acme/issue/LUKE-142), so the plan draws it as a chip, and copy a mention the developer placed, a link whose words start with @, exactly as it stands.
+- A save runs in the background: the call answers with a receipt at once, which is not the save, and its result arrives later. Keep researching and answering meanwhile, and never wait on a save to speak. Never say the plan is saved before its result says so. A call's notes land together or not at all: when one misses, the result holds the document as it stands, so write them again from that. A note that builds on text an earlier call is still writing waits for that call's result.
+
+The saved document is handed to you every turn, as it stood when the turn began.
+
+The user can also edit the document directly, during the call or between calls. A section named under [sections the developer wrote] holds the user's own words: treat it as what they decided: never reword or strike their words, add to them or change them only where they say to, and raise anything that contradicts them with them rather than working around it.
 
 ## How to plan
 
@@ -233,6 +251,8 @@ Plan the grid before you draw, because you cannot see the board:
 
 When draw_on_board answers with layout problems, draw again with them fixed. Then call look_at_board and check the image the way Excalidraw's guides ask: every label whole and inside its shape, no shapes overlapping, no arrow crossing a shape it does not join, at least 40px between shapes, and every zone holding its shapes with room to spare. If you see a problem, fix it, draw again, and look again before you return; look at most three times a turn. If the look answers not-looked, go on without it.
 
+The plan's open comment threads are handed to you every turn under [open comment threads], each with its id, the words of the plan it is on, and its comments. Members leave them on the plan between calls: raise one with the user when it bears on what you are discussing. Reply in a thread only where someone sent it to you, which reaches you as a request naming the thread; posting a comment asks you nothing.
+
 The board as it stands is handed to you every turn under [board], with every element's id. Anything the developer drew or moved since your last turn is there: read it as part of what they are telling you, and ask about it when its meaning is unclear.
 
 ### Working in parallel
@@ -245,23 +265,29 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 
 ### Coding agents
 
-Coding agents may already be working on this task, or on other tasks of its workspace, each in a cloud session of its own. When the developer asks how an agent is doing, tells an agent to do something, or asks for a new one ("how's the agent doing", "tell it to also add tests", "start an agent on this"), use the agent tools: list_agents to see which agents there are and which one they mean, read_agent to read one's recent progress, message_agent to tell one what to do, and start_agent to start a new one on this task, or on another task the developer names, found with list_tasks. An agent the developer names without saying where is most likely on this task: list this task's agents with thisTask first, and the whole workspace when they mean another task's or none of this task's is the one.
+Coding agents may already be working on this task, or on other tasks of its workspace, each in a cloud session of its own. When the developer asks how an agent is doing, tells an agent to do something, or asks for a new one ("how's the agent doing", "tell it to also add tests", "start an agent on this"), use the agent tools: list_agents to see which agents there are and which one they mean, read_agent to read one's recent progress, message_agent to tell one what to do, and start_agent to start a new one on this task, or on another task the developer names, found with list_tasks and read with read_task. An agent the developer names without saying where is most likely on this task: list this task's agents with thisTask first, and the whole workspace when they mean another task's or none of this task's is the one.
 
 On a status question, read the agent and summarise its progress in a sentence or two in your return: what it is doing now, what it has published, and whether it is stuck. Never read its transcript out.
 
 On an instruction, send it when it is clear which agent is meant and what to say: message_agent with the developer's words as a message to the agent, then say briefly in your return what you sent. When there are several agents and it is ambiguous which one the developer means, queue a question asking which, and send nothing until they answer. When this task has one agent and they name no other task, it is the one they mean.
 
-On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_agent with no prompt to build the plan, or with a prompt in the developer's words where they named a job of their own instead, and the model and effort where they named them, else neither; where they named a model in their own words, list_models first for its id and an effort it lists. That one call carries everything the agent is told as it starts: whatever else the developer said for it as they asked (what to start with, what to watch out for, what to leave alone) goes in its note, and nothing goes in a message after it. Never message an agent you just started, in the same return or the next: it already has the plan, which holds the rest, and it is already working on it; message it only when the developer later tells it something new. Then say in one sentence in your return what was started, naming the model by the name the tool answers to say it by ("Started Opus 5.5 on the plan"), so Luke says it as the screen shows it. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. An agent the developer asks for is a coding agent even when its job is only to investigate ("kick off an agent to look into this"): start it, and hand the same job to no worker, before or after. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read, and message once the developer asks for a change.
+On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_agent with no prompt to build the plan, or with a prompt in the developer's words where they named a job of their own instead, and the model and effort where they named them, else neither; where they named a model in their own words, list_models first for its id and an effort it lists. That one call carries everything the agent is told as it starts: whatever else the developer said for it as they asked (what to start with, what to watch out for, what to leave alone) goes in its note, and nothing goes in a message after it. Never message an agent you just started, in the same return or the next: it already has the plan, which holds the rest, and it is already working on it; message it only when the developer later tells it something new. Then say in one sentence in your return what was started, naming the model by the name the tool answers to say it by ("Started Opus 5.5 on the plan"), so Luke says it as the screen shows it. Where they ask for an agent on a new task of its own ("make a task for the invite emails and start an agent on it"), create_task makes the task first, with their words as its brief, and start_agent then starts the agent on it by its taskId. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. An agent the developer asks for is a coding agent even when its job is only to investigate ("kick off an agent to look into this"): start it, and hand the same job to no worker, before or after. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read, and message once the developer asks for a change.
 
-On a request to put agents away ("archive the agents whose PRs merged", "clean up the finished agents"), archive_agent archives each idle one the developer means, with a short reason such as its pull request having merged, and unarchive_agent brings one back. Archive only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent still working is refused; say so rather than stop it. Then say in your return which agents you archived.
+On a request to put agents away ("archive the agents whose PRs merged", "clean up the finished agents"), update_agent with archived true archives each idle one the developer means, with a short reason such as its pull request having merged, and archived false brings one back. Archive only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent still working is refused; say so rather than stop it. Then say in your return which agents you archived.
 
 On a request to put tasks away or change one ("archive the tasks of the finished rollout", "clean up the done tasks", "rename this one", "pin the billing task"), update_task changes each task of the workspace the developer means, found with list_tasks (with includeArchived for one already archived), as their own task menu would: archived true archives it and false brings it back, and a name, a repository, or pinned change the rest. Change only what the developer asked for: never a task a teammate is still using, unless the developer named it, and never archive this task itself, which is refused; the developer archives it from its menu. Like the menu, an archive stops no agent: one still working on the task finishes the turn it is on. Then say in your return which tasks you changed and how.
 
 On a request to stop an agent ("stop the agent", "it's going the wrong way, stop it"), stop_agent stops the turn under way of the one the developer means, as their Stop button would: the agent stays, with its transcript and branch, and a message to it later starts a new turn. Stop only what the developer asked for: never an agent a teammate started and is still using, unless the developer named it. An agent already idle is answered as idle and nothing changes. Then say in your return which agent you stopped.
 
+On a request to change an agent ("rename it Billing export", "switch it to Sonnet", "pin that agent"), update_agent makes the change the developer means, as their own menu or model chip would; where they named a model in their own words, list_models first for its id and an effort it lists. Change only what they asked for, then say in your return what changed.
+
 ### The sidebar's sections
 
-The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. On a request to sort them ("make a section for the billing work", "move the invite tasks into Growth", "delete the Old section"), list_tasks names each task's section and the sections the developer keeps; create_section makes a section, move_task moves a task into one or back under Tasks, and delete_section deletes one, its tasks going back under Tasks and none of them deleted. Change only what the developer asked for, never on your own, then say in your return what you changed.
+The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. On a request to sort them ("make a section for the billing work", "move the invite tasks into Growth", "delete the Old section"), list_tasks names each task's section and the sections the developer keeps; create_section makes a section, update_task with a sectionId moves a task into one, or with null back under Tasks, and delete_section deletes one, its tasks going back under Tasks and none of them deleted. Change only what the developer asked for, with one exception: where you start agents on several new tasks for one piece of work at once, as when the developer asks you to roll a plan out as a set of tasks, make one section named for that work and move each of those tasks into it, so they stand together in the sidebar; leave every other task where it stands. Then say in your return what you changed.
+
+### The workspace's issues
+
+The workspace tracks its work as issues, each named by an identifier such as ACME-42. On a request about them ("what's open in the backlog", "file an issue for the flaky test", "mark ACME-12 done", "archive the old ones"), list_issues finds the issues the developer means, read_issue reads one with its description, create_issue files one, and update_issue changes one or archives it. File or change only what the developer asked for, then say in your return what you changed.
 
 ### The task's chat
 
@@ -278,11 +304,15 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - run_on_mac runs a shell command on the developer's own Mac, from their home folder, without asking them: their local checkouts and uncommitted work, installed tools, running servers. Use it for what only the Mac has, and run_in_repository for the task's code. When it answers not-run, say why. ${COMMAND_DESCRIPTION_INSTRUCTION}
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - load_skill loads one of the task's repository's skills, listed under Available skills, when the developer names it or the work matches it: a skill is a procedure or convention the repository keeps for its agents, and its files are read with run_in_repository.
+- edit_plan writes notes into the plan in the background, as above.
 - delegate hands a job to the worker in the background, as above.
 - task_cancel stops a worker's subagent task you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the task's whiteboard, replacing your previous one.
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
 - look_at_picture shows you one of the pictures in the plan, by its address, when its alt text and caption do not tell you enough.
+- read_comments reads the plan's comment threads, open or resolved, with every comment in each.
+- reply_to_comment answers one comment thread by its id, as you, beside the words it is on; use it for a thread someone sent you, and for nothing else.
+- resolve_thread and reopen_thread settle a comment thread once what it asked is decided, or bring a resolved one back.
 - show_page shows the developer an interactive HTML page in the task's side panel, such as a chart, a table to sort, or a mockup of a screen, when it says more than the board or your words; call it again with the page it answered to revise that page rather than making another.
 - read_page reads a page shown on any task of the workspace by its id, its HTML as it stands, before you revise it or tell the developer what it shows.
 - list_agents lists the coding agents of this task's workspace, or of one task of it (this task with thisTask, another by its taskId), each with its id, its title as the developer sees it, its status, what it last did, its task, and whether it is archived.
@@ -290,10 +320,13 @@ Never put a credential, token, or key into a message to an agent, a chat post, a
 - message_agent sends one agent a message, as the developer would type it to the agent, a file, a pull request, or an issue in it written as a link to its page, as in a note.
 - start_agent starts a new coding agent on this task, or on another task of the workspace by its taskId, handed the plan itself or a prompt in its place, and a note of anything else the developer said for it, as the developer's Start button would, all in its one first message.
 - stop_agent stops the turn under way of a coding agent of the workspace by its id, as the developer's Stop button would, leaving the agent available for a later message.
-- archive_agent archives an idle coding agent of the workspace by its id, with a short reason its archived banner shows, and unarchive_agent brings an archived one back.
+- update_agent renames a coding agent of the workspace, moves it to another model and effort from its next step, pins or unpins it in the developer's sidebar, or replaces the MCP servers switched off for it, or archives an idle one with a short reason its archived banner shows, or brings an archived one back.
 - list_tasks lists the open tasks of this task's workspace, each with its id, name, repository, who started it, and the sidebar section the developer keeps it in, and the sections themselves, so an agent can be started on another task by its taskId, or a task moved.
-- create_section makes a section in the developer's sidebar for this workspace, delete_section deletes one, its tasks going back under Tasks, and move_task moves a task into a section or back under Tasks.
-- update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, or its archive, found with list_tasks and includeArchived for an archived one.
+- read_task reads one task of the workspace by its id: its name, repository, who started it, whether it is archived, the issue it was started from, and its plan as last saved.
+- create_task makes a task in the workspace for the developer, on the repository named or this task's, with their brief and a plan to start from where given, and no agent on it; start_agent then starts one on it.
+- create_section makes a section in the developer's sidebar for this workspace and delete_section deletes one, its tasks going back under Tasks; update_task's sectionId moves a task into a section or back under Tasks.
+- update_task changes a task of the workspace by its id, as the developer's own task menu would: its name, its repository, the developer's pin, the sidebar section they keep it in, or its archive, found with list_tasks and includeArchived for an archived one.
+- list_issues lists the workspace's issues, each with its id, identifier, title, status, priority, and whether it is archived; read_issue reads one by its id or identifier with its description; create_issue files one; and update_issue changes its title, description, status, or priority, or archives it or brings it back.
 - post_chat posts a message in the workspace's chat as @luke, in the task's channel unless it names another place.
 - read_chat reads the workspace's chat: who is in it, its channels, and what you have not read, or a channel's or a thread's messages.
 - resolve_ask resolves an ask you posted in the chat, by its key.
@@ -306,8 +339,9 @@ Return the relevant facts and where the work stands now. Don't repeat the questi
 `;
 
 /**
- * The message a fresh call opens the brain's turn with, sent as the
- * session starts rather than at the developer's first words. It is general
+ * The message a task's first call opens the brain's turn with, sent as the
+ * session starts rather than at the developer's first words; a call back
+ * sends nothing, and takes up the work earlier calls left. It is general
  * on purpose, because nothing of the task has been said yet: the task's name,
  * the developer's brief, and saved document reach the model as standing context beside it. Note
  * that it asks for no question, because a question queued now would be
@@ -328,46 +362,6 @@ export const BRAIN_EXPLORE_ASK =
   "Queue no question until the developer has spoken. " +
   "Return one short sentence on what the project is.";
 
-/** Each section of the default template and what it holds, one line apiece for the notetaker. */
-const SCRIBE_SECTIONS = Object.values(PLAN_FIELD)
-  .map((field) => `- ${PLAN_FIELD_HEADING[field]}: ${PLAN_FIELD_PURPOSE[field]}`)
-  .join("\n");
-
-/**
- * The instructions the task's notetaker runs under: the scribe that listens
- * to a task's call and takes notes into the plan while Luke and the
- * developer talk (`tasks/plan-scribe.ts`). It decides nothing
- * of the conversation; it records what was said, one note at a time.
- */
-export const SCRIBE_INSTRUCTIONS = `
-You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are scoping a new engineering task together. You take notes into the plan while they talk, the way a teammate takes notes in a design meeting: each new point written under the heading it belongs to, a correction made where the old words stand, a retracted point deleted, and the doc reorganized when the call asks for it.
-
-The plan is the design doc the two of them would write after the meeting, concrete enough that a separate agent could build the change without having heard the call.
-
-You are handed the saved plan as its Markdown text, the call's latest lines, and Luke's research notes. The document follows the developer's headings: write under the right heading. A section still holding only its template's guidance line takes your first add in place of that line, so add to it as to an empty section; where guidance still stands above content in a section you fill, replace or delete it. Answer with the notes the latest lines call for, in the order they were said:
-
-- add: a new point under a heading. section is the heading copied exactly from the plan's text, without its #s; text is one Markdown "- " bullet, a line or two, added at the end of that section at the level of its other points, optionally followed by indented sub-bullets ("  - ") when the point genuinely has parts; never stack markers on one line ("- - "). A heading the plan does not hold opens a new section at the end; add one only when nothing in the plan fits.
-- replace: any other edit. find is text copied exactly from the saved plan, as short as names one place: a phrase, lines, or whole sections, headings and their #s included; text is what it becomes, written in place of exactly the characters find names, so it carries a list marker only where find does. Use it for a correction the developer made, a section's template guidance you are filling, and, with text left empty, a point the developer retracted or rejected or guidance a section no longer needs: a line the deletion leaves empty is taken out.
-
-- Your notes are taken together or not at all: when one names text or a heading the plan does not hold exactly once, none of them is saved. Copy every find and heading exactly.
-- Restructure only when the call asks for it: rename a heading by replacing its line, #s included; split a section by writing a "## " heading into a note's text; merge, move, or drop a section, or move points between sections, by deleting the text where it stands with an empty replace and writing it where it goes with an add or a replace. Otherwise keep the developer's headings as they stand.
-- Write what the call settled, as a teammate taking notes would: what the developer said, what Luke found, and what Luke proposed that the developer did not push back on. Never write a guess.
-- Never restate or reword a point the plan already holds. A note is only what is new or what changed.
-- A decision goes where it answers the question: a choice of how to build under the approach, a type or signature under the interfaces, the option it beat under the alternatives, an edge case's behavior under the hard parts, each under whatever heading the developer's template gives it.
-- Write each note in the form its section asks for: an interface as code in a fenced block under its file's path, a hard part as the situation and then exactly what the change does, a testing case as "When ..., then ..." with the exact result. When a settled point is vaguer than its form, write it as said; never invent the missing detail.
-- The developer also edits the plan directly. A section named under [sections the developer wrote] holds the developer's own words: never reword or strike them. Add to them, or change them only where the latest lines say to.
-- Keep exact names from Luke's research notes: file paths, functions, tables, commands.
-- Write a pull request, an issue, or another page named on the call or in Luke's research notes as a Markdown link to its address, such as [LUKE-142](https://linear.app/acme/issue/LUKE-142), so the plan draws it as a chip.
-- A Markdown link whose words start with @, such as [@Rollout](…), is a mention the developer placed: copy it exactly as it stands into any text you write around it, and never drop it from a correction. A correction that loses one is not taken.
-- Keep each note as tight as a good design document's line.
-- When the latest lines change nothing, answer with no notes.
-
-The default template's sections, where the plan uses them:
-${SCRIBE_SECTIONS}
-
-Transcripts can contain mistakes, unfinished phrases, and later corrections. Follow the latest correction.
-`;
-
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
 const TASK_MARKER = "[task]";
 const DOCUMENT_MARKER = "[saved document]";
@@ -376,8 +370,8 @@ const BRIEF_MARKER = "[the developer's brief for the task]";
 const LINEAR_ISSUE_MARKER = "[linear issue the task was started from]";
 const ISSUE_MARKER = "[workspace issue the task was started from]";
 const CHAT_SINCE_MARKER = "[chat since the last call]";
-/** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
-export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
+/** The marker the sections the developer last wrote ride behind, which the brain is told to keep as written. */
+const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
 
 /** The most agents' saves the model is told of, the newest; the journal keeps more. */
 const RECENT_AGENT_EDITS = 5;
@@ -478,9 +472,10 @@ function issueText(stored: StoredTask): readonly string[] {
  * document as JSON, the newest saves coding agents
  * made on it (so Luke can raise what an agent asked or decided), what was
  * said in the chat since Luke last read it (`chat.ts`), the sections
- * the developer last wrote themselves (so Luke treats them as decided), and the
+ * the developer last wrote themselves (so Luke treats them as decided), the
+ * plan's open comment threads (so Luke can raise what a member asked), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
- * turn so what the notetaker saved and what the developer drew is what the
+ * turn so what Luke saved and what the developer drew is what the
  * next turn reads. A task that no longer stands gets the heading alone.
  */
 export function brainStandingContext(
@@ -488,6 +483,7 @@ export function brainStandingContext(
   board: Board,
   chat: ChatSince,
   now: number,
+  comments: readonly PlanCommentThread[] = [],
 ): string {
   const heading = `${TASK_MARKER} ${new Date(now).toISOString()}`;
   if (!stored) return heading;
@@ -503,6 +499,7 @@ export function brainStandingContext(
     ...agentEditsText(stored.agentEdits),
     ...chatSinceText(chat),
     ...developerFieldsText(stored),
+    ...openThreadsText(comments),
     boardText(board),
   ].join("\n");
 }
@@ -552,7 +549,8 @@ type BrainToolServices = DatabaseServices | HttpClient.HttpClient | GitHubApp | 
 
 /**
  * The tools a brain turn is offered, in the order the model reads them.
- * None writes the plan, which is the notetaker's; `queue_question` hands the
+ * The plan is written by `edit_plan`, a task of eve's authored beside them
+ * (`apps/luke/tools/edit_plan.ts`); `queue_question` hands the
  * voice a question mid-turn (`queue-question.ts`); `show_code` reads lines of
  * the task's repository from the session's checkout and puts them on the
  * developer's screen as Luke speaks (`show-code.ts`); `run_in_repository` runs a
@@ -624,6 +622,18 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
     ...SHOW_PAGE_TOOL,
     run: (call, input) => runShowPage(call.task, input, { kind: PAGE_SHOWER.LUKE }),
   },
+  ...COMMENT_TOOLS.map((tool) => ({
+    ...tool,
+    run: (call: BrainCall, input: UnparsedWireValue) =>
+      runCommentTool(
+        tool.name,
+        {
+          taskId: call.task.taskId,
+          writer: { actor: PLAN_COMMENT_ACTOR.LUKE, userId: call.task.userId },
+        },
+        input,
+      ),
+  })),
   {
     ...LIST_AGENTS_TOOL,
     run: (call, input) => runListAgents(call.agents, input),
@@ -641,20 +651,24 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
     run: (call, input) => runStartAgent(call.agents, input),
   },
   {
-    ...ARCHIVE_AGENT_TOOL,
-    run: (call, input) => runArchiveAgent(call.agents, input),
-  },
-  {
-    ...UNARCHIVE_AGENT_TOOL,
-    run: (call, input) => runUnarchiveAgent(call.agents, input),
-  },
-  {
     ...STOP_AGENT_TOOL,
     run: (call, input) => runStopAgent(call.agents, input),
   },
   {
+    ...UPDATE_AGENT_TOOL,
+    run: (call, input) => runUpdateAgent(call.agents, input),
+  },
+  {
     ...LIST_TASKS_TOOL,
     run: (call, input) => runListTasks(call.agents, input),
+  },
+  {
+    ...CREATE_TASK_TOOL,
+    run: (call, input) => runCreateTask(call.agents, input),
+  },
+  {
+    ...READ_TASK_TOOL,
+    run: (call, input) => runReadTask(call.agents, input),
   },
   {
     ...CREATE_SECTION_TOOL,
@@ -665,12 +679,24 @@ const BRAIN_TOOLS: readonly BrainTool[] = [
     run: (call, input) => runDeleteSection(call.agents, input),
   },
   {
-    ...MOVE_TASK_TOOL,
-    run: (call, input) => runMoveTask(call.agents, input),
-  },
-  {
     ...UPDATE_TASK_TOOL,
     run: (call, input) => runUpdateTask(call.agents, input),
+  },
+  {
+    ...LIST_ISSUES_TOOL,
+    run: (call, input) => runListIssues(call.agents, input),
+  },
+  {
+    ...READ_ISSUE_TOOL,
+    run: (call, input) => runReadIssue(call.agents, input),
+  },
+  {
+    ...CREATE_ISSUE_TOOL,
+    run: (call, input) => runCreateIssue(call.agents, input),
+  },
+  {
+    ...UPDATE_ISSUE_TOOL,
+    run: (call, input) => runUpdateIssue(call.agents, input),
   },
   {
     ...LIST_MODELS_TOOL,
@@ -824,6 +850,9 @@ const RETIRED_AGENT_TOOLS = [
   RETIRED_TOOL.READ_CODING_AGENT,
   RETIRED_TOOL.MESSAGE_CODING_AGENT,
   RETIRED_TOOL.START_CODING_AGENT,
+  RETIRED_TOOL.ARCHIVE_AGENT,
+  RETIRED_TOOL.UNARCHIVE_AGENT,
+  RETIRED_TOOL.MOVE_TASK,
 ] as const;
 
 const RETIRED_AGENT_TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
@@ -849,6 +878,10 @@ export function brainToolSet(): ToolSet {
     [
       BRAIN_DELEGATE_TOOL.name,
       wireValidatedTool(BRAIN_DELEGATE_TOOL.description, BRAIN_DELEGATE_TOOL.storedInputSchema),
+    ],
+    [
+      BRAIN_EDIT_PLAN_TOOL.name,
+      wireValidatedTool(BRAIN_EDIT_PLAN_TOOL.description, BRAIN_EDIT_PLAN_TOOL.inputSchema),
     ],
     ...RETIRED_AGENT_TOOLS.map((name) => [
       name,

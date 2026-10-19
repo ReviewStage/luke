@@ -13,8 +13,8 @@ import type { DesktopService, EffectDesktopService } from "./desktop-service.js"
  * partial or failed start allocated, and is safe to call when the start never
  * ran at all. A stop that cannot finish must not strand the rest either — a
  * window teardown that throws would otherwise leave the runtime undrained,
- * which is the one thing a quit may not do — so it is reported and the close
- * goes on.
+ * which is the one thing a quit may not do — so it is reported, to Sentry as
+ * well as the line, and the close goes on.
  */
 export const serviceLayer = (
   service: DesktopService,
@@ -24,7 +24,10 @@ export const serviceLayer = (
     Effect.andThen(
       Effect.addFinalizer(() =>
         Effect.catchDefect(
-          Effect.promise(() => service.stop()),
+          Effect.withErrorReporting(
+            Effect.promise(() => service.stop()),
+            { defectsOnly: true },
+          ),
           (cause) =>
             Effect.sync(() => {
               report(
@@ -49,12 +52,14 @@ export const effectServiceLayer = (
   Layer.effectDiscard(
     Effect.andThen(
       Effect.addFinalizer(() =>
-        Effect.catchDefect(service.stop(), (cause) =>
-          Effect.sync(() => {
-            report(
-              `the ${service.name} service did not stop cleanly: ${cause instanceof Error ? cause.message : String(cause)}`,
-            );
-          }),
+        Effect.catchDefect(
+          Effect.withErrorReporting(service.stop(), { defectsOnly: true }),
+          (cause) =>
+            Effect.sync(() => {
+              report(
+                `the ${service.name} service did not stop cleanly: ${cause instanceof Error ? cause.message : String(cause)}`,
+              );
+            }),
         ),
       ),
       service.start(),

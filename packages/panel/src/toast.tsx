@@ -55,6 +55,7 @@ import {
   TEXT_VARIANT,
   Text,
 } from "@luke/ui";
+import { visibleViewport } from "@luke/ui/visible-viewport";
 import { Clock, Duration, Effect } from "effect";
 import * as Atom from "effect/reactivity/Atom";
 import { CircleAlertIcon, CircleCheckIcon, InboxIcon, XIcon } from "lucide-react";
@@ -420,9 +421,10 @@ function useStackGlide(): React.RefObject<HTMLOListElement | null> {
   return list;
 }
 
-/** How many toasts the window has room for at its height now. */
+/** How many toasts the window has room for at the height of what can be seen of it now, the keyboard's left out. */
 function roomNow(): number {
-  return window.innerHeight <= SHORT_WINDOW ? TOAST_ROOM.SHORT : TOAST_ROOM.TALL;
+  const seen = visibleViewport();
+  return seen.bottom - seen.top <= SHORT_WINDOW ? TOAST_ROOM.SHORT : TOAST_ROOM.TALL;
 }
 
 /** Tells the stack how many toasts the window has room for, as the host mounts and whenever its height crosses `SHORT_WINDOW`. */
@@ -437,7 +439,13 @@ function useWindowRoom(step: (step: ToastStep) => void): void {
     };
     tell();
     window.addEventListener("resize", tell);
-    return () => window.removeEventListener("resize", tell);
+    // Note that a phone's keyboard shrinks what is seen without resizing the window.
+    const viewport = window.visualViewport;
+    viewport?.addEventListener("resize", tell);
+    return () => {
+      window.removeEventListener("resize", tell);
+      viewport?.removeEventListener("resize", tell);
+    };
   }, [step]);
 }
 

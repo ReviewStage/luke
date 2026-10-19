@@ -18,6 +18,7 @@ import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { PLAN_COMMENT_ACTOR } from "@luke/features/plan-comment-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Effect, Option, type Redacted, Result, type Schema, Stream } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -32,6 +33,12 @@ import {
   type OfferedModel,
   offeredToAccount,
 } from "../../providers/model-catalog.js";
+import {
+  COMMENT_TOOL_REFUSAL,
+  type CommentToolName,
+  commentToolRejected,
+  runCommentTool,
+} from "../../tasks/comment-tools.js";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../../tasks/page-tool.js";
 import {
   PICTURE_LOOK_REFUSAL,
@@ -59,12 +66,16 @@ import {
   eveSessionsComposer,
 } from "../brain-host/eve-sessions.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
-import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
+import {
+  foldedQuietly,
+  type RelayStanding,
+  type RelayStateStore,
+  StreamRelay,
+} from "../brain-host/relay.js";
 import {
   AGENT_CALLER,
   agentToolRejected,
   CODING_AGENT_TOOL_REFUSAL,
-  runArchiveAgent,
   runListAgents,
   runListModels,
   runListTasks,
@@ -73,9 +84,10 @@ import {
   runReadPage,
   runStartAgent,
   runStopAgent,
-  runUnarchiveAgent,
+  runUpdateAgent,
   runUpdateTask,
 } from "../coding-agent-tools.js";
+import { runCreateIssue, runListIssues, runReadIssue, runUpdateIssue } from "../issue-tools.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -84,7 +96,8 @@ import {
   type SearchWebResult,
 } from "../public-research.js";
 import type { RepositorySandbox } from "../repository-shell.js";
-import { runCreateSection, runDeleteSection, runMoveTask } from "../task-section-tools.js";
+import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
+import { runCreateTask, runReadTask } from "../task-tools.js";
 import { workspaceStepOf } from "../written-mentions.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
@@ -381,6 +394,12 @@ export interface CoderHost extends HostAdmission {
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
   ): Effect.Effect<PictureLookResult, never, DatabaseServices>;
+  /** Runs one call of a comment tool (`tasks/comment-tools.ts`) on the agent's plan, as the member whose turn it is, written under the agent. */
+  comment(
+    admitted: AdmittedConversation,
+    name: CommentToolName,
+    input: UnparsedWireValue,
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
   /** Runs one `show_page` call (`../page-tool.ts`) on the agent's task, a page's path read from the session's sandbox through the door given. */
   showPage(
     admitted: AdmittedConversation,
@@ -415,6 +434,8 @@ export interface CoderHost extends HostAdmission {
     never,
     DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog
   >;
+  /** Folds an event the store need hear nothing of into the session's relay state and answers whether it did, so the caller admits the session and relays only the rest: the relay's own quiet events (`foldedQuietly`), bar a compaction's end, which the agent's row records. */
+  relaysQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed, then, as the developer's words are received or a turn completes, asks for the agent's title where none stands and waits for it (`title.ts`); a title that fails is logged and the relay still answers. */
   relay(
     event: MessageStreamEvent,
@@ -444,15 +465,19 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.READ_AGENT
     | typeof CODER_TOOL.MESSAGE_AGENT
     | typeof CODER_TOOL.START_AGENT
-    | typeof CODER_TOOL.ARCHIVE_AGENT
-    | typeof CODER_TOOL.UNARCHIVE_AGENT
     | typeof CODER_TOOL.STOP_AGENT
+    | typeof CODER_TOOL.UPDATE_AGENT
     | typeof CODER_TOOL.READ_PAGE
     | typeof CODER_TOOL.LIST_TASKS
+    | typeof CODER_TOOL.READ_TASK
+    | typeof CODER_TOOL.CREATE_TASK
     | typeof CODER_TOOL.CREATE_SECTION
     | typeof CODER_TOOL.DELETE_SECTION
-    | typeof CODER_TOOL.MOVE_TASK
     | typeof CODER_TOOL.UPDATE_TASK
+    | typeof CODER_TOOL.LIST_ISSUES
+    | typeof CODER_TOOL.READ_ISSUE
+    | typeof CODER_TOOL.CREATE_ISSUE
+    | typeof CODER_TOOL.UPDATE_ISSUE
     | typeof CODER_TOOL.LIST_MODELS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
@@ -464,15 +489,19 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.READ_AGENT]: runReadAgent,
   [CODER_TOOL.MESSAGE_AGENT]: runMessageAgent,
   [CODER_TOOL.START_AGENT]: runStartAgent,
-  [CODER_TOOL.ARCHIVE_AGENT]: runArchiveAgent,
-  [CODER_TOOL.UNARCHIVE_AGENT]: runUnarchiveAgent,
   [CODER_TOOL.STOP_AGENT]: runStopAgent,
+  [CODER_TOOL.UPDATE_AGENT]: runUpdateAgent,
   [CODER_TOOL.READ_PAGE]: runReadPage,
   [CODER_TOOL.LIST_TASKS]: runListTasks,
+  [CODER_TOOL.READ_TASK]: runReadTask,
+  [CODER_TOOL.CREATE_TASK]: runCreateTask,
   [CODER_TOOL.CREATE_SECTION]: runCreateSection,
   [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
-  [CODER_TOOL.MOVE_TASK]: runMoveTask,
   [CODER_TOOL.UPDATE_TASK]: runUpdateTask,
+  [CODER_TOOL.LIST_ISSUES]: runListIssues,
+  [CODER_TOOL.READ_ISSUE]: runReadIssue,
+  [CODER_TOOL.CREATE_ISSUE]: runCreateIssue,
+  [CODER_TOOL.UPDATE_ISSUE]: runUpdateIssue,
   [CODER_TOOL.LIST_MODELS]: runListModels,
 } as const;
 
@@ -888,6 +917,23 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(pullRequestRejected(PULL_REQUEST_UNAVAILABLE))),
       ),
 
+    comment: (admitted, name, input) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return commentToolRejected(found.failure);
+        const { id: agentId, taskId } = found.success;
+        if (taskId === null) return commentToolRejected(COMMENT_TOOL_REFUSAL.TASKLESS);
+        // The comments are read and written as the member whose turn this is, as `editPlan` writes the plan.
+        const writer = {
+          actor: PLAN_COMMENT_ACTOR.AGENT,
+          userId: admitted.caller,
+          agentId,
+        } as const;
+        return yield* runCommentTool(name, { taskId, writer }, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(commentToolRejected(COMMENT_TOOL_REFUSAL.UNAVAILABLE))),
+      ),
     chatOffered: (admitted, prompt) =>
       (prompt.chatOn === true
         ? chatEnabledFor(admitted.target.userId)
@@ -1034,6 +1080,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         ? runSearchWeb(call, input)
         : runReadWebPage(call, input);
     },
+
+    relaysQuietly: (event, state) =>
+      event.type !== "compaction.completed" && foldedQuietly(event, state),
 
     relay: (event, admitted, session, state, prompt) =>
       Effect.gen(function* () {

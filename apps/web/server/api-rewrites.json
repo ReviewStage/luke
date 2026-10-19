@@ -64,6 +64,10 @@
     "dest": "/api/default.js?route=plans/edit&id=$1"
   },
   {
+    "src": "/api/plans/([^/]+)/stop",
+    "dest": "/api/default.js?route=plans/stop&id=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)/comments/([^/]+)",
     "dest": "/api/default.js?route=plans/comment-thread&id=$1&thread=$2"
   },
@@ -250,6 +254,10 @@
   {
     "src": "/api/account/integrations/connected",
     "dest": "/api/default.js?route=account/integrations/connected"
+  },
+  {
+    "src": "/api/account/integrations/settle",
+    "dest": "/api/default.js?route=account/integrations/settle"
   },
   {
     "src": "/api/account/plan-template",

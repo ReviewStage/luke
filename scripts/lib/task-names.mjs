@@ -80,9 +80,9 @@ const DOCUMENT_BEFORE = new Set(["copy", "edit", "per", "to"]);
 
 /** AI Elements' Plan card, which draws the plan an agent is handed, and the two places that draw it. */
 const PLAN_CARD_FILES = [
-  "apps/desktop/src/renderer/ai-elements/plan.tsx",
-  "apps/desktop/src/renderer/tasks/agent-tab.tsx",
-  "apps/desktop/src/renderer/tasks/replay-card.tsx",
+  "packages/panel/src/ai-elements/plan.tsx",
+  "packages/panel/src/tasks/agent-tab.tsx",
+  "packages/panel/src/tasks/replay-card.tsx",
 ];
 
 /**
@@ -97,12 +97,12 @@ const SCOPED_AFTER = {
   icon: PLAN_CARD_FILES,
   title: PLAN_CARD_FILES,
   // The line under the plan's title: who started its task and who last edited it.
-  byline: ["apps/desktop/src/renderer/tasks/plan-body.tsx"],
+  byline: ["packages/panel/src/tasks/plan-body.tsx"],
   // The Plan tab's row, and the shell's toggle onto the document.
-  row: ["apps/desktop/src/renderer/desktop/main-tabs.tsx"],
-  toggle: ["apps/desktop/src/renderer/desktop/desktop-shell.tsx"],
+  row: ["packages/panel/src/desktop/main-tabs.tsx"],
+  toggle: ["packages/panel/src/desktop/desktop-shell.tsx"],
   // The New task dialog's Plan switch, in its test.
-  switch: ["apps/desktop/src/renderer/tasks/new-task-dialog.test.ts"],
+  switch: ["packages/panel/src/tasks/new-task-dialog.test.ts"],
   // Who wrote a revision of the plan, and a save that lost to another or was not made.
   writer: [
     "packages/database/src/models/plan-revisions.ts",
@@ -117,8 +117,8 @@ const SCOPED_AFTER = {
   // The plan's tools, offered to an agent handed its plan.
   tools: ["apps/dev/host.ts", "apps/dev/tools/edit_plan.ts", "apps/dev/tools/show_page.ts"],
   // The plan editor's own `@`, and the words it shows in an empty plan.
-  mentions: ["apps/desktop/src/renderer/plan-editor/"],
-  placeholder: ["apps/desktop/src/renderer/plan-editor/"],
+  mentions: ["packages/panel/src/plan-editor/", "packages/panel/src/plan-editor/"],
+  placeholder: ["packages/panel/src/plan-editor/", "packages/panel/src/plan-editor/"],
   // The document the brain eval saves, and the words it looks for in it.
   saved: ["apps/luke/evals/brain-host.eval.ts"],
   words: ["apps/luke/evals/brain-host.eval.ts"],
@@ -165,15 +165,15 @@ const WIRE_NAME = {
     "packages/host/src/compose-automations.test.ts",
     "packages/service/src/automations/automations-app.ts",
     "packages/service/src/automations/automations-app.test.ts",
-    "apps/desktop/src/renderer/desktop/automations-page.test.ts",
-    "apps/desktop/src/renderer/desktop/command-palette.test.ts",
-    "apps/desktop/src/renderer/desktop/desktop-agent-page.test.ts",
-    "apps/desktop/src/renderer/desktop/desktop-home.test.ts",
-    "apps/desktop/src/renderer/desktop/desktop-inbox.test.ts",
-    "apps/desktop/src/renderer/desktop/person-page.test.ts",
-    "apps/desktop/src/renderer/settings/workspace-page.test.ts",
-    "apps/desktop/src/renderer/tasks/agent-automation.test.ts",
-    "apps/desktop/src/renderer/tasks/chip-cards.test.ts",
+    "packages/panel/src/desktop/automations-page.test.ts",
+    "packages/panel/src/desktop/command-palette.test.ts",
+    "packages/panel/src/desktop/desktop-agent-page.test.ts",
+    "packages/panel/src/desktop/desktop-home.test.ts",
+    "packages/panel/src/desktop/desktop-inbox.test.ts",
+    "packages/panel/src/desktop/person-page.test.ts",
+    "packages/panel/src/settings/workspace-page.test.ts",
+    "packages/panel/src/tasks/agent-automation.test.ts",
+    "packages/panel/src/tasks/chip-cards.test.ts",
   ],
   // The inbox's agents with no task (`account-inbox-wire.ts`).
   planless: [
@@ -200,18 +200,22 @@ const WIRE_NAME = {
     "packages/service/src/voice/live-exchange.ts",
     "packages/ui/src/tasks-model.ts",
     "packages/ui/src/call-card-model.test.ts",
-    "apps/desktop/src/renderer/tasks/task-board.tsx",
-    "apps/desktop/src/renderer/tasks/tasks-fixture.ts",
+    "packages/panel/src/tasks/task-board.tsx",
+    "packages/panel/src/tasks/tasks-fixture.ts",
   ],
-  // The main tabs' kept choice, under the key it was first stored as.
-  planClosed: ["packages/panel/src/tasks/use-main-tabs.ts"],
+  // The main tabs' kept choice, under the key it was first stored as, which a
+  // record kept before the Call anchored the column still holds.
+  planClosed: [
+    "packages/panel/src/tasks/use-main-tabs.ts",
+    "packages/panel/src/tasks/use-tasks-tab.test.ts",
+  ],
 };
 
-/** The New task dialog's Plan switch: whether Luke writes a plan for the task it starts. */
+/** New task's Plan mode: whether Luke writes a plan for the task it starts. */
 const PLAN_SWITCH_FILES = [
-  "apps/desktop/src/renderer/tasks/new-task-dialog.tsx",
-  "packages/panel/src/tasks/new-task-planning.ts",
-  "apps/desktop/src/renderer/tasks/use-tasks-tab.test.ts",
+  "packages/panel/src/tasks/new-task-dialog.tsx",
+  "packages/panel/src/tasks/new-task-composer.tsx",
+  "packages/panel/src/tasks/use-tasks-tab.test.ts",
 ];
 
 /** Names that hold a plan word without being the concept: a build's bundle plan, a billing plan, and the preview probe's plan. */
@@ -222,7 +226,7 @@ const NOT_THE_CONCEPT = new Set([
   "planProbes",
 ]);
 
-/** Where names are not read: the factory worlds' blueprints, the migrations, and the vendored skills. */
+/** Where names are not read: the Factory's blueprints, the migrations, and the vendored skills. */
 const SKIPPED = [/\/factory-world\//, /^packages\/database\/migrations\//, /^\.agents\//];
 
 /** The schemas, where a plan-spelled SQL name is refused unless the document owns it. */
@@ -348,10 +352,10 @@ export const CANARY = {
     ["EDIT_PLAN_TOOL", "packages/features/src/anywhere.ts"],
     ["MAX_PER_PLAN", "packages/features/src/anywhere.ts"],
     ["planet", "packages/features/src/anywhere.ts"],
-    ["PlanTitle", "apps/desktop/src/renderer/ai-elements/plan.tsx"],
-    ["PLAN_ROW", "apps/desktop/src/renderer/desktop/main-tabs.tsx"],
+    ["PlanTitle", "packages/panel/src/ai-elements/plan.tsx"],
+    ["PLAN_ROW", "packages/panel/src/desktop/main-tabs.tsx"],
     ["planClosed", "packages/panel/src/tasks/use-main-tabs.ts"],
-    ["useNewTaskPlanning", "packages/panel/src/tasks/new-task-planning.ts"],
+    ["useNewTaskPlanning", "packages/panel/src/tasks/new-task-composer.tsx"],
   ],
   /** The SQL names the schema clause must refuse, and those it must let stand. */
   SQL_REFUSED: ["plan", "plan_id", "plan_board", "plan_board2", "plan_pin"],

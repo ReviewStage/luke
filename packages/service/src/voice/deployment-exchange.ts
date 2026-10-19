@@ -3,14 +3,13 @@ import { storeWriter } from "@luke/database/models/writer";
 import { Data, Effect, type Layer, type Redacted } from "effect";
 import { FetchHttpClient } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
+import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import {
   type EveSessions,
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../agents/brain-host/eve-sessions.js";
-import { openAiBrainModel } from "../agents/brain-host/model.js";
 import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
-import { PLAN_SCRIBE } from "../tasks/plan-scribe.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
 import type { ExchangeAttachment } from "./live-exchange.js";
 
@@ -26,18 +25,23 @@ import type { ExchangeAttachment } from "./live-exchange.js";
  * switch every hosted endpoint keeps, and the same outcome a store that
  * cannot be reached has. Nothing is read from the environment here; the
  * function hands the reads in, and a test hands in its own database and a
- * fake eve behind the same door.
+ * fake eve behind the same door. Its eve sends a spoken ask and nothing else
+ * by its type. The brain's door admits a typed ask from anything that holds
+ * the deployment's secret, so what keeps the deployment's typed asks to a
+ * comment's is the code: no code path but the comment hand-over
+ * (`tasks/comment-ask.ts`) sends one.
  */
+
+/** The one kind of turn the voice function asks Luke for. */
+type SpokenTurn = typeof BRAIN_HOST_TURN.SPOKEN;
 
 interface DeploymentExchangeSeams {
   /** The secret the deployment acts for an account under at eve's door, the cron's own; nothing refuses every session. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The origin eve answers on; nothing refuses every session. */
   readonly eveOrigin: () => string | undefined;
-  /** The deployment's OpenAI key the plan's notetaker runs on; nothing means a call writes no plan. */
-  readonly openAiKey: () => Redacted.Redacted | undefined;
   /** eve as the deployment reaches it for one account; a test hands in a fake, the function composes the real client below. */
-  readonly eve?: (accountId: string) => EveSessions;
+  readonly eve?: (accountId: string) => EveSessions<SpokenTurn>;
   /**
    * The `HttpClient` eve's client is composed over. The exchange stands inside
    * the voice service, whose effects ask for the store's client alone, so the
@@ -86,9 +90,9 @@ function deploymentEve(
   compose: EveSessionsComposer,
   origin: string,
   deploymentSecret: Redacted.Redacted,
-): (accountId: string) => EveSessions {
+): (accountId: string) => EveSessions<SpokenTurn> {
   return (accountId) =>
-    compose({
+    compose<SpokenTurn>({
       origin,
       caller: { secret: deploymentSecret, account: accountId },
     });
@@ -119,10 +123,6 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
     return exchangeAttachment({
       writer,
       eve,
-      scribeModel: () => {
-        const key = seams.openAiKey();
-        return key === undefined ? undefined : openAiBrainModel(key, PLAN_SCRIBE.MODEL);
-      },
       createId: () => randomUUID(),
       report: seams.report,
     });

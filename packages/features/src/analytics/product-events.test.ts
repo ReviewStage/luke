@@ -5,6 +5,7 @@ import {
   PRODUCT_EVENT_PROPERTY,
   PRODUCT_EXPERIMENT,
   PRODUCT_SETTING_VALUE,
+  productEventBuildFromWire,
   productEventFromWire,
 } from "./product-events.js";
 
@@ -14,12 +15,9 @@ test("prose cannot pass as a property value", () => {
   const prose = "codex — /Users/me/luke on feature/x";
   assert.equal(
     productEventFromWire({
-      name: PRODUCT_EVENT.SESSION_OBSERVE,
+      name: PRODUCT_EVENT.SEARCH_OPEN,
       at: AT,
-      properties: {
-        [PRODUCT_EVENT_PROPERTY.PROVIDER_ID]: prose,
-        [PRODUCT_EVENT_PROPERTY.SESSION_COUNT]: 1,
-      },
+      properties: { [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: prose },
     }),
     undefined,
   );
@@ -72,4 +70,30 @@ test("an experiment's switch is counted by its key and on or off, and by nothing
     }),
     undefined,
   );
+});
+
+test("a batch's build is read as strictly as an event's, and is never a reason to refuse the batch", () => {
+  // A field the build does not name is not copied forward.
+  assert.deepEqual(
+    productEventBuildFromWire({
+      events: [],
+      build: { app_version: "0.18.0", packaged: true, email: "me@luke.test" },
+    }),
+    { app_version: "0.18.0", packaged: true },
+  );
+  // A version that is not `x.y.z` or a flag that is not a boolean leaves the
+  // whole build off rather than forwarding it.
+  assert.deepEqual(
+    productEventBuildFromWire({
+      events: [],
+      build: { app_version: "/Users/me/luke", packaged: true },
+    }),
+    {},
+  );
+  assert.deepEqual(
+    productEventBuildFromWire({ events: [], build: { app_version: "0.18.0", packaged: "yes" } }),
+    {},
+  );
+  // Builds 0.7 to 0.17 send no build at all.
+  assert.deepEqual(productEventBuildFromWire({ events: [] }), {});
 });

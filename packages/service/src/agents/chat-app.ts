@@ -27,7 +27,6 @@ import {
   chatCursorSchema,
   chatWriteRequestSchema,
   MEMBER_KIND,
-  mentionedHandles,
   replyRefusal,
 } from "@luke/features/chat-wire";
 import { workspaceIdSchema } from "@luke/features/task-wire";
@@ -56,6 +55,7 @@ import {
 } from "../http/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { EVE_MOUNT, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
+import { type ChatNamed, namedIn } from "./coder-host/chat-ask.js";
 import {
   CHAT_DOORS,
   type ChatTelling,
@@ -250,10 +250,10 @@ const dmWith = /* @__PURE__ */ Effect.fnUntraced(function* (writer: Writer, hand
   );
 });
 
-/** The handles a post's words mention, read off its Markdown. */
-function mentionsOf(blocks: readonly ChatBlock[]): readonly string[] {
+/** Whom a post's words name, read off its Markdown: the handles typed, and the members its mention links write. */
+function mentionsOf(blocks: readonly ChatBlock[]): ChatNamed {
   const words = blocks.flatMap((block) => (block.type === CHAT_BLOCK.MARKDOWN ? [block.text] : []));
-  return mentionedHandles(words.join("\n"));
+  return namedIn(words.join("\n"));
 }
 
 /** A person's post, told to the members it addresses: the message as the window reads it, and who it came to. */
@@ -277,7 +277,7 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     authorMemberId: writer.self.id,
     to,
     blocks,
-    mentions: mentionsOf(blocks),
+    ...mentionsOf(blocks),
     clientKey: post.clientKey,
   });
   if (!told.repeated) {

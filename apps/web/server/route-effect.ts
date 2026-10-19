@@ -1,6 +1,8 @@
 import { cookieOriginGuard } from "@luke/service/http/origin-guard";
+import { sentryReportedFetch } from "@luke/service/observability/sentry";
 import type { Route, WebRoutes } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
+import { waitUntil } from "@vercel/functions";
 import { Effect } from "effect";
 import { HttpRouter } from "effect/http";
 import { runWeb } from "./runtime.js";
@@ -28,12 +30,16 @@ type WebHandler = (request: Request) => Promise<Response>;
  * request a browser's cookie carried from a page this deployment does not
  * serve is refused before any route reads the cookie
  * (`packages/service/src/http/origin-guard.ts`).
+ *
+ * Sentry watches the whole of it (`sentryReportedFetch`): a build that failed
+ * is captured as it is thrown to the platform, and what a request queued is
+ * sent under Vercel's `waitUntil` after the answer has left.
  */
 export function routeFromHttpRouter(routes: WebRoutes<WebServices>): Route {
   const refuseCrossSite = cookieOriginGuard(process.env);
   let building: Promise<WebHandler> | undefined;
   return {
-    async fetch(request: Request): Promise<Response> {
+    fetch: sentryReportedFetch(async (request) => {
       const refusal = refuseCrossSite(request);
       if (refusal !== undefined) return refusal;
       building ??= runWeb(Effect.context<WebServices>()).then((context) => {
@@ -49,6 +55,6 @@ export function routeFromHttpRouter(routes: WebRoutes<WebServices>): Route {
         throw failure;
       }
       return handler(request);
-    },
+    }, waitUntil),
   };
 }

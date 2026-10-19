@@ -14,6 +14,7 @@ import {
   accountCall,
   type CallCredential,
   callAnswered,
+  lateCredential,
   NO_CREDENTIAL,
 } from "./account-call.js";
 
@@ -102,4 +103,44 @@ it.effect(
       assert.equal(requests.length, 1);
       assert.equal(recordedRequest(requests).authorization, undefined);
     }),
+);
+
+it.effect(
+  "a late credential goes out as the credential it resolves: no header where that one has none",
+  () =>
+    Effect.gen(function* () {
+      const { call, requests, client } = callOn(lateCredential(Effect.succeed({})), () =>
+        jsonResponse({ ok: true }),
+      );
+
+      const answer = yield* Effect.provide(
+        call.send({ method: HTTP_METHOD.GET, path: PATH }),
+        client,
+      );
+
+      assert.ok(callAnswered(answer) && answer.response.ok);
+      assert.equal(recordedRequest(requests).authorization, undefined);
+    }),
+);
+
+it.effect("a late credential renews and retries on the bearer it resolves", () =>
+  Effect.gen(function* () {
+    const { credential } = account(["stale", "fresh"]);
+    const { call, requests, client } = callOn(
+      lateCredential(Effect.succeed(credential)),
+      (request) =>
+        request.authorization === "Bearer fresh" ? jsonResponse({ ok: true }) : refusal(),
+    );
+
+    const answer = yield* Effect.provide(
+      call.send({ method: HTTP_METHOD.GET, path: PATH }),
+      client,
+    );
+
+    assert.ok(callAnswered(answer) && answer.response.ok);
+    assert.deepEqual(
+      requests.map((request) => request.authorization),
+      ["Bearer stale", "Bearer fresh"],
+    );
+  }),
 );

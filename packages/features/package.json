@@ -16,6 +16,8 @@
     "./issue-wire": "./src/issue-wire.js",
     "./issue-view": "./src/issue-view.js",
     "./avatar-grant": "./src/avatar-grant.js",
+    "./sentry-reporting": "./src/sentry-reporting.js",
+    "./sentry-tracing": "./src/sentry-tracing.js",
     "./video-avatar": "./src/video-avatar.js",
     "./board-text": "./src/board-text.js",
     "./image-signature": "./src/image-signature.js",
@@ -25,6 +27,7 @@
     "./board-vocabulary": "./src/board-vocabulary.js",
     "./board-wire": "./src/board-wire.js",
     "./coding-agent-failure-words": "./src/coding-agent-failure-words.js",
+    "./chat-mentions": "./src/chat-mentions.js",
     "./chat-wire": "./src/chat-wire.js",
     "./coding-agent-view": "./src/coding-agent-view.js",
     "./coding-agent-wire": "./src/coding-agent-wire.js",
@@ -95,6 +98,7 @@
     "./integration-tool-model": "./src/integration-tool-model.js",
     "./terminal-acts": "./src/terminal-acts.js",
     "./page-frame": "./src/page-frame.js",
+    "./browser-acts": "./src/browser-acts.js",
     "./page-policy": "./src/page-policy.js",
     "./terminal-entry": "./src/terminal-entry.js",
     "./terminal-model": "./src/terminal-model.js",
@@ -122,6 +126,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@sentry/core": "11.7.0",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

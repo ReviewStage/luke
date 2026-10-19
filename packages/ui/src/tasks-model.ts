@@ -137,6 +137,34 @@ export function taskNameOfIssue(issue: Pick<LinearIssueSummary, "identifier" | "
   return title === "" ? issue.identifier : title;
 }
 
+/** The characters a markdown link's label escapes to stay one label. */
+const LABEL_SPECIAL = /[[\]\\]/gu;
+
+/** The characters a markdown link's target encodes so it ends where it should. */
+const TARGET_SPECIAL = /[()]/gu;
+
+/**
+ * The prompt a coding agent New task starts is handed: a mention of the
+ * issue picked, where one was, by its key and title over its own address,
+ * a Linear issue's as the app writes its link
+ * (`[@ENG-1 Title](https://linear.app/…)`) and one of the workspace's own
+ * over its Luke link (`[@ACME-7 Title](https://tryluke.dev/…/issue/…)`),
+ * then a blank line and the words, trimmed; the issue alone where no words
+ * were written, and the words alone where no issue was picked.
+ */
+export function agentPromptOf(
+  issue: Pick<LinearIssueSummary, "identifier" | "title" | "url"> | undefined,
+  words: string,
+): string {
+  const said = words.trim();
+  if (issue === undefined) return said;
+  const name = `${issue.identifier} ${issue.title.trim()}`.trim();
+  const label = `@${name}`.replace(LABEL_SPECIAL, (special) => `\\${special}`);
+  const target = issue.url.replace(TARGET_SPECIAL, (special) => (special === "(" ? "%28" : "%29"));
+  const mention = `[${label}](${target})`;
+  return said === "" ? mention : `${mention}\n\n${said}`;
+}
+
 /** How many of a workspace's Linear issues New task offers under its name field at once. */
 export const ISSUE_MATCH_LIMIT = 6;
 
@@ -368,6 +396,15 @@ export function archiveTasksFailedNote(refused: number): string {
   return refused === 1
     ? MARK_FAILED_NOTES[TASK_MARK.ARCHIVE]
     : "The tasks could not be archived. Try again.";
+}
+
+/**
+ * Whether archiving the tasks asks first: any of them has a coding agent
+ * not yet archived, which the archive stops and archives with it. A task
+ * whose agents the list has yet to read asks nothing, as one with none.
+ */
+export function archiveAsks(tasks: readonly Pick<TaskSummary, "agents">[]): boolean {
+  return tasks.some((task) => (task.agents?.total ?? 0) > 0);
 }
 
 /** A task's pin and archive as the list carries them, each only where it stands. */

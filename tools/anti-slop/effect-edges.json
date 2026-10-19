@@ -29,6 +29,7 @@
     "apps/web/server/seed-clients.ts",
     "apps/web/server/terminal/function.ts",
     "apps/web/server/voice/function.ts",
+    "apps/web/src/app/web-root.tsx",
     "tools/trace-export/src/cli.ts"
   ],
   "runShims": [
@@ -54,7 +55,8 @@
     "apps/desktop/src/main/window/voice-window.ts",
     "packages/panel/src/feedback-images.ts",
     "packages/panel/src/luke-face-mood.ts",
-    "apps/desktop/src/renderer/use-caption-presentation.ts",
+    "packages/panel/src/use-caption-presentation.ts",
+    "packages/ui/src/components/menu/menu.tsx",
     "apps/web/src/admin/use-admin-read.ts",
     "packages/service/src/testing/voice-fakes.ts"
   ]

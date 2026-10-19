@@ -52,6 +52,7 @@ import {
   desc,
   eq,
   getTableName,
+  isNotNull,
   isNull,
   max,
   ne,
@@ -964,20 +965,21 @@ const TaskItemsRowSchema = Schema.Struct({
 const LATEST_ITEM = max(inboxItem.updatedAt);
 
 /**
- * Every task of the account's workspaces it has not archived that holds an
- * item, open or settled, whichever member's agent posted it, the task whose
- * item changed latest first.
+ * Every task of the account's workspaces that holds an item, open or
+ * settled, whichever member's agent posted it, the task whose item changed
+ * latest first: those it has not archived, and the archived ones too where
+ * `archived` asks.
  */
 const findTasksWithItems = SqlSchema.findAll({
-  Request: AccountRequestSchema,
+  Request: Schema.Struct({ userId: Schema.String, archived: Schema.Boolean }),
   Result: TaskItemsRowSchema,
-  execute: ({ userId }) =>
+  execute: ({ userId, archived }) =>
     Database.use((db) =>
       db
         .select({ taskId: inboxItem.taskId, items: count(), updatedAt: LATEST_ITEM })
         .from(inboxItem)
         .innerJoin(task, eq(task.id, inboxItem.taskId))
-        .where(and(taskReachableBy(userId), isNull(task.archivedAt)))
+        .where(and(taskReachableBy(userId), archived ? undefined : isNull(task.archivedAt)))
         .groupBy(inboxItem.taskId)
         .orderBy(desc(LATEST_ITEM), desc(inboxItem.taskId)),
     ),
@@ -1423,6 +1425,29 @@ export function readInboxItem(
   return Effect.map(findItem({ userId, itemId }), Option.map(storedItem));
 }
 
+/** The item's task, where it stands on one the account reaches and it is archived. */
+const findArchivedItemTask = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, itemId: Schema.String }),
+  Result: Schema.Struct({ taskId: Schema.String }),
+  execute: ({ userId, itemId }) =>
+    Database.use((db) =>
+      db
+        .select({ taskId: task.id })
+        .from(inboxItem)
+        .innerJoin(task, eq(task.id, inboxItem.taskId))
+        .where(and(eq(inboxItem.id, itemId), taskReachableBy(userId), isNotNull(task.archivedAt))),
+    ),
+});
+
+/**
+ * Whether the item stands on a task the account archived: put away with its
+ * task, read but answered no longer until the task is brought back. An item
+ * of an agent with no task, or one the account does not reach, is not.
+ */
+export function inboxItemArchived(userId: string, itemId: string): InboxStoreEffect<boolean> {
+  return Effect.map(findArchivedItemTask({ userId, itemId }), Option.isSome);
+}
+
 /** Whether the marker's write found the item: it moved the marker, or the account reaches an item whose marker stood as asked already. */
 function markerFound(
   marked: Option.Option<typeof MarkedSchema.Type>,
@@ -1865,10 +1890,15 @@ export function accountWaitingStamps(userId: string): InboxStoreEffect<readonly 
 /**
  * Every task the account has not archived that holds an inbox item,
  * waiting or settled, with how many and when the latest changed, the
- * task whose item changed latest first: what the desktop's Inbox lists.
+ * task whose item changed latest first: what the desktop's Inbox lists;
+ * the archived ones among them where `archived` asks, which its Archived
+ * tab lists.
  */
-export function accountInboxTasks(userId: string): InboxStoreEffect<readonly AccountInboxTask[]> {
-  return Effect.map(findTasksWithItems({ userId }), (rows) =>
+export function accountInboxTasks(
+  userId: string,
+  { archived = false }: { readonly archived?: boolean } = {},
+): InboxStoreEffect<readonly AccountInboxTask[]> {
+  return Effect.map(findTasksWithItems({ userId, archived }), (rows) =>
     rows.map(({ taskId, ...row }) => ({
       ...row,
       planId: taskId,

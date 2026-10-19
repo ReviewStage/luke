@@ -6,6 +6,7 @@ import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { VOICE_KEYLESS_NOTE } from "@luke/voice/microphone-access";
 import { test } from "vitest";
 import {
+  agentPromptOf,
   ISSUE_MATCH_LIMIT,
   linearIssuesAskOf,
   MICROPHONE_PRESS,
@@ -117,6 +118,35 @@ test("a plan started from a Linear issue is named by its title, cut to a name's 
     TASK_BOUNDS.MAX_NAME_CHARS,
   );
   assert.equal(taskNameOfIssue({ identifier: "ENG-3", title: "   " }), "ENG-3");
+});
+
+test("an agent New task starts is handed a mention of the issue picked, then a blank line and the words; the issue alone with no words, and the words alone with no issue", () => {
+  const issue = {
+    identifier: "ENG-1",
+    title: " Fix [the] refresh ",
+    url: "https://linear.app/acme/issue/ENG-1/fix-the-refresh",
+  };
+
+  assert.equal(
+    agentPromptOf(issue, "  Reproduce it first.\n"),
+    "[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)\n\nReproduce it first.",
+  );
+  assert.equal(
+    agentPromptOf(issue, "   "),
+    "[@ENG-1 Fix \\[the\\] refresh](https://linear.app/acme/issue/ENG-1/fix-the-refresh)",
+  );
+  assert.equal(
+    agentPromptOf(undefined, " Make the sidebar keep its folds. "),
+    "Make the sidebar keep its folds.",
+  );
+  assert.equal(
+    agentPromptOf(
+      { identifier: "ACME-7", title: "Invites expire", url: "https://tryluke.dev/a(b)/issue/7" },
+      "",
+    ),
+    "[@ACME-7 Invites expire](https://tryluke.dev/a%28b%29/issue/7)",
+    "one of the workspace's own issues is mentioned by its Luke link, its target kept one target",
+  );
 });
 
 test("a pin dragged here stands at its new place until the list carries it, and is let go once it does, the pin is gone, or the service answered", () => {

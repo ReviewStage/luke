@@ -1,4 +1,5 @@
 import { useAtom } from "@effect/atom-react";
+import type { PlanCommentAnchors } from "@luke/features/plan-comment-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import {
   type DocumentEditor,
@@ -62,7 +63,8 @@ export interface PlanEditing {
   /** Where the editor's caret went as it opened; the start of the text without one. */
   readonly placement: PlanEditorPlacement | undefined;
   readonly open: (placement?: PlanEditorPlacement) => void;
-  readonly typeText: (text: string) => void;
+  /** Words typed, and where the editor's comment threads stand in them, where it carries any. */
+  readonly typeText: (text: string, anchors?: PlanCommentAnchors) => void;
   /** Ends the edit; `select` is the block the keyboard goes back to once the editor has gone. */
   readonly close: (select?: EditorHost) => void;
   /** The block to take the keyboard back once the editor has gone, until it has. */
@@ -190,7 +192,7 @@ export function usePlanEditing(
       setPlacement(place);
       setSelecting(undefined);
     },
-    typeText: (words) => changed((now) => editorTyped(now, words)),
+    typeText: (words, anchors) => changed((now) => editorTyped(now, words, anchors)),
     // The save starts with the close, not a render later, since the close may
     // be focus leaving for another task that takes the document with it.
     close: (select) => {

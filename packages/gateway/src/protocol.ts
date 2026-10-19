@@ -68,8 +68,16 @@ export const GATEWAY_METHOD = {
   TASKS_PICTURE: "tasks.picture",
   /** One picture kept on one plan on the service, sent as a `data:` URL, answered with the id its text names it by; never held in the view. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
+  /** One task's plan's comment threads past a cursor, held open by the service while nothing changed. */
+  TASKS_COMMENTS: "tasks.comments",
+  /** A comment thread started on one task's plan, answered with the thread as it stands. */
+  TASKS_COMMENT_START: "tasks.commentStart",
+  /** One thing done to one comment thread of one task's plan, answered with the thread as it stands. */
+  TASKS_COMMENT_ACT: "tasks.commentAct",
   /** One revision of one plan put back as its content on the service; the view takes the task as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
+  /** The turn Luke is running on one task stopped on the service. */
+  TASKS_STOP_WORK: "tasks.stopWork",
   /** The developer's scene of the open task's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   TASKS_BOARD_SAVE: "tasks.boardSave",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */

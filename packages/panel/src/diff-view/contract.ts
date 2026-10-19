@@ -1,3 +1,4 @@
+import type { CodeLines } from "@luke/features/tasks-view";
 import type {
   DIFF_FONT,
   DIFF_FONT_SIZES,
@@ -9,7 +10,7 @@ import type {
 } from "@luke/settings/diff-view";
 
 /**
- * contract.ts -- what the Files changed view and the diff bundle say to each other: a mount for one patch and one for a list of files, and the handles the view redraws them through.
+ * contract.ts -- what the panel and the diff bundle say to each other: a mount for one patch and one for a list of files, the handles the view redraws them through, and a door that colours a run of a file's lines as a diff is coloured.
  *
  * A changed file's patch is drawn by Pierre's diffs (`@pierre/diffs`), with
  * Shiki colouring it, which is too large for the bundle every window parses,
@@ -128,12 +129,30 @@ export interface DiffListFile {
    * whole of its width, which say why it has no lines or show what it is.
    */
   readonly lead: boolean;
+  /** Whether the lines between the file's hunks may be opened, its text read whole the first time one is (`DiffListProps.readTexts`). */
+  readonly expandable: boolean;
+  /** The file's whole text before and after, where it is drawn whole, every unchanged line among its changes; none draws its hunks. */
+  readonly whole?: DiffFileTexts | undefined;
 }
 
 /** Lines lit in one file of a list: the file, by its path, and the lines. */
 export interface DiffListSelection {
   readonly path: string;
   readonly selection: DiffSelection;
+}
+
+/** Where a text selection stands in the window, in its viewport's pixels. */
+export interface DiffTextRect {
+  readonly top: number;
+  readonly left: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
+/** Code selected as text in one file of a list: the lines it runs over, as a pick of them, and where it stands. */
+export interface DiffTextSelection {
+  readonly picked: DiffListSelection;
+  readonly rect: DiffTextRect;
 }
 
 /**
@@ -143,7 +162,10 @@ export interface DiffListSelection {
  * stands at the top of the list as it scrolls. Where lines may be commented
  * on, `onComment` is told the lines a press of the gutter's + picked, on a
  * file that draws lines of its own, and `selected` lights the lines being
- * commented on; with no `onComment` the gutter offers nothing.
+ * commented on; with no `onComment` the gutter offers nothing. Where lines
+ * may be commented on, `onSelectText` is told the lines code selected as
+ * text runs over once a drag lets go, and none once it is let go, scrolled
+ * past, or pressed away from.
  */
 export interface DiffListProps {
   readonly files: readonly DiffListFile[];
@@ -153,6 +175,32 @@ export interface DiffListProps {
   readonly onTopFile: (path: string) => void;
   readonly onComment?: ((picked: DiffListSelection) => void) | undefined;
   readonly selected?: DiffListSelection | undefined;
+  /** Told the lines code selected as text in a file runs over, and where it stands; none once it is gone. */
+  readonly onSelectText?: ((selected: DiffTextSelection | undefined) => void) | undefined;
+  /** Reads a file's whole text on both sides, the first time the lines between its hunks are asked for; none offers no such lines. */
+  readonly readTexts?: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
+}
+
+/** How many unchanged lines one press of a gap's arrow opens, as GitHub's diff opens them. */
+export const GAP_LINES = 20;
+
+/** A changed file's whole text before and after, which the lines between its hunks are drawn from; none where it could not be read whole. */
+export interface DiffFileTexts {
+  readonly before: string;
+  readonly after: string;
+}
+
+/** A run of a file's lines to colour in a look's syntax themes: the file's name, which its grammar is read from, and its lines. */
+export interface ColourRequest {
+  readonly name: string;
+  readonly lines: readonly string[];
+  readonly look: DiffLook;
+}
+
+/** A run of lines coloured, each run of one colour carrying it in both appearances, and each theme's own ground. */
+export interface ColouredLines {
+  readonly lines: CodeLines;
+  readonly ground: { readonly dark: string; readonly light: string };
 }
 
 /** Whether two lists light the same lines of the same file, or both none. */
@@ -196,4 +244,10 @@ export interface DiffViewModule {
    * drawn at all.
    */
   readonly mountList: (host: HTMLElement, props: DiffListProps) => DiffListHandle;
+  /**
+   * Colours a run of a file's lines in the look's syntax themes, as a diff
+   * is coloured, off the window's thread where the pool's workers run; none
+   * where the file's name names no grammar, or the colouring failed.
+   */
+  readonly colourLines: (request: ColourRequest) => Promise<ColouredLines | undefined>;
 }

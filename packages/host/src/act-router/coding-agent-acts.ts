@@ -39,6 +39,7 @@ import {
   type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
+  type CodingAgentPullRequestReadParams,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
@@ -111,22 +112,22 @@ export interface CodingAgentActsDependencies {
     tasksRefresh(): Effect.Effect<void>;
     codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
     codingAgentPullRequest(
-      params: CodingAgentPullRequestParams,
+      params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentPullRequestAnswerView>;
     codingAgentChanges(
-      params: CodingAgentPullRequestParams,
+      params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentChangesAnswerView>;
     codingAgentOverviewPullRequest(
-      params: CodingAgentPullRequestParams,
+      params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
     codingAgentReviewOptions(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
     codingAgentOverviewChecks(
-      params: CodingAgentPullRequestParams,
+      params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
     codingAgentOverviewConversation(
-      params: CodingAgentPullRequestParams,
+      params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentOverviewConversationAnswerView>;
     codingAgentGitHubImage(
       params: CodingAgentGitHubImageParams,
@@ -135,7 +136,7 @@ export interface CodingAgentActsDependencies {
       params: CodingAgentPullRequestActionParams,
     ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
     codingAgentPullRequestViewed(
-      params: CodingAgentPullRequestParams,
+      params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
     providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
@@ -352,8 +353,11 @@ export function codingAgentActRows(
     },
     [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST, sender);
+      // Note that a read of another pull request by its number is no word on what the agent itself published.
       return noted(host.codingAgentPullRequest(params), (answer) => {
-        if ("pullRequest" in answer) notices.observePublished(params.agentId, answer.pullRequest);
+        if ("pullRequest" in answer && params.number === undefined) {
+          notices.observePublished(params.agentId, answer.pullRequest);
+        }
       });
     },
     [ACT_KIND.CODING_AGENTS_CHANGES]: (params, sender) => {

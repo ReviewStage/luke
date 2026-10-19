@@ -9,12 +9,11 @@ import { Effect, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
   type CallAnswer,
+  type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
 import {
   AUTOMATION_CALL_FAILURE,
   type AutomationCallFailure,
@@ -67,7 +66,9 @@ import {
  * why where the service said.
  */
 
-export interface HostedAutomationClientOptions extends AccountToken {
+export interface HostedAutomationClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -168,7 +169,7 @@ export class HostedAutomationClient {
     this.#serviceBaseUrl = options.serviceBaseUrl;
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
   }

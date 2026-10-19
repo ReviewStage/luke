@@ -1,0 +1,173 @@
+/* scroll-area.css -- the one box that scrolls: the axis it names and no
+   other, its overscroll held inside it or handed on, filling its parent's room or as
+   tall as what it holds, and the edges it fades dissolving into whatever
+   ground it stands on. No padding: the caller's is on its own element
+   inside, so the scroll bar stands at the area's edge. */
+
+/* Each edge's depth is a registered length, so a scroll timeline can ease
+   it from none to the whole fade over the first (or the last) stretch of
+   scrolling. The two depths are composed into one mask, rather than each
+   edge animating a mask of its own, because the second animation's mask
+   would replace the first's; they are named by start and end, because a
+   sideways area eases the same two along its inline axis. They do not
+   inherit, so as they ease only the area is restyled, never what it
+   holds. */
+@property --luke-scroll-area-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --luke-scroll-area-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* How far below the area's start edge its start fade begins: none, or a
+   stuck band's height. It does not inherit either, so an area inside one
+   with a band begins its own fade at its edge. */
+@property --luke-scroll-area-fade-inset {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes luke-scroll-area-fade-start {
+  from {
+    --luke-scroll-area-fade-start: 0px;
+  }
+
+  to {
+    --luke-scroll-area-fade-start: var(--luke-scroll-fade);
+  }
+}
+
+@keyframes luke-scroll-area-fade-end {
+  from {
+    --luke-scroll-area-fade-end: var(--luke-scroll-fade);
+  }
+
+  to {
+    --luke-scroll-area-fade-end: 0px;
+  }
+}
+
+@layer components {
+  .luke-scroll-area {
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  /* Held, a swipe that reaches an end stops there. Handed on, the browser's
+     own chaining is left alone, so a swipe past the end, or up and down over
+     an area that scrolls only sideways, moves whatever scrolls around it.
+     Note that a contained axis an area does not scroll still swallows a
+     swipe along it, which is why a short box inside a scroller hands on. */
+  .luke-scroll-area[data-overscroll="contain"] {
+    overscroll-behavior: contain;
+  }
+
+  /* An area out of the tab order is focused by script alone, so its keys
+     scroll it, and draws no ring; one in the tab order keeps the app's. */
+  .luke-scroll-area[tabindex="-1"] {
+    outline: none;
+  }
+
+  /* Note that each axis names both overflows, because `overflow-y: auto`
+     alone computes `overflow-x` to `auto`, and a pixel of a ring or a
+     dragged row past the edge would then scroll the area sideways. */
+  .luke-scroll-area[data-axis="vertical"] {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .luke-scroll-area[data-axis="horizontal"] {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .luke-scroll-area[data-axis="both"] {
+    overflow-x: auto;
+    overflow-y: auto;
+  }
+
+  .luke-scroll-area[data-gutter="stable"] {
+    scrollbar-gutter: stable;
+  }
+
+  /* Filling, it takes the rest of a flex column or row, and the whole of a
+     box or a grid cell that is no flex container. Note that its basis is a
+     percentage, so in a column of no fixed height, where that resolves to
+     what it holds, it stands as tall as that rather than collapsing. */
+  .luke-scroll-area[data-size="fill"] {
+    flex: 1 1 0%;
+    block-size: 100%;
+  }
+
+  /* As tall as what it holds, it gives way where its parent runs short of
+     room, a flex column's or a box's, and scrolls the rest. */
+  .luke-scroll-area[data-size="content"] {
+    flex: 0 1 auto;
+    max-block-size: 100%;
+  }
+
+  /* It is a mask, not a gradient in a ground colour, so its black is an
+     alpha and what scrolls dissolves into whatever ground the area stands
+     on, in either theme. A scroll timeline stands only while the area has
+     something to scroll, and is not motion, so reduced motion leaves it
+     be. The scroll padding brings what the keys move to clear of a faded
+     edge. Above its inset the mask is whole, so a band stuck there stands
+     whole, and the fade begins beneath it; the scroll padding clears both. */
+  .luke-scroll-area:not([data-fade="none"]) {
+    mask-image: linear-gradient(
+      to bottom,
+      #000 var(--luke-scroll-area-fade-inset),
+      transparent var(--luke-scroll-area-fade-inset),
+      #000 calc(var(--luke-scroll-area-fade-inset) + var(--luke-scroll-area-fade-start)),
+      #000 calc(100% - var(--luke-scroll-area-fade-end)),
+      transparent
+    );
+    scroll-padding-block-start: calc(var(--luke-scroll-area-fade-inset) + var(--luke-scroll-fade));
+    animation-name: luke-scroll-area-fade-start, luke-scroll-area-fade-end;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: scroll(self block), scroll(self block);
+    animation-range:
+      0 var(--luke-scroll-fade),
+      calc(100% - var(--luke-scroll-fade)) 100%;
+  }
+
+  .luke-scroll-area[data-fade-inset="band"] {
+    --luke-scroll-area-fade-inset: var(--luke-scroll-band);
+  }
+
+  /* The end's depth stays at none where the start alone fades. */
+  .luke-scroll-area[data-fade="start"] {
+    animation-name: luke-scroll-area-fade-start, none;
+  }
+
+  .luke-scroll-area[data-fade="both"] {
+    scroll-padding-block-end: var(--luke-scroll-fade);
+  }
+
+  /* A sideways area fades along its inline axis, on its inline timeline. */
+  .luke-scroll-area[data-axis="horizontal"]:not([data-fade="none"]) {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      #000 var(--luke-scroll-area-fade-start),
+      #000 calc(100% - var(--luke-scroll-area-fade-end)),
+      transparent
+    );
+    scroll-padding-block-start: 0;
+    scroll-padding-inline-start: var(--luke-scroll-fade);
+    animation-timeline: scroll(self inline), scroll(self inline);
+  }
+
+  .luke-scroll-area[data-axis="horizontal"][data-fade="both"] {
+    scroll-padding-block-end: 0;
+    scroll-padding-inline-end: var(--luke-scroll-fade);
+  }
+}

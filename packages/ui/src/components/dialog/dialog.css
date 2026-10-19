@@ -3,7 +3,9 @@
    frame. Its motion is spent from the motion tokens, which reduced motion
    and a capture run already hold still. The card is never taller than the
    window less its margins: what it holds is what gives way and scrolls, its
-   title and its foot staying on screen. */
+   title and its foot staying on screen. "The window" is what of it is seen
+   (`tokens/viewport.css`), so on a phone the card keeps above the keyboard;
+   an app that measures nothing gets `100vh` and no inset, as before. */
 
 @layer components {
   .luke-dialog-backdrop {
@@ -11,6 +13,8 @@
     position: fixed;
     z-index: var(--luke-z-dialog);
     inset: 0;
+    top: var(--luke-viewport-top);
+    bottom: var(--luke-keyboard-inset);
     display: grid;
     place-items: center;
     padding: var(--luke-space-24);
@@ -23,7 +27,7 @@
     box-sizing: border-box;
     display: flex;
     width: min(var(--luke-dialog-confirm-width), 100%);
-    max-height: calc(100vh - 2 * var(--luke-space-24));
+    max-height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
     flex-direction: column;
     gap: var(--luke-space-8);
     padding: var(--luke-dialog-inset);
@@ -43,6 +47,13 @@
      little further apart. */
   .luke-dialog[data-size="wide"] {
     width: min(var(--luke-dialog-wide-width), 100%);
+    gap: var(--luke-space-12);
+  }
+
+  /* A composer card with a row of chips at its foot, as New task's, wider
+     still so its chips stand whole beside the round button. */
+  .luke-dialog[data-size="composer"] {
+    width: min(var(--luke-dialog-composer-width), 100%);
     gap: var(--luke-space-12);
   }
 

@@ -16,6 +16,9 @@ import { type EventsOptions, handleEvents } from "./events.js";
 
 const EVENTS_PATH = "/api/events";
 
+/** Vercel's own name for the deployment: `production`, `preview`, or `development`. */
+const DEPLOYMENT_VARIABLE = "VERCEL_ENV";
+
 /**
  * Records what the signed-in desktop counted about its own use. The logic
  * lives in `packages/service/src/events/events.ts`; this hands it the deployment's real
@@ -34,6 +37,8 @@ const eventsEffect = /* @__PURE__ */ Effect.fn("web/eventsEffect")(function* (
         ? undefined
         : Redacted.value(environment.posthogProjectApiKey),
     resolveUserId: resolveHostedUserId,
+    // Vercel's own variable, read where Sentry reads it for the same name.
+    deployment: process.env[DEPLOYMENT_VARIABLE],
     // Read from the service's own user row rather than from the request, so
     // the desktop still sends nothing that names anybody.
     readPerson: readAccountPerson,

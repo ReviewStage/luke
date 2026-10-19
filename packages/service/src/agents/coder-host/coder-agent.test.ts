@@ -167,32 +167,87 @@ test("the deployment's cancel of a turn, which a continue started through start_
   assert.deepEqual(await door(cancel(OTHER_SESSION)), { refused: BRAIN_HOST_REFUSAL.NOT_OWNER });
 });
 
-test("an agent on a task is told of the task's links and pages, and one an automation started with no task of neither", () => {
+test("the deployment's retire of a session, which a delete a browser asked for ends an agent's session with, is admitted on the named account's own session as the developer's own principal, with no row of the table; another account's session, a read, and eve's other session controls are refused", async () => {
+  const door = doorOf(coderChannel());
+  const control = (sessionId: string, route: string, method = "POST") =>
+    new Request(`https://luke.test/eve/v1/session/${sessionId}/${route}`, {
+      method,
+      headers: { authorization: `Bearer ${SECRET}`, [BRAIN_HOST_HEADER.ACCOUNT]: ACCOUNT },
+    });
+
+  const { admitted } = await door(control(OWN_SESSION, "reset"));
+  assert.ok(admitted);
+  assert.deepEqual(
+    [admitted.authenticator, admitted.principalType, admitted.principalId],
+    [BRAIN_HOST_AUTHENTICATOR.ACCOUNT, BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT, ACCOUNT],
+  );
+  assert.equal(admitted.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER], BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.deepEqual(await door(control(OTHER_SESSION, "reset")), {
+    refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
+  });
+  for (const [route, method] of [
+    ["reset", "GET"],
+    ["compact", "POST"],
+    ["clear", "POST"],
+  ] as const) {
+    assert.deepEqual(
+      await door(control(OWN_SESSION, route, method)),
+      { refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT },
+      `${method} ${route}`,
+    );
+  }
+});
+
+test("an agent on a task is told of the task's links, pages, and comments, and one an automation started with no task of none", () => {
   const TASK_LINK = "`https://tryluke.dev/<workspace>/plan/<id>` link names a task";
   const PAGES = `show it with \`${CODER_TOOL.SHOW_PAGE}\``;
+  const COMMENTS = `answer in that thread with \`${CODER_TOOL.REPLY_TO_COMMENT}\``;
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const onTask = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
     const taskless = coderInstructions("Acme/Relay", brief, true, null);
-    assert.deepEqual([onTask.includes(TASK_LINK), onTask.includes(PAGES)], [true, true], brief);
-    assert.deepEqual(
-      [taskless.includes(TASK_LINK), taskless.includes(PAGES)],
-      [false, false],
-      brief,
-    );
+    const told = (words: string) => [
+      words.includes(TASK_LINK),
+      words.includes(PAGES),
+      words.includes(COMMENTS),
+    ];
+    assert.deepEqual(told(onTask), [true, true, true], brief);
+    assert.deepEqual(told(taskless), [false, false, false], brief);
     assert.ok(taskless.includes("## The developer's inbox"), "a planless agent keeps its inbox");
     assert.ok(!taskless.includes("luke://plan/"), "nor an older message's plan link");
   }
 });
 
-test("an agent handed its task's plan is offered edit_plan and show_page, one handed a prompt on a task show_page alone, and one an automation started with no task neither", () => {
+test("an agent on a task starts the agents that help with it on its own task, and one an automation started with no task, which has none, names a task for them", () => {
+  const OWN_TASK = "Start it on your own task";
+  const NO_TASK = "You work on no task, so name the task to start it on";
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const onTask = coderInstructions("Acme/Relay", brief, true, TASK_ADDRESS);
+    const taskless = coderInstructions("Acme/Relay", brief, true, null);
+    assert.deepEqual([onTask.includes(OWN_TASK), onTask.includes(NO_TASK)], [true, false], brief);
+    assert.deepEqual(
+      [taskless.includes(OWN_TASK), taskless.includes(NO_TASK)],
+      [false, true],
+      brief,
+    );
+  }
+});
+
+test("an agent handed its task's plan is offered edit_plan, show_page, and the comment tools, one handed a prompt on a task all but edit_plan, and one an automation started with no task none", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
-  assert.deepEqual(offered({ taskId: "plan-1", prompt: null }), [
-    CODER_TOOL.EDIT_PLAN,
-    CODER_TOOL.SHOW_PAGE,
-  ]);
-  assert.deepEqual(offered({ taskId: "plan-1", prompt: "Fix the flaky test." }), [
-    CODER_TOOL.SHOW_PAGE,
-  ]);
+  const comments = [
+    CODER_TOOL.READ_COMMENTS,
+    CODER_TOOL.REOPEN_THREAD,
+    CODER_TOOL.REPLY_TO_COMMENT,
+    CODER_TOOL.RESOLVE_THREAD,
+  ];
+  assert.deepEqual(
+    offered({ taskId: "plan-1", prompt: null }),
+    [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments].sort(),
+  );
+  assert.deepEqual(
+    offered({ taskId: "plan-1", prompt: "Fix the flaky test." }),
+    [CODER_TOOL.SHOW_PAGE, ...comments].sort(),
+  );
   assert.deepEqual(offered({ taskId: null, prompt: "Sweep the flaky tests." }), []);
 });
 

@@ -175,6 +175,39 @@ export interface LiveBrainRecovery {
   readonly follow: Effect.Effect<void>;
 }
 
+/**
+ * What a fresh call about the plan finds as it starts. The plan's first call
+ * sets the backend exploring, once; a call back instead joins whatever work
+ * earlier calls left under way, which goes on whether or not a call stands,
+ * and hears what Luke said meanwhile that nobody heard. Every run here answers
+ * no delegation of this call: the service stands each as a run the brain
+ * opened of its own, so none ends the call and the developer's next ask
+ * supersedes them.
+ */
+export interface LiveBrainJoin {
+  /** Whether the call joins earlier calls' work rather than being the plan's first. */
+  readonly joined: boolean;
+  /** The runs to hear from here: the exploring a first call set off, or the work earlier calls left running. */
+  readonly runs: readonly string[];
+  /** What Luke said since the developer last heard him, bounded and newest last; none where nothing was missed. */
+  readonly missed: string | undefined;
+  /** The questions Luke queued meanwhile and has not taken back, oldest first, for the voice to ask in turn. */
+  readonly questions: readonly LiveBrainQuestion[];
+  /**
+   * Counts what the join handed over as heard, so no later call hands it
+   * again, then tells the runs from there; run once the catch-up and every
+   * run stand, and never where the call went or moved on before they did, so
+   * a catch-up nobody received is handed to the next call instead.
+   */
+  readonly follow: Effect.Effect<void>;
+}
+
+/** A question the planning model queued for the developer, and the answer it recommends. */
+export interface LiveBrainQuestion {
+  readonly question: string;
+  readonly recommendation: string;
+}
+
 export interface LiveBrain {
   /**
    * Submits a spoken ask under the spoken origin. An ask that arrives while
@@ -185,12 +218,13 @@ export interface LiveBrain {
    */
   submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission>;
   /**
-   * Asks the backend to start exploring as a fresh call starts, before the
-   * developer has asked anything, so what it finds is already in hand when
-   * they do. The run answers no delegation: the service stands it as a run
-   * the brain opened of its own, which the developer's first ask supersedes.
+   * A fresh call starting: on the plan's first call the backend starts
+   * exploring before the developer has asked anything, so what it finds is
+   * already in hand when they do; on a call back it takes up the work earlier
+   * calls left under way rather than asking anything again. See
+   * `LiveBrainJoin`.
    */
-  explore(sessionId: string): Effect.Effect<LiveBrainSubmission>;
+  join(sessionId: string): Effect.Effect<LiveBrainJoin>;
   /**
    * Asks the backend to cancel one run, answering only once the backend has
    * said whether it took the cancel, so nothing is told of a cancel that did

@@ -44,8 +44,13 @@ const WORDS = [
 /** The gzip magic the library opens a compressed snapshot field with, as the binary string it sends. */
 const GZIP_MAGIC = "\u001f\u008b";
 
-function bootstrap(permitted: boolean): SessionReplayBootstrap {
-  return { permitted, appVersion: "1.2.3", accountId: "user-1" };
+function bootstrap(permitted: boolean, accountId = "user-1"): SessionReplayBootstrap {
+  return { permitted, appVersion: "1.2.3", packaged: true, accountId };
+}
+
+/** The same run's word on recording with nobody signed in. */
+function signedOut(permitted: boolean): SessionReplayBootstrap {
+  return { permitted, appVersion: "1.2.3", packaged: true };
 }
 
 function drawPage(): void {
@@ -140,4 +145,52 @@ test("the recorder loads before anything records, a stop while it loads holds, a
   // And none of its words, in a text node, an attribute, a link's address, an input's value, or
   // an editor's words and chips (the agent's message box, `tasks/composer-field.tsx`).
   for (const word of WORDS) assert.ok(!recording.includes(word), word);
+  // A stop resets the client, and the recording a sign-in as someone else
+  // resumes still names the build it came from, in the properties the counted
+  // events are stamped with, on the events sent beside it: a snapshot itself
+  // carries none, so these are what a recording is filtered by.
+  applySessionReplay(bootstrap(false), importRecorder);
+  applySessionReplay(bootstrap(true, "user-4"), importRecorder);
+  await vi.advanceTimersByTimeAsync(10_000);
+  const identify = sent.find((event) => event.event === "$identify");
+  assert.equal(identify?.properties.app_version, "1.2.3");
+  assert.equal(identify?.properties.packaged, true);
+});
+
+test("a sign-in partway through a recording files it under the account, and one after a deletion records again", async () => {
+  vi.useFakeTimers();
+  vi.stubGlobal("PACKAGED_POSTHOG_PROJECT_API_KEY", "phc_test");
+  drawPage();
+  // The recorder's bundle, already run, so it lands at once however this test is ordered.
+  await import("posthog-js/dist/posthog-recorder");
+  const importRecorder = () => import("posthog-js/dist/posthog-recorder");
+  const sent: CaptureResult[] = [];
+  posthog.on("eventCaptured", (event) => sent.push(event));
+
+  // Whatever ran before, a sign-out stands it down, and recording starts again signed out.
+  applySessionReplay(bootstrap(false), importRecorder);
+  applySessionReplay(signedOut(true), importRecorder);
+  await vi.advanceTimersByTimeAsync(10_000);
+  assert.equal(posthog.sessionRecordingStarted(), true);
+  const anonymous = posthog.get_distinct_id();
+  assert.notEqual(anonymous, "user-2");
+
+  // The sign-in lands while it records: recording is still permitted, and only the account moved.
+  applySessionReplay(bootstrap(true, "user-2"), importRecorder);
+  assert.equal(posthog.sessionRecordingStarted(), true);
+  assert.equal(posthog.get_distinct_id(), "user-2");
+  // The anonymous stretch before it is joined to the person, so erasing the account reaches it.
+  const identify = sent.find((event) => event.event === "$identify");
+  assert.equal(identify?.properties.$anon_distinct_id, anonymous);
+
+  // The account is deleted: the halt and then the host's answer stand recording down.
+  applySessionReplay(bootstrap(false, "user-2"), importRecorder);
+  applySessionReplay(signedOut(false), importRecorder);
+  assert.equal(posthog.sessionRecordingStarted(), false);
+  assert.notEqual(posthog.get_distinct_id(), "user-2");
+
+  // A later sign-in in the same run records again, filed under the account that signed in.
+  applySessionReplay(bootstrap(true, "user-3"), importRecorder);
+  assert.equal(posthog.sessionRecordingStarted(), true);
+  assert.equal(posthog.get_distinct_id(), "user-3");
 });

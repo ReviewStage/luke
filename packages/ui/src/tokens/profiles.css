@@ -19,6 +19,9 @@
   --luke-control-height: 30px;
   --luke-control-radius: var(--luke-radius-8);
   --luke-control-icon: 15px;
+  /* The least a press is taken across on a coarse pointer, a finger's: a
+     control drawn smaller keeps its size and takes the press around it. */
+  --luke-touch-target: 44px;
   --luke-control-inset: var(--luke-space-12);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
@@ -85,6 +88,7 @@
 
   --luke-dialog-confirm-width: 400px;
   --luke-dialog-wide-width: 520px;
+  --luke-dialog-composer-width: 720px;
   --luke-dialog-media-min-width: 360px;
   --luke-dialog-media-max-width: 1200px;
   --luke-dialog-inset: var(--luke-space-20);
@@ -100,6 +104,13 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --luke-menu-glyph: 16px;
   --luke-menu-shadow: 0 12px 32px var(--luke-color-shadow);
+
+  /* How deep a scroller's edge dissolves where content runs past it
+     (`ScrollArea`'s fade); the window's has stood a step off the scale. */
+  --luke-scroll-fade: 26px;
+  /* How tall a band stuck at a scroller's start stands, a call's checkpoint,
+     which its fade begins beneath (`ScrollArea`'s `fadeInset`). */
+  --luke-scroll-band: var(--luke-space-32);
 
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's `--luke-color-focus-ring`. The reach is
@@ -137,6 +148,9 @@
   --luke-control-height: 44px;
   --luke-control-radius: var(--luke-radius-8);
   --luke-control-icon: 16px;
+  /* The least a press is taken across on a coarse pointer, a finger's: a
+     control drawn smaller keeps its size and takes the press around it. */
+  --luke-touch-target: 44px;
   --luke-control-inset: var(--luke-space-16);
   --luke-control-gap: var(--luke-space-8);
   --luke-icon-gap: var(--luke-space-8);
@@ -192,6 +206,7 @@
 
   --luke-dialog-confirm-width: 400px;
   --luke-dialog-wide-width: 520px;
+  --luke-dialog-composer-width: 720px;
   --luke-dialog-media-min-width: 360px;
   --luke-dialog-media-max-width: 1200px;
   --luke-dialog-inset: var(--luke-space-20);
@@ -208,6 +223,11 @@
   /* The glyph slot every menu row keeps, at its end as at its start. */
   --luke-menu-glyph: 16px;
   --luke-menu-shadow: 0 12px 32px var(--luke-color-shadow);
+
+  /* How deep a scroller's edge dissolves where content runs past it (`ScrollArea`'s fade). */
+  --luke-scroll-fade: var(--luke-space-24);
+  /* How tall a band stuck at a scroller's start stands, which its fade begins beneath. */
+  --luke-scroll-band: var(--luke-space-32);
 
   /* How thick the keyboard's ring is and how far it stands off the control's
      edge; its colour is the palette's `--luke-color-focus-ring`. The reach is
@@ -239,18 +259,23 @@
    the site's roles a step down in size, its controls short enough to stand
    in a dense header and its type a step under a public page's. It sets size
    roles alone, each one the site's profile sets, so its faces, its spacing
-   between things, and its palette stay the site's. */
-[data-luke-profile="web"][data-luke-density="compact"] {
-  --luke-control-height: 32px;
-  --luke-control-inset: var(--luke-space-12);
+   between things, and its palette stay the site's. A finger keeps the site's
+   full size whatever the root asks: on a coarse pointer the compact roles
+   never apply, so a control stays a 44px target and a field's 16px words
+   keep iOS from zooming into it. */
+@media not all and (pointer: coarse) {
+  [data-luke-profile="web"][data-luke-density="compact"] {
+    --luke-control-height: 32px;
+    --luke-control-inset: var(--luke-space-12);
 
-  --luke-type-body-size: 14px;
-  --luke-type-body-leading: 20px;
-  --luke-type-label-size: 13px;
-  --luke-type-label-leading: 18px;
-  --luke-type-title-size: 22px;
-  --luke-type-title-leading: 30px;
+    --luke-type-body-size: 14px;
+    --luke-type-body-leading: 20px;
+    --luke-type-label-size: 13px;
+    --luke-type-label-leading: 18px;
+    --luke-type-title-size: 22px;
+    --luke-type-title-leading: 30px;
 
-  /* A compact menu's rows are its controls' height, as the site's are. */
-  --luke-menu-row-height: 32px;
+    /* A compact menu's rows are its controls' height, as the site's are. */
+    --luke-menu-row-height: 32px;
+  }
 }

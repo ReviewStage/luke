@@ -3,10 +3,15 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
+import {
+  READ_COMMENTS_TOOL,
+  REOPEN_THREAD_TOOL,
+  REPLY_TO_COMMENT_TOOL,
+  RESOLVE_THREAD_TOOL,
+} from "../../tasks/comment-tools.js";
 import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import {
-  ARCHIVE_AGENT_TOOL,
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
   LIST_MODELS_TOOL,
@@ -15,12 +20,19 @@ import {
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
   STOP_AGENT_TOOL,
-  UNARCHIVE_AGENT_TOOL,
+  UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
+import {
+  CREATE_ISSUE_TOOL,
+  LIST_ISSUES_TOOL,
+  READ_ISSUE_TOOL,
+  UPDATE_ISSUE_TOOL,
+} from "../issue-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
-import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL, MOVE_TASK_TOOL } from "../task-section-tools.js";
+import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
+import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 import { CODER } from "./bounds.js";
 import { CHAT_TOOLS } from "./chat.js";
 import { DELEGATE_TOOL } from "./delegation.js";
@@ -135,21 +147,25 @@ const AUTHORED_TOOLS = {
     description: START_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(START_AGENT_TOOL.inputSchema),
   },
-  [CODER_TOOL.ARCHIVE_AGENT]: {
-    description: ARCHIVE_AGENT_TOOL.description,
-    inputSchema: emitJsonSchema(ARCHIVE_AGENT_TOOL.inputSchema),
-  },
-  [CODER_TOOL.UNARCHIVE_AGENT]: {
-    description: UNARCHIVE_AGENT_TOOL.description,
-    inputSchema: emitJsonSchema(UNARCHIVE_AGENT_TOOL.inputSchema),
-  },
   [CODER_TOOL.STOP_AGENT]: {
     description: STOP_AGENT_TOOL.description,
     inputSchema: emitJsonSchema(STOP_AGENT_TOOL.inputSchema),
   },
+  [CODER_TOOL.UPDATE_AGENT]: {
+    description: UPDATE_AGENT_TOOL.description,
+    inputSchema: emitJsonSchema(UPDATE_AGENT_TOOL.inputSchema),
+  },
   [CODER_TOOL.LIST_TASKS]: {
     description: LIST_TASKS_TOOL.description,
     inputSchema: emitJsonSchema(LIST_TASKS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.CREATE_TASK]: {
+    description: CREATE_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(CREATE_TASK_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_TASK]: {
+    description: READ_TASK_TOOL.description,
+    inputSchema: emitJsonSchema(READ_TASK_TOOL.inputSchema),
   },
   [CODER_TOOL.CREATE_SECTION]: {
     description: CREATE_SECTION_TOOL.description,
@@ -159,13 +175,25 @@ const AUTHORED_TOOLS = {
     description: DELETE_SECTION_TOOL.description,
     inputSchema: emitJsonSchema(DELETE_SECTION_TOOL.inputSchema),
   },
-  [CODER_TOOL.MOVE_TASK]: {
-    description: MOVE_TASK_TOOL.description,
-    inputSchema: emitJsonSchema(MOVE_TASK_TOOL.inputSchema),
-  },
   [CODER_TOOL.UPDATE_TASK]: {
     description: UPDATE_TASK_TOOL.description,
     inputSchema: emitJsonSchema(UPDATE_TASK_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LIST_ISSUES]: {
+    description: LIST_ISSUES_TOOL.description,
+    inputSchema: emitJsonSchema(LIST_ISSUES_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_ISSUE]: {
+    description: READ_ISSUE_TOOL.description,
+    inputSchema: emitJsonSchema(READ_ISSUE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.CREATE_ISSUE]: {
+    description: CREATE_ISSUE_TOOL.description,
+    inputSchema: emitJsonSchema(CREATE_ISSUE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.UPDATE_ISSUE]: {
+    description: UPDATE_ISSUE_TOOL.description,
+    inputSchema: emitJsonSchema(UPDATE_ISSUE_TOOL.inputSchema),
   },
   [CODER_TOOL.POST_CHAT]: {
     description: CHAT_TOOLS.POST.description,
@@ -187,6 +215,22 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.SHOW_PAGE]: {
     description: SHOW_PAGE_TOOL.description,
     inputSchema: emitJsonSchema(SHOW_PAGE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.READ_COMMENTS]: {
+    description: READ_COMMENTS_TOOL.description,
+    inputSchema: emitJsonSchema(READ_COMMENTS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.REPLY_TO_COMMENT]: {
+    description: REPLY_TO_COMMENT_TOOL.description,
+    inputSchema: emitJsonSchema(REPLY_TO_COMMENT_TOOL.inputSchema),
+  },
+  [CODER_TOOL.RESOLVE_THREAD]: {
+    description: RESOLVE_THREAD_TOOL.description,
+    inputSchema: emitJsonSchema(RESOLVE_THREAD_TOOL.inputSchema),
+  },
+  [CODER_TOOL.REOPEN_THREAD]: {
+    description: REOPEN_THREAD_TOOL.description,
+    inputSchema: emitJsonSchema(REOPEN_THREAD_TOOL.inputSchema),
   },
   [CODER_TOOL.READ_PAGE]: {
     description: READ_PAGE_TOOL.description,

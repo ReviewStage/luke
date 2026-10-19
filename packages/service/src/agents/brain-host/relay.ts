@@ -39,6 +39,7 @@ import {
   userMetadataOf,
 } from "../../core.js";
 import { isRemoteToolName, storedRemoteCall } from "../../integrations/connection-tools.js";
+import { redactCredentials } from "../../observability/credentials.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../../tasks/board-look.js";
 import { LOOK_AT_PICTURE_TOOL, storedPictureLookOutput } from "../../tasks/picture-look.js";
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
@@ -312,36 +313,6 @@ const readFailureDetailWords = Schema.decodeUnknownOption(FailureDetailWordsSche
 /** How much of eve's failure message the row keeps, and how much of its details' key list, inside the writer's own 500. */
 const FAILURE_DETAIL_BOUNDS = { MESSAGE_CHARS: 200, KEYS_CHARS: 120 } as const;
 
-/**
- * The value a `key`, `token`, or `secret` name is assigned by `=` or `:` in a
- * query string or JSON, with up to 64 word characters of whatever prefixes
- * the name; a value ends at a space, an `&`, or a quote, so the parameter
- * after it is still read. Note that the prefix is bounded, because static
- * analysis reads an unbounded `\w*` before the name as rescanned from every
- * offset of a long word run; what a longer prefix leaves is the bare run's.
- */
-const NAMED_CREDENTIAL_PATTERN = /\w{0,64}(?:key|token|secret)"?\s*[=:]\s*"?[^\s&"']+/gi;
-
-/**
- * Anything else shaped like a credential, each replaced whole: an `sk-` key,
- * a bearer token, a JWT from its header onward, an AWS access key id, and a
- * run of 32 or more hex or base64 characters, url-safe alphabet included.
- */
-const CREDENTIAL_PATTERN =
-  /sk-[A-Za-z0-9_-]{8,}|Bearer\s+\S+|eyJ[A-Za-z0-9_.-]{16,}|(?:AKIA|ASIA)[0-9A-Z]{16}|[A-Za-z0-9+/=_-]{32,}/gi;
-
-const REDACTED = "[redacted]";
-
-/**
- * eve's failure message as the row may keep it: every credential-shaped run
- * replaced, the rest word for word. Note that the named values go first, in
- * a pass of their own, because the bare run starting earlier in a long name
- * would otherwise take a value's head up to its first `.` and leave the tail.
- */
-export function redactCredentials(message: string): string {
-  return message.replace(NAMED_CREDENTIAL_PATTERN, REDACTED).replace(CREDENTIAL_PATTERN, REDACTED);
-}
-
 type TurnFailedData = Extract<MessageStreamEvent, { readonly type: "turn.failed" }>["data"];
 
 /**
@@ -380,6 +351,89 @@ function withTurn(
   const turn = state.turns[eveTurnId];
   if (!turn) return state;
   return { ...state, turns: { ...state.turns, [eveTurnId]: next(turn) } };
+}
+
+/** A step's draft as one of eve's text events grows it, and the step's finished words through it. */
+interface GrownDraft {
+  readonly key: string;
+  readonly draft: RelayDraft;
+  readonly text: string;
+}
+
+/**
+ * The draft an event grows and the finished sentences it then holds;
+ * nothing for a turn the relay holds none of or an event the draft already
+ * read. Note that an event without an id, from a session older than eve's
+ * stamping of one, is read as it comes, since nothing could tell it from
+ * another.
+ */
+function grownDraft(
+  state: RelayState,
+  eveTurnId: string,
+  stepIndex: number,
+  eventId: string | undefined,
+  grow: (draft: RelayDraft) => RelayDraft,
+): GrownDraft | undefined {
+  const turn = state.turns[eveTurnId];
+  if (!turn) return undefined;
+  const key = String(stepIndex);
+  const held = turn.drafts?.[key] ?? EMPTY_DRAFT;
+  if (eventId !== undefined && eventId <= held.eventId) return undefined;
+  const draft = { ...grow(held), eventId: eventId ?? held.eventId };
+  return { key, draft, text: finishedSentencesOf(joinedWords(draft.completed, draft.forming)) };
+}
+
+function keepDraft(store: RelayStateStore, eveTurnId: string, key: string, draft: RelayDraft) {
+  store.update((state) =>
+    withTurn(state, eveTurnId, (current) => ({
+      ...current,
+      drafts: { ...current.drafts, [key]: draft },
+    })),
+  );
+}
+
+/** The kinds of event `StreamRelay.handle` reads; it passes over every other kind eve emits. */
+const RELAYED_EVENTS: ReadonlySet<MessageStreamEvent["type"]> = new Set([
+  "turn.started",
+  "message.received",
+  "step.started",
+  "actions.requested",
+  "action.result",
+  "reasoning.completed",
+  "message.appended",
+  "message.completed",
+  "step.completed",
+  "turn.completed",
+  "turn.failed",
+  "turn.cancelled",
+]);
+
+/**
+ * Folds an event the store need hear nothing of into the session's relay
+ * state, and answers whether it did, so the hook relays only the rest and
+ * admits the session, which costs the store its reads, only for them. An
+ * event of a kind the relay passes over is folded as nothing: eve streams a
+ * step's reasoning and a call's input a fragment at a time, and those
+ * fragments outnumber every other event. A fragment of the step's words is
+ * folded into its draft where it finishes no sentence the writer was not
+ * already told; one that does is the relay's, which grows the draft as this
+ * would and tells the writer. Note that folding needs no admission because
+ * it touches only the session's own state: a turn is held there only once
+ * an admitted relay opened it, and what is folded reaches the store only
+ * through a later event the hook admits.
+ */
+export function foldedQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean {
+  if (!RELAYED_EVENTS.has(event.type)) return true;
+  if (event.type !== "message.appended") return false;
+  const { turnId, stepIndex, messageDelta } = event.data;
+  const grown = grownDraft(state.get(), turnId, stepIndex, event.meta.id, (draft) => ({
+    ...draft,
+    forming: draft.forming + messageDelta,
+  }));
+  if (grown === undefined) return true;
+  if (grown.text.length > grown.draft.told) return false;
+  keepDraft(state, turnId, grown.key, grown.draft);
+  return true;
 }
 
 /** Whether a step already holds a part eve re-emitted: the same call, or the same words at the same place. */
@@ -985,9 +1039,8 @@ export class StreamRelay {
    * Reads one of eve's text events into its step's draft and, where another
    * sentence finished, tells the writer the step's words through it. A draft
    * the writer refused keeps its count, so the next sentence tells the words
-   * again; an event eve delivers again finds its id read and adds nothing.
-   * Note that an event without an id, from a session older than eve's stamping
-   * of one, is read as it comes, since nothing could tell it from another.
+   * again; an event eve delivers again finds its id read and adds nothing
+   * (`grownDraft`).
    */
   #drafted(
     eveTurnId: string,
@@ -997,28 +1050,17 @@ export class StreamRelay {
     grow: (draft: RelayDraft) => RelayDraft,
   ): RelayEffect<void> {
     return Effect.gen({ self: this }, function* () {
-      const turn = standing.state.get().turns[eveTurnId];
-      if (!turn) return;
-      const key = String(stepIndex);
-      const held = turn.drafts?.[key] ?? EMPTY_DRAFT;
-      if (eventId !== undefined && eventId <= held.eventId) return;
-      const draft = { ...grow(held), eventId: eventId ?? held.eventId };
-      const withDraft = (next: RelayDraft) =>
-        standing.state.update((state) =>
-          withTurn(state, eveTurnId, (current) => ({
-            ...current,
-            drafts: { ...current.drafts, [key]: next },
-          })),
-        );
-      withDraft(draft);
-      const text = finishedSentencesOf(joinedWords(draft.completed, draft.forming));
+      const grown = grownDraft(standing.state.get(), eveTurnId, stepIndex, eventId, grow);
+      if (grown === undefined) return;
+      const { key, draft, text } = grown;
+      keepDraft(standing.state, eveTurnId, key, draft);
       if (text.length <= draft.told) return;
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.TEXT_DRAFTED,
         step: stepOf(stepIndex),
         text,
       });
-      if (written) withDraft({ ...draft, told: text.length });
+      if (written) keepDraft(standing.state, eveTurnId, key, { ...draft, told: text.length });
     });
   }
 

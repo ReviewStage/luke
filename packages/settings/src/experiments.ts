@@ -8,12 +8,14 @@ import { Option, Schema } from "effect";
  * graduates, which is what makes every gate left behind fail to compile.
  */
 export const EXPERIMENT = {
+  /** A Browser tab in the side panel: a web page beside the plan, the Mac's own `localhost` among them. */
+  BROWSER: "browser",
   /** A workspace's chat: its people, coding agents, and Luke talking in channels and DMs. */
   CHAT: "chat",
   /** The read-only Talk → Build → Ship board beside the Inbox. */
   FACTORY: "factory",
-  /** Coding agents started on a schedule, listed and made on their own page. */
-  AUTOMATIONS: "automations",
+  /** The Code review automation, offered on the Automations page with its own settings in the editor. */
+  CODE_REVIEW: "code-review",
   /** Calls that open with Luke on video, a Keyframe avatar at the top of the Call tab. */
   VIDEO_CALLS: "video-calls",
   /** A workspace's issues, each a title, a status, a priority, and a description, listed on their own page. */
@@ -44,6 +46,24 @@ export interface ExperimentEntry {
  */
 export const EXPERIMENTS = [
   {
+    key: EXPERIMENT.CODE_REVIEW,
+    name: "Code review",
+    detail:
+      "Suggest a Code review automation on the Automations page, which reviews each pull " +
+      "request as Luke and posts one GitHub review.",
+    owner: "Dean",
+    since: "2026-10-19",
+  },
+  {
+    key: EXPERIMENT.BROWSER,
+    name: "Browser tab",
+    detail:
+      "Open a web page in a tab beside your plan, your own localhost included. Pages keep " +
+      "their own cookies, apart from Luke's.",
+    owner: "Dean",
+    since: "2026-10-16",
+  },
+  {
     key: EXPERIMENT.SECTIONS,
     name: "Sections",
     detail: "Keep tasks in sections of your own in the sidebar, each with a title and an icon.",
@@ -72,13 +92,6 @@ export const EXPERIMENTS = [
       "Keyframe Labs animates Luke from his voice, so what he says about your plan reaches " +
       "Keyframe. Your own voice never does.",
     owner: "Charles",
-    since: "2026-10-15",
-  },
-  {
-    key: EXPERIMENT.AUTOMATIONS,
-    name: "Automations",
-    detail: "Start a coding agent on a schedule, for you or for the whole workspace.",
-    owner: "Dean",
     since: "2026-10-15",
   },
   {

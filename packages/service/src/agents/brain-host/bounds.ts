@@ -62,7 +62,7 @@ export const BRAIN_HOST_ATTRIBUTE = {
   CONVERSATION: "luke:conversation",
   TURN: "luke:turn",
   ACCOUNT: "luke:account",
-  /** Who carried a message minted as the account's own principal: the deployment, named on the coder channel's voice steer and never laid over from a request. */
+  /** Who carried a request minted as the account's own principal: the deployment, named on every typed message it carries, the voice brain's steer of a coding agent and a browser's comment to Luke among them, and on the coder channel's cancel and reset; never laid over from a request. */
   CARRIER: "luke:carrier",
 } as const;
 
@@ -193,7 +193,7 @@ export const BRAIN_HOST_REFUSAL = {
   NO_TURN_KIND: "Not run: the request names no kind of turn.",
   NO_ACCOUNT: "Not run: the deployment's request names no account.",
   NOT_DEPLOYMENT_ACT:
-    "Not run: the deployment may only open the turns it is admitted for, or stop one.",
+    "Not run: the deployment may only open the turns it is admitted for, stop one, or retire a session.",
   NO_MODEL: "Not run: this deployment holds no model key, so the hosted brain is off.",
   NOT_CURRENT_SESSION: "Not run: this conversation runs in another session now.",
 } as const;

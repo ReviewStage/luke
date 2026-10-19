@@ -11,6 +11,7 @@ import {
   hostAssemblyLayer,
   hostKernelLayer,
   IdSource,
+  oauthAccountSourceLayer,
   RunMode,
   reporterLayer,
   SecretCipher,
@@ -40,14 +41,20 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(RunMode, runMode),
     Layer.succeed(AppIdentity, { appVersion: config.appVersion, packaged: config.packaged }),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord(config.environment)),
-    Layer.succeed(SecretCipher, cipher),
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),
     Layer.succeed(VoiceSocket, openVoiceSocketOverWs),
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
-    // The sign-in's consent is a loopback on this Mac: the browser hands the
-    // code back to a `node:http` listener on 127.0.0.1.
-    Layer.succeed(SignInConsent, { open: loopbackConsent }),
+    // The account is the OAuth sign-in, its tokens sealed by this Mac's
+    // cipher. The sign-in's consent is a loopback on this Mac: the browser
+    // hands the code back to a `node:http` listener on 127.0.0.1.
+    Layer.provide(
+      oauthAccountSourceLayer,
+      Layer.merge(
+        Layer.succeed(SecretCipher, cipher),
+        Layer.succeed(SignInConsent, { open: loopbackConsent }),
+      ),
+    ),
     // The protocol's shutdown answers accepted at once; the quit that follows
     // is the one drain, which the entry's `before-quit` asks for.
     Layer.succeed(ShutdownSignal, { notify: () => config.quit() }),

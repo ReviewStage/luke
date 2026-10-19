@@ -3,6 +3,9 @@
 import assert from "node:assert/strict";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { LIVE_STATUS } from "@luke/live";
+import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "@luke/panel/call/call-card";
+import { CALL_VIDEO_LABEL } from "@luke/panel/call/call-video-tile";
+import { CallTabVideo, useCallCardVideo } from "@luke/panel/call/panel-avatar";
 import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
@@ -14,10 +17,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "./call-card";
-import { CALL_VIDEO_LABEL } from "./call-video-tile";
 import { CallWindowCard } from "./call-window-card";
-import { CallTabVideo, useCallCardVideo } from "./panel-avatar";
 
 /**
  * The call card as a Luke window docks it on a video call: Luke's avatar

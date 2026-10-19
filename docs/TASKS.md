@@ -13,17 +13,17 @@ The product decisions behind it are settled in the project specification and
 are not reopened here. The two that shape everything below:
 
 - **One saved plan per named task**, one free Markdown text started as a
-  copy of the account's template ("The template" below), written by the
-  plan's notetaker, which takes notes into it ("The notetaker" below), by
+  copy of the account's template ("The template" below), written by Luke
+  himself, who takes notes into it with `edit_plan` on a call or off one, by
   coding agents through the same notes, and by the developer, whose editor
   is the document itself ("Editing" below).
   Every save that changes the plan is kept as a revision under the writer
   who made it ("History" below); there is no stale-revision rejection, no
   approval state, and no export record.
 - **The model drives the workflow.** Question choice, agreement, corrections,
-  and the final review live in Luke's instructions, and Luke's
-  model never writes the document: it is handed the saved document
-  every turn, so Luke keeps talking while the notetaker writes.
+  and the final review live in Luke's instructions. Luke's model writes the
+  document itself, each save a task it starts and keeps talking past, and is
+  handed the saved document every turn.
   The tab decides nothing; it shows the saved document and the voice state,
   and saves only the developer's own edits of the text.
 
@@ -33,9 +33,13 @@ A reviewer can hold the build to these as easily as to the layout:
 
 - No typed-chat composer and no typed fallback. The developer speaks; the only
   text fields are ordinary setup fields (the task's name and the repository
-  filter) and the editor the document opens in, and nothing typed into them
-  reaches the model as conversation. An edited section reaches it as the
-  document it is handed, marked as the developer's own words.
+  filter), the editor the document opens in, and a comment thread's reply
+  field, and nothing typed into them reaches the model as conversation. An
+  edited section reaches it as the document it is handed, marked as the
+  developer's own words. The plan's open comment threads reach it the same
+  way, as data beside the document; a thread reaches Luke as a request only
+  when a member mentions him in it with \`@\`, and he answers it in the thread
+  rather than on a call.
 - No Approve button, no readiness meter, no progress or coverage score, and
   no separate export or handoff screen. Earlier versions of the plan are
   read and restored from its version history ("History" below), which is the
@@ -44,15 +48,18 @@ A reviewer can hold the build to these as easily as to the layout:
   accepted: there is no checkbox, no Accept, and nothing that moves one
   elsewhere.
 - The document is the record. What was said on the task's calls can be read
-  back in the side panel's Transcript tab, but nothing there is a second
+  back in the task's Call tab, but nothing there is a second
   document: it is never copied, edited, or handed to an agent. The document
   itself is what Start hands to a coding agent, as the Markdown Copy puts on
   the clipboard ("From a plan to a pull request" below).
-- The document is always the page. The whiteboard ("Whiteboard" below), the
-  code Luke has on screen, the transcript, and each coding agent started on
-  the task stand beside it in a side panel ("Side panel" below) that the
-  developer opens and closes; only a first drawing, first code, or an agent
-  just started opens it on its own, and there are no second documents.
+- The work column is the agents'. The task's Call with Luke anchors it, and
+  each coding agent started on the task stands beside the Call in a tab of
+  its own; everything else, the plan's document, the task's Inbox, the
+  whiteboard ("Whiteboard" below), and the code Luke has on screen, stands
+  in a side panel ("Side panel" below) that the developer opens and closes.
+  A task opens with the panel shown on its plan; only a first drawing, first
+  code, or an Inbox item not yet seen opens it on its own, and there are no
+  second documents.
 - No window of its own. Tasks live in Luke's one window (LUKE-347): there
   is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -118,9 +125,9 @@ new-task page, which leaves the task, and the new-task page closes the panel. Es
   task open it does nothing. The microphone and speaker mute chords answer
   while a call is in progress wherever the panel stands, on another task,
   in Settings, or on the new-task page.
-- Nothing polls. Every change to a task happens during its call, and the
-  notetaker's drafts reach the open task on the call's own socket as they
-  are written. The list and the open task are read when a panel shows the
+- Nothing polls. Luke's saves, on a call or after it, reach the open task
+  through the conversation's own follow, which reads the document again as
+  his turn writes the plan. The list and the open task are read when a panel shows the
   Tasks tab; the open task again when a task opens, and the list again when
   one starts or is deleted. Leaving the tab leaves the task and its call
   standing, and coming back reads everything again.
@@ -453,15 +460,15 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 ### Agent tabs
 
 Each coding agent started on the task has a tab of its own in the task's
-column, after the task's tab (`desktop/main-tabs.tsx`,
+column, after the Call's tab (`desktop/main-tabs.tsx`,
 `planning/use-main-tabs.ts`, `planning/agent-tab.tsx`,
 `planning/use-coding-agents.ts`), opened and selected the moment its Start
 lands, and showing its transcript and composer where the document stands.
 The column's strip is the side panel's: tabs drag and step among
 themselves, close by ×, Delete, ⌘W, or Close and Close others, hang their
-cards, and pin to the sidebar. The task's tab stands first for good: it
-never closes or moves, a press chooses it, and its right-click offers Close
-others and Rename. The tab each task last showed is kept, so a task opens
+cards, and pin to the sidebar. The Call's tab stands first: it never moves,
+closes only beside another tab, a press chooses it, and its right-click
+offers Close others and Pin tab. The tab each task last showed is kept, so a task opens
 as it was left. ⌘T and ⌘W answer the column holding the focus, the side
 panel's once the pointer goes into it. A subagent's tab stays in the side
 panel.
@@ -620,21 +627,23 @@ of the turn's words under it (`planning/plan-transcript.tsx`,
   nothing said yet: "Nothing said yet — start a call and the transcript
   appears here."
 
-### The notetaker
+### Luke's notes
 
-A task's plan is written during a call by a notetaker beside it
-(`packages/service/src/tasks/plan-scribe.ts`), following GPT-Live's guidance to
-react to the transcript on a small model while speech goes on. It keeps both
-speakers' words from the call's sideband and Luke's replies as
-research notes. Once the developer has been quiet for about a second, it makes
-one `gpt-5.6-luna` call over the plan's saved text and what was said since
-its last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves
-the answer through `saveNotes` (`packages/service/src/tasks/plan-notes.ts`). Its
-runs never overlap, so no run of its own races another, and a run that fails
-moves nothing forward.
+Luke writes a task's plan himself, with `edit_plan`
+(`packages/service/src/agents/brain-host/plan-edit.ts`, run as an eve task from
+`apps/luke/tools/edit_plan.ts`), on a call or with no call up, as the
+conversation and his research settle it. Each call answers with a receipt at
+once and the save's result reaches him later as the task's result, so he goes
+on speaking and researching while it lands; a note that missed is written
+again over the plan as the result hands it. His saves go through `saveNotes`
+(`packages/service/src/tasks/plan-notes.ts`) under the notetaker's actor, which
+the history shows as Luke. Only what reaches him reaches the plan: the voice
+delegates every decision, requirement, correction, and retraction, and the
+developer's words no ask carried are handed to him as one last ask as the call
+ends.
 
-The answer is notes, the way a person takes notes on a call, never the text
-written out again:
+A call's notes are taken the way a person takes notes on a call, never the
+text written out again:
 
 - `add` puts a new point at the end of a section, under the heading it
   names, or opens that section at the end of the text where it has none.
@@ -648,8 +657,8 @@ split, merge, move, and drop sections, a move being a deletion and a
 replacement or an addition. The notes of one answer save together or not
 at all: one naming text or a heading the plan does not hold exactly
 once, or one that does not read under the schema, is reported, never guessed
-into another, and saves nothing of the answer, whose lines the next run is
-handed again over the plan as it then stands.
+into another, and saves nothing of the call, whose result hands the plan as it
+then stands.
 
 A coding agent takes the same notes through its `edit_plan` tool
 (`packages/service/src/agents/coder-host/plan-edit.ts`). Its save is written into

@@ -42,6 +42,8 @@ import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
  * answered at the hold's end at the latest. Note that it looks every
  * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
  * it for as long as it is signed in rather than while a tab is on screen.
+ * A reader that asks is listed the archived tasks holding items beside the
+ * rest, though none of their items waits on it.
  * The open items of agents with no task, and the automations holding them,
  * ride beside the tasks' under keys of their own, and move the same cursor.
  * So does the newest run of each of the account's own automations that
@@ -133,13 +135,14 @@ function accountStamps(userId: string): InboxStoreEffect<readonly InboxCursorSta
 export function accountInboxPast(
   userId: string,
   after: string,
+  { archived = false }: { readonly archived?: boolean } = {},
 ): InboxStoreEffect<AccountInboxAnswer> {
   const read = Effect.gen(function* () {
     const readAt = yield* Clock.currentTimeMillis;
     // Note that the cursor is read before what it stands for, so a change landing between them wakes the reader again rather than being lost.
     const cursor = cursorOf(yield* accountStamps(userId));
     const rows = yield* accountWaitingItems(userId);
-    const tasks = yield* accountInboxTasks(userId);
+    const tasks = yield* accountInboxTasks(userId, { archived });
     const tasklessRows = yield* accountTasklessItems(userId);
     const automations = yield* accountInboxAutomations(userId);
     const failedRuns = yield* failedRunsOf(userId);

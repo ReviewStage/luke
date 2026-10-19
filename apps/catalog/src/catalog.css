@@ -215,14 +215,16 @@ body {
   box-shadow: 0 4px 16px var(--luke-color-shadow);
 }
 
-/* A short room that scrolls, its button low enough that the popover opens
-   above it until a scroll lifts the button toward the room's top. */
+/* A short room that scrolls (`ScrollArea`), its button low enough that the
+   popover opens above it until a scroll lifts the button toward the room's
+   top. The frame clips the scroll bar to its corners. */
 .catalog-popover-room {
   position: relative;
+  display: flex;
   max-width: 560px;
   height: 200px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  flex-direction: column;
+  overflow: clip;
   border: 1px dashed var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);
 }
@@ -399,14 +401,6 @@ body {
   height: 200px;
   flex-direction: column;
   gap: var(--luke-space-8);
-}
-
-/* A dialog's long words, which give way and scroll in a short window so the
-   answers under them stay on the card. */
-.catalog-dialog-scroll {
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 /* A picture's card: its name and Close along the top, the picture under
@@ -658,11 +652,11 @@ body {
 }
 
 /* A screen as tall as a window, which scrolls the public page it holds as a
-   document would, so its banner stands still at the top. */
+   document would (`ScrollArea`), so its banner stands still at the top. */
 .catalog-screen-public {
+  display: flex;
   height: 480px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  flex-direction: column;
 }
 
 /* The words an example lays in a public page's banner and footer, as the
@@ -718,4 +712,83 @@ body {
 .catalog-auth-mark svg {
   width: 100%;
   height: 100%;
+}
+
+/* A pane's room a scroll area fills under a pinned bar, short enough that
+   its rows run past it; the wide one holds a board that runs past its
+   side. */
+.catalog-scroll-room {
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  height: 220px;
+  border: 1px dashed var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+}
+
+.catalog-scroll-room-wide {
+  width: 100%;
+  max-width: 560px;
+}
+
+.catalog-scroll-bar {
+  flex: none;
+  padding: var(--luke-space-8) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+/* The caller's own element inside the area, holding its padding, so the
+   scroll bar stands at the area's edge. */
+.catalog-scroll-body {
+  padding: var(--luke-space-8) var(--luke-space-12);
+}
+
+/* A log whose groups each open on a band stuck to the area's top, the
+   band's height the role the area's fade inset begins beneath. */
+.catalog-scroll-banded {
+  padding: 0 var(--luke-space-12) var(--luke-space-8);
+}
+
+.catalog-scroll-band {
+  position: sticky;
+  top: 0;
+  display: flex;
+  height: var(--luke-scroll-band);
+  align-items: center;
+  background: var(--luke-color-ground);
+}
+
+.catalog-scroll-board {
+  display: flex;
+  gap: var(--luke-space-12);
+  width: max-content;
+  padding: var(--luke-space-12);
+}
+
+.catalog-scroll-column {
+  flex: none;
+  width: 200px;
+  padding: var(--luke-space-8);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
+}
+
+/* The width field and its Apply sit with the toolbar's links. */
+.catalog-width {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  text-transform: none;
+}
+
+.catalog-width .luke-text-field {
+  inline-size: 10ch; /* four digits and the spinner, at either profile's size */
+}
+
+/* An example framed at a chosen width: no padding or border, so the example
+   gets the whole width, and its edge drawn as an outline just outside, so
+   what overflows the width shows past the line rather than being clipped. */
+.catalog-width-frame {
+  outline: 1px dashed var(--luke-color-border);
+  outline-offset: var(--luke-space-4);
 }

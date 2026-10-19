@@ -8,10 +8,10 @@ import { useAct } from "../act.js";
 import { useMinute } from "../tasks/task-time.js";
 
 /**
- * use-factory-world.ts -- the world a Factory world draws: one workspace's snapshot, read as the world opens and again every few minutes while it is on screen.
+ * use-factory-world.ts -- the world the Factory's campus draws: one workspace's snapshot, read as the campus opens and again every few minutes while it is on screen.
  *
  * Each read costs the service a tree read and a few manifests on GitHub, so
- * it is read once as a world is chosen and then each `REFRESH_MS` it stands
+ * it is read once as the campus is chosen and then each `REFRESH_MS` it stands
  * on screen, not each minute as a list is; Retry reads it at once. A refresh
  * that fails keeps the world it would have replaced, and only a first read
  * that fails is said as one. Nothing is held past the page.

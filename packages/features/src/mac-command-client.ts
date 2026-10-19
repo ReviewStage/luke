@@ -3,11 +3,10 @@ import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
+  type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
 import {
   type MacCommand,
   type MacCommandResult,
@@ -29,7 +28,9 @@ import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 /** The service's hold, and room for the answer to travel after it. */
 const HELD_READ_TIMEOUT_MS = 35_000;
 
-export interface HostedMacCommandClientOptions extends AccountToken {
+export interface HostedMacCommandClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
 }
@@ -39,7 +40,7 @@ export class HostedMacCommandClient {
   readonly #held: AccountCallEffects;
 
   constructor(options: HostedMacCommandClientOptions) {
-    const credential = accountBearer(options);
+    const { credential } = options;
     this.#call = accountCall({ baseUrl: options.serviceBaseUrl, credential });
     this.#held = accountCall({
       baseUrl: options.serviceBaseUrl,

@@ -10,6 +10,7 @@ import {
   VOICE_SERVICE_FRAME,
   WORKSPACE_CALL_FAILURE,
 } from "@luke/features";
+import { AGENT_TOOL } from "@luke/features/agent-tools";
 import type { Board } from "@luke/features/board-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
@@ -28,6 +29,13 @@ import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
+import {
+  PLAN_COMMENT_ACTOR,
+  PLAN_COMMENT_ENTRY,
+  PLAN_COMMENT_SCOPE,
+  PLAN_COMMENT_STATUS,
+  type PlanCommentThread,
+} from "@luke/features/plan-comment-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
 import {
   TASK_SECTION_WRITE,
@@ -117,6 +125,9 @@ function summary({
 /** The service as a table of tasks the test edits between beats. */
 interface FakeService extends TasksClient {
   tasks: Task[];
+  /** Each task's comment threads, by task id, and every comment call asked, in order. */
+  threads: Record<string, PlanCommentThread[]>;
+  commentCalls: string[];
   /** What the list says of each task's coding agents, by task id; a task with none says nothing. */
   agents: Record<string, TaskAgentsSummary>;
   /** The agents with no plan the list carries beside the plans. */
@@ -164,6 +175,8 @@ interface FakeService extends TasksClient {
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
   olderHistory: Record<number, PlanRevisionsAnswer>;
+  /** Every task whose work a Stop reached the service for, in order. */
+  stops: string[];
   /** Each revision the service holds, by its number, which a restore puts back as the task's document. */
   revisions: Record<number, PlanRevisionAnswer["revision"]>;
   /** Every version of every page the service holds, for any task. */
@@ -262,6 +275,45 @@ const EDITED_AT = 7_000;
 function fakeService(tasks: Task[]): FakeService {
   const service: FakeService = {
     tasks,
+    threads: {},
+    commentCalls: [],
+    comments: (planId, after) =>
+      Effect.sync(() => {
+        service.commentCalls.push(`read:${planId}:${after}`);
+        return { threads: service.threads[planId] ?? [], cursor: "c1" };
+      }),
+    // The service starts the thread as asked, the member its writer, and holds it on the plan.
+    startComment: (planId, start) =>
+      Effect.sync(() => {
+        service.commentCalls.push(`start:${planId}:${start.quote}`);
+        const thread: PlanCommentThread = {
+          id: "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11",
+          scope: start.scope,
+          quote: start.quote,
+          anchor: start.anchor,
+          section: "Goal",
+          status: PLAN_COMMENT_STATUS.OPEN,
+          entries: [
+            {
+              id: "5f2b0c1e-8d3a-4c7b-9e6f-1a2b3c4d5e6f",
+              kind: PLAN_COMMENT_ENTRY.COMMENT,
+              writer: { actor: PLAN_COMMENT_ACTOR.MEMBER, by: { userId: "u1", name: "Dean" } },
+              words: start.words,
+              at: 1,
+            },
+          ],
+          createdAt: 1,
+          updatedAt: 1,
+          revision: 1,
+        };
+        service.threads[planId] = [...(service.threads[planId] ?? []), thread];
+        return { thread };
+      }),
+    actOnComment: (planId, threadId, action) =>
+      Effect.sync(() => {
+        service.commentCalls.push(`act:${planId}:${threadId}:${action.action}`);
+        return { deleted: threadId };
+      }),
     agents: {},
     tasklessAgents: [],
     listFails: false,
@@ -331,6 +383,11 @@ function fakeService(tasks: Task[]): FakeService {
           candidate.id === taskId ? restored : candidate,
         );
         return restored;
+      }),
+    stops: [],
+    stopWork: (taskId) =>
+      Effect.sync(() => {
+        service.stops.push(taskId);
       }),
     editAnswer: undefined,
     pins: [],
@@ -800,6 +857,24 @@ function journal(id: string, text: string): CodingAgentMessage {
   return { id, role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text }] };
 }
 
+/** A turn of Luke's that called his plan edit, its call settled with the task's receipt as eve settles it. */
+function planEditing(id: string): CodingAgentMessage {
+  return {
+    id,
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [
+      { type: "text", text: "Writing it down." },
+      {
+        type: `tool-${AGENT_TOOL.EDIT_PLAN}`,
+        toolCallId: "call-1",
+        state: "output-available",
+        input: { notes: [] },
+        output: "Started task edit_plan-1.",
+      },
+    ],
+  };
+}
+
 /** A page of a task's conversation as the service answers it. */
 function conversationPage(
   messages: readonly CodingAgentMessage[],
@@ -947,6 +1022,33 @@ it.effect(
         { contentType: PICTURE_TYPE.PNG, base64: "iVBORw0KGgo=" },
       );
       assert.deepEqual(third, { failure: PICTURE_KEEP_FAILURE.TOO_MANY });
+    }),
+);
+
+it.effect(
+  "a plan's comments are read past the window's cursor, and a thread started on it is answered as the service holds it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const { call } = yield* subject(service);
+      const start = {
+        clientKey: "key-1",
+        scope: PLAN_COMMENT_SCOPE.WORDS,
+        quote: "Invites",
+        anchor: { from: 2, to: 9 },
+        text: "# Invites",
+        words: "Why invites?",
+      };
+
+      const started = yield* call(GATEWAY_METHOD.TASKS_COMMENT_START, {
+        planId: INVITES,
+        start,
+      });
+      const read = yield* call(GATEWAY_METHOD.TASKS_COMMENTS, { planId: INVITES, after: "0" });
+
+      assert.deepEqual(started, { thread: service.threads[INVITES]?.[0] });
+      assert.deepEqual(read, { threads: service.threads[INVITES], cursor: "c1" });
+      assert.deepEqual(service.commentCalls, [`start:${INVITES}:Invites`, `read:${INVITES}:0`]);
     }),
 );
 
@@ -1473,6 +1575,105 @@ it.effect(
         journal("turn-1", "Done."),
         journal("turn-2", "Reading"),
       ]);
+    }),
+);
+
+it.effect(
+  "code shown on the open task's call is drawn coloured, in the order shown and once, and code about another task is dropped",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.works[INVITES] = { turns: [] };
+      const { call, tasks, viewLands } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      const shown = {
+        callId: "call-1",
+        turnId: "turn-1",
+        shownAt: 10,
+        code: {
+          ref: { path: "src/invite.ts" },
+          repository: "acme/api",
+          firstLine: 1,
+          lineCount: 1,
+          lines: ["const answer = 42;"],
+        },
+      };
+
+      const drawn = yield* viewLands((view) =>
+        (view.shownCode ?? []).some((code) => code.callId === "call-3"),
+      );
+      tasks.showCode(BILLING, { ...shown, callId: "call-2" });
+      tasks.showCode(INVITES, shown);
+      tasks.showCode(INVITES, shown);
+      tasks.showCode(INVITES, { ...shown, callId: "call-3" });
+      const showing = (yield* drawn).shownCode ?? [];
+
+      assert.deepEqual(
+        showing.map((code) => code.callId),
+        ["call-1", "call-3"],
+      );
+      const line = showing[0]?.code.lines[0] ?? [];
+      assert.ok(line.length > 1, "a TypeScript line is coloured in runs");
+      assert.equal(line.map((run) => run.text).join(""), "const answer = 42;");
+    }),
+);
+
+it.effect(
+  "a turn of the open untitled plan that settles reads the list again once the name the service gives it has had time to land",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Untitled", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Done.")], "1:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+      // The service names the task just after the turn settles.
+      service.tasks = [task(INVITES, "Fix invite emails", "# Draft", 10)];
+      const named = yield* viewLands(
+        (view) =>
+          view.tasks.some((row) => row.id === INVITES && row.name === "Fix invite emails") &&
+          view.document.task?.name === "Fix invite emails",
+      );
+
+      yield* TestClock.adjust(Duration.seconds(5));
+
+      yield* named;
+    }),
+);
+
+it.effect(
+  "an untitled plan opened on a turn already settled reads the list again for the name it may have been given",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Untitled", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Done.")], "1:1", CODING_AGENT_STATUS.COMPLETED),
+      );
+      service.tasks = [task(INVITES, "Fix invite emails", "# Draft", 10)];
+      const named = yield* viewLands((view) =>
+        view.tasks.some((row) => row.id === INVITES && row.name === "Fix invite emails"),
+      );
+
+      yield* TestClock.adjust(Duration.seconds(5));
+
+      yield* named;
     }),
 );
 
@@ -2506,4 +2707,144 @@ it.effect(
       const open = last()?.document;
       assert.equal(open?.status === TASKS_READ.READY ? open.task?.workspaceId : undefined, ACME.id);
     }),
+);
+
+it.effect(
+  "with no call up, the open plan's document is read again as Luke's turn writes the plan, and once more as the turn stops writing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      const editing = planEditing("turn-1");
+      // The save lands behind the call's receipt, and the next page of the turn carries the call again.
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Invites expire.", 20)];
+      const saved = yield* viewLands(
+        (view) =>
+          view.document?.status === TASKS_READ.READY &&
+          view.document.task?.document.body.endsWith("Invites expire.") === true,
+      );
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([editing], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+      yield* saved;
+
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Resend daily.", 30)];
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      const after = yield* viewLands(
+        (view) =>
+          view.document?.status === TASKS_READ.READY &&
+          view.document.task?.document.body.endsWith("Resend daily.") === true,
+      );
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Done.")], "2:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* after;
+    }),
+);
+
+it.effect(
+  "a plan edit whose save lands after Luke's turn stops writing, as one cut off by a stop does, reaches the open plan once the save has had time to unwind",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Writing.", 15)];
+      const writing = yield* viewLands(
+        (view) =>
+          view.document?.status === TASKS_READ.READY &&
+          view.document.task?.document.body.endsWith("Writing.") === true,
+      );
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([planEditing("turn-1")], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+      yield* writing;
+      yield* conversations.nextAsk;
+      // The turn is stopped with its save still in its step, so the plan reads unsaved as the turn ends.
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Stopped.", 20)];
+      const stopped = yield* viewLands(
+        (view) =>
+          view.document?.status === TASKS_READ.READY &&
+          view.document.task?.document.body.endsWith("Stopped.") === true,
+      );
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Stopped.")], "2:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* stopped;
+
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Invites expire.", 30)];
+      const saved = yield* viewLands(
+        (view) =>
+          view.document?.status === TASKS_READ.READY &&
+          view.document.task?.document.body.endsWith("Invites expire.") === true,
+      );
+      yield* TestClock.adjust(Duration.seconds(30));
+
+      yield* saved;
+    }),
+);
+
+it.effect(
+  "each of two plan-editing turns that stop a second apart has its own plan read once its save has had time to unwind",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      const documentLands = (ending: string) =>
+        viewLands(
+          (view) =>
+            view.document?.status === TASKS_READ.READY &&
+            view.document.task?.document.body.endsWith(ending) === true,
+        );
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- First.", 20)];
+      const first = yield* documentLands("First.");
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([planEditing("turn-1")], "1:1", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* first;
+
+      // A second turn, heard a second later on the next follow, stops writing too.
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* conversations.nextAsk;
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Second.", 30)];
+      const second = yield* documentLands("Second.");
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([planEditing("turn-2")], "2:2", CODING_AGENT_STATUS.COMPLETED),
+      );
+      yield* second;
+
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- First unwound.", 40)];
+      const firstUnwound = yield* documentLands("First unwound.");
+      yield* TestClock.adjust(Duration.seconds(29));
+      yield* firstUnwound;
+      service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Second unwound.", 50)];
+      const secondUnwound = yield* documentLands("Second unwound.");
+      yield* TestClock.adjust(Duration.seconds(1));
+
+      yield* secondUnwound;
+    }),
+);
+
+it.effect("stopping Luke reaches the service for the task named", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { call } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.TASKS_STOP_WORK, { taskId: INVITES });
+    assert.deepEqual(service.stops, [INVITES]);
+  }),
 );

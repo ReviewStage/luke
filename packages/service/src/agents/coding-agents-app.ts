@@ -21,6 +21,7 @@ import {
   storeWriter,
 } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { ACCOUNT_INBOX_ARCHIVED, ACCOUNT_INBOX_QUERY } from "@luke/features/account-inbox-wire";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -43,6 +44,7 @@ import {
   type PullRequestMerging,
 } from "@luke/features/coding-agent-wire";
 import { githubImageOf } from "@luke/features/github-image";
+import { githubPullRequestNumberSchema } from "@luke/features/github-repositories-wire";
 import {
   INBOX_BOUNDS,
   INBOX_CURSOR_START,
@@ -134,6 +136,7 @@ import { logStoreFailure } from "../http/store-failure.js";
 import {
   answerInboxItem,
   INBOX_MESSAGE_OUTCOME,
+  inboxItemArchived,
   markInboxItemRead,
   markInboxItemUnread,
   markInboxRead,
@@ -149,6 +152,7 @@ import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { reachedAgent, resolvedUserId, uuidOf } from "./agent-reach.js";
 import { accountInboxPast, agentInboxPast, taskInboxPast } from "./coder-host/inbox-page.js";
 import {
+  agentPullRequestOfNumber,
   agentPullRequestReach,
   type PublishedCache,
   PublishedKey,
@@ -211,15 +215,18 @@ import {
  * the request names none, the task's repository confirmed reachable through
  * the Luke GitHub App, the agent and its conversation made, and its eve
  * session opened with the task's document, or the prompt the request named in
- * its place, as the first message, here under the developer's own bearer so
- * eve's door admits it as the developer. A retry carrying the same key is
+ * its place, as the first message, here as the request's own caller so eve's
+ * door admits it as the developer: over the developer's bearer, or, for a
+ * browser's session cookie, as the deployment acting for the account the
+ * cookie named (`coder-host/stop.ts`'s `eveFor`), which the coder channel
+ * mints as the developer's own principal. A retry carrying the same key is
  * the same agent, and opens nothing again. The list (`GET /api/plans/{id}/agents`) reads each agent's
  * status from its newest turn. The transcript
  * (`GET /api/agents/{id}/messages?after=`) is the conversation's rows past a
  * cursor, held open while the agent runs (`packages/service/src/agents/coder-host/transcript.ts`).
  * A message (`POST /api/agents/{id}/messages`) is the developer's words
- * handed to the session the agent runs in, under the developer's own
- * bearer, with the client's own key for the send, through the one steer
+ * handed to the session the agent runs in, as the request's own caller,
+ * with the client's own key for the send, through the one steer
  * path the voice brain's tool shares (`packages/service/src/agents/coder-host/steer.ts`): the
  * words steer the turn under way, or open a turn where none runs, and are
  * written as a user row awaiting its turn, so the transcript shows the
@@ -358,6 +365,7 @@ const QUERY = {
   ATTACHMENT: "attachment",
   PICTURE: "picture",
   SRC: "src",
+  NUMBER: "number",
 } as const;
 
 /** An answer is a note, a few short fields, and the files a message may carry: the note's bound at JSON's widest escape, the files, and room for the rest. */
@@ -495,7 +503,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
         Effect.provideService(HostedEnvironment, environment),
       ));
   const { agent, created } = yield* startRequestedAgent(
-    eveFor(seams, request),
+    eveFor(seams, request, userId),
     userId,
     taskId,
     asked.success,
@@ -610,8 +618,8 @@ function messageRefusal(body: UnparsedWireValue): HostedRefusal {
 
 /**
  * POST sends the agent a message: the developer's words handed to the
- * session the agent runs in under the developer's own bearer, through the
- * one steer path the voice brain's tool shares (`coder-host/steer.ts`),
+ * session the agent runs in as the request's own caller (`eveFor`), through
+ * the one steer path the voice brain's tool shares (`coder-host/steer.ts`),
  * with the client's own key for the send.
  */
 const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -623,7 +631,7 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_MESSAGE_BODY_BYTES);
   const asked = readEither(codingAgentMessageRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(messageRefusal(body));
-  const eve = yield* eveFor(seams, request);
+  const eve = yield* eveFor(seams, request, userId);
   yield* steerCodingAgent(eve, writer, userId, agent, {
     ...asked.success,
     sender: { kind: MESSAGE_SENDER.MEMBER, userId },
@@ -742,7 +750,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
     const { archived } = archive.success;
     if (archived) {
       // An archived agent works on unseen, so a turn still running is stopped before the stamp.
-      yield* stoppedForGood(seams, writer, request, agent);
+      yield* stoppedForGood(seams, writer, request, userId, agent);
     }
     const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
     if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
@@ -817,7 +825,7 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* reachedAgent(seams, request);
-  yield* stoppedTurn(seams, writer, request, agent);
+  yield* stoppedTurn(seams, writer, request, userId, agent);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
 });
 
@@ -849,6 +857,64 @@ const keptPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
+/** The pull request number the request names under `number`, or none where it names none; refused where it names one off the wire's shape or more than one. */
+const pullRequestNumberOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<number | undefined, HostedRefusal> {
+  const named = new URL(request.url).searchParams.getAll(QUERY.NUMBER);
+  if (named.length === 0) return undefined;
+  const read =
+    named.length === 1
+      ? readEither(githubPullRequestNumberSchema)(unparsedWire(Number(named[0])))
+      : undefined;
+  if (read === undefined || Result.isFailure(read)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return read.success;
+});
+
+/**
+ * What a read of the agent's Pull request tab is about: the pull request of
+ * the agent's repository the request names by its number (`number`), read
+ * afresh, as a tab showing a pull request other than the agent's own asks;
+ * else what the agent published, from the instance's kept answers.
+ */
+const askedPublished = /* @__PURE__ */ Effect.fnUntraced(function* (
+  published: PublishedCache,
+  userId: string,
+  agent: CodingAgent,
+  request: Request,
+): Effect.fn.Return<CodingAgentPullRequestAnswer, HostedRefusal, AgentsServices> {
+  const number = yield* pullRequestNumberOf(request);
+  if (number === undefined) return yield* keptPublished(published, userId, agent);
+  return yield* agentPullRequestOfNumber(userId, agent, number).pipe(
+    Effect.catch((failure) => {
+      switch (failure._tag) {
+        case "RepositoryNotReachable":
+          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+        case "SqlError":
+        case "EffectDrizzleQueryError":
+        case "SchemaError":
+          return hostedStoreOrUnavailable(Effect.fail(failure));
+        default:
+          return githubReadOrRefusal(Effect.fail(failure));
+      }
+    }),
+  );
+});
+
+/** The pull request a read or a change of the agent's Pull request tab is about (`askedPublished`), null where there is none. */
+const askedPullRequest = (
+  published: PublishedCache,
+  userId: string,
+  agent: CodingAgent,
+  request: Request,
+) =>
+  Effect.map(
+    askedPublished(published, userId, agent, request),
+    (answer): CodingAgentPullRequest | null => answer.pullRequest,
+  );
+
 /**
  * The instance's kept answers for the agent let go, every member's and on
  * either side of its end, so the next ask on this instance reads GitHub
@@ -864,7 +930,7 @@ const forgetPublished = (published: PublishedCache, agentId: string) =>
     ),
   );
 
-/** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
+/** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers; or, where the request names a number, that pull request of its repository (`askedPublished`). */
 const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpoint")(function* (
   seams: CodingAgentsAppSeams,
   published: PublishedCache,
@@ -875,7 +941,7 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* reachedAgent(seams, request);
-  const answer = yield* keptPublished(published, userId, agent);
+  const answer = yield* askedPublished(published, userId, agent, request);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
 
@@ -897,7 +963,7 @@ const changesEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangesEndpoint")(fu
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* reachedAgent(seams, request);
-  const { pullRequest } = yield* keptPublished(published, userId, agent);
+  const pullRequest = yield* askedPullRequest(published, userId, agent, request);
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const listed = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
@@ -963,7 +1029,7 @@ const overviewPart = /* @__PURE__ */ Effect.fnUntraced(function* <A>(
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* reachedAgent(seams, request);
-  const { pullRequest } = yield* keptPublished(published, userId, agent);
+  const pullRequest = yield* askedPullRequest(published, userId, agent, request);
   if (pullRequest === null) return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { pullRequest });
   const part = yield* Effect.gen(function* () {
     const { token } = yield* agentPullRequestReach(userId, agent);
@@ -1229,7 +1295,7 @@ const pullRequestActionEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullReques
     const body = yield* readJsonBodyEffect(MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES);
     const asked = readEither(pullRequestActionRequestSchema)(body);
     if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    const { pullRequest } = yield* keptPublished(published, userId, agent);
+    const pullRequest = yield* askedPullRequest(published, userId, agent, request);
     if (pullRequest === null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     const written = yield* memberPullRequestWrite(
       userId,
@@ -1259,7 +1325,7 @@ const pullRequestViewedEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullReques
     }
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
     const { userId, agent } = yield* reachedAgent(seams, request);
-    const { pullRequest } = yield* keptPublished(published, userId, agent);
+    const pullRequest = yield* askedPullRequest(published, userId, agent, request);
     if (pullRequest === null) {
       const none: PullRequestViewedAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.DONE, files: [] };
       return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, none);
@@ -1404,7 +1470,7 @@ const agentInboxEndpoint = /* @__PURE__ */ Effect.fn("web/agentInboxEndpoint")(f
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
 });
 
-/** GET reads what waits on the developer across the account's tasks past the cursor: every open item, held open while nothing changed. */
+/** GET reads what waits on the developer across the account's tasks past the cursor: every open item, held open while nothing changed, the archived tasks holding items listed too where `archived=include` asks. */
 const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
@@ -1415,7 +1481,10 @@ const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const after = yield* inboxCursorOf(request);
   const userId = yield* resolvedUserId(seams, request);
-  const page = yield* hostedStoreOrUnavailable(accountInboxPast(userId, after));
+  const archived =
+    new URL(request.url).searchParams.get(ACCOUNT_INBOX_QUERY.ARCHIVED) ===
+    ACCOUNT_INBOX_ARCHIVED.INCLUDE;
+  const page = yield* hostedStoreOrUnavailable(accountInboxPast(userId, after, { archived }));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
 });
 
@@ -1520,6 +1589,10 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
   const userId = yield* resolvedUserId(seams, request);
   const stored = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
   if (Option.isNone(stored)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  // An item put away with its task is read but not answered, whether or not its agent would hear it, until the task is back.
+  if (yield* hostedStoreOrUnavailable(inboxItemArchived(userId, itemId))) {
+    return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
+  }
   const body = yield* readJsonBodyEffect(MAXIMUM_INBOX_ANSWER_BODY_BYTES);
   const asked = readEither(inboxAnswerRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -1549,7 +1622,7 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor(seams, request);
+    const eve = yield* eveFor(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxAnswerMessage(taken, answer),
       attachments,
@@ -1622,7 +1695,7 @@ const inboxMessageEndpoint = /* @__PURE__ */ Effect.fn("web/inboxMessageEndpoint
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor(seams, request);
+    const eve = yield* eveFor(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,

@@ -8,6 +8,7 @@
 import type { OpenConsent } from "@luke/credentials";
 import type { OpenSocket } from "@luke/voice";
 import { type ConfigProvider, Context, Layer, Logger } from "effect";
+import type { AccountSourceSeam } from "../account-source.js";
 import type { OpenTerminalSocket } from "../compose-terminals.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
 import type { SecretCipher as SecretCipherSeam } from "../settings-store.js";
@@ -38,7 +39,11 @@ export class Environment extends Context.Service<Environment, ConfigProvider.Con
   "@luke/host/Environment",
 ) {}
 
-/** The Keychain-backed cipher the settings store encrypts its secrets with. */
+/**
+ * The Keychain-backed cipher the desktop's account source seals its tokens
+ * with. Only that source asks for it (`oauthAccountSourceLayer`), and hands
+ * it to the settings store as its `tokenCipher`.
+ */
 export class SecretCipher extends Context.Service<SecretCipher, SecretCipherSeam>()(
   "@luke/host/SecretCipher",
 ) {}
@@ -49,6 +54,19 @@ export interface IdSourceSeam {
 }
 
 export class IdSource extends Context.Service<IdSource, IdSourceSeam>()("@luke/host/IdSource") {}
+
+/**
+ * The origin of the service this host talks to, such as
+ * `https://preview.example.test`, for a shell that knows it: a host in a
+ * browser tab calls the origin that served it rather than production
+ * cross-origin. Every hosted address the host builds — the account service,
+ * the hosted routes, the voice socket — then stands on it, and no development
+ * override redirects any of them. It is optional: a host handed none derives
+ * its addresses as a desktop build does, so the desktop provides none.
+ */
+export class ServiceOrigin extends Context.Service<ServiceOrigin, string>()(
+  "@luke/host/ServiceOrigin",
+) {}
 
 /**
  * The voice sideband's WebSocket to the service. It arrives rather than being
@@ -75,7 +93,8 @@ export class TerminalSocket extends Context.Service<TerminalSocket, OpenTerminal
  * by `open`. It arrives rather than being built here, because the only
  * implementation so far is the desktop's loopback over `node:http`
  * (`@luke/credentials/node`), and a host that imported it could not load in a
- * browser, which would sign in its own way.
+ * browser, which would sign in its own way. Only the desktop's account source
+ * asks for it.
  */
 export interface SignInConsentSeam {
   readonly open: OpenConsent;
@@ -83,6 +102,16 @@ export interface SignInConsentSeam {
 
 export class SignInConsent extends Context.Service<SignInConsent, SignInConsentSeam>()(
   "@luke/host/SignInConsent",
+) {}
+
+/**
+ * Where the account's identity and credentials come from, as the shell
+ * chooses it (`account-source.ts`): the desktop's OAuth source, which needs
+ * `SecretCipher` and `SignInConsent` of its own, or a browser's cookie
+ * session, which needs neither.
+ */
+export class AccountSource extends Context.Service<AccountSource, AccountSourceSeam>()(
+  "@luke/host/AccountSource",
 ) {}
 
 /**
@@ -129,13 +158,12 @@ export class ShutdownSignal extends Context.Service<ShutdownSignal, ShutdownSign
   "@luke/host/ShutdownSignal",
 ) {}
 
-/** Every seam tag the host's kernel stands on; the assembly adds `VoiceSocket` and `SignInConsent`, and each platform concern it was built with adds its own. */
+/** Every seam tag the host's kernel stands on; the assembly adds `VoiceSocket` and `AccountSource`, and each platform concern it was built with adds its own. */
 export type HostSeamTags =
   | StateRoot
   | RunMode
   | AppIdentity
   | Environment
-  | SecretCipher
   | IdSource
   | Reporter
   | ShutdownSignal;

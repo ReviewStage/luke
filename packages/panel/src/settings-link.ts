@@ -1,0 +1,109 @@
+import { SETTINGS_VIEW, type SettingsLink, type SettingsView } from "@luke/settings/settings-views";
+import { useCallback, useState } from "react";
+import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
+import { landOnSettingsRow } from "./settings-search.js";
+
+/**
+ * settings-link.ts -- following a Settings link: the workspace it names, the tab, the page, and the section landed on.
+ *
+ * Every Open Settings press names where it leads as a `SettingsLink`, and
+ * this is the one place that turns it into the window's state, in the order
+ * the window needs: the workspace it names first, which the Workspace page
+ * shows for as long as Settings stays open, the sidebar untouched; then
+ * Settings, which lands on Profile, then the page, and last the section,
+ * which is looked for once the page is drawn and given up on quietly where
+ * it is not. Note that the sidebar is left as it was, because the task open
+ * behind Settings must still be the listed workspace's when Back returns to
+ * it, and an open of another task answered late must not move what Settings
+ * shows.
+ *
+ * Settings stands on its page list or on a page, which only a narrow room
+ * draws apart (`desktop-settings.tsx`): entered, it stands on its list, and a
+ * page chosen, by its row, a link, a search, or the history, stands on that
+ * page (`useSettingsPlace`).
+ */
+
+/** The window's own ways to turn to a place in Settings. */
+export interface SettingsLinkTargets {
+  readonly changeTab: (tab: PanelTab) => void;
+  readonly changeView: (view: SettingsView) => void;
+  /** Shows the workspace on the Workspace page while Settings stays open. */
+  readonly chooseWorkspace: (workspaceId: string) => void;
+  /** Looks for a section's anchor once drawn; answers how to give the look up. */
+  readonly land?: (anchor: string) => () => void;
+}
+
+/** Turns the window to the place the link names; answers how to give up the look for its section. */
+export function followSettingsLink(link: SettingsLink, targets: SettingsLinkTargets): () => void {
+  if (link.workspaceId !== undefined) targets.chooseWorkspace(link.workspaceId);
+  targets.changeTab(PANEL_TAB.SETTINGS);
+  // Note that entering Settings stands it on its page list, at its first page, which a link to the list keeps.
+  if (link.listed !== true) targets.changeView(link.page);
+  if (link.section === undefined) return () => undefined;
+  return (targets.land ?? landOnSettingsRow)(link.section);
+}
+
+/** The workspace Settings shows, and the door a link's workspace is handed to. */
+export interface SettingsWorkspace {
+  /** The workspace's id: one a link named, else the one the sidebar lists. */
+  readonly shownId: string | undefined;
+  /** Shows the workspace while Settings stays open. */
+  readonly link: (workspaceId: string) => void;
+}
+
+/**
+ * The workspace Settings shows: the one a link named, while Settings stays
+ * open and the sidebar lists the same one it did when the link was followed,
+ * else the one the sidebar lists. It answers the workspace's id and the door
+ * a link's workspace is handed to.
+ */
+export function useSettingsWorkspace(input: {
+  /** The workspace the sidebar lists. */
+  listedId: string | undefined;
+  /** The workspaces the account is a member of, which a named one must be among. */
+  workspaces: readonly { readonly id: string }[];
+  /** Whether Settings is the tab on screen. */
+  settingsShown: boolean;
+}): SettingsWorkspace {
+  const [linked, setLinked] = useState<{ workspaceId: string; over: string | undefined }>();
+  // A link's workspace gives way once Settings is left or the sidebar lists another.
+  if (linked !== undefined && (!input.settingsShown || linked.over !== input.listedId)) {
+    setLinked(undefined);
+  }
+  const named =
+    linked !== undefined && input.workspaces.some((each) => each.id === linked.workspaceId)
+      ? linked.workspaceId
+      : undefined;
+  return {
+    shownId: named ?? input.listedId,
+    link: (workspaceId) => setLinked({ workspaceId, over: input.listedId }),
+  };
+}
+
+/** Where Settings stands: its page, and whether its page list stands instead. */
+export interface SettingsPlace {
+  readonly view: SettingsView;
+  readonly listed: boolean;
+  /** Settings entered: its first page, Profile, under its page list. */
+  readonly onEnter: () => void;
+  /** A page chosen, which stands in the list's place. */
+  readonly onChoose: (view: SettingsView) => void;
+  /** Back from the page to the list. */
+  readonly onList: () => void;
+}
+
+/** Where Settings stands, entered on its list at Profile. */
+export function useSettingsPlace(): SettingsPlace {
+  const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ACCOUNT);
+  const [listed, setListed] = useState(true);
+  const onEnter = useCallback(() => {
+    setView(SETTINGS_VIEW.ACCOUNT);
+    setListed(true);
+  }, []);
+  const onChoose = useCallback((next: SettingsView) => {
+    setView(next);
+    setListed(false);
+  }, []);
+  const onList = useCallback(() => setListed(true), []);
+  return { view, listed, onEnter, onChoose, onList };
+}

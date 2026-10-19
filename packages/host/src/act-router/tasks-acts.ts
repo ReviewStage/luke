@@ -5,6 +5,11 @@ import {
   GITHUB_DISCONNECT_FAILURE,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
+  type TasksCommentActParams,
+  type TasksCommentAnswer,
+  type TasksCommentStartParams,
+  type TasksCommentsAnswer,
+  type TasksCommentsParams,
   type TasksEditAnswer,
   type TasksEditParams,
   type TasksFileAnswer,
@@ -120,6 +125,9 @@ export interface TasksActsDependencies {
     tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
     tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
     tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
+    tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
+    tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
+    tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
     githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
     workspaceCreate(params: TasksWorkspaceCreateParams): Effect.Effect<TasksWorkspaceAnswer>;
@@ -171,7 +179,7 @@ export interface TasksActsDependencies {
   /** Whether a call is in progress, which a start leaves standing for the panel to ask about moving. */
   callStanding: () => boolean;
   /** A transcript's fenced block coloured as its fence's language, by the highlighter the File tab's lines are coloured with. */
-  colourCode: (language: string, code: string) => CodeLines;
+  colourCode: (language: string, code: string) => Effect.Effect<CodeLines>;
 }
 
 export type TasksActKind =
@@ -211,6 +219,9 @@ export type TasksActKind =
   | typeof ACT_KIND.TASKS_PAGES
   | typeof ACT_KIND.TASKS_PICTURE_READ
   | typeof ACT_KIND.TASKS_PICTURE_KEEP
+  | typeof ACT_KIND.TASKS_COMMENTS
+  | typeof ACT_KIND.TASKS_COMMENT_START
+  | typeof ACT_KIND.TASKS_COMMENT_ACT
   | typeof ACT_KIND.WORKSPACE_CREATE
   | typeof ACT_KIND.WORKSPACE_RENAME
   | typeof ACT_KIND.WORKSPACE_PHOTO_SET
@@ -265,9 +276,12 @@ function refuseUnlessPanel(kind: TasksActKind, sender: ActSender): void {
 }
 
 /** A page's HTML as its tab's source draws it: line by line, coloured as HTML where it is short enough to colour, plain past that. */
-function pageSourceLines(html: string, colourCode: TasksActsDependencies["colourCode"]): CodeLines {
+function pageSourceLines(
+  html: string,
+  colourCode: TasksActsDependencies["colourCode"],
+): Effect.Effect<CodeLines> {
   if (html.length <= PAGE_SOURCE_COLOURED_MAX_CHARS) return colourCode("html", html);
-  return html.split("\n").map((text) => (text === "" ? [] : [{ text }]));
+  return Effect.succeed(html.split("\n").map((text) => (text === "" ? [] : [{ text }])));
 }
 
 /**
@@ -507,6 +521,19 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
       return host.tasksPicture(params);
     },
     // A refusal is the editor's to say on the picture, with its retry, so it is answered rather than refused.
+    [ACT_KIND.TASKS_COMMENTS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_COMMENTS, sender);
+      return host.tasksComments(params);
+    },
+    // A refused comment is the thread's to say, with its retry, so it is answered rather than refused.
+    [ACT_KIND.TASKS_COMMENT_START]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_COMMENT_START, sender);
+      return host.tasksCommentStart(params);
+    },
+    [ACT_KIND.TASKS_COMMENT_ACT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.TASKS_COMMENT_ACT, sender);
+      return host.tasksCommentAct(params);
+    },
     [ACT_KIND.TASKS_PICTURE_KEEP]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_PICTURE_KEEP, sender);
       return host.tasksPictureKeep(params);
@@ -514,12 +541,14 @@ export function tasksActRows(dependencies: TasksActsDependencies): Pick<ActRows,
     // The version is read as its frame reads it and held nowhere here, so its HTML reaches the tab that asked alone.
     [ACT_KIND.TASKS_PAGE_SOURCE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.TASKS_PAGE_SOURCE, sender);
-      return Effect.map(
+      return Effect.flatMap(
         host.tasksPage(params),
-        (answer): TasksPageSourceAnswer =>
+        (answer): Effect.Effect<TasksPageSourceAnswer> =>
           "page" in answer
-            ? { lines: pageSourceLines(answer.page.html, dependencies.colourCode) }
-            : answer,
+            ? Effect.map(pageSourceLines(answer.page.html, dependencies.colourCode), (lines) => ({
+                lines,
+              }))
+            : Effect.succeed(answer),
       );
     },
     [ACT_KIND.TASKS_PAGES]: (params, sender) => {

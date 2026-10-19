@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, recordingHttpClient } from "@luke/wire/testing";
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
+import { accountBearer } from "./account-call.js";
 import { HostedIssueClient } from "./issue-client.js";
 import { ISSUE_CALL_FAILURE } from "./issue-view.js";
 import { ISSUE_PRIORITY, ISSUE_STATUS } from "./issue-wire.js";
@@ -36,9 +37,11 @@ function client(): HostedIssueClient {
   return new HostedIssueClient({
     serviceBaseUrl: "https://tryluke.dev",
     requestTimeoutMs: 10_000,
-    readAccessToken: () => Effect.succeed("token-1"),
-    refreshAccount: () => Effect.void,
-    readAccountKey: () => Effect.succeed("ada@example.com"),
+    credential: accountBearer({
+      readAccessToken: () => Effect.succeed("token-1"),
+      refreshAccount: () => Effect.void,
+      readAccountKey: () => Effect.succeed("ada@example.com"),
+    }),
   });
 }
 
@@ -174,15 +177,17 @@ it.effect(
       const slowRenewal = new HostedIssueClient({
         serviceBaseUrl: "https://tryluke.dev",
         requestTimeoutMs: 10_000,
-        readAccessToken: () => Effect.sync(() => token),
-        refreshAccount: () =>
-          Effect.andThen(
-            Effect.sleep("15 seconds"),
-            Effect.sync(() => {
-              token = "token-2";
-            }),
-          ),
-        readAccountKey: () => Effect.succeed("ada@example.com"),
+        credential: accountBearer({
+          readAccessToken: () => Effect.sync(() => token),
+          refreshAccount: () =>
+            Effect.andThen(
+              Effect.sleep("15 seconds"),
+              Effect.sync(() => {
+                token = "token-2";
+              }),
+            ),
+          readAccountKey: () => Effect.succeed("ada@example.com"),
+        }),
       });
 
       const listing = yield* Effect.forkChild(

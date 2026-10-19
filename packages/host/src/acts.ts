@@ -17,6 +17,14 @@ import {
   automationViewSchema,
 } from "@luke/features/automation-view";
 import {
+  type BrowserPage,
+  browserAddressParamsSchema,
+  browserPageSchema,
+  browserPlaceParamsSchema,
+  browserStepParamsSchema,
+  browserViewParamsSchema,
+} from "@luke/features/browser-acts";
+import {
   type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
@@ -80,6 +88,7 @@ import {
   codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
+  codingAgentPullRequestReadParamsSchema,
   codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentRenameParamsSchema,
@@ -152,6 +161,8 @@ import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
   type CodeLines,
   codeLinesSchema,
+  type TasksCommentAnswer,
+  type TasksCommentsAnswer,
   type TasksEditAnswer,
   type TasksFileAnswer,
   type TasksIssue,
@@ -171,6 +182,11 @@ import {
   type TasksWorkspacePhotoAnswer,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
+  tasksCommentActParamsSchema,
+  tasksCommentAnswerSchema,
+  tasksCommentStartParamsSchema,
+  tasksCommentsAnswerSchema,
+  tasksCommentsParamsSchema,
   tasksEditAnswerSchema,
   tasksEditParamsSchema,
   tasksFileAnswerSchema,
@@ -405,6 +421,14 @@ export const ACT_KIND = {
   /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
   TASKS_PICTURE_KEEP: "tasks.pictureKeep",
   /**
+   * The open plan's comment threads: read past a cursor (held open by the
+   * service while nothing changed), one started on words of the plan, and
+   * one thing done to one thread. The window holds what it draws.
+   */
+  TASKS_COMMENTS: "tasks.comments",
+  TASKS_COMMENT_START: "tasks.commentStart",
+  TASKS_COMMENT_ACT: "tasks.commentAct",
+  /**
    * The account's workspaces: one made under a name, answered as made, which
    * the account owns; one renamed by its owners and admins, answered under
    * its new name; one's photo set as a `data:` URL or removed with null by
@@ -565,6 +589,21 @@ export const ACT_KIND = {
   TERMINAL_ATTACH: "terminal.attach",
   TERMINAL_DETACH: "terminal.detach",
   /**
+   * A Browser tab's view, which main owns over the panel that asked
+   * (`browser-views.ts`): opened on an address and answered how its page
+   * stands, sent to another, stepped back, forward, reloaded or stopped,
+   * placed over the tab's body or put out of sight, caught as a still while
+   * something covers it, and closed with its tab. How the page goes on to
+   * stand arrives on the panel's `onBrowserState`. Taken from a panel alone,
+   * and only while the account has the Browser tab experiment on.
+   */
+  BROWSER_OPEN: "browser.open",
+  BROWSER_NAVIGATE: "browser.navigate",
+  BROWSER_STEP: "browser.step",
+  BROWSER_PLACE: "browser.place",
+  BROWSER_CAPTURE: "browser.capture",
+  BROWSER_CLOSE: "browser.close",
+  /**
    * A coding agent's branch opened on this Mac (`@luke/features/mac-terminal-wire`):
    * each repository's run command read and set; and a terminal of this Mac
    * opened on the agent's branch for the asking panel, and closed with its
@@ -601,6 +640,8 @@ export const ACT_KIND = {
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
   VOICE_STOP_SPEAKING: "voice.stopSpeaking",
+  /** Stop Luke, the stop key's and the Call tab's Stop's one action: on the task named, else the call's, else the open one. */
+  LUKE_STOP: "luke.stop",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_REQUEST: "microphone.request",
   /**
@@ -1166,6 +1207,21 @@ export const ACT = {
     result: wireResult<TasksPictureAnswer>(isReadable(tasksPictureAnswerSchema)),
     refusal: "Could not read that picture on this system.",
   },
+  [ACT_KIND.TASKS_COMMENTS]: {
+    payload: actSchema(tasksCommentsParamsSchema),
+    result: wireResult<TasksCommentsAnswer>(isReadable(tasksCommentsAnswerSchema)),
+    refusal: "Could not read the task's comments on this system.",
+  },
+  [ACT_KIND.TASKS_COMMENT_START]: {
+    payload: actSchema(tasksCommentStartParamsSchema),
+    result: wireResult<TasksCommentAnswer>(isReadable(tasksCommentAnswerSchema)),
+    refusal: "Could not comment on the task on this system.",
+  },
+  [ACT_KIND.TASKS_COMMENT_ACT]: {
+    payload: actSchema(tasksCommentActParamsSchema),
+    result: wireResult<TasksCommentAnswer>(isReadable(tasksCommentAnswerSchema)),
+    refusal: "Could not change the task's comment on this system.",
+  },
   [ACT_KIND.TASKS_PICTURE_KEEP]: {
     payload: actSchema(tasksPictureKeepParamsSchema),
     result: wireResult<TasksPictureKeepAnswer>(isReadable(tasksPictureKeepAnswerSchema)),
@@ -1310,7 +1366,7 @@ export const ACT = {
     refusal: "Could not read the agent on this system.",
   },
   [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentPullRequestAnswerView>(
       isReadable(codingAgentPullRequestAnswerViewSchema),
     ),
@@ -1324,28 +1380,28 @@ export const ACT = {
     refusal: "Could not read the repository's reviewers and labels on this system.",
   },
   [ACT_KIND.CODING_AGENTS_CHANGES]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentChangesAnswerView>(
       isReadable(codingAgentChangesAnswerViewSchema),
     ),
     refusal: "Could not read the agent's changes on this system.",
   },
   [ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentOverviewPullRequestAnswerView>(
       isReadable(codingAgentOverviewPullRequestAnswerViewSchema),
     ),
     refusal: "Could not read the agent's pull request on this system.",
   },
   [ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentOverviewChecksAnswerView>(
       isReadable(codingAgentOverviewChecksAnswerViewSchema),
     ),
     refusal: "Could not read the pull request's checks on this system.",
   },
   [ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentOverviewConversationAnswerView>(
       isReadable(codingAgentOverviewConversationAnswerViewSchema),
     ),
@@ -1364,7 +1420,7 @@ export const ACT = {
     refusal: "Could not change the pull request on this system.",
   },
   [ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: {
-    payload: actSchema(codingAgentPullRequestParamsSchema),
+    payload: actSchema(codingAgentPullRequestReadParamsSchema),
     result: wireResult<CodingAgentPullRequestViewedAnswerView>(
       isReadable(codingAgentPullRequestViewedAnswerViewSchema),
     ),
@@ -1586,6 +1642,37 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not close that shell.",
   },
+  [ACT_KIND.BROWSER_OPEN]: {
+    payload: actSchema(browserAddressParamsSchema),
+    result: wireResult<BrowserPage>(isReadable(browserPageSchema)),
+    refusal: "Could not open that page.",
+  },
+  [ACT_KIND.BROWSER_NAVIGATE]: {
+    payload: actSchema(browserAddressParamsSchema),
+    result: answersNothing,
+    refusal: "Could not open that page.",
+  },
+  [ACT_KIND.BROWSER_STEP]: {
+    payload: actSchema(browserStepParamsSchema),
+    result: answersNothing,
+    refusal: "Could not move the page.",
+  },
+  [ACT_KIND.BROWSER_PLACE]: {
+    payload: actSchema(browserPlaceParamsSchema),
+    result: answersNothing,
+    refusal: "Could not show the page.",
+  },
+  [ACT_KIND.BROWSER_CAPTURE]: {
+    payload: actSchema(browserViewParamsSchema),
+    // A still of the page as a data address, or none where the view stands nowhere.
+    result: wireResult<string | null>((value) => value === null || isWireString(value)),
+    refusal: "Could not draw the page.",
+  },
+  [ACT_KIND.BROWSER_CLOSE]: {
+    payload: actSchema(browserViewParamsSchema),
+    result: answersNothing,
+    refusal: "Could not close the page.",
+  },
   [ACT_KIND.CODING_AGENTS_CHAT]: {
     payload: actSchema(codingAgentChatParamsSchema),
     result: wireResult<CodingAgentChatAnswerView>(isReadable(codingAgentChatAnswerViewSchema)),
@@ -1633,6 +1720,11 @@ export const ACT = {
       Result.isSuccess(readEither(EffectSchema.Boolean)(value)),
     ),
     refusal: "Could not tell Luke to stop speaking on this system.",
+  },
+  [ACT_KIND.LUKE_STOP]: {
+    payload: record({ taskId: EffectSchema.optionalKey(EffectSchema.NonEmptyString) }),
+    result: answersNothing,
+    refusal: "Could not stop Luke on this system.",
   },
   [ACT_KIND.VOICE_DIAGNOSTICS]: {
     payload: noPayload,

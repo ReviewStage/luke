@@ -3,14 +3,23 @@ import { defineConfig } from "vitest/config";
 
 /**
  * Streamdown's import of `rehype-raw` answered with the module that loads
- * the parser on demand, as the desktop's `scripts/build.mjs`
- * (`markdownHtmlParserOnDemand`) answers it in the bundle, so a test draws a
+ * the parser on demand, as `scripts/build-table.mjs` (`redirectOf`) answers
+ * it in both apps' bundles, so a test draws a
  * reply as the panel does. Streamdown is inlined so that its imports are
  * resolved here at all.
  */
 const MARKDOWN_HTML_PARSER = fileURLToPath(
   new URL("./src/markdown-html-parser.ts", import.meta.url),
 );
+
+/**
+ * The panel's own stylesheets, and the shared tokens' and components' sheets,
+ * which vitest answers as their text where a test imports one `?raw`, or
+ * those `?inline` (`testing/container-width.ts`), rather than as the empty module it
+ * answers any other stylesheet with.
+ */
+const PANEL_STYLESHEETS =
+  /\/panel\/src\/styles\/[a-z-]+\.css(?:\?raw)?$|\/ui\/src\/(?:styles|tokens\/tokens)\.css\?inline$/;
 
 export default defineConfig({
   plugins: [
@@ -26,7 +35,8 @@ export default defineConfig({
   test: {
     name: "panel",
     include: ["src/**/*.test.ts"],
-    setupFiles: ["src/testing/resize-observer.ts"],
+    setupFiles: ["src/testing/resize-observer.ts", "src/testing/match-media.ts"],
+    css: { include: [PANEL_STYLESHEETS] },
     server: { deps: { inline: ["streamdown"] } },
   },
 });

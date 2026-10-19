@@ -78,6 +78,10 @@
           "dest": "/api/default.js?route=plans/edit&id=$1"
         },
         {
+          "src": "/api/plans/([^/]+)/stop",
+          "dest": "/api/default.js?route=plans/stop&id=$1"
+        },
+        {
           "src": "/api/plans/([^/]+)/comments/([^/]+)",
           "dest": "/api/default.js?route=plans/comment-thread&id=$1&thread=$2"
         },
@@ -264,6 +268,10 @@
         {
           "src": "/api/account/integrations/connected",
           "dest": "/api/default.js?route=account/integrations/connected"
+        },
+        {
+          "src": "/api/account/integrations/settle",
+          "dest": "/api/default.js?route=account/integrations/settle"
         },
         {
           "src": "/api/account/plan-template",
@@ -515,15 +523,15 @@
       "root": "apps/luke",
       "framework": "eve",
       "installCommand": "pnpm install --frozen-lockfile --filter @luke/luke...",
-      "buildCommand": "pnpm exec eve build",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/luke :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json"
+      "buildCommand": "pnpm exec eve build && pnpm exec bash ../../scripts/eve-source-maps.sh",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/luke :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json :/scripts/eve-source-maps.sh"
     },
     "dev": {
       "root": "apps/dev",
       "framework": "eve",
       "installCommand": "pnpm install --frozen-lockfile --filter @luke/coder...",
-      "buildCommand": "export EVE_PUBLIC_ROUTE_PREFIX=/eve/coder && pnpm exec eve build",
-      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/dev :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json",
+      "buildCommand": "export EVE_PUBLIC_ROUTE_PREFIX=/eve/coder && pnpm exec eve build && pnpm exec bash ../../scripts/eve-source-maps.sh",
+      "ignoreCommand": "git diff --quiet HEAD^ HEAD -- :/apps/dev :/packages :/pnpm-lock.yaml :/pnpm-workspace.yaml :/package.json :/vercel.json :/scripts/eve-source-maps.sh",
       "routes": [
         {
           "src": "^/eve/coder/v1/(.*)$",

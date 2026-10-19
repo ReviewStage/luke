@@ -1,4 +1,4 @@
-import type { AccountRefreshFailed } from "@luke/features";
+import { type CallCredential, lateCredential } from "@luke/features";
 import {
   PRODUCT_EVENT,
   PRODUCT_SETTING_VALUE,
@@ -31,7 +31,7 @@ import {
 } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, isWireBoolean, type UnparsedWireValue } from "@luke/wire";
-import { Cause, Effect, Queue, type Scope } from "effect";
+import { Cause, Effect, Option, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
@@ -39,12 +39,12 @@ import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
-import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
+import { AccountSource, AppIdentity, type Environment } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { EXPERIMENT_UNANSWERED, experimentWriter } from "./experiment-write.js";
 import { removeRetiredStore } from "./retired-store.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
-import { SettingsStore, type StoredAccount } from "./settings-store.js";
+import { SettingsStore } from "./settings-store.js";
 import { reporterOf } from "./wire-helpers.js";
 
 type StoredSettings = SettingsUpdateResult["settings"]["stored"];
@@ -59,7 +59,16 @@ const EXPERIMENT_SIGNED_OUT = "Sign in to turn on an experiment.";
  * however much simpler that would be.
  */
 interface SettingsLinks {
-  refreshAccount: () => Effect.Effect<void, AccountRefreshFailed>;
+  /** What authorizes the counted events and the account preferences on the signed-in account. */
+  readonly credential: CallCredential;
+  /**
+   * Who the signed-in account is, as the account's session names it: the
+   * key its synced preferences and experiments are kept under, and nothing
+   * while no account is signed in.
+   */
+  readonly readAccountKey: () => Effect.Effect<string | undefined>;
+  /** Settles on the account the service names now, before a write keyed on the account. */
+  readonly confirmAccount: () => Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
   /** The standing live session ended once the voice moved, since a session keeps the voice it was created with. */
   readonly endLiveSession: Effect.Effect<void>;
@@ -102,14 +111,14 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     never,
     | HostKernelTag
     | Environment
-    | SecretCipher
+    | AccountSource
     | AppIdentity
     | FileSystem.FileSystem
     | Path.Path
     | Scope.Scope
   > {
     const kernel = yield* HostKernelTag;
-    const cipher = yield* SecretCipher;
+    const { tokenCipher } = yield* AccountSource;
     const identity = yield* AppIdentity;
     const overrides = yield* settingsOverrides;
     const fileSystemContext = yield* Effect.context<FileSystem.FileSystem | Path.Path>();
@@ -131,37 +140,53 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       // A fixture or evidence run refuses the account it holds, so nothing is
       // reported as available that would not actually happen.
       credentialsUsable: runMode.observesProviders,
-      cipher,
+      // The account source's own: a source that keeps no tokens here hands none.
+      cipher: tokenCipher,
+      // Note that the link is peeked, because a read before the merge links the account must read no one rather than wait.
+      sessionAccountEmail: () =>
+        Effect.flatMap(late.peek, (links) =>
+          Option.isSome(links) ? links.value.readAccountKey() : Effect.succeed(undefined),
+        ),
       overrides,
       fileSystem,
       path,
     });
 
     /**
-     * One account read: a store that could not be read is an account this
-     * attempt cannot name, which is what every caller of this already treated
-     * a failed read as.
+     * The account's credential as the merge links it: the clients below are
+     * built before the account is, so each call waits for the link and then
+     * goes out exactly as the linked credential would, a header or none.
      */
-    const readStoredAccount = (): Effect.Effect<StoredAccount | undefined> =>
-      store.readAccount().pipe(Effect.orElseSucceed(() => undefined));
+    const credential: CallCredential = lateCredential(
+      linked((links) => Effect.succeed(links.credential)),
+    );
 
     const productEvents = yield* ProductEventSender.make({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       appVersion: identity.appVersion,
+      packaged: identity.packaged,
       sends: runMode.sendsNetwork,
-      readAccessToken: () => Effect.map(readStoredAccount(), (account) => account?.accessToken),
-      refreshAccount: () => linked((links) => links.refreshAccount()),
-      readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
+      // The kernel's clock, so a count is stamped on the same clock as every other timer here.
+      now: kernel.now,
+      credential,
+      // The day each once-a-day count was last sent, kept in the settings
+      // file so a relaunch the same day does not count it again.
+      recordedDays: {
+        lastRecordedDay: (name, discriminator, account) =>
+          store
+            .lastProductEventDay(name, discriminator, account)
+            .pipe(Effect.orElseSucceed(() => undefined)),
+        keepRecordedDay: (recorded) =>
+          Effect.catch(store.keepProductEventDay(recorded), (error) =>
+            Effect.sync(() => {
+              report(`Keeping the day a usage count was sent failed: ${error.message}`);
+            }),
+          ),
+      },
     });
     const accountPreferencesClient = new AccountPreferencesClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      readAccessToken: () =>
-        runMode.sendsNetwork
-          ? Effect.map(readStoredAccount(), (account) => account?.accessToken)
-          : Effect.succeed(undefined),
-      refreshAccount: () => linked((links) => links.refreshAccount()),
-      readAccountKey: () =>
-        readAccountPreferenceAccountKey().pipe(Effect.orElseSucceed(() => undefined)),
+      credential,
     });
     let accountPreferencesHydratedAccount: string | undefined;
     /**
@@ -171,7 +196,12 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
      * answer read before a write would otherwise put back the switch the
      * developer just moved.
      */
-    const experiments = experimentWriter({ client: accountPreferencesClient, store });
+    const experiments = experimentWriter({
+      client: accountPreferencesClient,
+      store,
+      readAccountKey: () => readAccountPreferenceAccountKey(),
+      confirmAccount: () => confirmAccount(),
+    });
 
     /**
      * One account-preferences action and the name its failure is reported
@@ -214,8 +244,12 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       Effect.forever,
     );
 
-    const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined, PlatformError> =>
-      Effect.map(store.readAccount(), (account) => account?.email);
+    // Note that the key is the session's, because a cookie session keeps no account in the settings file.
+    const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined> =>
+      linked((links) => links.readAccountKey());
+
+    // Note that a write keyed on the account first settles on the one the service names, because another tab may have signed in as someone else.
+    const confirmAccount = (): Effect.Effect<void> => linked((links) => links.confirmAccount());
 
     function accountPreferencesEmpty(preferences: AccountPreferences): boolean {
       return Object.keys(preferences).length === 0;
@@ -228,6 +262,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const accountPreferenceHydrationBaseline = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountEmail: string,
     ): Effect.fn.Return<AccountPreferences, PlatformError> {
+      // Note that we settle again, because an arrival whose settling failed must not hand this account another's choices.
+      yield* store.settleSessionAccount(accountEmail);
       const baseline = yield* store.accountPreferencesSyncBaseline(accountEmail);
       if (baseline !== undefined) return baseline;
       const preferences = yield* store.accountPreferences();
@@ -261,6 +297,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     const hydrateAccountPreferences = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountKey: string,
     ): Effect.fn.Return<boolean, PlatformError> {
+      yield* confirmAccount();
+      if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
       const baseline = yield* accountPreferenceHydrationBaseline(accountKey);
       if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
       const writesBefore = experiments.writesSent();
@@ -319,6 +357,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           ) {
             return;
           }
+          yield* confirmAccount();
           const preferences = yield* store.accountPreferences();
           if (
             (yield* readAccountPreferenceAccountKey()) !== accountKey ||
@@ -446,9 +485,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           if (!isExperiment(named)) return yield* invalid("experiment must name one");
           if (!isWireBoolean(on)) return yield* invalid("on must be true or false");
           const experiment: Experiment = named;
-          const accountKey = yield* readAccountPreferenceAccountKey().pipe(
-            Effect.orElseSucceed(() => undefined),
-          );
+          const accountKey = yield* readAccountPreferenceAccountKey();
           if (!accountKey) return carried(yield* refusedSettings(EXPERIMENT_SIGNED_OUT));
           const result = yield* settingsWrite(
             () => experiments.write(accountKey, experiment, on),
@@ -525,10 +562,12 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           Effect.sync(() => {
             productEvents.arm();
             productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: identity.appVersion });
-            productEvents.markDayActive();
           }),
           productEvents.drop,
         );
+        // Forked, because marking the day reads the account and the day kept
+        // in the settings file, which no composer built after this one waits on.
+        yield* Effect.forkScoped(productEvents.markDayActive());
         // A live launch removes the SQLite store an earlier build left under
         // the agent's directory; a removal that fails is reported and stops
         // nothing else. A fixture or capture run keeps nothing on disk and

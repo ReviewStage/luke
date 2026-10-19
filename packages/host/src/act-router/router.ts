@@ -137,6 +137,9 @@ export function createActRouter<Sender>(rows: ActRows<Sender>): ActRouter<Sender
       if (declared.result(value) === false) return refused(declared.refusal);
       return { status: ACT_OUTCOME_STATUS.DONE, value };
     }).pipe(
+      // A defect is a bug of this build, so it is reported before it is
+      // worded: the window hears the kind's sentence, and Sentry the defect.
+      Effect.withErrorReporting({ defectsOnly: true }),
       Effect.catchTag("ActRefused", (error) => Effect.succeed(refused(error.message))),
       // A host the row could not reach, and a row's effect that died, carry
       // no more to the window than a row that threw: the kind's own sentence,

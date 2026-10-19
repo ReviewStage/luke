@@ -1,7 +1,8 @@
 {
   "slack": 0.05,
+  "sentrySlackBytes": 1024,
   "gzipBytes": {
-    "renderer/panel.js": 901571,
+    "renderer/panel.js": 946875,
     "renderer/voice.js": 345922,
     "renderer/call.js": 402844,
     "renderer/whiteboard.js": 441172,
@@ -12,18 +13,6 @@
     "renderer/pcm-tee-worklet.js": 413,
     "renderer/avatar-session.js": 149485,
     "renderer/diagram.js": 195523,
-    "renderer/diff-view.js": 178690,
-    "renderer/factory-world.js": 161840,
-    "renderer/factory-world-dev.js": 1745,
-    "renderer/factory-world-station.js": 32657,
-    "renderer/factory-world-citadel.js": 31901,
-    "renderer/factory-world-railway.js": 41644,
-    "renderer/factory-world-archipelago.js": 35693,
-    "renderer/factory-world-neon.js": 30543,
-    "renderer/factory-world-factory.js": 38317,
-    "renderer/factory-world-colony.js": 32366,
-    "renderer/factory-world-atlantis.js": 37955,
-    "renderer/factory-world-tree.js": 34651,
-    "renderer/factory-world-planet.js": 30877
+    "renderer/diff-view.js": 256515
   }
 }

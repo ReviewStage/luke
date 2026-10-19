@@ -62,6 +62,7 @@ import {
   type CodingAgentPullRequestActionParams,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
+  type CodingAgentPullRequestReadParams,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
@@ -155,6 +156,11 @@ import {
   TASK_CALL_FAILURE,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
+  type TasksCommentActParams,
+  type TasksCommentAnswer,
+  type TasksCommentStartParams,
+  type TasksCommentsAnswer,
+  type TasksCommentsParams,
   type TasksEditAnswer,
   type TasksEditParams,
   type TasksFileAnswer,
@@ -216,6 +222,8 @@ import {
   type TasksWorkspaceRenameParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
+  tasksCommentAnswerSchema,
+  tasksCommentsAnswerSchema,
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
@@ -290,7 +298,7 @@ import {
   type WireRecord,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Effect, type Schema as EffectSchema, Option, Result } from "effect";
+import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
 
 /**
@@ -427,6 +435,8 @@ export interface HostOperator {
   tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
   tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
+  /** The turn Luke is running on a task stopped on the service. */
+  tasksStopWork(taskId: string): Effect.Effect<void>;
   /** One version of one page of a task with its HTML, for the frame that draws it; or that the service did not answer. */
   tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
   /** One plan's pages, each by its newest version; or that the service did not answer. */
@@ -435,6 +445,12 @@ export interface HostOperator {
   tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
   /** One picture kept on one plan, answering the id its text names it by, or why it was not kept. */
   tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
+  /** One task's comment threads past a cursor, held by the service while nothing changed; or why there are none. */
+  tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
+  /** A comment thread started on one task's plan, answered as it stands, or why not. */
+  tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
+  /** One thing done to one comment thread of one task's plan, answered as it stands, or why not. */
+  tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
   /** Where every one of the account's integrations stands; or why there is no answer. */
   integrationsStatus(): Effect.Effect<IntegrationStatusesView>;
   /** A sign-in to one provider begun and opened in the browser by the host; whether it was, never the address. */
@@ -559,11 +575,11 @@ export interface HostOperator {
   factoryWorld(params: FactoryWorldParams): Effect.Effect<FactoryWorldView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   codingAgentPullRequest(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentPullRequestAnswerView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
   codingAgentChanges(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentChangesAnswerView>;
   /** One image an agent's pull request's overview names, read by the service on the App's token; or why there is none. */
   codingAgentGitHubImage(
@@ -575,11 +591,11 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
   /** Which of one agent's pull request's files the account marked viewed on GitHub, read on its own GitHub sign-in; or why there is no answer. */
   codingAgentPullRequestViewed(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them; or why there is none. */
   codingAgentOverviewPullRequest(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
   /** What the reviewer and label pickers of one agent's Pull request tab offer: its repository's labels, collaborators, and teams; or why there is no answer. */
   codingAgentReviewOptions(
@@ -587,11 +603,11 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
   /** The checks on one agent's pull request's head as GitHub holds them; or why there are none. */
   codingAgentOverviewChecks(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
   /** One agent's pull request's conversation and where its reviewers stand, as GitHub holds them; or why there is none. */
   codingAgentOverviewConversation(
-    params: CodingAgentPullRequestParams,
+    params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentOverviewConversationAnswerView>;
   /** The account's own provider keys as hints and statuses; or why there are none. */
   providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
@@ -711,15 +727,26 @@ interface HostOperatorOptions {
   report: (message: string) => void;
 }
 
-/** The host refused a call, or answered a shape its method does not document: a defect of this build, worded by the router as the kind's refusal. */
+/** A Pull request tab's read as the gateway carries it: the agent, and the pull request's number where the tab names one other than the agent's own. */
+function pullRequestRead(
+  params: CodingAgentPullRequestReadParams,
+): CodingAgentPullRequestReadParams {
+  return params.number === undefined
+    ? { agentId: params.agentId }
+    : { agentId: params.agentId, number: params.number };
+}
+
+/**
+ * The host refused a call, or answered a shape its method does not document:
+ * a defect of this build, worded by the router as the kind's refusal. Note
+ * that only the shape is reported to Sentry, because a refusal is the host's
+ * own answer, and a handler that died behind one was reported where it died
+ * (`gatewayHost`).
+ */
 function unanswered(method: GatewayMethod, answer: GatewayCallResult): Effect.Effect<never> {
-  return Effect.die(
-    new Error(
-      answer.ok
-        ? `${method} answered a shape this client cannot read`
-        : `${method} was refused: ${answer.error.message}`,
-    ),
-  );
+  if (answer.ok) return Effect.die(new Error(`${method} answered a shape this client cannot read`));
+  const refusal = new Error(`${method} was refused: ${answer.error.message}`);
+  return Effect.die(Object.assign(refusal, { [ErrorReporter.ignore]: true }));
 }
 
 /**
@@ -1182,6 +1209,46 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
               )
             : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
       ),
+    tasksComments: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_COMMENTS, {
+          planId: params.planId,
+          after: params.after,
+        }),
+        (answer): TasksCommentsAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(tasksCommentsAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
+    tasksCommentStart: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_COMMENT_START, {
+          planId: params.planId,
+          start: params.start,
+        }),
+        (answer): TasksCommentAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(tasksCommentAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
+    tasksCommentAct: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_COMMENT_ACT, {
+          planId: params.planId,
+          threadId: params.threadId,
+          action: params.action,
+        }),
+        (answer): TasksCommentAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(tasksCommentAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
     tasksPictureKeep: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.TASKS_PICTURE_KEEP, {
@@ -1239,6 +1306,8 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.TASKS_RESTORE, { taskId: params.taskId, seq: params.seq }),
         (answer) => record(answer)?.restored === true,
       ),
+    tasksStopWork: (taskId) =>
+      Effect.asVoid(client.call(GATEWAY_METHOD.TASKS_STOP_WORK, { taskId })),
     githubConnect: () => Effect.map(client.call(GATEWAY_METHOD.GITHUB_CONNECT), githubPage),
     githubDisconnect: () =>
       Effect.map(
@@ -1615,12 +1684,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     codingAgentPullRequest: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: params.agentId }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, pullRequestRead(params)),
         codingAgentAnswer(codingAgentPullRequestAnswerViewSchema),
       ),
     codingAgentChanges: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, { agentId: params.agentId }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_CHANGES, pullRequestRead(params)),
         codingAgentAnswer(codingAgentChangesAnswerViewSchema),
       ),
     codingAgentGitHubImage: (params) =>
@@ -1631,21 +1700,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     codingAgentPullRequestAction: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_ACTION, {
-          agentId: params.agentId,
+          ...pullRequestRead(params),
           request: params.request,
         }),
         codingAgentAnswer(codingAgentPullRequestWriteAnswerViewSchema),
       ),
     codingAgentPullRequestViewed: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, { agentId: params.agentId }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST_VIEWED, pullRequestRead(params)),
         codingAgentAnswer(codingAgentPullRequestViewedAnswerViewSchema),
       ),
     codingAgentOverviewPullRequest: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, {
-          agentId: params.agentId,
-        }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, pullRequestRead(params)),
         codingAgentAnswer(codingAgentOverviewPullRequestAnswerViewSchema),
       ),
     codingAgentReviewOptions: (params) =>
@@ -1655,14 +1722,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     codingAgentOverviewChecks: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, { agentId: params.agentId }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CHECKS, pullRequestRead(params)),
         codingAgentAnswer(codingAgentOverviewChecksAnswerViewSchema),
       ),
     codingAgentOverviewConversation: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, {
-          agentId: params.agentId,
-        }),
+        client.call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_CONVERSATION, pullRequestRead(params)),
         codingAgentAnswer(codingAgentOverviewConversationAnswerViewSchema),
       ),
     providerKeysRead: () =>

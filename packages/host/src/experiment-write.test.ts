@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
+import { fixedBearer } from "@luke/features";
 import { EXPERIMENT, type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { fakeHttpClientLayer, temporaryDirectory } from "@luke/wire/testing";
@@ -56,6 +57,13 @@ async function signedInStore(directory: string): Promise<SettingsStore> {
   return store;
 }
 
+/** The signed-in account's key as the desktop's session reads it: the stored account's address. */
+const storedAccountKey = (store: SettingsStore) => () =>
+  Effect.map(
+    Effect.orElseSucceed(store.readAccount(), () => undefined),
+    (account) => account?.email,
+  );
+
 /** The account's service, answering each write as `answer` decides from its body and the write's place in line. */
 function serviceAnswering(
   answer: (body: { experiments: ExperimentChoices }, at: number) => Promise<Response>,
@@ -63,8 +71,7 @@ function serviceAnswering(
   const bodies: { experiments: ExperimentChoices }[] = [];
   const client = new AccountPreferencesClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: () => Effect.succeed("token"),
-    refreshAccount: () => Effect.void,
+    credential: fixedBearer("token"),
     httpClient: fakeHttpClientLayer(async (_url, init) => {
       const body = JSON.parse(String(init?.body));
       bodies.push(body);
@@ -83,7 +90,12 @@ test("the service's answer is what the store keeps and the settings carry", asyn
   const { client, bodies } = serviceAnswering(async () => holding({ [EXPERIMENT.FACTORY]: true }));
 
   const written = await Effect.runPromise(
-    experimentWriter({ client, store }).write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
+    experimentWriter({
+      client,
+      store,
+      readAccountKey: storedAccountKey(store),
+      confirmAccount: () => Effect.void,
+    }).write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
   );
 
   assert.equal(written.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -103,7 +115,12 @@ test("two presses land in the order they were made, however slowly the first is 
     held = { ...held, ...body.experiments };
     return holding(held);
   });
-  const writer = experimentWriter({ client, store });
+  const writer = experimentWriter({
+    client,
+    store,
+    readAccountKey: storedAccountKey(store),
+    confirmAccount: () => Effect.void,
+  });
 
   const turnedOn = Effect.runPromise(writer.write(ACCOUNT.email, EXPERIMENT.FACTORY, true));
   const turnedOff = Effect.runPromise(writer.write(ACCOUNT.email, EXPERIMENT.FACTORY, false));
@@ -126,7 +143,12 @@ test("a write the service did not answer leaves the switch where it stood", asyn
   const { client } = serviceAnswering(async () => new Response("unavailable", { status: 503 }));
 
   const written = await Effect.runPromise(
-    experimentWriter({ client, store }).write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
+    experimentWriter({
+      client,
+      store,
+      readAccountKey: storedAccountKey(store),
+      confirmAccount: () => Effect.void,
+    }).write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
   );
 
   assert.equal(written.status, ACTION_RESULT_STATUS.REJECTED);
@@ -142,7 +164,12 @@ test("an answer that arrives after the account signed out is refused, not report
   });
 
   const written = await Effect.runPromise(
-    experimentWriter({ client, store }).write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
+    experimentWriter({
+      client,
+      store,
+      readAccountKey: storedAccountKey(store),
+      confirmAccount: () => Effect.void,
+    }).write(ACCOUNT.email, EXPERIMENT.FACTORY, true),
   );
 
   assert.equal(written.status, ACTION_RESULT_STATUS.REJECTED);

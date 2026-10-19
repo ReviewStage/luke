@@ -1,8 +1,8 @@
 import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
+import type { BundleImporter } from "@luke/panel/bundle-loader";
 import { sessionRecorderLoaded } from "@luke/panel/session-recorder/contract";
 import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
 import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
-import type { BundleImporter } from "./bundle-loader";
 
 /**
  * Recording the shape of what Luke's own panel draws, and none of its words.
@@ -23,7 +23,7 @@ import type { BundleImporter } from "./bundle-loader";
  * is edited in, whose masked value would still record the rhythm of the
  * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
  * version history, Inbox, Chat, and coding agents' tabs and their Terminal tabs,
- * among others. The whiteboard and a Terminal tab are the surfaces that draw
+ * and Browser tabs with the still of a page they draw, among others. The whiteboard and a Terminal tab are the surfaces that draw
  * their words on a canvas, which the text masking cannot reach, so their
  * block is their only line, and canvas recording is held off by name rather
  * than by the library's default.
@@ -32,8 +32,8 @@ import type { BundleImporter } from "./bundle-loader";
  * masking and those blocks are the whole of what decides it.
  *
  * What this file decides on its own is only whether to record at all, and the
- * main process is the whole of that answer: an ordinary run records, a
- * fixture or capture run does not, and a run whose account was deleted stops.
+ * main process is the whole of that answer: an ordinary packaged run records,
+ * a development, fixture, or capture run does not, and a run whose account was deleted stops.
  * There is no switch — `PRIVACY.md` is where a user learns this happens, so
  * that file carries the whole of the disclosure and has to keep doing it. No
  * account is among the reasons either. Recording begins at the first paint of
@@ -161,10 +161,11 @@ function scrubbedProperties(properties: Properties): Properties {
 }
 
 /**
- * The project the recording is filed under, fixed at build time. A build packaged without one records nothing —
- * the same kill switch the site's own counting has, so a local run or an
- * unconfigured build measures nothing rather than measuring into a stranger's
- * project.
+ * The project the recording is filed under, fixed at build time, and baked
+ * only into a Developer ID release build (`scripts/package-config.mjs`'s
+ * `replayProjectKeyDefine`). A build without one records nothing — the same
+ * kill switch the site's own counting has, so a local run or an unconfigured
+ * build measures nothing rather than measuring into production's project.
  */
 declare const PACKAGED_POSTHOG_PROJECT_API_KEY: string | undefined;
 
@@ -273,6 +274,8 @@ let loading = false;
 let client: PostHog | undefined;
 /** The run's latest word on recording, which a recorder that finishes loading starts under. */
 let latest: SessionReplayBootstrap | undefined;
+/** The account the running recording is filed under, cleared with the person on a stop. */
+let identified: string | undefined;
 
 /** The recorder's bundle, imported where the bundler put it; it registers itself as it runs. */
 const importSessionRecorder: BundleImporter<unknown> = () => import("./session-recorder/index");
@@ -280,7 +283,10 @@ const importSessionRecorder: BundleImporter<unknown> = () => import("./session-r
 /**
  * Brings recording into line with what the run allows, in either direction.
  * Called at bootstrap and again on every account transition, so a deletion
- * stops the recording where it stands rather than at the next launch. The
+ * stops the recording where it stands rather than at the next launch, and a
+ * sign-in that lands while a recording runs files it under the account then
+ * rather than at the next launch: being signed out is no reason to stop, so a
+ * sign-in leaves the answer where it was and only the account moves. The
  * recorder's bundle is reached through `importRecorder`, its own entry
  * unless a test stands one in.
  */
@@ -290,9 +296,13 @@ export function applySessionReplay(
 ): void {
   latest = bootstrap;
   const wanted = sessionReplayWanted(bootstrap);
-  if (wanted === started) return;
-  if (wanted) startSessionReplay(bootstrap, importRecorder);
-  else stopSessionReplay();
+  if (wanted !== started) {
+    if (wanted) startSessionReplay(bootstrap, importRecorder);
+    else stopSessionReplay();
+    return;
+  }
+  // A client still loading starts under `latest`, which already names the account.
+  if (started && initialized && client !== undefined) identifyAccount(client, bootstrap);
 }
 
 /**
@@ -417,9 +427,16 @@ function record(posthog: PostHog, key: string, bootstrap: SessionReplayBootstrap
  * later calls this, which is where the library joins that anonymous session
  * to the person. What never reaches a sign-in stays anonymous, and so cannot
  * be erased with an account — `PRIVACY.md` says so, because it is now true.
+ * Note that an account already identified is not identified again, because
+ * every account transition re-answers recording, most of them for nothing
+ * that moved. The build registered at the start stands: `identify` keeps the
+ * registered properties, and only the stop's `reset` clears them.
  */
 function identifyAccount(posthog: PostHog, bootstrap: SessionReplayBootstrap): void {
-  if (bootstrap.accountId) posthog.identify(bootstrap.accountId);
+  const accountId = bootstrap.accountId;
+  if (!accountId || accountId === identified) return;
+  identified = accountId;
+  posthog.identify(accountId);
 }
 
 /**
@@ -440,18 +457,22 @@ function optIn(posthog: PostHog): void {
  * Which build these came from, registered on every start rather than once at
  * init: stopping calls `reset`, which clears the registered properties along
  * with the person, so a recording resumed afterwards would otherwise say
- * nothing about the version it came from.
+ * nothing about the version it came from. `app_version` and `packaged` are
+ * the names the counted events are stamped with, so one filter separates
+ * both.
  */
 function registerBuild(posthog: PostHog, bootstrap: SessionReplayBootstrap): void {
   posthog.register({
     app_name: "desktop",
     app_version: bootstrap.appVersion,
+    packaged: bootstrap.packaged,
     platform: navigator.platform,
   });
 }
 
 function stopSessionReplay(): void {
   started = false;
+  identified = undefined;
   const posthog = initialized ? client : undefined;
   if (posthog === undefined) return;
   posthog.stopSessionRecording();

@@ -58,7 +58,8 @@ function accountKey(account: AccountSnapshot): string | undefined {
  *
  * A refresh a callback asks for is forked into a set this scope owns, so it
  * runs on the services the client was built with and ends with the scope, and
- * a defect in one is reported rather than left in a set nobody joins.
+ * a defect in one is reported, to Sentry as well as the line, rather than left
+ * in a set nobody joins.
  */
 export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNotices")(function* (
   dependencies: ClientNoticesDependencies,
@@ -68,7 +69,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
   // Note that a defect is reported here, because nothing joins the set a refresh is forked into.
   const forkReported = (refresh: Effect.Effect<void>, what: string): void => {
     fork(
-      Effect.catchDefect(refresh, (defect) =>
+      Effect.catchDefect(Effect.withErrorReporting(refresh, { defectsOnly: true }), (defect) =>
         Effect.sync(() =>
           report(`${what} failed: ${defect instanceof Error ? defect.message : String(defect)}`),
         ),
@@ -100,11 +101,6 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     readAccountInbox: (after) => host.codingAgentAccountInbox({ after }),
     accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
     onInboxChanged: (inbox) => state.update({ inbox }),
-    automationsOn: () =>
-      experimentOn(
-        state.snapshot().settings?.experiments ?? NO_EXPERIMENTS,
-        EXPERIMENT.AUTOMATIONS,
-      ),
     chatOn: () =>
       experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT),
     report,
@@ -115,7 +111,10 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
       Stream.changes(Stream.map(state.changes, (document) => document.tasks.tasklessAgents)),
       (agents) =>
         Effect.catchDefect(
-          Effect.sync(() => notices.observeTaskless(agents ?? [])),
+          Effect.withErrorReporting(
+            Effect.sync(() => notices.observeTaskless(agents ?? [])),
+            { defectsOnly: true },
+          ),
           (defect) =>
             Effect.sync(() =>
               report(

@@ -5,7 +5,9 @@ import type * as HttpClient from "effect/http/HttpClient";
 import {
   PRODUCT_EVENT_MAXIMUM_AGE_MS,
   type ProductEventBatch,
+  type ProductEventBuild,
   productEventBatchFromWire,
+  productEventBuildFromWire,
   text as trimmedText,
   type UnparsedWireValue,
 } from "../core.js";
@@ -40,6 +42,12 @@ const MAXIMUM_BODY_BYTES = 16_384;
 /** The `$lib` tag every batch is stamped with: the desktop is the one app that posts them. */
 const PRODUCT_EVENT_LIB = "luke-desktop";
 
+/** The property every forwarded event names the deployment that recorded it under. */
+const ENVIRONMENT_PROPERTY = "environment";
+
+/** The environment stamped where Vercel names none, as a local `vercel dev` or a test; Sentry's own fallback. */
+const UNNAMED_DEPLOYMENT = "development";
+
 /** What the shared brake holds this endpoint to; a batch spends its own event count. */
 const RATE_LIMIT = {
   WINDOW_MS: 60_000,
@@ -61,6 +69,12 @@ export interface EventsOptions {
   /** A deployment-configured ingestion host; the shared default otherwise. */
   host?: string;
   resolveUserId: UserIdResolver;
+  /**
+   * The deployment's own `VERCEL_ENV` (`production`, `preview`, or
+   * `development`), stamped on every event as `environment` so a preview's
+   * or a local service's counts can be told from production's.
+   */
+  deployment?: string | undefined;
   /**
    * The account's own name and address, for the person record. Omitted by a
    * deployment that would rather PostHog held neither; the counts still land.
@@ -87,9 +101,16 @@ export interface EventsOptions {
  * event stream the allowlist exists to keep it out of. They are read from the
  * service's own user row: nothing identifying arrives from the desktop, and
  * nothing a caller sends can name a different person.
+ *
+ * Every event is also stamped with the deployment that recorded it and with
+ * what the desktop said about the build the batch came from, so a preview's,
+ * a local service's, or a development build's counts can be filtered from
+ * production's. They go under the event's own properties, so an event that
+ * names its own `app_version` keeps it.
  */
 function batchDocument(
   events: ProductEventBatch,
+  stamp: ProductEventBuild & { readonly [ENVIRONMENT_PROPERTY]: string },
   projectApiKey: string,
   userId: string,
   now: number,
@@ -100,6 +121,7 @@ function batchDocument(
     historical_migration: false,
     batch: events.map((event, index) => {
       const properties = {
+        ...stamp,
         ...event.properties,
         $geoip_disable: true,
         $lib: PRODUCT_EVENT_LIB,
@@ -165,6 +187,15 @@ export function handleEvents(
     if (!events) {
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
     }
+    // Note that a batch of nothing but retired names is accepted with nothing
+    // to post, because the older build that sent it is not at fault.
+    if (events.length === 0) {
+      return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, { accepted: 0 });
+    }
+    const stamp = {
+      ...productEventBuildFromWire(wire),
+      [ENVIRONMENT_PROPERTY]: trimmedText(options.deployment) ?? UNNAMED_DEPLOYMENT,
+    };
 
     const now = yield* Clock.currentTimeMillis;
     if (!(yield* eventsBrake.check(userId, events.length))) {
@@ -183,7 +214,7 @@ export function handleEvents(
         )
       : undefined;
     const response = yield* Effect.provide(
-      postBatchEffect(batchDocument(events, projectApiKey, userId, now, person), upstream),
+      postBatchEffect(batchDocument(events, stamp, projectApiKey, userId, now, person), upstream),
       upstream.httpClient ?? FetchHttpClient.layer,
     );
     if (!response) {

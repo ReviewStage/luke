@@ -1,4 +1,11 @@
-import { cn, IconButton } from "@luke/ui";
+import {
+  cn,
+  IconButton,
+  SCROLL_FADE,
+  ScrollArea,
+  type ScrollFade,
+  type ScrollFadeInset,
+} from "@luke/ui";
 import { ArrowDownIcon } from "lucide-react";
 import {
   type ComponentProps,
@@ -27,12 +34,14 @@ import {
  * the button that takes them there. The context the children read is the
  * registry's: whether the log is at its bottom, and a way to go there.
  *
- * The log itself is a block that scrolls, not a flex column. A flex item
- * of a container with a definite height has a definite height of its own
- * once flexed, so a percentage height anywhere inside a message would
- * resolve against the message rather than fall back to its content; a
- * block child of a scroll box keeps the height it draws, whatever is
- * inside it. `planning/transcript-layout.test.ts` holds the rule.
+ * The log scrolls in `@luke/ui`'s `ScrollArea`, which fades its edges as
+ * the caller asks, and holds its lines in one block of its own inside it
+ * (`.conversation-log`), which carries the log's padding. That block is
+ * not a flex column. A flex item of a container with a definite height has
+ * a definite height of its own once flexed, so a percentage height anywhere
+ * inside a message would resolve against the message rather than fall back
+ * to its content; a block child keeps the height it draws, whatever is
+ * inside it.
  */
 
 /** How far from the bottom, in pixels, the list still counts as following the newest line: a rounding's worth, since any wider snapped a reader scrolling up through it back down on the next render. */
@@ -91,7 +100,11 @@ export function Conversation({ className, children, ...props }: ConversationProp
     if (element === null) return;
     if (following.current) element.scrollTop = element.scrollHeight;
     resized.observe(element);
-    for (const line of element.children) resized.observe(line);
+    // The lines stand in the one block inside the area.
+    const lines = element.firstElementChild;
+    if (lines === null) return;
+    resized.observe(lines);
+    for (const line of lines.children) resized.observe(line);
   });
   const scroll: ConversationScroll = {
     isAtBottom,
@@ -116,25 +129,28 @@ export function Conversation({ className, children, ...props }: ConversationProp
   );
 }
 
-export type ConversationContentProps = ComponentProps<"div">;
+export interface ConversationContentProps {
+  /** The pane's own class on the block the lines stand in, which holds the log's padding. */
+  className?: string | undefined;
+  /** Which of the log's edges fade where lines run past them; both where none is named. */
+  fade?: ScrollFade | undefined;
+  /** Where its start fade begins: beneath a band stuck at its top, as a call's checkpoint is. */
+  fadeInset?: ScrollFadeInset | undefined;
+  children?: ReactNode;
+}
 
-/** The scroll box, a log of what follows. */
+/** The scroll box, a log of what follows, its lines in one block inside it. */
 export function ConversationContent({
   className,
+  fade = SCROLL_FADE.BOTH,
+  fadeInset,
   children,
-  ...props
 }: ConversationContentProps): ReactNode {
   const { list, onScroll } = useConversation();
   return (
-    <div
-      ref={list}
-      role="log"
-      className={cn("conversation-log", className)}
-      onScroll={onScroll}
-      {...props}
-    >
-      {children}
-    </div>
+    <ScrollArea ref={list} role="log" fade={fade} fadeInset={fadeInset} onScroll={onScroll}>
+      <div className={cn("conversation-log", className)}>{children}</div>
+    </ScrollArea>
   );
 }
 

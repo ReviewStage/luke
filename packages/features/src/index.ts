@@ -6,7 +6,10 @@ export {
   type CallCredential,
   callAnswered,
   fixedBearer,
+  lateCredential,
   NO_CREDENTIAL,
+  resolvedCredential,
+  sessionBearer,
 } from "./account-call.js";
 export {
   AccountRefreshFailed,

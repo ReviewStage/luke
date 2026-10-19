@@ -282,7 +282,7 @@ it.layer(getTestDB())("an agent started on a plan from one of the workspace's is
         assert.ok(handed !== undefined && other !== undefined);
         assert.ok(handed.startsWith("# Invites expire too soon"), "the plan comes first");
         const named = new RegExp(
-          String.raw`the issue [A-Z0-9]+-${filed.number} Invites expire too soon \(https://\S+/issue/${filed.id}\)\.`,
+          String.raw`the issue \[@[A-Z0-9]+-${filed.number} Invites expire too soon\]\(https://tryluke\.dev/[^/\s]+/issue/${filed.id}\)\.`,
         );
         assert.match(handed, named);
         assert.ok(handed.includes(ISSUE_HEADING));

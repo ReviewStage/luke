@@ -7,14 +7,18 @@
  * either. The avatar's voice plays beside `App`, so no tab it shows cuts it.
  */
 
+import { App } from "@luke/panel/app";
+import { callAvatarAtom } from "@luke/panel/call/call-avatar";
+import { PanelAvatarVoice } from "@luke/panel/call/panel-avatar";
+import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
+import { installShellBundles } from "@luke/panel/shell-bundles";
 import { memoryHistory } from "@luke/ui/history-adapter";
-import { App } from "./app";
-import { callAvatarAtom } from "./call/call-avatar";
-import { PanelAvatarVoice } from "./call/panel-avatar";
-import { installWindowHistory } from "./navigation-history";
+import { DESKTOP_BUNDLES } from "./desktop-bundles";
 import { mountWindow } from "./window-root";
 
+// A call's avatar is the desktop's own bundle.
+installShellBundles(DESKTOP_BUNDLES);
 // The panel's back and forward live in memory for as long as the window is open.
 installWindowHistory(memoryHistory());
 

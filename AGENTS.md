@@ -63,6 +63,12 @@ the check names. A component is placed by review under the same rule.
   on 2026-10-13: the Keyframe session token for a call's own avatar may reach
   the panel window, which runs that session, and never the voice window,
   a Gateway answer or event, app state, a counted event, a trace, or a fixture.
+  And, approved by Dean on 2026-10-16, a Browser tab's page, its address,
+  title, and a still of it go only to the panel that opened the tab, from its
+  view in main (`apps/desktop/src/main/window/browser-views.ts`), never into a
+  trace, a counted event, a fixture, app state, the service, or the voice
+  window; the still is left out of the screen recording, and the title and
+  address the tab draws are masked there as every word is.
   And, approved by Charles on 2026-10-16: Sentry's SDKs run with their default
   data collection (`packages/service/src/observability/sentry.ts`, the eve
   roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`), so what a
@@ -183,7 +189,8 @@ in `tools/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/src/main/
 (the layer that runtime is built from), the renderer root
 `apps/desktop/src/renderer/window-root.tsx` (loaded once per window by each
 window's own entry, the panels' and the voice window's alike, so no two windows
-share a browser registry),
+share a browser registry), and the web app's root `apps/web/src/app/web-root.tsx`,
+on the same terms for a browser tab: its entry (`app.html`) loads it once per tab,
 `packages/panel/src/renderer-runtime.ts` (the module the root's
 runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
 reads it, the moment the root first reaches it, so the edge is here rather than

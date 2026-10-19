@@ -9,14 +9,12 @@ import { Effect, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
+  type CallCredential,
   type CallRequest,
   callAnswered,
   sendInSession,
-  sessionBearer,
 } from "./account-call.js";
-import type { AccountSessionToken, AccountToken } from "./account-token.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
 import { type LinearIssueSummary, linearIssuesAnswerSchema } from "./linear-wire.js";
 import { HOSTED_SERVICE_PATH, workspacePhotoPath } from "./service-paths.js";
@@ -85,7 +83,11 @@ import {
  * it, the workspace is not one it is in, or no answer came.
  */
 
-export interface HostedWorkspaceClientOptions extends AccountToken, AccountSessionToken {
+export interface HostedWorkspaceClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
+  /** The Mac's own Better Auth session, for the calls that write through Better Auth's organization endpoints. */
+  sessionCredential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -121,16 +123,16 @@ export class HostedWorkspaceClient {
   constructor(options: HostedWorkspaceClientOptions) {
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
     this.#inSession = sendInSession(
       accountCall({
         baseUrl: options.serviceBaseUrl,
-        credential: sessionBearer(options),
+        credential: options.sessionCredential,
         requestTimeoutMs: options.requestTimeoutMs,
       }),
-      options,
+      options.sessionCredential,
     );
   }
 

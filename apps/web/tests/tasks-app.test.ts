@@ -5,7 +5,8 @@ import { Database } from "@luke/database/core/query";
 import { createIssue } from "@luke/database/models/issue-store";
 import { writePage } from "@luke/database/models/plan-pages";
 import { PLAN_REVISION } from "@luke/database/models/plan-revisions";
-import { createTask, readTask } from "@luke/database/models/task-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { createTask, openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { personalWorkspaceOf } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
@@ -54,6 +55,7 @@ import {
   taskTranscriptAnswerSchema,
 } from "@luke/features/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@luke/live";
+import { EVE_RESET_OUTCOME, type EveSessions } from "@luke/service/agents/brain-host/eve-sessions";
 import {
   requestUserId,
   type SessionEndpoint,
@@ -85,7 +87,18 @@ import { added } from "@luke/service/testing/task-contents";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { eq } from "drizzle-orm";
-import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
+import {
+  Clock,
+  DateTime,
+  Duration,
+  Effect,
+  Layer,
+  Option,
+  Redacted,
+  Result,
+  type Schema,
+  Stream,
+} from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -119,6 +132,7 @@ const REVISIONS = "/api/plans/revisions";
 const REVISION = "/api/plans/revision";
 const RESTORE = "/api/plans/restore";
 const EDIT = "/api/plans/edit";
+const STOP = "/api/plans/stop";
 const PAGE = "/api/plans/page";
 
 const RELAY = {
@@ -137,12 +151,48 @@ interface Answer {
 /** A GitHub on which nobody reaches anything; the routes that read no repository never ask it. */
 const UNREACHED_GITHUB: FakeGitHub = { layer: NO_GITHUB, sent: [] };
 
+/** How the fake eve writes down the deployment acting for an account, apart from any bearer a request carried. */
+function deploymentFor(account: string): string {
+  return `deployment for ${account}`;
+}
+
+/**
+ * eve as a task's delete reaches it: each retire written down with who asked
+ * it, over the request's bearer or as the deployment acting for an account;
+ * a task here has no coding agent, so its delete asks eve nothing else, and
+ * `coding-agents-app.test.ts` deletes one that has.
+ */
+function retiringEve() {
+  const retired: (readonly [string, string])[] = [];
+  const asked = (caller: string): EveSessions => ({
+    open: () => Effect.die(new Error("a task's delete opens no session")),
+    send: () => Effect.die(new Error("a task's delete sends no message")),
+    cancel: () => Effect.die(new Error("a task with no agent has no turn to cancel")),
+    reset: (sessionId) =>
+      Effect.sync(() => {
+        retired.push([caller, sessionId]);
+        return { outcome: EVE_RESET_OUTCOME.RESET };
+      }),
+    stream: () => Stream.empty,
+  });
+  return {
+    retired,
+    eve: (authorization: Redacted.Redacted) => asked(Redacted.value(authorization)),
+    eveAs: (account: string) => asked(deploymentFor(account)),
+  };
+}
+
 /**
  * Two accounts, each behind its own bearer. The owner signed in with GitHub
  * through the App; the other signed in with Google alone, and reaches
- * nothing on GitHub.
+ * nothing on GitHub. eve is a fake that writes down each retire, unless the
+ * test asks for none, when the deployment composes its own: on an
+ * environment naming no secret, over a network nothing answers on.
  */
-const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
+const openAccounts = (
+  github: FakeGitHub = UNREACHED_GITHUB,
+  options: { readonly reachesEve?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const db = yield* Database;
     const owner = yield* openGithubUser();
@@ -158,9 +208,10 @@ const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
         [sessionCookieOf(other), other],
       ]),
     };
+    const eve = options.reachesEve === false ? undefined : retiringEve();
     const ask = (request: Request, landedAs?: string) =>
-      answer(signedIn, github, request, landedAs);
-    return { owner, other, ask };
+      answer(signedIn, github, eve, request, landedAs);
+    return { owner, other, ask, retired: eve?.retired ?? [] };
   });
 
 /** How the suite's accounts sign in: each one's OAuth bearer, and the session cookie of a browser signed in to it. */
@@ -194,7 +245,13 @@ function sessionOf(sessions: ReadonlyMap<string, string>): SessionEndpoint {
  * a client sends it, landed by the platform on a function holding the group
  * under that key.
  */
-const answer = (signedIn: SignedIn, github: FakeGitHub, request: Request, landedAs?: string) =>
+const answer = (
+  signedIn: SignedIn,
+  github: FakeGitHub,
+  eve: ReturnType<typeof retiringEve> | undefined,
+  request: Request,
+  landedAs?: string,
+) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     // The handler runs on the router's own fiber, so it is handed the test's clock: the account rows hang off it.
@@ -212,8 +269,8 @@ const answer = (signedIn: SignedIn, github: FakeGitHub, request: Request, landed
         resolveUserId: (incoming) =>
           requestUserId(incoming, userInfoOf(signedIn.bearers), sessionOf(signedIn.sessions)),
         workspaces: yield* fakeWorkspaceSeams,
-        // A task here has no coding agent, so its delete has nothing to stop; `coding-agents-app.test.ts` deletes one that has.
-        eveOrigin: () => undefined,
+        eveOrigin: () => ORIGIN,
+        ...(eve === undefined ? undefined : { eve: eve.eve, eveAs: eve.eveAs }),
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
@@ -272,6 +329,22 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 function startedId(started: Answer): string {
   return readAnswer(taskAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.id;
 }
+
+/** The task's own conversation, opened and recorded as running in an eve session of its own, as Luke's first turn on it leaves it: the session's id. */
+const sessionOn = (owner: string, taskId: string) =>
+  Effect.gen(function* () {
+    const { conversationId } = Option.getOrThrow(yield* openTaskConversation(owner, taskId));
+    const sessionId = `wrun_${randomUUID()}`;
+    assert.equal(
+      yield* claimRuntimeSession(
+        { userId: owner, conversationId },
+        sessionId,
+        yield* DateTime.nowAsDate,
+      ),
+      true,
+    );
+    return sessionId;
+  });
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
@@ -654,6 +727,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
       for (const path of [MESSAGES, CODE]) {
         assert.deepEqual(yield* ask(request(path, other, { id: taskId })), notFound);
       }
+      assert.deepEqual(yield* ask(request(STOP, other, { id: taskId, method: "POST" })), notFound);
       assert.deepEqual(
         yield* ask(request(SUBAGENT_MESSAGES, other, { id: taskId, query: { call: "call-0-0" } })),
         notFound,
@@ -661,40 +735,41 @@ it.layer(getTestDB())("the plan routes", (it) => {
     }),
   );
 
+  it.effect("stopping Luke on a plan he never worked on stops nothing, and only a POST stops", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      const taskId = startedId(yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })));
+
+      assert.deepEqual(yield* ask(request(STOP, owner, { id: taskId, method: "POST" })), {
+        status: HOSTED_HTTP_STATUS.OK,
+        body: {},
+      });
+      assert.deepEqual(
+        yield* ask(request(STOP, owner, { id: taskId })),
+        refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+      );
+    }),
+  );
+
   it.effect(
-    "a session cookie opens its account's task but never deletes it, however the delete lands, and the bearer deletes it",
+    "a session cookie's delete is refused as unavailable, stopping and deleting nothing, on a deployment that cannot reach eve as itself, while the bearer's delete goes on with its retires a courtesy",
     () =>
       Effect.gen(function* () {
-        const { owner, ask } = yield* openAccounts();
+        const { owner, ask } = yield* openAccounts(UNREACHED_GITHUB, { reachesEve: false });
         const taskId = startedId(
           yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
         );
-        const cookie = sessionCookieOf(owner);
-        const unauthenticated = refusal(
-          HOSTED_HTTP_STATUS.UNAUTHORIZED,
-          HOSTED_API_ERROR.INVALID_TOKEN,
-        );
+        yield* sessionOn(owner, taskId);
 
-        assert.equal(
-          (yield* ask(request(ONE_TASK, undefined, { id: taskId, cookie }))).status,
-          HOSTED_HTTP_STATUS.OK,
-          "the cookie names the account on a read",
-        );
-        assert.deepEqual(
-          yield* ask(request(ONE_TASK, undefined, { id: taskId, method: "DELETE", cookie })),
-          unauthenticated,
-        );
-        // Note that a client may name the one-task path in the query of another path the group's functions serve.
         assert.deepEqual(
           yield* ask(
-            request(`/api/plans/${taskId}/pages`, undefined, {
+            request(ONE_TASK, undefined, {
+              id: taskId,
               method: "DELETE",
-              cookie,
-              query: { [DISPATCH_QUERY.PATH]: "plans/plan" },
+              cookie: sessionCookieOf(owner),
             }),
-            "plans/pages",
           ),
-          unauthenticated,
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
         );
         assert.equal(
           (yield* ask(request(ONE_TASK, owner, { id: taskId }))).status,
@@ -709,37 +784,51 @@ it.layer(getTestDB())("the plan routes", (it) => {
   );
 
   it.effect(
-    "a session cookie starts a task but not one with an agent, whose session is opened over the bearer, and that start writes nothing",
+    "a session cookie starts, reads, and deletes its account's task however the delete lands, retiring the task's session as the deployment acting for the cookie's account, while another account's cookie deletes and retires nothing",
     () =>
       Effect.gen(function* () {
-        const { owner, ask } = yield* openAccounts();
+        const { owner, other, ask, retired } = yield* openAccounts();
         const cookie = sessionCookieOf(owner);
-        const agent = { idempotencyKey: randomUUID(), prompt: "Expire invitations." };
+        const started = (body: typeof RELAY | typeof LEDGER) =>
+          Effect.map(ask(request(TASKS, undefined, { method: "POST", body, cookie })), startedId);
+        const relay = yield* started(RELAY);
+        const ledger = yield* started(LEDGER);
+        const relaySession = yield* sessionOn(owner, relay);
+        const ledgerSession = yield* sessionOn(owner, ledger);
+        // Note that a client may name the one-task path in the query of another path the group's functions serve.
+        const landedElsewhere = (taskId: string, by: string) =>
+          ask(
+            request(`/api/plans/${taskId}/pages`, undefined, {
+              method: "DELETE",
+              cookie: by,
+              query: { [DISPATCH_QUERY.PATH]: "plans/plan" },
+            }),
+            "plans/pages",
+          );
+        const deletedBy = (taskId: string, by: string) =>
+          ask(request(ONE_TASK, undefined, { id: taskId, method: "DELETE", cookie: by }));
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        const deleted = { status: HOSTED_HTTP_STATUS.OK, body: { deleted: true } };
 
-        const plain = yield* ask(
-          request(TASKS, undefined, { method: "POST", body: RELAY, cookie }),
-        );
-        const withAgent = yield* ask(
-          request(TASKS, undefined, {
-            method: "POST",
-            body: { name: LEDGER.name, repository: "acme/relay", agent },
-            cookie,
-          }),
-        );
-        const listed = readAnswer(
-          taskListAnswerSchema,
+        assert.equal(
+          (yield* ask(request(ONE_TASK, undefined, { id: relay, cookie }))).status,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(TASKS, owner)),
+          "the cookie names the account on a read",
         );
+        assert.deepEqual(yield* landedElsewhere(relay, sessionCookieOf(other)), notFound);
+        assert.deepEqual(yield* deletedBy(ledger, sessionCookieOf(other)), notFound);
+        assert.deepEqual(retired, [], "another account's cookie retires nothing");
 
-        assert.equal(plain.status, HOSTED_HTTP_STATUS.CREATED);
+        assert.deepEqual(yield* landedElsewhere(relay, cookie), deleted);
+        assert.deepEqual(yield* deletedBy(ledger, cookie), deleted);
+        assert.deepEqual(retired, [
+          [deploymentFor(owner), relaySession],
+          [deploymentFor(owner), ledgerSession],
+        ]);
         assert.deepEqual(
-          withAgent,
-          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
-        );
-        assert.deepEqual(
-          listed.plans.map((plan) => plan.name),
-          [RELAY.name],
+          readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(TASKS, owner)))
+            .plans,
+          [],
         );
       }),
   );

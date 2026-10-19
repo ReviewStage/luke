@@ -4,12 +4,11 @@ import { Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
-  accountBearer,
   accountCall,
   type CallAnswer,
+  type CallCredential,
   callAnswered,
 } from "./account-call.js";
-import type { AccountToken } from "./account-token.js";
 import {
   INTEGRATION_CALL_FAILURE,
   type IntegrationAccountView,
@@ -55,7 +54,9 @@ import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
  * every caller does the same with one: says why, and offers to try again.
  */
 
-export interface HostedIntegrationsClientOptions extends AccountToken {
+export interface HostedIntegrationsClientOptions {
+  /** What authorizes each call on the signed-in account, read fresh for every attempt. */
+  credential: CallCredential;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
@@ -190,7 +191,7 @@ export class HostedIntegrationsClient {
   constructor(options: HostedIntegrationsClientOptions) {
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
+      credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
     });
   }

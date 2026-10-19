@@ -17,12 +17,7 @@ import { hostTurnId, sentLineId } from "@luke/database/models/ids";
 import { readMessageByClientId, sentLineStands } from "@luke/database/models/message-reads";
 import { keepPlanAttachment, PLAN_ATTACHMENT_KEEP } from "@luke/database/models/plan-attachments";
 import { writePage } from "@luke/database/models/plan-pages";
-import {
-  createTask,
-  listTasks,
-  openTaskConversation,
-  readTask,
-} from "@luke/database/models/task-store";
+import { createTask, openTaskConversation, readTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
@@ -88,8 +83,6 @@ import { HELD_DOORS } from "../coder-host/chat-notify.js";
 import { STEER_OUTCOME } from "../coder-host/steer.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import {
-  ARCHIVE_AGENT_REFUSAL,
-  ARCHIVE_AGENT_TOOL,
   CODING_AGENT_TOOL_REFUSAL,
   LIST_AGENTS_TOOL,
   LIST_TASKS_TOOL,
@@ -98,9 +91,12 @@ import {
   READ_PAGE_TOOL,
   START_AGENT_TOOL,
   START_CODING_AGENT_REFUSAL,
+  UPDATE_AGENT_REFUSAL,
+  UPDATE_AGENT_TOOL,
   UPDATE_TASK_REFUSAL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
+import { CREATE_TASK_TOOL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import { brainToolDeclarations, tasksModelOutput } from "./brain.js";
@@ -430,7 +426,7 @@ test("a member speaking in the plan conversation a teammate opened messages the 
   );
 });
 
-test("Luke makes the new task a start names for the member speaking, in the call's task's workspace and on its repository, and starts on it; a call on a task naming no repository makes none", async () => {
+test("Luke makes a task for the member speaking, in the call's task's workspace and on its repository, and starts an agent on it by its id; a call on a task naming no repository makes one with none", async () => {
   const opener = await database.createUser();
   const member = await database.createUser();
   const task = await taskConversation(opener, RELAY_FULL_NAME);
@@ -443,31 +439,29 @@ test("Luke makes the new task a start names for the member speaking, in the call
   });
   const call = await callerOn(acting, task, eve.services, CATALOG, member);
 
-  const started = await call(
-    START_AGENT_TOOL.name,
-    { newTask: "Expiry", prompt: TASK },
-    "call-new",
-  );
-  const agent = startedAgentOf(started);
-  assert.ok(isRecord(started.newTask) && isWireString(started.newTask.id), JSON.stringify(started));
-  const made = Option.getOrThrow(await database.run(readTask(member, started.newTask.id)));
+  const created = await call(CREATE_TASK_TOOL.name, { name: "Expiry" }, "call-new");
+  assert.ok(isRecord(created.task) && isWireString(created.task.id), JSON.stringify(created));
+  const made = Option.getOrThrow(await database.run(readTask(member, created.task.id)));
   assert.deepEqual(
     [made.ownerId, made.task.workspaceId, made.task.repository, made.task.name],
     [member, task.workspaceId, RELAY_FULL_NAME, "Expiry"],
   );
+  assert.equal(eve.sent.length, 0);
+  const started = await call(
+    START_AGENT_TOOL.name,
+    { taskId: made.task.id, prompt: TASK },
+    "call-start",
+  );
+  const agent = startedAgentOf(started);
   const stored = Option.getOrThrow(await database.run(readCodingAgent(member, agent.id)));
   assert.equal(stored.taskId, made.task.id);
   assert.equal(eve.sent.length, 1);
 
   const bare = await taskConversation(opener);
   const onBare = await callerOn(acting, bare, eve.services, CATALOG);
-  assert.deepEqual(
-    await onBare(START_AGENT_TOOL.name, { newTask: "Nowhere", prompt: TASK }, "call-bare"),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: START_CODING_AGENT_REFUSAL.NO_REPOSITORY },
-  );
-  const listed = await database.run(listTasks(opener));
-  assert.equal(listed.filter((each) => each.name === "Nowhere").length, 0);
-  assert.equal(eve.sent.length, 1);
+  const nowhere = await onBare(CREATE_TASK_TOOL.name, { name: "Nowhere" }, "call-bare");
+  assert.ok(isRecord(nowhere.task), JSON.stringify(nowhere));
+  assert.equal(nowhere.task.repository, null);
 });
 
 test("Luke's agent tools reach every agent of the task's workspace: a list names each agent's task, narrowed to this task or another by its id, archived ones marked; another task's agent, a teammate's, is read and messaged; an archived agent takes no message, and another workspace's agent is none of these", async () => {
@@ -798,15 +792,15 @@ test("Luke archives an idle agent of the task's workspace, a teammate's, for the
   const call = await callerOn(brainHost(seams), task, eve.services, CATALOG);
   const reason = "The developer asked to clean up the finished agents.";
 
-  const archived = await call(ARCHIVE_AGENT_TOOL.name, { agentId: idle.id, reason });
+  const archived = await call(UPDATE_AGENT_TOOL.name, { agentId: idle.id, archived: true, reason });
   assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
   const row = Option.getOrThrow(await database.run(readCodingAgent(opener, idle.id)));
   assert.ok(row.archivedAt !== null);
   assert.deepEqual(row.archivedBy, { by: CODING_AGENT_ARCHIVER.LUKE, userId: opener, reason });
-  assert.deepEqual(await call(ARCHIVE_AGENT_TOOL.name, { agentId: starting.id }, "call-2"), {
-    status: ACTION_RESULT_STATUS.REJECTED,
-    reason: ARCHIVE_AGENT_REFUSAL.WORKING,
-  });
+  assert.deepEqual(
+    await call(UPDATE_AGENT_TOOL.name, { agentId: starting.id, archived: true }, "call-2"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: UPDATE_AGENT_REFUSAL.WORKING },
+  );
 });
 
 test("Luke archives a teammate's task of the call's workspace for the member on the call and brings it back, and refuses the call's own task and one of another workspace", async () => {
