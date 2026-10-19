@@ -123,6 +123,7 @@ test("the rail lists the measures, with Animations after them in its footer at i
   if (bar === undefined || rail === undefined) throw new Error("No navigation");
   expect(sectionNames(rail)).toEqual([
     "Overview",
+    "Cost",
     "Reliability",
     "Workspaces",
     "Users",
@@ -135,6 +136,7 @@ test("the rail lists the measures, with Animations after them in its footer at i
   // The phone's bar carries the measures alone.
   expect(Array.from(bar.querySelectorAll("a"), (link) => link.getAttribute("aria-label"))).toEqual([
     "Overview",
+    "Cost",
     "Reliability",
     "Workspaces",
     "Users",
