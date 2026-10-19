@@ -18,6 +18,7 @@ export const AGENT_EXTERNAL_DEPENDENCIES = [
   "@better-auth/electron",
   "@better-auth/oauth-provider",
   "@effect/sql-pg",
+  "@sentry/effect",
   "@vercel/connect",
   "@vercel/oidc",
   "ai",
