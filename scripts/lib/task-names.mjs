@@ -203,8 +203,12 @@ const WIRE_NAME = {
     "packages/panel/src/tasks/task-board.tsx",
     "packages/panel/src/tasks/tasks-fixture.ts",
   ],
-  // The main tabs' kept choice, under the key it was first stored as.
-  planClosed: ["packages/panel/src/tasks/use-main-tabs.ts"],
+  // The main tabs' kept choice, under the key it was first stored as, which a
+  // record kept before the Call anchored the column still holds.
+  planClosed: [
+    "packages/panel/src/tasks/use-main-tabs.ts",
+    "packages/panel/src/tasks/use-tasks-tab.test.ts",
+  ],
 };
 
 /** New task's Plan mode: whether Luke writes a plan for the task it starts. */

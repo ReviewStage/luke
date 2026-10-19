@@ -32,7 +32,7 @@ import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
-import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
+import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import {
   AUTOMATIONS_PAGE,
@@ -322,13 +322,14 @@ function TitleBarNewTask({ tasks }: { tasks: TasksControl }): React.JSX.Element 
 /**
  * Whether the open task's Transcript is on screen with its words, streaming
  * a call's as they are said. A Call tab standing behind another chosen
- * tab is not on screen, and one still reading, or failed, shows no words.
+ * tab, or under a side panel filling the window, is not on screen, and one
+ * still reading, or failed, shows no words.
  */
 function transcriptStreaming(tasks: TasksControl): boolean {
-  const { sidePanel, transcript } = tasks;
+  const { mainTabs, sidePanel, transcript } = tasks;
   return (
-    sidePanel.open &&
-    sidePanel.tab === SIDE_PANEL_TAB.CALL &&
+    !sidePanel.fullScreen &&
+    mainTabs.tab === MAIN_TAB.CALL &&
     transcript.region.kind === TRANSCRIPT_REGION.READY
   );
 }

@@ -63,7 +63,6 @@ import {
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
-import { CallTabVideo } from "../call/panel-avatar.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
@@ -96,7 +95,6 @@ import { PlanCommentsTab } from "../tasks/plan-comments.js";
 import { ofPullRequestTab } from "../tasks/pull-request-number.js";
 import { type KindLook, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { TaskBoard } from "../tasks/task-board.js";
-import { TaskCall } from "../tasks/task-call.js";
 import { useOpenTerminal } from "../tasks/terminal-commands.js";
 import { TerminalCardFoot, TerminalStanding } from "../tasks/terminal-shells.js";
 import { TerminalTab } from "../tasks/terminal-tab.js";
@@ -656,6 +654,8 @@ function stripTabs(input: {
   shownAgent: string | undefined;
   /** The open plan, whose pages a page tab's card previews. */
   taskId: string;
+  /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
+  inboxWaiting: number;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
   const { repository, copied, readWorker, onOpenAgent, shownAgent, taskId } = input;
@@ -668,9 +668,16 @@ function stripTabs(input: {
     selected: chosen(tab),
     onSelect: () => panel.onChoose(tab),
   });
+  // The Inbox counts what waits on the developer after its name, dimmed as a
+  // model's effort is after the model's, so an item posted while the
+  // developer reads elsewhere is seen from any tab.
+  const { inboxWaiting } = input;
   const fixed = panel.tabs.map((tab) => ({
     tab,
-    look: look(tab, tabLook({ kind: TAB_KIND.PANEL, tab })),
+    look: look(tab, {
+      ...tabLook({ kind: TAB_KIND.PANEL, tab }),
+      detail: tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0 ? String(inboxWaiting) : undefined,
+    }),
     close: () => panel.onClose(tab),
   }));
   const subagentTabs = subagents.map((drawn) => {
@@ -851,6 +858,7 @@ function PanelTabs({
   actionsSlot,
   onOpenAgent,
   shownAgent,
+  inboxWaiting,
 }: {
   panel: SidePanelControl;
   holder: SidePanelHolder;
@@ -890,6 +898,8 @@ function PanelTabs({
   onOpenAgent: (agentId: string) => void;
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
   shownAgent: string | undefined;
+  /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
+  inboxWaiting: number;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const kinds = stripTabs({
@@ -911,6 +921,7 @@ function PanelTabs({
     onOpenAgent,
     shownAgent,
     taskId,
+    inboxWaiting,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   const copyLink = useCopyLinkItem();
@@ -1335,9 +1346,7 @@ function TabContent({
   standings,
   shown,
   findActive,
-  onOpenSubagent,
   onOpenTarget,
-  cards,
   onWorkerStatus,
   onWorkerHeld,
   onOpenFile,
@@ -1354,6 +1363,8 @@ function TabContent({
   shellsList,
   browsers,
   onBrowserOpened,
+  plan,
+  inbox,
 }: {
   tab: SidePanelTab;
   taskId: string;
@@ -1377,12 +1388,8 @@ function TabContent({
   shown: boolean;
   /** Whether the panel holds the window's keys, so a page's tab finds in its source. */
   findActive: boolean;
-  /** Opens a brain's worker's session in a tab of its own, by the call that started it. */
-  onOpenSubagent: (callId: string) => void;
-  /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the task's column. */
+  /** Opens what a row of a tab is about in the tab that draws it, as the Comments tab's opens the plan or an agent's tab. */
   onOpenTarget: (target: ToolTarget) => void;
-  /** The cards the Call tab's rows that open a tab hang. */
-  cards: TranscriptCards;
   /** A delegated worker's page said where it stands now. */
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
   /** A delegated worker's tab drew its transcript anew, by the call that started it. */
@@ -1415,6 +1422,10 @@ function TabContent({
   browsers: readonly OpenBrowser[];
   /** Says a Browser tab's page was opened at an address (`SidePanelControl.onBrowserOpened`). */
   onBrowserOpened: (browserId: string, address: string) => void;
+  /** The plan's document, drawn by the task's page that holds what it reads (`desktop-tasks.tsx`). */
+  plan: React.ReactNode;
+  /** The task's Inbox, drawn by the task's page on the same terms. */
+  inbox: React.ReactNode;
 }): React.JSX.Element {
   const { act } = useAct();
   if (isMacTerminalTab(tab)) {
@@ -1567,6 +1578,10 @@ function TabContent({
     );
   }
   switch (tab) {
+    case SIDE_PANEL_TAB.PLAN:
+      return <>{plan}</>;
+    case SIDE_PANEL_TAB.INBOX:
+      return <>{inbox}</>;
     case SIDE_PANEL_TAB.BOARD:
       // An archived task's board only shows, as its agents only read.
       return (
@@ -1593,22 +1608,6 @@ function TabContent({
           onOpenFile={onOpenFile}
           reveal={codeReveal}
           onRevealed={onRevealed}
-        />
-      );
-    case SIDE_PANEL_TAB.CALL:
-      return (
-        <TaskCall
-          region={transcript.region}
-          onRetry={transcript.onRetry}
-          conversation={work.conversation}
-          onLoadEarlier={work.onLoadEarlier}
-          onOpenSubagent={onOpenSubagent}
-          onOpenTarget={onOpenTarget}
-          cards={cards}
-          shown={shown}
-          models={agents.models}
-          reveal={transcript.reveal ?? work.reveal}
-          video={<CallTabVideo taskId={taskId} />}
         />
       );
     case SIDE_PANEL_TAB.COMMENTS:
@@ -1843,8 +1842,9 @@ export function SidePanel({
   shown,
   focused,
   onOpenTarget,
-  cards,
   banner,
+  plan,
+  inbox,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
@@ -1874,12 +1874,14 @@ export function SidePanel({
   shown: boolean;
   /** Whether the panel holds the window's focus, which its ⌘W, ⌘T, and ⌘F answer to. */
   focused: boolean;
-  /** Opens what a call on the Call tab is about in the tab that draws it, as a start's row opens its agent's tab in the task's column. */
+  /** Opens what a row of a tab is about in the tab that draws it, as an agent's card opens its tab in the task's column. */
   onOpenTarget: (target: ToolTarget) => void;
-  /** The cards the Call tab's rows that open a tab hang, as those tabs hang them. */
-  cards: TaskCards;
   /** The task's banner, where one stands (`task-banner.tsx`), drawn under the bar while the panel fills the window and covers the column that draws it otherwise. */
   banner?: React.ReactNode;
+  /** The plan's document, which its Plan tab shows; none beside anything but a task's page. */
+  plan?: React.ReactNode;
+  /** The task's Inbox, which its Inbox tab shows, and how many of its items wait on the developer, which the tab counts; none beside anything but a task's page. */
+  inbox?: { readonly body: React.ReactNode; readonly waiting: number } | undefined;
 }): React.JSX.Element {
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
@@ -1987,10 +1989,6 @@ export function SidePanel({
                   : isBrowserTab(tab)
                     ? (browserTitleOf(browserPages.get(tab.browser)) ?? TAB_WORDS.BROWSER)
                     : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
-  const openSubagent = useCallback(
-    (callId: string) => panel.onChoose({ subagent: callId }),
-    [panel.onChoose],
-  );
   // The card a File tab's note asked the Code tab to scroll to, until it has.
   const [codeReveal, setCodeReveal] = useState<string | undefined>(undefined);
   const showNote = useCallback(
@@ -2004,9 +2002,12 @@ export function SidePanel({
   const keys = shown && leaving === PANEL_LEAVING.NONE;
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
+  // The Inbox is offered only on a task holding an agent, an archived one among them, since only an agent posts.
+  const inboxOffered =
+    (agents.heldIds?.length ?? 0) > 0 || panel.tabs.includes(SIDE_PANEL_TAB.INBOX);
   const offers = panelEntries({
     panel,
-    kinds: HOLDER_KINDS[holder],
+    kinds: HOLDER_KINDS[holder].filter((kind) => kind !== SIDE_PANEL_TAB.INBOX || inboxOffered),
     workers,
     files: offered,
     changes: changesOffers(agents, changes),
@@ -2057,6 +2058,7 @@ export function SidePanel({
           actionsSlot={actionsSlot}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           shownAgent={shownAgent}
+          inboxWaiting={inbox?.waiting ?? 0}
         />
       }
       actions={<span ref={setActionsSlot} className="toolbar-tab-actions" />}
@@ -2099,9 +2101,7 @@ export function SidePanel({
             standings={standings}
             shown={keys}
             findActive={keys && focused}
-            onOpenSubagent={openSubagent}
             onOpenTarget={onOpenTarget}
-            cards={cards.call}
             onWorkerStatus={views.onWorkerStatus}
             onWorkerHeld={views.onWorkerHeld}
             onOpenFile={panel.onOpenFile}
@@ -2118,6 +2118,8 @@ export function SidePanel({
             shellsList={shellsList}
             browsers={browsers}
             onBrowserOpened={panel.onBrowserOpened}
+            plan={plan}
+            inbox={inbox?.body}
           />
         </FindScope>
       )}

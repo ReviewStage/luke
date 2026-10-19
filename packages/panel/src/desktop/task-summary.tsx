@@ -29,7 +29,6 @@ import { type InboxBoardView, NEEDS_YOU } from "../tasks/inbox-model.js";
 import { PageCard } from "../tasks/page-card.js";
 import { TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { workRowsOf } from "../tasks/work-model.js";
@@ -442,8 +441,8 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
   const changes = changesOffers(agents, sidePanel.changes);
   const inboxHolds = inbox.open.length + inbox.settled.length > 0;
   const inboxRow =
-    inboxHolds || mainTabs.tabs.includes(MAIN_TAB.INBOX)
-      ? [inboxEntry(() => mainTabs.onChoose(MAIN_TAB.INBOX), inbox.open.length)]
+    inboxHolds || sidePanel.tabs.includes(SIDE_PANEL_TAB.INBOX)
+      ? [inboxEntry(() => sidePanel.onChoose(SIDE_PANEL_TAB.INBOX), inbox.open.length)]
       : [];
   // The task's comments stand in Tabs while any thread is open, counting them, or while their tab was used.
   const commented = openComments !== undefined && openComments > 0;
@@ -462,7 +461,10 @@ function summaryRows(tasks: TasksControl, inbox: InboxBoardView, openComments?: 
     ...commentsRow,
     ...panelEntries({
       panel: sidePanel,
-      kinds: sidePanel.used.filter((kind) => kind !== SIDE_PANEL_TAB.COMMENTS),
+      // The Inbox and Comments stand above, each with its count.
+      kinds: sidePanel.used.filter(
+        (kind) => kind !== SIDE_PANEL_TAB.COMMENTS && kind !== SIDE_PANEL_TAB.INBOX,
+      ),
       workers,
       files,
       changes,

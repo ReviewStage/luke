@@ -1,6 +1,6 @@
 import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
-import { AgentPlaceholderIcon, DocumentIcon, PlusIcon } from "@luke/ui";
+import { AgentPlaceholderIcon, CallIcon, DocumentIcon, PlusIcon } from "@luke/ui";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import {
   AppWindowIcon,
@@ -33,9 +33,12 @@ import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel.js
 
 /** The kinds of tab, each drawn its own way. */
 export const TAB_KIND = {
-  /** One of the side panel's fixed kinds: Board, Code, or Call. */
+  /** One of the side panel's fixed kinds: Plan, Inbox, Board, Code, or Comments. */
   PANEL: "panel",
+  /** A task, as a row naming it does. */
   PLAN: "plan",
+  /** The task's calls with Luke, which anchor its column. */
+  CALL: "call",
   INBOX: "inbox",
   /** The plan's own channel of the workspace's chat. */
   CHAT: "chat",
@@ -64,6 +67,7 @@ interface AgentStanding {
 export type TabSubject =
   | { readonly kind: typeof TAB_KIND.PANEL; readonly tab: FixedSidePanelTab }
   | { readonly kind: typeof TAB_KIND.PLAN; readonly name: string }
+  | { readonly kind: typeof TAB_KIND.CALL }
   | { readonly kind: typeof TAB_KIND.INBOX }
   | { readonly kind: typeof TAB_KIND.CHAT }
   | { readonly kind: typeof TAB_KIND.DRAFT }
@@ -166,6 +170,8 @@ export function tabLook(subject: TabSubject): KindLook {
     }
     case TAB_KIND.PLAN:
       return { icon: <DocumentIcon />, label: subject.name };
+    case TAB_KIND.CALL:
+      return { icon: <CallIcon />, label: TAB_WORDS.CALL };
     case TAB_KIND.INBOX:
       return { icon: <InboxIcon />, label: TAB_WORDS.INBOX };
     case TAB_KIND.CHAT:

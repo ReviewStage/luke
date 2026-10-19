@@ -11,6 +11,7 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { TASK_WORK_STATE } from "@luke/features/tasks-view";
+import { TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -150,8 +151,8 @@ async function mount(): Promise<HTMLElement> {
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [MAIN_TAB.PLAN, { agent: WORKING.id }, { draft: DRAFT }],
-      tab: MAIN_TAB.PLAN,
+      tabs: [MAIN_TAB.CALL, { agent: WORKING.id }, { draft: DRAFT }],
+      tab: MAIN_TAB.CALL,
       openAgents: [WORKING.id],
     },
     sidePanel: {
@@ -247,15 +248,15 @@ test("the column's + offers a working agent and the draft in the look their tabs
   assert.match(tabs.get(WORKING.title ?? "")?.glyph ?? "", /data-state="working"/u);
 });
 
-test("the plan's own tab closes beside the agents', and the column's + offers the plan to open it again in the look its tab wears", async () => {
+test("the Call's tab closes beside the agents', and the column's + offers the Call to open it again in the look its tab wears", async () => {
   const column = (await mount()).querySelector(".main-tabs");
-  assert.ok(column, "the plan's column's strip");
+  assert.ok(column, "the task's column's strip");
   const pill = column.querySelector('.tab[data-anchored="true"]');
   assert.equal(pill?.getAttribute("data-closable"), "true");
   const tabs = tabLooks(column);
   const rows = rowLooks(column);
-  assert.ok(tabs.has(TASK.name), "the strip has the plan's tab");
-  assert.deepEqual(rows.get(TASK.name), tabs.get(TASK.name));
+  assert.ok(tabs.has(TAB_WORDS.CALL), "the strip has the Call's tab");
+  assert.deepEqual(rows.get(TAB_WORDS.CALL), tabs.get(TAB_WORDS.CALL));
 });
 
 test("the side panel's + offers a working subagent and an agent's Pull request in the look their tabs wear, the Pull request named by its number and title rather than its agent's name", async () => {
@@ -275,10 +276,10 @@ test("the side panel's + offers a working subagent and an agent's Pull request i
   );
 });
 
-test("the plan's own tab hangs the plan's card, as its sidebar row does, its agents among it, rather than a hint naming its repository", async () => {
+test("the Call's tab hangs the task's card, as its sidebar row does, its agents among it, rather than a hint naming its repository", async () => {
   const column = (await mount()).querySelector(".main-tabs");
   const tab = column?.querySelector<HTMLElement>('[role="tab"]');
-  assert.equal(tab?.textContent, TASK.name);
+  assert.equal(tab?.textContent, TAB_WORDS.CALL);
   act(() => {
     tab?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });

@@ -305,7 +305,7 @@ function onTab(
 ): TasksControl {
   return {
     ...tasks,
-    mainTabs: { ...tasks.mainTabs, tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX, AGENT_TAB], tab },
+    mainTabs: { ...tasks.mainTabs, tabs: [MAIN_TAB.CALL, AGENT_TAB], tab },
     sidePanel: { ...tasks.sidePanel, ...sidePanel },
     agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
   };
@@ -352,13 +352,19 @@ test("a plan whose repository its workspace cannot reach and another of the acco
   assert.deepEqual(moves, [[TASK.id, ACME.id]]);
 });
 
-test("a stranded plan's banner stands over every tab of the plan: its Inbox too narrow for its list and item side by side, an agent's, beside the side panel, and over the side panel filling the window", () => {
+test("a stranded plan's banner stands over every tab of the plan: its Call beside its Inbox too narrow for its list and item side by side, an agent's beside the plan, and over the side panel filling the window", () => {
   const tasks = openTab(TASK, [STUDIO, ACME]);
-  const inbox = openTask(onTab(tasks, MAIN_TAB.INBOX));
+  const inboxShown = {
+    open: true,
+    tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+    strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+    tab: SIDE_PANEL_TAB.INBOX,
+  };
+  const inbox = openTask(onTab(tasks, MAIN_TAB.CALL, inboxShown));
   layOutInbox(inbox, 700);
-  const agent = openTask(onTab(tasks, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.CALL }));
+  const agent = openTask(onTab(tasks, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.PLAN }));
   const full = openTask(
-    onTab(tasks, MAIN_TAB.PLAN, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.CALL }),
+    onTab(tasks, MAIN_TAB.CALL, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.PLAN }),
   );
 
   assert.equal(inbox.querySelector(".inbox-view")?.getAttribute("data-columns"), "list");
@@ -388,7 +394,7 @@ test("no banner stands over any tab of a plan its own workspace reaches, one no 
     [{ ...TASK, ownerId: SAM }, [STUDIO, ACME]],
   ];
   const banners = cases.flatMap(([task, workspaces]) =>
-    [MAIN_TAB.PLAN, MAIN_TAB.INBOX, AGENT_TAB].map((tab) => {
+    [MAIN_TAB.CALL, AGENT_TAB].map((tab) => {
       const page = openTask(onTab(openTab(task, workspaces), tab));
       const found = strandedBanner(page) !== null;
       unmountAll();
@@ -398,6 +404,6 @@ test("no banner stands over any tab of a plan its own workspace reaches, one no 
 
   assert.deepEqual(
     banners,
-    Array.from({ length: cases.length * 3 }, () => false),
+    Array.from({ length: cases.length * 2 }, () => false),
   );
 });

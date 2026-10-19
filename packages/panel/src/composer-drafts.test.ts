@@ -28,8 +28,10 @@ import {
   useAgentComposer,
 } from "./tasks/use-agent-composer.js";
 import { MAIN_TAB, type MainTab } from "./tasks/use-main-tabs.js";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "./tasks/use-task-inbox.js";
 import { NO_LOOKS } from "./tasks/use-task-looks.js";
+import type { TasksControl } from "./tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import {
@@ -156,8 +158,8 @@ function windowOn(registry: AtomRegistry.AtomRegistry) {
       region: { kind: DOCUMENT_REGION.READY, task: open.plan },
       mainTabs: {
         ...tasksControl().mainTabs,
-        tabs: [MAIN_TAB.PLAN, agentTab],
-        tab: onTask ? MAIN_TAB.PLAN : agentTab,
+        tabs: [MAIN_TAB.CALL, agentTab],
+        tab: onTask ? MAIN_TAB.CALL : agentTab,
         openAgents: [open.agent.id],
       },
       agents: codingAgentsControl({
@@ -425,7 +427,7 @@ async function sidebarOn(open: typeof INVITES, pinned: boolean) {
     sidePanel: { ...tasksControl().sidePanel, pins: pinned ? [pin] : [] },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.PLAN, pin.tab],
+      tabs: [MAIN_TAB.CALL, pin.tab],
       tab: pin.tab,
       openAgents: [open.agent.id],
     },
@@ -472,7 +474,18 @@ const DRAFT_KEY = "draft-invites";
  * agent's under `DRAFT_KEY`, and its sidebar row beside the column; the
  * drafts are what storage holds.
  */
-async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVITES.agent) {
+/** The side panel shown on `tab`, its Plan and Inbox standing. */
+function inboxPanel(tab: SidePanelTab): TasksControl["sidePanel"] {
+  const tabs = [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX];
+  return { ...tasksControl().sidePanel, open: true, tabs, strip: tabs, tab };
+}
+
+async function columnOn(
+  tabs: readonly MainTab[],
+  chosen: MainTab,
+  agent = INVITES.agent,
+  side: SidePanelTab | undefined = undefined,
+) {
   const tasks = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     tasks: [INVITES.plan],
@@ -480,12 +493,13 @@ async function columnOn(tabs: readonly MainTab[], chosen: MainTab, agent = INVIT
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.PLAN, ...tabs],
+      tabs: [MAIN_TAB.CALL, ...tabs],
       tab: chosen,
       openAgents: tabs.some((tab) => sameTab(tab, { agent: INVITES.agent.id }))
         ? [INVITES.agent.id]
         : [],
     },
+    ...(side === undefined ? undefined : { sidePanel: inboxPanel(side) }),
     agents: {
       ...codingAgentsControl({
         agents: [agent],
@@ -566,9 +580,13 @@ test("an inbox card's answer and a draft agent's first message mark neither thei
       },
     ]),
   );
-  const tabs = [MAIN_TAB.INBOX, { draft: DRAFT_KEY }];
-  for (const chosen of [MAIN_TAB.PLAN, MAIN_TAB.INBOX, { draft: DRAFT_KEY }]) {
-    const column = await columnOn(tabs, chosen);
+  const tabs = [{ draft: DRAFT_KEY }];
+  for (const [chosen, side] of [
+    [MAIN_TAB.CALL, SIDE_PANEL_TAB.PLAN],
+    [MAIN_TAB.CALL, SIDE_PANEL_TAB.INBOX],
+    [{ draft: DRAFT_KEY }, SIDE_PANEL_TAB.INBOX],
+  ] as const) {
+    const column = await columnOn(tabs, chosen, INVITES.agent, side);
     assert.equal(column.tabDrafted(TAB_WORDS.INBOX), false);
     assert.equal(column.tabDrafted(TAB_WORDS.NEW_AGENT), false);
     assert.equal(column.rowDrafted(), false);
@@ -583,12 +601,12 @@ test("a draft behind no open tab of its task's, or behind a failed agent's, leav
       { ...keptEntry(DEAN.id, INVITES.plan.id, INVITES.agent.id, "Expire"), accountId: null },
     ]),
   );
-  const closed = await columnOn([], MAIN_TAB.PLAN);
+  const closed = await columnOn([], MAIN_TAB.CALL);
   assert.equal(closed.rowDrafted(), false, "the agent's tab is closed, but its task is open");
   closed.unmount();
 
   const failed = { ...INVITES.agent, status: CODING_AGENT_STATUS.FAILED };
-  const marked = await columnOn([{ agent: INVITES.agent.id }], MAIN_TAB.PLAN, failed);
+  const marked = await columnOn([{ agent: INVITES.agent.id }], MAIN_TAB.CALL, failed);
   assert.equal(marked.tabDrafted(INVITES.agent.title ?? ""), false);
   assert.equal(marked.rowDrafted(), false);
 });
@@ -626,11 +644,7 @@ async function inboxOn(item: InboxItem) {
     tasks: [INVITES.plan],
     activeTaskId: INVITES.plan.id,
     region: { kind: DOCUMENT_REGION.READY, task: INVITES.plan },
-    mainTabs: {
-      ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
-      tab: MAIN_TAB.INBOX,
-    },
+    sidePanel: inboxPanel(SIDE_PANEL_TAB.INBOX),
     agents: codingAgentsControl({
       agents: [INVITES.agent],
       agentIds: [INVITES.agent.id],

@@ -10,7 +10,7 @@ import type { AppInboxTaskHolding } from "@luke/host/app-state";
 import { EXPERIMENT } from "@luke/settings";
 import { EmptyState, ErrorState } from "@luke/ui";
 import { INBOX_PANEL_TARGET, inboxPanelTarget } from "@luke/ui/inbox-panel-link";
-import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
+import type { StripTab } from "@luke/ui/tab-strip-model";
 import { TASK_MARK } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { InboxIcon } from "lucide-react";
@@ -73,7 +73,6 @@ import {
   SidePanel,
   type SidePanelDrawing,
   showPullRequest,
-  taskCards,
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel.js";
@@ -780,13 +779,6 @@ function InboxSidePanel({
     }
     if (target.kind !== TOOL_TARGET.INBOX && taskId !== undefined) tasks.onShowTask(taskId);
   };
-  const cards = taskCards({
-    agents,
-    workRows: [],
-    held: views.held,
-    chosen: (opened) => panel.tab !== undefined && sameTab(opened, panel.tab),
-    shownCode: [],
-  });
   // The task's agents' workers are their delegations, read through their own transcripts, so the panel's work is none.
   const work = {
     conversation: undefined,
@@ -813,7 +805,6 @@ function InboxSidePanel({
       shown={tasks.shown}
       focused={focused}
       onOpenTarget={openTarget}
-      cards={cards}
     />
   );
 }

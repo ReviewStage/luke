@@ -82,7 +82,7 @@ async function mount(): Promise<{ readonly opened: () => number }> {
     tasks: [SUMMARY],
     activeTaskId: TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
-    mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.PLAN], tab: MAIN_TAB.PLAN },
+    mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.CALL], tab: MAIN_TAB.CALL },
     sidePanel: {
       ...base.sidePanel,
       open: true,

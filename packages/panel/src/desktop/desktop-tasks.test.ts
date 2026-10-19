@@ -33,11 +33,12 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, test, vi } from "vitest";
-import { runAppCommand, useAppKeymap } from "../app-commands.js";
+import { runAppCommand } from "../app-commands.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
+import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
@@ -64,6 +65,13 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+/** The side panel shown on the plan, as a task opens. */
+const DOCUMENT_PANEL: TasksControl["sidePanel"] = {
+  ...tasksControl().sidePanel,
+  open: true,
+  tab: SIDE_PANEL_TAB.PLAN,
+};
 
 test("a task the service will not hand the reader, as a link to another workspace's may name, is not found, its Close the one way on", () => {
   const left: string[] = [];
@@ -107,7 +115,7 @@ test("the Call tab draws each call's spoken lines as the developer's bubbles and
         page: TASKS_PAGE.DOCUMENT,
         activeTaskId: TASK.id,
         region: { kind: DOCUMENT_REGION.READY, task: TASK },
-        sidePanel: { ...tasksControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CALL },
+        mainTabs: { ...tasksControl().mainTabs, tab: MAIN_TAB.CALL },
         transcript: {
           region: {
             kind: TRANSCRIPT_REGION.READY,
@@ -258,10 +266,12 @@ test("a plan's Inbox tab whose read holds nothing says nothing needs you under t
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
             region: { kind: DOCUMENT_REGION.READY, task: TASK },
-            mainTabs: {
-              ...tasksControl().mainTabs,
-              tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
-              tab: MAIN_TAB.INBOX,
+            sidePanel: {
+              ...tasksControl().sidePanel,
+              open: true,
+              tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+              strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+              tab: SIDE_PANEL_TAB.INBOX,
             },
             agents: codingAgentsControl({
               agentIds: [agentId],
@@ -322,7 +332,6 @@ function approvalItem(id: string, title: string, at: number): InboxItem {
 /** The plan's Inbox tab over the items given, laid out 700px wide, too narrow for its list and the item side by side, or as wide as given. */
 async function narrowTaskInbox(
   items: readonly InboxItem[],
-  fullScreen = false,
   width = 700,
   /** What the read held open past the first answers, where a test settles it; else it stays open. */
   later: Promise<CodingAgentInboxAnswerView> = new Promise(() => undefined),
@@ -351,12 +360,13 @@ async function narrowTaskInbox(
             page: TASKS_PAGE.DOCUMENT,
             activeTaskId: TASK.id,
             region: { kind: DOCUMENT_REGION.READY, task: TASK },
-            mainTabs: {
-              ...tasksControl().mainTabs,
-              tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
-              tab: MAIN_TAB.INBOX,
+            sidePanel: {
+              ...tasksControl().sidePanel,
+              open: true,
+              tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+              strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+              tab: SIDE_PANEL_TAB.INBOX,
             },
-            sidePanel: { ...tasksControl().sidePanel, open: fullScreen, fullScreen },
             agents: codingAgentsControl({
               agentIds: ["8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"],
               readInbox: ({ after }) =>
@@ -477,7 +487,7 @@ test("a task's Inbox heads its list with the Inbox's name and its tabs, opening 
     approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ];
-  let inbox = await narrowTaskInbox(items, false, 1_200);
+  let inbox = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(inbox.head(), ["Inbox", "All open"]);
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
   inbox.pressTab("Everything");
@@ -488,7 +498,7 @@ test("a task's Inbox heads its list with the Inbox's name and its tabs, opening 
   assert.deepEqual(inbox.rows(), ["Expire after 7 days?"]);
   inbox.unmount();
 
-  inbox = await narrowTaskInbox(items, false, 1_200);
+  inbox = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(inbox.head(), ["Inbox", "Needs you"], "the tab outlives a relaunch");
   inbox.unmount();
   window.localStorage.clear();
@@ -504,7 +514,7 @@ test("a task's Inbox whose Needs you was pressed before the tabs opens on the Ne
   ] as const) {
     window.localStorage.clear();
     window.localStorage.setItem(TASK_EARLIER_SHOW_KEY, JSON.stringify(pressed));
-    const inbox = await narrowTaskInbox(items, false, 1_200);
+    const inbox = await narrowTaskInbox(items, 1_200);
     assert.deepEqual(inbox.head(), ["Inbox", shown]);
     inbox.unmount();
   }
@@ -573,7 +583,7 @@ function heldAnswer(): HeldAnswer {
 test("while a task's Inbox is first read, its list stands placeholder rows under a status saying the inbox is being read, with no ring in its corner; once the read lands, the items stand", async () => {
   const read = heldAnswer();
   const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
-  const inbox = await narrowTaskInbox([], false, 1_200, undefined, read.promise);
+  const inbox = await narrowTaskInbox([], 1_200, undefined, read.promise);
   const list = document.querySelector<HTMLElement>(".inbox-tasks");
   assert.ok(list, "the list is drawn");
   const wait = list.querySelector<HTMLElement>('[role="status"][aria-busy="true"]');
@@ -594,7 +604,7 @@ test("with Needs you on, the item a task's Inbox chose for itself stays shown on
   window.localStorage.clear();
   const asked = approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000);
   const read = heldAnswer();
-  const inbox = await narrowTaskInbox([asked], false, 1_200, read.promise);
+  const inbox = await narrowTaskInbox([asked], 1_200, read.promise);
   inbox.pressNeedsYou();
   assert.equal(inbox.title(), "Expire after 7 days?");
   await read.settle({ items: [approvedItem(asked.id, asked.title, 1_000)], cursor: "2" });
@@ -612,7 +622,7 @@ test("a task's Inbox holding only settled items, on the Needs you tab, lists no 
     approvedItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ];
-  const wide = await narrowTaskInbox(items, false, 1_200);
+  const wide = await narrowTaskInbox(items, 1_200);
   assert.deepEqual(wide.rows(), ["Resend on bounce?", "Expire after 7 days?"]);
   wide.pressNeedsYou();
   assert.deepEqual(wide.head(), ["Inbox", "Needs you"]);
@@ -650,40 +660,17 @@ test("a task's Inbox whose read failed offers Retry though Needs you lists nothi
   const settled = [
     approvedItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
   ];
-  const first = await narrowTaskInbox(settled, false, 1_200);
+  const first = await narrowTaskInbox(settled, 1_200);
   first.pressNeedsYou();
   first.unmount();
 
   const read = heldAnswer();
-  const inbox = await narrowTaskInbox(settled, false, 1_200, read.promise);
+  const inbox = await narrowTaskInbox(settled, 1_200, read.promise);
   assert.deepEqual(inbox.rows(), [], "Needs you, kept from before, lists nothing");
   await read.settle({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   assert.deepEqual(inbox.failure(), [true, true]);
   window.localStorage.clear();
   inbox.unmount();
-});
-
-test("a plan's Inbox the full-screen side panel covers leaves K and J to the panel, stepping nothing it hides", async () => {
-  const keys = createRoot(document.body.appendChild(document.createElement("div")));
-  function Keymap() {
-    useAppKeymap(true);
-    return null;
-  }
-  act(() => keys.render(createElement(Keymap)));
-  const inbox = await narrowTaskInbox(
-    [
-      approvalItem("a1b2c3d4-0000-4000-8000-000000000001", "Expire after 7 days?", 1_000),
-      approvalItem("a1b2c3d4-0000-4000-8000-000000000002", "Resend on bounce?", 2_000),
-    ],
-    true,
-  );
-  assert.equal(inbox.title(), "Resend on bounce?");
-  act(() => {
-    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
-  });
-  assert.equal(inbox.title(), "Resend on bounce?");
-  inbox.unmount();
-  act(() => keys.unmount());
 });
 
 test("a plan's Inbox tab too narrow for its list and the item side by side shows the chosen item under a way back to the list, whose rows open their items again", async () => {
@@ -732,6 +719,7 @@ test("a plan's document opens on its title, with who created it and last edited 
             region: { kind: DOCUMENT_REGION.READY, task },
             workspaces: [home],
             workspace: home,
+            sidePanel: DOCUMENT_PANEL,
           }),
         }),
       ),
@@ -788,7 +776,6 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
       assumptions: [],
     },
   };
-  const base = tasksControl();
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   act(() =>
@@ -803,7 +790,7 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
             activeTaskId: task.id,
             region: { kind: DOCUMENT_REGION.READY, task },
             sidePanel: {
-              ...base.sidePanel,
+              ...DOCUMENT_PANEL,
               onPullRequestView: (tab, view) => opened.push({ agentId: tab.changes, view }),
               onChoose: (tab) => opened.push(tab),
             },
@@ -917,7 +904,7 @@ async function chatTabMounted(ownChannel: boolean) {
             region: { kind: DOCUMENT_REGION.READY, task: TASK },
             mainTabs: {
               ...tasksControl().mainTabs,
-              tabs: [MAIN_TAB.PLAN, MAIN_TAB.CHAT],
+              tabs: [MAIN_TAB.CALL, MAIN_TAB.CHAT],
               tab: MAIN_TAB.CHAT,
             },
             chatView: { ...tasksControl().chatView, available: true, chat },
@@ -984,7 +971,7 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
     ...approvalItem("a1b2c3d4-0000-4000-8000-0000000000a2", "Roll back?", 1),
     unread: true,
   };
-  const inbox = await narrowTaskInbox([SHIP, ROLL], false, 1400);
+  const inbox = await narrowTaskInbox([SHIP, ROLL], 1400);
   await act(async () => {
     for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
   });

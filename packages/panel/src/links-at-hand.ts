@@ -21,7 +21,8 @@ import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-ta
  * what stands in the plan's place (an agent's page, the Inbox on an item,
  * an automation, an issue, Factory) before the list it is in; and a page of Settings
  * while Settings stands. A tab with nothing of its own to link to, a
- * file's, the board, the code, or a terminal, is passed over for the task.
+ * file's, the board, the code, the Inbox, or a terminal, is passed over for
+ * the task, and so is the plan's, whose link is the task's.
  * Each link is written under its workspace's slug, or its id until the
  * workspaces are read, as a task's own is; an agent's page under the
  * workspace the page read its agent into, which only the page knows, so the
@@ -97,13 +98,13 @@ function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefine
   return home?.slug ?? workspaceId ?? "";
 }
 
-/** The place a tab of the side panel shows, on its task; none for a tab whose thing has no link of its own: a file's, the board, the code, a terminal. */
+/** The place a tab of the side panel shows, on its task; none for a tab whose thing has no link of its own: a file's, the board, the code, the Inbox, a terminal. */
 export function panelTabPlace(
   taskId: string,
   tab: SidePanelTab | undefined,
 ): LinkPlace | undefined {
   if (tab === undefined) return undefined;
-  if (tab === SIDE_PANEL_TAB.CALL) return { kind: LINK_PLACE.CALL, planId: taskId };
+  if (tab === SIDE_PANEL_TAB.PLAN) return { kind: LINK_PLACE.TASK, planId: taskId };
   if (isPageTab(tab)) return { kind: LINK_PLACE.PAGE, planId: taskId, pageId: tab.page };
   if (isChangesTab(tab)) return { kind: LINK_PLACE.CHANGES, planId: taskId, agentId: tab.changes };
   if (!isSubagentTab(tab)) return undefined;

@@ -461,15 +461,15 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   assert.equal(tab.control().newTask.open, false, "Settings taking the window put the dialog away");
 });
 
-test("a task started opens with the side panel hidden, a refused start shows it again as it stood, and a panel opened before the start answers stays open", async () => {
+test("a task started opens with the side panel shown on its plan, a refused start hides it again where it stood hidden, and a panel hidden before the start answers stays hidden", async () => {
   const answers: Array<(answer: ActResultFor<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
   );
   const panel = () => tab.control().sidePanel;
-  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => panel().onToggleFullScreen());
+  act(() => panel().onToggle());
+  assert.equal(panel().open, false);
 
   const send = () => {
     let note: Promise<string | undefined> = Promise.resolve(undefined);
@@ -482,27 +482,26 @@ test("a task started opens with the side panel hidden, a refused start shows it 
   };
   act(() => tab.control().onNewTask());
   const refused = send();
-  assert.equal(panel().open, false, "the panel hides as the start is sent");
+  assert.deepEqual(
+    panelOf(tab),
+    { open: true, tab: SIDE_PANEL_TAB.PLAN },
+    "the panel shows as the start is sent",
+  );
   await act(async () => {
     answers[0]?.({ failure: TASK_CALL_FAILURE.REPOSITORY_NOT_REACHABLE });
     await refused;
   });
-  assert.deepEqual(
-    panelOf(tab),
-    { open: true, tab: SIDE_PANEL_TAB.BOARD },
-    "a refusal shows it again",
-  );
-  assert.equal(panel().fullScreen, false, "beside the document");
+  assert.equal(panel().open, false, "a refusal hides it again");
 
   const started = send();
-  assert.equal(panel().open, false);
-  // The host turns to the new plan before the start answers, and the developer opens its panel.
+  assert.equal(panel().open, true);
+  // The host turns to the new plan before the start answers, and the developer hides its panel.
   act(() => panel().onToggle());
   await act(async () => {
     answers[1]?.({ planId: OTHER_TASK_ID });
     await started;
   });
-  assert.equal(panel().open, true, "the late answer leaves the panel the developer opened");
+  assert.equal(panel().open, false, "the late answer leaves the panel the developer hid");
 });
 
 test("a planning worker's tab reads its session as an agent's worker's tab reads its own, under the plan and the call that started it", async () => {
@@ -673,24 +672,39 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   const panel = () => tab.control().sidePanel;
   const column = () => tab.control().mainTabs;
   const file = { file: CODE.ref.path };
-  // The code shown on the task stands its Code tab first.
+  // The plan stands first, and the code shown on the task stands its Code tab after it.
   act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => panel().onChoose(SIDE_PANEL_TAB.CALL));
+  act(() => panel().onChoose(SIDE_PANEL_TAB.COMMENTS));
   act(() => panel().onOpenFile(CODE.ref));
-  const strip = [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CALL, file];
+  const strip = [
+    SIDE_PANEL_TAB.PLAN,
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.COMMENTS,
+    file,
+  ];
   assert.deepEqual(panel().strip, strip);
-  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, { agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, { agent: AGENT_ID }]);
   assert.equal(tab.control().onReopenClosedTab, undefined, "nothing closed, nothing to reopen");
 
   act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
   act(() => column().onClose({ agent: AGENT_ID }));
   act(() => panel().onClose(file));
   act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
-  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CALL]);
-  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN]);
+  assert.deepEqual(panel().strip, [
+    SIDE_PANEL_TAB.PLAN,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.COMMENTS,
+  ]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.CALL]);
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(panel().strip, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CALL, file]);
+  assert.deepEqual(panel().strip, [
+    SIDE_PANEL_TAB.PLAN,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.COMMENTS,
+    file,
+  ]);
   assert.deepEqual(panel().tab, file);
   assert.deepEqual(
     panel().files.map((each) => [each.path, each.range]),
@@ -699,7 +713,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   );
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, { agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, { agent: AGENT_ID }]);
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 
   act(() => tab.control().onReopenClosedTab?.());
@@ -708,7 +722,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
-test("the plan's tab closes beside another, stays closed across a launch until chosen again, and stands again, never closing, once nothing else does", async () => {
+test("the Call's tab closes beside another, stays closed across a launch until chosen again, and stands again, never closing, once nothing else does", async () => {
   const listed = {
     [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
   };
@@ -716,15 +730,15 @@ test("the plan's tab closes beside another, stays closed across a launch until c
   await settle();
   const column = () => tab.control().mainTabs;
   const agent = { agent: AGENT_ID };
-  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, agent]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, agent]);
 
-  act(() => column().onClose(MAIN_TAB.PLAN));
+  act(() => column().onClose(MAIN_TAB.CALL));
   assert.deepEqual(column().tabs, [agent]);
   assert.deepEqual(column().tab, agent, "the column shows the tab beside it");
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN, agent], "⇧⌘T opens it first again");
-  assert.equal(column().tab, MAIN_TAB.PLAN);
-  act(() => column().onClose(MAIN_TAB.PLAN));
+  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, agent], "⇧⌘T opens it first again");
+  assert.equal(column().tab, MAIN_TAB.CALL);
+  act(() => column().onClose(MAIN_TAB.CALL));
 
   const launched = mount({ shown: true, tasks: OPEN }, listed);
   await settle();
@@ -732,15 +746,41 @@ test("the plan's tab closes beside another, stays closed across a launch until c
   assert.deepEqual(again().tabs, [agent], "a launch keeps it closed");
 
   act(() => again().onClose(agent));
-  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN]);
-  assert.equal(again().tab, MAIN_TAB.PLAN, "a column with no other tab is back on the plan");
-  act(() => again().onClose(MAIN_TAB.PLAN));
-  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN], "alone, it does not close");
+  assert.deepEqual(again().tabs, [MAIN_TAB.CALL]);
+  assert.equal(again().tab, MAIN_TAB.CALL, "a column with no other tab is back on the Call");
+  act(() => again().onClose(MAIN_TAB.CALL));
+  assert.deepEqual(again().tabs, [MAIN_TAB.CALL], "alone, it does not close");
   act(() => again().onChoose(agent));
-  assert.deepEqual(again().tabs, [MAIN_TAB.PLAN, agent], "it stays open beside a tab opened since");
+  assert.deepEqual(again().tabs, [MAIN_TAB.CALL, agent], "it stays open beside a tab opened since");
 });
 
-test("a closed plan's tab that stands again because its last agent was archived stays open beside the next tab opened", async () => {
+test("a column kept while the plan and the Inbox stood in it reads with both let go, its agents' order and the tab last viewed still standing", async () => {
+  window.localStorage.setItem(
+    "luke.mainTabs",
+    JSON.stringify({
+      closedAgents: [],
+      tasks: {
+        [TASK.id]: {
+          recent: ["plan", { agent: AGENT_ID }, "inbox"],
+          order: [{ agent: AGENT_ID }, "inbox"],
+          inboxOpen: true,
+          inboxSeen: ["item-1"],
+          planClosed: true,
+        },
+      },
+    }),
+  );
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  const column = () => tab.control().mainTabs;
+  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, { agent: AGENT_ID }]);
+  assert.deepEqual(column().tab, { agent: AGENT_ID });
+});
+
+test("a closed Call's tab that stands again because its last agent was archived stays open beside the next tab opened", async () => {
   let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
@@ -755,14 +795,14 @@ test("a closed plan's tab that stands again because its last agent was archived 
   );
   await settle();
   const column = () => tab.control().mainTabs;
-  act(() => column().onClose(MAIN_TAB.PLAN));
+  act(() => column().onClose(MAIN_TAB.CALL));
   assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
 
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
-  assert.deepEqual(column().tabs, [MAIN_TAB.PLAN]);
+  assert.deepEqual(column().tabs, [MAIN_TAB.CALL]);
   act(() => column().onChoose({ draft: tab.control().agents.onNewDraft() }));
-  assert.equal(column().tabs[0], MAIN_TAB.PLAN, "the plan's tab stands beside the draft's");
+  assert.equal(column().tabs[0], MAIN_TAB.CALL, "the Call's tab stands beside the draft's");
   assert.equal(column().tabs.length, 2);
 });
 
@@ -781,14 +821,15 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
 
   tab.stand({ tasks: OPEN });
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
-  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD]);
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD]);
 });
 
-test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, else Call", () => {
+test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, and a plan's own tab stands from a first launch, the panel shown on it", () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
   act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onChoose(SIDE_PANEL_TAB.CODE));
+  act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
   act(() => panel().onClose(SIDE_PANEL_TAB.BOARD));
   act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
   assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
@@ -807,10 +848,8 @@ test("Show panel on a plan whose strip holds no tab opens the tab last closed th
 
   window.localStorage.clear();
   const fresh = mount({ shown: true, tasks: OPEN });
-  assert.deepEqual(fresh.control().sidePanel.strip, [], "the plan holds nothing yet");
-  assert.equal(fresh.control().sidePanel.open, false);
-  act(() => fresh.control().sidePanel.onToggle());
-  assert.deepEqual(panelOf(fresh), { open: true, tab: SIDE_PANEL_TAB.CALL });
+  assert.deepEqual(fresh.control().sidePanel.strip, [SIDE_PANEL_TAB.PLAN]);
+  assert.deepEqual(panelOf(fresh), { open: true, tab: SIDE_PANEL_TAB.PLAN });
 });
 
 test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows the panel empty, though another plan stands open behind it", () => {
@@ -1106,7 +1145,7 @@ test("a Luke link to a task's version opens its version history on that version,
 
   assert.deepEqual(history, { open: true, spot: { revision: 3, opened: undefined } });
   assert.equal(tab.control().history.open, false);
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CALL });
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.CALL);
 });
 
 test("a Luke link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", () => {
@@ -1171,7 +1210,11 @@ test("the closed tabs kept are the latest twenty, the oldest let go past them", 
     reopen = tab.control().onReopenClosedTab;
   }
   assert.equal(reopened, 20);
-  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.CODE], "the Board, closed first, is not kept");
+  assert.deepEqual(
+    panel().tabs,
+    [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.CODE],
+    "the Board, closed first, is not kept",
+  );
 });
 
 test("a file's tab opens again on the record it closed with, though another plan opened the same path since", () => {

@@ -80,9 +80,10 @@ async function settle(): Promise<void> {
 
 /**
  * The task's page with a tab of every kind open, `main` chosen in its column
- * and `side` in the side panel: the task's, an agent's, the draft's, and the
- * Inbox's in the column, and in the side panel the fixed tabs, the agent's
- * delegated worker's, a file's, the agent's Changes and Terminal, and a page's.
+ * and `side` in the side panel: the Call's, an agent's, and the draft's in
+ * the column, and in the side panel the fixed tabs, the Plan and the Inbox
+ * among them, the agent's delegated worker's, a file's, the agent's Changes
+ * and Terminal, and a page's.
  */
 async function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): Promise<HTMLElement> {
   const control = tasksControl({
@@ -91,7 +92,7 @@ async function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): Pro
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.PLAN, { agent: AGENT.id }, { draft: "draft-1" }, MAIN_TAB.INBOX],
+      tabs: [MAIN_TAB.CALL, { agent: AGENT.id }, { draft: "draft-1" }],
       tab: chosen.main,
       openAgents: [AGENT.id],
     },
@@ -238,8 +239,8 @@ test("an agent's tab and a subagent's put their right-click's content actions, a
   }
 });
 
-test("the plan's tab keeps the plan's own ⋯ in its bar", async () => {
-  const container = await mountEveryTab({ main: MAIN_TAB.PLAN, side: SIDE_PANEL_TAB.BOARD });
+test("the Call's tab keeps the task's own ⋯ in its bar", async () => {
+  const container = await mountEveryTab({ main: MAIN_TAB.CALL, side: SIDE_PANEL_TAB.BOARD });
   const [more, ...others] = slotButtons(bars(container).main);
   assert.equal(more?.getAttribute("aria-label"), "Task actions");
   assert.equal(others.length, 0);
@@ -247,10 +248,11 @@ test("the plan's tab keeps the plan's own ⋯ in its bar", async () => {
 
 test("a tab with no content action shows no ⋯ in its bar, though its right-click still answers, and no tab wears a ⋯ of its own", async () => {
   const without: { main: MainTab; side: SidePanelTab }[] = [
-    { main: MAIN_TAB.INBOX, side: SIDE_PANEL_TAB.BOARD },
+    { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.BOARD },
     { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.CODE },
-    { main: MAIN_TAB.INBOX, side: { file: "src/invite.ts" } },
-    { main: MAIN_TAB.INBOX, side: { terminal: AGENT.id } },
+    { main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.INBOX },
+    { main: { draft: "draft-1" }, side: { file: "src/invite.ts" } },
+    { main: { draft: "draft-1" }, side: { terminal: AGENT.id } },
   ];
   for (const chosen of without) {
     const container = await mountEveryTab(chosen);
@@ -273,24 +275,24 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the task's, the agent's, its worker's, its Changes', a page's, or the Call tab's link", async () => {
+test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the Call tab's, the agent's, its worker's, its Changes', a page's, or the Plan tab's, the task's own", async () => {
   const copied = installClipboard();
   const task = `https://tryluke.dev/workspace-personal/plan/${TASK.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
-    [{ main: MAIN_TAB.PLAN, side: SIDE_PANEL_TAB.BOARD }, "main", task],
+    [{ main: MAIN_TAB.CALL, side: SIDE_PANEL_TAB.BOARD }, "main", `${task}/call`],
     [
       { main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.BOARD },
       "main",
       `${task}/agent/${AGENT.id}`,
     ],
-    [{ main: MAIN_TAB.INBOX, side: SUBAGENT }, "side", `${task}/agent/${AGENT.id}/worker/call-1`],
+    [{ main: MAIN_TAB.CALL, side: SUBAGENT }, "side", `${task}/agent/${AGENT.id}/worker/call-1`],
     [
-      { main: MAIN_TAB.INBOX, side: { changes: AGENT.id } },
+      { main: MAIN_TAB.CALL, side: { changes: AGENT.id } },
       "side",
       `${task}/agent/${AGENT.id}/changes`,
     ],
-    [{ main: MAIN_TAB.INBOX, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
-    [{ main: MAIN_TAB.INBOX, side: SIDE_PANEL_TAB.CALL }, "side", `${task}/call`],
+    [{ main: MAIN_TAB.CALL, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
+    [{ main: MAIN_TAB.CALL, side: SIDE_PANEL_TAB.PLAN }, "side", task],
   ];
   for (const [chosen, column] of cases) {
     const container = await mountEveryTab(chosen);

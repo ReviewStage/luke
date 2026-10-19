@@ -403,7 +403,6 @@ export function DesktopAgentPage({
                         shown={tasks.shown}
                         focused={sideFocused}
                         onOpenTarget={openTarget}
-                        cards={cards}
                       />
                     ) : null}
                   </div>
