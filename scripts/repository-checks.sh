@@ -780,12 +780,12 @@ node --input-type=module -e '
   const UI = "packages/ui/src/";
   // [file, the rule'"'"'s selector (or, in a .tsx, its class), why it scrolls itself].
   const ALLOWED = [
-    ["apps/desktop/src/renderer/styles/markdown.css", ".markdown pre", "code keeps each line whole and scrolls sideways in the element the Markdown engine draws"],
-    ["apps/desktop/src/renderer/styles/markdown.css", ".markdown table", "a table'"'"'s own box scrolls sideways, as the engine draws it, with its edge fade on its own timeline"],
-    ["apps/desktop/src/renderer/styles/tasks.css", ".transcript-code-body", "a transcript'"'"'s code keeps each line whole and scrolls sideways in its own pre"],
-    ["apps/desktop/src/renderer/styles/tasks.css", ".transcript-table", "a transcript'"'"'s table'"'"'s own box scrolls sideways, as a Markdown table does"],
-    ["apps/desktop/src/renderer/styles/desktop.css", ".tab-strip", "the strip scrolls sideways itself, its chosen tab sticky and its fades drawn on its own scroll"],
-    ["apps/desktop/src/renderer/styles/tasks.css", ".agent-composer-input", "the composer'"'"'s contenteditable, owned by its editor, grows to eight lines and scrolls itself"],
+    ["packages/panel/src/styles/markdown.css", ".markdown pre", "code keeps each line whole and scrolls sideways in the element the Markdown engine draws"],
+    ["packages/panel/src/styles/markdown.css", ".markdown table", "a table'"'"'s own box scrolls sideways, as the engine draws it, with its edge fade on its own timeline"],
+    ["packages/panel/src/styles/tasks.css", ".transcript-code-body", "a transcript'"'"'s code keeps each line whole and scrolls sideways in its own pre"],
+    ["packages/panel/src/styles/tasks.css", ".transcript-table", "a transcript'"'"'s table'"'"'s own box scrolls sideways, as a Markdown table does"],
+    ["packages/panel/src/styles/desktop.css", ".tab-strip", "the strip scrolls sideways itself, its chosen tab sticky and its fades drawn on its own scroll"],
+    ["packages/panel/src/styles/tasks.css", ".agent-composer-input", "the composer'"'"'s contenteditable, owned by its editor, grows to eight lines and scrolls itself"],
   ];
   const SCROLLING = /^(?:auto|scroll)$/;
   // A sideways value that stands beside a scroll; `visible` and the resets
