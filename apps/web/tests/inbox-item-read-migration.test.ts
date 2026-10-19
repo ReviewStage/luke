@@ -4,8 +4,8 @@ import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { MIGRATIONS_FOLDER, runWebMigrations } from "@luke/database/core/migrator";
 import { Database } from "@luke/database/core/query";
-import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
+import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { joinWorkspace, openWorkspace, unmigratedPgliteSqlClient } from "@luke/database/testing";
 import { INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import { postInboxItem, readInboxItem } from "@luke/service/inbox/inbox-store";
@@ -52,31 +52,24 @@ it.effect(
         yield* runWebMigrations(yield* foldersBefore);
         yield* openUser("dean");
         yield* openUser("charles");
-        // The task is written as the schema of then holds it, since the store writes columns later migrations add.
+        // The task and its agent are written as the schema of then holds them, since the store writes columns later migrations add.
         const task = { id: randomUUID(), workspaceId: yield* openWorkspace("dean") };
         yield* sql`insert into task (id, user_id, organization_id, name, document) values (${task.id}, 'dean', ${task.workspaceId}, 'Teammate invitations', '')`;
         yield* joinWorkspace(task.workspaceId, "charles");
-        const started = Option.getOrThrow(
-          yield* createCodingAgent("dean", {
-            taskId: task.id,
-            idempotencyKey: randomUUID(),
-            model: "anthropic/claude-opus-5.5",
-            effort: "high",
-            repository: "acme/relay",
-            planSnapshot: "# Teammate invitations\n",
-            prompt: null,
-          }),
-        );
+        const agent = { id: randomUUID(), conversationId: randomUUID() };
+        yield* sql`insert into conversations (id, user_id, kind) values (${agent.conversationId}, 'dean', ${CONVERSATION_KIND.CODING_AGENT})`;
+        yield* sql`insert into coding_agent (id, task_id, organization_id, user_id, conversation_id, model, effort, plan_snapshot, repository, idempotency_key)
+          values (${agent.id}, ${task.id}, ${task.workspaceId}, 'dean', ${agent.conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})`;
         const standing = randomUUID();
         yield* sql`insert into inbox_item (id, user_id, task_id, organization_id, agent_id, key, revision, version, title, blocks, response, needs_reply, status, posted_at, updated_at)
-          values (${standing}, 'dean', ${task.id}, ${task.workspaceId}, ${started.agent.id}, 'branch-protection', 1, 4, 'Require a review on main', '[]'::jsonb, '{"type":"task"}'::jsonb, false, 'open', '2026-10-17T09:00:00Z', '2026-10-17T09:00:00Z')`;
+          values (${standing}, 'dean', ${task.id}, ${task.workspaceId}, ${agent.id}, 'branch-protection', 1, 4, 'Require a review on main', '[]'::jsonb, '{"type":"task"}'::jsonb, false, 'open', '2026-10-17T09:00:00Z', '2026-10-17T09:00:00Z')`;
 
         yield* runWebMigrations();
         yield* sql`delete from __drizzle_migrations where name = ${MIGRATION}`;
         yield* runWebMigrations();
 
         const posted = yield* postInboxItem(
-          { userId: "dean", taskId: task.id, agentId: started.agent.id },
+          { userId: "dean", taskId: task.id, agentId: agent.id },
           {
             key: "invite-copy",
             title: "What should it say?",

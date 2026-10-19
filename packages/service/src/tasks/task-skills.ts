@@ -29,8 +29,9 @@ import { reachTaskRepository, refused } from "./task-file.js";
 const readSkills = /* @__PURE__ */ Effect.fn("web/taskSkillsRead")(function* (
   organizationId: string,
   repository: string,
+  member: string,
 ) {
-  const reach = yield* reachTaskRepository(organizationId, repository);
+  const reach = yield* reachTaskRepository(organizationId, repository, member);
   if ("refused" in reach) return reach.refused;
   const { token, repository: confirmed } = reach.reached;
   const skills = yield* readRepositorySkills(token, confirmed);
@@ -67,7 +68,9 @@ export function readTaskSkills(
     if (Option.isNone(stored)) return Option.none();
     const repository = stored.value.task.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
-    return Option.some(yield* readWorkspaceSkills(stored.value.task.workspaceId, repository));
+    return Option.some(
+      yield* readWorkspaceSkills(stored.value.task.workspaceId, repository, userId),
+    );
   });
 }
 
@@ -81,8 +84,9 @@ export function readTaskSkills(
 export function readWorkspaceSkills(
   workspaceId: string,
   repository: string,
+  member: string,
 ): Effect.Effect<TaskSkillsAnswer, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
-  return readSkills(workspaceId, repository).pipe(
+  return readSkills(workspaceId, repository, member).pipe(
     Effect.catchTag("GitHubUnavailable", (failure) =>
       Effect.as(logGitHubReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE)),
     ),

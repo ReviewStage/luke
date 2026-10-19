@@ -25,7 +25,11 @@ import { causeKind } from "@luke/runtime/effect";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
-import { agentWorkspace, workspaceRepository } from "../../github/workspace-repository.js";
+import {
+  agentMember,
+  agentWorkspace,
+  workspaceRepository,
+} from "../../github/workspace-repository.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -223,6 +227,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   yield* workspaceRepository(
     workspace.value,
     agent.repository,
+    agentMember(agent),
     task?.ownerId === userId ? userId : undefined,
   );
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));

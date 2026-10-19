@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { eq, sql } from "drizzle-orm";
@@ -12,6 +13,7 @@ import { organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { issue } from "../../schemas/issue.js";
 import { conversations } from "../../schemas/storage.js";
+import { task } from "../../schemas/task.js";
 import { taskPin } from "../../schemas/task-pin.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
@@ -767,5 +769,33 @@ it.layer(getTestDB())("a task's work beginning", (it) => {
       assert.equal((yield* standingOf(dean, canceled.id)).status, TASK_STATUS.CANCELED);
       assert.equal((yield* standingOf(dean, todo.id)).status, TASK_STATUS.TODO);
     }),
+  );
+});
+
+it.layer(getTestDB())("a task's GitHub access", (it) => {
+  it.effect(
+    "a task keeps how its repository was reached as it was named, and a repository named again without one, or cleared, is the App's",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const accessOf = (taskId: string) =>
+          Effect.map(
+            db.select({ access: task.githubAccess }).from(task).where(eq(task.id, taskId)),
+            ([row]) => row?.access,
+          );
+        const { id: taskId } = yield* createTask(owner, {
+          organizationId: workspace,
+          repository: "octo-member/side",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const named = yield* accessOf(taskId);
+        yield* updateTask(owner, taskId, { repository: "acme/relay" });
+        const renamed = yield* accessOf(taskId);
+
+        assert.equal(named, GITHUB_ACCESS.TOKEN);
+        assert.equal(renamed, GITHUB_ACCESS.APP);
+      }),
   );
 });

@@ -10,15 +10,19 @@
  * their expiries beside them. A row's instants hang off the test clock as it
  * stands rather than off a clock the test moved: under a real Postgres pool
  * a `TestClock.setTime` jump left every later statement waiting, which
- * PGlite never showed. Synthetic keys, secrets, and tokens throughout.
+ * PGlite never showed. A member's own GitHub token is saved sealed under a
+ * fixture ring the App is stood over where a test hands
+ * `GITHUB_APP_WITH_TOKENS`. Synthetic keys, secrets, and tokens throughout.
  */
 
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { Database } from "@luke/database/core/query";
+import { saveGitHubToken } from "@luke/database/models/github-token-store";
+import { parseKeyRing, sealGitHubToken } from "@luke/database/models/provider-key-seal";
 import { account, user } from "@luke/database/schemas/auth";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { symmetricEncrypt } from "better-auth/crypto";
-import { Clock, Effect, Layer, Redacted } from "effect";
+import { Clock, Effect, Layer, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   GITHUB_PROVIDER_ID,
@@ -67,6 +71,23 @@ export interface FakeGitHub {
 
 /** The App over the fixture settings, which is what every fake stands unless a test hands another. */
 const GITHUB_APP_LAYER: Layer.Layer<GitHubApp> = GitHubApp.layer(GITHUB_APP_SETTINGS);
+
+/** The ring members' own tokens are sealed under here: fixed bytes written for the fixtures. */
+const GITHUB_FIXTURE_TOKEN_RING = Redacted.make(`1:${Buffer.alloc(32, 7).toString("base64")}`);
+
+/** The App over the fixture settings that opens a member's own token, sealed under the fixture ring. */
+export const GITHUB_APP_WITH_TOKENS: Layer.Layer<GitHubApp> = GitHubApp.layer(
+  GITHUB_APP_SETTINGS,
+  [],
+  GITHUB_FIXTURE_TOKEN_RING,
+);
+
+/** A member's own classic token as a test saves it, and the GitHub account GitHub said it is. */
+export const GITHUB_FIXTURE_MEMBER = {
+  TOKEN: "ghp_fixture_member_token",
+  LOGIN: "octo-member",
+  ID: "4242",
+} as const;
 
 /** The token the fake App mints for a repository, which is what a test reads for at the sandbox's firewall. */
 export const GITHUB_FIXTURE_INSTALLATION_TOKEN = "ghs_fixture_installation_token";
@@ -129,7 +150,7 @@ export function fakeGitHub(
 }
 
 /** One repository as a test names it; GitHub's record is built from it. */
-interface RepositoryFixture {
+export interface RepositoryFixture {
   readonly owner: string;
   readonly name: string;
   /** When GitHub last saw it change, ISO; a fixed instant when unsaid. */
@@ -174,6 +195,11 @@ function repositoryJson(fixture: RepositoryFixture) {
     pushed_at: fixture.updatedAt ?? "2026-10-01T00:00:00Z",
     html_url: `https://github.com/${fixture.owner}/${fixture.name}`,
   };
+}
+
+/** GitHub's record of a repository as a member's own token reads it, with whether the token may push to it. */
+export function memberRepositoryJson(fixture: RepositoryFixture, push: boolean) {
+  return { ...repositoryJson(fixture), permissions: { admin: false, push, pull: true } };
 }
 
 /** The page GitHub was asked for, as its query spells it; the first, and a hundred, when unsaid. */
@@ -376,5 +402,30 @@ export const openGithubUser = (standing?: GitHubAccountRow) =>
       scope: "",
       updatedAt: new Date(now - GITHUB_FIXTURE.HOUR_MS),
     });
+    return userId;
+  });
+
+/**
+ * A member signed in with GitHub who saved their own token, the fixture's
+ * unless another is given, sealed under the fixture ring. The member's id.
+ */
+export const openTokenMember = (options: { readonly token?: string } = {}) =>
+  Effect.gen(function* () {
+    const userId = yield* openGithubUser();
+    const ring = parseKeyRing(GITHUB_FIXTURE_TOKEN_RING);
+    if (Result.isFailure(ring)) return yield* Effect.die(ring.failure);
+    const token = Redacted.make(options.token ?? GITHUB_FIXTURE_MEMBER.TOKEN);
+    const now = yield* Clock.currentTimeMillis;
+    yield* saveGitHubToken(
+      userId,
+      sealGitHubToken(ring.success, userId, token),
+      {
+        hint: "ghp_…oken",
+        githubUserId: GITHUB_FIXTURE_MEMBER.ID,
+        githubLogin: GITHUB_FIXTURE_MEMBER.LOGIN,
+        expiresAt: null,
+      },
+      new Date(now),
+    );
     return userId;
   });

@@ -20,6 +20,13 @@
     "updatedAt": {
       "type": "number",
       "minimum": 0
+    },
+    "access": {
+      "type": "string",
+      "enum": [
+        "app",
+        "token"
+      ]
     }
   },
   "required": [

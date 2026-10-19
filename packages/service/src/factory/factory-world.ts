@@ -488,13 +488,13 @@ const chooseRepository = Effect.fnUntraced(function* (
   const app = yield* GitHubApp;
   const busiest = busiestRepository(agents);
   if (busiest !== undefined) {
-    const reached = yield* app.repositoryReadToken(organizationId, busiest);
+    const reached = yield* app.repositoryReadToken(organizationId, busiest, undefined);
     if (Option.isSome(reached)) return reached;
   }
   const reachable = yield* app.workspaceRepositories(organizationId);
   const [latest] = Option.getOrElse(reachable, () => []);
   if (latest === undefined) return Option.none();
-  return yield* app.repositoryReadToken(organizationId, latest.fullName);
+  return yield* app.repositoryReadToken(organizationId, latest.fullName, undefined);
 });
 
 /**

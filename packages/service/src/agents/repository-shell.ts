@@ -432,7 +432,7 @@ const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
   const reached = yield* Effect.gen(function* () {
     const workspace = yield* taskWorkspace(call.task.userId, call.task.taskId);
     if (Option.isNone(workspace)) return Option.none();
-    return yield* app.repositoryReadToken(workspace.value, repository);
+    return yield* app.repositoryReadToken(workspace.value, repository, call.task.userId);
   }).pipe(
     Effect.mapError(() => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.GITHUB_UNAVAILABLE })),
   );

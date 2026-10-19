@@ -14,6 +14,7 @@ import {
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { it } from "vitest";
 import { replayOf, type StartFrom } from "./replay.js";
 import { SNAPSHOT_MISS } from "./snapshot.js";
@@ -48,6 +49,7 @@ const source: CodingAgent = {
   archivedBy: null,
   disabledServers: [],
   author: null,
+  githubAccess: GITHUB_ACCESS.APP,
   createdAt: new Date(0),
 };
 

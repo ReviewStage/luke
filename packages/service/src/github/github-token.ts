@@ -48,11 +48,25 @@ export function memberGitHubToken(
   DatabaseServices | HostedEnvironment
 > {
   return Effect.gen(function* () {
+    const environment = yield* HostedEnvironment;
+    return yield* openMemberGitHubToken(environment.providerKeyEncryptionKeys, userId);
+  });
+}
+
+/** The same read under the ring given, the deployment's `providerKeyEncryptionKeys`, for a service built over it. */
+export function openMemberGitHubToken(
+  configured: Redacted.Redacted | undefined,
+  userId: string,
+): Effect.Effect<
+  Result.Result<MemberGitHubToken, GitHubTokenAbsence>,
+  TaskStoreFailure,
+  DatabaseServices
+> {
+  return Effect.gen(function* () {
     const row = yield* readGitHubTokenRow(userId);
     if (row === undefined) return Result.fail(GITHUB_TOKEN_ABSENCE.NONE);
     if (row.status === GITHUB_TOKEN_STATUS.INVALID)
       return Result.fail(GITHUB_TOKEN_ABSENCE.INVALID);
-    const configured = (yield* HostedEnvironment).providerKeyEncryptionKeys;
     const ring = configured === undefined ? undefined : parseKeyRing(configured);
     if (ring === undefined || Result.isFailure(ring)) {
       return Result.fail(GITHUB_TOKEN_ABSENCE.UNREADABLE);
