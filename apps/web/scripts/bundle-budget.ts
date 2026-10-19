@@ -98,9 +98,13 @@ function sumGzipped(bundle: OutputBundle, files: Iterable<string>): number {
 /**
  * The gzipped bytes of each measure in a client bundle: the entry's first
  * load as JS (`app`) and as CSS (`app.css`), and each side bundle's bytes
- * beyond that first load, since what the entry already loaded costs nothing
- * more when the side bundle is fetched. Each file is gzipped on its own, as
- * each is served on its own.
+ * beyond that first load, its stylesheets among them, since what the entry
+ * already loaded costs nothing more when the side bundle is fetched. Each
+ * file is gzipped on its own, as each is served on its own.
+ *
+ * Note that the entry chunk covers everything `app.html` links that Vite
+ * bundles: every module script in the document is folded into the one entry,
+ * and a stylesheet `<link>` becomes a stylesheet that entry imports.
  */
 function measureBundle(bundle: OutputBundle, targets: BudgetTargets): Measures {
   const chunks = chunksOf(bundle);
@@ -109,9 +113,7 @@ function measureBundle(bundle: OutputBundle, targets: BudgetTargets): Measures {
   );
   if (entry === undefined) throw new Error(`the bundle has no entry for ${targets.entry}`);
   const firstLoad = loadedWith(chunks, entry.fileName);
-  const stylesheets = new Set(
-    [...firstLoad].flatMap((file) => [...(chunks.get(file)?.viteMetadata?.importedCss ?? [])]),
-  );
+  const stylesheets = stylesheetsOf(chunks, firstLoad);
   const measured = new Map([
     [ENTRY_JS, sumGzipped(bundle, firstLoad)],
     [ENTRY_CSS, sumGzipped(bundle, stylesheets)],
@@ -125,13 +127,26 @@ function measureBundle(bundle: OutputBundle, targets: BudgetTargets): Measures {
     );
     if (side === undefined) throw new Error(`the bundle has no chunk for ${name} (${modulePath})`);
     const beyond = [...loadedWith(chunks, side.fileName)].filter((file) => !firstLoad.has(file));
-    measured.set(name, sumGzipped(bundle, beyond));
+    const sideStylesheets = [...stylesheetsOf(chunks, beyond)].filter(
+      (file) => !stylesheets.has(file),
+    );
+    measured.set(name, sumGzipped(bundle, [...beyond, ...sideStylesheets]));
   }
   return measured;
 }
 
+/** The stylesheets a set of chunks imports, which Vite loads beside them. */
+function stylesheetsOf(
+  chunks: ReadonlyMap<string, OutputChunk>,
+  files: Iterable<string>,
+): ReadonlySet<string> {
+  return new Set(
+    [...files].flatMap((file) => [...(chunks.get(file)?.viteMetadata?.importedCss ?? [])]),
+  );
+}
+
 /** A baseline's ceiling: the baseline plus the budget's slack, as the desktop's build without Sentry has it. */
-export function bundleCeiling(baseline: number, slack: number): number {
+function bundleCeiling(baseline: number, slack: number): number {
   return Math.floor(baseline * (1 + slack));
 }
 
