@@ -62,6 +62,13 @@ function voiceOptionLabel(voice: LiveVoice): string {
   return voice === LIVE_DEFAULTS.VOICE ? `${name} (default)` : name;
 }
 
+/* Each voice's clip under the panel's asset base, recorded from the voice
+   itself by `@luke/panel`'s `scripts/record-voice-samples.mjs`, which names
+   the file this way. */
+function voiceSamplePath(voice: LiveVoice): string {
+  return `voices/${voice}.m4a`;
+}
+
 /* A theme is stored in lowercase; on a control it reads as a name. */
 function themeOptionLabel(theme: Theme): string {
   return theme.charAt(0).toUpperCase() + theme.slice(1);
@@ -173,6 +180,7 @@ export const APP_SETTING_SCHEMA = {
     values: OFFERED_VOICE_LIST,
     token: (voice) => voice,
     optionLabel: voiceOptionLabel,
+    optionSample: voiceSamplePath,
     guard: (value: UnparsedWireValue) => optional(value, isLiveVoice),
     default: LIVE_DEFAULTS.VOICE,
     page: SETTINGS_PAGE.VOICE,

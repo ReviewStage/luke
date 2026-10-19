@@ -8,13 +8,24 @@ import {
   settingRowsForPage,
 } from "@luke/settings";
 import { searchAnchorProps } from "@luke/settings/settings-anchors";
-import { SELECT_ALIGN, SELECT_WIDTH, Select, SettingsRow, Switch } from "@luke/ui";
+import {
+  IconButton,
+  PlayIcon,
+  SELECT_ALIGN,
+  SELECT_WIDTH,
+  Select,
+  SettingsRow,
+  StopIcon,
+  Switch,
+} from "@luke/ui";
 import { useSettingWrite } from "@luke/ui/use-setting-write";
 import type { ActionResult } from "@luke/wire";
 import { APP_SETTING_KIND, APP_TOGGLE_VALUE } from "@luke/wire/app-settings";
+import { Tooltip } from "../tooltip.js";
 import { ChangedMark } from "./marks.js";
 import { Picker } from "./picker-row.js";
 import { PictureChoiceRow } from "./picture-choice-row.js";
+import { type SamplePlayer, useSamplePlayer } from "./sample-player.js";
 import type { SettingsWrites } from "./writes.js";
 
 /** One value a choice's control offers, as the schema hands it. */
@@ -28,6 +39,27 @@ const NO_MATCH = "Nothing matches.";
 /** Where a pressed search result lands: the row's one control, for a row the schema names. */
 function anchorOf(id: string) {
   return isAppSettingId(id) ? searchAnchorProps(id) : undefined;
+}
+
+/** The press beside a choice whose values are heard, which plays the chosen one's clip or stops it. */
+function SampleButton({
+  sample,
+  player,
+}: {
+  sample: string;
+  player: SamplePlayer;
+}): React.JSX.Element {
+  const playing = player.playing === sample;
+  const label = playing ? "Stop sample" : "Play sample";
+  return (
+    <Tooltip label={label}>
+      <IconButton
+        icon={playing ? <StopIcon /> : <PlayIcon />}
+        label={label}
+        onClick={() => (playing ? player.stop() : player.play(sample))}
+      />
+    </Tooltip>
+  );
 }
 
 /**
@@ -77,7 +109,10 @@ function SchemaSwitchRow({
  * A choice's row: the shared row, and the shared pop-up for a short set read
  * whole. A set long enough to search drops the window's searchable menu
  * instead (`picker-row.tsx`), which the pop-up is not. A set whose values
- * have faces is a `PictureChoiceRow`, never this.
+ * have faces is a `PictureChoiceRow`, never this. A set whose values are
+ * heard, such as the voices, wears a play button before its control, and a
+ * value picked from it is played as it is chosen, so going down the list is
+ * hearing each in turn.
  */
 function SchemaChoiceRow({
   id,
@@ -100,9 +135,14 @@ function SchemaChoiceRow({
   onChange: (token: string) => Promise<ActionResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onChange);
+  const player = useSamplePlayer();
+  const sample = options.find((option) => option.value === value)?.sample;
   // A token the set does not hold is not written, so a stale menu writes nothing.
   const pick = (token: string) => {
-    if (options.some((option) => option.value === token)) run(token);
+    const picked = options.find((option) => option.value === token);
+    if (picked === undefined) return;
+    run(token);
+    if (picked.sample !== undefined) player.play(picked.sample);
   };
   return (
     <SettingsRow
@@ -111,34 +151,37 @@ function SchemaChoiceRow({
       description={detail}
       error={rejection}
     >
-      {(control) =>
-        search === undefined ? (
-          <Select
-            {...anchorOf(id)}
-            label={label}
-            options={options}
-            value={value}
-            describedBy={control["aria-describedby"]}
-            aria-invalid={control["aria-invalid"]}
-            disabled={busy}
-            align={SELECT_ALIGN.END}
-            width={SELECT_WIDTH.FIELD}
-            onChange={pick}
-          />
-        ) : (
-          <SearchedChoice
-            id={id}
-            label={label}
-            describedBy={control["aria-describedby"]}
-            invalid={control["aria-invalid"]}
-            value={value}
-            options={options}
-            search={search}
-            disabled={busy}
-            onPick={pick}
-          />
-        )
-      }
+      {(control) => (
+        <>
+          {sample === undefined ? null : <SampleButton sample={sample} player={player} />}
+          {search === undefined ? (
+            <Select
+              {...anchorOf(id)}
+              label={label}
+              options={options}
+              value={value}
+              describedBy={control["aria-describedby"]}
+              aria-invalid={control["aria-invalid"]}
+              disabled={busy}
+              align={SELECT_ALIGN.END}
+              width={SELECT_WIDTH.FIELD}
+              onChange={pick}
+            />
+          ) : (
+            <SearchedChoice
+              id={id}
+              label={label}
+              describedBy={control["aria-describedby"]}
+              invalid={control["aria-invalid"]}
+              value={value}
+              options={options}
+              search={search}
+              disabled={busy}
+              onPick={pick}
+            />
+          )}
+        </>
+      )}
     </SettingsRow>
   );
 }

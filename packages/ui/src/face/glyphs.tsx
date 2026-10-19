@@ -584,6 +584,15 @@ export function PlayIcon(): React.JSX.Element {
   );
 }
 
+/** Stops what is playing: the square every transport draws for stop, at the triangle's weight. */
+export function StopIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <rect x="6" y="6" width="12" height="12" rx="1.8" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
 /** A board on its stand with a line drawn across it: the task's whiteboard. */
 export function BoardIcon(): React.JSX.Element {
   return (

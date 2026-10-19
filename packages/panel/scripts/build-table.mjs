@@ -161,9 +161,10 @@ const EXCALIDRAW_FONTS_LEFT_OUT = new Set(["Xiaolai"]);
 /**
  * The folders of static files the panel reaches under its shell's asset base
  * (`src/app-platform.ts`'s `assetBase`), each as the directory it is copied
- * from and the path under that base it is served at: Excalidraw's fonts, and
- * the harness marks drawn as images rather than traced
- * (`src/harness-marks.tsx`), so the bundle carries none of their bytes.
+ * from and the path under that base it is served at: Excalidraw's fonts, the
+ * harness marks drawn as images rather than traced
+ * (`src/harness-marks.tsx`), and the clip Settings plays for each voice
+ * (`scripts/record-voice-samples.mjs`), so the bundle carries none of their bytes.
  */
 export function panelStaticDirectories() {
   return [
@@ -174,5 +175,6 @@ export function panelStaticDirectories() {
         to: `fonts/${entry.name}`,
       })),
     { from: path.join(panelRoot, "marks"), to: "marks" },
+    { from: path.join(panelRoot, "voices"), to: "voices" },
   ];
 }

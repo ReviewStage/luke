@@ -120,12 +120,14 @@ export interface SettingsVisibility {
   capabilities: readonly HostCapability[];
 }
 
-/** One option a row's control draws: the token it stores by, the words it shows, and the picture beside them where it has one. */
+/** One option a row's control draws: the token it stores by, the words it shows, and the picture beside them or the clip it plays where it has one. */
 export interface SettingOption {
   value: string;
   label: string;
   /** The address of its picture, such as an avatar's face. A set whose every option has one is chosen from the pictures. */
   picture?: string;
+  /** The path of a clip that lets it be heard before it is chosen, such as a voice's, under the panel's asset base. */
+  sample?: string;
 }
 
 /**
