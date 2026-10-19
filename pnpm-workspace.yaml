@@ -76,6 +76,21 @@ patchedDependencies:
 # its cause. `apps/web/tests/drizzle-driver.test.ts` holds all three. Delete
 # the patch when drizzle-orm 1.0.0-rc.5 is released and carries them.
   drizzle-orm@1.0.0-rc.4: patches/drizzle-orm@1.0.0-rc.4.patch
+#
+# `eve` 0.74.0 compiles each authored file of an agent (every tool, hook,
+# channel, and subagent) into a bundle of its own and imports it, all in the
+# one build process, which keeps every bundle's source for its whole life. It
+# writes each with an inline source map holding the source of everything the
+# file reaches, which no build or run here reads (nothing turns on Node's
+# source maps), and that map was four fifths of every bundle: some 7 MB of a
+# coding agent tool's 8.8 MB, forty-eight times over. That held enough memory
+# to push the coding agent's `eve build` past Vercel's 8 GB build machine. The
+# patch writes those compile-time bundles without the map; what Nitro bundles
+# for the deployment, and the hidden maps `nitro.config.ts` asks of it, are
+# untouched. `packages/service/src/agents/agent-runtime/build.test.ts` holds
+# it. Move the patch with every `eve` bump, and delete it if eve stops writing
+# the map.
+  eve@0.74.0: patches/eve@0.74.0.patch
 
 # A dependency is keyed by its peers' names alone, not by the peers' own peer
 # graphs, so one `vitest` serves every workspace. Keyed in full, a peer's own
