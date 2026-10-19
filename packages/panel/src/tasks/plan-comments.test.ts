@@ -989,3 +989,17 @@ test("the focus going from the editor into the thread its caret opened keeps it 
 
   assert.ok(opened());
 });
+
+test("a press on the line's count while the editor's caret holds its thread open closes it, as the count's toggle does", async () => {
+  const { container, opened } = await caretInThread();
+  const count = container.querySelector<HTMLButtonElement>(".comment-count button");
+  assert.ok(count, "the line's count");
+
+  // Note that a press focuses the count between its pointerdown and its click, as the window does.
+  act(() => count.dispatchEvent(new Event("pointerdown", { bubbles: true })));
+  act(() => count.focus());
+  act(() => count.dispatchEvent(new Event("pointerup", { bubbles: true })));
+  act(() => count.click());
+
+  assert.equal(opened(), false);
+});
