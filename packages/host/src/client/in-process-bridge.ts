@@ -58,11 +58,17 @@ interface InProcessBridge {
   events: InProcessEvents;
 }
 
-/** One subscription set: what a page subscribed, the one door that tells them all, and its end. */
+/** An unsubscribe with nothing to end. */
+const unsubscribe = (): void => {};
+/** What has no listener in a page that runs no voice, avatar, call window, Browser tab, menu bar, or global key. */
+const neverDelivered = (): (() => void) => unsubscribe;
+const dropped = (): void => {};
+
+/** One subscription set: what a page subscribed, the one door that tells them all, and its close. */
 interface Listeners<Payload> {
   subscribe: (listener: (payload: Payload) => void) => () => void;
   emit: (payload: Payload) => void;
-  clear: () => void;
+  close: () => void;
 }
 
 /** Each one-shot event's subscriptions, the page's side and the shell's of one set. */
@@ -76,11 +82,14 @@ type EventListeners = {
  * listener on a channel of the desktop's does. Each is told on its own as
  * well: one that throws is reported, and the rest still hear, because on the
  * desktop a page's callback throws in the page and never into the sender.
+ * Once closed, a set holds no subscription and takes none.
  */
 function listeners<Payload>(report: (message: string) => void): Listeners<Payload> {
   const held = new Set<{ readonly listener: (payload: Payload) => void }>();
+  let closed = false;
   return {
     subscribe: (listener) => {
+      if (closed) return unsubscribe;
       const entry = { listener };
       held.add(entry);
       return () => {
@@ -98,14 +107,12 @@ function listeners<Payload>(report: (message: string) => void): Listeners<Payloa
         }
       }
     },
-    clear: () => held.clear(),
+    close: () => {
+      closed = true;
+      held.clear();
+    },
   };
 }
-
-/** What has no listener in a page that runs no voice, avatar, call window, Browser tab, menu bar, or global key. */
-const unsubscribe = (): void => {};
-const neverDelivered = (): (() => void) => unsubscribe;
-const dropped = (): void => {};
 
 /**
  * The bridge for a page that runs the host in its own process. The page is
@@ -147,8 +154,8 @@ export function createInProcessBridge<Sender = unknown>(
     // A page whose bridge is closed hears nothing more, whoever still holds `events`.
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
-        appState.clear();
-        for (const set of Object.values(said)) set.clear();
+        appState.close();
+        for (const set of Object.values(said)) set.close();
       }),
     );
     const bridge: AppBridge = {

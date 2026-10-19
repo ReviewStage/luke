@@ -210,14 +210,15 @@ it.effect("a listener that throws is reported, and the others still hear the eve
   }).pipe(Effect.scoped),
 );
 
-it.effect("a closed bridge tells its page nothing more", () =>
+it.effect("a closed bridge tells its page nothing more, nor takes a new subscription", () =>
   Effect.gen(function* () {
     const shown: unknown[] = [];
-    const { events } = yield* Effect.scoped(
+    const { bridge, events } = yield* Effect.scoped(
       Effect.tap(bridgeFixture, ({ bridge }) =>
         Effect.sync(() => bridge.onShowAgent((place) => shown.push(place))),
       ),
     );
+    bridge.onShowAgent((place) => shown.push(place));
     events.onShowAgent(AGENT_PLACE);
     assert.deepEqual(shown, []);
   }),
