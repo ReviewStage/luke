@@ -126,6 +126,7 @@ import type { ActHandle } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
+import type { ShellRoom } from "../shell-room.js";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast.js";
 import type { FixtureChat, Staged } from "./chat-fixture.js";
 import { useChatOn } from "./chat-gate.js";
@@ -1102,6 +1103,8 @@ export function useTasksTab(input: {
   onOpenSettings: (link: SettingsLink) => void;
   /** The window's ask before leaving unsaved work, which guards every door here that moves the place. */
   leaveGuard: LeaveGuard;
+  /** The room the panel's stage gives, which holds the side panel only full screen while it is narrow (`shell-room.ts`). */
+  room: ShellRoom;
 }): TasksControl {
   const { shown, voice, leaveGuard } = input;
   const { guard } = leaveGuard;
@@ -1555,6 +1558,7 @@ export function useTasksTab(input: {
           ? inboxTaskAgents.agentIds
           : inboxAgents
         : (pageAgents ?? agents.agentIds),
+    input.room,
   );
   // An agent, or its Pull request, pinned to the sidebar is named there as
   // its tab is named now, so a pin made before the agent had its title or its

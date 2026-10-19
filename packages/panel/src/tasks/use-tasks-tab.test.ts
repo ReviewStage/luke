@@ -54,6 +54,7 @@ import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { SHELL_ROOM } from "../shell-room.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -213,6 +214,7 @@ function mount(
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
       leaveGuard: useLeaveGuard(),
+      room: SHELL_ROOM.WIDE,
     });
     return null;
   }

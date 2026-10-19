@@ -6,6 +6,7 @@ import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import {
   type OpenTask,
   SIDE_PANEL_TAB,
@@ -413,4 +414,29 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
     { changes: AGENT },
     { file: "src/invites.ts" },
   ]);
+});
+
+test("a narrow room holds the open panel full screen alone, so the window's ways out of full screen shut it there, and a room widened again stands it beside the document", () => {
+  let room: ShellRoom = SHELL_ROOM.NARROW;
+  let control: SidePanelControl | undefined;
+  function Probe({ at }: { at: ShellRoom }) {
+    control = useSidePanel(undefined, usedTask(TASK), [], [], [], [], [], at);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const render = () => act(() => root.render(createElement(Probe, { at: room })));
+  const now = () => control ?? assert.fail("the panel is held");
+  render();
+  act(() => now().onToggle());
+  assert.deepEqual([now().open, now().fullScreen, now().fullScreenOnly], [true, true, true]);
+
+  // Back, a column's tab shown, and a pin opened step out of full screen this way.
+  act(() => now().onToggleFullScreen());
+  assert.equal(now().open, false, "leaving full screen in a narrow room shuts the panel");
+
+  act(() => now().onToggle());
+  room = SHELL_ROOM.WIDE;
+  render();
+  assert.deepEqual([now().open, now().fullScreen, now().fullScreenOnly], [true, false, false]);
 });

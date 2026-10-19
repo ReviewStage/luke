@@ -203,6 +203,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     sidePanel: {
       open: false,
       fullScreen: false,
+      fullScreenOnly: false,
       newTabAsked: false,
       tabs: SIDE_PANEL_TABS,
       order: [],
