@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ASK_STATUS, CHANNEL_KIND, CHAT_ASK } from "@luke/features/chat-wire";
+import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import { Effect } from "effect";
@@ -60,6 +61,7 @@ afterEach(() => {
 /** The window's Chat over the fixture's chat, changed as the test asks, its place and its posts its own, as the plans tab holds them. */
 function mount(
   change: (chat: FixtureChat) => FixtureChat | undefined = (chat) => chat,
+  workspace: Workspace | undefined = undefined,
 ): HTMLElement {
   function Page() {
     const [place, setPlace] = useState<ChatPlace>(FOR_YOU);
@@ -75,6 +77,7 @@ function mount(
     return createElement(DesktopChat, {
       accountName: "Dean Stratakos",
       tasks: tasksControl({
+        workspace,
         chatView: {
           open: true,
           available: true,
@@ -577,4 +580,29 @@ test("where the editor's bundle could not be loaded, the box is a plain field th
   await settle();
   assert.deepEqual(sent, ["@agent-1 ship it"]);
   assert.equal(container.querySelector('button[aria-label="Dictate"]'), null);
+});
+
+test("in a listed workspace, an agent chosen from the @ list is written as its chip, sent as its link, and the message names it", async () => {
+  const acme: Workspace = {
+    id: "9e8d7c6b-5a49-4382-9716-05f4e3d2c1b0",
+    name: "Acme",
+    slug: "acme",
+    role: WORKSPACE_ROLE.OWNER,
+    github: null,
+  };
+  const page = mount((chat) => chat, acme);
+  act(() => railRow(page, "teammate-invitations").click());
+  const box = boxNamed(page, "Message #teammate-invitations");
+  typeInComposer(box, "@agent-2");
+  pressInComposer(box, "Enter");
+  assert.ok(box.querySelector("[data-mention-ref]"), "the agent stands in the box as its chip");
+  typeInComposer(box, "take the template");
+  pressInComposer(box, "Enter");
+  await settle();
+  const last = [...page.querySelectorAll(".chat-message")].at(-1);
+  assert.match(last?.querySelector(".chat-words")?.textContent ?? "", /take the template/u);
+  assert.ok(
+    last?.querySelector(".chat-words [data-mention-ref]"),
+    "the sent message draws it as its chip",
+  );
 });

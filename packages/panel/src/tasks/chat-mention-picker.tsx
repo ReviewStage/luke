@@ -12,9 +12,9 @@ import type { ComposerTrigger } from "../plan-editor/contract.js";
  * roster rather than the agent box's mentions (`mention-picker.tsx`), which
  * stand on a task's page: one row per member or channel, its handle or name
  * and a muted line of what it stands for (`chat-mention.ts`). ↑ and ↓ move
- * the highlight, Enter or Tab writes the one highlighted as its plain word
- * (`@agent-2`, `#general`), which is how the service reads who a message
- * names, and Escape closes the list until the caret leaves the word. A key
+ * the highlight, Enter or Tab writes the one highlighted, as the box writes
+ * it (`chat-composer.tsx`), and Escape closes the list until the caret
+ * leaves the word. A key
  * an input method is composing with is the method's.
  */
 
@@ -52,8 +52,8 @@ export function useChatMentionPicker({
 }: {
   /** What an `@` or `#` word may name. */
   targets: readonly ChatTarget[];
-  /** Writes the chosen one's word, `@handle` or `#name`, over the word typed. */
-  onChoose: (words: string) => void;
+  /** Writes the one chosen over the word typed: its chip, or its word (`@luke`, `#general`). */
+  onChoose: (target: ChatTarget) => void;
 }): ChatMentionPicker {
   const id = useId();
   const [reported, setReported] = useState<Reported | undefined>(undefined);
@@ -82,7 +82,7 @@ export function useChatMentionPicker({
       : 0;
   const at = Math.min(held, Math.max(rows.length - 1, 0));
   const listed = mention !== undefined && rows.length > 0;
-  const choose = (target: ChatTarget) => onChoose(`${target.sigil}${target.name}`);
+  const choose = (target: ChatTarget) => onChoose(target);
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (event.isComposing || !listed || mention === undefined) return false;
