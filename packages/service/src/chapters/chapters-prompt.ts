@@ -23,8 +23,14 @@ import type { Chapter, ChapterHunk, HunkRef } from "@luke/features/pull-request-
 /** The fence the author's own words stand in. */
 const AUTHOR_CONTEXT_TAG = "author_provided_context";
 
-/** The fence's tags, opening or closing, however they are spaced or cased. */
-const AUTHOR_CONTEXT_TAGS = /<\s*\/?\s*author_provided_context\s*>/giu;
+/**
+ * The fence's name, however it is cased. Note that the name itself is
+ * broken in the author's words rather than its tags matched, because
+ * without it no tag of the fence can be written, however spaced, and a
+ * match on a fixed word cannot backtrack. Each is put out as a space, never
+ * as nothing, so the words around one cannot close up into the name again.
+ */
+const AUTHOR_CONTEXT_NAME = /author_provided_context/giu;
 
 /** The most of a pull request's body the model reads, as ReviewStage cuts one. */
 const MAX_BODY_CHARS = 4_000;
@@ -141,9 +147,9 @@ The pull request's title, inside <${AUTHOR_CONTEXT_TAG}> tags, is the author's w
 
 ${NARRATION_RULES}`;
 
-/** The author's words with every tag of the fence taken out, so they cannot close it early or open another. */
+/** The author's words with the fence's name taken out, so they cannot close it early or open another. */
 function withoutFence(text: string): string {
-  return text.replaceAll(AUTHOR_CONTEXT_TAGS, "");
+  return text.replaceAll(AUTHOR_CONTEXT_NAME, " ");
 }
 
 /** The author's words fenced as untrusted data. */
