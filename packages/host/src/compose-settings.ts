@@ -1,4 +1,4 @@
-import type { AccountRefreshFailed } from "@luke/features";
+import type { CallCredential } from "@luke/features";
 import {
   PRODUCT_EVENT,
   PRODUCT_SETTING_VALUE,
@@ -44,7 +44,7 @@ import { settingsOverrides } from "./effect/settings-overrides.js";
 import { EXPERIMENT_UNANSWERED, experimentWriter } from "./experiment-write.js";
 import { removeRetiredStore } from "./retired-store.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
-import { SettingsStore, type StoredAccount } from "./settings-store.js";
+import { SettingsStore } from "./settings-store.js";
 import { reporterOf } from "./wire-helpers.js";
 
 type StoredSettings = SettingsUpdateResult["settings"]["stored"];
@@ -59,7 +59,8 @@ const EXPERIMENT_SIGNED_OUT = "Sign in to turn on an experiment.";
  * however much simpler that would be.
  */
 interface SettingsLinks {
-  refreshAccount: () => Effect.Effect<void, AccountRefreshFailed>;
+  /** What authorizes the counted events and the account preferences on the signed-in account. */
+  readonly credential: CallCredential;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
   /** The standing live session ended once the voice moved, since a session keeps the voice it was created with. */
   readonly endLiveSession: Effect.Effect<void>;
@@ -138,21 +139,22 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     });
 
     /**
-     * One account read: a store that could not be read is an account this
-     * attempt cannot name, which is what every caller of this already treated
-     * a failed read as.
+     * The account's credential as the merge links it: the clients below are
+     * built before the account is, so each read awaits the link.
      */
-    const readStoredAccount = (): Effect.Effect<StoredAccount | undefined> =>
-      store.readAccount().pipe(Effect.orElseSucceed(() => undefined));
+    const credential: CallCredential = {
+      authorization: () =>
+        linked((links) => links.credential.authorization?.() ?? Effect.succeed(undefined)),
+      renew: () => linked((links) => links.credential.renew?.() ?? Effect.void),
+      holder: () => linked((links) => links.credential.holder?.() ?? Effect.succeed(undefined)),
+    };
 
     const productEvents = yield* ProductEventSender.make({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       appVersion: identity.appVersion,
       packaged: identity.packaged,
       sends: runMode.sendsNetwork,
-      readAccessToken: () => Effect.map(readStoredAccount(), (account) => account?.accessToken),
-      refreshAccount: () => linked((links) => links.refreshAccount()),
-      readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
+      credential,
       // The day each once-a-day count was last sent, kept in the settings
       // file so a relaunch the same day does not count it again.
       recordedDays: {
@@ -170,13 +172,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
     });
     const accountPreferencesClient = new AccountPreferencesClient({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      readAccessToken: () =>
-        runMode.sendsNetwork
-          ? Effect.map(readStoredAccount(), (account) => account?.accessToken)
-          : Effect.succeed(undefined),
-      refreshAccount: () => linked((links) => links.refreshAccount()),
-      readAccountKey: () =>
-        readAccountPreferenceAccountKey().pipe(Effect.orElseSucceed(() => undefined)),
+      credential,
     });
     let accountPreferencesHydratedAccount: string | undefined;
     /**

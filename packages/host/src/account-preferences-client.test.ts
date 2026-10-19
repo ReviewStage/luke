@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { fixedBearer } from "@luke/features";
 import { EXPERIMENT } from "@luke/settings";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect } from "effect";
@@ -31,8 +32,7 @@ function service(answers: Array<() => Response>) {
 function client(options: Partial<ConstructorParameters<typeof AccountPreferencesClient>[0]> = {}) {
   return new AccountPreferencesClient({
     serviceBaseUrl: "https://tryluke.dev",
-    readAccessToken: () => Effect.succeed("token-1"),
-    refreshAccount: () => Effect.void,
+    credential: fixedBearer("token-1"),
     ...options,
   });
 }
