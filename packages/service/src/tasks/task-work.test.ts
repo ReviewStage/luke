@@ -37,7 +37,7 @@ import {
 } from "@luke/features/tasks-view";
 import { isRecord, isWireString, TURN_ORIGIN, type WireRecord, type WireValue } from "@luke/wire";
 import { eq } from "drizzle-orm";
-import { Deferred, Effect, Fiber, Option, Schema } from "effect";
+import { Deferred, Duration, Effect, Fiber, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
@@ -51,9 +51,9 @@ import { ASK_ORIGIN, MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE, TURN_STATUS 
 import { LiveWake } from "../live/live-wake.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { FIRST_EVE_TURN } from "../testing/eve-turns.js";
+import { quietLiveWake } from "../testing/live-wake.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import {
-  BRAIN_POLL,
   type BrainPage,
   brainPageNow,
   brainPagePast,
@@ -75,6 +75,9 @@ import { readTaskCode, readTaskWork } from "./task-work-store.js";
  */
 
 const NOW = 1_800_000_000_000;
+
+/** How long a held read with no change heard waits before it looks again: its safety beat. */
+const LIVE_SAFETY_BEAT = Duration.seconds(5);
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
@@ -742,7 +745,9 @@ test("a plan's conversation reads on the agent tab's own wire: its newest turns'
     [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Admins may revoke.")],
     third,
   );
-  const past = await database.run(brainPagePast(target, page.cursor));
+  const past = await database.run(
+    brainPagePast(target, page.cursor).pipe(Effect.provide(quietLiveWake)),
+  );
   assert.deepEqual(turnsOf(past), [
     [hostTurnId(third.sessionId, FIRST_EVE_TURN), "Admins may revoke."],
   ]);
@@ -772,7 +777,9 @@ test("a plan at rest answers a reader with nothing new at once, and the page bef
   assert.deepEqual(turnsOf(older), [
     [hostTurnId(standings[0]?.sessionId ?? "", FIRST_EVE_TURN), "Answer 0."],
   ]);
-  const quiet = await database.run(brainPagePast(target, newest.cursor));
+  const quiet = await database.run(
+    brainPagePast(target, newest.cursor).pipe(Effect.provide(quietLiveWake)),
+  );
   assert.deepEqual(quiet.messages, []);
 });
 
@@ -819,7 +826,9 @@ test("a planner page says where each worker its turns delegated to stands, read 
   assert.equal(running.status, CODING_AGENT_STATUS.RUNNING);
 
   await play(answeringStep(FIRST_EVE_TURN, 1, "Both let an admin revoke."), childStanding);
-  const answered = await database.run(brainPagePast(target, running.cursor));
+  const answered = await database.run(
+    brainPagePast(target, running.cursor).pipe(Effect.provide(quietLiveWake)),
+  );
   assert.deepEqual(statusOf(answered), [[callId, CODING_AGENT_STATUS.COMPLETED]]);
 });
 
@@ -847,7 +856,9 @@ test("a reader past the cursor reads on through a run of the voice's rows longer
     second,
   );
 
-  const past = await database.run(brainPagePast(target, cursor));
+  const past = await database.run(
+    brainPagePast(target, cursor).pipe(Effect.provide(quietLiveWake)),
+  );
   assert.deepEqual(turnsOf(past), [
     [hostTurnId(second.sessionId, FIRST_EVE_TURN), "Expiry is seven days."],
   ]);
@@ -912,14 +923,16 @@ test("a held reader hears a worker end beside one still running at the next look
 
   const answered = await database.run(
     Effect.gen(function* () {
-      const read = yield* Effect.forkChild(brainPagePast(target, cursor));
-      yield* TestClock.adjust(BRAIN_POLL);
+      const read = yield* Effect.forkChild(
+        brainPagePast(target, cursor).pipe(Effect.provide(quietLiveWake)),
+      );
+      yield* TestClock.adjust(LIVE_SAFETY_BEAT);
       const db = yield* Database;
       yield* db
         .update(turns)
         .set({ status: TURN_STATUS.SETTLED, settledAt: new Date() })
         .where(eq(turns.id, workerTurns[0] ?? ""));
-      yield* TestClock.adjust(BRAIN_POLL);
+      yield* TestClock.adjust(LIVE_SAFETY_BEAT);
       return yield* Fiber.join(read);
     }).pipe(Effect.provide(TestClock.layer())),
   );
@@ -985,7 +998,9 @@ test("a page no journal moved says where a worker under a turn older than a page
   const { cursor } = await database.run(brainTurnsPage(target, undefined));
   await play(answeringStep(FIRST_EVE_TURN, 1, "Both let an admin revoke."), childStanding);
 
-  const past = await database.run(brainPagePast(target, cursor));
+  const past = await database.run(
+    brainPagePast(target, cursor).pipe(Effect.provide(quietLiveWake)),
+  );
   assert.deepEqual(past.messages, []);
   assert.deepEqual(
     past.subagents?.map((worker) => [worker.callId, worker.status]),
@@ -1135,7 +1150,7 @@ test("a plan never planned on is marked at the start, and a reader past the curs
   assert.equal(now.status, CODING_AGENT_STATUS.RUNNING);
 });
 
-test("a held reader watched by Realtime looks again as the conversation's mark changes, not on the poll: a turn that settles is heard though the clock never moves", async () => {
+test("a held reader looks again as the conversation's mark changes over Realtime: a turn that settles is heard though the clock never moves", async () => {
   const target = await taskConversation();
   await play(
     [
@@ -1159,7 +1174,6 @@ test("a held reader watched by Realtime looks again as the conversation's mark c
           Effect.sync(() => {
             watched.push(...statements.map((statement) => statement.sql));
             return {
-              live: Effect.succeed(true),
               changed: Effect.andThen(Deferred.succeed(parked, undefined), Deferred.await(fired)),
             };
           }),

@@ -68,7 +68,7 @@ import {
  * until no desktop reads them.
  */
 
-/** How often a held read looks again: the voice's follow's own beat, so the Call tab hears a part as soon as the frame it replaces did. */
+/** How often a planning worker's held read looks again: the voice's follow's own beat, so the Call tab hears a part as soon as the frame it replaces did. */
 export const BRAIN_POLL = Duration.millis(250);
 
 /** The newest turns whose workers a page a moving turn let go says the standing of, beside the page's own; a page no journal moved says every worker's (`withStandings`). */
@@ -326,8 +326,8 @@ const pageOfLook = (
  * ended since the hold began, so a worker that ends beside one still
  * running is heard at once; or the empty page and the cursor to read on
  * from once the hold is out. Between looks it waits on the `live`
- * statements where Neon Realtime watches them (the conversation's mark,
- * `taskConversationLiveStatements`), and on `BRAIN_POLL` where nothing does.
+ * statements over Neon Realtime (the conversation's mark,
+ * `taskConversationLiveStatements`), and its safety beat.
  */
 export function brainPagePast(
   target: ConversationTarget,
@@ -345,7 +345,7 @@ export function brainPagePast(
         ? Option.none()
         : Option.some(look);
     });
-    const read = yield* lookedUntil(once, BRAIN_POLL, CODER.MESSAGES_HOLD, live);
+    const read = yield* lookedUntil(once, CODER.MESSAGES_HOLD, live);
     return yield* pageOfLook(
       target,
       Option.isSome(read) ? read.value : yield* pagePast(target, after),
