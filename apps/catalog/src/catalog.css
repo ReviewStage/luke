@@ -215,14 +215,16 @@ body {
   box-shadow: 0 4px 16px var(--luke-color-shadow);
 }
 
-/* A short room that scrolls, its button low enough that the popover opens
-   above it until a scroll lifts the button toward the room's top. */
+/* A short room that scrolls (`ScrollArea`), its button low enough that the
+   popover opens above it until a scroll lifts the button toward the room's
+   top. The frame clips the scroll bar to its corners. */
 .catalog-popover-room {
   position: relative;
+  display: flex;
   max-width: 560px;
   height: 200px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  flex-direction: column;
+  overflow: clip;
   border: 1px dashed var(--luke-color-border-strong);
   border-radius: var(--luke-radius-8);
 }
@@ -399,14 +401,6 @@ body {
   height: 200px;
   flex-direction: column;
   gap: var(--luke-space-8);
-}
-
-/* A dialog's long words, which give way and scroll in a short window so the
-   answers under them stay on the card. */
-.catalog-dialog-scroll {
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 /* A picture's card: its name and Close along the top, the picture under
@@ -658,11 +652,11 @@ body {
 }
 
 /* A screen as tall as a window, which scrolls the public page it holds as a
-   document would, so its banner stands still at the top. */
+   document would (`ScrollArea`), so its banner stands still at the top. */
 .catalog-screen-public {
+  display: flex;
   height: 480px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  flex-direction: column;
 }
 
 /* The words an example lays in a public page's banner and footer, as the

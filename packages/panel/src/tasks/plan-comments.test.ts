@@ -284,7 +284,8 @@ test("the Comments tab's Resolved toggle lists the resolved thread whole, where 
 
 test("the Comments tab's Resolved toggle starts the other list at its top", () => {
   const { container } = drawn("tab");
-  const list = container.querySelector<HTMLElement>(".comments-list");
+  // The list scrolls in the box around its rows (`ScrollArea`).
+  const list = container.querySelector<HTMLElement>(".comments-list")?.parentElement;
   assert.ok(list);
   let top = 240;
   Object.defineProperty(list, "scrollTop", {
@@ -554,7 +555,7 @@ test("a link to a resolved thread lists it under Resolved, open, and scrolls the
       `.comment-card[data-thread="${ID.RESOLVED}"]`,
     );
     assert.equal(card?.dataset.open, "true");
-    assert.equal(container.querySelector(".comments-list")?.scrollTop, 500 - 96);
+    assert.equal(container.querySelector(".comments-list")?.parentElement?.scrollTop, 500 - 96);
   } finally {
     if (rect !== undefined) Object.defineProperty(Element.prototype, "getBoundingClientRect", rect);
   }

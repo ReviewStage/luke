@@ -144,7 +144,7 @@ blockquote.markdown-quote > * + * {
 
 /* A table scrolls sideways rather than widening the bubble; a column's
    alignment arrives as each cell's own inline style, from the delimiter row.
-   Its edges fade where it hides columns past them (`table-scroll-fade`). */
+   Its edges fade where it hides columns past them (the mask below). */
 .markdown table {
   display: block;
   max-width: 100%;

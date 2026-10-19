@@ -1,5 +1,5 @@
 import { PULL_REQUEST_WRITE_BOUNDS } from "@luke/features/pull-request-write-wire";
-import { TextArea } from "@luke/ui";
+import { SCROLL_SIZE, ScrollArea, TextArea } from "@luke/ui";
 import { type Ref, useState } from "react";
 import { Segmented } from "../segmented.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -76,12 +76,16 @@ export function MarkdownField({
           onSubmit={onSubmit}
         />
       ) : (
-        <div className="markdown-field-preview pull-request-words">
-          {value.trim() === "" ? (
-            <p className="pull-request-quiet">{FIELD_WORDS.NOTHING}</p>
-          ) : (
-            <TranscriptWords text={value} />
-          )}
+        <div className="markdown-field-preview">
+          <ScrollArea size={SCROLL_SIZE.CONTENT}>
+            <div className="markdown-field-preview-words pull-request-words">
+              {value.trim() === "" ? (
+                <p className="pull-request-quiet">{FIELD_WORDS.NOTHING}</p>
+              ) : (
+                <TranscriptWords text={value} />
+              )}
+            </div>
+          </ScrollArea>
         </div>
       )}
     </div>
