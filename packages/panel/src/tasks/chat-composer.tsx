@@ -28,6 +28,7 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input.js";
 import { useSideBundles } from "../bundle-loader.js";
+import { enterKeyHint, enterSends } from "../enter-sends.js";
 import {
   COMPOSER_INPUT,
   type ComposerEditorHandle,
@@ -381,7 +382,7 @@ function PlainChatComposer({
         return;
       }
     }
-    if (event.key === "Enter" && !event.shiftKey) {
+    if (enterSends(event)) {
       event.preventDefault();
       send();
     }
@@ -415,6 +416,7 @@ function PlainChatComposer({
           placeholder={label}
           rows={compact === true ? 1 : 2}
           maxLength={CHAT_BOUNDS.MAX_TEXT_CHARS}
+          enterKeyHint={enterKeyHint()}
           value={draft}
           disabled={sending}
           {...listProps}

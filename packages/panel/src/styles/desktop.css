@@ -5947,8 +5947,11 @@ polygon.factory-campus-edge[data-edge="selected"] {
   background: color-mix(in srgb, var(--luke-color-accent) 55%, transparent);
 }
 
-/* A finger takes an edge across a finger's width, centred on the strip it
-   draws, which keeps its width and its place. */
+/* A finger takes an edge across both columns' gutters, centred on the strip
+   it draws, which keeps its width and its place. Note that the edge stops at
+   the gutters rather than reaching a finger's full width, because past them
+   it would stand over the rows and controls either column holds there, and
+   a press on one would start a drag instead. */
 @media (pointer: coarse) {
   .side-panel-resize::before,
   .sidebar-resize::before {
@@ -5956,7 +5959,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
     top: 0;
     bottom: 0;
     left: 50%;
-    width: var(--luke-touch-target);
+    width: calc(2 * var(--column-inset));
     transform: translateX(-50%);
     content: "";
   }

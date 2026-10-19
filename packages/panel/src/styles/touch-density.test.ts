@@ -14,9 +14,9 @@ import { layContainersAt } from "../testing/container-width.js";
  * site's full roles on a touch screen, 44px controls and 16px words, so a
  * field never makes iOS zoom, and keeps its compact ones with a mouse; the
  * desktop's roles stand as they are. The tab's ×, a sidebar row's mark, a
- * section's ⋯, a toolbar's glyph button, and a resize edge each take a
- * press at least 44px across around what they draw on a touch screen, and
- * take none past their own box with a mouse. jsdom answers no media query,
+ * section's ⋯, and a toolbar's glyph button each take a press at least 44px
+ * across around what they draw on a touch screen, a resize edge one across
+ * both columns' gutters, and none takes one past its own box with a mouse. jsdom answers no media query,
  * no `var()`, and no pseudo-element, so the sheets are laid for the device
  * (`testing/container-width.ts`) and a `::before` hit area is read from the
  * rules laid that match the element, its lengths resolved from the root.
@@ -75,24 +75,45 @@ function before(element: Element): Map<string, string> {
   return declared;
 }
 
-/** The least a length spans in pixels, its `var()`s read off the root and a `max()` its largest pixel term; nothing for one that names none. */
+/** A length with every `var()` in it read off the root, through as many as it names. */
+function resolved(length: string): string {
+  const once = length.replace(/var\((--[\w-]+)\)/g, (_, name: string) => role(name));
+  return once === length ? once : resolved(once);
+}
+
+/** The least a length spans in pixels: a `max()` its largest pixel term, a `calc()` of a count times a length their product; nothing for one that names no pixels. */
 function leastPixels(length: string | undefined): number | undefined {
   if (length === undefined) return undefined;
-  const resolved = length.replace(/var\((--[\w-]+)\)/g, (_, name: string) => role(name));
-  const pixels = [...resolved.matchAll(/(\d+(?:\.\d+)?)px/g)].map(([, value]) => Number(value));
+  const words = resolved(length);
+  const product = /calc\((\d+) \* (\d+(?:\.\d+)?)px\)/.exec(words);
+  if (product !== null) return Number(product[1]) * Number(product[2]);
+  const pixels = [...words.matchAll(/(\d+(?:\.\d+)?)px/g)].map(([, value]) => Number(value));
   return pixels.length === 0 ? undefined : Math.max(...pixels);
 }
 
-/** Whether `element` takes a press a finger's width across around what it draws: a box of its own drawn past it, so wide, and as tall unless it runs the element's height. */
-function takesFinger(element: Element): boolean {
+/** Whether `element` draws a box of its own past it to take presses with. */
+function hitArea(element: Element): Map<string, string> | undefined {
   const area = before(element);
-  if (area.get("content") === undefined || area.get("position") !== "absolute") return false;
-  const wide = (leastPixels(area.get("width")) ?? 0) >= FINGER;
-  const tall =
-    (leastPixels(area.get("height")) ?? 0) >= FINGER ||
-    (area.get("top") === "0px" && area.get("bottom") === "0px") ||
-    (area.get("top") === "0" && area.get("bottom") === "0");
-  return wide && tall;
+  return area.get("content") === undefined || area.get("position") !== "absolute"
+    ? undefined
+    : area;
+}
+
+/** Whether `element` takes a press a finger's width across, and as tall, around what it draws. */
+function takesFinger(element: Element): boolean {
+  const area = hitArea(element);
+  return (
+    area !== undefined &&
+    (leastPixels(area.get("width")) ?? 0) >= FINGER &&
+    (leastPixels(area.get("height")) ?? 0) >= FINGER
+  );
+}
+
+/** How wide a resize edge takes a press, in pixels, where it runs its whole height; nothing where it draws no box of its own. */
+function edgeReach(edge: Element): number | undefined {
+  const area = hitArea(edge);
+  if (area === undefined || !/^0(px)?$/.test(area.get("top") ?? "")) return undefined;
+  return /^0(px)?$/.test(area.get("bottom") ?? "") ? leastPixels(area.get("width")) : undefined;
 }
 
 /** Draws `node` into a container wearing `className`, answering the container. */
@@ -121,10 +142,6 @@ function smallTargets(): ReadonlyMap<string, Element> {
   tab.dataset.marked = "false";
   const close = drawn(compact("Close Plan"), "tab-close");
   tab.append(close);
-  const edge = document.body.appendChild(document.createElement("div"));
-  edge.className = "sidebar-resize";
-  const sideEdge = document.body.appendChild(document.createElement("div"));
-  sideEdge.className = "side-panel-resize";
   return new Map<string, Element>([
     ["the tab's ×", buttonIn(close)],
     ["a sidebar row's mark", buttonIn(drawn(compact("Pin"), "sidebar-task"))],
@@ -141,8 +158,19 @@ function smallTargets(): ReadonlyMap<string, Element> {
         ),
       ),
     ],
-    ["the sidebar's resize edge", edge],
-    ["the side panel's resize edge", sideEdge],
+  ]);
+}
+
+/** The resize edges, each by what the developer calls it. */
+function resizeEdges(): ReadonlyMap<string, Element> {
+  const edge = (className: string) => {
+    const element = document.body.appendChild(document.createElement("div"));
+    element.className = className;
+    return element;
+  };
+  return new Map([
+    ["the sidebar's resize edge", edge("sidebar-resize")],
+    ["the side panel's resize edge", edge("side-panel-resize")],
   ]);
 }
 
@@ -174,9 +202,18 @@ test("on a touch screen each small target takes a press a finger's width across"
   }
 });
 
-test("with a mouse no small target takes a press past what it draws", () => {
+test("on a touch screen a resize edge takes a press across both columns' gutters and no further, over no row", () => {
+  layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
+  const gutters = 2 * (leastPixels(role("--column-inset")) ?? 0);
+  for (const [name, edge] of resizeEdges()) {
+    assert.equal(edgeReach(edge), gutters, `${name} spans the gutters`);
+    assert.ok(gutters >= 24, `${name} keeps the 24px floor`);
+  }
+});
+
+test("with a mouse no small target or resize edge takes a press past what it draws", () => {
   layFor(false, { "data-luke-profile": "desktop" });
-  for (const [name, target] of smallTargets()) {
-    assert.equal(before(target).get("content"), undefined, `${name} draws no hit area`);
+  for (const [name, target] of [...smallTargets(), ...resizeEdges()]) {
+    assert.equal(hitArea(target), undefined, `${name} draws no hit area`);
   }
 });

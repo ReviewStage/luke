@@ -153,8 +153,9 @@ control's words are not, since a control is pressed rather than read
 Every pointer action has a keyboard path and an accessible name. Tab lists use
 one tab stop and Left/Right/Home/End navigation. A control that floats over a
 thumbnail keeps at least a 24px target even when its glyph is smaller; on a
-coarse pointer every button and resize edge takes a press at least
-`--luke-touch-target` (44px) across around what it draws, its glyph unmoved; and
+coarse pointer every button takes a press at least `--luke-touch-target` (44px)
+across around what it draws, its glyph unmoved, and a resize edge one across
+both columns' gutters, no further, so it never stands over a row; and
 errors that appear after an action are live alerts. Reduced motion and capture
 runs must still leave every state legible and reachable.
 
