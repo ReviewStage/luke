@@ -30,6 +30,7 @@ import {
   type PortActKind,
   type PortActPayload,
   type PortActResult,
+  TASKS_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "@luke/host/contract";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -356,7 +357,7 @@ function answer(request: Asked): Promise<Answered> {
   }
 }
 
-/** One workspace kind on the act port, answered by `answer`, a refusal as the port's declared error. */
+/** One kind on the act port, answered by `answer`, a refusal as the port's declared error. */
 function onPort(kind: PortActKind) {
   return async (payload: PortActPayload<PortActKind>) => {
     // SAFETY: the port hands each procedure the payload its own kind takes.
@@ -368,9 +369,11 @@ function onPort(kind: PortActKind) {
   };
 }
 
-/** The act port answering every workspace kind as `answer` does. */
+/** The act port answering every workspace and task kind as `answer` does. */
 function workspacePort(): Parameters<typeof fakeActPort>[0] {
-  const procedures = Object.values(WORKSPACE_ACT_KIND).map((kind) => [kind, onPort(kind)]);
+  const procedures = [...Object.values(TASKS_ACT_KIND), ...Object.values(WORKSPACE_ACT_KIND)].map(
+    (kind) => [kind, onPort(kind)],
+  );
   // SAFETY: each kind's procedure answers that kind's own result, as `answer` gives it.
   return Object.fromEntries(procedures) as Parameters<typeof fakeActPort>[0];
 }

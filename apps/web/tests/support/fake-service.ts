@@ -1,5 +1,5 @@
 /**
- * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, an empty issue list, and nothing else, answered over a fake `HttpClient`.
+ * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, an empty issue list, the repositories the Luke GitHub App reaches, and nothing else, answered over a fake `HttpClient`.
  *
  * The Slack sign-in is settled only by the settling POST, as the service
  * answers a cookie caller. The web client's host calls the origin that
@@ -64,6 +64,13 @@ export const WORKSPACE_MEMBER = {
   role: "owner",
 } as const;
 
+/** The repositories the account reaches through the Luke GitHub App: the App installed, reaching none yet. */
+export const GITHUB_REPOSITORIES = {
+  installed: true,
+  repositories: [],
+  installationUrl: "https://github.com/apps/luke/installations/new",
+} as const;
+
 /** The fake service, signed in or not as it starts. */
 export function fakeService(options: { readonly signedIn: boolean }): FakeService {
   let signedIn = options.signedIn;
@@ -91,6 +98,9 @@ export function fakeService(options: { readonly signedIn: boolean }): FakeServic
     }
     if (pathname === "/api/workspaces/members" && method === "GET" && signedIn) {
       return json({ members: [WORKSPACE_MEMBER] });
+    }
+    if (pathname === "/api/github/repositories" && method === "GET" && signedIn) {
+      return json(GITHUB_REPOSITORIES);
     }
     if (pathname === "/api/plans" && method === "GET") {
       return signedIn ? json({ plans: [LISTED_TASK] }) : json({ error: "unauthorized" }, 401);

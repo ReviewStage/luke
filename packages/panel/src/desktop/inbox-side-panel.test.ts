@@ -63,13 +63,16 @@ const ACME: Workspace = {
   memberCount: 2,
 };
 
+/** The task's repository, where its agent opened the pull request. */
+const REPOSITORY = "acme/relay";
+
 const TASK: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: ACME.id,
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
-  repository: "acme/relay",
+  repository: REPOSITORY,
 };
 const OTHER_TASK = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
@@ -167,7 +170,7 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve({
         status: ACT_OUTCOME_STATUS.DONE,
         value: {
-          repository: TASK.repository,
+          repository: REPOSITORY,
           branch: "luke/batch-invitations",
           pullRequest: {
             number: 42,

@@ -233,10 +233,6 @@ beforeEach(() => {
           value: { automations: [SWEEP] },
         });
       }
-      if (request.kind === ACT_KIND.GITHUB_OPEN) {
-        openedOnGitHub.push(request.payload.url);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      }
       if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
         const { number } = request.payload;
         const held = gitHub.get(number);
@@ -260,6 +256,10 @@ beforeEach(() => {
     },
   });
   fakeActPort({
+    [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
+      openedOnGitHub.push(url);
+      return Promise.resolve();
+    },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
       members === undefined ? Promise.reject(refusedOnPort("Not here.")) : Promise.resolve(members),
   });
@@ -709,10 +709,9 @@ test("a skill a message names is its chip, which opens the skill's SKILL.md on G
   assert.ok(chip, "the skill is its chip");
   act(() => chip.click());
 
-  assert.deepEqual(
-    told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
-    [{ url: "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md" }],
-  );
+  assert.deepEqual(openedOnGitHub, [
+    "https://github.com/acme/relay/blob/HEAD/.agents/skills/release/SKILL.md",
+  ]);
 });
 
 test("until the agent is read, its wait stands centred in the page's room rather than as a ring in its corner, and gives way to the agent once read", async () => {

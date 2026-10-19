@@ -39,7 +39,7 @@ import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -765,9 +765,12 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   const onGitHub: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
   fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.GITHUB_OPEN) onGitHub.push(request.payload.url);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
+  });
+  fakeActPort({
+    [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
+      onGitHub.push(url);
+      return Promise.resolve();
     },
   });
   const task: Task = {

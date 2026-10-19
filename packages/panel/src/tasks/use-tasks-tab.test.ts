@@ -31,7 +31,7 @@ import {
   type TaskWorkTurn,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
+import { ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { isPortActKind, type PortActKind, type PortActResult } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
@@ -218,8 +218,13 @@ function mount(
           isPortActKind(kind)
             ? portAnswer(kind, ...args)
             : appAnswer(kind, ...args)) as ActHandle["act"],
-        // SAFETY: this suite's window asks no kind the act port answers, so its fake answers `app:act` kinds alone.
-        tell: ((kind: ActKind, ...args: unknown[]) => {
+        // A told port kind is answered as an asked one is, and its answer or refusal read by no one, as `tell` reads none.
+        // SAFETY: each kind is answered by its own act or procedure's answer, the dispatch on the kind the one erasure.
+        tell: (<Kind extends ActKind | PortActKind>(kind: Kind, ...args: unknown[]) => {
+          if (isPortActKind(kind)) {
+            void portAnswer(kind, ...args).catch(() => undefined);
+            return;
+          }
           record(kind);
           // The one told payload the tests read, parsed as the boundary would.
           const shown = Option.getOrUndefined(readShown(args[0]));
@@ -411,7 +416,7 @@ const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.Strin
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
   payloads: readonly { readonly kind: ActKind | PortActKind; readonly payload: unknown }[],
-  kind: ActKind,
+  kind: ActKind | PortActKind,
 ): (string | undefined)[] {
   return payloads
     .filter((asked) => asked.kind === kind)
@@ -499,7 +504,7 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
 });
 
 test("a task started opens with the side panel shown on its plan, a refused start hides it again where it stood hidden, and a panel hidden before the start answers stays hidden", async () => {
-  const answers: Array<(answer: ActResultFor<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
@@ -1955,7 +1960,7 @@ test("the repository chooser says the account manages the workspace it owns, and
 });
 
 test("a Disconnect whose page did not open says why in a toast", async () => {
-  const refusal = ACT[ACT_KIND.GITHUB_DISCONNECT].refusal;
+  const refusal = "Could not disconnect GitHub on this system.";
   const tab = mount(
     { shown: true, tasks: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },
     { [ACT_KIND.GITHUB_DISCONNECT]: () => Promise.reject(new Error(refusal)) },

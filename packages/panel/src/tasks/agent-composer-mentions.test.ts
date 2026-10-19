@@ -40,7 +40,13 @@ import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+  type OpenedLink,
+  openingLinks,
+} from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import {
@@ -193,7 +199,7 @@ const MEMBERS: readonly WorkspaceMember[] = [
 ];
 
 /** Every act the panel told the main process, in order. */
-const told: Act[] = [];
+const told: (Act | OpenedLink)[] = [];
 
 /** The repository the task's tree is read from now. */
 let standing = "acme/relay";
@@ -267,7 +273,10 @@ beforeEach(() => {
       );
     },
   });
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
+  fakeActPort({
+    ...openingLinks((link) => told.push(link)),
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
+  });
 });
 
 afterEach(() => {
@@ -1482,6 +1491,7 @@ const issuesRead: string[] = [];
 async function issuesBox(on: boolean, standing: Issue[] = [REFRESH_ISSUE, LINK_ISSUE]) {
   issuesRead.length = 0;
   fakeActPort({
+    ...openingLinks((link) => told.push(link)),
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
     [ACT_KIND.ISSUES_LIST]: (payload) => {
       issuesRead.push(payload.workspaceId);

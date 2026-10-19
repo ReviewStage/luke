@@ -71,6 +71,8 @@ let keys: readonly ProviderKeySummary[] = [];
 let stored: ModelChoice = { model: OPUS.id, effort: "high" };
 /** Every act the page sent, in order. */
 let sent: Act[] = [];
+/** Every web page the page opened, in order. */
+let browsed: string[] = [];
 /** Whether the service refuses the next write. */
 let refuseWrite = false;
 
@@ -85,8 +87,6 @@ function answer(request: Act): Promise<ActOutcome> {
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_MODELS:
       return Promise.resolve(done({ models }));
-    case ACT_KIND.WEB_OPEN:
-      return Promise.resolve(done(undefined));
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
       return Promise.resolve(done({ choice: stored }));
     case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
@@ -100,9 +100,13 @@ function answer(request: Act): Promise<ActOutcome> {
   }
 }
 
-/** The act port, answering the page's asks of the account's keys the way the host would. */
+/** The act port, answering the page's asks of the account's keys the way the host would, and opening each web page it is asked to. */
 function answerKeys(): void {
   fakeActPort({
+    [ACT_KIND.WEB_OPEN]: ({ url }) => {
+      browsed.push(url);
+      return Promise.resolve();
+    },
     [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve({ keys }),
     [ACT_KIND.PROVIDER_KEYS_SAVE]: () => {
       // The replacement key's organization runs fast mode, so the service offers Opus's fast version again.
@@ -121,6 +125,7 @@ beforeEach(() => {
   models = [OPUS, OPUS_FAST];
   keys = [];
   sent = [];
+  browsed = [];
   refuseWrite = false;
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
   fakeAppBridge({ act: answer });
@@ -294,10 +299,7 @@ test("a model whose fast version the key's organization was never granted rests 
 
   act(() => link.click());
   await settle();
-  assert.deepEqual(
-    sent.filter((request) => request.kind === ACT_KIND.WEB_OPEN).map((request) => request.payload),
-    [{ url: "https://claude.com/fast-mode" }],
-  );
+  assert.deepEqual(browsed, ["https://claude.com/fast-mode"]);
 });
 
 test("on Luke's key the resting Fast row says the same and links nowhere, since only the key's own organization can ask", async () => {

@@ -2964,12 +2964,17 @@ function skillReads(): string[] {
           value: { skills: { repository: "acme/relay", branch: "main", skills: [release] } },
         });
       }
-      if (request.kind === ACT_KIND.GITHUB_OPEN) {
-        opened.push(request.payload.url);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      }
       return bridge.act(request);
     },
+  });
+  // The members are read as every test here reads them, beside the GitHub pages written down.
+  fakeActPort({
+    [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
+      opened.push(url);
+      return Promise.resolve();
+    },
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(members),
   });
   return opened;
 }

@@ -249,7 +249,6 @@ function platformRows(http: HttpClient.HttpClient): PlatformActRows<WebSender> {
 /** The host's own rows' dependencies, answered for a tab: no voice, no keys, and links opened in a tab of their own. */
 function hostRowDependencies(
   operator: OperatorClient,
-  state: AppStateStore,
   notices: HostActDependencies<WebSender>["codingAgents"]["notices"],
   reporterOf: (sender: WebSender) => string,
 ): HostActDependencies<WebSender> {
@@ -276,16 +275,7 @@ function hostRowDependencies(
       // A tab claims no global key, so no chord is ever held.
       stopChordHolder: () => undefined,
     },
-    tasks: {
-      host,
-      openExternal: async (url) => openTab(url),
-      serviceBaseUrl: location.origin,
-      activeTaskId: () => state.snapshot().tasks.activeTaskId,
-      talkAboutTask: nothing,
-      voiceReady: () => false,
-      callStanding: () => false,
-      colourCode: highlightSnippet,
-    },
+    tasks: { host, colourCode: highlightSnippet },
     codingAgents: { host, notices },
     integrations: { host },
     automations: { host },
@@ -301,13 +291,27 @@ function hostRowDependencies(
  * panel's and trusted; the procedures' effects run on the tab's runtime.
  * Both ends close with the host's scope.
  */
-const servedActPort = (operator: OperatorClient, services: Context.Context<never>) =>
+const servedActPort = (
+  operator: OperatorClient,
+  state: AppStateStore,
+  services: Context.Context<never>,
+) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const channel = new MessageChannel();
       createActPortHandler({
         accountAsks: { host: operator.host },
         issues: { host: operator.host },
+        // No voice stands in a tab, so a started task opens no call and the microphone's press reaches none.
+        tasks: {
+          host: operator.host,
+          openExternal: async (url) => openTab(url),
+          serviceBaseUrl: location.origin,
+          activeTaskId: () => state.snapshot().tasks.activeTaskId,
+          talkAboutTask: () => undefined,
+          voiceReady: () => false,
+          callStanding: () => false,
+        },
         workspaces: { host: operator.host, openExternal: async (url) => openTab(url) },
       }).upgrade(channel.port2, {
         context: () => ({
@@ -389,7 +393,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
         sender: window,
         routerFor: (reporterOf) =>
           createHostActRouter(
-            hostRowDependencies(operator, state, notices, reporterOf),
+            hostRowDependencies(operator, notices, reporterOf),
             platformRows(http),
           ),
         run,
@@ -400,7 +404,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
         report,
       });
       events = made.events;
-      const actPort = yield* servedActPort(operator, services);
+      const actPort = yield* servedActPort(operator, state, services);
       return {
         bridge: made.bridge,
         actPort,

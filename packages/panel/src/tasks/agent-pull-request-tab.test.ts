@@ -285,8 +285,6 @@ beforeEach(() => {
   fakeAppPlatform(DESKTOP_LINKS);
   fakeAppBridge({
     act: (request: Act) => {
-      if (request.kind === ACT_KIND.GITHUB_OPEN) opened.push(request.payload.url);
-      if (request.kind === ACT_KIND.WEB_OPEN) opened.push(request.payload.url);
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
         changes.push([request.payload.agentId, request.payload.request]);
         changeNumbers.push(request.payload.number);
@@ -303,7 +301,17 @@ beforeEach(() => {
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
-  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([CHARLES]) });
+  fakeActPort({
+    [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
+      opened.push(url);
+      return Promise.resolve();
+    },
+    [ACT_KIND.WEB_OPEN]: ({ url }) => {
+      opened.push(url);
+      return Promise.resolve();
+    },
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve([CHARLES]),
+  });
 });
 
 afterEach(() => {

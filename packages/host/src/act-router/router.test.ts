@@ -107,11 +107,11 @@ it.effect(
       const ran: ActKind[] = [];
       const router = createHostActRouter(UNREACHED, platformRecording(ran));
       const voice: ActSender = { ...PANEL, panel: false, voice: true };
-      const refresh = yield* perform(router, { kind: ACT_KIND.TASKS_REFRESH }, voice);
+      const earlier = yield* perform(router, { kind: ACT_KIND.TASKS_WORK_EARLIER }, voice);
       yield* perform(router, { kind: ACT_KIND.UPDATE_CHECK }, PANEL);
-      assert.deepEqual(refresh, {
+      assert.deepEqual(earlier, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.TASKS_REFRESH].refusal,
+        reason: ACT[ACT_KIND.TASKS_WORK_EARLIER].refusal,
       });
       assert.deepEqual(ran, [ACT_KIND.UPDATE_CHECK]);
     }),
@@ -124,18 +124,18 @@ it.effect(
       const ran: ActKind[] = [];
       const overlapping = {
         ...platformRecording(ran),
-        [ACT_KIND.TASKS_REFRESH]: () => {
-          ran.push(ACT_KIND.TASKS_REFRESH);
+        [ACT_KIND.TASKS_WORK_EARLIER]: () => {
+          ran.push(ACT_KIND.TASKS_WORK_EARLIER);
         },
       };
-      // @ts-expect-error -- tasks.refresh is the host's to answer, so a platform row for it is refused.
+      // @ts-expect-error -- tasks.workEarlier is the host's to answer, so a platform row for it is refused.
       const platform: PlatformActRows<unknown> = overlapping;
       const router = createHostActRouter(UNREACHED, platform);
       const voice: ActSender = { ...PANEL, panel: false, voice: true };
-      const refresh = yield* perform(router, { kind: ACT_KIND.TASKS_REFRESH }, voice);
-      assert.deepEqual(refresh, {
+      const earlier = yield* perform(router, { kind: ACT_KIND.TASKS_WORK_EARLIER }, voice);
+      assert.deepEqual(earlier, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.TASKS_REFRESH].refusal,
+        reason: ACT[ACT_KIND.TASKS_WORK_EARLIER].refusal,
       });
       assert.deepEqual(ran, []);
     }),

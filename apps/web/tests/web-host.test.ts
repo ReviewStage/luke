@@ -10,7 +10,7 @@ import { THEME } from "@luke/settings";
 import { Context, Effect, Layer, Schema } from "effect";
 import { afterEach } from "vitest";
 import { composeWeb, WebHostTag } from "../src/app/web-host";
-import { fakeService, WORKSPACE_MEMBER } from "./support/fake-service";
+import { fakeService, GITHUB_REPOSITORIES, WORKSPACE_MEMBER } from "./support/fake-service";
 
 /**
  * The shared host as a browser tab composes it, with no panel drawn: what it
@@ -112,6 +112,20 @@ it.effect("a workspace act rides the tab's act port to the service and back", ()
       );
 
       assert.deepEqual(members, [WORKSPACE_MEMBER]);
+    }),
+  ),
+);
+
+it.effect("a task act rides the tab's act port to the service and back", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+      installAppBridge(bridge);
+      installActPort(actPort);
+
+      const listed = yield* Effect.promise(() => askAct(ACT_KIND.TASKS_REPOSITORIES, {}));
+
+      assert.deepEqual(listed, { repositories: GITHUB_REPOSITORIES });
     }),
   ),
 );

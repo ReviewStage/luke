@@ -2,7 +2,8 @@ import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { admittedElements } from "@luke/features/board-scene";
 import { LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import type { Board } from "@luke/features/board-wire";
-import { ACT_KIND, type ActPayload } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
+import type { PortActPayload } from "@luke/host/contract";
 import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
@@ -62,7 +63,7 @@ interface BoardSave {
 const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
   Effect.gen(function* () {
     yield* Effect.sleep(SAVE_PAUSE);
-    const scene: ActPayload<typeof ACT_KIND.TASKS_BOARD_SAVE> = {
+    const scene: PortActPayload<typeof ACT_KIND.TASKS_BOARD_SAVE> = {
       taskId: save.taskId,
       elements: admittedElements(save.elements),
       appliedDrawing: save.appliedDrawing,

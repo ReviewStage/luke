@@ -17,6 +17,7 @@ import {
   type AccountAskProceduresDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
+  type TasksProceduresDependencies,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
 
@@ -97,9 +98,12 @@ function windowPort(
   } as HostAsk;
   // SAFETY: no account ask is called here, so the account asks' host is never reached.
   const accountAsks = { host: {} } as AccountAskProceduresDependencies;
+  // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
+  const tasks = { host: {} } as TasksProceduresDependencies;
   const handler = createActPortHandler({
     accountAsks,
     issues: { host },
+    tasks,
     workspaces: NO_WORKSPACES,
   });
   const { port1, port2 } = new MessageChannel();

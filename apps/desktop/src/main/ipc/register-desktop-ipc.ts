@@ -181,24 +181,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         stopChordHolder: (chord) =>
           hotkeys.reserve(chord, HOTKEY_RANK.STOP) === HOTKEY_RANK.TALK ? "talk" : undefined,
       },
-      tasks: {
-        host: operator.host,
-        openExternal: config.openExternal,
-        serviceBaseUrl: config.hostedServiceBaseUrl,
-        activeTaskId: () => state.snapshot().tasks.activeTaskId,
-        talkAboutTask: (taskId) => {
-          voiceWindow.current()?.webContents.send(channels.onTasksTalk, { taskId });
-        },
-        voiceReady: () => {
-          const snapshot = state.snapshot();
-          return (
-            snapshot.settings?.status.voiceAvailable === true &&
-            snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
-          );
-        },
-        callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
-        colourCode: highlightSnippet,
-      },
+      tasks: { host: operator.host, colourCode: highlightSnippet },
       codingAgents: { host: operator.host, notices },
       integrations: { host: operator.host },
       automations: { host: operator.host },
@@ -253,6 +236,23 @@ export function registerDesktopIpc(services: DesktopServices): void {
     actPort: createActPortHandler({
       accountAsks: { host: operator.host },
       issues: { host: operator.host },
+      tasks: {
+        host: operator.host,
+        openExternal: config.openExternal,
+        serviceBaseUrl: config.hostedServiceBaseUrl,
+        activeTaskId: () => state.snapshot().tasks.activeTaskId,
+        talkAboutTask: (taskId) => {
+          voiceWindow.current()?.webContents.send(channels.onTasksTalk, { taskId });
+        },
+        voiceReady: () => {
+          const snapshot = state.snapshot();
+          return (
+            snapshot.settings?.status.voiceAvailable === true &&
+            snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
+          );
+        },
+        callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
+      },
       workspaces: { host: operator.host, openExternal: config.openExternal },
     }),
     services: effectServices,

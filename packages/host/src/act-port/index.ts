@@ -6,6 +6,7 @@ import {
 } from "./account-ask-procedures.js";
 import { type ActPortContext, isRefusal, refusedBy } from "./base.js";
 import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
+import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import {
   type WorkspaceProceduresDependencies,
   workspaceProcedures,
@@ -21,6 +22,7 @@ import {
 
 export type { AccountAskProceduresDependencies } from "./account-ask-procedures.js";
 export type { IssueProceduresDependencies } from "./issue-procedures.js";
+export type { TasksProceduresDependencies } from "./tasks-procedures.js";
 export type { WorkspaceProceduresDependencies } from "./workspace-procedures.js";
 
 /** The act port's server, which the bridge upgrades each window's port with. */
@@ -30,6 +32,7 @@ export type ActPortHandler = RPCHandler<ActPortContext>;
 export interface ActPortDependencies {
   readonly accountAsks: AccountAskProceduresDependencies;
   readonly issues: IssueProceduresDependencies;
+  readonly tasks: TasksProceduresDependencies;
   readonly workspaces: WorkspaceProceduresDependencies;
 }
 
@@ -45,6 +48,7 @@ export function createActPortHandler(dependencies: ActPortDependencies): ActPort
   const router = {
     ...accountAskProcedures(dependencies.accountAsks),
     ...issueProcedures(dependencies.issues),
+    ...tasksProcedures(dependencies.tasks),
     ...workspaceProcedures(dependencies.workspaces),
   };
   return new RPCHandler<ActPortContext>(router, {

@@ -7,6 +7,7 @@ import type {
 import { accountAskActsContract } from "./account-asks.js";
 import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
+import { tasksActsContract } from "./tasks.js";
 import { workspaceActsContract } from "./workspaces.js";
 
 /**
@@ -24,6 +25,7 @@ export {
   ACCOUNT_ASK_ACT_KIND,
   ISSUE_ACT_KIND,
   type PortActKind,
+  TASKS_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
 
@@ -31,6 +33,7 @@ export {
 export const actContract = {
   ...accountAskActsContract,
   ...issueActsContract,
+  ...tasksActsContract,
   ...workspaceActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 
