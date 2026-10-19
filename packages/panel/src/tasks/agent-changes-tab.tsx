@@ -79,6 +79,7 @@ import {
   headerPatch,
   linesChanged,
   listPatch,
+  rowPlace,
   STATUS_LETTER,
   STATUS_WORDS,
   suggestedLines,
@@ -374,7 +375,7 @@ function AboveThreads({
 type ThreadHover = (
   key: string,
   group: boolean,
-  threads: readonly ReviewThread[],
+  lines: DiffListSelection | undefined,
   resting: boolean,
 ) => void;
 
@@ -386,13 +387,14 @@ type ThreadHover = (
 function ThreadLines({
   hoverKey,
   group = false,
-  threads,
+  lines,
   hover,
   children,
 }: {
   hoverKey: string;
   group?: boolean;
-  threads: readonly ReviewThread[];
+  /** The lines the threads are on, as the list lights them (`threadLines`). */
+  lines: DiffListSelection | undefined;
   hover: ThreadHover | undefined;
   children: ReactNode;
 }): React.JSX.Element {
@@ -401,8 +403,8 @@ function ThreadLines({
     // biome-ignore lint/a11y/noStaticElementInteractions: the pointer resting on a thread only lights the lines it is on; nothing is pressed.
     <div
       className="diff-thread-lines"
-      onMouseEnter={() => hover(hoverKey, group, threads, true)}
-      onMouseLeave={() => hover(hoverKey, group, threads, false)}
+      onMouseEnter={() => hover(hoverKey, group, lines, true)}
+      onMouseLeave={() => hover(hoverKey, group, lines, false)}
     >
       {children}
     </div>
@@ -424,6 +426,7 @@ interface FileMinimized {
  * stands among them.
  */
 function minimizedNotes(
+  file: CodingAgentChangedFile,
   placed: ReturnType<typeof threadsOn>["placed"],
   draw: ChangesThreads["draw"] | undefined,
   minimized: FileMinimized,
@@ -438,7 +441,12 @@ function minimizedNotes(
   return [...lines].flatMap(([side, onSide]) =>
     [...onSide].flatMap(([line, threads]) => {
       const drawn = threads.map((each) => (
-        <ThreadLines key={each.key} hoverKey={each.key} threads={[each.thread]} hover={hover}>
+        <ThreadLines
+          key={each.key}
+          hoverKey={each.key}
+          lines={threadLines([each.thread], file)}
+          hover={hover}
+        >
           {draw?.(each.thread, THREAD_PLACE.ON_LINE)}
         </ThreadLines>
       ));
@@ -458,7 +466,10 @@ function minimizedNotes(
                 <ThreadLines
                   hoverKey={first.key}
                   group
-                  threads={threads.map((each) => each.thread)}
+                  lines={threadLines(
+                    threads.map((each) => each.thread),
+                    file,
+                  )}
                   hover={hover}
                 >
                   <MinimizedThreads
@@ -517,12 +528,12 @@ function entryOf(
           side: each.side,
           line: each.line,
           content: (
-            <ThreadLines hoverKey={each.key} threads={[each.thread]} hover={hover}>
+            <ThreadLines hoverKey={each.key} lines={threadLines([each.thread], file)} hover={hover}>
               {draw?.(each.thread, THREAD_PLACE.ON_LINE)}
             </ThreadLines>
           ),
         }))
-      : minimizedNotes(placed, draw, minimized, comments, hover);
+      : minimizedNotes(file, placed, draw, minimized, comments, hover);
   // The threads above the diff, as one list, or minimized to a chip of their own.
   const aboveOf = (unplaced: typeof above, side: DiffSelection["side"]) => {
     const list = <AboveThreads above={unplaced} draw={draw} />;
@@ -746,38 +757,25 @@ const COMMENT_SIDE = {
   [DIFF_SIDE.RIGHT]: DIFF_SELECTION_SIDE.ADDITIONS,
 } as const;
 
-/** Each side's place in the order a diff draws a line's rows: the old side's first. */
-const SIDE_ORDER = {
-  [DIFF_SELECTION_SIDE.DELETIONS]: 0,
-  [DIFF_SELECTION_SIDE.ADDITIONS]: 1,
-} as const;
-
 /**
- * The lines review threads ending on one line are on now, as the list
- * lights them: the widest of their ranges, the one that starts earliest,
- * which holds every other; none for threads on no line of the head.
+ * The lines review threads ending on one line of `file` are on now, as the
+ * list lights them: the widest of their ranges, the one whose first line's
+ * row the diff draws first, which holds every other; none for threads on no
+ * line of the head.
  */
-function threadLines(threads: readonly ReviewThread[]): DiffListSelection | undefined {
-  const ranges = threads.flatMap((thread) =>
-    thread.line === null
-      ? []
-      : [
-          {
-            path: thread.path,
-            selection: {
-              start: thread.startLine ?? thread.line,
-              side: COMMENT_SIDE[thread.startSide ?? thread.side],
-              end: thread.line,
-              endSide: COMMENT_SIDE[thread.side],
-            },
-          },
-        ],
-  );
-  return ranges.toSorted(
-    (a, b) =>
-      SIDE_ORDER[a.selection.side] - SIDE_ORDER[b.selection.side] ||
-      a.selection.start - b.selection.start,
-  )[0];
+function threadLines(
+  threads: readonly ReviewThread[],
+  file: CodingAgentChangedFile,
+): DiffListSelection | undefined {
+  const ranges = threads.flatMap((thread) => {
+    if (thread.line === null) return [];
+    const side = COMMENT_SIDE[thread.startSide ?? thread.side];
+    const start = thread.startLine ?? thread.line;
+    const place = rowPlace(file, side, start) ?? Number.POSITIVE_INFINITY;
+    const selection = { start, side, end: thread.line, endSide: COMMENT_SIDE[thread.side] };
+    return [{ place, lines: { path: thread.path, selection } }];
+  });
+  return ranges.toSorted((a, b) => a.place - b.place)[0]?.lines;
 }
 
 /**
@@ -897,8 +895,7 @@ function useThreadHover(): RestingThread {
   const [resting, setResting] = useState<
     readonly { key: string; group: boolean; lines: DiffListSelection }[]
   >([]);
-  const hover = useCallback<ThreadHover>((key, group, threads, on) => {
-    const lines = threadLines(threads);
+  const hover = useCallback<ThreadHover>((key, group, lines, on) => {
     setResting((was) => {
       const others = was.filter((each) => each.key !== key || each.group !== group);
       if (on && lines !== undefined) return [...others, { key, group, lines }];

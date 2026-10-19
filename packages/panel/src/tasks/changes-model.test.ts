@@ -13,6 +13,7 @@ import {
   commentLines,
   commentLinesLabel,
   filterFiles,
+  rowPlace,
   startsCollapsed,
   suggestedLines,
   textsOf,
@@ -462,4 +463,17 @@ test("a suggestion starts from the head's own words of the lines a comment is on
     undefined,
   );
   assert.equal(suggestedLines(FILE_A, { line: 9, side: DIFF_SIDE.RIGHT }), undefined);
+});
+
+test("a line's place is its row's in the order the diff draws them, so an added row drawn before a removed one stands first, and a line no row holds has none", () => {
+  const mixed = changed("src/m.ts", { patch: "@@ -1,4 +1,4 @@\n a\n+b\n c\n-d\n e" });
+
+  assert.equal(rowPlace(mixed, DIFF_SELECTION_SIDE.ADDITIONS, 2), 1);
+  assert.equal(rowPlace(mixed, DIFF_SELECTION_SIDE.DELETIONS, 3), 3);
+  assert.equal(
+    rowPlace(mixed, DIFF_SELECTION_SIDE.DELETIONS, 2),
+    2,
+    "an unchanged row holds the old side's line",
+  );
+  assert.equal(rowPlace(mixed, DIFF_SELECTION_SIDE.ADDITIONS, 9), undefined);
 });
