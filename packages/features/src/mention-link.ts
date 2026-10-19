@@ -34,8 +34,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * Linear issue's address is the words' own, and is handed nothing.
  *
  * The target is the address the thing has on the web, so a mention copied
- * out of Luke, into Slack, a pull request or a mail, still leads somewhere
- * (`docs/proposals/web-and-links.md`):
+ * out of Luke, into Slack, a pull request or a mail, still leads somewhere:
  *
  * - A task is `https://tryluke.dev/<workspace>/plan/<id>`, and one of its
  *   sections that with `#<anchor>` after it. Only the id finds the task: the

@@ -265,6 +265,21 @@ test("every agent on a task is told how to update its plan, one handed a prompt 
   assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, false, false]);
 });
 
+test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the plan, a page, or its final message", () => {
+  const NO_DOCUMENT = "never commit the write-up as a document";
+  const PLAN = `write it into the plan with \`${CODER_TOOL.EDIT_PLAN}\``;
+  const PAGE = `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``;
+  const MESSAGE = "write it in your final message";
+  const told = (brief: CodingAgentBrief, taskLink: string | null) => {
+    const words = coderInstructions("Acme/Relay", brief, true, taskLink);
+    assert.ok(words.includes(NO_DOCUMENT), brief);
+    return [words.includes(PLAN), words.includes(PAGE), words.includes(MESSAGE)];
+  };
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, TASK_ADDRESS), [false, true, false]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, false, true]);
+});
+
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     assert.ok(

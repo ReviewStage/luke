@@ -4,7 +4,7 @@ import { browserAddressOf, isBrowserAddress } from "./browser-acts.js";
 
 /**
  * What a line typed into a Browser tab's bar opens, as a browser's address
- * bar reads it (`docs/proposals/browser-tab.md`).
+ * bar reads it.
  */
 
 test("an http or https address opens as written", () => {
