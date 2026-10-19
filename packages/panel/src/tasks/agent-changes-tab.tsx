@@ -80,6 +80,7 @@ import { LinesMenu, useSaveText } from "./file-menu.js";
 import { FileTreePane } from "./file-tree-pane.js";
 import { FileViewBar, usePaneRoom } from "./file-view.js";
 import { useFileViewSettings } from "./file-view-settings.js";
+import { FilesChangedKeysSheet } from "./files-changed-keys.js";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff.js";
 import { LineComment, type PendingReview } from "./line-comment.js";
 import { PullRequestMark } from "./pull-request-mark.js";
@@ -126,7 +127,8 @@ import { useViewedFiles } from "./viewed-files.js";
  * narrows the rows, said over the list while the tree is hidden, with the
  * pull request's count under it, or under the list while the tree is
  * hidden; choosing a file there or in a crumb's tree scrolls the list to
- * it. stage-cli's keys walk the list (`changes-list.tsx`). The diffs are
+ * it. stage-cli's keys walk the list (`changes-list.tsx`), and `?` opens a
+ * sheet listing them (`files-changed-keys.tsx`). The diffs are
  * drawn by Pierre's diffs in a bundle of its own (`../diff-view/`), on the
  * File tab's ground, in its type and colours, unified or split, numbered
  * and wrapped as the File tabs' settings say, their numbers left out of the
@@ -928,6 +930,7 @@ export function AgentChangesTab({
       {/* The count stands under the tree, and under the list while the tree
           stands nowhere beside it, which the stylesheet says (tasks.css). */}
       <p className="file-tree-foot">{counted}</p>
+      {list.keysShown ? <FilesChangedKeysSheet onDismiss={list.hideKeys} /> : null}
     </div>
   );
 }
