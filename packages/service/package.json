@@ -44,7 +44,6 @@
     "./agents/agent-runtime/tools": "./src/agents/agent-runtime/tools.js",
     "./agents/agent-terminals-app": "./src/agents/agent-terminals-app.js",
     "./agents/attached-files": "./src/agents/attached-files.js",
-    "./agents/messages-procedures": "./src/agents/messages-procedures.js",
     "./agents/brain-host/auth": "./src/agents/brain-host/auth.js",
     "./agents/brain-host/bounds": "./src/agents/brain-host/bounds.js",
     "./agents/brain-host/brain-ask": "./src/agents/brain-host/brain-ask.js",
