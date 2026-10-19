@@ -112,11 +112,16 @@ const URL_AUTHORITY_PATTERN = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i;
  * it`, a patch that does not apply, a file not found), how this repository's
  * file tools add what to do next to eve's words (`coder-host/files.ts`), and
  * how a connection's tool answers an error.
+ *
+ * Note that a bare `Error` carrying a field of its own beside its cause (a
+ * sandbox API error's `response`, undici's `code`) is a failure beneath the
+ * tool dressed as one, and is reported.
  */
 function isRefusal(failure: Error, depth = 0): boolean {
   const { cause } = failure;
   return (
     Object.getPrototypeOf(failure) === Error.prototype &&
+    Object.keys(failure).every((key) => key === "cause") &&
     depth < REFUSAL_CAUSE_DEPTH &&
     (cause === undefined || (cause instanceof Error && isRefusal(cause, depth + 1)))
   );

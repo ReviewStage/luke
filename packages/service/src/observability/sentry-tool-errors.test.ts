@@ -165,6 +165,17 @@ it.effect("a tool's refusal is not an issue, and a failure beneath a tool still 
       // Note that the causes are read 5 deep: a refusal of 5 bare errors is a refusal, and one of 6 is reported.
       edit_file: throwing(refusalChain(5, "Patch contains overlapping file operations.")),
       grep: throwing(refusalChain(6, "The pattern did not parse.")),
+      // Note that a bare `Error` carrying fields of its own is a failure beneath the tool, as `@vercel/sandbox` and undici throw one.
+      glob: throwing(
+        Object.assign(new Error("Status code 404 is not ok: sandbox not found"), {
+          response: new Response(null, { status: 404 }),
+        }),
+      ),
+      list_files: throwing(
+        new Error("The listing was cut short.", {
+          cause: Object.assign(new Error("other side closed"), { code: "UND_ERR_SOCKET" }),
+        }),
+      ),
     };
     const input = jsonSchema<Record<string, never>>({ type: "object", properties: {} });
     const answer = yield* Effect.promise(() =>
@@ -183,7 +194,9 @@ it.effect("a tool's refusal is not an issue, and a failure beneath a tool still 
     assert.equal(answer.text, "Read it first, then wrote it.");
     assert.deepEqual([...new Set(exceptionValues(sentry.sent))].sort(), [
       "Status code 404 is not ok",
+      "Status code 404 is not ok: sandbox not found",
       "The connection answered in circles.",
+      "The listing was cut short.",
       "The pattern did not parse. (6 of 6)",
       "The sandbox could not be read.",
     ]);
