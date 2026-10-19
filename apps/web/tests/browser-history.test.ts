@@ -54,6 +54,21 @@ test("a visit pushes an entry at its address and a step taken in place replaces 
   assert.equal(history.current().at, 1);
 });
 
+test("an address that is no path of this site, as a link with no workspace spells, is written at /app rather than thrown on", () => {
+  openAt("/app");
+  const history = browserHistory<string>();
+
+  history.push({ address: "/acme/inbox", state: "inbox" });
+  assert.doesNotThrow(() => history.push({ address: "//automations/", state: "automations" }));
+  assert.equal(addressBar(), "/app");
+  assert.doesNotThrow(() => history.replace({ address: "/\\x", state: "elsewhere" }));
+  assert.equal(addressBar(), "/app");
+  assert.deepEqual(
+    history.current().entries.map((entry) => entry.address),
+    ["/acme/inbox", "/app"],
+  );
+});
+
 test("the browser's Back stands the entry before and tells every listener, and its Forward the entry after", async () => {
   openAt("/app");
   const history = browserHistory<string>();

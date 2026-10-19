@@ -42,6 +42,17 @@ interface SavedEntry<State> {
   readonly idx: number;
 }
 
+/** The address written for an entry whose own is not a path of this site, which the browser would refuse: the panel's own page, which names no place. */
+const PANEL_ADDRESS = "/app";
+
+/** A path of this site: one slash, then anything but a second, or a backslash a browser reads as one, which would name another host. */
+const SAME_ORIGIN_PATH = /^\/(?![/\\])/u;
+
+/** The entry as it is written: at its own address where that is a path of this site, else at the panel's page, so a bad address never throws. */
+function writable<State>(entry: HistoryEntry<State>): HistoryEntry<State> {
+  return SAME_ORIGIN_PATH.test(entry.address) ? entry : { ...entry, address: PANEL_ADDRESS };
+}
+
 /** The address the tab stands at, as the panel writes one: its path, query, and fragment. */
 function addressHere(): string {
   return `${location.pathname}${location.search}${location.hash}`;
@@ -146,7 +157,8 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): HistoryAda
 
   return {
     current: () => snapshot,
-    push: (entry) => {
+    push: (pushed) => {
+      const entry = writable(pushed);
       if (snapshot.at < 0) {
         write(WRITE.REPLACE, entry, 0);
         stand({ entries: [entry], at: 0 });
@@ -156,7 +168,8 @@ export function browserHistory<State>(limit: number = HISTORY_LIMIT): HistoryAda
       write(WRITE.PUSH, entry, next.at);
       stand(next);
     },
-    replace: (entry) => {
+    replace: (replaced) => {
+      const entry = writable(replaced);
       const at = Math.max(snapshot.at, 0);
       const entries = snapshot.at < 0 ? [entry] : snapshot.entries.with(at, entry);
       write(WRITE.REPLACE, entry, at);
