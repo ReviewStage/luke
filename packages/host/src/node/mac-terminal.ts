@@ -83,14 +83,19 @@ function processesOn(tools: MacTerminalTools, tty: string): readonly number[] {
     .filter((pid) => Number.isInteger(pid) && pid > 0);
 }
 
-/** When a process started, as `ps` says it, which no later process given the same id shares; none where it has ended. */
-function startedAt(pid: number): string | undefined {
-  const listed = spawnSync("ps", ["-o", "lstart=", "-p", String(pid)], {
+/** When each process started, by its id, as one `ps` says it, which no later process given the same id shares; none for one that has ended. */
+function startTimes(pids: readonly number[]): ReadonlyMap<number, string> {
+  if (pids.length === 0) return new Map();
+  const listed = spawnSync("ps", ["-o", "pid=,lstart=", "-p", pids.join(",")], {
     encoding: "utf8",
     timeout: 2_000,
   });
-  const folded = listed.stdout?.trim().replace(/\s+/gu, " ") ?? "";
-  return listed.status === 0 && folded !== "" ? folded : undefined;
+  const times = new Map<number, string>();
+  for (const line of (listed.stdout ?? "").split("\n")) {
+    const [pid, ...started] = line.trim().split(/\s+/u);
+    if (pid !== undefined && started.length > 0) times.set(Number(pid), started.join(" "));
+  }
+  return times;
 }
 
 /** Every terminal standing, which a quit closes. */
@@ -156,10 +161,12 @@ export function startMacTerminal(options: {
       // Note that what runs on the terminal is noted before the hang-up, since a job that outlives it no longer names the terminal once it is gone.
       const running = device === undefined ? [] : processesOn(tools, device);
       // Note that each process is named with when it started, and the terminal's own process group by its id, both before any signal, so the kill after the grace reaches what was running then and nothing the system started since under an id it gave again.
+      // Note that the times are read in one `ps`, so Stop's signals are not held up by a read per process.
+      const started = startTimes(running);
       const targets = [
         ...running.flatMap((pid) => {
-          const started = startedAt(pid);
-          return started === undefined ? [] : [String(pid), started];
+          const time = started.get(pid);
+          return time === undefined ? [] : [String(pid), time];
         }),
         ...(child.pid === undefined ? [] : [String(-child.pid), "group"]),
       ];
