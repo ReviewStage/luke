@@ -88,15 +88,17 @@ import {
   suggestedLines,
   textsOf,
   threadsOn,
+  treeOrder,
   wholeable,
 } from "./changes-model.js";
+import { ChangesStrip } from "./changes-strip.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import { type DiffListEntry, type DiffNote, PierreDiffList } from "./diff-list.js";
 import { DiffSettingsButton } from "./diff-settings.js";
 import { useDiffLook, useSplitRoom } from "./file-diff.js";
 import { LinesMenu, useSaveText } from "./file-menu.js";
 import { FileTreePane } from "./file-tree-pane.js";
-import { FileViewBar, usePaneRoom } from "./file-view.js";
+import { FileViewBar, type TreeShown, usePaneRoom, useTreeEdge } from "./file-view.js";
 import { useFileViewSettings } from "./file-view-settings.js";
 import { FilesChangedKeysSheet } from "./files-changed-keys.js";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff.js";
@@ -1190,7 +1192,7 @@ export function AgentChangesTab({
   /** The task's repository, which the agent works in and the breadcrumbs name; none names the path plain. */
   repository: string | null;
   /** Whether the tree beside File and Changes tabs is open, and its toggle. */
-  tree: { readonly open: boolean; readonly onToggle: () => void };
+  tree: TreeShown;
   /** The pull request's review threads, drawn on their lines in each file's diff; none draws none. */
   threads?: ChangesThreads | undefined;
   /** How a comment on lines is made, where the tab lets one be; none offers no comment. */
@@ -1206,6 +1208,7 @@ export function AgentChangesTab({
   });
   if (reads.current.of !== answer) reads.current = { of: answer, count: reads.current.count + 1 };
   const room = usePaneRoom(tree);
+  const edge = useTreeEdge(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
   const roomy = useSplitRoom(diffBox);
   const pullRequest = answer !== undefined && "pullRequest" in answer ? answer.pullRequest : null;
@@ -1214,7 +1217,7 @@ export function AgentChangesTab({
   const changed = useMemo(() => {
     const files = pullRequest?.files ?? [];
     const paths = files.map((file) => file.path);
-    return { files, paths, folders: changedFolders(paths) };
+    return { files, paths, ordered: treeOrder(files), folders: changedFolders(paths) };
   }, [pullRequest]);
   // Note that the marks are read with each answer the changes read lands with, so the two describe the same push.
   const viewedFiles = useViewedFiles(
@@ -1225,7 +1228,7 @@ export function AgentChangesTab({
   const viewSettings = useFileViewSettings();
   const minimize = () =>
     viewSettings.change("diffMinimizeComments", !viewSettings.settings.diffMinimizeComments);
-  const list = useChangesList(changed.files, viewedFiles.marks, minimize);
+  const list = useChangesList(changed.files, viewedFiles.marks, minimize, room.toggle);
   const marks = useMemo(
     () => changeMarks(changed.files, { threads: threads?.list, viewed: list.viewed }),
     [changed.files, threads?.list, list.viewed],
@@ -1361,8 +1364,18 @@ export function AgentChangesTab({
             pane={room.beside.pane}
             float={room.pane}
             leaving={room.beside.leaving}
+            width={tree.width?.width}
+            edge={edge}
           />
         ) : null}
+        {tree.open ? null : (
+          <ChangesStrip
+            files={changed.ordered}
+            current={shownFile.path}
+            viewed={list.viewed}
+            peek={room.strip}
+          />
+        )}
       </div>
       {/* The count stands under the tree, and under the list while the tree
           stands nowhere beside it, which the stylesheet says (tasks.css). */}

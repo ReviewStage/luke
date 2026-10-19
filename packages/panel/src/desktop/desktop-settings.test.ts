@@ -446,6 +446,7 @@ test("Keyboard shortcuts lists Files changed's own keys under a group of their o
       ["Clear file focus", "Esc"],
       ["Toggle viewed and go to next file", "V"],
       ["Minimize or show inline comments", "I"],
+      ["Show or hide file tree", "⇧F"],
     ],
   );
   assert.deepEqual(foundUnder(page, "Collapse or expand all files"), ["Keyboard shortcuts"]);

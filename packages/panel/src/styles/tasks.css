@@ -1170,10 +1170,14 @@
   display: flex;
 }
 
-/* The tree beside a File tab, its search level with the tab's heading. */
+/* The tree beside a File tab, its search level with the tab's heading, as
+   wide as it was last dragged (`useTreeEdge`), never so wide that it takes
+   the tab's room, and dragged by the edge on its left, which straddles its
+   border as the side panel's does. */
 .file-tree-pane {
+  position: relative;
   display: flex;
-  width: min(264px, 40%);
+  width: min(var(--file-tree-width, 264px), max(40%, 100% - 320px));
   min-width: 0;
   flex: 0 0 auto;
   flex-direction: column;
@@ -1204,6 +1208,100 @@
   display: none;
 }
 
+.file-tree-pane[data-leaving] > .side-panel-resize {
+  display: none;
+}
+
+/* While Files changed's tree is hidden, a strip stands in its place, one
+   mark for each changed file, coloured as its letter is in the tree, dimmed
+   once viewed, the file the bar names standing out (changes-strip.tsx);
+   the pointer resting on it peeks the tree out over the list, as a pane
+   floats where the panel is too narrow for it (below). */
+.file-tree-strip {
+  display: none;
+}
+
+.file-view[data-pane-beside="false"] > .file-view-body > .file-tree-strip {
+  display: flex;
+  width: var(--luke-space-12);
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  padding-block: var(--luke-space-12);
+  border-left: 1px solid var(--luke-color-border);
+}
+
+/* Each mark is a share of the strip's height, at most a line's mark, its
+   colour filling the top of its share so the gap between marks shrinks
+   with them: a pull request of thousands of files draws every mark, however
+   thin, and the file the bar names never thinner than a line. */
+.file-tree-strip-mark {
+  --strip-mark-colour: var(--luke-color-attention);
+  width: var(--luke-space-6);
+  min-height: 0;
+  max-height: var(--luke-space-6);
+  flex: 1 1 0;
+  background: linear-gradient(var(--strip-mark-colour) 0 66%, transparent 66%);
+}
+
+.file-tree-strip-mark[data-status="added"] {
+  --strip-mark-colour: var(--luke-color-complete);
+}
+
+.file-tree-strip-mark[data-status="deleted"] {
+  --strip-mark-colour: var(--luke-color-danger-text);
+}
+
+.file-tree-strip-mark[data-status="renamed"] {
+  --strip-mark-colour: var(--luke-color-working);
+}
+
+.file-tree-strip-mark[data-viewed] {
+  opacity: 0.35;
+}
+
+.file-tree-strip-mark[data-current] {
+  width: var(--luke-space-12);
+  min-height: var(--luke-space-2);
+  opacity: 1;
+  box-shadow: 0 0 0 1px var(--luke-color-text);
+}
+
+/* The tree peeked from the strip, or opened over the list, floats over the
+   list's right edge, as it does in a narrow panel, on the window's floating
+   surface: a menu's ground, edge, and shadow, so it reads as standing above
+   the list rather than as the list cut short. */
+.file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-pane {
+  border-left-color: var(--luke-color-border-strong);
+  background: var(--luke-color-overlay);
+}
+
+.file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-host {
+  --trees-bg-override: var(--luke-color-overlay);
+}
+
+.file-view[data-pane-beside="false"]:is([data-pane-over="peek"], [data-pane-over="open"])
+  .file-tree-pane {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  right: 0;
+  display: flex;
+  width: min(var(--file-tree-width, 264px), calc(100% - var(--luke-space-48)));
+  box-shadow: var(--luke-menu-shadow);
+  animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+}
+
+.file-view[data-pane-beside="false"][data-pane-over="peek"] .file-tree-pane {
+  animation-delay: var(--duration-quick);
+}
+
+.file-view[data-pane-beside="false"]:is([data-pane-over="peek"], [data-pane-over="open"])
+  .file-tree-pane
+  > .side-panel-resize {
+  display: none;
+}
+
 .file-tree-toggle[data-place="over"] {
   display: none;
 }
@@ -1225,9 +1323,14 @@
     z-index: 1;
     inset-block: 0;
     right: 0;
-    width: min(264px, calc(100% - var(--luke-space-48)));
+    width: min(var(--file-tree-width, 264px), calc(100% - var(--luke-space-48)));
     background: var(--luke-color-well);
     box-shadow: var(--luke-menu-shadow);
+  }
+
+  .file-view .file-tree-pane > .side-panel-resize,
+  .file-view[data-pane-beside="false"] > .file-view-body > .file-tree-strip {
+    display: none;
   }
 
   .file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-pane {
@@ -1257,6 +1360,15 @@
 
   .file-view[data-pane-beside] > .file-tree-foot {
     display: block;
+  }
+}
+
+/* A panel with no room for the tree's least width beside the tab's own
+   keeps the tree at its share of the panel, with no edge to drag, since
+   any width a drag asked for would be drawn no wider (`useTreeEdge`). */
+@container side-panel (max-width: 539px) {
+  .file-view .file-tree-pane > .side-panel-resize {
+    display: none;
   }
 }
 

@@ -51,6 +51,7 @@ import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import type { ChangesThreads } from "./agent-changes-tab.js";
 import { blobShaOf } from "./changes-model.js";
+import type { TreeShown } from "./file-view.js";
 
 /**
  * agent-changes-tab.test.ts -- a Files changed view hands the diff bundle
@@ -251,6 +252,8 @@ let registry = AtomRegistry.make();
 interface DrawOptions {
   readonly threads?: ChangesThreads;
   readonly treeOpen?: boolean;
+  /** The tree as the panel holds it, in `treeOpen`'s place: its toggle and its width. */
+  readonly tree?: TreeShown;
   readonly beside?: ReactElement;
   readonly repository?: string;
   readonly control?: typeof control;
@@ -268,7 +271,7 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
     control: options.control ?? control,
     shown: options.shown ?? true,
     repository: options.repository ?? "acme/relay",
-    tree: { open: options.treeOpen ?? false, onToggle: () => undefined },
+    tree: options.tree ?? { open: options.treeOpen ?? false, onToggle: () => undefined },
     threads: options.threads,
   });
   act(() =>
@@ -525,6 +528,78 @@ test("a file the filter leaves out, chosen in a tree of every changed file, clea
   assert.match(document.querySelector(".file-view-bar")?.textContent ?? "", /README\.md/u);
 });
 
+/** A tree as the panel holds it, open as given, counting its toggles and keeping the widths asked for. */
+function heldTree(open: boolean, width = 300) {
+  const widths: number[] = [];
+  const held = { toggles: 0, widths };
+  const tree: TreeShown = {
+    open,
+    onToggle: () => {
+      held.toggles += 1;
+    },
+    width: { width, onResize: (asked) => held.widths.push(asked) },
+  };
+  return { tree, held };
+}
+
+test("⇧F inside the view shows or hides the tree, as its toggle does, and is no key while typing", async () => {
+  files = [changed("a.ts"), changed("b.ts")];
+  const { tree, held } = heldTree(true);
+  await drawTab({ tree });
+
+  assert.equal(press(listBox(), { key: "F", shiftKey: true }), true);
+  const field = document.querySelector<HTMLInputElement>(".file-tree-search input");
+  assert.equal(
+    press(field ?? assert.fail("the search field is drawn"), { key: "F", shiftKey: true }),
+    false,
+  );
+  assert.equal(held.toggles, 1);
+});
+
+test("the tree stands as wide as the panel keeps it, and its edge asks for another width", async () => {
+  files = [changed("a.ts")];
+  const { tree, held } = heldTree(true, 360);
+  await drawTab({ tree });
+
+  const pane = document.querySelector<HTMLElement>(".file-tree-pane") ?? assert.fail("a tree");
+  assert.equal(pane.style.getPropertyValue("--file-tree-width"), "360px");
+  const edge = pane.querySelector<HTMLElement>('[role="separator"]') ?? assert.fail("an edge");
+  assert.equal(edge.getAttribute("aria-label"), "Resize files");
+  press(edge, { key: "Enter" });
+  assert.deepEqual(held.widths, [264], "Enter puts back the tree's own width");
+});
+
+test("while the tree is hidden a strip stands in its place, a mark for each file, and resting on it peeks the tree", async () => {
+  viewedAnswer = MARKED;
+  files = [
+    changed("c.ts"),
+    changed("a.ts", { status: CHANGED_FILE_STATUS.ADDED }),
+    changed("b.ts", { status: CHANGED_FILE_STATUS.DELETED }),
+  ];
+  const { tree } = heldTree(false);
+  await drawTab({ tree });
+
+  const strip = document.querySelector<HTMLElement>(".file-tree-strip") ?? assert.fail("a strip");
+  assert.deepEqual(
+    [...strip.children].map((mark) => [
+      mark.getAttribute("data-status"),
+      mark.hasAttribute("data-viewed"),
+      mark.hasAttribute("data-current"),
+    ]),
+    [
+      ["added", true, true],
+      ["deleted", false, false],
+      ["modified", false, false],
+    ],
+  );
+  assert.equal(document.querySelector(".file-tree-pane"), null);
+
+  act(() => strip.dispatchEvent(new PointerEvent("pointerover", { bubbles: true })));
+  await flush();
+  assert.equal(document.querySelector(".file-view")?.getAttribute("data-pane-over"), "peek");
+  assert.notEqual(document.querySelector(".file-tree-pane"), null, "the tree peeks out");
+});
+
 test("J and K step through the files inside the view, ; and ⇧; fold, and Escape lets go of the file", async () => {
   files = [changed("a.ts"), changed("b.ts"), changed("c.ts")];
   await drawTab();
@@ -707,6 +782,7 @@ test("? inside the view opens a sheet of its keys by group, which Escape or ? ag
         ["Minimize or show inline comments", "I"],
       ],
     ],
+    ["Panels", [["Show or hide file tree", "⇧F"]]],
   ]);
 
   press(sheet, { key: "Escape" });
