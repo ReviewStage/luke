@@ -25,7 +25,12 @@
 
 import { ACT_KIND, type ActKind } from "@luke/host/acts";
 import type { AppBridge } from "@luke/host/bridge";
-import { type ActPortClient, actContract, WORKSPACE_ACT_KIND } from "@luke/host/contract";
+import {
+  type ActPortClient,
+  actContract,
+  INTEGRATION_ACT_KIND,
+  WORKSPACE_ACT_KIND,
+} from "@luke/host/contract";
 import {
   CONNECT_CHANNEL,
   CONNECT_SAID,
@@ -35,10 +40,7 @@ import {
 } from "../connect-return";
 
 /** The acts on the bridge that end by opening an address the service answered, which no press can open itself. */
-const CONNECT_KINDS: ReadonlySet<ActKind> = new Set([
-  ACT_KIND.INTEGRATIONS_CONNECT,
-  ACT_KIND.GITHUB_CONNECT,
-]);
+const CONNECT_KINDS: ReadonlySet<ActKind> = new Set([ACT_KIND.GITHUB_CONNECT]);
 
 /** What a connect reaches of a tab it opened: whether it is still open, its close, and its address replaced. */
 export interface ConnectTab {
@@ -67,7 +69,7 @@ interface Press {
 export interface ConnectTabs {
   /** The bridge with each connect's press opening its empty tab before the act goes out. */
   readonly bridge: (bridge: AppBridge) => AppBridge;
-  /** The act port's client with each workspace connect's press doing the same. */
+  /** The act port's client with each integration's and workspace's connect press doing the same. */
   readonly portClient: (client: ActPortClient) => ActPortClient;
   /** Opens an address: in the oldest connect's tab while one waits, else as a link. */
   readonly open: (url: string) => void;
@@ -101,6 +103,7 @@ export function connectTabs(browser: ConnectBrowser): ConnectTabs {
 
   // Note that the client is a proxy that lists no procedure, so each is read off it by the contract's own names.
   const portClient = (client: ActPortClient): ActPortClient => {
+    const integration = client[INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT];
     const github = client[WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT];
     const linear = client[WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT];
     // SAFETY: every procedure the contract names is read off the client, so this answers each one the client does.
@@ -109,6 +112,8 @@ export function connectTabs(browser: ConnectBrowser): ConnectTabs {
     ) as ActPortClient;
     return {
       ...procedures,
+      [INTEGRATION_ACT_KIND.INTEGRATIONS_CONNECT]: (...args: Parameters<typeof integration>) =>
+        press(() => integration(...args)),
       [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_CONNECT]: (...args: Parameters<typeof github>) =>
         press(() => github(...args)),
       [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT]: (...args: Parameters<typeof linear>) =>

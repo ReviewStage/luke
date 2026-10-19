@@ -62,7 +62,7 @@ function fakeBrowser(options: { readonly refusesTabs: boolean }) {
   return { browser, tabs, navigated, links };
 }
 
-const DONE: ActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } };
+const DONE: ActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
 
 /** The host behind the bridge: each act answers once the service has, opening the address it answered where it opens one. */
 function hostBridge(open: (url: string) => void, opens: boolean): AppBridge {
@@ -76,7 +76,7 @@ function hostBridge(open: (url: string) => void, opens: boolean): AppBridge {
   } as AppBridge;
 }
 
-const CONNECT: Act = { kind: ACT_KIND.INTEGRATIONS_CONNECT, payload: { provider: "notion" } };
+const CONNECT: Act = { kind: ACT_KIND.GITHUB_CONNECT };
 
 afterEach(() => {
   sessionStorage.clear();
@@ -144,7 +144,7 @@ test("connects answered out of order each open in a tab, and the one that opened
   } as AppBridge;
   const firstPress = connect.bridge(first).act(CONNECT);
   await connect.bridge(hostBridge(connect.open, true)).act(CONNECT);
-  refuseFirst({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Notion could not be reached." });
+  refuseFirst({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "GitHub could not be reached." });
   await firstPress;
 
   const open = tabs.filter((tab) => !tab.closed());

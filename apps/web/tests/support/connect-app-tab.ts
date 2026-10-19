@@ -25,12 +25,12 @@ export async function appTab(connects: number): Promise<{ readonly close: () => 
   const host = {
     act: async (_act: Act) => {
       tabs.open("https://provider.example/oauth/authorize");
-      return { status: ACT_OUTCOME_STATUS.DONE, value: { opened: true } };
+      return { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
     },
   } as AppBridge;
   const bridge = tabs.bridge(host);
   for (let connect = 0; connect < connects; connect += 1) {
-    await bridge.act({ kind: ACT_KIND.INTEGRATIONS_CONNECT, payload: { provider: "notion" } });
+    await bridge.act({ kind: ACT_KIND.GITHUB_CONNECT });
   }
   return { close: tabs.listen() };
 }

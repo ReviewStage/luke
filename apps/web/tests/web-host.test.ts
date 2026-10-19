@@ -168,16 +168,16 @@ it.effect(
         };
         // SAFETY: the tab's opener is cut, and its `closed` and `location.replace` read, alone, which this holds.
         vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
-        const { bridge } = yield* standingHost(fakeService({ signedIn: true }));
+        const { bridge, actPort, actPortClient } = yield* standingHost(
+          fakeService({ signedIn: true }),
+        );
+        installAppBridge(bridge);
+        installActPort(actPort, actPortClient);
 
-        const outcome = yield* Effect.promise(() =>
-          bridge.act({
-            kind: ACT_KIND.INTEGRATIONS_CONNECT,
-            payload: { provider: INTEGRATION_PROVIDER.NOTION },
-          }),
+        yield* Effect.promise(() =>
+          askAct(ACT_KIND.INTEGRATIONS_CONNECT, { provider: INTEGRATION_PROVIDER.NOTION }),
         );
 
-        assert.equal(outcome.status, ACT_OUTCOME_STATUS.DONE);
         assert.deepEqual(sentTo, [NOTION_SIGN_IN]);
         // The provider's page reaches nothing of the app's tab.
         assert.equal(tab.opener, null);
