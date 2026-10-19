@@ -146,6 +146,16 @@ function typeWords(dialog: HTMLElement, words: string): void {
   });
 }
 
+/** A time typed into one of the picker's time fields. */
+function typeTime(dialog: HTMLElement, name: string, time: string): void {
+  const field = fieldOf(dialog, name);
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(field, time);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 /** Each mention the editor holds, as the saved text writes it. */
 function mentionsIn(editor: Editor): { name: string; target: string }[] {
   const found: { name: string; target: string }[] = [];
@@ -225,6 +235,44 @@ test("End date switched on and closed at once writes the range it shows, to the 
   assert.deepEqual(mentionsIn(editor), [
     { name: "Oct 23, 2026 → Oct 24, 2026", target: "luke://date/2026-10-23/2026-10-24" },
   ]);
+});
+
+test("End date on a time in the day's last hour ends an hour later, past midnight", async () => {
+  const { container, editor } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="Include time"]').click());
+  typeTime(dialog, "Start time", "23:30");
+  act(() => control(dialog, 'button[role="switch"][aria-label="End date"]').click());
+  const ends = [fieldOf(dialog, "Start time").value, fieldOf(dialog, "End time").value];
+  await pressKey(dialog, "Escape");
+  const [mention] = mentionsIn(editor);
+
+  assert.deepEqual(ends, ["23:30", "00:30"]);
+  assert.match(
+    mention?.target ?? "",
+    /^luke:\/\/date\/2026-10-23T23:30[+-]\d\d:\d\d\/2026-10-24T00:30[+-]\d\d:\d\d$/u,
+  );
+});
+
+test("an end picked on its start's day at an earlier time swaps with the start, keeping the range", async () => {
+  const { container, editor } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="Include time"]').click());
+  typeTime(dialog, "Start time", "10:00");
+  act(() => control(dialog, 'button[role="switch"][aria-label="End date"]').click());
+  typeTime(dialog, "End time", "09:00");
+  pickDay(dialog, "Friday, October 23, 2026");
+  const ends = [fieldOf(dialog, "Start time").value, fieldOf(dialog, "End time").value];
+  await pressKey(dialog, "Escape");
+  const [mention] = mentionsIn(editor);
+
+  assert.deepEqual(ends, ["09:00", "10:00"]);
+  assert.match(
+    mention?.target ?? "",
+    /^luke:\/\/date\/2026-10-23T09:00[+-]\d\d:\d\d\/2026-10-23T10:00[+-]\d\d:\d\d$/u,
+  );
 });
 
 test("an end picked before the start becomes the start, so the range stays in order", async () => {

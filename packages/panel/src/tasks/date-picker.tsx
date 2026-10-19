@@ -135,8 +135,12 @@ interface Draft {
   readonly changed: boolean;
 }
 
-/** The day after `day`, both `YYYY-MM-DD`. */
-function dayAfter(day: string): string {
+/** The last day a date mention spells, whose year is the last of four digits. */
+const LAST_DAY = "9999-12-31";
+
+/** The day after `day`, both `YYYY-MM-DD`; nothing after the last day a mention spells. */
+function dayAfter(day: string): string | undefined {
+  if (day >= LAST_DAY) return undefined;
   const next = new Date(`${day}T00:00:00.000Z`);
   next.setUTCDate(next.getUTCDate() + 1);
   return next.toISOString().slice(0, 10);
@@ -144,14 +148,21 @@ function dayAfter(day: string): string {
 
 /**
  * The end End date puts after `start`, always after it, so what the picker
- * shows is the range it writes: a day's the next day, a time's an hour
- * later, or the next day at that time where the hour is the day's last.
+ * shows is the range it writes: a day's the next day, and a time's an hour
+ * later, past midnight onto the next day where it must be; nothing where no
+ * day follows.
  */
-function endAfter(start: DateWallMoment): DateWallMoment {
-  if (start.time === undefined) return { day: dayAfter(start.day) };
+function endAfter(start: DateWallMoment): DateWallMoment | undefined {
+  if (start.time === undefined) {
+    const day = dayAfter(start.day);
+    return day === undefined ? undefined : { day };
+  }
   const [hour = "0", minute = "00"] = start.time.split(":");
-  if (Number(hour) >= LAST_HOUR) return { day: dayAfter(start.day), time: start.time };
-  return { day: start.day, time: `${String(Number(hour) + 1).padStart(2, "0")}:${minute}` };
+  const next = Number(hour) + 1;
+  if (next <= LAST_HOUR)
+    return { day: start.day, time: `${String(next).padStart(2, "0")}:${minute}` };
+  const day = dayAfter(start.day);
+  return day === undefined ? undefined : { day, time: `00:${minute}` };
 }
 
 /** A draft whose ends the developer changed, its words the date's own again. */
@@ -179,20 +190,25 @@ function dayPicked(draft: Draft, day: string): Draft {
       return changedTo({ start: { ...start, day }, end: { ...end, day: start.day } }, false);
     }
     const picked = { ...end, day };
-    return orderOf(start) < orderOf(picked)
-      ? changedTo({ start, end: picked }, false)
-      : changedTo({ start }, false);
+    // Note that an end at the start's own moment names no range, and one earlier on its day swaps with it.
+    if (orderOf(picked) === orderOf(start)) return changedTo({ start }, false);
+    const wall =
+      orderOf(picked) < orderOf(start) ? { start: picked, end: start } : { start, end: picked };
+    return changedTo(wall, false);
   }
   const moved = { ...start, day };
   const kept = { ...end, day: day > end.day ? day : end.day };
   const after = orderOf(moved) < orderOf(kept) ? kept : endAfter(moved);
-  return changedTo({ start: moved, end: after }, true);
+  return changedTo({ start: moved, end: after }, after !== undefined);
 }
 
 /** End date switched: on, an end just after the start (`endAfter`), which the next pick moves; off, the start alone. */
 function endSwitched(draft: Draft, on: boolean): Draft {
   const { start } = draft.wall;
-  return on ? changedTo({ start, end: endAfter(start) }, true) : changedTo({ start }, false);
+  if (!on) return changedTo({ start }, false);
+  // Note that the last day a mention spells has no day after it, so its switch stays off.
+  const end = endAfter(start);
+  return end === undefined ? draft : changedTo({ start, end }, true);
 }
 
 /** Include time switched: on, a time on each end; off, the days alone. */
