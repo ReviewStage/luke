@@ -1,13 +1,15 @@
-/* viewport.css -- how much of the window is seen: its height, and the on-screen keyboard's below it.
+/* viewport.css -- how much of the window is seen: where it begins, its height, and the on-screen keyboard's below it.
 
    A layer that must fit what is seen, a dialog's card first of all, is
    measured by these rather than by `vh`, which on a phone stands behind the
-   browser's toolbars and the keyboard. An app that measures its visual
+   browser's toolbars and the keyboard. A phone may pan what is seen down
+   the window to a focused field, and the top is how far. An app that measures its visual
    viewport writes both on the root, over these (the panel's
    `use-visual-viewport.ts`); an app that measures nothing draws by the
    window, as `100vh` always drew it. */
 
 :root {
+  --luke-viewport-top: 0px;
   --luke-stage-height: 100vh;
   --luke-keyboard-inset: 0px;
 }

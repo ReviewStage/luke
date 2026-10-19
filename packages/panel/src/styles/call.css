@@ -83,7 +83,8 @@ html.call-window #root {
 .call-card[data-surface="floating"] {
   position: fixed;
   z-index: var(--luke-z-toast);
-  bottom: var(--luke-space-16);
+  /* Above the on-screen keyboard, while it is up. */
+  bottom: calc(var(--luke-space-16) + var(--luke-keyboard-inset));
   left: var(--luke-space-16);
   width: calc(var(--sidebar-width-default) - 2 * var(--row-inset));
   translate: 0

@@ -157,15 +157,16 @@ body,
   --caption-width-max: 560px;
   --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
   position: absolute;
-  /* The stage stops where the on-screen keyboard begins, so what stands at
-     its foot, a composer first of all, stays above the keyboard. The panel
-     writes the inset and the visible height on the root
+  /* The stage stands over what is seen of the window: from where a phone
+     panned it to, down to where the on-screen keyboard begins, so what
+     stands at its foot, a composer first of all, stays above the keyboard.
+     The panel writes the top, the inset, and the visible height on the root
      (`use-visual-viewport.ts`); where it writes nothing, the stage fills the
      window and what is measured by the stage's height is measured by
      `100vh` (`@luke/ui`'s `tokens/viewport.css`). It keeps off a phone's
      notch and home indicator too, where its page is drawn under them
      (`viewport-fit=cover`); everywhere else those insets are zero. */
-  top: env(safe-area-inset-top, 0px);
+  top: calc(var(--luke-viewport-top) + env(safe-area-inset-top, 0px));
   right: env(safe-area-inset-right, 0px);
   bottom: max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px));
   left: env(safe-area-inset-left, 0px);
@@ -6619,7 +6620,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .command-palette {
   position: fixed;
   z-index: var(--luke-z-dialog);
-  top: calc(var(--luke-stage-height) * 0.18);
+  top: calc(var(--luke-viewport-top) + var(--luke-stage-height) * 0.18);
   left: 50%;
   display: flex;
   width: min(560px, calc(100vw - 2 * var(--luke-space-24)));
@@ -7278,7 +7279,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
   position: fixed;
   z-index: var(--luke-z-toast);
   right: var(--luke-space-16);
-  bottom: var(--luke-space-16);
+  /* Above the on-screen keyboard, while it is up. */
+  bottom: calc(var(--luke-space-16) + var(--luke-keyboard-inset));
   width: min(340px, calc(100vw - 2 * var(--luke-space-16)));
   pointer-events: none;
 }

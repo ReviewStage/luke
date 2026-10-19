@@ -4,8 +4,9 @@
  * A `vh` is the layout viewport's height, which on a phone stands behind its
  * browser toolbars and, while it is up, the on-screen keyboard; `dvh` follows
  * the toolbars but never the keyboard. The visual viewport is the part that
- * is actually seen, so the panel writes its height and the keyboard's height
- * below it over `@luke/ui`'s `--luke-stage-height` and `--luke-keyboard-inset`,
+ * is actually seen, so the panel writes where it begins, its height, and the
+ * keyboard's height below it over `@luke/ui`'s `--luke-viewport-top`,
+ * `--luke-stage-height`, and `--luke-keyboard-inset`,
  * and the stage, the palette, the dialogs, and the viewers are measured by
  * those. They are written on the document's root rather than the stage,
  * because a dialog is drawn over `document.body`, outside the stage, and must
@@ -15,6 +16,8 @@
 
 import { useLayoutEffect } from "react";
 
+/** How far down the layout viewport the visible part begins, as a phone pans it to a focused field. */
+const VIEWPORT_TOP = "--luke-viewport-top";
 /** The visible height, in CSS pixels. */
 const STAGE_HEIGHT = "--luke-stage-height";
 /** How much of the layout viewport stands below the visible part: the keyboard's height while it is up. */
@@ -32,9 +35,11 @@ export function useVisualViewport(): void {
     if (viewport === null || viewport === undefined) return undefined;
     const root = document.documentElement.style;
     const write = () => {
-      // A panned viewport (`offsetTop`) is seen, not covered, so only what
-      // stands below its foot is the keyboard's.
+      // A panned viewport (`offsetTop`) is seen, not covered: what stands
+      // above it is the top's, and only what stands below its foot is the
+      // keyboard's.
       const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      root.setProperty(VIEWPORT_TOP, `${viewport.offsetTop}px`);
       root.setProperty(STAGE_HEIGHT, `${viewport.height}px`);
       root.setProperty(KEYBOARD_INSET, `${inset}px`);
     };
@@ -44,6 +49,7 @@ export function useVisualViewport(): void {
     return () => {
       viewport.removeEventListener("resize", write);
       viewport.removeEventListener("scroll", write);
+      root.removeProperty(VIEWPORT_TOP);
       root.removeProperty(STAGE_HEIGHT);
       root.removeProperty(KEYBOARD_INSET);
     };

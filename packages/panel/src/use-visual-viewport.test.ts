@@ -61,6 +61,7 @@ test("a layer over the body is measured by the visible height, above the keyboar
   const viewport = new FakeVisualViewport();
   standViewport(viewport);
   mount();
+  assert.equal(readOverBody("--luke-viewport-top"), "0px");
   assert.equal(readOverBody("--luke-stage-height"), "800px");
   assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
 
@@ -70,9 +71,11 @@ test("a layer over the body is measured by the visible height, above the keyboar
 
   // Note that a viewport panned down to the field is seen, not covered.
   act(() => viewport.change({ height: 480, offsetTop: 120 }, "scroll"));
+  assert.equal(readOverBody("--luke-viewport-top"), "120px");
   assert.equal(readOverBody("--luke-keyboard-inset"), "200px");
 
   act(() => viewport.change({ height: 800, offsetTop: 0 }, "resize"));
+  assert.equal(readOverBody("--luke-viewport-top"), "0px");
   assert.equal(readOverBody("--luke-stage-height"), "800px");
   assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
 });
@@ -80,6 +83,7 @@ test("a layer over the body is measured by the visible height, above the keyboar
 test("without a visual viewport nothing is written, so the tokens' own window height stands", () => {
   standViewport(undefined);
   mount();
+  assert.equal(readOverBody("--luke-viewport-top"), "");
   assert.equal(readOverBody("--luke-stage-height"), "");
   assert.equal(readOverBody("--luke-keyboard-inset"), "");
 });
@@ -89,6 +93,7 @@ test("a panel taken down leaves the window to the tokens' own height", () => {
   mount();
   act(() => root?.unmount());
   root = undefined;
+  assert.equal(readOverBody("--luke-viewport-top"), "");
   assert.equal(readOverBody("--luke-stage-height"), "");
   assert.equal(readOverBody("--luke-keyboard-inset"), "");
 });
