@@ -58,7 +58,7 @@ export function useChatMentionPicker({
   const id = useId();
   const [reported, setReported] = useState<Reported | undefined>(undefined);
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
-  const [closedAt, setClosedAt] = useState<number | undefined>(undefined);
+  const [closed, setClosed] = useState<{ sigil: ChatSigil; start: number } | undefined>(undefined);
   // Note that each word reports on its own, so a word leaving clears only a list its own sigil opened.
   const reportFor = (sigil: ChatSigil) => (trigger: ComposerTrigger | undefined) =>
     setReported((was) =>
@@ -68,10 +68,11 @@ export function useChatMentionPicker({
     reported === undefined
       ? undefined
       : { sigil: reported.sigil, start: reported.trigger.start, query: reported.trigger.query };
-  // A word closed with Escape stays closed only while the caret is in it.
-  if (closedAt !== undefined && mention?.start !== closedAt) setClosedAt(undefined);
-  const rows =
-    mention !== undefined && closedAt !== mention.start ? matchingTargets(targets, mention) : [];
+  // A word closed with Escape stays closed only while the caret is in it, and only as the word it was: a `#` written over a closed `@` opens its own list.
+  const shut =
+    closed !== undefined && closed.start === mention?.start && closed.sigil === mention.sigil;
+  if (closed !== undefined && !shut) setClosed(undefined);
+  const rows = mention !== undefined && !shut ? matchingTargets(targets, mention) : [];
   const held =
     highlight !== undefined &&
     mention !== undefined &&
@@ -88,7 +89,7 @@ export function useChatMentionPicker({
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      setClosedAt(mention.start);
+      setClosed({ sigil: mention.sigil, start: mention.start });
       return true;
     }
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
