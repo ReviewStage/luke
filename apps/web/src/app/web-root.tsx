@@ -9,6 +9,7 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import type { LinkPlatform } from "@luke/features/link-open";
 import type { DuplicateGatewayMethod, HostTag } from "@luke/host/effect";
 import { App } from "@luke/panel/app";
 import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
@@ -23,6 +24,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import { createRoot } from "react-dom/client";
 import { browserHistory } from "./browser-history";
 import { withLoadLink } from "./load-link";
+import { browserLinkPlatform, handOffToMacApp } from "./mac-app-handoff";
 import { composeWeb, WebHostTag } from "./web-host";
 import { WEB_BUNDLES } from "./web-platform";
 
@@ -30,6 +32,10 @@ import { WEB_BUNDLES } from "./web-platform";
 export interface WebAppOptions {
   /** The client every service call goes out on; the tab's same-origin fetch where none is given. */
   readonly httpClient?: Layer.Layer<HttpClient.HttpClient>;
+  /** The platform the tab says it runs on; the browser's own word where none is given. */
+  readonly linkPlatform?: LinkPlatform;
+  /** How the loaded link is handed to the Mac app; a navigation to the desktop's scheme where none is given. */
+  readonly openMacApp?: (appLink: string) => void;
 }
 
 /** The app as drawn: closing it takes the panel down and drains the host. */
@@ -47,12 +53,13 @@ export async function mountWebApp(
   rootElement: HTMLElement,
   options: WebAppOptions = {},
 ): Promise<WebApp | undefined> {
+  // The address the tab loaded at, read before the panel's history writes its own steps into it.
+  const loadedAt = location.href;
+  const httpClient = options.httpClient ?? FetchHttpClient.layer;
   // Note that an act runs only once the host stands, by which time the runtime is set.
   let runtime: ManagedRuntime.ManagedRuntime<WebHostTag | HostTag, DuplicateGatewayMethod>;
   const run = <A,>(effect: Effect.Effect<A>): Promise<A> => runtime.runPromise(effect);
-  runtime = ManagedRuntime.make(
-    composeWeb({ httpClient: options.httpClient ?? FetchHttpClient.layer, run }),
-  );
+  runtime = ManagedRuntime.make(composeWeb({ httpClient, run }));
   try {
     const web = await runtime.runPromise(WebHostTag);
     // The address the tab was opened at is said once, as the link it is.
@@ -73,6 +80,20 @@ export async function mountWebApp(
     <RegistryContext.Provider value={rendererRegistry}>
       <App />
     </RegistryContext.Provider>,
+  );
+  // The account's choice of the Mac app is read after the first paint, once per load, and never awaited.
+  runtime.runFork(
+    Effect.provide(
+      handOffToMacApp(
+        {
+          address: loadedAt,
+          platform: options.linkPlatform ?? browserLinkPlatform(),
+          open: options.openMacApp ?? ((appLink) => location.assign(appLink)),
+        },
+        location.origin,
+      ),
+      httpClient,
+    ),
   );
   return {
     close: async () => {

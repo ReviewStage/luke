@@ -25,27 +25,27 @@ function metaOf(page: string): ReadonlyMap<string, string> {
   );
 }
 
-const open = metaOf("open.html");
+const app = metaOf("app.html");
 const landing = metaOf("index.html");
 
 test("a pasted Luke link unfurls under Luke's name, and its card leads to the link itself, never the landing page", () => {
-  assert.equal(open.get("og:title"), "Luke");
-  assert.equal(open.get("twitter:title"), "Luke");
-  assert.equal(open.get("og:site_name"), "Luke");
-  assert.equal(open.get("og:url"), undefined);
+  assert.equal(app.get("og:title"), "Luke");
+  assert.equal(app.get("twitter:title"), "Luke");
+  assert.equal(app.get("og:site_name"), "Luke");
+  assert.equal(app.get("og:url"), undefined);
 });
 
 test("a pasted Luke link shows the landing page's card, large, on X as everywhere else", () => {
   for (const key of ["og:image", "og:image:width", "og:image:height", "og:image:alt"]) {
-    assert.equal(open.get(key), landing.get(key), key);
+    assert.equal(app.get(key), landing.get(key), key);
   }
-  assert.equal(open.get("twitter:image"), landing.get("og:image"));
-  assert.equal(open.get("twitter:card"), "summary_large_image");
+  assert.equal(app.get("twitter:image"), landing.get("og:image"));
+  assert.equal(app.get("twitter:card"), "summary_large_image");
 });
 
 test("a pasted Luke link says one line of what Luke is, the same in every tag that carries it", () => {
-  const description = open.get("description");
+  const description = app.get("description");
   assert.ok(description !== undefined && description.length > 0);
-  assert.equal(open.get("og:description"), description);
-  assert.equal(open.get("twitter:description"), description);
+  assert.equal(app.get("og:description"), description);
+  assert.equal(app.get("twitter:description"), description);
 });
