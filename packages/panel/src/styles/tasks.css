@@ -2426,8 +2426,9 @@
    of the line in a row of no height while closed, so the diff reads as if the
    line held no comments, and a note holding the fold alone keeps no padding
    of its own. Open, the chip stands at the end of its own row over the
-   threads it shows. */
-.diff-note:has(> .diff-thread-chip-row:only-child:not([open])) {
+   threads it shows; so does the chip of threads on no line, above the diff
+   or under a file's picture, which has no line to float over. */
+.diff-note:has(> .diff-thread-chip-row:only-child:not([open], [data-above])) {
   padding-block: 0;
 }
 
@@ -2435,7 +2436,7 @@
   position: relative;
 }
 
-.diff-thread-chip-row:not([open]) {
+.diff-thread-chip-row:not([open], [data-above]) {
   height: 0;
 }
 
@@ -2457,7 +2458,7 @@
   color: var(--luke-color-text);
 }
 
-.diff-thread-chip-row:not([open]) > .diff-thread-chip {
+.diff-thread-chip-row:not([open], [data-above]) > .diff-thread-chip {
   position: absolute;
   right: 0;
   bottom: var(--luke-space-2);

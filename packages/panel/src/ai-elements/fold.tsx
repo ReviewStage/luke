@@ -19,19 +19,26 @@ import type { ComponentProps, MouseEvent, ReactNode } from "react";
  * summary row is `Disclosure` itself, not this.
  */
 
-/** Note that the element's own `open` is not a prop: the state is this component's, and a fold meant to start open says `defaultOpen`. */
+/** Note that the element's own `open` is not a prop: a fold meant to start open says `defaultOpen`, and one whose holder keeps its state says `open` and hears `onOpenChange`, each press and each toggle a find makes. */
 export type FoldProps = Omit<ComponentProps<"details">, "open"> & {
   defaultOpen?: boolean;
+  open?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
 };
 
 export function Fold({
   className,
   children,
   defaultOpen = false,
+  open,
+  onOpenChange,
   onToggle,
   ...props
 }: FoldProps): ReactNode {
-  const { state, details } = useDisclosureFold(defaultOpen);
+  const { state, details } = useDisclosureFold(
+    defaultOpen,
+    open === undefined ? undefined : { open, onOpenChange: onOpenChange ?? (() => undefined) },
+  );
   return (
     <DisclosureScope state={state}>
       <details

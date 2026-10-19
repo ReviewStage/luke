@@ -51,9 +51,12 @@ export function MinimizedThreads({
   threads,
   shown,
   onShown,
+  above = false,
   children,
 }: {
   threads: readonly ReviewThread[];
+  /** Whether the threads stand above the diff, on no line, where the chip takes a row of its own rather than floating over a line. */
+  above?: boolean;
   /** Whether the threads stand under the chip. */
   shown: boolean;
   /** Told the threads were shown or put away, by the chip or by the find. */
@@ -71,12 +74,10 @@ export function MinimizedThreads({
   ].join(" · ");
   return (
     <Fold
-      key={String(shown)}
       className="diff-thread-chip-row"
-      defaultOpen={shown}
-      onToggle={(event) => {
-        if (event.currentTarget.open !== shown) onShown(event.currentTarget.open);
-      }}
+      data-above={above ? "" : undefined}
+      open={shown}
+      onOpenChange={onShown}
     >
       <Tooltip label={shown ? CHIP_WORDS.HIDE_HINT : CHIP_WORDS.SHOW_HINT}>
         <FoldSummary className="diff-thread-chip" aria-label={label}>

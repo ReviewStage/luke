@@ -1391,9 +1391,16 @@ test("a refused mark leaves a fold chosen since, as Collapse all chose it", asyn
 });
 
 test("I turns Minimize inline comments on and off inside Files changed, each line's threads then one chip that a find still reads and opens", async () => {
+  // Each thread drawn as a resolved one is, folded closed under its head.
   const threads: ChangesThreads = {
     list: [seatsThread(2, "why-42")],
-    draw: (thread) => createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+    draw: (thread) =>
+      createElement(
+        "details",
+        { className: "drawn-card" },
+        createElement("summary", null, "head"),
+        createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+      ),
   };
   await drawTab({ threads });
   const note = () => lastDrawn().renderAnnotation("src/seats.ts", `${PAGE}#why-42`);
@@ -1423,8 +1430,30 @@ test("I turns Minimize inline comments on and off inside Files changed, each lin
     note().querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
     "1 comment by octo · 1 open, hide",
   );
+  assert.equal(
+    note().querySelector<HTMLDetailsElement>(".drawn-card")?.open,
+    true,
+    "the found words' own fold stays open",
+  );
 
   press(listBox(), { key: "i" });
   await flush();
   assert.equal(note().querySelector(".diff-thread-chip"), null, "I again draws every thread whole");
+});
+
+test("minimized, the threads on no line take a row of their own for their chip, which has no line to float over", async () => {
+  const threads: ChangesThreads = {
+    list: [seatsThread(2, "why-42"), seatsThread(null, "was-3")],
+    draw: (thread) => createElement("p", null, thread.comments[0]?.body),
+  };
+  await drawTab({ threads });
+  press(listBox(), { key: "i" });
+  await flush();
+  const [outdated, current] = lastDrawn().files[0]?.annotations ?? [];
+  const chipOf = (key: string | undefined) =>
+    lastDrawn()
+      .renderAnnotation("src/seats.ts", key ?? "")
+      .querySelector(".diff-thread-chip-row");
+  assert.equal(chipOf(outdated?.key)?.hasAttribute("data-above"), true, "above the diff");
+  assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
 });

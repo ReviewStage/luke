@@ -427,6 +427,7 @@ function entryOf(
         threads={unplaced.map((each) => each.thread)}
         shown={minimized.shown(side, FILE_NOTE_LINE)}
         onShown={(shown) => minimized.show(side, FILE_NOTE_LINE, shown)}
+        above
       >
         {list}
       </MinimizedThreads>
