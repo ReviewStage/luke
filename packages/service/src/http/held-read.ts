@@ -1,26 +1,25 @@
 import { createHash } from "node:crypto";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Duration, Effect, Option } from "effect";
-import { LiveWake, UNWATCHED } from "../live/live-wake.js";
+import { LiveWake } from "../live/live-wake.js";
 
 /**
  * held-read.ts -- a read the desktop holds open while nothing it reads changed since its cursor: the cursor, and the hold.
  *
  * The cursor is a digest of where every row a read covers stands, so any
  * change to any of them moves it, and a reader that holds it hears the next
- * change once. A read whose cursor is still the rows' is held, looked at
- * again every poll, each look reading where the rows stand and none of
- * their words, and let go at the hold's end, when it answers the rows
- * unchanged and the reader asks again. The Inbox and a plan's comments are
- * read this way, so a window hears a teammate's or an agent's change the
- * moment it lands without asking on a clock of its own.
+ * change once. A read whose cursor is still the rows' is held, and let go
+ * at the hold's end, when it answers the rows unchanged and the reader asks
+ * again. The Inbox and a plan's comments are read this way, so a window
+ * hears a teammate's or an agent's change the moment it lands without
+ * asking on a clock of its own.
  *
- * Where the deployment runs Neon Realtime (`live/live-wake.ts`), a hold
- * watches statements covering the rows its looks read, and looks again as
- * they change rather than on its poll, with a look every `LIVE_SAFETY_POLL`
- * beside, so a change the watch missed is heard late rather than never; a
- * watch that breaks hands the hold back to its poll. Any wait of the
- * service's on a row is held the same way (`lookedUntil`).
+ * A hold watches statements covering the rows its looks read over Neon
+ * Realtime (`live/live-wake.ts`), and looks again as they change, each look
+ * reading where the rows stand and none of their words, with a look every
+ * `LIVE_SAFETY_POLL` beside, so a change the watch missed is heard late
+ * rather than never. Any wait of the service's on a row is held the same
+ * way (`lookedUntil`).
  */
 
 /** How often a watched wait looks though nothing told it to: what a change the watch missed waits at most. */
@@ -61,26 +60,22 @@ export function cursorOf(stamps: readonly CursorStamp[]): string {
 
 /**
  * Looks until a look finds something, or the hold ends: between looks it
- * waits for the next change of the `live` statements where Realtime
- * watches them, and its `poll` where nothing does. None past the hold.
+ * waits for the next change of the `live` statements, or the safety beat.
+ * None past the hold.
  */
 export function lookedUntil<A, E, R>(
   look: Effect.Effect<Option.Option<A>, E, R>,
-  poll: Duration.Input,
   hold: Duration.Input,
   live: readonly LiveStatement[] = [],
 ): Effect.Effect<Option.Option<A>, E, R> {
   return Effect.scoped(
     Effect.gen(function* () {
       const wake = yield* LiveWake;
-      const watch = live.length === 0 ? UNWATCHED : yield* wake.watch(live);
+      const watch = yield* wake.watch(live);
       while (true) {
         const found = yield* look;
         if (Option.isSome(found)) return found;
-        const watched = yield* watch.live;
-        yield* watched
-          ? Effect.raceFirst(watch.changed, Effect.sleep(LIVE_SAFETY_POLL))
-          : Effect.sleep(poll);
+        yield* Effect.raceFirst(watch.changed, Effect.sleep(LIVE_SAFETY_POLL));
       }
     }),
   ).pipe(Effect.timeoutOption(hold), Effect.map(Option.flatten));
@@ -94,12 +89,11 @@ export function lookedUntil<A, E, R>(
 export function heldUntilMoved<E, R>(
   stamps: Effect.Effect<readonly CursorStamp[], E, R>,
   after: string,
-  poll: Duration.Duration,
   hold: Duration.Duration,
   live: readonly LiveStatement[] = [],
 ): Effect.Effect<void, E, R> {
   const moved = Effect.map(stamps, (standing) =>
     cursorOf(standing) === after ? Option.none() : Option.some(true),
   );
-  return Effect.asVoid(lookedUntil(moved, poll, hold, live));
+  return Effect.asVoid(lookedUntil(moved, hold, live));
 }

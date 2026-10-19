@@ -219,6 +219,7 @@
     "./testing/integration-connect": "./src/testing/integration-connect.js",
     "./testing/linux-shell-tools": "./src/testing/linux-shell-tools.js",
     "./testing/live-events": "./src/testing/live-events.js",
+    "./testing/live-wake": "./src/testing/live-wake.js",
     "./testing/task-contents": "./src/testing/task-contents.js",
     "./testing/plan-documents": "./src/testing/plan-documents.js",
     "./testing/repository-sandbox": "./src/testing/repository-sandbox.js",

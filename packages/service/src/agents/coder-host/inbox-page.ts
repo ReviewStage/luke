@@ -35,8 +35,7 @@ import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
  * so a post, a close, an answer, and a new item each move it, and a reader
  * that holds it hears the next change once. A read whose cursor is
  * still the inbox's is held, looked at again as Realtime says its rows
- * changed (`http/held-read.ts`), or every `MESSAGES_POLL` without it, each
- * look reading where the items stand and none of their words, and let
+ * changed (`http/held-read.ts`), each look reading where the items stand and none of their words, and let
  * go at `MESSAGES_HOLD` as a transcript read is (`transcript.ts`), so the
  * Inbox tab hears an item the moment it lands without asking on a clock of
  * its own; a read past the hold answers the inbox unchanged, and the reader
@@ -48,9 +47,7 @@ import { chatWaitingEntries, chatWaitingStamps } from "./chat-waiting.js";
  * an item too, settled ones included, read once per answer rather than on
  * each look: a task's list moves with its open items, since every item
  * opens before it settles, and what moves it alone, such as an archive, is
- * answered at the hold's end at the latest. Note that it looks every
- * `ACCOUNT_INBOX_POLL` rather than `MESSAGES_POLL`, because a desktop holds
- * it for as long as it is signed in rather than while a tab is on screen.
+ * answered at the hold's end at the latest.
  * A reader that asks is listed the archived tasks holding items beside the
  * rest, though none of their items waits on it.
  * The open items of agents with no task, and the automations holding them,
@@ -76,13 +73,11 @@ type InboxCursorStamp = Pick<InboxStamp, "id" | "revision" | "updatedAt"> & {
 function heldUntilMoved(
   stamps: InboxStoreEffect<readonly InboxCursorStamp[]>,
   after: string,
-  poll: Duration.Duration,
   live: Option.Option<readonly LiveStatement[]>,
 ): InboxStoreEffect<void> {
   return heldOpen(
     stamps,
     after,
-    poll,
     CODER.MESSAGES_HOLD,
     Option.getOrElse(live, () => []),
   );
@@ -117,7 +112,6 @@ export function agentInboxPast(
   return heldUntilMoved(
     memberAgentInboxStamps(userId, agentId),
     after,
-    CODER.MESSAGES_POLL,
     Option.map(memberAgentInboxLiveStatements(userId, agentId), ({ items }) => [items]),
   ).pipe(
     Effect.andThen(memberAgentInboxItems(userId, agentId)),
@@ -134,7 +128,6 @@ export function taskInboxPast(
   return heldUntilMoved(
     taskInboxStamps(userId, taskId),
     after,
-    CODER.MESSAGES_POLL,
     Option.map(taskInboxLiveStatements(userId, taskId), ({ items }) => [items]),
   ).pipe(
     Effect.andThen(taskInboxItems(userId, taskId)),
@@ -199,7 +192,5 @@ export function accountInboxPast(
       parts.chatNotices,
     ],
   );
-  return heldUntilMoved(accountStamps(userId), after, CODER.ACCOUNT_INBOX_POLL, live).pipe(
-    Effect.andThen(read),
-  );
+  return heldUntilMoved(accountStamps(userId), after, live).pipe(Effect.andThen(read));
 }

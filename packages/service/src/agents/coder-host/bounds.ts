@@ -62,13 +62,6 @@ export const CODER = {
   /** How often a held transcript read looks for a new message. */
   MESSAGES_POLL: Duration.millis(500),
   /**
-   * How often a held read of what waits across the account looks for a
-   * change. Slower than `MESSAGES_POLL`, because a desktop holds that read
-   * for as long as it is signed in, and an item heard a moment later costs
-   * the developer nothing.
-   */
-  ACCOUNT_INBOX_POLL: Duration.seconds(2),
-  /**
    * How long a title call may take before its agent or worker goes untitled
    * (`title.ts`), which is also how long after a delegation a read of an
    * ended agent, or of the worker, waits for the worker's title to land.

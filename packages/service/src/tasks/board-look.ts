@@ -44,9 +44,8 @@ export const LOOK_AT_BOARD_STATUS = {
   NOT_LOOKED: "not-looked",
 } as const;
 
-/** How long a look waits for the Mac's image of the latest drawing, and how often it reads. */
+/** How long a look waits for the Mac's image of the latest drawing. */
 export const BOARD_LOOK_WAIT = {
-  POLL: Duration.millis(250),
   DEADLINE: Duration.seconds(8),
 } as const;
 
@@ -95,7 +94,6 @@ export function runLookAtBoard(
   }
   const awaited = lookedUntil(
     readBoardImage(binding.userId, binding.taskId),
-    BOARD_LOOK_WAIT.POLL,
     BOARD_LOOK_WAIT.DEADLINE,
     Option.toArray(boardImageLiveStatement(binding.userId, binding.taskId)),
   );

@@ -234,6 +234,7 @@ import {
   standingGithubRow,
 } from "../testing/github-app-fake.js";
 import { CONNECTOR_ASKED_NOTHING, integrationConnectOf } from "../testing/integration-connect.js";
+import { quietLiveWake } from "../testing/live-wake.js";
 import {
   fixtureOidcToken,
   SOURCE_SANDBOX,
@@ -547,6 +548,7 @@ const standing = (
       modelCatalogOf(CATALOG),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
       ANALYTICS.layer,
+      quietLiveWake,
     );
     // Every account behind a bearer is signed in on a browser of its own too, whose cookie names it.
     const sessions = new Map(
@@ -835,7 +837,7 @@ function reachRequests(sent: readonly SentToGitHub[], installationId: number) {
   };
 }
 
-it.layer(getTestDB())("the coding-agent routes", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("the coding-agent routes", (it) => {
   it.effect(
     "a Start whose prompt mentions a page the store cannot read is refused before any agent is made, so a retry under its key starts afresh",
     () =>
@@ -1867,7 +1869,7 @@ function linesAnswering(pending: readonly PendingNode[]): (call: GraphqlCall) =>
   return reviewsAnswering(pending);
 }
 
-it.layer(getTestDB())("changing an agent's pull request", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("changing an agent's pull request", (it) => {
   /** The owner's plan with an agent that published a pull request, and the other account where the test makes it a member. */
   const published = (options: {
     readonly answer?: (call: GraphqlCall) => Response;
@@ -3026,196 +3028,204 @@ function changeAs(bearer: string, agentId: string, body: WireBoundaryInput): Req
   return request(AGENT_PULL_REQUEST_ACTION, bearer, { method: "POST", id: agentId, body });
 }
 
-it.layer(getTestDB())("asking reviews and labelling an agent's pull request", (it) => {
-  const published = (repository: RepositoryScript, otherToken = "ghu_teammate") =>
-    Effect.gen(function* () {
-      const opened = yield* openTask({ github: repository, otherToken });
-      yield* joinWorkspace(opened.task.workspaceId, opened.other);
-      const { agent } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
-      yield* updateCodingAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
-      return { ...opened, agent };
-    });
-
-  it.effect(
-    "a teammate asks a review of a team, asks one of a user no longer, puts a label on and takes one off, each a REST write on the teammate's own token",
-    () =>
+it.layer(Layer.merge(getTestDB(), quietLiveWake))(
+  "asking reviews and labelling an agent's pull request",
+  (it) => {
+    const published = (repository: RepositoryScript, otherToken = "ghu_teammate") =>
       Effect.gen(function* () {
-        const writes: RestWrite[] = [];
-        const { other, agent, ask } = yield* published(peopleAndLabelsAnswering(writes));
-        const pull = `/repos/${RELAY.owner}/${RELAY.name}/pulls/${PUBLISHED.number}`;
-        const issue = `/repos/${RELAY.owner}/${RELAY.name}/issues/${PUBLISHED.number}`;
+        const opened = yield* openTask({ github: repository, otherToken });
+        yield* joinWorkspace(opened.task.workspaceId, opened.other);
+        const { agent } = yield* startedAgent(opened.owner, opened.task.id, opened.ask);
+        yield* updateCodingAgentBranch(opened.owner, agent.id, PUBLISHED.branch);
+        return { ...opened, agent };
+      });
 
-        const answers = [
-          yield* ask(
-            changeAs(other, agent.id, {
-              action: "request-review",
-              reviewer: { kind: "team", name: "reviewers" },
-            }),
-          ),
-          yield* ask(
-            changeAs(other, agent.id, {
-              action: "remove-review-request",
-              reviewer: { kind: "user", name: "priyan" },
-            }),
-          ),
-          yield* ask(changeAs(other, agent.id, { action: "add-label", label: "bug" })),
-          yield* ask(changeAs(other, agent.id, { action: "remove-label", label: "needs review" })),
-        ];
+    it.effect(
+      "a teammate asks a review of a team, asks one of a user no longer, puts a label on and takes one off, each a REST write on the teammate's own token",
+      () =>
+        Effect.gen(function* () {
+          const writes: RestWrite[] = [];
+          const { other, agent, ask } = yield* published(peopleAndLabelsAnswering(writes));
+          const pull = `/repos/${RELAY.owner}/${RELAY.name}/pulls/${PUBLISHED.number}`;
+          const issue = `/repos/${RELAY.owner}/${RELAY.name}/issues/${PUBLISHED.number}`;
 
-        assert.ok(
-          answers.every((answered) => answered.status === HOSTED_HTTP_STATUS.OK),
-          "every change is answered",
-        );
-        assert.deepEqual(
-          answers.map((answered) => answered.body),
-          answers.map(() => ({ outcome: "done" })),
-        );
-        assert.deepEqual(
-          writes.map(({ method, path, body }) => ({ method, path, body })),
-          [
-            {
-              method: "POST",
-              path: `${pull}/requested_reviewers`,
-              body: { team_reviewers: ["reviewers"] },
-            },
-            {
-              method: "DELETE",
-              path: `${pull}/requested_reviewers`,
-              body: { reviewers: ["priyan"] },
-            },
-            { method: "POST", path: `${issue}/labels`, body: { labels: ["bug"] } },
-            { method: "DELETE", path: `${issue}/labels/needs review`, body: undefined },
-          ],
-        );
-        assert.ok(writes.every((write) => write.authorization === "Bearer ghu_teammate"));
-      }),
-  );
-
-  it.effect(
-    "a review GitHub will not ask is answered in its words, and a reviewer the wire does not name is refused before GitHub",
-    () =>
-      Effect.gen(function* () {
-        const writes: RestWrite[] = [];
-        const { other, agent, ask } = yield* published(
-          peopleAndLabelsAnswering(writes, () =>
-            Response.json(
-              { message: "Reviews may only be requested from collaborators." },
-              { status: 422 },
+          const answers = [
+            yield* ask(
+              changeAs(other, agent.id, {
+                action: "request-review",
+                reviewer: { kind: "team", name: "reviewers" },
+              }),
             ),
-          ),
-        );
+            yield* ask(
+              changeAs(other, agent.id, {
+                action: "remove-review-request",
+                reviewer: { kind: "user", name: "priyan" },
+              }),
+            ),
+            yield* ask(changeAs(other, agent.id, { action: "add-label", label: "bug" })),
+            yield* ask(
+              changeAs(other, agent.id, { action: "remove-label", label: "needs review" }),
+            ),
+          ];
 
-        assert.deepEqual(
-          yield* ask(
-            changeAs(other, agent.id, {
-              action: "request-review",
-              reviewer: { kind: "user", name: "stranger" },
-            }),
-          ),
-          {
-            status: HOSTED_HTTP_STATUS.OK,
-            body: {
-              outcome: "refused",
-              words: "Reviews may only be requested from collaborators.",
+          assert.ok(
+            answers.every((answered) => answered.status === HOSTED_HTTP_STATUS.OK),
+            "every change is answered",
+          );
+          assert.deepEqual(
+            answers.map((answered) => answered.body),
+            answers.map(() => ({ outcome: "done" })),
+          );
+          assert.deepEqual(
+            writes.map(({ method, path, body }) => ({ method, path, body })),
+            [
+              {
+                method: "POST",
+                path: `${pull}/requested_reviewers`,
+                body: { team_reviewers: ["reviewers"] },
+              },
+              {
+                method: "DELETE",
+                path: `${pull}/requested_reviewers`,
+                body: { reviewers: ["priyan"] },
+              },
+              { method: "POST", path: `${issue}/labels`, body: { labels: ["bug"] } },
+              { method: "DELETE", path: `${issue}/labels/needs review`, body: undefined },
+            ],
+          );
+          assert.ok(writes.every((write) => write.authorization === "Bearer ghu_teammate"));
+        }),
+    );
+
+    it.effect(
+      "a review GitHub will not ask is answered in its words, and a reviewer the wire does not name is refused before GitHub",
+      () =>
+        Effect.gen(function* () {
+          const writes: RestWrite[] = [];
+          const { other, agent, ask } = yield* published(
+            peopleAndLabelsAnswering(writes, () =>
+              Response.json(
+                { message: "Reviews may only be requested from collaborators." },
+                { status: 422 },
+              ),
+            ),
+          );
+
+          assert.deepEqual(
+            yield* ask(
+              changeAs(other, agent.id, {
+                action: "request-review",
+                reviewer: { kind: "user", name: "stranger" },
+              }),
+            ),
+            {
+              status: HOSTED_HTTP_STATUS.OK,
+              body: {
+                outcome: "refused",
+                words: "Reviews may only be requested from collaborators.",
+              },
             },
-          },
-        );
-        assert.deepEqual(
-          yield* ask(
-            changeAs(other, agent.id, {
-              action: "request-review",
-              reviewer: { kind: "everyone", name: "all" },
-            }),
-          ),
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        );
-        assert.equal(writes.length, 1);
-      }),
-  );
-});
+          );
+          assert.deepEqual(
+            yield* ask(
+              changeAs(other, agent.id, {
+                action: "request-review",
+                reviewer: { kind: "everyone", name: "all" },
+              }),
+            ),
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+          assert.equal(writes.length, 1);
+        }),
+    );
+  },
+);
 
 const AGENT_REVIEW_OPTIONS = "/api/agents/review-options";
 
-it.layer(getTestDB())("what the reviewer and label pickers offer", (it) => {
-  it.effect(
-    "the repository's labels, collaborators named against the workspace, and teams, read on the App's token; teams it may not read list none",
-    () =>
-      Effect.gen(function* () {
-        const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
-        const asked: SentToGitHub[] = [];
-        const { owner, task, ask } = yield* openTask({
-          github: (sent) => {
-            const path = new URL(sent.url).pathname;
-            if (path.startsWith(repository)) asked.push(sent);
-            switch (path) {
-              case `${repository}/labels`:
-                return Response.json([{ name: "bug", color: "d73a4a" }]);
-              case `${repository}/collaborators`:
-                return Response.json([
-                  {
-                    login: "priyan",
-                    id: 1002,
-                    type: "User",
-                    avatar_url: "https://avatars.githubusercontent.com/u/1002?v=4",
-                  },
-                ]);
-              case `${repository}/teams`:
-                return Response.json(
-                  { message: "Resource not accessible by integration" },
-                  { status: 403 },
-                );
-              default:
-                return publishedPullRequest(sent);
-            }
-          },
-        });
-        const { agent } = yield* startedAgent(owner, task.id, ask);
+it.layer(Layer.merge(getTestDB(), quietLiveWake))(
+  "what the reviewer and label pickers offer",
+  (it) => {
+    it.effect(
+      "the repository's labels, collaborators named against the workspace, and teams, read on the App's token; teams it may not read list none",
+      () =>
+        Effect.gen(function* () {
+          const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+          const asked: SentToGitHub[] = [];
+          const { owner, task, ask } = yield* openTask({
+            github: (sent) => {
+              const path = new URL(sent.url).pathname;
+              if (path.startsWith(repository)) asked.push(sent);
+              switch (path) {
+                case `${repository}/labels`:
+                  return Response.json([{ name: "bug", color: "d73a4a" }]);
+                case `${repository}/collaborators`:
+                  return Response.json([
+                    {
+                      login: "priyan",
+                      id: 1002,
+                      type: "User",
+                      avatar_url: "https://avatars.githubusercontent.com/u/1002?v=4",
+                    },
+                  ]);
+                case `${repository}/teams`:
+                  return Response.json(
+                    { message: "Resource not accessible by integration" },
+                    { status: 403 },
+                  );
+                default:
+                  return publishedPullRequest(sent);
+              }
+            },
+          });
+          const { agent } = yield* startedAgent(owner, task.id, ask);
 
-        const answered = yield* ask(request(AGENT_REVIEW_OPTIONS, owner, { id: agent.id }));
+          const answered = yield* ask(request(AGENT_REVIEW_OPTIONS, owner, { id: agent.id }));
 
-        assert.deepEqual(answered, {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: {
-            labels: [{ name: "bug", color: "d73a4a" }],
-            users: [
-              {
-                login: "priyan",
-                bot: false,
-                avatarUrl: "https://avatars.githubusercontent.com/u/1002?v=4",
-              },
-            ],
-            teams: [],
-          },
-        });
-        assert.ok(
-          asked.every((sent) => !sent.headers.get("authorization")?.includes("ghu_")),
-          "the repository is read on an installation token, never a member's",
-        );
-      }),
-  );
+          assert.deepEqual(answered, {
+            status: HOSTED_HTTP_STATUS.OK,
+            body: {
+              labels: [{ name: "bug", color: "d73a4a" }],
+              users: [
+                {
+                  login: "priyan",
+                  bot: false,
+                  avatarUrl: "https://avatars.githubusercontent.com/u/1002?v=4",
+                },
+              ],
+              teams: [],
+            },
+          });
+          assert.ok(
+            asked.every((sent) => !sent.headers.get("authorization")?.includes("ghu_")),
+            "the repository is read on an installation token, never a member's",
+          );
+        }),
+    );
 
-  it.effect(
-    "a listing GitHub did not answer fails the read rather than offering an empty list, so the picker reads it again",
-    () =>
-      Effect.gen(function* () {
-        const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
-        const { owner, task, ask } = yield* openTask({
-          github: (sent) =>
-            new URL(sent.url).pathname === `${repository}/labels`
-              ? Response.json({ message: "Service unavailable" }, { status: 503 })
-              : new URL(sent.url).pathname.startsWith(`${repository}/`) &&
-                  !new URL(sent.url).pathname.startsWith(`${repository}/pulls`)
-                ? Response.json([])
-                : publishedPullRequest(sent),
-        });
-        const { agent } = yield* startedAgent(owner, task.id, ask);
+    it.effect(
+      "a listing GitHub did not answer fails the read rather than offering an empty list, so the picker reads it again",
+      () =>
+        Effect.gen(function* () {
+          const repository = `/repos/${RELAY.owner}/${RELAY.name}`;
+          const { owner, task, ask } = yield* openTask({
+            github: (sent) =>
+              new URL(sent.url).pathname === `${repository}/labels`
+                ? Response.json({ message: "Service unavailable" }, { status: 503 })
+                : new URL(sent.url).pathname.startsWith(`${repository}/`) &&
+                    !new URL(sent.url).pathname.startsWith(`${repository}/pulls`)
+                  ? Response.json([])
+                  : publishedPullRequest(sent),
+          });
+          const { agent } = yield* startedAgent(owner, task.id, ask);
 
-        const answered = yield* ask(request(AGENT_REVIEW_OPTIONS, owner, { id: agent.id }));
+          const answered = yield* ask(request(AGENT_REVIEW_OPTIONS, owner, { id: agent.id }));
 
-        assert.notEqual(answered.status, HOSTED_HTTP_STATUS.OK);
-      }),
-  );
-});
+          assert.notEqual(answered.status, HOSTED_HTTP_STATUS.OK);
+        }),
+    );
+  },
+);
 
 /** A message to the agent as the bearer given, with the body given. */
 function messageAs(bearer: string | undefined, agentId: string, body: WireBoundaryInput): Request {
@@ -3234,7 +3244,7 @@ function userTexts(page: {
     });
 }
 
-it.layer(getTestDB())("an agent's kept pull request", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("an agent's kept pull request", (it) => {
   /** One file as GitHub lists a pull request's files. */
   const githubFile = (filename: string, additions: number, deletions: number) => ({
     filename,
@@ -3412,7 +3422,7 @@ it.layer(getTestDB())("an agent's kept pull request", (it) => {
   );
 });
 
-it.layer(getTestDB())("messaging a coding agent", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("messaging a coding agent", (it) => {
   /** An agent started on the owner's task, its session claimed, and its first turn where asked. */
   const startedAgent = (
     eve: ReturnType<typeof fakeEve>,
@@ -4871,7 +4881,7 @@ const INBOX_READ = "/api/inbox/read";
 /** The first bytes of a PNG, as a screenshot's file starts. */
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
 
-it.layer(getTestDB())("the developer's inbox", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("the developer's inbox", (it) => {
   /** The owner's task with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
   const openInbox = (eve = fakeEve()) =>
     Effect.gen(function* () {
@@ -5676,7 +5686,7 @@ const picture = (mark: number) => ({
   height: 720,
 });
 
-it.layer(getTestDB())("an agent's pictures", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("an agent's pictures", (it) => {
   it.effect(
     "a picture a tool answered an agent or its worker is served as its bytes, not to be sniffed, not to be cached, and never to run as a page, to whoever may read the agent, and through its own transcript alone",
     () =>
@@ -5748,613 +5758,624 @@ it.layer(getTestDB())("an agent's pictures", (it) => {
   );
 });
 
-it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) => {
-  /**
-   * The owner's plan with two agents on it, each session claimed so a notice
-   * reaches it, their chat members and the owner's, the plan's channel, and
-   * the door a post goes through, as the owner posts.
-   */
-  const openChat = (eve = fakeEve(), secondByTeammate = false) =>
-    Effect.gen(function* () {
-      const opened = yield* openTask({ eve });
-      const workspace = opened.task.workspaceId;
-      if (secondByTeammate) yield* joinWorkspace(workspace, opened.other);
-      // Chat is an experiment each starter turns on; the tests below are of its telling.
-      for (const starter of [opened.owner, opened.other]) {
-        yield* writeAccountPreferences(starter, { experiments: { [EXPERIMENT.CHAT]: true } });
-      }
-      const agents = [];
-      for (const at of [0, 1]) {
-        const starter = at === 1 && secondByTeammate ? opened.other : opened.owner;
-        const started = yield* startedAgent(starter, opened.task.id, opened.ask);
-        const sessionId = eve.opened[at]?.sessionId ?? "";
-        assert.equal(
-          yield* claimRuntimeSession(started.target, sessionId, yield* DateTime.nowAsDate),
-          true,
-        );
-        const member = Option.getOrThrow(
+it.layer(Layer.merge(getTestDB(), quietLiveWake))(
+  "telling a chat message to the agents it addresses",
+  (it) => {
+    /**
+     * The owner's plan with two agents on it, each session claimed so a notice
+     * reaches it, their chat members and the owner's, the plan's channel, and
+     * the door a post goes through, as the owner posts.
+     */
+    const openChat = (eve = fakeEve(), secondByTeammate = false) =>
+      Effect.gen(function* () {
+        const opened = yield* openTask({ eve });
+        const workspace = opened.task.workspaceId;
+        if (secondByTeammate) yield* joinWorkspace(workspace, opened.other);
+        // Chat is an experiment each starter turns on; the tests below are of its telling.
+        for (const starter of [opened.owner, opened.other]) {
+          yield* writeAccountPreferences(starter, { experiments: { [EXPERIMENT.CHAT]: true } });
+        }
+        const agents = [];
+        for (const at of [0, 1]) {
+          const starter = at === 1 && secondByTeammate ? opened.other : opened.owner;
+          const started = yield* startedAgent(starter, opened.task.id, opened.ask);
+          const sessionId = eve.opened[at]?.sessionId ?? "";
+          assert.equal(
+            yield* claimRuntimeSession(started.target, sessionId, yield* DateTime.nowAsDate),
+            true,
+          );
+          const member = Option.getOrThrow(
+            yield* ensureMember(opened.owner, workspace, {
+              kind: MEMBER_KIND.AGENT,
+              agentId: started.agent.id,
+            }),
+          );
+          agents.push({ ...started, sessionId, member });
+        }
+        const [first, second] = agents;
+        assert.ok(first && second);
+        const person = Option.getOrThrow(
           yield* ensureMember(opened.owner, workspace, {
-            kind: MEMBER_KIND.AGENT,
-            agentId: started.agent.id,
+            kind: MEMBER_KIND.HUMAN,
+            userId: opened.owner,
           }),
         );
-        agents.push({ ...started, sessionId, member });
-      }
-      const [first, second] = agents;
-      assert.ok(first && second);
-      const person = Option.getOrThrow(
-        yield* ensureMember(opened.owner, workspace, {
-          kind: MEMBER_KIND.HUMAN,
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(opened.owner, opened.task.id));
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const telling: ChatTelling = {
+          eveFor: (starter) => eve.eve(`Bearer ${starter}`),
+          writer: Effect.succeed(writer),
           userId: opened.owner,
-        }),
-      );
-      const channel = Option.getOrThrow(yield* ensureTaskChannel(opened.owner, opened.task.id));
-      const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-      const telling: ChatTelling = {
-        eveFor: (starter) => eve.eve(`Bearer ${starter}`),
-        writer: Effect.succeed(writer),
-        userId: opened.owner,
-        organizationId: workspace,
-        doors: HELD_DOORS,
-      };
-      /** A post by the member given, its mentions read off its words, through the door. */
-      const post = (
-        author: { readonly id: string },
-        text: string,
-        to: { readonly channelId: string } | { readonly replyTo: number } = {
-          channelId: channel.id,
-        },
-        clientKey: string = randomUUID(),
-      ) =>
-        postChat(telling, {
-          authorMemberId: author.id,
-          to,
-          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
-          mentions: mentionedHandles(text),
-          clientKey,
-        }).pipe(Effect.provide(opened.github.layer));
-      /** The user rows of an agent's conversation, as the store keeps them. */
-      const rowsOf = (target: { readonly userId: string; readonly conversationId: string }) =>
-        Effect.map(
-          listMessagesPast(target.userId, target.conversationId, CODER_TOOL_SET, CURSOR_START, 50),
-          (page) =>
-            (page.read.ok ? page.read.value : []).filter(
-              (record) => record.message.role === MESSAGE_ROLE.USER,
-            ),
-        );
-      return { ...opened, workspace, first, second, person, channel, telling, post, rowsOf };
-    });
-
-  it.effect(
-    "a post whose pictures cannot be kept is not posted at all, so no reader ever sees an image block without its bytes, and nobody is told",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const chat = yield* openChat(eve);
-        const attachmentId = randomUUID();
-        // One byte past a chat picture's bound, which the store's own check refuses as it writes the picture.
-        const bytes = new Uint8Array(CHAT_BOUNDS.MAX_IMAGE_BYTES + 1);
-        bytes.set(PNG);
-        const refused = yield* Effect.flip(
-          postChat(
-            chat.telling,
-            {
-              authorMemberId: chat.person.id,
-              to: { channelId: chat.channel.id },
-              blocks: [
-                { type: CHAT_BLOCK.MARKDOWN, text: "@agent-1 the new email." },
-                { type: CHAT_BLOCK.IMAGE, attachmentId, alt: "email.png" },
-              ],
-              mentions: ["agent-1"],
-              clientKey: randomUUID(),
-            },
-            [{ id: attachmentId, contentType: CHAT_IMAGE_TYPE.PNG, bytes }],
-          ).pipe(Effect.provide(chat.github.layer)),
-        );
-        assert.deepEqual(refused, HOSTED_REFUSAL.UNAVAILABLE);
-        const kept = Option.getOrThrow(
-          yield* history(chat.owner, chat.workspace, chat.person.id, {
-            channelId: chat.channel.id,
-          }),
-        );
-        assert.deepEqual(kept, [], "the message went with its pictures");
-        assert.equal(eve.sent.length, 0);
-      }),
-  );
-
-  it.effect(
-    "a DM steers the other agent once as a chat-marked line of its own, a second while the first is unread is held, and one after it reads is told",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const chat = yield* openChat(eve);
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(
-            chat.owner,
-            chat.workspace,
-            chat.first.member.id,
-            chat.second.member.id,
-          ),
-        );
-        const key = randomUUID();
-        const sent = yield* chat.post(
-          chat.first.member,
-          "The invite table is mine.",
-          { channelId: dm.id },
-          key,
-        );
-        assert.deepEqual(sent.receipt, { told: ["agent-2"], held: [], left: [], unresolved: [] });
-        assert.deepEqual(
-          eve.sent.map((each) => each.sessionId),
-          [chat.second.sessionId],
-        );
-        // The notice is the only line the second agent's conversation holds: no turn of its has run.
-        const [notice] = yield* chat.rowsOf(chat.second.target);
-        assert.ok(notice?.message.role === MESSAGE_ROLE.USER);
-        assert.deepEqual(notice.message.metadata, {
-          author: MESSAGE_AUTHOR.AGENT,
-          channel: MESSAGE_CHANNEL.CHAT,
-          chat_seq: sent.message.seq,
-          from: "agent-1",
-        });
-        // The window reads the notice back as the words posted alone, its head and closing lines its own.
-        const noticeLine = notice.message.parts.flatMap((part) =>
-          part.type === "text" ? [part.text] : [],
-        );
-        assert.deepEqual(noticeLine.map(chatNoticeWords), ["The invite table is mine."]);
-        assert.deepEqual(
-          (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
-          // An agent's notice names it by its handle, and by its member's agent and the model that agent posted under.
-          {
-            kind: MESSAGE_SENDER.AGENT,
-            name: "agent-1",
-            model: chat.first.agent.model,
-            agent: { id: chat.first.agent.id, taskId: chat.first.agent.planId ?? undefined },
+          organizationId: workspace,
+          doors: HELD_DOORS,
+        };
+        /** A post by the member given, its mentions read off its words, through the door. */
+        const post = (
+          author: { readonly id: string },
+          text: string,
+          to: { readonly channelId: string } | { readonly replyTo: number } = {
+            channelId: channel.id,
           },
-        );
-        // The notice keeps the model its agent posted under, whatever the agent runs on since.
-        yield* Database.use((db) =>
-          db
-            .update(codingAgent)
-            .set({ model: "openai/gpt-6.1-sol" })
-            .where(eq(codingAgent.id, chat.first.agent.id)),
-        );
-        assert.deepEqual(
-          (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
-          {
-            kind: MESSAGE_SENDER.AGENT,
-            name: "agent-1",
-            model: chat.first.agent.model,
-            agent: { id: chat.first.agent.id, taskId: chat.first.agent.planId ?? undefined },
-          },
-        );
-        const again = yield* chat.post(
-          chat.first.member,
-          "The invite table is mine.",
-          { channelId: dm.id },
-          key,
-        );
-        assert.equal(again.repeated, true);
-        assert.equal(eve.sent.length, 1);
-
-        const held = yield* chat.post(chat.first.member, "And the emails.", { channelId: dm.id });
-        assert.deepEqual(held.receipt.held, ["agent-2"]);
-        assert.equal(eve.sent.length, 1);
-        yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
-        const told = yield* chat.post(chat.first.member, "Done now.", { channelId: dm.id });
-        assert.deepEqual(told.receipt.told, ["agent-2"]);
-        assert.equal(eve.sent.length, 2);
-      }),
-  );
-
-  it.effect(
-    "an account with Chat off reads nothing waiting in chat, a message addressed to its person among it",
-    () =>
-      Effect.gen(function* () {
-        const chat = yield* openChat();
-        yield* chooseChat(chat.owner, false);
-        const telling = { ...chat.telling, doors: CHAT_DOORS };
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
-        );
-        const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
-        yield* postChat(telling, {
-          authorMemberId: chat.first.member.id,
-          to: { channelId: dm.id },
-          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
-          mentions: [],
-          clientKey: randomUUID(),
-        }).pipe(Effect.provide(chat.github.layer));
-        const after = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
-        assert.deepEqual(after.chat, []);
-        assert.equal(after.cursor, before.cursor, "nothing in chat moves the read");
-      }),
-  );
-
-  it.effect(
-    "a person a message addresses is told through their account's read once, a second before they read is held, and the read carries who and where until they read past it, with none of its words",
-    () =>
-      Effect.gen(function* () {
-        const chat = yield* openChat();
-        yield* chooseChat(chat.owner, true);
-        const telling = { ...chat.telling, doors: CHAT_DOORS };
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
-        );
-        const say = (text: string) =>
+          clientKey: string = randomUUID(),
+        ) =>
           postChat(telling, {
+            authorMemberId: author.id,
+            to,
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+            mentions: mentionedHandles(text),
+            clientKey,
+          }).pipe(Effect.provide(opened.github.layer));
+        /** The user rows of an agent's conversation, as the store keeps them. */
+        const rowsOf = (target: { readonly userId: string; readonly conversationId: string }) =>
+          Effect.map(
+            listMessagesPast(
+              target.userId,
+              target.conversationId,
+              CODER_TOOL_SET,
+              CURSOR_START,
+              50,
+            ),
+            (page) =>
+              (page.read.ok ? page.read.value : []).filter(
+                (record) => record.message.role === MESSAGE_ROLE.USER,
+              ),
+          );
+        return { ...opened, workspace, first, second, person, channel, telling, post, rowsOf };
+      });
+
+    it.effect(
+      "a post whose pictures cannot be kept is not posted at all, so no reader ever sees an image block without its bytes, and nobody is told",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve);
+          const attachmentId = randomUUID();
+          // One byte past a chat picture's bound, which the store's own check refuses as it writes the picture.
+          const bytes = new Uint8Array(CHAT_BOUNDS.MAX_IMAGE_BYTES + 1);
+          bytes.set(PNG);
+          const refused = yield* Effect.flip(
+            postChat(
+              chat.telling,
+              {
+                authorMemberId: chat.person.id,
+                to: { channelId: chat.channel.id },
+                blocks: [
+                  { type: CHAT_BLOCK.MARKDOWN, text: "@agent-1 the new email." },
+                  { type: CHAT_BLOCK.IMAGE, attachmentId, alt: "email.png" },
+                ],
+                mentions: ["agent-1"],
+                clientKey: randomUUID(),
+              },
+              [{ id: attachmentId, contentType: CHAT_IMAGE_TYPE.PNG, bytes }],
+            ).pipe(Effect.provide(chat.github.layer)),
+          );
+          assert.deepEqual(refused, HOSTED_REFUSAL.UNAVAILABLE);
+          const kept = Option.getOrThrow(
+            yield* history(chat.owner, chat.workspace, chat.person.id, {
+              channelId: chat.channel.id,
+            }),
+          );
+          assert.deepEqual(kept, [], "the message went with its pictures");
+          assert.equal(eve.sent.length, 0);
+        }),
+    );
+
+    it.effect(
+      "a DM steers the other agent once as a chat-marked line of its own, a second while the first is unread is held, and one after it reads is told",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve);
+          const dm = Option.getOrThrow(
+            yield* findOrMakeDm(
+              chat.owner,
+              chat.workspace,
+              chat.first.member.id,
+              chat.second.member.id,
+            ),
+          );
+          const key = randomUUID();
+          const sent = yield* chat.post(
+            chat.first.member,
+            "The invite table is mine.",
+            { channelId: dm.id },
+            key,
+          );
+          assert.deepEqual(sent.receipt, { told: ["agent-2"], held: [], left: [], unresolved: [] });
+          assert.deepEqual(
+            eve.sent.map((each) => each.sessionId),
+            [chat.second.sessionId],
+          );
+          // The notice is the only line the second agent's conversation holds: no turn of its has run.
+          const [notice] = yield* chat.rowsOf(chat.second.target);
+          assert.ok(notice?.message.role === MESSAGE_ROLE.USER);
+          assert.deepEqual(notice.message.metadata, {
+            author: MESSAGE_AUTHOR.AGENT,
+            channel: MESSAGE_CHANNEL.CHAT,
+            chat_seq: sent.message.seq,
+            from: "agent-1",
+          });
+          // The window reads the notice back as the words posted alone, its head and closing lines its own.
+          const noticeLine = notice.message.parts.flatMap((part) =>
+            part.type === "text" ? [part.text] : [],
+          );
+          assert.deepEqual(noticeLine.map(chatNoticeWords), ["The invite table is mine."]);
+          assert.deepEqual(
+            (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
+            // An agent's notice names it by its handle, and by its member's agent and the model that agent posted under.
+            {
+              kind: MESSAGE_SENDER.AGENT,
+              name: "agent-1",
+              model: chat.first.agent.model,
+              agent: { id: chat.first.agent.id, taskId: chat.first.agent.planId ?? undefined },
+            },
+          );
+          // The notice keeps the model its agent posted under, whatever the agent runs on since.
+          yield* Database.use((db) =>
+            db
+              .update(codingAgent)
+              .set({ model: "openai/gpt-6.1-sol" })
+              .where(eq(codingAgent.id, chat.first.agent.id)),
+          );
+          assert.deepEqual(
+            (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
+            {
+              kind: MESSAGE_SENDER.AGENT,
+              name: "agent-1",
+              model: chat.first.agent.model,
+              agent: { id: chat.first.agent.id, taskId: chat.first.agent.planId ?? undefined },
+            },
+          );
+          const again = yield* chat.post(
+            chat.first.member,
+            "The invite table is mine.",
+            { channelId: dm.id },
+            key,
+          );
+          assert.equal(again.repeated, true);
+          assert.equal(eve.sent.length, 1);
+
+          const held = yield* chat.post(chat.first.member, "And the emails.", { channelId: dm.id });
+          assert.deepEqual(held.receipt.held, ["agent-2"]);
+          assert.equal(eve.sent.length, 1);
+          yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+          const told = yield* chat.post(chat.first.member, "Done now.", { channelId: dm.id });
+          assert.deepEqual(told.receipt.told, ["agent-2"]);
+          assert.equal(eve.sent.length, 2);
+        }),
+    );
+
+    it.effect(
+      "an account with Chat off reads nothing waiting in chat, a message addressed to its person among it",
+      () =>
+        Effect.gen(function* () {
+          const chat = yield* openChat();
+          yield* chooseChat(chat.owner, false);
+          const telling = { ...chat.telling, doors: CHAT_DOORS };
+          const dm = Option.getOrThrow(
+            yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
+          );
+          const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+          yield* postChat(telling, {
             authorMemberId: chat.first.member.id,
             to: { channelId: dm.id },
-            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
             mentions: [],
             clientKey: randomUUID(),
           }).pipe(Effect.provide(chat.github.layer));
-        const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
-        assert.deepEqual(before.chat, []);
+          const after = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+          assert.deepEqual(after.chat, []);
+          assert.equal(after.cursor, before.cursor, "nothing in chat moves the read");
+        }),
+    );
 
-        const first = yield* say("Can I take the invite file too?");
-        assert.deepEqual(first.receipt.told, [chat.person.handle]);
-        const second = yield* say("Or should I wait for #214?");
-        assert.deepEqual(second.receipt.held, [chat.person.handle]);
-
-        const waiting = yield* accountInboxPast(chat.owner, before.cursor);
-        assert.notEqual(waiting.cursor, before.cursor);
-        assert.deepEqual(
-          waiting.chat?.map(({ seq, reason, from, workspaceId }) => ({
-            seq,
-            reason,
-            from,
-            workspaceId,
-          })),
-          [
-            {
-              seq: first.message.seq,
-              reason: ACCOUNT_CHAT_REASON.DIRECT,
-              from: "agent-1",
-              workspaceId: chat.workspace,
-            },
-          ],
-        );
-        assert.ok(!JSON.stringify(waiting.chat).includes("invite file"));
-
-        yield* readTo(
-          chat.owner,
-          chat.workspace,
-          chat.person.id,
-          second.message.channelId,
-          second.message.seq,
-        );
-        const read = yield* accountInboxPast(chat.owner, waiting.cursor);
-        assert.deepEqual(read.chat, []);
-        const third = yield* say("Going ahead.");
-        assert.deepEqual(third.receipt.told, [chat.person.handle]);
-      }),
-  );
-
-  it.effect(
-    "a plain post steers nobody, a mention steers the agent it names, and Luke, a person, and a handle naming no one are told no agent's way",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const chat = yield* openChat(eve);
-        const plain = yield* chat.post(chat.first.member, "Starting on the emails.");
-        assert.deepEqual(plain.receipt, { told: [], held: [], left: [], unresolved: [] });
-        assert.equal(eve.sent.length, 0);
-
-        const mentioned = yield* chat.post(
-          chat.first.member,
-          `@agent-2 take the table; @luke and @${chat.person.handle} FYI; @nobody`,
-        );
-        assert.deepEqual(mentioned.receipt, {
-          told: ["agent-2"],
-          held: ["luke", chat.person.handle],
-          left: [],
-          unresolved: ["nobody"],
-        });
-        assert.deepEqual(
-          eve.sent.map((each) => each.sessionId),
-          [chat.second.sessionId],
-        );
-      }),
-  );
-
-  it.effect(
-    "a thread reply tells the root's author and the earlier repliers, never its own author",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const chat = yield* openChat(eve);
-        const root = yield* chat.post(chat.first.member, "Who owns the invite table?");
-        const reply = yield* chat.post(chat.person, "agent-2 does.", { replyTo: root.message.seq });
-        assert.deepEqual(reply.receipt.told, ["agent-1"]);
-        const answer = yield* chat.post(chat.second.member, "Confirmed.", {
-          replyTo: root.message.seq,
-        });
-        assert.deepEqual(
-          [answer.receipt.told, answer.receipt.held],
-          [[], ["agent-1", chat.person.handle]],
-        );
-        assert.deepEqual(
-          eve.sent.map((each) => each.sessionId),
-          [chat.first.sessionId],
-        );
-      }),
-  );
-
-  it.effect(
-    "an archived agent is said to have left and steered nothing, and is told again once brought back; one whose session eve no longer runs is stamped as having left for good",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const chat = yield* openChat(eve);
-        yield* archiveCodingAgent(chat.owner, chat.second.agent.id, true);
-        const archived = yield* chat.post(chat.first.member, "@agent-2 still there?");
-        assert.deepEqual(archived.receipt.left, ["agent-2"]);
-        assert.equal(eve.sent.length, 0);
-        yield* archiveCodingAgent(chat.owner, chat.second.agent.id, false);
-        const back = yield* chat.post(chat.first.member, "@agent-2 welcome back.");
-        assert.deepEqual(back.receipt.told, ["agent-2"]);
-        assert.equal(eve.sent.length, 1);
-        assert.deepEqual(
-          (yield* roster(chat.owner, chat.workspace)).filter((row) => row.leftAt !== null),
-          [],
-        );
-      }),
-  );
-
-  it.effect(
-    "an agent whose session eve no longer runs is stamped as having left, and posts nothing more",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve({ sends: EVE_SEND_OUTCOME.RETIRED });
-        const chat = yield* openChat(eve);
-        const toSecond = yield* chat.post(chat.person, "@agent-2 are you?");
-        assert.deepEqual(toSecond.receipt.left, ["agent-2"]);
-        const left = (yield* roster(chat.owner, chat.workspace)).filter(
-          (row) => row.leftAt !== null,
-        );
-        assert.deepEqual(
-          left.map((row) => row.handle),
-          ["agent-2"],
-        );
-        const silenced = yield* chat.post(chat.second.member, "Still here.").pipe(Effect.result);
-        assert.ok(Result.isFailure(silenced));
-      }),
-  );
-
-  it.effect(
-    "a DM tells its other member alone, a mention in it naming no one else, so its words reach no one who may not read them",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const chat = yield* openChat(eve);
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
-        );
-        const sent = yield* chat.post(chat.first.member, "@agent-2 is slow, between us.", {
-          channelId: dm.id,
-        });
-        assert.deepEqual(sent.receipt, {
-          told: [],
-          held: [chat.person.handle],
-          left: [],
-          unresolved: [],
-        });
-        assert.equal(eve.sent.length, 0);
-      }),
-  );
-
-  it.effect(
-    "a post sent again under its key finishes a telling the first send never made, and steers no one twice",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const chat = yield* openChat(eve);
-        const key = randomUUID();
-        // The first send landed and was never told, as a send that failed after its write leaves it.
-        yield* postMessage(chat.owner, chat.workspace, {
-          authorMemberId: chat.first.member.id,
-          to: { channelId: chat.channel.id },
-          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "@agent-2 the table is mine." }],
-          mentions: ["agent-2"],
-          clientKey: key,
-        });
-        const retried = yield* chat.post(
-          chat.first.member,
-          "@agent-2 the table is mine.",
-          { channelId: chat.channel.id },
-          key,
-        );
-        assert.deepEqual([retried.repeated, retried.receipt.told], [true, ["agent-2"]]);
-        const again = yield* chat.post(
-          chat.first.member,
-          "@agent-2 the table is mine.",
-          { channelId: chat.channel.id },
-          key,
-        );
-        assert.deepEqual(again.receipt.held, ["agent-2"]);
-        assert.equal(eve.sent.length, 1);
-      }),
-  );
-
-  it.effect("an ask posted again under its key is told again with what it now asks", () =>
-    Effect.gen(function* () {
-      const eve = fakeEve();
-      const chat = yield* openChat(eve);
-      const asked = (text: string) =>
+    it.effect(
+      "a person a message addresses is told through their account's read once, a second before they read is held, and the read carries who and where until they read past it, with none of its words",
+      () =>
         Effect.gen(function* () {
-          const posted = Result.getOrThrow(
-            yield* postAsk(chat.owner, chat.workspace, {
+          const chat = yield* openChat();
+          yield* chooseChat(chat.owner, true);
+          const telling = { ...chat.telling, doors: CHAT_DOORS };
+          const dm = Option.getOrThrow(
+            yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
+          );
+          const say = (text: string) =>
+            postChat(telling, {
               authorMemberId: chat.first.member.id,
-              to: { channelId: chat.channel.id },
+              to: { channelId: dm.id },
               blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
-              mentions: ["agent-2"],
+              mentions: [],
               clientKey: randomUUID(),
-              key: "table-owner",
-              ask: { response: { type: CHAT_ASK.TEXT } },
-            }),
-          );
-          return yield* tellMessage(chat.telling, posted.message, posted.unresolved).pipe(
-            Effect.provide(chat.github.layer),
-          );
-        });
-      assert.deepEqual((yield* asked("@agent-2 who owns the table?")).told, ["agent-2"]);
-      yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
-      assert.deepEqual((yield* asked("@agent-2 who owns the table, now?")).told, ["agent-2"]);
-      assert.deepEqual(
-        eve.sent.map((each) => String(each.message.message).includes("now?")),
-        [false, true],
-      );
-    }),
-  );
+            }).pipe(Effect.provide(chat.github.layer));
+          const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+          assert.deepEqual(before.chat, []);
 
-  it.effect(
-    "a post past a notice's bound is cut in its words alone, so the notice stays within a message's bound and ends on its closing lines whole, an ask's among them",
-    () =>
+          const first = yield* say("Can I take the invite file too?");
+          assert.deepEqual(first.receipt.told, [chat.person.handle]);
+          const second = yield* say("Or should I wait for #214?");
+          assert.deepEqual(second.receipt.held, [chat.person.handle]);
+
+          const waiting = yield* accountInboxPast(chat.owner, before.cursor);
+          assert.notEqual(waiting.cursor, before.cursor);
+          assert.deepEqual(
+            waiting.chat?.map(({ seq, reason, from, workspaceId }) => ({
+              seq,
+              reason,
+              from,
+              workspaceId,
+            })),
+            [
+              {
+                seq: first.message.seq,
+                reason: ACCOUNT_CHAT_REASON.DIRECT,
+                from: "agent-1",
+                workspaceId: chat.workspace,
+              },
+            ],
+          );
+          assert.ok(!JSON.stringify(waiting.chat).includes("invite file"));
+
+          yield* readTo(
+            chat.owner,
+            chat.workspace,
+            chat.person.id,
+            second.message.channelId,
+            second.message.seq,
+          );
+          const read = yield* accountInboxPast(chat.owner, waiting.cursor);
+          assert.deepEqual(read.chat, []);
+          const third = yield* say("Going ahead.");
+          assert.deepEqual(third.receipt.told, [chat.person.handle]);
+        }),
+    );
+
+    it.effect(
+      "a plain post steers nobody, a mention steers the agent it names, and Luke, a person, and a handle naming no one are told no agent's way",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve);
+          const plain = yield* chat.post(chat.first.member, "Starting on the emails.");
+          assert.deepEqual(plain.receipt, { told: [], held: [], left: [], unresolved: [] });
+          assert.equal(eve.sent.length, 0);
+
+          const mentioned = yield* chat.post(
+            chat.first.member,
+            `@agent-2 take the table; @luke and @${chat.person.handle} FYI; @nobody`,
+          );
+          assert.deepEqual(mentioned.receipt, {
+            told: ["agent-2"],
+            held: ["luke", chat.person.handle],
+            left: [],
+            unresolved: ["nobody"],
+          });
+          assert.deepEqual(
+            eve.sent.map((each) => each.sessionId),
+            [chat.second.sessionId],
+          );
+        }),
+    );
+
+    it.effect(
+      "a thread reply tells the root's author and the earlier repliers, never its own author",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve);
+          const root = yield* chat.post(chat.first.member, "Who owns the invite table?");
+          const reply = yield* chat.post(chat.person, "agent-2 does.", {
+            replyTo: root.message.seq,
+          });
+          assert.deepEqual(reply.receipt.told, ["agent-1"]);
+          const answer = yield* chat.post(chat.second.member, "Confirmed.", {
+            replyTo: root.message.seq,
+          });
+          assert.deepEqual(
+            [answer.receipt.told, answer.receipt.held],
+            [[], ["agent-1", chat.person.handle]],
+          );
+          assert.deepEqual(
+            eve.sent.map((each) => each.sessionId),
+            [chat.first.sessionId],
+          );
+        }),
+    );
+
+    it.effect(
+      "an archived agent is said to have left and steered nothing, and is told again once brought back; one whose session eve no longer runs is stamped as having left for good",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve);
+          yield* archiveCodingAgent(chat.owner, chat.second.agent.id, true);
+          const archived = yield* chat.post(chat.first.member, "@agent-2 still there?");
+          assert.deepEqual(archived.receipt.left, ["agent-2"]);
+          assert.equal(eve.sent.length, 0);
+          yield* archiveCodingAgent(chat.owner, chat.second.agent.id, false);
+          const back = yield* chat.post(chat.first.member, "@agent-2 welcome back.");
+          assert.deepEqual(back.receipt.told, ["agent-2"]);
+          assert.equal(eve.sent.length, 1);
+          assert.deepEqual(
+            (yield* roster(chat.owner, chat.workspace)).filter((row) => row.leftAt !== null),
+            [],
+          );
+        }),
+    );
+
+    it.effect(
+      "an agent whose session eve no longer runs is stamped as having left, and posts nothing more",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve({ sends: EVE_SEND_OUTCOME.RETIRED });
+          const chat = yield* openChat(eve);
+          const toSecond = yield* chat.post(chat.person, "@agent-2 are you?");
+          assert.deepEqual(toSecond.receipt.left, ["agent-2"]);
+          const left = (yield* roster(chat.owner, chat.workspace)).filter(
+            (row) => row.leftAt !== null,
+          );
+          assert.deepEqual(
+            left.map((row) => row.handle),
+            ["agent-2"],
+          );
+          const silenced = yield* chat.post(chat.second.member, "Still here.").pipe(Effect.result);
+          assert.ok(Result.isFailure(silenced));
+        }),
+    );
+
+    it.effect(
+      "a DM tells its other member alone, a mention in it naming no one else, so its words reach no one who may not read them",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve);
+          const dm = Option.getOrThrow(
+            yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
+          );
+          const sent = yield* chat.post(chat.first.member, "@agent-2 is slow, between us.", {
+            channelId: dm.id,
+          });
+          assert.deepEqual(sent.receipt, {
+            told: [],
+            held: [chat.person.handle],
+            left: [],
+            unresolved: [],
+          });
+          assert.equal(eve.sent.length, 0);
+        }),
+    );
+
+    it.effect(
+      "a post sent again under its key finishes a telling the first send never made, and steers no one twice",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve);
+          const key = randomUUID();
+          // The first send landed and was never told, as a send that failed after its write leaves it.
+          yield* postMessage(chat.owner, chat.workspace, {
+            authorMemberId: chat.first.member.id,
+            to: { channelId: chat.channel.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "@agent-2 the table is mine." }],
+            mentions: ["agent-2"],
+            clientKey: key,
+          });
+          const retried = yield* chat.post(
+            chat.first.member,
+            "@agent-2 the table is mine.",
+            { channelId: chat.channel.id },
+            key,
+          );
+          assert.deepEqual([retried.repeated, retried.receipt.told], [true, ["agent-2"]]);
+          const again = yield* chat.post(
+            chat.first.member,
+            "@agent-2 the table is mine.",
+            { channelId: chat.channel.id },
+            key,
+          );
+          assert.deepEqual(again.receipt.held, ["agent-2"]);
+          assert.equal(eve.sent.length, 1);
+        }),
+    );
+
+    it.effect("an ask posted again under its key is told again with what it now asks", () =>
       Effect.gen(function* () {
         const eve = fakeEve();
         const chat = yield* openChat(eve);
-        // Three blocks a little short of their bound each run past what one notice may carry.
-        const block = (fill: string) => `@agent-2 ${fill.repeat(7_900)}`;
-        const blocks = ["a", "b", "c"].map((fill) => ({
-          type: CHAT_BLOCK.MARKDOWN,
-          text: block(fill),
-        }));
-        const told = (ask: boolean) =>
+        const asked = (text: string) =>
           Effect.gen(function* () {
-            const post = {
-              authorMemberId: chat.first.member.id,
-              to: { channelId: chat.channel.id },
-              blocks,
-              mentions: ["agent-2"],
-              clientKey: randomUUID(),
-            };
-            const seq = ask
-              ? yield* Effect.gen(function* () {
-                  const posted = Result.getOrThrow(
-                    yield* postAsk(chat.owner, chat.workspace, {
-                      ...post,
-                      key: "long-ask",
-                      ask: { response: { type: CHAT_ASK.TEXT } },
-                    }),
-                  );
-                  yield* tellMessage(chat.telling, posted.message, posted.unresolved).pipe(
-                    Effect.provide(chat.github.layer),
-                  );
-                  return posted.message.seq;
-                })
-              : (yield* postChat(chat.telling, post).pipe(Effect.provide(chat.github.layer)))
-                  .message.seq;
-            yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
-            return { seq, text: String(eve.sent.at(-1)?.message.message) };
+            const posted = Result.getOrThrow(
+              yield* postAsk(chat.owner, chat.workspace, {
+                authorMemberId: chat.first.member.id,
+                to: { channelId: chat.channel.id },
+                blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+                mentions: ["agent-2"],
+                clientKey: randomUUID(),
+                key: "table-owner",
+                ask: { response: { type: CHAT_ASK.TEXT } },
+              }),
+            );
+            return yield* tellMessage(chat.telling, posted.message, posted.unresolved).pipe(
+              Effect.provide(chat.github.layer),
+            );
           });
-        for (const ask of [false, true]) {
-          const { seq, text } = yield* told(ask);
-          assert.ok(text.length <= CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS, String(text.length));
-          const closings = [
-            ...(ask ? [chatNoticeAsksLine(CHAT_ASK.TEXT)] : []),
-            chatNoticeReplyLine(seq),
-          ].join("\n\n");
-          assert.ok(text.endsWith(`\n\n${closings}`), text.slice(-200));
-          const words = chatNoticeWords(text);
-          assert.ok(words.startsWith(block("a")), "the words are cut from their end");
-          assert.equal(words.includes("Reply with"), false);
-        }
-      }),
-  );
-
-  it.effect(
-    "a notice to an agent a teammate started is minted for that teammate, whose principal its turn runs under, whoever posted",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const chat = yield* openChat(eve, true);
-        const told = yield* chat.post(chat.first.member, "@agent-2 the table is mine.");
-        assert.deepEqual(told.receipt.told, ["agent-2"]);
+        assert.deepEqual((yield* asked("@agent-2 who owns the table?")).told, ["agent-2"]);
+        yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+        assert.deepEqual((yield* asked("@agent-2 who owns the table, now?")).told, ["agent-2"]);
         assert.deepEqual(
-          eve.sent.map((each) => [each.authorization, each.sessionId]),
-          [[`Bearer ${chat.other}`, chat.second.sessionId]],
-        );
-        const back = yield* chat.post(chat.second.member, "@agent-1 noted.");
-        assert.deepEqual(back.receipt.told, ["agent-1"]);
-        assert.deepEqual(eve.sent[1]?.authorization, `Bearer ${chat.owner}`);
-      }),
-  );
-
-  it.effect(
-    "an agent whose starter left the workspace is away: said to have left, steered nothing, stamped nothing, and told again once its starter is back",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const chat = yield* openChat(eve, true);
-        const db = yield* Database;
-        yield* db
-          .delete(member)
-          .where(and(eq(member.organizationId, chat.workspace), eq(member.userId, chat.other)));
-        const away = yield* chat.post(chat.person, "@agent-2 please carry on.");
-        assert.deepEqual(away.receipt.left, ["agent-2"]);
-        assert.equal(eve.sent.length, 0);
-        assert.deepEqual(
-          (yield* roster(chat.owner, chat.workspace)).filter((row) => row.leftAt !== null),
-          [],
-        );
-
-        yield* joinWorkspace(chat.workspace, chat.other);
-        const back = yield* chat.post(chat.person, "@agent-2 welcome back.");
-        assert.deepEqual(back.receipt.told, ["agent-2"]);
-        assert.deepEqual(
-          eve.sent.map((each) => each.authorization),
-          [`Bearer ${chat.other}`],
+          eve.sent.map((each) => String(each.message.message).includes("now?")),
+          [false, true],
         );
       }),
-  );
+    );
 
-  it.effect("an ask only answered since it was told steers no one again", () =>
-    Effect.gen(function* () {
-      const eve = fakeEve();
-      const chat = yield* openChat(eve);
-      const posted = Result.getOrThrow(
-        yield* postAsk(chat.owner, chat.workspace, {
-          authorMemberId: chat.first.member.id,
-          to: { channelId: chat.channel.id },
-          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "@agent-2 who owns the table?" }],
-          mentions: ["agent-2"],
-          clientKey: randomUUID(),
-          key: "table-owner",
-          ask: { response: { type: CHAT_ASK.TEXT } },
+    it.effect(
+      "a post past a notice's bound is cut in its words alone, so the notice stays within a message's bound and ends on its closing lines whole, an ask's among them",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve);
+          // Three blocks a little short of their bound each run past what one notice may carry.
+          const block = (fill: string) => `@agent-2 ${fill.repeat(7_900)}`;
+          const blocks = ["a", "b", "c"].map((fill) => ({
+            type: CHAT_BLOCK.MARKDOWN,
+            text: block(fill),
+          }));
+          const told = (ask: boolean) =>
+            Effect.gen(function* () {
+              const post = {
+                authorMemberId: chat.first.member.id,
+                to: { channelId: chat.channel.id },
+                blocks,
+                mentions: ["agent-2"],
+                clientKey: randomUUID(),
+              };
+              const seq = ask
+                ? yield* Effect.gen(function* () {
+                    const posted = Result.getOrThrow(
+                      yield* postAsk(chat.owner, chat.workspace, {
+                        ...post,
+                        key: "long-ask",
+                        ask: { response: { type: CHAT_ASK.TEXT } },
+                      }),
+                    );
+                    yield* tellMessage(chat.telling, posted.message, posted.unresolved).pipe(
+                      Effect.provide(chat.github.layer),
+                    );
+                    return posted.message.seq;
+                  })
+                : (yield* postChat(chat.telling, post).pipe(Effect.provide(chat.github.layer)))
+                    .message.seq;
+              yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+              return { seq, text: String(eve.sent.at(-1)?.message.message) };
+            });
+          for (const ask of [false, true]) {
+            const { seq, text } = yield* told(ask);
+            assert.ok(text.length <= CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS, String(text.length));
+            const closings = [
+              ...(ask ? [chatNoticeAsksLine(CHAT_ASK.TEXT)] : []),
+              chatNoticeReplyLine(seq),
+            ].join("\n\n");
+            assert.ok(text.endsWith(`\n\n${closings}`), text.slice(-200));
+            const words = chatNoticeWords(text);
+            assert.ok(words.startsWith(block("a")), "the words are cut from their end");
+            assert.equal(words.includes("Reply with"), false);
+          }
         }),
-      );
-      const tell = (message: typeof posted.message) =>
-        tellMessage(chat.telling, message, []).pipe(Effect.provide(chat.github.layer));
-      yield* tell(posted.message);
-      yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
-      const answered = Result.getOrThrow(
-        yield* answerAsk(chat.owner, chat.workspace, {
-          answererMemberId: chat.person.id,
-          seq: posted.message.seq,
-          revision: 1,
-          reply: { reply: CHAT_REPLY.ANSWERED, note: "agent-1 does." },
-          clientKey: randomUUID(),
-        }),
-      );
-      yield* tell(answered.ask);
-      assert.equal(eve.sent.length, 1);
-    }),
-  );
+    );
 
-  it.effect(
-    "an agent whose starter has not turned Chat on is steered nothing, however it is addressed",
-    () =>
+    it.effect(
+      "a notice to an agent a teammate started is minted for that teammate, whose principal its turn runs under, whoever posted",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve, true);
+          const told = yield* chat.post(chat.first.member, "@agent-2 the table is mine.");
+          assert.deepEqual(told.receipt.told, ["agent-2"]);
+          assert.deepEqual(
+            eve.sent.map((each) => [each.authorization, each.sessionId]),
+            [[`Bearer ${chat.other}`, chat.second.sessionId]],
+          );
+          const back = yield* chat.post(chat.second.member, "@agent-1 noted.");
+          assert.deepEqual(back.receipt.told, ["agent-1"]);
+          assert.deepEqual(eve.sent[1]?.authorization, `Bearer ${chat.owner}`);
+        }),
+    );
+
+    it.effect(
+      "an agent whose starter left the workspace is away: said to have left, steered nothing, stamped nothing, and told again once its starter is back",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve, true);
+          const db = yield* Database;
+          yield* db
+            .delete(member)
+            .where(and(eq(member.organizationId, chat.workspace), eq(member.userId, chat.other)));
+          const away = yield* chat.post(chat.person, "@agent-2 please carry on.");
+          assert.deepEqual(away.receipt.left, ["agent-2"]);
+          assert.equal(eve.sent.length, 0);
+          assert.deepEqual(
+            (yield* roster(chat.owner, chat.workspace)).filter((row) => row.leftAt !== null),
+            [],
+          );
+
+          yield* joinWorkspace(chat.workspace, chat.other);
+          const back = yield* chat.post(chat.person, "@agent-2 welcome back.");
+          assert.deepEqual(back.receipt.told, ["agent-2"]);
+          assert.deepEqual(
+            eve.sent.map((each) => each.authorization),
+            [`Bearer ${chat.other}`],
+          );
+        }),
+    );
+
+    it.effect("an ask only answered since it was told steers no one again", () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const chat = yield* openChat(eve, true);
-        yield* writeAccountPreferences(chat.other, { experiments: { [EXPERIMENT.CHAT]: false } });
-        const told = yield* chat.post(chat.person, "@agent-2 please carry on.");
-        assert.deepEqual([told.receipt.told, told.receipt.held], [[], ["agent-2"]]);
-        assert.equal(eve.sent.length, 0);
+        const chat = yield* openChat(eve);
+        const posted = Result.getOrThrow(
+          yield* postAsk(chat.owner, chat.workspace, {
+            authorMemberId: chat.first.member.id,
+            to: { channelId: chat.channel.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "@agent-2 who owns the table?" }],
+            mentions: ["agent-2"],
+            clientKey: randomUUID(),
+            key: "table-owner",
+            ask: { response: { type: CHAT_ASK.TEXT } },
+          }),
+        );
+        const tell = (message: typeof posted.message) =>
+          tellMessage(chat.telling, message, []).pipe(Effect.provide(chat.github.layer));
+        yield* tell(posted.message);
+        yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
+        const answered = Result.getOrThrow(
+          yield* answerAsk(chat.owner, chat.workspace, {
+            answererMemberId: chat.person.id,
+            seq: posted.message.seq,
+            revision: 1,
+            reply: { reply: CHAT_REPLY.ANSWERED, note: "agent-1 does." },
+            clientKey: randomUUID(),
+          }),
+        );
+        yield* tell(answered.ask);
+        assert.equal(eve.sent.length, 1);
       }),
-  );
-});
+    );
+
+    it.effect(
+      "an agent whose starter has not turned Chat on is steered nothing, however it is addressed",
+      () =>
+        Effect.gen(function* () {
+          const eve = fakeEve();
+          const chat = yield* openChat(eve, true);
+          yield* writeAccountPreferences(chat.other, { experiments: { [EXPERIMENT.CHAT]: false } });
+          const told = yield* chat.post(chat.person, "@agent-2 please carry on.");
+          assert.deepEqual([told.receipt.told, told.receipt.held], [[], ["agent-2"]]);
+          assert.equal(eve.sent.length, 0);
+        }),
+    );
+  },
+);
 
 /** A sandbox door no post with words alone opens: one that fails if it is. */
 const noSandbox: InboxSandboxDoor = () => Promise.reject(new Error("the sandbox was opened"));
@@ -6391,7 +6412,7 @@ const QUEUE_ASK = {
   },
 } as const;
 
-it.layer(getTestDB())("the coding agent's chat tools", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("the coding agent's chat tools", (it) => {
   /**
    * The owner's plan with two agents on it, each session claimed so a notice
    * reaches it, and each agent's tools as its own calls run them: a post
@@ -7167,7 +7188,7 @@ function openedParts(eve: ReturnType<typeof fakeEve>) {
   return { text: message, parts: firstMessageParts(message) };
 }
 
-it.layer(getTestDB())("starting an agent from another", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("starting an agent from another", (it) => {
   /** A source agent on the owner's plan, on a choice and servers of its own, with a transcript of two turns, a branch, and a pull request, its GitHub answering as given. */
   const sourceAgentOn = (github?: RepositoryScript, eve?: ReturnType<typeof fakeEve>) =>
     Effect.gen(function* () {
@@ -8583,7 +8604,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
 const chooseChat = (userId: string, on: boolean) =>
   writeAccountPreferences(userId, { experiments: { [EXPERIMENT.CHAT]: on } });
 
-it.layer(getTestDB())("a person's chat from the window", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("a person's chat from the window", (it) => {
   /**
    * The owner's plan with one agent on it, its session claimed so a notice
    * reaches it, its chat member, the plan's channel, and the chat's writes

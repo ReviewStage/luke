@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Effect, Fiber, Option } from "effect";
+import { Effect, Exit, Fiber, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { lookedUntil } from "../http/held-read.js";
 import { type LiveSubscriber, LiveWake, type LiveWatch, realtimeWake } from "./live-wake.js";
 
 /**
- * A wait on a row, woken by Neon Realtime where the deployment has it: with
- * no Realtime it looks on its own poll; watched, it looks again as soon as
- * the rows change, and on a safety beat beside; a watch that breaks hands
- * it back to its poll; and the wake over Realtime's direct server subscribes
+ * A wait on a row, woken by Neon Realtime: it looks again as soon as the
+ * rows change, and on a safety beat beside; with no wake provided it fails
+ * rather than polling; and the wake over Realtime's direct server subscribes
  * to each statement for the length of the wait and lets go after.
  *
  * Statements and rows are synthetic; Realtime is a script.
@@ -36,12 +35,10 @@ function scriptedLook() {
   };
 }
 
-/** A watch a test changes and breaks by hand. */
+/** A watch a test changes by hand. */
 function scriptedWatch() {
-  let live = true;
   let wake: (() => void) | undefined;
   const watch: LiveWatch = {
-    live: Effect.sync(() => live),
     changed: Effect.callback<void>((resume) => {
       wake = () => resume(Effect.void);
     }),
@@ -49,25 +46,15 @@ function scriptedWatch() {
   return {
     wake: { watch: () => Effect.succeed(watch) },
     change: () => wake?.(),
-    break: () => {
-      live = false;
-      wake?.();
-    },
   };
 }
 
-it.effect("with no Realtime a wait looks on its own poll, and none is found past the hold", () =>
+it.effect("with no wake provided a wait fails rather than looking on a clock", () =>
   Effect.gen(function* () {
     const script = scriptedLook();
-    const waiting = yield* Effect.forkChild(
-      lookedUntil(script.look, "1 second", "10 seconds", [STATEMENT]),
-    );
-    yield* settled;
-    assert.equal(script.looks(), 1);
-    yield* TestClock.adjust("3 seconds");
-    assert.equal(script.looks(), 4);
-    yield* TestClock.adjust("10 seconds");
-    assert.deepEqual(yield* Fiber.join(waiting), Option.none());
+    const exit = yield* Effect.exit(lookedUntil(script.look, "10 seconds", [STATEMENT]));
+    assert.ok(Exit.isFailure(exit));
+    assert.equal(script.looks(), 0);
   }),
 );
 
@@ -78,7 +65,7 @@ it.effect(
       const script = scriptedLook();
       const watch = scriptedWatch();
       const waiting = yield* Effect.forkChild(
-        lookedUntil(script.look, "1 hour", "1 minute", [STATEMENT]).pipe(
+        lookedUntil(script.look, "1 minute", [STATEMENT]).pipe(
           Effect.provideService(LiveWake, watch.wake),
         ),
       );
@@ -94,31 +81,9 @@ it.effect(
     }),
 );
 
-it.effect("a watch that breaks hands the wait back to its own poll", () =>
-  Effect.gen(function* () {
-    const script = scriptedLook();
-    const watch = scriptedWatch();
-    const waiting = yield* Effect.forkChild(
-      lookedUntil(script.look, "1 second", "1 minute", [STATEMENT]).pipe(
-        Effect.provideService(LiveWake, watch.wake),
-      ),
-    );
-    yield* settled;
-    watch.break();
-    yield* settled;
-    const before = script.looks();
-    yield* TestClock.adjust("2 seconds");
-    assert.equal(script.looks(), before + 2);
-    script.find("late");
-    yield* TestClock.adjust("1 second");
-    assert.deepEqual(yield* Fiber.join(waiting), Option.some("late"));
-  }),
-);
-
 /** Realtime's direct server as a script: each subscription's listeners, and which are let go. */
 function scriptedSubscriber() {
   const updates: (() => void)[] = [];
-  const states: ((state: { readonly status: string }) => void)[] = [];
   const subscribed: string[] = [];
   const unsubscribed: string[] = [];
   let refuse = false;
@@ -132,10 +97,6 @@ function scriptedSubscriber() {
           updates.push(listener);
           return () => undefined;
         },
-        onStateChange: (listener) => {
-          states.push(listener);
-          return () => undefined;
-        },
         unsubscribe: () => void unsubscribed.push(name),
       });
     },
@@ -147,9 +108,6 @@ function scriptedSubscriber() {
     update: () => {
       for (const listener of updates) listener();
     },
-    fail: () => {
-      for (const listener of states) listener({ status: "error" });
-    },
     refuse: () => {
       refuse = true;
     },
@@ -157,7 +115,7 @@ function scriptedSubscriber() {
 }
 
 it.effect(
-  "the wake over Realtime subscribes to each statement for the length of a wait, wakes it on any update, breaks on an error, and lets go after",
+  "the wake over Realtime subscribes to each statement for the length of a wait, wakes it on any update, and lets go after; a refused subscription leaves the wait on its safety beat",
   () =>
     Effect.gen(function* () {
       const realtime = scriptedSubscriber();
@@ -166,7 +124,6 @@ it.effect(
         Effect.gen(function* () {
           const watch = yield* wake.watch([STATEMENT, STATEMENT]);
           assert.deepEqual(realtime.subscribed, ["query-0", "query-1"]);
-          assert.equal(yield* watch.live, true);
           const changed = yield* Effect.forkChild(watch.changed);
           yield* settled;
           realtime.update();
@@ -174,15 +131,21 @@ it.effect(
           // A change no wait took yet is taken by the next one at once.
           realtime.update();
           yield* watch.changed;
-          realtime.fail();
-          assert.equal(yield* watch.live, false);
-          yield* watch.changed;
         }),
       );
       assert.deepEqual(realtime.unsubscribed.toSorted(), ["query-0", "query-1"]);
 
       realtime.refuse();
-      const refused = yield* Effect.scoped(wake.watch([STATEMENT]));
-      assert.equal(yield* refused.live, false);
+      const script = scriptedLook();
+      const waiting = yield* Effect.forkChild(
+        lookedUntil(script.look, "1 minute", [STATEMENT]).pipe(
+          Effect.provideService(LiveWake, wake),
+        ),
+      );
+      yield* settled;
+      assert.equal(script.looks(), 1);
+      yield* TestClock.adjust("5 seconds");
+      assert.equal(script.looks(), 2);
+      yield* Fiber.interrupt(waiting);
     }),
 );

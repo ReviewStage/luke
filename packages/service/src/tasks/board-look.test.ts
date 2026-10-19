@@ -11,9 +11,10 @@ import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
 import { unparsedWire } from "@luke/wire";
-import { Effect, Option } from "effect";
+import { Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { driven, forkClockDriven } from "../testing/clock-driven.js";
+import { quietLiveWake } from "../testing/live-wake.js";
 import { BOARD_LOOK_WAIT, LOOK_AT_BOARD_STATUS, runLookAtBoard } from "./board-look.js";
 
 /**
@@ -41,7 +42,7 @@ const openTask = Effect.gen(function* () {
   return { userId, taskId: started.id, binding: { userId, taskId: started.id } };
 });
 
-it.layer(getTestDB())("look_at_board", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("look_at_board", (it) => {
   it.effect("another account's plan shows nothing", () =>
     Effect.gen(function* () {
       const { userId, taskId } = yield* openTask;

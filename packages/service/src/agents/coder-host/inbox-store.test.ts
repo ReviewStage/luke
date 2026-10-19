@@ -55,7 +55,7 @@ import {
 } from "@luke/features/live-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { eq } from "drizzle-orm";
-import { DateTime, Duration, Effect, Option, Result, Schema } from "effect";
+import { DateTime, Duration, Effect, Layer, Option, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import {
@@ -84,6 +84,7 @@ import {
   withdrawInboxClose,
   withdrawInboxMessage,
 } from "../../inbox/inbox-store.js";
+import { quietLiveWake } from "../../testing/live-wake.js";
 import { accountInboxPast, taskInboxPast } from "./inbox-page.js";
 
 /**
@@ -218,7 +219,7 @@ const liveAnswerOf = (userId: string, readAt: number) =>
     );
   });
 
-it.layer(getTestDB())("the inbox store", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("the inbox store", (it) => {
   it.effect(
     "the live statements of a plan's inbox and an agent's deliver the items their held reads answer, open, answered, and closed alike, to a member and to no one else",
     () =>
@@ -1075,7 +1076,7 @@ const postedId = (agent: InboxAgent, key: string) =>
     return posted.success.id;
   });
 
-it.layer(getTestDB())("an inbox item's read state", (it) => {
+it.layer(Layer.merge(getTestDB(), quietLiveWake))("an inbox item's read state", (it) => {
   it.effect(
     "a new item is unread for every member until each reads it, and unread again for a reader once anything happens on it after their read",
     () =>

@@ -60,6 +60,7 @@ import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog
 import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
+import { quietLiveWake } from "../../testing/live-wake.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import { CODER_REFUSAL } from "./bounds.js";
@@ -400,7 +401,7 @@ const turnRow = (id: string) =>
       rows[0] === undefined ? undefined : Schema.decodeUnknownSync(TurnRowSchema)(rows[0]),
   );
 
-it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
+it.layer(Layer.mergeAll(getTestDB(), noNetwork, quietLiveWake))("the coding-agent host", (it) => {
   it.effect(
     "a conversation that is no agent's is refused a model, an agent, and a prompt alike",
     () =>

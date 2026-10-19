@@ -46,7 +46,7 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
 const MAC_COMMAND_SERVICE = {
   /** How long the Mac's read is held while nothing waits for it. */
   HOLD: Duration.seconds(20),
-  /** How often a held read, and a call waiting on its result, looks again. */
+  /** How often the Mac's held read looks again. */
   POLL: Duration.millis(500),
   /** How lately a Mac must have read for a call to count it listening: one hold, and room for the next read to arrive. */
   LISTENER_FRESH: Duration.seconds(45),
@@ -157,7 +157,6 @@ function awaitedResult(
   );
   return lookedUntil(
     macCommandResult(userId, queued.id),
-    MAC_COMMAND_SERVICE.POLL,
     deadline,
     Option.toArray(macCommandSettledLiveStatement(userId, queued.id)),
   );

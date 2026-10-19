@@ -158,7 +158,6 @@ function planCommentsPast(
   return heldUntilMoved(
     planCommentStamps(userId, taskId),
     after,
-    CODER.MESSAGES_POLL,
     CODER.MESSAGES_HOLD,
     Option.toArray(planCommentStampsLiveStatement(userId, taskId)),
   ).pipe(

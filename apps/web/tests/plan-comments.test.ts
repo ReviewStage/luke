@@ -41,6 +41,7 @@ import {
   CONNECTOR_ASKED_NOTHING,
   integrationConnectOf,
 } from "@luke/service/testing/integration-connect";
+import { quietLiveWake } from "@luke/service/testing/live-wake";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, type Context, Effect, Layer, Option, Result, Stream } from "effect";
@@ -125,6 +126,7 @@ const answer = (routes: "comments" | "plans", request: Request) =>
       NO_GITHUB,
       modelCatalogOf([]),
       integrationConnectOf(() => CONNECTOR_ASKED_NOTHING),
+      quietLiveWake,
     );
     let response: Response;
     if (routes === "comments") {

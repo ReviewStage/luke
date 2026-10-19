@@ -68,7 +68,7 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * answers unavailable. `LiveWake` is the same Realtime seen from the service's
  * side: one socket per instance, which every held read and every wait on a
  * row watches its rows over rather than looking on a clock
- * (`live/live-wake.ts`); without Realtime each looks on its own poll.
+ * (`live/live-wake.ts`); without Realtime each fails.
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
