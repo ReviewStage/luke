@@ -6260,11 +6260,16 @@ button.picture-frame {
 }
 
 /* The web's gutter is a finger's target across (desktop.css), which its
-   count, a glyph and a figure, fills when drawn tighter than a toolbar's
-   button; its press still takes the whole target on a touch screen. */
+   count, a glyph and its figures, fills when drawn tighter than a toolbar's
+   button; its press still takes the whole target on a touch screen, inside
+   the column. It ends where the block's button ends, a hair inside the
+   column, so a count of more figures grows in toward the words rather than
+   past the column's edge. */
 [data-luke-profile="web"] .comment-count {
   --luke-control-inset: var(--luke-space-6);
   --luke-icon-gap: var(--luke-space-4);
+  right: calc(var(--luke-space-2) - var(--comment-gutter));
+  left: auto;
 }
 
 .comment-float {
@@ -6275,6 +6280,12 @@ button.picture-frame {
   width: var(--comment-card-width);
   flex-direction: column;
   gap: var(--luke-space-4);
+}
+
+/* On a phone narrower than a card and the web's gutter, the open thread
+   gives way to the column rather than start past its other edge. */
+[data-luke-profile="web"] .comment-float {
+  max-width: calc(100% + var(--luke-space-6));
 }
 
 /* A line's other threads stand closed beside the open one, each on the

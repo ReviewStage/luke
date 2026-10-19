@@ -2407,8 +2407,12 @@ ul.actor-stack {
    hair either side of it short of the column, whether or not a thread stands
    yet, as the desktop's inset does, so the words never move when the first
    comment lands, and a plan, its versions, and an issue keep one width. */
+[data-luke-profile="web"] .desktop-document {
+  --comment-gutter: calc(var(--luke-touch-target) + 2 * var(--luke-space-2));
+}
+
 [data-luke-profile="web"] .desktop-document .plan-document-body {
-  padding-right: calc(var(--luke-touch-target) + 2 * var(--luke-space-2));
+  padding-right: var(--comment-gutter);
 }
 
 .desktop-document .plan-body,

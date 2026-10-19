@@ -11,8 +11,10 @@ import { layContainersAt } from "../testing/container-width.js";
  * the column's inset to its other, so the strip scrolls within the column
  * and the buttons stay in the row above; a wide room keeps them in the bar's
  * one row. On the web a document ends a finger's gutter short of its column,
- * whether or not a thread stands on it, and a line's comment count fits in
- * that gutter; the desktop keeps the inset it had. jsdom lays nothing out
+ * whether or not a thread stands on it, a line's comment count stands in
+ * that gutter with a finger's press inside the column, ending where it ends
+ * however many figures it holds, and an open thread on the narrowest phone
+ * stays within the document; the desktop keeps the inset it had. jsdom lays nothing out
  * and answers no `var()`, so the sheets are laid for the device
  * (`testing/container-width.ts`), each piece is built in the markup its
  * component draws, and its lengths are resolved from the roles it reads.
@@ -21,11 +23,8 @@ import { layContainersAt } from "../testing/container-width.js";
 /** The least a finger's press is taken across, in pixels. */
 const FINGER = 44;
 
-/** How far a comment count stands past the document's end (tasks.css's `.comment-count`), in pixels. */
-const COUNT_OFFSET = 2;
-
 /** The share of an em a figure of the label's face takes at most. */
-const FIGURE_EM = 0.65;
+const FIGURE_EM = 0.6;
 
 /** The pieces a fixture's markup is built from: a tag, its classes, its data, and what stands in it. */
 interface Piece {
@@ -187,17 +186,57 @@ function countWidth(count: Element, figures: number): number {
   );
 }
 
+/** Where a line's comment count ends, past the document's end, in pixels: its `right` turned about. */
+function countEnd(count: Element): number {
+  return -pixels(count, getComputedStyle(count).right);
+}
+
 for (const touch of [true, false]) {
-  test(`on the web with ${touch ? "a finger" : "a mouse"} a document ends a finger's gutter short of its column, and a line's comment count fits in it`, () => {
+  test(`on the web with ${touch ? "a finger" : "a mouse"} a document ends a finger's gutter short of its column, and a line's comment count stands in it, its press inside the column and a longer one growing in toward the words`, () => {
     layFor("web", touch);
     planDocument();
     const body = the(".plan-document-body");
     const gutter = pixels(body, getComputedStyle(body).paddingRight);
-    assert.ok(gutter >= FINGER + COUNT_OFFSET, `the gutter, ${gutter}px, holds a finger's target`);
+    assert.ok(gutter >= FINGER, `the gutter, ${gutter}px, holds a finger's target`);
     const count = the(".comment-count");
-    assert.ok(COUNT_OFFSET + countWidth(count, 1) <= gutter, "a count of one figure fits");
+    const end = countEnd(count);
+    assert.ok(
+      end < gutter,
+      `the count ends inside the column, ${gutter - end}px short of its edge`,
+    );
+    // A finger's press is taken across the count's middle, at least a finger wide.
+    const middle = end - countWidth(count, 1) / 2;
+    const reach = Math.max(countWidth(count, 1), FINGER) / 2;
+    assert.ok(middle - reach >= 0, "a count of one figure takes its press past the words");
+    assert.ok(middle + reach <= gutter, "a count of one figure takes its press inside the column");
   });
 }
+
+/** A line's open thread, which floats under its count over the document. */
+function openThread(): HTMLElement {
+  built(the(".comment-layer"), { className: "comment-float" });
+  return the(".comment-float");
+}
+
+/** The narrowest phone a test lays a document out on, in CSS pixels. */
+const SMALL_PHONE = 320;
+
+test("on the web a line's open thread on the narrowest phone stands within the document rather than start past its other edge", () => {
+  layFor("web", true);
+  planDocument();
+  const body = the(".plan-document-body");
+  const page = getComputedStyle(body);
+  const width =
+    SMALL_PHONE - pixels(body, "var(--luke-page-inset)") - pixels(body, page.paddingRight);
+  const float = openThread();
+  const style = getComputedStyle(float);
+  const card = Math.min(
+    pixels(float, style.width),
+    pixels(float, style.maxWidth.replace("100%", `${width}px`)),
+  );
+  const end = width - pixels(float, style.right);
+  assert.ok(end - card >= 0, `the card starts ${end - card}px from the document's start`);
+});
 
 test("the desktop's documents add no gutter at their end, keeping the page's inset", () => {
   layFor("desktop", false);
