@@ -1579,6 +1579,47 @@ it.effect(
 );
 
 it.effect(
+  "code shown on the open task's call is drawn coloured, in the order shown and once, and code about another task is dropped",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.works[INVITES] = { turns: [] };
+      const { call, tasks, viewLands } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      const shown = {
+        callId: "call-1",
+        turnId: "turn-1",
+        shownAt: 10,
+        code: {
+          ref: { path: "src/invite.ts" },
+          repository: "acme/api",
+          firstLine: 1,
+          lineCount: 1,
+          lines: ["const answer = 42;"],
+        },
+      };
+
+      const drawn = yield* viewLands((view) =>
+        (view.shownCode ?? []).some((code) => code.callId === "call-3"),
+      );
+      tasks.showCode(BILLING, { ...shown, callId: "call-2" });
+      tasks.showCode(INVITES, shown);
+      tasks.showCode(INVITES, shown);
+      tasks.showCode(INVITES, { ...shown, callId: "call-3" });
+      const showing = (yield* drawn).shownCode ?? [];
+
+      assert.deepEqual(
+        showing.map((code) => code.callId),
+        ["call-1", "call-3"],
+      );
+      const line = showing[0]?.code.lines[0] ?? [];
+      assert.ok(line.length > 1, "a TypeScript line is coloured in runs");
+      assert.equal(line.map((run) => run.text).join(""), "const answer = 42;");
+    }),
+);
+
+it.effect(
   "a turn of the open untitled plan that settles reads the list again once the name the service gives it has had time to land",
   () =>
     Effect.gen(function* () {

@@ -1,30 +1,7 @@
 import type { ShownCode, TaskFileWindow } from "@luke/features/task-wire";
 import type { CodeToken, TaskCode, TaskFileShown } from "@luke/features/tasks-view";
-import langBash from "@shikijs/langs/bash";
-import langC from "@shikijs/langs/c";
-import langCpp from "@shikijs/langs/cpp";
-import langCss from "@shikijs/langs/css";
-import langGo from "@shikijs/langs/go";
-import langHtml from "@shikijs/langs/html";
-import langJava from "@shikijs/langs/java";
-import langJavascript from "@shikijs/langs/javascript";
-import langJson from "@shikijs/langs/json";
-import langJsx from "@shikijs/langs/jsx";
-import langKotlin from "@shikijs/langs/kotlin";
-import langMarkdown from "@shikijs/langs/markdown";
-import langPython from "@shikijs/langs/python";
-import langRuby from "@shikijs/langs/ruby";
-import langRust from "@shikijs/langs/rust";
-import langSql from "@shikijs/langs/sql";
-import langSwift from "@shikijs/langs/swift";
-import langToml from "@shikijs/langs/toml";
-import langTsx from "@shikijs/langs/tsx";
-import langTypescript from "@shikijs/langs/typescript";
-import langYaml from "@shikijs/langs/yaml";
-import githubDarkDefault from "@shikijs/themes/github-dark-default";
-import githubLightDefault from "@shikijs/themes/github-light-default";
-import { createHighlighterCoreSync, type HighlighterCore } from "shiki/core";
-import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
+import { Effect } from "effect";
+import type { HighlighterCore } from "shiki/core";
 
 /**
  * task-code.ts -- the code on screen during a task's call, coloured: the lines the service read from the task's repository, as the window draws them.
@@ -90,39 +67,78 @@ const CODE_EXCERPT_LINES = {
 /** The themes the code is coloured in, one per appearance. */
 const THEME = { DARK: "github-dark-default", LIGHT: "github-light-default" } as const;
 
+/**
+ * Shiki, its two themes, and the grammars of every language coloured here,
+ * each reached through a dynamic `import()`, so a bundle that carries the
+ * host carries none of them until code is first coloured, and a build that
+ * splits chunks (the web client's) loads them only then.
+ */
+const loadHighlighter = Effect.all(
+  {
+    core: Effect.promise(() => import("shiki/core")),
+    engine: Effect.promise(() => import("shiki/engine/javascript")),
+    themes: Effect.all(
+      [
+        Effect.promise(() => import("@shikijs/themes/github-dark-default")),
+        Effect.promise(() => import("@shikijs/themes/github-light-default")),
+      ],
+      { concurrency: "unbounded" },
+    ),
+    langs: Effect.all(
+      [
+        Effect.promise(() => import("@shikijs/langs/bash")),
+        Effect.promise(() => import("@shikijs/langs/c")),
+        Effect.promise(() => import("@shikijs/langs/cpp")),
+        Effect.promise(() => import("@shikijs/langs/css")),
+        Effect.promise(() => import("@shikijs/langs/go")),
+        Effect.promise(() => import("@shikijs/langs/html")),
+        Effect.promise(() => import("@shikijs/langs/java")),
+        Effect.promise(() => import("@shikijs/langs/javascript")),
+        Effect.promise(() => import("@shikijs/langs/json")),
+        Effect.promise(() => import("@shikijs/langs/jsx")),
+        Effect.promise(() => import("@shikijs/langs/kotlin")),
+        Effect.promise(() => import("@shikijs/langs/markdown")),
+        Effect.promise(() => import("@shikijs/langs/python")),
+        Effect.promise(() => import("@shikijs/langs/ruby")),
+        Effect.promise(() => import("@shikijs/langs/rust")),
+        Effect.promise(() => import("@shikijs/langs/sql")),
+        Effect.promise(() => import("@shikijs/langs/swift")),
+        Effect.promise(() => import("@shikijs/langs/toml")),
+        Effect.promise(() => import("@shikijs/langs/tsx")),
+        Effect.promise(() => import("@shikijs/langs/typescript")),
+        Effect.promise(() => import("@shikijs/langs/yaml")),
+      ],
+      { concurrency: "unbounded" },
+    ),
+  },
+  { concurrency: "unbounded" },
+).pipe(
+  Effect.map(({ core, engine, themes, langs }) =>
+    core.createHighlighterCoreSync({
+      themes: themes.map((theme) => theme.default),
+      langs: langs.map((lang) => lang.default),
+      engine: engine.createJavaScriptRegexEngine(),
+    }),
+  ),
+);
+
 let highlighter: HighlighterCore | undefined;
 
-/** The one highlighter, built the first time code is coloured, since most launches show none. */
-function sharedHighlighter(): HighlighterCore {
-  highlighter ??= createHighlighterCoreSync({
-    themes: [githubDarkDefault, githubLightDefault],
-    langs: [
-      langBash,
-      langC,
-      langCpp,
-      langCss,
-      langGo,
-      langHtml,
-      langJava,
-      langJavascript,
-      langJson,
-      langJsx,
-      langKotlin,
-      langMarkdown,
-      langPython,
-      langRuby,
-      langRust,
-      langSql,
-      langSwift,
-      langToml,
-      langTsx,
-      langTypescript,
-      langYaml,
-    ],
-    engine: createJavaScriptRegexEngine(),
-  });
-  return highlighter;
-}
+/**
+ * The one highlighter, loaded and built the first time code is coloured,
+ * since most launches show none, and kept for the life of the process. Note
+ * that two colourings racing the first load may each build one, which is
+ * harmless: the modules load once, and the later build is the one kept.
+ */
+const sharedHighlighter: Effect.Effect<HighlighterCore> = Effect.suspend(() =>
+  highlighter === undefined
+    ? Effect.tap(loadHighlighter, (built) =>
+        Effect.sync(() => {
+          highlighter = built;
+        }),
+      )
+    : Effect.succeed(highlighter),
+);
 
 /** A run's colour in one theme, or nothing for that theme's own foreground. */
 function runColour(color: string | undefined, foreground: string): string | undefined {
@@ -156,20 +172,24 @@ function compactLine(
  * what the service sent: a window opened inside a comment or a string is
  * coloured from there.
  */
-function colouredLines(language: string | undefined, lines: readonly string[]): CodeToken[][] {
+function colouredLines(
+  language: string | undefined,
+  lines: readonly string[],
+): Effect.Effect<CodeToken[][]> {
   if (language === undefined) {
-    return lines.map((text) => (text === "" ? [] : [{ text }]));
+    return Effect.succeed(lines.map((text) => (text === "" ? [] : [{ text }])));
   }
-  const core = sharedHighlighter();
-  const foreground = {
-    dark: core.getTheme(THEME.DARK).fg.toLowerCase(),
-    light: core.getTheme(THEME.LIGHT).fg.toLowerCase(),
-  };
-  const tokens = core.codeToTokensWithThemes(lines.join("\n"), {
-    lang: language,
-    themes: { [THEME.DARK]: THEME.DARK, [THEME.LIGHT]: THEME.LIGHT },
+  return Effect.map(sharedHighlighter, (core) => {
+    const foreground = {
+      dark: core.getTheme(THEME.DARK).fg.toLowerCase(),
+      light: core.getTheme(THEME.LIGHT).fg.toLowerCase(),
+    };
+    const tokens = core.codeToTokensWithThemes(lines.join("\n"), {
+      lang: language,
+      themes: { [THEME.DARK]: THEME.DARK, [THEME.LIGHT]: THEME.LIGHT },
+    });
+    return tokens.slice(0, lines.length).map((line) => compactLine(line, foreground));
   });
-  return tokens.slice(0, lines.length).map((line) => compactLine(line, foreground));
 }
 
 /**
@@ -189,9 +209,11 @@ function languageOfPath(path: string): string | undefined {
  * its fence gives: a language's own name or one of the aliases its grammar
  * declares (`ts`, `py`, `sh`), and none for a name no grammar here answers to.
  */
-function languageOfFence(name: string): string | undefined {
+function languageOfFence(name: string): Effect.Effect<string | undefined> {
   const lower = name.toLowerCase();
-  return sharedHighlighter().getLoadedLanguages().includes(lower) ? lower : undefined;
+  return Effect.map(sharedHighlighter, (core) =>
+    core.getLoadedLanguages().includes(lower) ? lower : undefined,
+  );
 }
 
 /**
@@ -217,21 +239,24 @@ export function codeExcerpt(code: ShownCode): ShownCode {
 }
 
 /** A window of a whole file as the File tab draws it: the lines the service read from GitHub, coloured as the file's language. */
-export function highlightFile(window: TaskFileWindow): TaskFileShown {
-  return { ...window, lines: colouredLines(languageOfPath(window.path), window.lines) };
+export function highlightFile(window: TaskFileWindow): Effect.Effect<TaskFileShown> {
+  return Effect.map(colouredLines(languageOfPath(window.path), window.lines), (lines) => ({
+    ...window,
+    lines,
+  }));
 }
 
 /** The code as the screen draws it: the lines the service sent, coloured, under the place, the repository, and the commit they came from, with Luke's note where he wrote one. */
-export function highlightCode(code: ShownCode): TaskCode {
-  return {
+export function highlightCode(code: ShownCode): Effect.Effect<TaskCode> {
+  return Effect.map(colouredLines(languageOfPath(code.ref.path), code.lines), (lines) => ({
     ref: code.ref,
     repository: code.repository,
     ...(code.commit === undefined ? undefined : { commit: code.commit }),
     firstLine: code.firstLine,
     lineCount: code.lineCount,
-    lines: colouredLines(languageOfPath(code.ref.path), code.lines),
+    lines,
     ...(code.note === undefined ? undefined : { note: code.note }),
-  };
+  }));
 }
 
 /**
@@ -239,6 +264,8 @@ export function highlightCode(code: ShownCode): TaskCode {
  * line by line, coloured as the language its fence names, as the Code tab's
  * lines are, and plain for a language the highlighter does not know.
  */
-export function highlightSnippet(language: string, code: string): CodeToken[][] {
-  return colouredLines(languageOfFence(language), code.split("\n"));
+export function highlightSnippet(language: string, code: string): Effect.Effect<CodeToken[][]> {
+  return Effect.flatMap(languageOfFence(language), (fenced) =>
+    colouredLines(fenced, code.split("\n")),
+  );
 }

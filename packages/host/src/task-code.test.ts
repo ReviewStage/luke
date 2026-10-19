@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type { TaskFileWindow } from "@luke/features/task-wire";
-import { it } from "vitest";
+import { Effect } from "effect";
 import { highlightFile } from "./task-code.js";
 
 const LINE = "const answer = 42;";
@@ -17,13 +18,18 @@ function windowAt(path: string): TaskFileWindow {
   };
 }
 
-it("a file is coloured by the extension of its own name, whatever its case, and a dot in a directory or opening the name is no extension", () => {
-  const coloured = highlightFile(windowAt("packages/web.app/src/Main.TS")).lines[0] ?? [];
-  const plain = [[{ text: LINE }]];
+it.effect(
+  "a file is coloured by the extension of its own name, whatever its case, and a dot in a directory or opening the name is no extension",
+  () =>
+    Effect.gen(function* () {
+      const coloured =
+        (yield* highlightFile(windowAt("packages/web.app/src/Main.TS"))).lines[0] ?? [];
+      const plain = [[{ text: LINE }]];
 
-  assert.ok(coloured.length > 1, "a TypeScript file is coloured in runs");
-  assert.equal(coloured.map((run) => run.text).join(""), LINE);
-  assert.deepEqual(highlightFile(windowAt("config.ts/Makefile")).lines, plain);
-  assert.deepEqual(highlightFile(windowAt("src/.ts")).lines, plain);
-  assert.deepEqual(highlightFile(windowAt("notes.txt")).lines, plain);
-});
+      assert.ok(coloured.length > 1, "a TypeScript file is coloured in runs");
+      assert.equal(coloured.map((run) => run.text).join(""), LINE);
+      assert.deepEqual((yield* highlightFile(windowAt("config.ts/Makefile"))).lines, plain);
+      assert.deepEqual((yield* highlightFile(windowAt("src/.ts"))).lines, plain);
+      assert.deepEqual((yield* highlightFile(windowAt("notes.txt"))).lines, plain);
+    }),
+);
