@@ -31,6 +31,7 @@ import {
   treeOrder,
 } from "./changes-model.js";
 import type { DiffListDoor } from "./diff-list.js";
+import { PATH_COPY_WORDS } from "./file-menu.js";
 
 /**
  * changes-list.tsx -- how Files changed's list of files is walked: which files a filter keeps, which are collapsed, the file the keys stand on, and the keys, stage-cli's, that move between them.
@@ -373,10 +374,6 @@ const HEAD_WORDS = {
   EXPAND: "Expand file",
   COLLAPSE: "Collapse file",
   ALL_HINT: "\u2325-click for all files",
-  COPY_PATH: "Copy path",
-  COPY_OLD_PATH: "Copy old path",
-  COPY_NEW_PATH: "Copy new path",
-  PATH_COPIED: "Path copied",
 } as const;
 
 /** What on a header's row keeps its press for itself rather than folding the file. */
@@ -536,20 +533,26 @@ export function FileHead({
         {hinted(STATUS_WORDS[file.status], letter)}
         <span className="diff-list-path">
           {file.previousPath === null ? (
-            pathCopy(file.path, 3, HEAD_WORDS.PATH_COPIED, HEAD_WORDS.COPY_PATH, false)
+            pathCopy(file.path, 3, PATH_COPY_WORDS.PATH_COPIED, PATH_COPY_WORDS.COPY_PATH, false)
           ) : (
             <>
               {pathCopy(
                 file.previousPath,
                 2,
-                HEAD_WORDS.PATH_COPIED,
-                HEAD_WORDS.COPY_OLD_PATH,
+                PATH_COPY_WORDS.PATH_COPIED,
+                PATH_COPY_WORDS.COPY_OLD_PATH,
                 true,
               )}
               <span className="diff-list-folder" aria-hidden="true">
                 {"\u00a0\u2192\u00a0"}
               </span>
-              {pathCopy(file.path, 3, HEAD_WORDS.PATH_COPIED, HEAD_WORDS.COPY_NEW_PATH, false)}
+              {pathCopy(
+                file.path,
+                3,
+                PATH_COPY_WORDS.PATH_COPIED,
+                PATH_COPY_WORDS.COPY_NEW_PATH,
+                false,
+              )}
             </>
           )}
         </span>

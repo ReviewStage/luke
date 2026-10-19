@@ -62,10 +62,10 @@ import type { TreeShown } from "./file-view.js";
  * folded, each fold and all of them turned by its controls and stage-cli's
  * keys, which J and K step through only inside the view; and how the File
  * tabs' settings draw it: unified with its changed words marked until told
- * otherwise, split once Split view is chosen in its ⋯, tinted whole once
- * Highlight changed words is turned off, each choice kept for the next
- * view; a diff too narrow to split is drawn unified, Split view dimmed, the
- * choice kept for a wider one. The settings are the app's own, read off the
+ * otherwise, split once Split is chosen in its View settings, tinted whole
+ * once Changed words is Off, each choice kept for the next view, its ⋯
+ * holding actions alone; a diff too narrow to split is drawn unified, its
+ * layout saying so, the choice kept for a wider one. The settings are the app's own, read off the
  * document main hands the window and written back through it
  * (`handSettings`). The bundle, a chunk of its own the panel imports, is
  * stood in for at its importer, which records what it was handed. Synthetic
@@ -348,14 +348,11 @@ function typeSearch(words: string): void {
   });
 }
 
-/** The ⋯'s item of a label, the menu opened. */
-function menuItem(label: string): HTMLButtonElement {
+/** The ⋯'s items, the menu opened. */
+function menuItems(): readonly HTMLButtonElement[] {
   const options = document.querySelector<HTMLButtonElement>('button[aria-label="Changes actions"]');
   act(() => options?.click());
-  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]')].find(
-    (each) => each.textContent?.includes(label),
-  );
-  return item ?? assert.fail(`the ⋯ offers ${label}`);
+  return [...document.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')];
 }
 
 /** Lets the document a settings write sends back land and be drawn. */
@@ -365,10 +362,18 @@ async function flush(): Promise<void> {
   });
 }
 
-/** Chooses a setting in the view's ⋯, and lets it be drawn. */
-async function choose(label: string): Promise<void> {
-  const item = menuItem(label);
-  act(() => item.click());
+/** Picks a value of a View settings pop-up by its row's name, and lets it be drawn. */
+async function pick(popover: HTMLElement, row: string, value: string): Promise<void> {
+  const trigger =
+    [...popover.querySelectorAll<HTMLButtonElement>("[aria-haspopup]")].find((each) =>
+      each.getAttribute("aria-label")?.startsWith(row),
+    ) ?? assert.fail(`the settings offer ${row}`);
+  act(() => trigger.click());
+  const option =
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (each) => each.textContent === value,
+    ) ?? assert.fail(`${row} offers ${value}`);
+  act(() => option.click());
   await flush();
 }
 
@@ -885,25 +890,43 @@ test("the diff settings set the layout, the indicators, and a switch for every d
   assert.deepEqual((await drawTab()).look, expected);
 });
 
-test("Split view draws the diff side by side, which the next view keeps", async () => {
+test("the ⋯ holds the view's actions alone, Copy path among them, its looks set in View settings", async () => {
+  files = [changed("src/seats.ts")];
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
   await drawTab();
 
-  await choose("Split view");
+  const items = menuItems();
+  assert.deepEqual(
+    items.map((item) => item.textContent),
+    ["Copy file name", "Copy path", "Copy patch", "Download patch", "Refresh changes"],
+  );
+  act(() => items[1]?.click());
+  await flush();
+  assert.deepEqual(copied, ["src/seats.ts"]);
+});
+
+test("Split draws the diff side by side, which the next view keeps", async () => {
+  await drawTab();
+
+  const popover = openSettings();
+  act(() => settingControl(popover, '[role="radio"]', "Split").click());
+  await flush();
   assert.equal(lastDrawn().look.layout, "split");
 
   assert.equal((await drawTab()).look.layout, "split");
 });
 
-test("with Highlight changed words turned off a changed line is tinted whole, for this view and the next", async () => {
+test("with Changed words Off a changed line is tinted whole, for this view and the next", async () => {
   await drawTab();
 
-  await choose("Highlight changed words");
+  await pick(openSettings(), "Changed words", "Off");
   assert.equal(lastDrawn().look.inlineDiff, "none");
 
   assert.equal((await drawTab()).look.inlineDiff, "none");
 });
 
-test("a list too narrow to split is drawn unified with Split view dimmed and its settings saying so, and split again once there is room", async () => {
+test("a list too narrow to split is drawn unified with its settings saying so, and split again once there is room", async () => {
   handSettings({ diffLayout: DIFF_LAYOUT.SPLIT });
   await drawTab();
   assert.equal(lastDrawn().look.layout, "split");
@@ -911,10 +934,6 @@ test("a list too narrow to split is drawn unified with Split view dimmed and its
   boxWidth = 480;
   act(() => relayout());
   assert.equal(lastDrawn().look.layout, "unified");
-  const item = menuItem("Split view");
-  assert.equal(item.getAttribute("aria-disabled") ?? String(item.disabled), "true");
-  assert.equal(item.getAttribute("aria-checked"), "false");
-  act(() => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
   assert.match(openSettings().textContent ?? "", /Needs a wider panel/u);
 
   boxWidth = 900;
@@ -925,12 +944,12 @@ test("a list too narrow to split is drawn unified with Split view dimmed and its
 test("a setting is drawn as written while its write is out, so a press reads the one before it", async () => {
   await drawTab();
 
-  const item = menuItem("Highlight changed words");
-  act(() => item.click());
+  const popover = openSettings();
+  act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
 
-  assert.equal(lastDrawn().look.inlineDiff, "none", "drawn before the document comes back");
+  assert.equal(lastDrawn().look.ligatures, true, "drawn before the document comes back");
   await flush();
-  assert.equal(lastDrawn().look.inlineDiff, "none");
+  assert.equal(lastDrawn().look.ligatures, true);
 });
 
 /** Holds every settings write unanswered, and the window's document unchanged, until a test answers one. */

@@ -756,7 +756,7 @@ export function PlanDocumentEditor({
   });
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
-  // The plan's pages, agents, and pull requests are offered as the page's agents' boxes offer them.
+  // The plan's pages, agents, pull requests, and workspace's issues are offered as the page's agents' boxes offer them.
   const page = useTaskMentions();
   // A Luke address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
@@ -771,6 +771,7 @@ export function PlanDocumentEditor({
       agents: page?.agents,
       readAgents: page?.readAgents,
       pullRequests: page?.pullRequests,
+      readIssues: page?.readIssues,
     },
     room,
     side: MENTION_MENU_SIDE.BELOW,

@@ -6,7 +6,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { MenuRow } from "../settings/menu-row.js";
-import { LinesMenu } from "../tasks/file-menu.js";
+import { BarMenu } from "../tasks/file-menu.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 
 /**
@@ -74,7 +74,7 @@ test("a Settings row's ⋯ and a file bar's ⋯ each open their menu on a press 
       "div",
       null,
       createElement(MenuRow, { label: "Linear actions", actions: ACTIONS, children: "Linear" }),
-      createElement(LinesMenu, { label: "File actions", actions: ACTIONS }),
+      createElement(BarMenu, { label: "File actions", actions: ACTIONS }),
     ),
   );
   for (const name of ["Linear actions", "File actions"]) {

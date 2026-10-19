@@ -14,7 +14,6 @@ import { imageTypeOfPath } from "@luke/features/github-image";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
-import { DIFF_LAYOUT, INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   BUTTON_SIZE,
   Button,
@@ -37,10 +36,8 @@ import {
   ChevronsUpDownIcon,
   ClipboardCopyIcon,
   CodeIcon,
-  Columns2Icon,
   FileDiffIcon,
   FoldVerticalIcon,
-  HighlighterIcon,
   ImageIcon,
   RotateCwIcon,
   UnfoldVerticalIcon,
@@ -106,7 +103,7 @@ import {
 } from "./comment-drafts.js";
 import { type DiffListEntry, type DiffNote, PierreDiffList } from "./diff-list.js";
 import { useDiffLook, useSplitRoom } from "./file-diff.js";
-import { LinesMenu, useSaveText } from "./file-menu.js";
+import { BarMenu, copyPathAction, useSaveText } from "./file-menu.js";
 import { FileTreePane } from "./file-tree-pane.js";
 import { FileViewBar, type TreeShown, usePaneRoom, useTreeEdge } from "./file-view.js";
 import { useFileViewSettings } from "./file-view-settings.js";
@@ -119,7 +116,7 @@ import { usePullRequestNumber } from "./pull-request-number.js";
 import { OpenedBy, ReviewersLine } from "./pull-request-people.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents.js";
-import { ViewSettingsButton } from "./view-settings.js";
+import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles } from "./viewed-files.js";
 
 /**
@@ -247,28 +244,23 @@ function ChangeBeside({ file }: { file: CodingAgentChangedFile }): React.JSX.Ele
   );
 }
 
-/** The bar's ⋯ over a diff: the file's name or its patch copied, the patch saved, and the changes read again, over the File tabs' settings and the diff's own. */
+/** The bar's ⋯ over a diff: the file's name, its path, or its patch copied, the patch saved, and the changes read again. */
 function ChangesMenu({
   file,
   reading,
   onRefresh,
-  roomy,
 }: {
   file: CodingAgentChangedFile;
   /** Whether a read is out, which a refresh would only repeat. */
   reading: boolean;
   onRefresh: () => void;
-  /** Whether the diff is wide enough to split, which Split view is offered by. */
-  roomy: boolean;
 }): React.JSX.Element {
   const copyWithToast = useCopyToast();
   const saveText = useSaveText();
-  const { settings, change } = useFileViewSettings();
   const name = fileName(file.path);
   const patch = filePatch(file);
-  const split = settings.diffLayout === DIFF_LAYOUT.SPLIT;
   return (
-    <LinesMenu
+    <BarMenu
       label="Changes actions"
       actions={[
         {
@@ -276,6 +268,7 @@ function ChangesMenu({
           icon: <CopyIcon />,
           onSelect: () => copyWithToast(name, "File name copied"),
         },
+        copyPathAction(file.path, copyWithToast),
         {
           label: "Copy patch",
           icon: <ClipboardCopyIcon aria-hidden="true" />,
@@ -297,26 +290,6 @@ function ChangesMenu({
           icon: <RotateCwIcon aria-hidden="true" />,
           disabled: reading,
           onSelect: onRefresh,
-        },
-      ]}
-      looks={[
-        {
-          label: "Split view",
-          icon: <Columns2Icon aria-hidden="true" />,
-          detail: roomy ? undefined : CHANGES_WORDS.TOO_NARROW_TO_SPLIT,
-          checked: split && roomy,
-          disabled: !roomy,
-          onSelect: () => change("diffLayout", split ? DIFF_LAYOUT.UNIFIED : DIFF_LAYOUT.SPLIT),
-        },
-        {
-          label: "Highlight changed words",
-          icon: <HighlighterIcon aria-hidden="true" />,
-          checked: settings.inlineDiff !== INLINE_DIFF.NONE,
-          onSelect: () =>
-            change(
-              "inlineDiff",
-              settings.inlineDiff === INLINE_DIFF.NONE ? INLINE_DIFF.WORD_ALT : INLINE_DIFF.NONE,
-            ),
         },
       ]}
     />
@@ -1537,9 +1510,9 @@ export function AgentChangesTab({
         onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
         menu={
           <>
-            <ViewSettingsButton roomy={roomy} />
+            <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
             <FoldAllButton list={list} />
-            <ChangesMenu file={shownFile} reading={out} onRefresh={refresh} roomy={roomy} />
+            <ChangesMenu file={shownFile} reading={out} onRefresh={refresh} />
           </>
         }
         tree={room.toggles}

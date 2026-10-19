@@ -42,7 +42,7 @@ import {
 } from "./file-view-settings.js";
 
 /**
- * view-settings.tsx -- the View settings button in the Files changed bar, and the popover under it: every diff setting stage-cli offers, in Luke's own controls, grouped by what a reader changes.
+ * view-settings.tsx -- the View settings button in a bar over lines, and the popover under it: on Files changed every diff setting stage-cli offers, in Luke's own controls, grouped by what a reader changes; over a File tab's or a page's source only the two its lines follow.
  *
  * The popover sets what every diff follows (`file-view-settings.ts`), the
  * Files changed view's and a review thread's alike, drawn again as each
@@ -51,7 +51,9 @@ import {
  * how lines run (wrap, numbers, and minimized comments, with the key that
  * turns them); and Text, how code looks (the syntax theme of the appearance
  * chosen, the type, its size and line height, and ligatures). Its foot opens
- * Settings › Appearance › Diffs, which holds the same settings. Each row
+ * Settings › Appearance › Diffs, which holds the same settings. A File
+ * tab's lines and a page's source follow only wrap and numbers, so there it
+ * offers those alone, never a row that changes nothing on the tab. Each row
  * carries the settings' mark while it differs from its default. A diff too
  * narrow to split says so under its layout, the choice kept for a wider one.
  * It closes on Escape, its ×, the button, or focus leaving it, and hands the
@@ -190,15 +192,16 @@ function currentAppearance(): Appearance {
 /** What the popover's foot says, and where it goes. */
 const ALL_SETTINGS = "All diff and code settings\u2026";
 
-/** A group of the popover's rows under its name, set apart from the one before by a rule. */
+/** A group of the popover's rows under its name, set apart from the one before by a rule; a popover's one group stands unnamed. */
 function SettingsGroup({
   title,
   children,
 }: {
-  title: string;
+  title?: string | undefined;
   children: React.ReactNode;
 }): React.JSX.Element {
   const id = useId();
+  if (title === undefined) return <div className="view-settings-group">{children}</div>;
   return (
     <section className="view-settings-group" aria-labelledby={id}>
       <h3 className="view-settings-heading" id={id}>
@@ -209,13 +212,51 @@ function SettingsGroup({
   );
 }
 
+/** What a View settings button sets: a diff's every setting, its layout's room said, or the two a File tab's lines follow. */
+export const VIEW_SETTINGS_SCOPE = {
+  DIFF: "diff",
+  LINES: "lines",
+} as const;
+
+export type ViewSettingsScope =
+  | {
+      readonly kind: typeof VIEW_SETTINGS_SCOPE.DIFF;
+      /** Whether the diff is wide enough to split, which the layout row says where it is not. */
+      readonly roomy: boolean;
+    }
+  | { readonly kind: typeof VIEW_SETTINGS_SCOPE.LINES };
+
+/** The two settings every run of lines follows, a File tab's and a diff's alike. */
+function LinesRows(): React.JSX.Element {
+  const { settings, change } = useFileViewSettings();
+  const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
+  return (
+    <>
+      <SwitchRow
+        density={SETTINGS_ROW_DENSITY.COMPACT}
+        label="Word wrap"
+        checked={settings.wordWrap}
+        changed={changed("wordWrap")}
+        onChange={(wordWrap) => change("wordWrap", wordWrap)}
+      />
+      <SwitchRow
+        density={SETTINGS_ROW_DENSITY.COMPACT}
+        label="Line numbers"
+        checked={settings.lineNumbers}
+        changed={changed("lineNumbers")}
+        onChange={(lineNumbers) => change("lineNumbers", lineNumbers)}
+      />
+    </>
+  );
+}
+
 /**
  * The popover's rows, every diff setting in its group: Diff, Lines, and
  * Text. Each is changed for every diff as it is set. The Text group shows
  * one appearance's syntax theme at a time, the window's own as it opens,
  * and the other a press away.
  */
-function ViewSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
+function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
   const { settings, change } = useFileViewSettings();
   const [appearance, setAppearance] = useState(currentAppearance);
   const changed = (key: keyof FileViewSettings) => settings[key] !== DEFAULT_SETTINGS[key];
@@ -255,20 +296,7 @@ function ViewSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
         />
       </SettingsGroup>
       <SettingsGroup title={GROUP_TITLE.LINES}>
-        <SwitchRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Word wrap"
-          checked={settings.wordWrap}
-          changed={changed("wordWrap")}
-          onChange={(wordWrap) => change("wordWrap", wordWrap)}
-        />
-        <SwitchRow
-          density={SETTINGS_ROW_DENSITY.COMPACT}
-          label="Line numbers"
-          checked={settings.lineNumbers}
-          changed={changed("lineNumbers")}
-          onChange={(lineNumbers) => change("lineNumbers", lineNumbers)}
-        />
+        <LinesRows />
         <SwitchRow
           density={SETTINGS_ROW_DENSITY.COMPACT}
           label="Minimize inline comments"
@@ -349,12 +377,12 @@ function ViewSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
 /** The popover: its title and ×, then the rows (`PopoverPanel`), and at its foot the way to every such setting in Settings. */
 function ViewSettingsPopover({
   id,
-  roomy,
+  scope,
   onClose,
   onLeave,
 }: {
   id: string;
-  roomy: boolean;
+  scope: ViewSettingsScope;
   /** Closes the popover and hands the keyboard back to the button. */
   onClose: () => void;
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
@@ -369,7 +397,13 @@ function ViewSettingsPopover({
       onDismiss={onClose}
       onLeave={onLeave}
     >
-      <ViewSettingsRows roomy={roomy} />
+      {scope.kind === VIEW_SETTINGS_SCOPE.DIFF ? (
+        <DiffSettingsRows roomy={scope.roomy} />
+      ) : (
+        <SettingsGroup>
+          <LinesRows />
+        </SettingsGroup>
+      )}
       <div className="view-settings-foot">
         <TextButton
           tone={TEXT_BUTTON_TONE.LINK}
@@ -385,13 +419,8 @@ function ViewSettingsPopover({
   );
 }
 
-/** The bar's View settings button, and its popover while open. */
-export function ViewSettingsButton({
-  roomy,
-}: {
-  /** Whether the diff is wide enough to split, which the layout row says where it is not. */
-  roomy: boolean;
-}): React.JSX.Element {
+/** A bar's View settings button, and its popover while open: a diff's every setting, or only those its lines follow, so no row sets what the tab does not draw. */
+export function ViewSettingsButton({ scope }: { scope: ViewSettingsScope }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const popoverId = useId();
   const root = useRef<HTMLDivElement>(null);
@@ -417,7 +446,7 @@ export function ViewSettingsButton({
         <AnchoredPopover align={POPOVER_ALIGN.END}>
           <ViewSettingsPopover
             id={popoverId}
-            roomy={roomy}
+            scope={scope}
             onClose={close}
             onLeave={(left) => {
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);

@@ -242,6 +242,22 @@ body,
   transform: none;
 }
 
+/* A narrow room's sidebar is a drawer: the same float, standing on the
+   window's left edge over the work, never so wide that the work stops showing
+   past it, where a press puts it away (`shell-room.ts`). It stands out of the
+   shell's columns, so the work is the one column left. */
+.desktop-shell[data-room="narrow"][data-sidebar-collapsed] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.desktop-shell[data-room="narrow"][data-sidebar-collapsed] .desktop-sidebar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: min(var(--sidebar-width), calc(100% - var(--luke-space-48)));
+}
+
 /* Where the pointer peeks the folded sidebar out: a strip at the window's
    left edge, under the title bar so the traffic lights keep their presses. */
 .sidebar-peek-edge {
@@ -1558,6 +1574,13 @@ ul.actor-stack {
 .sidebar-repository-header:is(:hover, :focus-within, [data-menu-open="true"])
   .sidebar-repository-actions {
   opacity: 1;
+}
+
+/* A screen with no hover shows them at rest, in the room they keep. */
+@media (hover: none) {
+  .sidebar-repository-actions {
+    opacity: 1;
+  }
 }
 
 /* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
@@ -4959,6 +4982,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   opacity: 1;
 }
 
+@media (hover: none) {
+  .chat-byline-action {
+    opacity: 1;
+  }
+}
+
 .chat-words {
   color: var(--luke-color-text-body);
 }
@@ -6174,6 +6203,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   .tab-strip .tab[data-closable="true"][data-selected="false"]:hover .tab-button {
     mask-image: none;
   }
+
+  @media (hover: none) {
+    .tab-strip .tab[data-closable="true"][data-selected="false"][data-marked="false"] .tab-button {
+      mask-image: none;
+    }
+  }
 }
 
 /* The chosen tab keeps a share of its own, its glyph, its label, and its ×
@@ -6310,6 +6345,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
   );
 }
 
+/* A screen with no hover fades a label under its × at rest, as under the
+   pointer, but a marked tab's, which keeps room for its mark. */
+@media (hover: none) {
+  .tab[data-closable="true"][data-selected="false"][data-marked="false"] .tab-button {
+    mask-image: linear-gradient(
+      to left,
+      transparent calc(var(--tab-close) + var(--tab-close-inset)),
+      #000 calc(var(--tab-close) + var(--tab-close-inset) + 10px)
+    );
+  }
+}
+
 .tab-icon {
   position: relative;
   display: flex;
@@ -6440,6 +6487,25 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .tab:hover .tab-close,
 .tab[data-selected="true"] .tab-close {
   opacity: 1;
+}
+
+/* A screen with no hover shows every tab's × at rest, over its label's
+   faded end as under the pointer, but a marked tab's, whose mark keeps the
+   place, its Close in its menu. Note that a tap leaves its tab matching
+   `:hover` until the next one, so a marked tab's mark holds against the
+   swap below. */
+@media (hover: none) {
+  .tab[data-marked="false"] .tab-close {
+    opacity: 1;
+  }
+
+  .tab[data-marked="true"]:hover .tab-end-mark {
+    opacity: 1;
+  }
+
+  .tab[data-marked="true"]:hover .tab-close {
+    opacity: 0;
+  }
 }
 
 /* A tab's end mark, a failed agent's, stands in the ×'s place with room
@@ -7325,6 +7391,16 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
   opacity: 1;
   transform: none;
   pointer-events: auto;
+}
+
+/* A screen with no hover shows the × at rest, since no pointer rests on
+   the card to bring it. */
+@media (hover: none) {
+  .toast-dismiss {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
 }
 
 /* Note that the × must let the pointer through under a modal too, because

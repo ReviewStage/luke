@@ -16,7 +16,8 @@ import { FindScope } from "../find-in-tab.js";
 import { SpinnerRegion } from "../spinner.js";
 import { Tooltip } from "../tooltip.js";
 import { CodeLinesView, useLinesLook } from "./code-lines.js";
-import { LinesMenu } from "./file-menu.js";
+import { BarMenu } from "./file-menu.js";
+import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 
 /**
  * page-pane.tsx -- one page an agent wrote for the task, in the side panel: the page itself, drawn at the version chosen, and a bar to step between its versions and reload it.
@@ -171,11 +172,11 @@ function PageSource({
   );
 }
 
-/** The bar's ⋯ over the source: its text copied, then the File tabs' settings its lines follow. */
+/** The bar's ⋯ over the source: its text copied. */
 function SourceMenu({ read }: { read: SourceRead | undefined }): React.JSX.Element {
   const copyWithToast = useCopyToast();
   return (
-    <LinesMenu
+    <BarMenu
       label="Source actions"
       actions={[
         {
@@ -283,7 +284,12 @@ export function PagePane({
                 }}
               />
             </Tooltip>
-            {showingSource ? <SourceMenu read={source} /> : null}
+            {showingSource ? (
+              <>
+                <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
+                <SourceMenu read={source} />
+              </>
+            ) : null}
           </div>
         </header>
         {showingSource ? (
