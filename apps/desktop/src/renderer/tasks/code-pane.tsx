@@ -9,7 +9,7 @@ import { CopyGlyph, copyHint, useCopyFeedback } from "@luke/panel/copy-feedback"
 import { FIND_SKIP_ATTRIBUTE } from "@luke/panel/find-matches";
 import { useOpenLink } from "@luke/panel/tasks/use-open-link";
 import { Tooltip } from "@luke/panel/tooltip";
-import { cssCustomProperties, IconButton } from "@luke/ui";
+import { cssCustomProperties, IconButton, SCROLL_FADE_INSET } from "@luke/ui";
 import {
   type CodeFeedCall,
   type CodeFeedCallSource,
@@ -338,7 +338,7 @@ export function CodePane({
   return (
     <section ref={pane} className="code-pane ph-no-capture" aria-label="Code shown">
       <Conversation>
-        <ConversationContent className="checkpoint-log scroll-fade">
+        <ConversationContent className="checkpoint-log" fadeInset={SCROLL_FADE_INSET.BAND}>
           {codeFeedCalls(shown, calls).map((call) => (
             <CodeFeedRun key={call.key} call={call} now={now} onOpenFile={onOpenFile} />
           ))}

@@ -1378,9 +1378,7 @@ function AgentTranscriptView({
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups; lines fade under the bar or banner above. */}
-        <ConversationContent
-          className={overComposer ? "scroll-fade agent-log-over-composer" : "scroll-fade"}
-        >
+        <ConversationContent className={overComposer ? "agent-log-over-composer" : undefined}>
           {placed.map(({ message, arrived }, index) => (
             <Fragment key={message.id}>
               <AgentMessage

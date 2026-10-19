@@ -35,7 +35,15 @@ import {
   type SettingsView,
 } from "@luke/settings/settings-views";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
-import { BackIcon, NAV_CURRENT, NavItem, SettingsPage, useMenu } from "@luke/ui";
+import {
+  BackIcon,
+  NAV_CURRENT,
+  NavItem,
+  SCROLL_FADE,
+  ScrollArea,
+  SettingsPage,
+  useMenu,
+} from "@luke/ui";
 import { accountActor } from "@luke/ui/actor-model";
 import { integrationNamed } from "@luke/ui/integration-search";
 import { useEffect, useRef, useState } from "react";
@@ -265,27 +273,31 @@ export function DesktopSettings({
           }}
         />
         <LinkWorkspaceProvider value={listed?.slug ?? listed?.id}>
-          <div className="sidebar-section scroll-fade">
-            {search ? (
-              <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
-            ) : (
-              shownSettingsPageGroups(settings.capabilities).map(({ group, pages }) => (
-                <section key={group} className="settings-nav-group">
-                  <GroupHeading group={group} listed={listed} />
-                  <ul>
-                    {pages.map((view) => (
-                      <SettingsPageRow
-                        key={view}
-                        view={view}
-                        current={view === settings.view}
-                        note={view === SETTINGS_VIEW.VOICE ? voiceNote : undefined}
-                        onOpen={() => open(view)}
-                      />
-                    ))}
-                  </ul>
-                </section>
-              ))
-            )}
+          <div className="sidebar-section">
+            <ScrollArea fade={SCROLL_FADE.BOTH}>
+              <div className="sidebar-section-body">
+                {search ? (
+                  <SettingsSearchResults search={search} opened={marked} onOpen={openResult} />
+                ) : (
+                  shownSettingsPageGroups(settings.capabilities).map(({ group, pages }) => (
+                    <section key={group} className="settings-nav-group">
+                      <GroupHeading group={group} listed={listed} />
+                      <ul>
+                        {pages.map((view) => (
+                          <SettingsPageRow
+                            key={view}
+                            view={view}
+                            current={view === settings.view}
+                            note={view === SETTINGS_VIEW.VOICE ? voiceNote : undefined}
+                            onOpen={() => open(view)}
+                          />
+                        ))}
+                      </ul>
+                    </section>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
           </div>
         </LinkWorkspaceProvider>
         <ColumnFoot call={call} />

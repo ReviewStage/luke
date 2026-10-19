@@ -174,9 +174,11 @@ blockquote.markdown-quote > * + * {
 /* A table that scrolls sideways fades each edge it hides columns past, as the
    tab strip does, so a column cut at the edge reads as more to scroll to
    rather than as words cut short. It is the window's one scroll fade
-   (base.css's `scroll-fade`), its two depths eased on the table's own
-   inline timeline, which stands only while the table overflows: one that
-   fits is left whole without asking JavaScript. Its mask multiplies with the
+   (`@luke/ui`'s `ScrollArea`, whose registered depths and keyframes it
+   eases), its two depths eased on the table's own inline timeline, which
+   stands only while the table overflows: one that fits is left whole
+   without asking JavaScript. Note that the table is no `ScrollArea` itself,
+   because a table's own box is what scrolls. Its mask multiplies with the
    faded scroller it stands in, a document's or a log's, and neither reads
    the other's depths, which do not inherit. */
 .markdown table,
@@ -184,17 +186,17 @@ blockquote.markdown-quote > * + * {
   mask-image: linear-gradient(
     to right,
     transparent,
-    #000 var(--fade-start),
-    #000 calc(100% - var(--fade-end)),
+    #000 var(--luke-scroll-area-fade-start),
+    #000 calc(100% - var(--luke-scroll-area-fade-end)),
     transparent
   );
-  animation-name: scroll-fade-start, scroll-fade-end;
+  animation-name: luke-scroll-area-fade-start, luke-scroll-area-fade-end;
   animation-timing-function: linear;
   animation-fill-mode: both;
   animation-timeline: scroll(self inline), scroll(self inline);
   animation-range:
-    0 var(--scroll-fade),
-    calc(100% - var(--scroll-fade)) 100%;
+    0 var(--luke-scroll-fade),
+    calc(100% - var(--luke-scroll-fade)) 100%;
 }
 
 .markdown th {

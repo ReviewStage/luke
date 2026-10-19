@@ -217,16 +217,20 @@
   padding: var(--luke-space-2) var(--row-inset) var(--luke-space-6);
 }
 
-/* A column's cards scroll under its head. The list pads by the ring's reach
-   and gives it back, so a card's ring is never cut off at the column's
-   edge. */
-.issue-column-cards {
+/* A column's cards scroll under its head, in a `ScrollArea` as tall as
+   they are, which gives way where the column runs short. The area stands
+   the ring's reach past the column's sides and foot, and the list pads it
+   back, so a card's ring is never cut off at the column's edge. */
+.issue-column-scroll {
+  display: flex;
   min-height: 0;
   flex: 0 1 auto;
+  flex-direction: column;
   margin: 0 calc(-1 * var(--luke-focus-ring-reach)) calc(-1 * var(--luke-focus-ring-reach));
+}
+
+.issue-column-cards {
   padding: var(--luke-focus-ring-reach);
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
 /* A card's title stands whole under its line, wrapping to three lines at
