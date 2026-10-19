@@ -32,7 +32,8 @@ import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-ta
  * version history stands, the Inbox, an agent's or a person's page, an
  * automation or the list, Factory, an issue, or a page of Settings. The
  * history writes that link as the step's address, so the address and Copy
- * link never disagree. Chat, the Issues list, and the home page have none.
+ * link never disagree. Chat, the Issues list, a new automation's page, and
+ * the home page have none.
  */
 
 /** The side panel's own element, inside which the keyboard makes its tab the thing at hand. */
@@ -216,17 +217,20 @@ function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
     return [within(item, LINK_THING.INBOX_ITEM), inbox];
   }
   if (tasks.automationsView.open) {
-    const list = at_({ kind: LINK_PLACE.AUTOMATIONS }, LINK_THING.AUTOMATIONS);
+    const list: LinkPlace = { kind: LINK_PLACE.AUTOMATIONS };
     const { place } = tasks.automationsView;
-    return place.kind === AUTOMATIONS_PAGE.EDIT
-      ? [
-          at_(
-            { kind: LINK_PLACE.AUTOMATION, automationId: place.automationId },
-            LINK_THING.AUTOMATION,
-          ),
-          within({ kind: LINK_PLACE.AUTOMATIONS }, LINK_THING.AUTOMATIONS),
-        ]
-      : [list];
+    if (place.kind === AUTOMATIONS_PAGE.EDIT) {
+      return [
+        at_(
+          { kind: LINK_PLACE.AUTOMATION, automationId: place.automationId },
+          LINK_THING.AUTOMATION,
+        ),
+        within(list, LINK_THING.AUTOMATIONS),
+      ];
+    }
+    // A new automation's page is a step with no link of its own, so it offers the list it is in.
+    if (place.kind === AUTOMATIONS_PAGE.NEW) return [within(list, LINK_THING.AUTOMATIONS)];
+    return [at_(list, LINK_THING.AUTOMATIONS)];
   }
   if (tasks.factoryView.open) return [at_({ kind: LINK_PLACE.FACTORY }, LINK_THING.FACTORY)];
   // Chat has no link of its own, and the task it stands over is not in sight, so it offers none.

@@ -463,6 +463,13 @@ test("each step's address is the path of the link ⌥⌘C copies there", async (
   );
 });
 
+test("a new automation's page has no link, so it stands at /app beside the list it was opened from", () => {
+  const window = mount(onAutomations({ kind: AUTOMATIONS_PAGE.LIST }, []));
+  window.stand(onAutomations({ kind: AUTOMATIONS_PAGE.NEW }, []));
+
+  assert.deepEqual(window.addresses(), ["/workspace-acme/automations", "/app"]);
+});
+
 test("a place with no link stands at /app: the home page, and Chat though a task stands under it", () => {
   const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
   const task = onTask([ACME]);
