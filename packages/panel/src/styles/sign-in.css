@@ -42,6 +42,9 @@
 .sign-in-note {
   min-height: var(--luke-type-caption-leading);
   margin-top: var(--luke-space-20);
+}
+
+[data-luke-profile="desktop"] .sign-in-note {
   -webkit-app-region: no-drag;
 }
 
