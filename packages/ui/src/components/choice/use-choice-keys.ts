@@ -2,7 +2,7 @@ import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { type ChoiceRole, type ChoiceStop, choiceKeyTarget, choiceTabStop } from "./choice-keys.js";
 
 /**
- * use-choice-keys.ts -- the keys and the one tab stop of a row of options where you choose one, which `Tabs` and `Segmented` share.
+ * use-choice-keys.ts -- the keys and the one tab stop of a row of options where you choose one, which `ChoiceBar` takes its keys from.
  *
  * The row is the caller's: it draws its options, in order, each carrying
  * `role` (a tab or a radio) inside the element the handler is put on, and

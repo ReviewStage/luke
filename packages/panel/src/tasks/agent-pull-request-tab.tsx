@@ -37,8 +37,14 @@ import {
   Avatar,
   Badge,
   Button,
+  CHOICE_BAR_INSET,
+  CHOICE_BAR_LOOK,
+  ChoiceBar,
+  type ChoiceItem,
+  COUNT_TONE,
   CopyIcon,
-  CountParts,
+  type CountPart,
+  type CountTone,
   DETAIL_PAGE_INSET,
   DetailPage,
   DisclosureChevron,
@@ -56,12 +62,6 @@ import {
   Skeleton,
   SkeletonRegion,
   Switch,
-  TAB_COUNT_TONE,
-  TABS_INSET,
-  TabCount,
-  type TabCountTone,
-  type TabItem,
-  Tabs,
   TEXT_BUTTON_TONE,
   TextButton,
   useMenu,
@@ -1397,24 +1397,24 @@ const SUMMARY_WORDS = {
 
 /** The tone the Checks tab's count takes for how its checks went, as its glyph does. */
 const SUMMARY_TONES = {
-  [CHECK_SUMMARY.FAILING]: TAB_COUNT_TONE.DANGER,
-  [CHECK_SUMMARY.PENDING]: TAB_COUNT_TONE.ATTENTION,
-  [CHECK_SUMMARY.PASSING]: TAB_COUNT_TONE.COMPLETE,
-  [CHECK_SUMMARY.NONE]: TAB_COUNT_TONE.QUIET,
-} as const satisfies Record<CheckSummary, TabCountTone>;
+  [CHECK_SUMMARY.FAILING]: COUNT_TONE.DANGER,
+  [CHECK_SUMMARY.PENDING]: COUNT_TONE.ATTENTION,
+  [CHECK_SUMMARY.PASSING]: COUNT_TONE.COMPLETE,
+  [CHECK_SUMMARY.NONE]: COUNT_TONE.QUIET,
+} as const satisfies Record<CheckSummary, CountTone>;
 
 /** What the Checks tab counts: how they went in its colour from the first frame, and how many once read; nothing where neither stands. */
-function checksCount(summary: CheckSummary, count: number | undefined): ReactNode {
+function checksCount(
+  summary: CheckSummary,
+  count: number | undefined,
+): readonly CountPart[] | undefined {
   const glyph = SUMMARY_GLYPHS[summary];
   if (glyph === null && count === undefined) return undefined;
-  return (
-    <TabCount
-      tone={SUMMARY_TONES[summary]}
-      {...(glyph === null ? {} : { glyph, glyphLabel: SUMMARY_WORDS[summary] })}
-    >
-      {count?.toLocaleString()}
-    </TabCount>
-  );
+  const text = count?.toLocaleString() ?? "";
+  const tone = SUMMARY_TONES[summary];
+  return [
+    glyph === null ? { text, tone } : { text, tone, glyph, glyphLabel: SUMMARY_WORDS[summary] },
+  ];
 }
 
 /** How many entries the Conversation tab counts: its comments and reviews, the earlier ones left on GitHub, and every review thread. */
@@ -1436,7 +1436,7 @@ function tabsOf(
   parts: OverviewParts,
   published: CodingAgentPullRequest | undefined,
   bar: BarPullRequest | undefined,
-): readonly TabItem<PullRequestView>[] {
+): readonly ChoiceItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
   return [
@@ -1464,9 +1464,7 @@ function tabsOf(
       icon: <FileDiffIcon />,
       label: "Files changed",
       count:
-        published === undefined ? undefined : (
-          <CountParts parts={linesCount(published.additions, published.deletions)} />
-        ),
+        published === undefined ? undefined : linesCount(published.additions, published.deletions),
     },
   ];
 }
@@ -1769,13 +1767,14 @@ function PullRequestTabBody({
               />
             </header>
             <div className="pull-request-tabs">
-              <Tabs<PullRequestView>
+              <ChoiceBar<PullRequestView>
                 label="Pull request"
-                tabs={tabsOf(parts, published, bar)}
+                items={tabsOf(parts, published, bar)}
                 value={view}
                 onChange={onView}
-                ids={ids}
-                inset={TABS_INSET.READING}
+                look={CHOICE_BAR_LOOK.FILL}
+                panels={ids}
+                inset={CHOICE_BAR_INSET.READING}
               />
             </div>
             <div
