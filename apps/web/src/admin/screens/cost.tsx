@@ -37,16 +37,21 @@ const COST_ERROR = "The cost endpoint did not answer.";
 const readCost: AdminReader<AdminCost> = async (response) => (await response.json()) as AdminCost;
 
 /** What every figure on the screen is, said once under the title. */
-const COST_DESCRIPTION = "List price for all model tokens and metered seconds, whichever key paid.";
+const COST_DESCRIPTION =
+  "Every model token and metered second at its public list price: a list-price equivalent, not what Luke pays.";
+
+/** The screen's dollar measure, named once so every label says the same thing. */
+const LIST_PRICE = "List-price equivalent";
 
 /** The screen's own sections, in the order the loaded page states them. */
 const COST_SHAPES: readonly SkeletonShape[] = [
   { kind: SKELETON_SHAPE.STAT_GROUP },
-  { kind: SKELETON_SHAPE.HEADING, label: "Daily spend" },
+  { kind: SKELETON_SHAPE.STATIC, node: <ListPriceNote /> },
+  { kind: SKELETON_SHAPE.HEADING, label: `Daily ${LIST_PRICE.toLowerCase()}` },
   { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.USAGE] },
-  { kind: SKELETON_SHAPE.HEADING, label: "Spend by model" },
+  { kind: SKELETON_SHAPE.HEADING, label: `${LIST_PRICE} by model` },
   { kind: SKELETON_SHAPE.TABLE, rows: 5, numericColumns: 2 },
-  { kind: SKELETON_SHAPE.HEADING, label: "Most expensive accounts" },
+  { kind: SKELETON_SHAPE.HEADING, label: `Accounts with the highest ${LIST_PRICE.toLowerCase()}` },
   { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 3 },
 ];
 
@@ -62,7 +67,23 @@ function usdOrNone(value: number | null): string {
   return value === null ? NO_FIGURE : formatUsd(value);
 }
 
-/** The headline spend's comparison with the window before it, which says nothing where there was none. */
+/**
+ * What every dollar on the screen is and is not, said once under the
+ * headline: a comparison and a trend at public prices, never Luke's bill.
+ */
+function ListPriceNote(): React.JSX.Element {
+  return (
+    <div className="mt-3">
+      <Text tone={TEXT_TONE.MUTED}>
+        Figures are public list prices, used to compare accounts, models, and sources and to show
+        trends. They are not what Luke pays: discounts, credits, plan fees, and which key paid
+        aren't reflected.
+      </Text>
+    </div>
+  );
+}
+
+/** The headline figure's comparison with the window before it, which says nothing where there was none. */
 function spendMove(cost: AdminCost): string {
   const { trend } = cost.totals;
   if (trend.prior === 0) return `nothing priced in the ${trend.days} days before`;
@@ -94,7 +115,7 @@ const MODEL_COLUMNS: readonly DataTableColumn<AdminCostModel>[] = [
   },
   {
     key: MODEL_COLUMN.SPEND,
-    label: "Spend",
+    label: LIST_PRICE,
     kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
     cell: (row) =>
       row.spendUsd === null ? (
@@ -132,7 +153,7 @@ function accountColumns(
     },
     {
       key: ACCOUNT_COLUMN.SPEND,
-      label: "Spend",
+      label: LIST_PRICE,
       kind: DATA_TABLE_COLUMN_KIND.NUMERIC,
       cell: (row) => (
         <>
@@ -171,9 +192,8 @@ function CostBasisNote({ cost }: { cost: AdminCost }): React.JSX.Element {
   return (
     <div className="mt-3">
       <Text tone={TEXT_TONE.MUTED}>
-        Tokens are priced at AI Gateway's catalog as it stands now. No turn records whether Luke's
-        key or the account's own key paid, so every total counts all model tokens at list price
-        whichever key paid. A model the catalog does not price is counted as unpriced tokens and
+        Tokens are priced at AI Gateway's catalog as it stands now, every model token counted
+        whichever key ran it. A model the catalog does not price is counted as unpriced tokens and
         left out of every dollar figure. Voice is priced at {prices.voice.model}'s{" "}
         {perMinute(prices.voice.usdPerMinute)} a minute, dictation at {prices.dictation.model}'s{" "}
         {perMinute(prices.dictation.usdPerMinute)}, and the video avatar at{" "}
@@ -258,22 +278,22 @@ export function CostScreen({
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
             <StatGroup>
               <StatCard
-                label={`Spend · ${cost.windowDays} days`}
+                label={`${LIST_PRICE} · ${cost.windowDays} days`}
                 value={formatUsd(cost.totals.spendUsd)}
                 hint={spendHint(cost)}
-                title={`against ${formatUsd(cost.totals.trend.prior)} in the ${cost.totals.trend.days} days before`}
+                title={`${LIST_PRICE.toLowerCase()} against ${formatUsd(cost.totals.trend.prior)} in the ${cost.totals.trend.days} days before`}
                 grouped
               />
               <StatCard
-                label="Per active account"
+                label={`${LIST_PRICE} per active account`}
                 value={usdOrNone(cost.perAccount.meanUsd)}
                 hint={`median ${usdOrNone(cost.perAccount.medianUsd)} · ${formatNumber(cost.perAccount.accounts)} accounts`}
                 grouped
               />
               <StatCard
-                label="Per merged PR"
+                label={`${LIST_PRICE} per merged PR`}
                 value={usdOrNone(cost.perMergedPullRequest.spendUsd)}
-                hint={`all spend over ${formatNumber(cost.perMergedPullRequest.mergedPullRequests)} PRs merged`}
+                hint={`the window's whole figure over ${formatNumber(cost.perMergedPullRequest.mergedPullRequests)} PRs merged`}
                 grouped
               />
               <StatCard
@@ -281,19 +301,20 @@ export function CostScreen({
                 value={wholeMinutes(cost.voice.minutes)}
                 hint={
                   cost.voice.unpricedMinutes === 0
-                    ? `${formatUsd(cost.voice.spendUsd)} · ${cost.prices.voice.model}`
-                    : `${formatUsd(cost.voice.spendUsd)} · ${wholeMinutes(cost.voice.unpricedMinutes)} min on an unpriced model`
+                    ? `${formatUsd(cost.voice.spendUsd)} at ${cost.prices.voice.model}'s list price`
+                    : `${formatUsd(cost.voice.spendUsd)} at list price · ${wholeMinutes(cost.voice.unpricedMinutes)} min on an unpriced model`
                 }
                 grouped
               />
             </StatGroup>
+            <ListPriceNote />
 
-            <SectionHeading>Daily spend</SectionHeading>
+            <SectionHeading>Daily {LIST_PRICE.toLowerCase()}</SectionHeading>
             <CostChart daily={cost.daily} generatedAt={cost.generatedAt} />
 
-            <SectionHeading>Spend by model</SectionHeading>
+            <SectionHeading>{LIST_PRICE} by model</SectionHeading>
             <DataTable
-              label="Spend by model"
+              label={`${LIST_PRICE} by model`}
               columns={MODEL_COLUMNS}
               rows={cost.byModel}
               rowKey={(row) => row.model ?? ""}
@@ -301,13 +322,13 @@ export function CostScreen({
               minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
             />
 
-            <SectionHeading>Most expensive accounts</SectionHeading>
+            <SectionHeading>Accounts with the highest {LIST_PRICE.toLowerCase()}</SectionHeading>
             <DataTable
-              label="Most expensive accounts"
+              label={`Accounts with the highest ${LIST_PRICE.toLowerCase()}`}
               columns={accountColumns(onOpenAccount)}
               rows={cost.topAccounts}
               rowKey={(row) => row.id}
-              empty="No spend recorded in this window yet."
+              empty="No priced usage recorded in this window yet."
               minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
               onRowPress={(row) => onOpenAccount(row.id)}
             />

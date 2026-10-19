@@ -1,5 +1,5 @@
 /**
- * cost-chart.tsx -- the Cost screen's daily spend, one bar a day stacked by where the dollars went.
+ * cost-chart.tsx -- the Cost screen's daily list-price equivalent, one bar a day stacked by source.
  */
 
 import {
@@ -61,9 +61,10 @@ function CostLegend(): React.JSX.Element {
 
 /**
  * The window's days as stacked bars, each source a series of its own, so a
- * day's height is its whole priced spend and its bands say where it went.
+ * day's height is its whole list-price equivalent and its bands say where it
+ * came from.
  * Unpriced tokens are in no band, which the screen says beside the totals.
- * Today's bar wears the partial-day fade, and a window with no spend says
+ * Today's bar wears the partial-day fade, and a window with nothing priced says
  * so rather than drawing the zero-fill as a flat measurement.
  */
 export function CostChart({
@@ -73,12 +74,12 @@ export function CostChart({
   daily: readonly AdminCostDay[];
   generatedAt: number;
 }): React.JSX.Element {
-  const title = "Daily spend by source, USD";
+  const title = "Daily list-price equivalent by source, USD";
   const totals = daily.map((day) => SOURCES.reduce((total, source) => total + day[source], 0));
   if (seriesHasNoData(totals)) {
     return (
       <ChartFrame title={title}>
-        <ChartEmpty>No priced spend recorded in this window yet.</ChartEmpty>
+        <ChartEmpty>No priced usage recorded in this window yet.</ChartEmpty>
       </ChartFrame>
     );
   }

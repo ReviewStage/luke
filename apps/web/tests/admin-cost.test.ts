@@ -8,9 +8,9 @@ import { CostScreen } from "../src/admin/screens/cost";
 
 /**
  * admin-cost.test.ts -- the Cost screen reads its window and scope from the
- * service, states each headline tile in words, says every total is list price
- * whichever key paid, shows a model the catalog does not price as unpriced
- * rather than as dollars, and opens an expensive account's own page from its
+ * service, states each headline tile in words, names every dollar figure a
+ * list-price equivalent and says it is not what Luke pays, shows a model the
+ * catalog does not price as unpriced rather than as dollars, and opens an expensive account's own page from its
  * row. The network, the HTTP boundary to Luke, is a fake that answers the
  * screen's read.
  */
@@ -146,25 +146,26 @@ test("each headline tile reads its figure and its hint under its name", async ()
   const page = await openCost(cost());
 
   expect(page.querySelector("h1")?.textContent).toBe("Cost");
-  expect(cardOf(page, "Spend · 7 days")).toBe(
-    "Spend · 7 days$16.01+100% vs the 7 days before · plus 2.5M unpriced tokens",
+  expect(cardOf(page, "List-price equivalent · 7 days")).toBe(
+    "List-price equivalent · 7 days$16.01+100% vs the 7 days before · plus 2.5M unpriced tokens",
   );
-  expect(cardOf(page, "Per active account")).toBe(
-    "Per active account$4.00median $1.50 · 4 accounts",
+  expect(cardOf(page, "List-price equivalent per active account")).toBe(
+    "List-price equivalent per active account$4.00median $1.50 · 4 accounts",
   );
-  expect(cardOf(page, "Per merged PR")).toBe("Per merged PR$8.01all spend over 2 PRs merged");
-  expect(cardOf(page, "Voice minutes")).toBe("Voice minutes10$0.50 · gpt-live-1");
+  expect(cardOf(page, "List-price equivalent per merged PR")).toBe(
+    "List-price equivalent per merged PR$8.01the window's whole figure over 2 PRs merged",
+  );
+  expect(cardOf(page, "Voice minutes")).toBe("Voice minutes10$0.50 at gpt-live-1's list price");
 });
 
-test("every total is said to be list price whichever key paid", async () => {
+test("every dollar figure is said to be a list-price equivalent, not what Luke pays", async () => {
   const page = await openCost(cost());
 
+  expect(page.textContent).toContain("a list-price equivalent, not what Luke pays.");
   expect(page.textContent).toContain(
-    "List price for all model tokens and metered seconds, whichever key paid.",
+    "Figures are public list prices, used to compare accounts, models, and sources and to show trends. They are not what Luke pays: discounts, credits, plan fees, and which key paid aren't reflected.",
   );
-  expect(page.textContent).toContain(
-    "every total counts all model tokens at list price whichever key paid",
-  );
+  expect(page.textContent).not.toMatch(/\bspend\b/i);
   expect(page.textContent).toContain(
     "Voice is priced at gpt-live-1's $0.05 a minute, dictation at gpt-transcribe's $0.0045",
   );
@@ -174,7 +175,7 @@ test("every total is said to be list price whichever key paid", async () => {
 test("a model the catalog does not price reads as unpriced, never as dollars", async () => {
   const page = await openCost(cost());
 
-  expect(rowsOf(page, "Spend by model")).toEqual([
+  expect(rowsOf(page, "List-price equivalent by model")).toEqual([
     ["anthropic/claude-test", "$15.50", "3M"],
     ["openai/retired-test", "Unpriced", "2.5M"],
   ]);
@@ -183,7 +184,9 @@ test("a model the catalog does not price reads as unpriced, never as dollars", a
 test("a short call on an unpriced Live model still says it is there", async () => {
   const page = await openCost(cost({ voice: { minutes: 0.2, spendUsd: 0, unpricedMinutes: 0.2 } }));
 
-  expect(cardOf(page, "Voice minutes")).toBe("Voice minutes<1$0.00 · <1 min on an unpriced model");
+  expect(cardOf(page, "Voice minutes")).toBe(
+    "Voice minutes<1$0.00 at list price · <1 min on an unpriced model",
+  );
 });
 
 test("a catalog that could not be read says no model token was priced", async () => {
@@ -196,10 +199,10 @@ test("an expensive account's row opens its own page", async () => {
   const opened: string[] = [];
   const page = await openCost(cost(), opened);
 
-  const [row] = rowsOf(page, "Most expensive accounts");
+  const [row] = rowsOf(page, "Accounts with the highest list-price equivalent");
   expect(row?.slice(1)).toEqual(["$12.50", "0", "—"]);
   const cell = page.querySelector(
-    'table[aria-label="Most expensive accounts"] tbody td:last-child',
+    'table[aria-label="Accounts with the highest list-price equivalent"] tbody td:last-child',
   );
   act(() => cell?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   expect(opened).toEqual(["account-ada"]);
