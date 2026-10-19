@@ -7019,9 +7019,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* The words field stands at least five lines tall, so a task's prompt has
-   room before it is written; it still grows to the agent box's eight. */
+   room before it is written; it still grows to the agent box's eight. In a
+   window too short for that, as a small one zoomed in, the minimum yields to
+   a quarter of the window, so the card's foot and its Start stay in view. */
 .new-task-composer .agent-composer-input {
-  min-height: calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  min-height: min(
+    calc(5 * var(--luke-type-body-leading) + var(--agent-composer-field-block)),
+    25vh
+  );
 }
 
 /* Where the card is too narrow for one row, as in a narrow window zoomed
