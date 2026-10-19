@@ -5,16 +5,25 @@ import type { FileMark } from "./contract.js";
  * row-marks.ts -- what a pull request's file row says at its end, past what became of it: its review threads, the lines it adds and removes, and its Viewed toggle, as stage-cli's tree draws them; and the sheet the tree draws them by.
  *
  * Pierre draws one decoration in each row's lane, a run of words in the
- * colours given, so a file's are drawn as one run of four parts in a fixed
- * order (`PART`): the threads standing on it, counted beside a speech mark;
- * the lines it adds; the lines it removes; and its Viewed toggle. A part
- * with nothing to say holds no words, and the sheet draws no room for it.
- * The sheet draws the speech mark and the toggle's circle, ticked once the
- * file is viewed, as Lucide's `MessageSquare`, `Circle`, and `CircleCheck`,
- * and finds each part by its place in the run; it dims a viewed file's
- * row, as stage-cli does, shows a toggle not yet ticked only while its row
- * is hovered or holds the keyboard, and draws the lines only where the
- * row's name leaves room for them. A folder's row says nothing more.
+ * colours given, so a file's are drawn as one run of five parts in a fixed
+ * order (`PART`): a speech mark and the count of the threads standing on
+ * it; the lines it adds; the lines it removes; and its Viewed toggle. A
+ * part with nothing to say holds no words, and the sheet draws no room for
+ * it. The sheet draws the speech mark and the toggle's circle, ticked once
+ * the file is viewed, as Lucide's `MessageSquare`, `Circle`, and
+ * `CircleCheck`, and finds each part by its place in the run.
+ *
+ * The name comes first: the lane holds only the room the name leaves, as
+ * Pierre lays it out, so no mark ever cuts a name short. Where that room
+ * runs out the run gives up its parts from its end, one line of a run that
+ * wraps with its second line out of sight: the lines removed, then the
+ * lines added, then the count, then the speech mark. The toggle takes no
+ * room of its own while the row is hovered or holds the keyboard: it
+ * stands over the run's end, the row's ground behind it, in place of the
+ * counts. Once ticked it stands there always, in room the lane keeps for
+ * it, so a viewed file's name is cut short before it rather than under
+ * it, and the row is dimmed, as stage-cli dims a viewed file. A folder's
+ * row says nothing more.
  *
  * Note that the sheet is adopted by the tree's shadow root as a
  * constructed sheet rather than handed to Pierre's `unsafeCSS`, because
@@ -27,10 +36,11 @@ import type { FileMark } from "./contract.js";
 
 /** Each part's place in a file's run of words. */
 const PART = {
-  THREADS: 0,
-  ADDED: 1,
-  REMOVED: 2,
-  VIEWED: 3,
+  SPEECH: 0,
+  THREADS: 1,
+  ADDED: 2,
+  REMOVED: 3,
+  VIEWED: 4,
 } as const;
 
 /** What a part says, read out in the run's hint. */
@@ -64,30 +74,6 @@ function maskOf(shapes: string): string {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 
-/**
- * The room each part the lane never gives up takes, with the gap before
- * it: a count of up to two figures beside its mark, and the toggle. The
- * lane takes the room the name leaves, never less than these need, the
- * name cut short before them.
- */
-const LEAST = {
-  THREADS: "var(--luke-space-4) + 1em + var(--luke-space-2) + 2ch",
-  VIEWED: "var(--luke-space-4) + var(--luke-space-12)",
-} as const;
-
-/**
- * The order the run lays its parts in from the row's end, which is the
- * order it gives them up in where the lane runs short: the lines first,
- * as one line of a run that wraps, its second line out of sight. So the
- * run reads as stage-cli's does, the lines, the threads, then the toggle.
- */
-const FROM_END = {
-  [PART.VIEWED]: 0,
-  [PART.THREADS]: 1,
-  [PART.REMOVED]: 2,
-  [PART.ADDED]: 3,
-} as const;
-
 /** A decorated row's lane, and the run of words in it. */
 const LANE = '[data-type="item"] > [data-item-section="decoration"]';
 const RUN = `${LANE} > span`;
@@ -97,19 +83,22 @@ function part(at: number): string {
   return `${RUN} > span:nth-child(${at + 1})`;
 }
 
-/** A run's threads where any stand on its file, its toggle where it draws one, and the toggle once ticked. */
-const THREADS_SHOWN = `span:nth-child(${PART.THREADS + 1}):not(:empty)`;
+/** The toggle, and the toggle once ticked, as a part of a run. */
 const TOGGLE = `span:nth-child(${PART.VIEWED + 1})`;
 const TICKED = `${TOGGLE}:not(:empty)`;
 
 /** A row in reach of the pointer or the keyboard, which draws a toggle not yet ticked. */
 const REACHED = '[data-type="item"]:is(:hover, [data-item-focused])';
 
-/** The room the lane keeps for its threads and its toggle, each none until drawn. */
-const ROOM = { THREADS: "--file-row-threads-room", VIEWED: "--file-row-toggle-room" } as const;
-
 /** A row whose toggle is ticked. */
-const VIEWED_ROW = `[data-type="item"]:has(> [data-item-section="decoration"] > span > span:nth-child(${PART.VIEWED + 1}):not(:empty))`;
+const VIEWED_ROW = `[data-type="item"]:has(> [data-item-section="decoration"] > span > ${TICKED})`;
+
+/**
+ * The row's ground as it stands, hovered or chosen, which Pierre paints
+ * behind a name it cuts short and the toggle paints behind itself.
+ */
+const ROW_GROUND =
+  "linear-gradient(var(--truncate-marker-background-overlay-color, transparent), var(--truncate-marker-background-overlay-color, transparent)), var(--truncate-marker-background-color, transparent)";
 
 /**
  * The rules the tree draws by: the window's thin scrollbar, whose colour
@@ -119,20 +108,18 @@ const VIEWED_ROW = `[data-type="item"]:has(> [data-item-section="decoration"] > 
  */
 const SHEET = `
 [data-file-tree-virtualized-scroll], [data-file-tree-scrollbar-measure] { scrollbar-width: thin; }
-${LANE}:has(> span > span) { --file-row-threads-room: 0px; --file-row-toggle-room: 0px; min-width: calc(var(${ROOM.THREADS}) + var(${ROOM.VIEWED})); }
-${LANE}:has(> span > ${THREADS_SHOWN}) { --file-row-threads-room: calc(${LEAST.THREADS}); }
-${LANE}:has(> span > ${TICKED}), ${REACHED} > [data-item-section="decoration"]:has(> span > ${TOGGLE}) { --file-row-toggle-room: calc(${LEAST.VIEWED}); }
-${RUN} { flex-direction: row-reverse; flex-wrap: wrap; justify-content: flex-start; align-content: flex-start; height: 1lh; column-gap: var(--luke-space-4); font-variant-numeric: tabular-nums; }
-${RUN} > span { display: inline-flex; flex: none; height: 100%; align-items: center; gap: var(--luke-space-2); }
+${LANE}:has(> span > span) { position: relative; overflow: visible; }
+${LANE}:has(> span > ${TICKED}) { min-width: calc(var(--luke-space-4) + var(--luke-space-12)); }
+${RUN} { flex-wrap: wrap; justify-content: flex-end; align-content: flex-start; height: 1lh; column-gap: var(--luke-space-4); font-variant-numeric: tabular-nums; }
+${RUN} > span { display: inline-flex; flex: none; height: 100%; align-items: center; }
 ${RUN} > span:empty { display: none; }
-${Object.entries(FROM_END)
-  .map(([at, order]) => `${part(Number(at))} { order: ${order}; }`)
-  .join("\n")}
-${part(PART.THREADS)}::before { content: ""; width: 1em; height: 1em; background: currentColor; mask: ${maskOf(GLYPH.SPEECH)} center / contain no-repeat; }
-${part(PART.VIEWED)}, ${part(PART.VIEWED)}:empty { display: inline-flex; font-size: 0; cursor: default; }
+${part(PART.SPEECH)}:has(+ span:not(:empty)) { display: inline-flex; margin-inline-end: calc(var(--luke-space-2) - var(--luke-space-4)); }
+${part(PART.SPEECH)}::before { content: ""; width: 1em; height: 1em; background: currentColor; mask: ${maskOf(GLYPH.SPEECH)} center / contain no-repeat; }
+${part(PART.VIEWED)}, ${part(PART.VIEWED)}:empty { position: absolute; inset-block: 0; inset-inline-end: 0; display: none; padding-inline-start: var(--luke-space-4); background: ${ROW_GROUND}; font-size: 0; cursor: default; }
 ${part(PART.VIEWED)}::before { content: ""; width: var(--luke-space-12); height: var(--luke-space-12); background: currentColor; mask: ${maskOf(GLYPH.CHECKED)} center / contain no-repeat; }
 ${part(PART.VIEWED)}:empty::before { mask-image: ${maskOf(GLYPH.CIRCLE)}; }
-[data-type="item"]:not(:hover, [data-item-focused]) > [data-item-section="decoration"] > span > ${TOGGLE}:empty { display: none; }
+${REACHED} > [data-item-section="decoration"] > span > ${TOGGLE}, ${RUN} > ${TICKED} { display: inline-flex; }
+${REACHED} > [data-item-section="decoration"]:has(> span > ${TOGGLE}) > span > span:not(:nth-child(${PART.VIEWED + 1})), ${RUN}:has(> ${TICKED}) > span:not(:nth-child(${PART.VIEWED + 1})) { visibility: hidden; }
 ${VIEWED_ROW}:not([data-item-selected]) { opacity: 0.6; }
 `;
 
@@ -174,7 +161,9 @@ export function rowDecoration(mark: FileMark | undefined): FileTreeRowDecoration
   if (threads === 0 && mark.lines === undefined && viewed === undefined) return null;
   const additions = mark.lines?.additions ?? 0;
   const deletions = mark.lines?.deletions ?? 0;
+  // Note that the speech mark holds no words: the sheet draws it beside a count.
   const parts = [
+    { text: "", color: PART_COLOUR.THREADS },
     { text: counted(threads, ""), color: PART_COLOUR.THREADS },
     { text: counted(additions, "+"), color: PART_COLOUR.ADDED },
     { text: counted(deletions, "−"), color: PART_COLOUR.REMOVED },

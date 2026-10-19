@@ -68,7 +68,7 @@ function parts(path: string): string[] {
 /** A row's Viewed toggle, the last part of its run. */
 function toggle(path: string): HTMLElement {
   const run = row(path).querySelector('[data-item-section="decoration"] > span');
-  const part = run?.children[3];
+  const part = run?.children[4];
   return part instanceof HTMLElement ? part : assert.fail(`${path} draws a Viewed toggle`);
 }
 
@@ -93,8 +93,8 @@ const MARKS: readonly FileMark[] = [
 test("a file's row ends in its threads, its lines, and its Viewed toggle; a folder's and a bare mark's say nothing more", async () => {
   await mountMarked(MARKS);
 
-  assert.deepEqual(parts("src/seats.ts"), ["2", "+12", "−4", ""]);
-  assert.deepEqual(parts("src/plan.md"), ["", "+30", "", "Viewed"]);
+  assert.deepEqual(parts("src/seats.ts"), ["", "2", "+12", "−4", ""]);
+  assert.deepEqual(parts("src/plan.md"), ["", "", "+30", "", "Viewed"]);
   assert.match(
     row("src/seats.ts").querySelector("[title]")?.getAttribute("title") ?? "",
     /2 comments/u,
@@ -123,11 +123,11 @@ test("marks handed again redraw the rows, a file marked viewed since ticked", as
   );
   await settle();
 
-  assert.equal(parts("src/seats.ts")[3], "Viewed");
+  assert.equal(parts("src/seats.ts")[4], "Viewed");
 });
 
 test("a mark that does not say whether its file is viewed draws no toggle", async () => {
   await mountMarked([{ path: "src/seats.ts", status: FILE_MARK.MODIFIED, threads: 1 }]);
 
-  assert.deepEqual(parts("src/seats.ts"), ["1", "", ""]);
+  assert.deepEqual(parts("src/seats.ts"), ["", "1", "", ""]);
 });
