@@ -141,9 +141,11 @@ Every brief must contain:
    or hold for an explicit go from the orchestrator, for a PR that needs the
    user's attention, saying why. A worker on merge-on-green that finds the
    PR needs the user after all (a review comment it should not settle alone,
-   a change that grew past its brief) does not merge; it reports blocked and
-   waits. A PR based on another PR merges only once that PR has merged and
-   the restack has retargeted it to `main`.
+   a change that grew past its brief) does not merge: it first disarms the
+   merge it armed (`gh pr merge --disable-auto`, which also takes the PR out
+   of the merge queue), then reports blocked and waits, and re-arms it only
+   on the orchestrator's go. A PR based on another PR merges only once that
+   PR has merged and the restack has retargeted it to `main`.
 4. **Report back, do not wait to be asked**: on each milestone (opened, fix
    pushed, CI green, blocked, merged) send a message to the orchestrator, as
    the table's "Worker reports back" row says, in this shape:
@@ -178,7 +180,9 @@ and each message arrives as a new turn. On each report:
 - **Question or blocked**: answer from the plan and the other PRs' state by
   messaging that worker. Escalate to the user only when the decision is
   theirs, and relay the answer back yourself. A merge-on-green PR that
-  turns out to need the user becomes a held PR.
+  turns out to need the user becomes a held PR: if it is already open and
+  green (`gh pr checks <number>`), ask the user for the go now, since no
+  later green report will come to prompt it; otherwise ask on its next one.
 - **Merged**: if any PR builds on this one, restack (Step 3), which also
   retargets the PR above to `main`. Archive the merged PR's worker.
 
