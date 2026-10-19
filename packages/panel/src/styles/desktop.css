@@ -6547,6 +6547,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
   opacity: 1;
 }
 
+/* A close takes a finger's press up and down alone on a coarse pointer,
+   never sideways, because beside it stand the words it would close, and a
+   tap meant for a tab's label that lands near its end must not close it:
+   the tab's ×, and a toast's (`.toast-dismiss`). Every other glyph button
+   keeps its press a finger's width across (`@luke/ui`'s `button.css`). */
+@media (pointer: coarse) {
+  .tab-close .luke-button::before,
+  .toast-dismiss .luke-button::before {
+    width: 100%;
+  }
+}
+
 /* A screen with no hover shows every tab's × at rest, over its label's
    faded end as under the pointer, but a marked tab's, whose mark keeps the
    place, its Close in its menu. Note that a tap leaves its tab matching

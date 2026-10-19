@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { BUTTON_SIZE, IconButton } from "@luke/ui";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeAll, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
@@ -13,10 +13,12 @@ import { layContainersAt } from "../testing/container-width.js";
  * a mouse keeps what it had. A compact web root (the web app's) takes the
  * site's full roles on a touch screen, 44px controls and 16px words, so a
  * field never makes iOS zoom, and keeps its compact ones with a mouse; the
- * desktop's roles stand as they are. The tab's ×, a sidebar row's mark, a
- * section's ⋯, and a toolbar's glyph button each take a press at least 44px
- * across around what they draw on a touch screen, a resize edge one across
- * both columns' gutters, and none takes one past its own box with a mouse. jsdom answers no media query,
+ * desktop's roles stand as they are. A sidebar row's mark, a section's ⋯,
+ * and a toolbar's glyph button each take a press at least 44px across around
+ * what they draw on a touch screen; a close beside the words it closes, the
+ * tab's × and a toast's, a press 44px tall and no wider than it draws, so a
+ * near miss on the label closes nothing; a resize edge one across both
+ * columns' gutters; and none takes one past its own box with a mouse. jsdom answers no media query,
  * no `var()`, and no pseudo-element, so the sheets are laid for the device
  * (`testing/container-width.ts`) and a `::before` hit area is read from the
  * rules laid that match the element, its lengths resolved from the root.
@@ -25,8 +27,16 @@ import { layContainersAt } from "../testing/container-width.js";
 /** The least a finger's press is taken across, in pixels. */
 const FINGER = 44;
 
+declare global {
+  var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
 const roots: Root[] = [];
 let laid: HTMLStyleElement | undefined;
+
+beforeAll(() => {
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -137,13 +147,7 @@ function buttonIn(container: Element): HTMLButtonElement {
 function smallTargets(): ReadonlyMap<string, Element> {
   const compact = (label: string) =>
     createElement(IconButton, { icon: "·", label, size: BUTTON_SIZE.COMPACT });
-  const tab = document.body.appendChild(document.createElement("div"));
-  tab.className = "tab";
-  tab.dataset.marked = "false";
-  const close = drawn(compact("Close Plan"), "tab-close");
-  tab.append(close);
   return new Map<string, Element>([
-    ["the tab's ×", buttonIn(close)],
     ["a sidebar row's mark", buttonIn(drawn(compact("Pin"), "sidebar-task"))],
     [
       "a section's ⋯",
@@ -158,6 +162,25 @@ function smallTargets(): ReadonlyMap<string, Element> {
         ),
       ),
     ],
+  ]);
+}
+
+/** The closes that stand beside the words they close, each by what the developer calls it. */
+function closes(): ReadonlyMap<string, Element> {
+  const compact = (label: string) =>
+    createElement(IconButton, { icon: "×", label, size: BUTTON_SIZE.COMPACT });
+  const tab = document.body.appendChild(document.createElement("div"));
+  tab.className = "tab";
+  tab.dataset.marked = "false";
+  const close = drawn(compact("Close Plan"), "tab-close");
+  tab.append(close);
+  const toast = document.body.appendChild(document.createElement("li"));
+  toast.className = "toast";
+  const dismiss = drawn(compact("Dismiss"), "toast-dismiss");
+  toast.append(dismiss);
+  return new Map([
+    ["the tab's ×", buttonIn(close)],
+    ["a toast's ×", buttonIn(dismiss)],
   ]);
 }
 
@@ -202,6 +225,16 @@ test("on a touch screen each small target takes a press a finger's width across"
   }
 });
 
+test("on a touch screen a tab's × and a toast's × take a finger's height and no more width than they draw, so a tap on the label's end within 10px closes nothing", () => {
+  layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
+  for (const [name, close] of closes()) {
+    const area = hitArea(close);
+    assert.ok(area !== undefined, `${name} takes a press past what it draws`);
+    assert.ok((leastPixels(area.get("height")) ?? 0) >= FINGER, `${name} is a finger's height`);
+    assert.equal(area.get("width"), "100%", `${name} reaches no further sideways than it draws`);
+  }
+});
+
 test("on a touch screen a resize edge takes a press across both columns' gutters and no further, over no row", () => {
   layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
   const gutters = 2 * (leastPixels(role("--column-inset")) ?? 0);
@@ -213,7 +246,7 @@ test("on a touch screen a resize edge takes a press across both columns' gutters
 
 test("with a mouse no small target or resize edge takes a press past what it draws", () => {
   layFor(false, { "data-luke-profile": "desktop" });
-  for (const [name, target] of [...smallTargets(), ...resizeEdges()]) {
+  for (const [name, target] of [...smallTargets(), ...closes(), ...resizeEdges()]) {
     assert.equal(hitArea(target), undefined, `${name} draws no hit area`);
   }
 });
