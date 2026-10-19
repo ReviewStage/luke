@@ -1,5 +1,5 @@
 /**
- * plans.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its board, its edit, its history, its transcript and work, and Luke's Stop.
+ * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its board, its edit, its history, its transcript and work, and Luke's Stop.
  *
  * Every path names the plan by its id (`{id}`), which the handler reads as
  * the old routes read it: an id that is no UUID names no plan, and answers
