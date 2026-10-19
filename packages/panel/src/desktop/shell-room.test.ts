@@ -21,6 +21,7 @@ import { SIDE_PANEL_TAB, useSidePanel } from "../tasks/use-side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -217,6 +218,13 @@ function panelOf(page: HTMLElement) {
   };
 }
 
+/** The tasks' sidebar, folded or not. */
+function sidebarOf(page: HTMLElement): HTMLElement {
+  return (
+    page.querySelector<HTMLElement>("aside.desktop-sidebar") ?? assert.fail("the sidebar is drawn")
+  );
+}
+
 /** How the sidebar stands: `away` out of reach, `drawer` floating over the work, or `pinned` beside it. */
 function sidebarStanding(page: HTMLElement): string {
   const shell = page.querySelector(".desktop-shell");
@@ -264,7 +272,14 @@ test("an open side panel on a narrow stage fills the window, with no edge to dra
 });
 
 test("the sidebar on a narrow stage is a drawer: no edge peeks it out, its toggle opens it over the work, and a press outside puts it away", () => {
+  const sheets = layContainersAt({});
   const page = mount(PHONE);
+  const shell = page.querySelector(".desktop-shell") ?? assert.fail("the shell stands");
+  assert.deepEqual(
+    [getComputedStyle(shell).gridTemplateColumns, getComputedStyle(sidebarOf(page)).position],
+    ["minmax(0, 1fr)", "absolute"],
+    "the drawer stands out of the shell's columns, leaving the work the whole stage",
+  );
   assert.equal(sidebarStanding(page), "away");
   assert.equal(
     page.querySelector("[data-sidebar-peek-edge]"),
@@ -285,4 +300,10 @@ test("the sidebar on a narrow stage is a drawer: no edge peeks it out, its toggl
 
   resizeStage(WIDE);
   assert.equal(sidebarStanding(page), "pinned", "the desktop's width pins it as before");
+  assert.deepEqual(
+    [getComputedStyle(shell).gridTemplateColumns, getComputedStyle(sidebarOf(page)).position],
+    ["var(--sidebar-width) minmax(0, 1fr)", "relative"],
+    "pinned, it takes its column beside the work again",
+  );
+  sheets.remove();
 });
