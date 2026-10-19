@@ -2668,6 +2668,21 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
   const linear = await call(CODER_TOOL.READ_TASK, { taskId: fromLinear.id });
   assert.deepEqual(isRecord(linear.task) && linear.task.linearIssue, linearIssue);
 
+  // A task started from a brief, its plan still untouched, is read with the developer's words.
+  const briefed = await database.run(
+    createTask(teammates.userId, {
+      organizationId: workspaceId,
+      name: "Bulk invites",
+      brief: "Allow admins to bulk invite members.",
+    }),
+  );
+  const withBrief = await call(CODER_TOOL.READ_TASK, { taskId: briefed.id });
+  assert.equal(
+    isRecord(withBrief.task) && withBrief.task.brief,
+    "Allow admins to bulk invite members.",
+  );
+  assert.equal(isRecord(issued.task) && issued.task.brief, null);
+
   for (const taskId of [taskIds.elsewhere, randomUUID()]) {
     assert.deepEqual(await call(CODER_TOOL.READ_TASK, { taskId }), {
       status: ACTION_RESULT_STATUS.REJECTED,
