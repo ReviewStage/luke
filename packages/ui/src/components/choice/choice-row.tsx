@@ -177,21 +177,21 @@ function placeThumb(bar: HTMLElement, slide: boolean): void {
  * keep its thumb under the chosen option: sliding to it after a render that
  * chose another, and placed at once when the row or an option resizes (a
  * narrow row dropping its names, a count growing, a hidden panel shown).
+ * Note that each element is watched by an observer of its own, let go with
+ * `disconnect`, the one way every observer has to stop.
  */
 function useThumb() {
   const bar = useRef<HTMLDivElement | null>(null);
-  const resized = useRef<ResizeObserver | undefined>(undefined);
   useLayoutEffect(() => {
     if (bar.current !== null) placeThumb(bar.current, true);
   });
   const optionRef = useCallback((element: HTMLElement | null) => {
     if (element === null || !("ResizeObserver" in globalThis)) return undefined;
-    resized.current ??= new ResizeObserver(() => {
+    const resized = new ResizeObserver(() => {
       if (bar.current !== null) placeThumb(bar.current, false);
     });
-    const observer = resized.current;
-    observer.observe(element);
-    return () => observer.unobserve(element);
+    resized.observe(element);
+    return () => resized.disconnect();
   }, []);
   const barRef = useCallback(
     (element: HTMLDivElement | null) => {
