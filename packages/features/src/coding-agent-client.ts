@@ -19,13 +19,7 @@ import {
   ACCOUNT_INBOX_QUERY,
   accountInboxAnswerSchema,
 } from "./account-inbox-wire.js";
-import {
-  CHAT_QUERY,
-  type ChatWriteRequest,
-  chatAnswerSchema,
-  chatWriteAnswerSchema,
-  chatWriteRequestSchema,
-} from "./chat-wire.js";
+import { CHAT_QUERY, type ChatWriteRequest, chatWriteRequestSchema } from "./chat-wire.js";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
@@ -83,7 +77,6 @@ import {
   codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
-  codingAgentMessagesAnswerSchema,
   codingAgentOverviewChecksAnswerSchema,
   codingAgentOverviewConversationAnswerSchema,
   codingAgentOverviewPullRequestAnswerSchema,
@@ -95,7 +88,13 @@ import {
   codingAgentStartRequestOnWire,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
-import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+import {
+  askHosted,
+  HOSTED_DEADLINE,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
@@ -139,7 +138,6 @@ import {
   agentChangesPath,
   agentGitHubImagePath,
   agentInboxPath,
-  agentMessagesPath,
   agentOverviewChecksPath,
   agentOverviewConversationPath,
   agentOverviewPullRequestPath,
@@ -150,7 +148,6 @@ import {
   agentPullRequestViewedPath,
   agentReviewOptionsPath,
   agentStopPath,
-  agentSubagentMessagesPath,
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
   inboxItemPath,
@@ -160,8 +157,6 @@ import {
   planTemplateRevisionPath,
   taskAgentsPath,
   taskInboxPath,
-  taskMessagesPath,
-  taskSubagentMessagesPath,
 } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -606,13 +601,15 @@ export class HostedCodingAgentClient {
     after: string,
     callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
-    const path =
+    const asked =
       callId === undefined
-        ? agentMessagesPath(agentId, after)
-        : agentSubagentMessagesPath(agentId, callId, after);
-    return Effect.flatMap(this.#held.send({ method: HTTP_METHOD.GET, path }), (answer) =>
-      readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
-    );
+        ? askHosted(this.#hosted.messages.agent, { id: agentId, after }, HOSTED_DEADLINE.HELD)
+        : askHosted(
+            this.#hosted.messages.agentWorker,
+            { id: agentId, call: callId, after },
+            HOSTED_DEADLINE.HELD,
+          );
+    return hostedAnswer(asked, ROW_REFUSALS);
   }
 
   /**
@@ -626,13 +623,23 @@ export class HostedCodingAgentClient {
     page: { after?: string; before?: string },
     callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
-    const path =
+    const asked =
       callId === undefined
-        ? taskMessagesPath(taskId, page)
-        : taskSubagentMessagesPath(taskId, callId, page.after ?? CODING_AGENT_CURSOR_START);
-    return Effect.flatMap(this.#held.send({ method: HTTP_METHOD.GET, path }), (answer) =>
-      readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
-    );
+        ? askHosted(
+            this.#hosted.messages.task,
+            {
+              id: taskId,
+              ...(page.after === undefined ? undefined : { after: page.after }),
+              ...(page.before === undefined ? undefined : { before: page.before }),
+            },
+            HOSTED_DEADLINE.HELD,
+          )
+        : askHosted(
+            this.#hosted.messages.taskWorker,
+            { id: taskId, call: callId, after: page.after ?? CODING_AGENT_CURSOR_START },
+            HOSTED_DEADLINE.HELD,
+          );
+    return hostedAnswer(asked, ROW_REFUSALS);
   }
 
   /**
@@ -647,13 +654,9 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(codingAgentMessageRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: agentMessagesPath(agentId),
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, codingAgentAnswerSchema, MESSAGE_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.messages.send, { params: { id: agentId }, body: admitted }),
+      MESSAGE_REFUSALS,
     );
   }
 
@@ -872,16 +875,9 @@ export class HostedCodingAgentClient {
     workspaceId: string,
     after: string,
   ): Effect.Effect<CodingAgentChatAnswerView, never, HttpClient.HttpClient> {
-    const query = new URLSearchParams({
-      [CHAT_QUERY.WORKSPACE_ID]: workspaceId,
-      [CHAT_QUERY.AFTER]: after,
-    });
-    return Effect.flatMap(
-      this.#held.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
-      }),
-      (answer) => readAnswer(answer, chatAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.messages.chat, { workspaceId, after }, HOSTED_DEADLINE.HELD),
+      ROW_REFUSALS,
     );
   }
 
@@ -963,14 +959,12 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    const query = new URLSearchParams({ [CHAT_QUERY.WORKSPACE_ID]: workspaceId });
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
-        body: JSON.stringify(admitted),
+    return hostedAnswer(
+      askHosted(this.#hosted.messages.chatWrite, {
+        query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
+        body: admitted,
       }),
-      (answer) => readAnswer(answer, chatWriteAnswerSchema, MESSAGE_REFUSALS),
+      MESSAGE_REFUSALS,
     );
   }
   /**

@@ -1,10 +1,8 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { askRecord } from "@luke/database/models/asks";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
-import { childTitlesOf } from "@luke/database/models/child-titles";
 import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
 import { hostedStore } from "@luke/database/models/hosted-store";
-import { childConversationId } from "@luke/database/models/ids";
 import { readIssue } from "@luke/database/models/issue-store";
 import {
   keepPlanAttachment,
@@ -27,12 +25,6 @@ import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@luke/features/board-wire";
-import {
-  CODING_AGENT_CURSOR_START,
-  CODING_AGENT_STATUS,
-  codingAgentCallIdSchema,
-  codingAgentCursorSchema,
-} from "@luke/features/coding-agent-wire";
 import { pageVersionNumberSchema } from "@luke/features/page-wire";
 import { PICTURE_BOUNDS, pictureOfDataUrl } from "@luke/features/picture-wire";
 import {
@@ -51,7 +43,7 @@ import {
   taskFileRequestSchema,
 } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, Data, Effect, Layer, Option, Result } from "effect";
+import { Data, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { STOP_REFUSAL, stopConversation } from "../agents/brain-host/brain-ask.js";
 import { EVE_MOUNT } from "../agents/brain-host/eve-sessions.js";
@@ -65,13 +57,6 @@ import {
   summaryOf,
 } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
-import {
-  CURSOR_START,
-  cursorOfWire,
-  cursorToWire,
-  type TranscriptPage,
-  transcriptPast,
-} from "../agents/coder-host/transcript.js";
 import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import {
@@ -109,16 +94,6 @@ import {
 } from "../integrations/linear-issues.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
-import {
-  BRAIN_POLL,
-  type BrainPage,
-  brainPagePast,
-  brainStatusNow,
-  brainTitleAwaited,
-  brainTurnsPage,
-  brainWorkerSession,
-} from "./brain-transcript.js";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
@@ -212,10 +187,6 @@ const TASKS_PATH = {
   TRANSCRIPT: "/api/plans/transcript",
   /** GET reads a page of the task's work, before the turn `before` names where it names one, and on the newest page every code shown on it; the rewrite moves the path's id into the `id` query. */
   WORK: "/api/plans/work",
-  /** GET reads the task's brain conversation as a coding agent's transcript is read: past the cursor `after` names, held while a turn or a worker runs; its newest turns where it names none; the turns before the one `before` names. The rewrite moves the path's id into the `id` query. */
-  MESSAGES: "/api/plans/messages",
-  /** GET reads one brain worker's session past the cursor, held while it runs; the rewrite moves the path's id and the call that started the worker into the `id` and `call` queries. */
-  SUBAGENT_MESSAGES: "/api/plans/subagent-messages",
   /** GET reads every code Luke showed on the task; the rewrite moves the path's id into the `id` query. */
   CODE: "/api/plans/code",
   /** GET reads a window of one file of the task's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
@@ -256,12 +227,6 @@ const TASK_ID_QUERY = "id";
 
 /** The query naming the turn an older page of a task's work is read before, and the revision an older page of its history is. */
 const BEFORE_TURN_QUERY = "before";
-
-/** The queries of a transcript read: the cursor it reads past, and the call that started the worker whose session it is. */
-const TRANSCRIPT_QUERY = {
-  AFTER: "after",
-  CALL: "call",
-} as const;
 
 /** The query naming one revision of the plan by its number. */
 const REVISION_SEQ_QUERY = "seq";
@@ -877,130 +842,6 @@ const workEndpoint = /* @__PURE__ */ Effect.fn("web/taskWorkEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, work.value);
 });
 
-/** The cursor a transcript read names, at most once, or none; refused where it names something else. */
-const cursorQueryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-): Effect.fn.Return<string | undefined, HostedRefusal> {
-  const named = new URL(request.url).searchParams.getAll(TRANSCRIPT_QUERY.AFTER);
-  const [after] = named;
-  if (after === undefined) return undefined;
-  const read = readEither(codingAgentCursorSchema)(unparsedWire(after));
-  if (named.length !== 1 || Result.isFailure(read)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  return read.success;
-});
-
-/** A page of a transcript as the wire answers it, the agent transcript's own shape, every field the page holds carried as it is; a brain conversation is named by its task, so it carries no title. */
-function transcriptAnswer(
-  page: BrainPage | TranscriptPage,
-  title: string | null,
-): HttpServerResponse.HttpServerResponse {
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    ...page,
-    cursor: cursorToWire(page.cursor),
-    title,
-  });
-}
-
-/**
- * GET reads the task's brain conversation as a coding agent's transcript
- * is read: past the cursor, held while a turn or a worker runs; with no
- * cursor, its newest turns, or with `before` the turns queued before that
- * one. A task never planned on reads as an empty conversation.
- */
-const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskMessagesEndpoint")(function* (
-  seams: TasksAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const taskId = yield* idOf(request, TASK_ID_QUERY);
-  const userId = yield* resolvedUserId(seams, request);
-  const after = yield* cursorQueryOf(request);
-  const before = yield* beforeTurnOf(request);
-  if (after !== undefined && before !== undefined) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
-  if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const { conversationId } = task.value;
-  if (conversationId === undefined) {
-    return transcriptAnswer(
-      { messages: [], cursor: CURSOR_START, status: CODING_AGENT_STATUS.COMPLETED },
-      null,
-    );
-  }
-  const target = { userId, conversationId };
-  const page = yield* hostedStoreOrUnavailable(
-    after === undefined
-      ? brainTurnsPage(target, before)
-      : brainPagePast(target, cursorOfWire(after)),
-  );
-  return transcriptAnswer(page, null);
-});
-
-/**
- * GET reads one brain worker's session past the cursor, as an agent's
- * worker's is read and on the same answer: the child conversation of the
- * task's conversation under the call that started the worker, held while it
- * runs, with its title once one landed. A worker whose session has written
- * nothing yet reads as starting, held for, so a tab opened the moment its
- * call was made keeps reading.
- */
-const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/taskSubagentMessagesEndpoint")(
-  function* (
-    seams: TasksAppSeams,
-  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, TasksServices> {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    if (incoming.method !== HTTP_METHOD.GET) {
-      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-    }
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const taskId = yield* idOf(request, TASK_ID_QUERY);
-    const call = readEither(codingAgentCallIdSchema)(
-      unparsedWire(new URL(request.url).searchParams.get(TRANSCRIPT_QUERY.CALL) ?? ""),
-    );
-    if (Result.isFailure(call)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    const userId = yield* resolvedUserId(seams, request);
-    const after = (yield* cursorQueryOf(request)) ?? CODING_AGENT_CURSOR_START;
-    const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
-    if (Option.isNone(task) || task.value.conversationId === undefined) {
-      return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    }
-    const parent = { userId, conversationId: task.value.conversationId };
-    const session = yield* hostedStoreOrUnavailable(brainWorkerSession(parent, call.success));
-    if (session === undefined) {
-      // A tab opens the moment its call is made, a step before the journal holds the call; past the turn, none is none for good.
-      const status = yield* hostedStoreOrUnavailable(brainStatusNow(parent));
-      if (status !== CODING_AGENT_STATUS.RUNNING)
-        return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return transcriptAnswer(
-        { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
-        null,
-      );
-    }
-    const child = childConversationId(parent.conversationId, session);
-    const createdAt = new Date(yield* Clock.currentTimeMillis);
-    const page = yield* hostedStoreOrUnavailable(
-      transcriptPast(
-        { userId, conversationId: child },
-        HOSTED_TOOL_SET,
-        cursorOfWire(after),
-        { createdAt },
-        undefined,
-        brainTitleAwaited(parent, child),
-        BRAIN_POLL,
-      ),
-    );
-    // The title is read after the page, since it lands beside the worker's start, which a held read may span.
-    const titles = yield* hostedStoreOrUnavailable(childTitlesOf(parent, [child]));
-    return transcriptAnswer(page, titles.get(child) ?? null);
-  },
-);
-
 /** GET reads every code Luke showed on the task, oldest first. */
 const codeEndpoint = /* @__PURE__ */ Effect.fn("web/taskCodeEndpoint")(function* (
   seams: TasksAppSeams,
@@ -1376,12 +1217,6 @@ export function tasksApp(seams: TasksAppSeams): WebRoutes<TasksAppServices> {
     HttpRouter.add(ANY_METHOD, TASKS_PATH.BOARD, hostedRefusing(boardEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.TRANSCRIPT, hostedRefusing(transcriptEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.WORK, hostedRefusing(workEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, TASKS_PATH.MESSAGES, hostedRefusing(messagesEndpoint(seams))),
-    HttpRouter.add(
-      ANY_METHOD,
-      TASKS_PATH.SUBAGENT_MESSAGES,
-      hostedRefusing(subagentMessagesEndpoint(seams)),
-    ),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.CODE, hostedRefusing(codeEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.FILE, hostedRefusing(fileEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, TASKS_PATH.TREE, hostedRefusing(treeEndpoint(seams))),
