@@ -4,7 +4,7 @@ import {
   eventWithoutAccessTokens,
   transactionWithoutAccessTokens,
   withoutAccessTokens,
-} from "./sentry-breadcrumbs";
+} from "./sentry-breadcrumbs.js";
 
 /**
  * sentry-breadcrumbs.test.ts -- a renderer's breadcrumbs as Sentry would carry them: LiveKit's token never among them.
