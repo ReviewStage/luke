@@ -27,7 +27,9 @@ import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "./tasks/use-ta
  * Each link is written under its workspace's slug, or its id until the
  * workspaces are read, as a task's own is; an agent's page under the
  * workspace the page read its agent into, which only the page knows, so the
- * page tells the window (`usePageWorkspace`).
+ * page tells the window (`usePageWorkspace`). A place whose workspace is
+ * known by neither, as with no workspace listed, has no link, since a link
+ * with no workspace would name a path of none.
  *
  * One of them names the step the window stands on, as its history counts
  * steps (`navigation-history.ts`): the task, or its version while its
@@ -103,7 +105,7 @@ const PageWorkspaceContext = createContext<(held: PageWorkspace | undefined) => 
 /** Hands an agent's page the window's ear for the workspace it read its agent into (`CopyLink`'s `onPageWorkspace`). */
 export const PageWorkspaceProvider = PageWorkspaceContext.Provider;
 
-/** A workspace as a link names it: its slug, or its id before its slug is read. */
+/** A workspace as a link names it: its slug, or its id before its slug is read; empty where neither is known. */
 function slugOf(workspaces: readonly Workspace[], workspaceId: string | undefined): string {
   const home = workspaces.find((each) => each.id === workspaceId);
   return home?.slug ?? workspaceId ?? "";
@@ -196,8 +198,13 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   return order.filter((each): each is LinkAtHand => each !== undefined);
 }
 
-/** Every link the window can copy now, the most specific first; none on the home page. */
+/** Every link the window can copy now, the most specific first; none on the home page, nor for a place whose workspace is unknown. */
 function linksAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
+  return placesAtHand(tasks, at).filter((each) => each.link.workspace !== "");
+}
+
+/** The links of what is open or focused, the most specific first, each under the workspace it is in, empty where that is unknown. */
+function placesAtHand(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
   const listed = slugOf(tasks.workspaces, tasks.workspace?.id);
   // `at_` writes the link of the step the window stands on, `within` one of something open in it.
   const at_ = (place: LinkPlace, thing: LinkThing, workspace = listed): LinkAtHand => ({

@@ -62,6 +62,26 @@ const OpenHereContext = createContext<OpenHere | undefined>(undefined);
 /** Hands everything under it the place's own opener, asked first of every link opened there. */
 export const OpenHereProvider = OpenHereContext.Provider;
 
+/**
+ * Under it, `open` is asked first of every link opened, and any place's own
+ * opener around it after, as a pull request's tab opens a link to one of
+ * its own comments on GitHub at that comment (`pull-request-anchors.ts`).
+ */
+export function OpenHereFirst({
+  open,
+  children,
+}: {
+  open: OpenHere;
+  children: ReactNode;
+}): ReactNode {
+  const around = useContext(OpenHereContext);
+  const first = useCallback<OpenHere>(
+    (href) => open(href) || around?.(href) === true,
+    [open, around],
+  );
+  return createElement(OpenHereContext.Provider, { value: first }, children);
+}
+
 /** The tasks the window lists, as their rows name their pull requests; none outside the window. */
 type ListedTasks = Parameters<typeof listedPullRequestOf>[1];
 

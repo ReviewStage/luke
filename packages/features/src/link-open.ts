@@ -9,8 +9,8 @@ import { openTargetOf } from "./open-address.js";
  * whether a Luke link opened in a browser stays there or goes to Luke for
  * Mac. The choice is the account's (`@luke/settings`' `linkOpen`, its own
  * part of the preferences snapshot), so the web reads it on a signed-in
- * load and decides here. The hand-off is the "Open in Luke" page's own
- * (`open-address.ts`): the place the address names, written again in the
+ * load and decides here. The hand-off is the web app's "Open in the Mac
+ * app" link (`open-address.ts`): the place the address names, written again in the
  * desktop's scheme, so nothing else the address carried reaches the app.
  * The browser is the default, because it works without the app.
  */
@@ -62,8 +62,8 @@ function parsedUrl(address: string): URL | undefined {
  * The link a web page showing `address` hands to the Mac app, or nothing
  * where it stays on the web: the account chose the browser, the browser is
  * on no Mac, or the address names no place in a workspace. The address is
- * the page's own, on Luke's home or a preview alike, read as the "Open in
- * Luke" page reads it.
+ * the page's own, on Luke's home or a preview alike, read as
+ * `open-address.ts` reads it.
  */
 export function linkOpenTarget(
   preference: LinkOpen,

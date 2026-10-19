@@ -64,9 +64,9 @@ export function useWindowThreadReveal(
     : { reveal, onRevealed: standing?.onRevealed ?? (() => undefined) };
 }
 
-/** The thread a view's cards land on, and what the view does around the landing. */
+/** The card a view lands on, a review thread by GitHub's id or a conversation entry by its page (`target`), and what the view does around the landing. */
 export interface ThreadLanding {
-  readonly threadId: string;
+  readonly target: string;
   readonly ask: number;
   /** Brings the card into sight in the view's own scroller; none where the view has scrolled it there itself. */
   readonly scroll?: ((card: HTMLElement) => void) | undefined;
@@ -82,18 +82,22 @@ export interface ThreadLanding {
 
 const ThreadLandingContext = createContext<ThreadLanding | undefined>(undefined);
 
-/** Hands a view's thread cards the thread to land on; none lands on none. */
+/** Hands a view's cards the one to land on; none lands on none. */
 export const ThreadLandingProvider = ThreadLandingContext.Provider;
 
-/** A thread card's fold, opened by a landing, and its ring while the landing stands. */
-export interface LandedThread {
+/** A card a landing may end on: its element, and its ring while the landing stands. */
+export interface LandedCard {
   /** Holds the card's element, the one ringed and scrolled to. */
   readonly ref: (card: HTMLElement | null) => void;
-  readonly open: boolean;
-  readonly onOpenChange: (open: boolean) => void;
   /** Whether the card wears its ring, `data-search-landed`. */
   readonly ringed: boolean;
   readonly onAnimationEnd: (event: AnimationEvent<HTMLElement>) => void;
+}
+
+/** A thread card, its fold opened by a landing. */
+export interface LandedThread extends LandedCard {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
 }
 
 /** The ring's animation (`settings.css`'s `search-landed`), whose end is the landing's. */
@@ -118,34 +122,36 @@ export function landable(card: HTMLElement): boolean {
 }
 
 /**
- * A thread card's fold, `defaultOpen` until pressed, opened by each landing
- * on its thread, and the landing itself: once the card is drawn where the
- * view says it may end, it is scrolled into sight where the view scrolls it,
- * its summary takes the focus without scrolling, and it wears its ring until
- * the ring's animation ends.
+ * A card's landing, where the view lands on `target`: once the card is drawn
+ * where the view says it may end, it is scrolled into sight where the view
+ * scrolls it, what `focused` names in it takes the focus without scrolling,
+ * and it wears its ring until the ring's animation ends. `onAsked` hears
+ * each new ask as the card draws, before the view scrolls.
  */
-export function useLandedThread(thread: ReviewThread, defaultOpen: boolean): LandedThread {
+function useLanding(
+  target: string | undefined,
+  focused: (card: HTMLElement) => HTMLElement | null,
+  onAsked: () => void,
+): LandedCard {
   const landing = useContext(ThreadLandingContext);
-  const asked = landing !== undefined && landing.threadId === thread.id ? landing : undefined;
+  const asked = landing !== undefined && landing.target === target ? landing : undefined;
   const card = useRef<HTMLElement | null>(null);
   const ref = useCallback((element: HTMLElement | null) => {
     card.current = element;
   }, []);
-  const [open, setOpen] = useState(defaultOpen);
   const [seen, setSeen] = useState<number | undefined>(undefined);
   const [ringed, setRinged] = useState(false);
-  // A new ask opens the card at once, so the view measures it open before it scrolls.
   if (asked !== undefined && asked.ask !== seen) {
     setSeen(asked.ask);
-    setOpen(true);
+    onAsked();
   }
-  const latest = useRef(asked);
-  latest.current = asked;
+  const latest = useRef({ asked, focused });
+  latest.current = { asked, focused };
   // The landing's word that its ring ended, kept from the moment it landed, since the ask is let go then.
   const fade = useRef<(() => void) | undefined>(undefined);
   const ask = asked?.ask;
   useEffect(() => {
-    const standing = latest.current;
+    const standing = latest.current.asked;
     if (ask === undefined || standing === undefined) return undefined;
     return focusSeek({
       find: () => card.current,
@@ -153,7 +159,7 @@ export function useLandedThread(thread: ReviewThread, defaultOpen: boolean): Lan
       frames: standing.frames ?? LANDING_FRAMES,
       act: (card) => {
         standing.scroll?.(card);
-        card.querySelector<HTMLElement>("summary")?.focus({ preventScroll: true });
+        latest.current.focused(card)?.focus({ preventScroll: true });
         fade.current = () => standing.onFaded(ask);
         setRinged(true);
         standing.onLanded(ask);
@@ -162,8 +168,6 @@ export function useLandedThread(thread: ReviewThread, defaultOpen: boolean): Lan
   }, [ask]);
   return {
     ref,
-    open,
-    onOpenChange: setOpen,
     ringed,
     // Note that only the card's own ring ends the landing, since its body's motion bubbles here too.
     onAnimationEnd: (event) => {
@@ -173,4 +177,26 @@ export function useLandedThread(thread: ReviewThread, defaultOpen: boolean): Lan
       fade.current = undefined;
     },
   };
+}
+
+/** A thread card's summary, which takes the focus a landing brings. */
+function summaryOf(card: HTMLElement): HTMLElement | null {
+  return card.querySelector<HTMLElement>("summary");
+}
+
+/** A card that takes the focus itself, as a conversation entry does (`tabIndex` −1). */
+function itself(card: HTMLElement): HTMLElement {
+  return card;
+}
+
+/** A thread card's fold, `defaultOpen` until pressed, and each landing on its thread, which opens it at once, so the view measures it open before it scrolls. */
+export function useLandedThread(thread: ReviewThread, defaultOpen: boolean): LandedThread {
+  const [open, setOpen] = useState(defaultOpen);
+  const card = useLanding(thread.id, summaryOf, () => setOpen(true));
+  return { ...card, open, onOpenChange: setOpen };
+}
+
+/** A conversation entry's landing, by its page, as a link to it on GitHub lands on it. */
+export function useLandedEntry(url: string): LandedCard {
+  return useLanding(url, itself, () => undefined);
 }

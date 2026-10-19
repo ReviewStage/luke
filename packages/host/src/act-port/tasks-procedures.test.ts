@@ -173,8 +173,8 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     tasksArchive: (params) => ask(`archive:${params.taskId}:${params.archived}`, () => false),
     tasksStart: (request) =>
       ask(`start:${request.name ?? ""}`, () =>
-        // SAFETY: a key no start answer names, carried on purpose to show the port drops it.
-        script.startExtra ? ({ ...script.start, extra: true } as TasksStartAnswer) : script.start,
+        // A key no start answer names, carried on purpose to show the port drops it.
+        script.startExtra ? Object.assign({ extra: true }, script.start) : script.start,
       ),
     tasksRepositories: (params) =>
       ask(`repositories:${params.workspaceId}`, () => ({

@@ -7,8 +7,10 @@
  * link it is handed, and said once through the bridge's `onShowLink`, which
  * the panel already opens (`app.tsx`). A page reloaded on an entry the
  * browser history saved a step in (`browser-history.ts`) reopens that step
- * instead, and says nothing here. `/app` and `/app.html`, the panel's own
- * paths, name no place, so the panel opens on Home there.
+ * instead, and says nothing here. `/app`, the panel's own path, names no
+ * place, so the panel opens on Home there; so does `/app.html`, the build's
+ * file name, which only the dev server answers, the site sending it to
+ * `/app`.
  */
 
 import { LINK_ORIGIN } from "@luke/features/link-home";

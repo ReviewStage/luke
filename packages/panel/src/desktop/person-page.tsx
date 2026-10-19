@@ -247,9 +247,21 @@ function PersonActions({
   // Their link names the workspace their page stands in, by its slug where it has one.
   const homeId = tasks.personView.workspaceId ?? workspace?.id;
   const home = tasks.workspaces.find((each) => each.id === homeId);
-  const link = linkOf({ kind: LINK_PLACE.PERSON, userId }, home?.slug ?? homeId ?? "");
+  // A page whose workspace is not known has no link, rather than one naming no workspace.
+  const slug = home?.slug ?? homeId;
+  const link = slug === undefined ? undefined : linkOf({ kind: LINK_PLACE.PERSON, userId }, slug);
   const actions: MenuAction[][] = [
-    [{ label: LINK_COPY.LABEL, icon: <LinkIcon />, onSelect: () => copy(link, LINK_COPY.COPIED) }],
+    ...(link === undefined
+      ? []
+      : [
+          [
+            {
+              label: LINK_COPY.LABEL,
+              icon: <LinkIcon />,
+              onSelect: () => copy(link, LINK_COPY.COPIED),
+            },
+          ],
+        ]),
     ...(email === undefined
       ? []
       : [

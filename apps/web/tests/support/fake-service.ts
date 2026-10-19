@@ -1,5 +1,5 @@
 /**
- * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, an empty issue list, the repositories the Luke GitHub App reaches, and nothing else, answered over a fake `HttpClient`.
+ * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, an empty issue list, the repositories the Luke GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
  *
  * The Slack sign-in is settled only by the settling POST, as the service
  * answers a cookie caller. The web client's host calls the origin that
@@ -10,6 +10,7 @@
  * one call.
  */
 
+import type { LinkOpen } from "@luke/features/link-open";
 import type { WireValue } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import type { Layer } from "effect";
@@ -71,8 +72,14 @@ export const GITHUB_REPOSITORIES = {
   installationUrl: "https://github.com/apps/luke/installations/new",
 } as const;
 
+/** How the fake starts: signed in or not, and where the account chose its Luke links open, if it chose. */
+interface FakeServiceOptions {
+  readonly signedIn: boolean;
+  readonly linkOpen?: LinkOpen;
+}
+
 /** The fake service, signed in or not as it starts. */
-export function fakeService(options: { readonly signedIn: boolean }): FakeService {
+export function fakeService(options: FakeServiceOptions): FakeService {
   let signedIn = options.signedIn;
   const seen: SeenRequest[] = [];
   const layer = fakeHttpClientLayer(async (url, init) => {
@@ -101,6 +108,12 @@ export function fakeService(options: { readonly signedIn: boolean }): FakeServic
     }
     if (pathname === "/api/github/repositories" && method === "GET" && signedIn) {
       return json(GITHUB_REPOSITORIES);
+    }
+    // The account's preferences snapshot, as a cookie caller reads it: no stored settings, and the link choice where one was made.
+    if (pathname === "/api/account/preferences" && method === "GET") {
+      if (!signedIn) return json({ error: "unauthorized" }, 401);
+      const linkOpen = options.linkOpen === undefined ? undefined : { linkOpen: options.linkOpen };
+      return json({ preferences: {}, ...linkOpen });
     }
     if (pathname === "/api/plans" && method === "GET") {
       return signedIn ? json({ plans: [LISTED_TASK] }) : json({ error: "unauthorized" }, 401);
