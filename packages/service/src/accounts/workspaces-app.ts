@@ -1,36 +1,19 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import type {
-  MemberSeams,
-  OrganizationRefused,
-  PluginInvitation,
-  WorkspaceSeams,
-} from "@luke/database/models/workspace-seams";
+import type { MemberSeams, WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import {
   createWorkspace,
   ensurePersonalWorkspace,
   listWorkspaces,
   readWorkspacePhoto,
-  type Workspace,
   workspaceOf,
 } from "@luke/database/models/workspace-store";
 import { workspaceIdSchema } from "@luke/features/task-wire";
-import {
-  INVITATION_OFFER_QUERY,
-  INVITATION_ROLE,
-  invitationAcceptUrl,
-  invitationOfferQuerySchema,
-  WORKSPACE_INVITATIONS_QUERY,
-  type WorkspaceInvitation,
-  workspaceInvitationCancelSchema,
-  workspaceInviteRequestSchema,
-} from "@luke/features/workspace-invitation-wire";
 import {
   WORKSPACE_MEMBERS_QUERY,
   WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_ROLE,
   type WorkspaceRole,
   workspaceCreateRequestSchema,
-  workspaceGithubRequestSchema,
   workspaceLeaveRequestSchema,
   workspaceMemberRemovalSchema,
   workspaceMemberRoleSchema,
@@ -39,13 +22,11 @@ import {
   workspaceTransferSchema,
 } from "@luke/features/workspace-wire";
 import { readEither } from "@luke/wire/effect";
-import { type Cause, Clock, Effect, Layer, Option, Result } from "effect";
+import { type Cause, Effect, Layer, Option, Result } from "effect";
 import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { unparsedWire } from "../core.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
-import { GitHubApp } from "../github/github-app.js";
-import { createConnectIntent, GITHUB_CONNECT_ROLES } from "../github/github-installations.js";
-import { logGitHubReadFailure } from "../github/github-refusal.js";
+import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_BYTES_HEADERS,
@@ -61,11 +42,11 @@ import {
 } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
-import { invitationOffer } from "./invitation-offers.js";
+import { answeredWorkspace, managedWorkspace, pluginCallOrRefused } from "./workspace-access.js";
 import { listFormerMembers, listMembers, memberIdOf } from "./workspace-members.js";
 
 /**
- * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, given a photo, or handed over, a GitHub account connected, and its members read, removed, given a role, or left.
+ * workspaces-app.ts -- the account's workspaces as the Mac reads and asks for them: the list, a workspace created, renamed, given a photo, or handed over, and its members read, removed, given a role, or left.
  *
  * `GET /api/workspaces` answers every workspace the bearer's account is a
  * member of, the one made for it first and the rest by name, each with the
@@ -73,17 +54,10 @@ import { listFormerMembers, listMembers, memberIdOf } from "./workspace-members.
  * ensured before the read, so an account's first read makes it, and it is
  * then a workspace like any other. `POST` creates a
  * workspace with the name given through the organization plugin's
- * server-only create, the account its owner. `POST /api/workspaces/github/connect`
- * answers where the browser goes to connect GitHub: the Luke GitHub App's
- * install address with a single-use intent as its `state`, which the connect's
- * callback spends (`github-install-app.ts`), adding the installation beside
- * any the workspace holds; it takes an owner or admin of the workspace, and
- * a workspace the account is not in answers as none does. Which
- * installations and repositories a workspace holds is managed on GitHub, so
- * `.../disconnect`, which a Mac from before several installations still
- * sends, is refused as not permitted and removes nothing. A workspace's
- * repositories are its installations' alone, so one with nothing connected
- * has none.
+ * server-only create, the account its owner. A workspace's GitHub is
+ * connected through the hosted procedures (`workspace-github-procedures.ts`),
+ * and its repositories are its installations' alone, so one with nothing
+ * connected has none.
  * `GET /api/workspaces/members` answers a workspace's
  * members to a member of it, and who its work still names but left. `POST /api/workspaces/members/remove` lets the
  * owner remove an admin or a member, and an admin a member alone;
@@ -112,28 +86,17 @@ import { listFormerMembers, listMembers, memberIdOf } from "./workspace-members.
  * plugin reads as the session cookie those calls take; every other path
  * here takes the Mac's OAuth token. Luke's own rules stand in front of the
  * plugin's, which checks the caller's role and membership again itself.
- *
- * An owner or an admin of a workspace invites people from the Mac the
- * same way, under the session, the owner alone as an admin: `GET /api/workspaces/invitations` answers the
- * pending invitations, each with its accept link, `POST` makes one through
- * the plugin's `createInvitation`
- * (https://www.better-auth.com/docs/plugins/organization#send-invitation),
- * and `POST /api/workspaces/invitations/cancel` cancels one through
- * `cancelInvitation`, answering those still pending.
+ * An owner's or an admin's invitations are made, read, and canceled the
+ * same way, through the hosted procedures (`workspace-invitations-procedures.ts`).
  */
 
 const WORKSPACES_PATH = "/api/workspaces";
-const GITHUB_CONNECT_PATH = "/api/workspaces/github/connect";
-const GITHUB_DISCONNECT_PATH = "/api/workspaces/github/disconnect";
 const MEMBERS_PATH = "/api/workspaces/members";
 const MEMBERS_REMOVE_PATH = "/api/workspaces/members/remove";
 const MEMBERS_ROLE_PATH = "/api/workspaces/members/role";
 const TRANSFER_PATH = "/api/workspaces/transfer";
 const LEAVE_PATH = "/api/workspaces/leave";
 const RENAME_PATH = "/api/workspaces/rename";
-const INVITATIONS_PATH = "/api/workspaces/invitations";
-const INVITATION_OFFER_PATH = "/api/workspaces/invitations/offer";
-const INVITATIONS_CANCEL_PATH = "/api/workspaces/invitations/cancel";
 /** GET serves a workspace's photo; the rewrite moves the path's workspace id into the `id` query. */
 const PHOTO_PATH = "/api/workspaces/photo";
 
@@ -143,19 +106,7 @@ const PHOTO_SET_PATH = "/api/workspaces/photo/set";
 /** The query the photo's rewrite names its workspace under. */
 const PHOTO_QUERY = { ID: "id" } as const;
 
-/** The plugin's word for an invitation not yet accepted, rejected, or canceled. */
-const INVITATION_PENDING = "pending";
-
-/** The plugin's codes for an address it will not invite because it already is, or already was. */
-const ALREADY_INVITED_CODES: ReadonlySet<string> = new Set([
-  "USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION",
-  "USER_IS_ALREADY_INVITED_TO_THIS_ORGANIZATION",
-]);
-
 const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
-
-/** The query GitHub carries back to the Setup URL, which is the connect intent's state. */
-const INSTALL_STATE_PARAM = "state";
 
 /** A workspace's name or id is a few dozen characters, so a body past this is not one. */
 const MAXIMUM_BODY_BYTES = 1_024;
@@ -167,9 +118,6 @@ const MAXIMUM_BODY_BYTES = 1_024;
  * bound still fits, because its refusal is the invalid one the schema says.
  */
 const PHOTO_BODY_BYTES = Math.ceil(WORKSPACE_PHOTO_BOUNDS.MAX_BYTES / 3) * 4 + MAXIMUM_BODY_BYTES;
-
-/** The roles that rename the workspace, set its photo, or invite people to it. */
-const MANAGING_ROLES: ReadonlySet<string> = new Set([WORKSPACE_ROLE.OWNER, WORKSPACE_ROLE.ADMIN]);
 
 /** The roles a workspace is handed to: an admin, or an owner a handover cut short already made one. */
 const HEIR_ROLES: ReadonlySet<WorkspaceRole> = new Set([
@@ -244,87 +192,6 @@ const sessionAccountOf = Effect.fn("web/workspacesSessionAccount")(function* (
   return { userId: account.value, headers: request.headers };
 });
 
-/**
- * A plugin call under the session: its refusal of the session as
- * unauthenticated, an address already in or invited as such, any other
- * refusal as not permitted, since Luke's own rules already passed, and a
- * failure that is not a refusal as the outage the Mac may retry, logged by
- * its kind alone.
- */
-function pluginCallOrRefused<A, R>(
-  write: Effect.Effect<A, OrganizationRefused | Cause.UnknownError, R>,
-): Effect.Effect<A, HostedRefusal, R> {
-  return Effect.catch(write, (failure): Effect.Effect<never, HostedRefusal> => {
-    if (failure._tag === "UnknownError") {
-      return Effect.andThen(
-        Effect.logWarning("Member write failed: UnknownError"),
-        Effect.fail(HOSTED_REFUSAL.UNAVAILABLE),
-      );
-    }
-    if (failure.status === HOSTED_HTTP_STATUS.UNAUTHORIZED) {
-      return Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    }
-    return Effect.fail(
-      failure.code !== undefined && ALREADY_INVITED_CODES.has(failure.code)
-        ? HOSTED_REFUSAL.ALREADY_INVITED
-        : HOSTED_REFUSAL.NOT_PERMITTED,
-    );
-  });
-}
-
-/** An invitation's expiry as the instant it is, however the plugin's adapter handed it back. */
-function expiryOf(invitation: PluginInvitation): Date {
-  return invitation.expiresAt instanceof Date
-    ? invitation.expiresAt
-    : new Date(invitation.expiresAt);
-}
-
-/** The role an invitation carries, where it is one an invitation may; anything else is no invitation of Luke's. */
-function invitationRoleOf(role: string): WorkspaceInvitation["role"] | undefined {
-  return Object.values(INVITATION_ROLE).find((one) => one === role);
-}
-
-/**
- * The plugin's invitations as the Mac reads them: pending and unexpired
- * alone, soonest to expire first, each with its accept link on the service's
- * own origin.
- */
-function pendingInvitations(
-  invitations: readonly PluginInvitation[],
-  origin: string,
-  now: number,
-): readonly WorkspaceInvitation[] {
-  return invitations
-    .filter((one) => one.status === INVITATION_PENDING && expiryOf(one).getTime() > now)
-    .toSorted((first, second) => expiryOf(first).getTime() - expiryOf(second).getTime())
-    .flatMap((one) => {
-      const role = invitationRoleOf(one.role);
-      if (role === undefined) return [];
-      return [
-        {
-          id: one.id,
-          email: one.email,
-          role,
-          expiresAt: expiryOf(one).toISOString(),
-          acceptUrl: invitationAcceptUrl(origin, one.id, one.email),
-        },
-      ];
-    });
-}
-
-/** The workspace the body names, where the account is an owner or admin of it; one it is not in is not found. */
-const administeredWorkspace = Effect.fn("web/administeredWorkspace")(function* (userId: string) {
-  const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
-  const asked = readEither(workspaceGithubRequestSchema)(body);
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const workspace = yield* hostedStoreOrUnavailable(workspaceOf(userId, asked.success.workspaceId));
-  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  if (!GITHUB_CONNECT_ROLES.has(workspace.value.role)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  }
-  return workspace.value;
-});
-
 /** GET: the account's workspaces; POST: one created. */
 const workspacesEndpoint = Effect.fn("web/workspacesEndpoint")(function* (
   seams: WorkspacesAppSeams,
@@ -348,56 +215,6 @@ const workspacesEndpoint = Effect.fn("web/workspacesEndpoint")(function* (
   yield* recordServerEvent(SERVER_EVENT.WORKSPACE_CREATE, userId, {});
   const workspace = yield* answeredWorkspace(userId, organizationId);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { workspace });
-});
-
-/** The workspace as the account now sees it; one that vanished between the write and this read is not found. */
-const answeredWorkspace = Effect.fn("web/answeredWorkspace")(function* (
-  userId: string,
-  organizationId: string,
-): Effect.fn.Return<Workspace, HostedRefusal, DatabaseServices> {
-  const workspace = yield* hostedStoreOrUnavailable(workspaceOf(userId, organizationId));
-  if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return workspace.value;
-});
-
-/** POST: where the browser goes to connect GitHub to the workspace. */
-const connectEndpoint = Effect.fn("web/workspaceGithubConnectEndpoint")(function* (
-  seams: WorkspacesAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const userId = yield* accountOf(seams);
-  const workspace = yield* administeredWorkspace(userId);
-  const app = yield* GitHubApp;
-  const installUrl = yield* app.installUrl.pipe(
-    Effect.catch((failure) =>
-      Effect.andThen(logGitHubReadFailure(failure), Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)),
-    ),
-  );
-  const state = yield* hostedStoreOrUnavailable(createConnectIntent(userId, workspace.id));
-  const url = new URL(installUrl);
-  url.searchParams.set(INSTALL_STATE_PARAM, state);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url: url.toString() });
-});
-
-/**
- * POST: refused as not permitted to every account, removing nothing. A Mac
- * from before several installations offered Disconnect, which removed the
- * workspace's one; a workspace's installations are now managed on GitHub,
- * where uninstalling one reaches the webhook, so the old press must not
- * remove every installation the workspace holds.
- */
-const disconnectEndpoint = Effect.fn("web/workspaceGithubDisconnectEndpoint")(function* (
-  seams: WorkspacesAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  yield* accountOf(seams);
-  return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
 });
 
 /** GET: a workspace's members, and who its work names but left, to a member of it. */
@@ -600,16 +417,6 @@ const leaveEndpoint = Effect.fn("web/workspaceLeaveEndpoint")(function* (
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { workspaceId });
 });
 
-/** A workspace the account is an owner or an admin of; the one whose invitations it manages, that it renames, or whose photo it sets. */
-const managedWorkspace = Effect.fn("web/managedWorkspace")(function* (
-  userId: string,
-  organizationId: string,
-): Effect.fn.Return<Workspace, HostedRefusal, DatabaseServices> {
-  const workspace = yield* answeredWorkspace(userId, organizationId);
-  if (!MANAGING_ROLES.has(workspace.role)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  return workspace;
-});
-
 /**
  * POST: an owner or admin renames a workspace, answered with it as it then
  * stands; an account's first workspace is refused, because every read names
@@ -670,130 +477,12 @@ const photoSetEndpoint = Effect.fn("web/workspacePhotoSetEndpoint")(function* (
   });
 });
 
-/** The service's own origin, which an accept link is built on. */
-const serviceOrigin = Effect.gen(function* () {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  return new URL(request.url).origin;
-});
-
-/** The workspace's pending invitations as the plugin lists them under the session, read for the Mac. */
-const pendingOf = Effect.fn("web/workspacePendingInvitations")(function* (
-  seams: WorkspacesAppSeams,
-  headers: Headers,
-  organizationId: string,
-) {
-  const listed = yield* pluginCallOrRefused(
-    seams.members.listInvitations({ headers, organizationId }),
-  );
-  return pendingInvitations(listed, yield* serviceOrigin, yield* Clock.currentTimeMillis);
-});
-
-/** POST: an invitation made by an owner or an admin, as an admin by the owner alone, answered with it and its accept link. */
-const inviteEndpoint = Effect.fn("web/workspaceInviteEndpoint")(function* (
-  seams: WorkspacesAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
-  const { userId, headers } = yield* sessionAccountOf(seams);
-  const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
-  const asked = readEither(workspaceInviteRequestSchema)(body);
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { workspaceId, email, role } = asked.success;
-  const workspace = yield* managedWorkspace(userId, workspaceId);
-  if (role === INVITATION_ROLE.ADMIN && workspace.role !== WORKSPACE_ROLE.OWNER) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
-  }
-  const made = yield* pluginCallOrRefused(
-    seams.members.inviteMember({ headers, organizationId: workspace.id, email, role }),
-  );
-  const [invitation] = pendingInvitations(
-    [made],
-    yield* serviceOrigin,
-    yield* Clock.currentTimeMillis,
-  );
-  if (invitation === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { invitation });
-});
-
-/** GET: a workspace's pending invitations, to an owner or an admin; POST: one made. */
-const invitationsEndpoint = Effect.fn("web/workspaceInvitationsEndpoint")(function* (
-  seams: WorkspacesAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method === HTTP_METHOD.POST) return yield* inviteEndpoint(seams);
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const { userId, headers } = yield* sessionAccountOf(seams);
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const named = new URL(request.url).searchParams.getAll(WORKSPACE_INVITATIONS_QUERY.WORKSPACE_ID);
-  const asked = readEither(workspaceIdSchema)(unparsedWire(named[0]));
-  if (named.length !== 1 || Result.isFailure(asked)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const workspace = yield* managedWorkspace(userId, asked.success);
-  const invitations = yield* pendingOf(seams, headers, workspace.id);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { invitations });
-});
-
-/**
- * GET: one invitation as its recipient is offered it on the accept page,
- * under the browser's session (`invitation-offers.ts`): the workspace's
- * name, the role, and the inviter while they are still a member, or why
- * there is none to offer. An invitation outlives the member who made it.
- */
-const invitationOfferEndpoint = Effect.fn("web/workspaceInvitationOfferEndpoint")(function* (
-  seams: WorkspacesAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const { userId } = yield* sessionAccountOf(seams);
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const named = new URL(request.url).searchParams.getAll(INVITATION_OFFER_QUERY.ID);
-  const asked = readEither(invitationOfferQuerySchema)(unparsedWire({ id: named[0] }));
-  if (named.length !== 1 || Result.isFailure(asked)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const now = yield* Clock.currentTimeMillis;
-  const answer = yield* hostedStoreOrUnavailable(invitationOffer(userId, asked.success.id, now));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-});
-
-/** POST: a pending invitation canceled by an owner or an admin, answered with those still pending. */
-const cancelInvitationEndpoint = Effect.fn("web/workspaceInvitationCancelEndpoint")(function* (
-  seams: WorkspacesAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, Requirements> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const { userId, headers } = yield* sessionAccountOf(seams);
-  const body = yield* readJsonBodyEffect(MAXIMUM_BODY_BYTES);
-  const asked = readEither(workspaceInvitationCancelSchema)(body);
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { workspaceId, invitationId } = asked.success;
-  const workspace = yield* managedWorkspace(userId, workspaceId);
-  // Note that only a pending invitation of this workspace is canceled,
-  // because the plugin checks the caller's role in whichever workspace the
-  // id names, not the one the body names.
-  const pending = yield* pendingOf(seams, headers, workspace.id);
-  if (!pending.some((one) => one.id === invitationId)) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  }
-  yield* pluginCallOrRefused(seams.members.cancelInvitation({ headers, invitationId }));
-  const invitations = yield* pendingOf(seams, headers, workspace.id);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { invitations });
-});
-
-/** The group: the workspaces path, the rename, the two GitHub paths, the four members paths, the handover, the photo's two paths, the two invitations paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the workspaces path, the rename, the four members paths, the handover, the photo's two paths, and the hosted vocabulary's own refusal for any other. */
 export function workspacesApp(
   seams: WorkspacesAppSeams,
 ): WebRoutes<DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, WORKSPACES_PATH, hostedRefusing(workspacesEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, GITHUB_CONNECT_PATH, hostedRefusing(connectEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, GITHUB_DISCONNECT_PATH, hostedRefusing(disconnectEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, MEMBERS_PATH, hostedRefusing(membersEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, MEMBERS_REMOVE_PATH, hostedRefusing(removeEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, MEMBERS_ROLE_PATH, hostedRefusing(roleEndpoint(seams))),
@@ -802,17 +491,6 @@ export function workspacesApp(
     HttpRouter.add(ANY_METHOD, RENAME_PATH, hostedRefusing(renameEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PHOTO_PATH, hostedRefusing(photoEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PHOTO_SET_PATH, hostedRefusing(photoSetEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, INVITATIONS_PATH, hostedRefusing(invitationsEndpoint(seams))),
-    HttpRouter.add(
-      ANY_METHOD,
-      INVITATION_OFFER_PATH,
-      hostedRefusing(invitationOfferEndpoint(seams)),
-    ),
-    HttpRouter.add(
-      ANY_METHOD,
-      INVITATIONS_CANCEL_PATH,
-      hostedRefusing(cancelInvitationEndpoint(seams)),
-    ),
     hostedNotFoundRoute,
   );
 }

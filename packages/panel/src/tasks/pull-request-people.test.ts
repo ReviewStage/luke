@@ -19,10 +19,11 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { ChangesTabReading } from "../testing/changes-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { Tooltip } from "../tooltip.js";
-import { AgentChangesTab, ChangesCard, peopleOf } from "./agent-changes-tab.js";
+import { ChangesCard, peopleOf } from "./agent-changes-tab.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
 
 /**
@@ -264,7 +265,7 @@ test("a Changes card says who opened the pull request and its reviewers once its
 test("Files changed names nobody, with files or without, since the Pull request tab's header does", async () => {
   const names = async (readChanges: typeof control.readChanges) => {
     const tab = await draw(
-      createElement(AgentChangesTab, {
+      createElement(ChangesTabReading, {
         agentId: AGENT.id,
         control: { ...control, readChanges },
         shown: true,

@@ -268,8 +268,8 @@ interface DrawOptions {
 
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
 async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
-  const { AgentChangesTab } = await import("./agent-changes-tab.js");
-  const tab = createElement(AgentChangesTab, {
+  const { ChangesTabReading } = await import("../testing/changes-tab.js");
+  const tab = createElement(ChangesTabReading, {
     agentId: AGENT.id,
     control: options.control ?? control,
     shown: options.shown ?? true,

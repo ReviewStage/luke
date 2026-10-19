@@ -22,7 +22,8 @@
  * fit (`fold`).
  * A count is words, or parts each in
  * its own tone (`CountPart`), which holds chosen or not; a diff's lines are
- * `linesCount`'s, always green and red.
+ * `linesCount`'s, always green and red. An option may say more in the
+ * app's hint over it (`hint`), such as the whole a count leaves out.
  *
  * `look` is how the chosen option stands out. `fill` is the window's own
  * selected state, a sidebar row's and an open tab's: plain words at the
@@ -40,7 +41,11 @@
 
 import {
   type ButtonHTMLAttributes,
+  type ComponentType,
+  type FocusEventHandler,
   type HTMLAttributes,
+  type PointerEventHandler,
+  type ReactElement,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
@@ -336,8 +341,26 @@ export interface ChoiceItem<Value extends string> {
   readonly icon?: ReactNode;
   /** Words drawn quiet after the name, or parts each in its own tone. */
   readonly count?: string | readonly CountPart[] | undefined;
+  /** What the app's hint over the option says beyond its name and count (the whole a count leaves out); none raises nothing. */
+  readonly hint?: string | undefined;
   readonly disabled?: boolean | undefined;
 }
+
+/** What a hint hands the option it wraps: when to show and go, and what it says of it. */
+interface ChoiceBarHintProps {
+  "aria-describedby"?: string | undefined;
+  onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerLeave?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  onFocus?: FocusEventHandler<HTMLElement> | undefined;
+  onBlur?: FocusEventHandler<HTMLElement> | undefined;
+}
+
+/** The hint an app hangs from an option that has one, saying `label`. */
+export type ChoiceBarHint = ComponentType<{
+  label: string | undefined;
+  children: ReactElement<ChoiceBarHintProps>;
+}>;
 
 interface ChoiceBarBase<Value extends string> {
   /** The bar's accessible name. */
@@ -352,6 +375,8 @@ interface ChoiceBarBase<Value extends string> {
   focus?: ChoiceBarFocus | undefined;
   inset?: ChoiceBarInset | undefined;
   fold?: ChoiceBarFold | undefined;
+  /** The app's hint, hung from each option that says one (`ChoiceItem.hint`). */
+  hint?: ChoiceBarHint | undefined;
   disabled?: boolean | undefined;
 }
 
@@ -396,6 +421,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     focus = CHOICE_BAR_FOCUS.ROVING,
     inset = CHOICE_BAR_INSET.NONE,
     fold = CHOICE_BAR_FOLD.OWN,
+    hint: Hint,
     disabled = false,
     clearable: _,
     onChange: __,
@@ -434,7 +460,7 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
       {items.map((item) => {
         const chosen = item.value === value;
         const count = countOf(item.count);
-        return (
+        const option = (
           <button
             key={item.value}
             ref={thumb.optionRef}
@@ -454,6 +480,13 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
             <span className="luke-choice-bar-label">{item.label}</span>
             {count === undefined ? null : <span className="luke-choice-bar-count">{count}</span>}
           </button>
+        );
+        return Hint === undefined || item.hint === undefined ? (
+          option
+        ) : (
+          <Hint key={item.value} label={item.hint}>
+            {option}
+          </Hint>
         );
       })}
     </div>
