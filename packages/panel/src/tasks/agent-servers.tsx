@@ -30,6 +30,8 @@ import {
   POPOVER_PANEL_LOOK,
   PROVIDER_MARK_SIZE,
   ProviderMark,
+  SCROLL_SIZE,
+  ScrollArea,
   SEARCH_FIELD_LOOK,
   SearchField,
   Spinner,
@@ -666,27 +668,31 @@ function ServersPopover({
         }}
         onKeyDown={onHomeKey}
       />
-      <div ref={list} className="agent-servers-list">
-        {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
-        {rows.length > 0 && picks.length === 0 && groups.length === 0 ? (
-          <ServersNote words={SEARCH.NONE} />
-        ) : null}
-        {groups.map((group) => (
-          <Fragment key={group.heading ?? "unread"}>
-            {group.heading !== undefined ? <ServersHeading words={group.heading} /> : null}
-            <List label={group.heading ?? SERVERS_LABEL} density={LIST_DENSITY.COMPACT}>
-              {group.rows.map(serverRow)}
-            </List>
-          </Fragment>
-        ))}
-        {found.tools.length > 0 ? (
-          <>
-            <ServersHeading words={SEARCH.TOOLS} />
-            <List label={SEARCH.TOOLS} density={LIST_DENSITY.COMPACT}>
-              {found.tools.map(toolRow)}
-            </List>
-          </>
-        ) : null}
+      <div className="agent-servers-scroll">
+        <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
+          <div className="agent-servers-list">
+            {rows.length === 0 ? <ServersNote words={SERVERS_NONE} /> : null}
+            {rows.length > 0 && picks.length === 0 && groups.length === 0 ? (
+              <ServersNote words={SEARCH.NONE} />
+            ) : null}
+            {groups.map((group) => (
+              <Fragment key={group.heading ?? "unread"}>
+                {group.heading !== undefined ? <ServersHeading words={group.heading} /> : null}
+                <List label={group.heading ?? SERVERS_LABEL} density={LIST_DENSITY.COMPACT}>
+                  {group.rows.map(serverRow)}
+                </List>
+              </Fragment>
+            ))}
+            {found.tools.length > 0 ? (
+              <>
+                <ServersHeading words={SEARCH.TOOLS} />
+                <List label={SEARCH.TOOLS} density={LIST_DENSITY.COMPACT}>
+                  {found.tools.map(toolRow)}
+                </List>
+              </>
+            ) : null}
+          </div>
+        </ScrollArea>
       </div>
     </>
   );
@@ -715,18 +721,22 @@ function ServersPopover({
           }}
           onKeyDown={onPageKey}
         />
-        <div ref={list} className="agent-servers-list">
-          {pageTools.length === 0 ? <ServersNote words={PAGE.NONE} /> : null}
-          <IntegrationToolList
-            server={row.name}
-            tools={pageTools}
-            tokens={pageTokens}
-            current={pageTools[pageAt]?.name}
-            idOf={(each) => `${rowsId}-tool-${pageTools.indexOf(each)}`}
-            onCurrent={(each) => setPageHighlight(pageTools.indexOf(each))}
-            onOpen={(each) => openTool(each.name)}
-            keepFocus
-          />
+        <div className="agent-servers-scroll">
+          <ScrollArea ref={list} size={SCROLL_SIZE.CONTENT}>
+            <div className="agent-servers-list">
+              {pageTools.length === 0 ? <ServersNote words={PAGE.NONE} /> : null}
+              <IntegrationToolList
+                server={row.name}
+                tools={pageTools}
+                tokens={pageTokens}
+                current={pageTools[pageAt]?.name}
+                idOf={(each) => `${rowsId}-tool-${pageTools.indexOf(each)}`}
+                onCurrent={(each) => setPageHighlight(pageTools.indexOf(each))}
+                onOpen={(each) => openTool(each.name)}
+                keepFocus
+              />
+            </div>
+          </ScrollArea>
         </div>
       </>
     );

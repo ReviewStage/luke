@@ -26,6 +26,8 @@ import {
   ERROR_STATE_PLACEMENT,
   ErrorState,
   IconButton,
+  SCROLL_FADE,
+  ScrollArea,
   SUBMIT_STATE,
   TEXT_ELEMENT,
   TEXT_TONE,
@@ -1730,39 +1732,41 @@ export function PlanCommentsTab({
           }}
         />
       </div>
-      <div ref={list} className="comments-list scroll-fade">
-        {control.failed ? (
-          <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
-            The comments could not be read.
-          </ErrorState>
-        ) : listed.length === 0 ? (
-          control.read ? (
-            <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
-              {NO_COMMENTS[filter].line}
-            </EmptyState>
-          ) : null
-        ) : (
-          listed.map((thread) => (
-            <div key={thread.id} className="comments-row">
-              {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
-              <ThreadCard
-                thread={thread}
-                open
-                quote
-                doors={full}
-                onShowWords={
-                  openThread(thread)
-                    ? () => {
-                        onShowDocument();
-                        reveal(thread.id);
-                      }
-                    : undefined
-                }
-              />
-            </div>
-          ))
-        )}
-      </div>
+      <ScrollArea ref={list} fade={SCROLL_FADE.BOTH}>
+        <div className="comments-list">
+          {control.failed ? (
+            <ErrorState placement={ERROR_STATE_PLACEMENT.CENTRED} onRetry={control.onRetry}>
+              The comments could not be read.
+            </ErrorState>
+          ) : listed.length === 0 ? (
+            control.read ? (
+              <EmptyState icon={<CommentsIcon />} title={NO_COMMENTS[filter].title}>
+                {NO_COMMENTS[filter].line}
+              </EmptyState>
+            ) : null
+          ) : (
+            listed.map((thread) => (
+              <div key={thread.id} className="comments-row">
+                {/* Note that every thread stands whole here, its replies and its field, its quote the way to its words in the plan. */}
+                <ThreadCard
+                  thread={thread}
+                  open
+                  quote
+                  doors={full}
+                  onShowWords={
+                    openThread(thread)
+                      ? () => {
+                          onShowDocument();
+                          reveal(thread.id);
+                        }
+                      : undefined
+                  }
+                />
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 }

@@ -9,8 +9,12 @@ import type { ComponentPropsWithRef, ReactNode } from "react";
  *
  * - its axis (`axis`): up and down by default, with nothing scrolling
  *   sideways; sideways alone; or both;
- * - its overscroll, held inside it, so a swipe that reaches its end never
- *   scrolls the page or the pane around it;
+ * - its overscroll (`overscroll`): held inside it by default, so a swipe
+ *   that reaches its end never scrolls the page or the pane around it; or
+ *   handed on, for a short box inside something that scrolls (a tool
+ *   call's block in a transcript, a grid on a page), so a swipe past its
+ *   end, or up and down over a box that scrolls only sideways, moves what
+ *   is around it as it would if the box were not there;
  * - how it fills the room its parent gives it (`size`): the rest of a flex
  *   column, or as tall as what it holds, shrinking to the room where that
  *   runs short; and
@@ -77,6 +81,18 @@ export const SCROLL_FADE_INSET = {
 
 export type ScrollFadeInset = (typeof SCROLL_FADE_INSET)[keyof typeof SCROLL_FADE_INSET];
 
+/**
+ * What a swipe that reaches the area's end does: stops there, or carries on
+ * into whatever scrolls around the area, as it does past a box that does
+ * not scroll.
+ */
+export const SCROLL_OVERSCROLL = {
+  CONTAIN: "contain",
+  CHAIN: "chain",
+} as const;
+
+export type ScrollOverscroll = (typeof SCROLL_OVERSCROLL)[keyof typeof SCROLL_OVERSCROLL];
+
 /** Whether the room a scroll bar takes is kept while nothing scrolls: only once it does, or always. */
 export const SCROLL_GUTTER = {
   AUTO: "auto",
@@ -96,6 +112,8 @@ export type ScrollAreaProps = {
   fadeInset?: ScrollFadeInset | undefined;
   /** Whether the scroll bar's room is kept while nothing scrolls; only once it does where none is named. */
   gutter?: ScrollGutter | undefined;
+  /** What a swipe past its end does; stops there where none is named. */
+  overscroll?: ScrollOverscroll | undefined;
   /** The caller's one element, which holds its padding and its layout. */
   children: ReactNode;
 } & Omit<
@@ -103,13 +121,14 @@ export type ScrollAreaProps = {
   "className" | "style" | "children" | "dangerouslySetInnerHTML"
 >;
 
-/** A box scrolling `axis`, filling its parent's room as `size` says, its edges fading as `fade` and `fadeInset` say. */
+/** A box scrolling `axis`, filling its parent's room as `size` says, its edges fading as `fade` and `fadeInset` say, a swipe past its end stopping or handed on as `overscroll` says. */
 export function ScrollArea({
   axis = SCROLL_AXIS.VERTICAL,
   size = SCROLL_SIZE.FILL,
   fade = SCROLL_FADE.NONE,
   fadeInset = SCROLL_FADE_INSET.NONE,
   gutter = SCROLL_GUTTER.AUTO,
+  overscroll = SCROLL_OVERSCROLL.CONTAIN,
   children,
   ...div
 }: ScrollAreaProps): React.JSX.Element {
@@ -122,6 +141,7 @@ export function ScrollArea({
       data-fade={fade}
       data-fade-inset={fadeInset}
       data-gutter={gutter}
+      data-overscroll={overscroll}
     >
       {children}
     </div>

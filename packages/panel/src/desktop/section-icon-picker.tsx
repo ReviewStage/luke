@@ -9,7 +9,7 @@ import {
   type TaskSectionIconColor,
   taskSectionIconSchema,
 } from "@luke/features/task-section-wire";
-import { IconButton, SearchField, Segmented, TextField } from "@luke/ui";
+import { IconButton, ScrollArea, SearchField, Segmented, TextField } from "@luke/ui";
 import {
   emojiGroups,
   findEmoji,
@@ -487,12 +487,14 @@ export function SectionIconPicker({
         }}
       >
         <legend className="visually-hidden">{tab === ICON_TAB.ICONS ? "Icons" : "Emoji"}</legend>
-        <div ref={grid} className="section-icon-scroll">
-          {tab === ICON_TAB.ICONS ? (
-            <GlyphPanel query={query} icon={icon} color={color} onIcon={choose} />
-          ) : (
-            <EmojiPanel query={query} icon={icon} onIcon={choose} />
-          )}
+        <div className="section-icon-scroll">
+          <ScrollArea ref={grid}>
+            {tab === ICON_TAB.ICONS ? (
+              <GlyphPanel query={query} icon={icon} color={color} onIcon={choose} />
+            ) : (
+              <EmojiPanel query={query} icon={icon} onIcon={choose} />
+            )}
+          </ScrollArea>
         </div>
       </fieldset>
       <p className="section-icon-resting" aria-hidden="true">
