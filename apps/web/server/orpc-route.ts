@@ -3,6 +3,7 @@
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { cookieOriginGuard } from "@luke/service/http/origin-guard";
+import { integrationsAppSeams } from "@luke/service/integrations/integration-seams";
 import { type HostedFetch, hostedFetch } from "@luke/service/orpc/handler";
 import { type HostedRouterSeams, hostedRouter } from "@luke/service/orpc/router";
 import type { Route } from "@luke/service/route";
@@ -46,6 +47,7 @@ export function routeFromHostedFetch(answer: HostedFetch): Route {
 }
 
 const DEPLOYMENT_SEAMS: HostedRouterSeams = {
+  ...integrationsAppSeams(),
   resolveUserId: resolveHostedUserId,
   eveOrigin: deploymentEveOrigin,
 };
