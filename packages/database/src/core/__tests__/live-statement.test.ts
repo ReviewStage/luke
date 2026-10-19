@@ -45,7 +45,7 @@ test("a group's latest instant is immutable around its max, as Realtime requires
     queryBuilder.select({ latest: liveLatest(probe.at).as("latest") }).from(probe),
     "latest",
   );
-  // An index takes no aggregate, so the max is read as its one row: what wraps it is what Realtime checks.
+  // Note that we read the max as its one row, because an index takes no aggregate: what wraps it is what Realtime checks.
   const wrapping = latest.replace('max("probe"."at")', '"probe"."at"');
   assert.notEqual(wrapping, latest);
   await client.exec(`create index probe_latest_millis on probe ((${wrapping}))`);
