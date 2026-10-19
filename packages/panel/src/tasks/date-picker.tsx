@@ -17,21 +17,16 @@ import {
   Calendar,
   GAP,
   Inline,
-  JUSTIFY,
   POPOVER_ALIGN,
-  POPOVER_PANEL_LOOK,
-  PopoverPanel,
+  SETTINGS_ROW_DENSITY,
   Stack,
-  Switch,
-  TEXT_ELEMENT,
   TEXT_FIELD_TYPE,
-  TEXT_TONE,
-  TEXT_VARIANT,
-  Text,
   TextField,
 } from "@luke/ui";
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from "react";
 import type { MentionNode } from "../plan-editor/contract.js";
+import { PopoverPanel } from "../popover-panel.js";
+import { SwitchRow } from "../settings/switch-row.js";
 import { useMinute } from "./task-time.js";
 
 /**
@@ -40,11 +35,18 @@ import { useMinute } from "./task-time.js";
  * A date chip in words that take a change (the plan's editor, an agent's
  * box, a comment's) opens this picker when pressed, and the `@` list
  * narrowed to dates opens it from its "Pick a date…" row to write a new
- * one. Top to bottom it holds the date's words, which Enter reads as an `@`
- * word is read (`dateOfWords`, so `next fri 3pm` works); the month the
- * date's start falls in (`@luke/ui`'s `Calendar`); an End date switch, after
- * which the next pick sets the range's end; an Include time switch, which
- * puts a time on each end, read and written in the reader's zone; and Clear.
+ * one. It is drawn as the window's other popovers with settings in them
+ * are (`view-settings.tsx`): a card under its title and ×, its switches the
+ * Settings rows' own (`../settings/switch-row.tsx`) at their compact
+ * density, and its one action, Clear, a quiet button at its ruled foot, as
+ * the MCP servers popover's Settings stands (`agent-servers.tsx`). Top
+ * to bottom it holds a field for each end's date, as Notion's does, each
+ * read as an `@` word is read (`dateOfWords`, so `next fri 3pm` works) as
+ * Enter or leaving the field takes it, and beside each, while Include
+ * time is on, the end's time in the reader's zone, which the switch's row
+ * names; the month the date's start falls in (`@luke/ui`'s `Calendar`); End
+ * date, after which the next pick sets the range's end; Include time; and
+ * Clear.
  *
  * What the developer changes is held here until the picker closes, as
  * Notion applies a change: Escape, Enter in its words, a press outside, or
@@ -106,12 +108,15 @@ const LAST_HOUR = 23;
 
 const WORDS = {
   TITLE: "Date",
-  FIELD: "Date",
+  /** The date fields', named apart from the End date switch. */
+  START_DATE: "Start",
+  END_DATE: "End",
   END: "End date",
   TIME: "Include time",
   START_TIME: "Start time",
   END_TIME: "End time",
   CLEAR: "Clear",
+  CLOSE: "Close",
 } as const;
 
 /** Where the picker's anchor stands in its room, in the room's own pixels. */
@@ -122,16 +127,30 @@ interface AnchorBox {
   readonly height: number;
 }
 
+/** Which end of the date a field writes. */
+const DATE_END = {
+  START: "start",
+  END: "end",
+} as const;
+
+type DateEnd = (typeof DATE_END)[keyof typeof DATE_END];
+
+/** Words typed into one end's date field and not yet read, and whether they were read as no date. */
+interface Typing {
+  readonly end: DateEnd;
+  readonly words: string;
+  readonly invalid: boolean;
+}
+
 /**
  * What the picker holds while it stands: the date's ends, whether the next
- * pick sets the end, the words typed in its field where they are not the
- * date's own, whether those read as no date, and whether anything changed.
+ * pick sets the end, words typed into a date field and not yet read, and
+ * whether anything changed.
  */
 interface Draft {
   readonly wall: DateWall;
   readonly pickingEnd: boolean;
-  readonly words: string | undefined;
-  readonly invalid: boolean;
+  readonly typing: Typing | undefined;
   readonly changed: boolean;
 }
 
@@ -165,9 +184,9 @@ function endAfter(start: DateWallMoment): DateWallMoment | undefined {
   return day === undefined ? undefined : { day, time: `00:${minute}` };
 }
 
-/** A draft whose ends the developer changed, its words the date's own again. */
+/** A draft whose ends the developer changed, its fields the date's own words again. */
 function changedTo(wall: DateWall, pickingEnd: boolean): Draft {
-  return { wall, pickingEnd, words: undefined, invalid: false, changed: true };
+  return { wall, pickingEnd, typing: undefined, changed: true };
 }
 
 /** A moment as it orders against another: its day, then its time. */
@@ -200,6 +219,48 @@ function dayPicked(draft: Draft, day: string): Draft {
   const kept = { ...end, day: day > end.day ? day : end.day };
   const after = orderOf(moved) < orderOf(kept) ? kept : endAfter(moved);
   return changedTo({ start: moved, end: after }, after !== undefined);
+}
+
+/**
+ * Ends kept in order after one was typed: an end before its start swaps
+ * with it, and one at its start's own moment moves on just after it.
+ */
+function ordered(wall: DateWall): DateWall {
+  const { start, end } = wall;
+  if (end === undefined || orderOf(start) < orderOf(end)) return wall;
+  if (orderOf(end) < orderOf(start)) return { start: end, end: start };
+  return { start, end: endAfter(start) };
+}
+
+/**
+ * A moment typed into one end's date field: its day, and its time while
+ * Include time is on, the end's own time kept where the words named none.
+ */
+function typedInto(draft: Draft, which: DateEnd, moment: DateWallMoment): Draft {
+  const { start, end } = draft.wall;
+  const timed = start.time !== undefined;
+  const at = (was: DateWallMoment) => ({
+    day: moment.day,
+    time: timed ? (moment.time ?? was.time) : undefined,
+  });
+  const wall =
+    which === DATE_END.START ? { start: at(start), end } : { start, end: end && at(end) };
+  return changedTo(ordered(wall), false);
+}
+
+/**
+ * The draft with its typed words read as `dateOfWords` reads an `@` word:
+ * words naming a range set both ends, and words naming one moment set the
+ * end typed into; nothing where they name no date.
+ */
+function wordsRead(draft: Draft, now: number, zone: string): Draft | undefined {
+  const { typing } = draft;
+  if (typing === undefined) return draft;
+  const named = dateOfWords(typing.words, now, zone);
+  const wall = named === undefined ? undefined : dateWall(named, zone);
+  if (wall === undefined) return undefined;
+  if (wall.end !== undefined) return changedTo(wall, false);
+  return typedInto(draft, typing.end, wall.start);
 }
 
 /** End date switched: on, an end just after the start (`endAfter`), which the next pick moves; off, the start alone. */
@@ -235,24 +296,9 @@ export function dateMentionNode(date: DateSpan, place: MentionPlace): MentionNod
   };
 }
 
-/** A switch with its words beside it. */
-function SwitchRow({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-}): React.JSX.Element {
-  return (
-    <Inline justify={JUSTIFY.BETWEEN} wrap={false}>
-      <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.LABEL}>
-        {label}
-      </Text>
-      <Switch label={label} checked={checked} onChange={(next) => onChange(next)} />
-    </Inline>
-  );
+/** An end's day as its field says it: in full, as a date mention writes it. */
+function dayWords(moment: DateWallMoment): string {
+  return dateLabel({ start: moment.day });
 }
 
 /** An end's time of day, written in the reader's zone. */
@@ -277,7 +323,12 @@ function TimeField({
   );
 }
 
-/** The picker itself, opened on `date`, or on today for a new one, handing what it holds to `onClose` once. */
+/**
+ * The picker itself, opened on `date`, or on today for a new one, handing
+ * what it holds to `onClose` once. Its fields stand as Notion's: each end's
+ * date, and beside it, while Include time is on, its time, the end's row
+ * under the start's; with no time the two dates share a row.
+ */
 function DatePickerPanel({
   date,
   onClose,
@@ -293,104 +344,133 @@ function DatePickerPanel({
   const [draft, setDraft] = useState<Draft>(() => ({
     wall: (date === undefined ? undefined : dateWall(date, zone)) ?? { start: { day: today } },
     pickingEnd: false,
-    words: undefined,
-    invalid: false,
+    typing: undefined,
     changed: false,
   }));
+  // Note that the draft is kept beside its state too, because a field's blur reads its words just before a press outside closes the picker, in the same event.
+  const latest = useRef(draft);
   const [month, setMonth] = useState(() => draft.wall.start.day.slice(0, 7));
   const { start, end } = draft.wall;
-  const held = dateOfWall(draft.wall, zone);
   const timed = start.time !== undefined;
 
-  const finish = (how: DatePickerClose, closing: Draft = draft) => {
+  const update = (next: Draft) => {
+    latest.current = next;
+    setDraft(next);
+  };
+  const finish = (how: DatePickerClose) => {
     if (done.current) return;
     done.current = true;
+    const closing = wordsRead(latest.current, Date.now(), zone) ?? latest.current;
     onClose({ date: dateOfWall(closing.wall, zone), changed: closing.changed, how });
   };
-  const change = (next: Draft) => {
-    setDraft(next);
-    setMonth(next.wall.start.day.slice(0, 7));
-  };
-  // Enter closes on the date the words typed name; words that name none are marked and kept.
-  const typed = () => {
-    if (draft.words === undefined) {
-      finish(DATE_PICKER_CLOSE.KEY);
-      return;
+  // Typed words are read as the field is left, the month shown moving to the end they set; words that name no date are marked and kept.
+  const read = (): boolean => {
+    const typing = latest.current.typing;
+    if (typing === undefined) return true;
+    const next = wordsRead(latest.current, Date.now(), zone);
+    if (next === undefined) {
+      update({ ...latest.current, typing: { ...typing, invalid: true } });
+      return false;
     }
-    const named = dateOfWords(draft.words, Date.now(), zone);
-    const wall = named === undefined ? undefined : dateWall(named, zone);
-    if (wall === undefined) setDraft({ ...draft, invalid: true });
-    else finish(DATE_PICKER_CLOSE.KEY, changedTo(wall, false));
+    update(next);
+    const moved = typing.end === DATE_END.END ? next.wall.end : next.wall.start;
+    setMonth((moved ?? next.wall.start).day.slice(0, 7));
+    return true;
   };
+  const dateField = (which: DateEnd, moment: DateWallMoment) => {
+    const typing = draft.typing?.end === which ? draft.typing : undefined;
+    return (
+      <TextField
+        ref={which === DATE_END.START ? field : undefined}
+        label={which === DATE_END.START ? WORDS.START_DATE : WORDS.END_DATE}
+        value={typing?.words ?? dayWords(moment)}
+        invalid={typing?.invalid === true}
+        spellCheck={false}
+        onChange={(words) =>
+          update({ ...latest.current, typing: { end: which, words, invalid: false } })
+        }
+        onBlur={() => {
+          read();
+        }}
+        onEnter={() => {
+          if (read()) finish(DATE_PICKER_CLOSE.KEY);
+        }}
+      />
+    );
+  };
+  const timeField = (which: DateEnd, moment: DateWallMoment) => (
+    <TimeField
+      label={which === DATE_END.START ? WORDS.START_TIME : WORDS.END_TIME}
+      time={moment.time}
+      onChange={(time) => {
+        const wall =
+          which === DATE_END.START
+            ? { start: { ...start, time }, end }
+            : { start, end: end && { ...end, time } };
+        update(changedTo(wall, draft.pickingEnd));
+      }}
+    />
+  );
 
   return (
     <PopoverPanel
       title={WORDS.TITLE}
-      look={POPOVER_PANEL_LOOK.MENU}
+      closeLabel={WORDS.CLOSE}
       initialFocus={field}
       onDismiss={() => finish(DATE_PICKER_CLOSE.KEY)}
       onLeave={() => finish(DATE_PICKER_CLOSE.LEAVE)}
     >
-      <div className="date-picker">
-        <Stack gap={GAP.CONTROL}>
-          <TextField
-            ref={field}
-            label={WORDS.FIELD}
-            value={draft.words ?? (held === undefined ? "" : dateLabel(held, zone))}
-            invalid={draft.invalid}
-            spellCheck={false}
-            onChange={(words) => setDraft({ ...draft, words, invalid: false })}
-            onEnter={typed}
-          />
-          <Calendar
-            month={month}
-            today={today}
-            start={start.day}
-            end={end?.day}
-            onPick={(day) => change(dayPicked(draft, day))}
-            onShowMonth={setMonth}
-          />
-          <SwitchRow
-            label={WORDS.END}
-            checked={end !== undefined}
-            onChange={(on) => change(endSwitched(draft, on))}
-          />
-          <SwitchRow
-            label={WORDS.TIME}
-            checked={timed}
-            onChange={(on) => change(timeSwitched(draft, on))}
-          />
-          {timed ? (
-            <Stack gap={GAP.TIGHT}>
+      <Stack gap={GAP.TIGHT}>
+        {timed ? (
+          <>
+            <Inline gap={GAP.CONTROL} wrap={false}>
+              {dateField(DATE_END.START, start)}
+              {timeField(DATE_END.START, start)}
+            </Inline>
+            {end === undefined ? null : (
               <Inline gap={GAP.CONTROL} wrap={false}>
-                <TimeField
-                  label={WORDS.START_TIME}
-                  time={start.time}
-                  onChange={(time) =>
-                    change(changedTo({ start: { ...start, time }, end }, draft.pickingEnd))
-                  }
-                />
-                {end === undefined ? null : (
-                  <TimeField
-                    label={WORDS.END_TIME}
-                    time={end.time}
-                    onChange={(time) =>
-                      change(changedTo({ start, end: { ...end, time } }, draft.pickingEnd))
-                    }
-                  />
-                )}
+                {dateField(DATE_END.END, end)}
+                {timeField(DATE_END.END, end)}
               </Inline>
-              <Text variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
-                {zone}
-              </Text>
-            </Stack>
-          ) : null}
-          <Inline>
-            <Button variant={BUTTON_VARIANT.QUIET} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
-              {WORDS.CLEAR}
-            </Button>
+            )}
+          </>
+        ) : (
+          <Inline gap={GAP.CONTROL} wrap={false}>
+            {dateField(DATE_END.START, start)}
+            {end === undefined ? null : dateField(DATE_END.END, end)}
           </Inline>
-        </Stack>
+        )}
+      </Stack>
+      <Calendar
+        month={month}
+        today={today}
+        start={start.day}
+        end={end?.day}
+        onPick={(day) => {
+          update(dayPicked(latest.current, day));
+          setMonth(day.slice(0, 7));
+        }}
+        onShowMonth={setMonth}
+      />
+      <Stack gap={GAP.TIGHT}>
+        <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
+          label={WORDS.END}
+          checked={end !== undefined}
+          onChange={(on) => update(endSwitched(latest.current, on))}
+        />
+        <SwitchRow
+          density={SETTINGS_ROW_DENSITY.COMPACT}
+          label={WORDS.TIME}
+          detail={timed ? zone : undefined}
+          checked={timed}
+          onChange={(on) => update(timeSwitched(latest.current, on))}
+        />
+      </Stack>
+      <div className="task-compose-menu-foot">
+        <Button variant={BUTTON_VARIANT.QUIET} onClick={() => finish(DATE_PICKER_CLOSE.CLEAR)}>
+          {WORDS.CLEAR}
+        </Button>
       </div>
     </PopoverPanel>
   );

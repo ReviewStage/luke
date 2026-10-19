@@ -342,10 +342,6 @@
   pointer-events: auto;
 }
 
-.date-picker {
-  padding: var(--luke-space-12);
-}
-
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
    stands under its own; a kind typed with its colon has no back arrow, so
    its glyph keeps the rows' inset. */

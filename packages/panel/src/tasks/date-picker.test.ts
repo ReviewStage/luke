@@ -136,9 +136,9 @@ async function pressKey(dialog: HTMLElement, key: string): Promise<void> {
   await act(async () => undefined);
 }
 
-/** Words typed into the picker's field, as the field's own input hands them over. */
-function typeWords(dialog: HTMLElement, words: string): void {
-  const field = fieldOf(dialog, "Date");
+/** Words typed into one of the picker's date fields, as the field's own input hands them over. */
+function typeWords(dialog: HTMLElement, name: string, words: string): void {
+  const field = fieldOf(dialog, name);
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
   act(() => {
     setter?.call(field, words);
@@ -182,7 +182,8 @@ test("a date chip pressed in the plan's editor opens its picker on the date, its
 
   const dialog = await pressChip(container);
 
-  assert.equal(fieldOf(dialog, "Date").value, "Oct 23, 2026");
+  assert.equal(fieldOf(dialog, "Start").value, "Oct 23, 2026");
+  assert.equal(dialog.querySelector('input[aria-label="End"]'), null);
   assert.match(dialog.textContent ?? "", /October 2026/u);
   assert.equal(
     control(dialog, '[aria-selected="true"] button').getAttribute("aria-label"),
@@ -228,10 +229,14 @@ test("End date switched on and closed at once writes the range it shows, to the 
 
   const dialog = await pressChip(container);
   act(() => control(dialog, 'button[role="switch"][aria-label="End date"]').click());
-  const shown = fieldOf(dialog, "Date").value;
+  const start = fieldOf(dialog, "Start");
+  const end = fieldOf(dialog, "End");
+  const shown = [start.value, end.value];
+  const oneRow = start.parentElement === end.parentElement;
   await pressKey(dialog, "Escape");
 
-  assert.equal(shown, "Oct 23, 2026 → Oct 24, 2026");
+  assert.deepEqual(shown, ["Oct 23, 2026", "Oct 24, 2026"]);
+  assert.ok(oneRow, "with no time, the two dates stand on one row");
   assert.deepEqual(mentionsIn(editor), [
     { name: "Oct 23, 2026 → Oct 24, 2026", target: "luke://date/2026-10-23/2026-10-24" },
   ]);
@@ -327,7 +332,7 @@ test("words typed in the picker that name a date are written as it on Enter", as
   const { container, editor } = await opened();
 
   const dialog = await pressChip(container);
-  typeWords(dialog, "oct 28");
+  typeWords(dialog, "Start", "oct 28");
   await pressKey(dialog, "Enter");
 
   assert.equal(picker(container), null);
@@ -336,14 +341,48 @@ test("words typed in the picker that name a date are written as it on Enter", as
   ]);
 });
 
+test("words typed into the end's field are read as that end once the field is left", async () => {
+  const { container, editor } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="End date"]').click());
+  act(() => fieldOf(dialog, "End").focus());
+  typeWords(dialog, "End", "oct 30");
+  act(() => fieldOf(dialog, "Start").focus());
+  const shown = fieldOf(dialog, "End").value;
+  await pressKey(dialog, "Escape");
+
+  assert.equal(shown, "Oct 30, 2026");
+  assert.deepEqual(mentionsIn(editor), [
+    { name: "Oct 23, 2026 → Oct 30, 2026", target: "luke://date/2026-10-23/2026-10-30" },
+  ]);
+});
+
+test("with a time each end's date stands beside its time, the end's row under the start's", async () => {
+  const { container } = await opened();
+
+  const dialog = await pressChip(container);
+  act(() => control(dialog, 'button[role="switch"][aria-label="Include time"]').click());
+  act(() => control(dialog, 'button[role="switch"][aria-label="End date"]').click());
+  const row = (name: string) => fieldOf(dialog, name).parentElement;
+
+  assert.equal(row("Start"), row("Start time"));
+  assert.equal(row("End"), row("End time"));
+  assert.notEqual(row("Start"), row("End"));
+  assert.deepEqual(
+    ["Start", "Start time", "End", "End time"].map((name) => fieldOf(dialog, name).value),
+    ["Oct 23, 2026", "09:00", "Oct 23, 2026", "10:00"],
+  );
+});
+
 test("words typed in the picker that name no date are marked and change nothing", async () => {
   const { container, editor } = await opened();
 
   const dialog = await pressChip(container);
-  typeWords(dialog, "someday");
+  typeWords(dialog, "Start", "someday");
   await pressKey(dialog, "Enter");
 
-  assert.equal(fieldOf(dialog, "Date").getAttribute("aria-invalid"), "true");
+  assert.equal(fieldOf(dialog, "Start").getAttribute("aria-invalid"), "true");
   assert.deepEqual(mentionsIn(editor), [
     { name: "Oct 23, 2026", target: "luke://date/2026-10-23" },
   ]);
