@@ -194,6 +194,7 @@ async function inbox(options: {
           onChoose: setChosen,
           pages: undefined,
           onRereadPages: () => undefined,
+          onTaskAgents: () => undefined,
         },
       }),
     });
