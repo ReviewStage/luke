@@ -1264,16 +1264,26 @@
 }
 
 /* The tree peeked from the strip, or opened over the list, floats over the
-   list's right edge, as it does in a narrow panel. */
+   list's right edge, as it does in a narrow panel, on the window's floating
+   surface: a menu's ground, edge, and shadow, so it reads as standing above
+   the list rather than as the list cut short. */
+.file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-pane {
+  border-left-color: var(--luke-color-border-strong);
+  background: var(--luke-color-overlay);
+}
+
+.file-view:is([data-pane-over="peek"], [data-pane-over="open"]) .file-tree-host {
+  --trees-bg-override: var(--luke-color-overlay);
+}
+
 .file-view[data-pane-beside="false"]:is([data-pane-over="peek"], [data-pane-over="open"])
-.file-tree-pane {
+  .file-tree-pane {
   position: absolute;
   z-index: 1;
   inset-block: 0;
   right: 0;
   display: flex;
   width: min(var(--file-tree-width, 264px), calc(100% - var(--luke-space-48)));
-  background: var(--luke-color-well);
   box-shadow: var(--luke-menu-shadow);
   animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
 }
