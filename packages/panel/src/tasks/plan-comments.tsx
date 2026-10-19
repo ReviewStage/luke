@@ -70,6 +70,7 @@ import {
 } from "react";
 import { ActorMark, ActorRef } from "../actor-ref.js";
 import { useSideBundles } from "../bundle-loader.js";
+import { coarsePointerNow } from "../coarse-pointer.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -136,6 +137,9 @@ const REVEAL_ROOM = 96;
 
 /** How far apart two cards of the margin stand. */
 const CARD_GAP = 8;
+
+/** The room a finger's bubble needs under the words, its gap past the handle and its own height, short of which it stands over them after all. */
+const BUBBLE_ROOM_TOUCH = 16 + 48;
 
 /** The words a thread's controls are named by. */
 const COMMENT_WORDS = {
@@ -1141,7 +1145,7 @@ export function PlanCommentLayer({
   // Whether a pointer is down, whose press moves the focus before its own rule says what becomes of the thread.
   const pressing = useRef(false);
   const [bubble, setBubble] = useState<
-    { top: number; left: number; start: () => void } | undefined
+    { top: number; left: number; below: boolean; start: () => void } | undefined
   >(undefined);
   const cards = useRef(new Map<string, HTMLDivElement>());
   // The cards already stood in the margin, which move to their next place rather than land there, so a card arriving lands where it belongs.
@@ -1333,11 +1337,15 @@ export function PlanCommentLayer({
       }
       const box = range.getBoundingClientRect();
       const own = element.getBoundingClientRect();
+      // Note that a finger's bubble stands under the words, because the system's own selection menu stands over them, unless the window ends first.
+      const below = coarsePointerNow() && box.bottom + BUBBLE_ROOM_TOUCH <= window.innerHeight;
+      const top = (below ? box.bottom : box.top) - own.top;
       // In the editor the words are measured through it, and its selection is left as it stands.
       if (editor !== undefined) {
         setBubble({
-          top: box.top - own.top,
+          top,
           left: box.left - own.left,
+          below,
           start: () => {
             const span = editor.current?.selectionSpan();
             if (span !== undefined) setPending(editorPending(span, PLAN_COMMENT_SCOPE.WORDS));
@@ -1353,8 +1361,9 @@ export function PlanCommentLayer({
       const from = drawnOffset(start, range.startContainer, range.startOffset);
       const to = drawnOffset(start, range.endContainer, range.endOffset);
       setBubble({
-        top: box.top - own.top,
+        top,
         left: box.left - own.left,
+        below,
         start: () => {
           const begun = pendingOf(start, section, { from, to }, PLAN_COMMENT_SCOPE.WORDS, quote);
           if (begun !== undefined) setPending(begun);
@@ -1472,7 +1481,11 @@ export function PlanCommentLayer({
     );
   const bubbleDrawn =
     bubble === undefined ? null : (
-      <div className="comment-bubble menu-surface" style={{ top: bubble.top, left: bubble.left }}>
+      <div
+        className="comment-bubble menu-surface"
+        data-below={bubble.below ? "" : undefined}
+        style={{ top: bubble.top, left: bubble.left }}
+      >
         <Button keepFocus icon={<MessageSquarePlusIcon />} onClick={bubble.start}>
           {COMMENT_WORDS.COMMENT}
         </Button>
