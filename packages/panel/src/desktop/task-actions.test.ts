@@ -12,6 +12,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { OpenPersonProvider } from "../person-door.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { lineWords } from "../testing/actor-line.js";
@@ -269,7 +270,7 @@ test("the plan's name reaches the recording only as masked text, never in an att
 });
 
 /** The open task's tab on `tab`, `SHARED_PLAN` open as `me` reads it and `OTHER` beside it in the list. */
-function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): TasksControl {
+function sharedTab(me: string, tab: MainTab = MAIN_TAB.CALL): TasksControl {
   const base = tasksControl();
   return tasksControl({
     page: TASKS_PAGE.DOCUMENT,
@@ -277,7 +278,7 @@ function sharedTab(me: string, tab: MainTab = MAIN_TAB.PLAN): TasksControl {
     tasks: [SHARED_TASK, OTHER],
     activeTaskId: SHARED_TASK.id,
     region: { kind: DOCUMENT_REGION.READY, task: SHARED_TASK },
-    mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX], tab },
+    mainTabs: { ...base.mainTabs, tabs: [MAIN_TAB.CALL, MAIN_TAB.CHAT], tab },
   });
 }
 
@@ -347,7 +348,7 @@ test("a sidebar task someone else created wears its creator's face before its ti
   assert.deepEqual(faces(OTHER), [[], undefined]);
 });
 
-test("Start and the plan's ⋯ stand in the toolbar on the Plan tab alone", () => {
+test("Start and the task's ⋯ stand in the toolbar on the Call tab alone", () => {
   const drawn = (tab: MainTab) => {
     const container = mount(
       createElement(DesktopTasks, {
@@ -364,8 +365,8 @@ test("Start and the plan's ⋯ stand in the toolbar on the Plan tab alone", () =
     return shown;
   };
 
-  assert.deepEqual(drawn(MAIN_TAB.PLAN), ["Start a coding agent", "Task actions"]);
-  assert.deepEqual(drawn(MAIN_TAB.INBOX), []);
+  assert.deepEqual(drawn(MAIN_TAB.CALL), ["Start a coding agent", "Task actions"]);
+  assert.deepEqual(drawn(MAIN_TAB.CHAT), []);
 });
 
 /** Dean's own workspace, with no GitHub connected, and the team's, whose GitHub reaches acme-corp's repositories. */
@@ -457,7 +458,12 @@ test("Copy link copies the plan's address on tryluke.dev, alike from the toolbar
   const copied = installClipboard();
   mount(createElement(ToastHost));
   const opened = openTab();
-  const tasks: TasksControl = { ...opened.tasks, workspaces: [{ ...PERSONAL, slug: "dean" }] };
+  // The title's ⋯ stands over the plan, which the side panel shows.
+  const tasks: TasksControl = {
+    ...opened.tasks,
+    workspaces: [{ ...PERSONAL, slug: "dean" }],
+    sidePanel: { ...opened.tasks.sidePanel, open: true, tab: SIDE_PANEL_TAB.PLAN },
+  };
   const link = `https://tryluke.dev/dean/plan/${TASK.id}`;
   const copyFromMenu = async () => {
     const item = menuItems().find((candidate) => candidate.textContent === "Copy link");

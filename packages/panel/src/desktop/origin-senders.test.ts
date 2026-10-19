@@ -18,7 +18,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
-import type { SidePanelTab } from "../tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -78,13 +78,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The plan's page as `reader` sees it, `main` chosen in its column and `side` in its panel, every tab the column is asked to show recorded. */
+/** The plan's page as `reader` sees it, `main` chosen in its column and `side` in its panel, every tab either is asked to show recorded. */
 async function mount(input: {
   reader: string;
   main: MainTab;
   side?: SidePanelTab | undefined;
-}): Promise<{ container: HTMLElement; chosen: MainTab[] }> {
-  const chosen: MainTab[] = [];
+}): Promise<{ container: HTMLElement; chosen: (MainTab | SidePanelTab)[] }> {
+  const chosen: (MainTab | SidePanelTab)[] = [];
   // Note that only the first read answers, because a read past the cursor waits on the service.
   const read = new Set<string>();
   const control = tasksControl({
@@ -94,7 +94,7 @@ async function mount(input: {
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.PLAN, { agent: AGENT.id }],
+      tabs: [MAIN_TAB.CALL, { agent: AGENT.id }],
       tab: input.main,
       openAgents: [AGENT.id],
       onChoose: (tab) => chosen.push(tab),
@@ -104,6 +104,7 @@ async function mount(input: {
       open: input.side !== undefined,
       subagents: [{ subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } }],
       tab: input.side,
+      onChoose: (tab) => chosen.push(tab),
     },
     agents: codingAgentsControl({
       agents: [AGENT],
@@ -165,7 +166,7 @@ function senderLine(place: Element): HTMLElement {
   );
 }
 
-test("a task's agent opens on its plan sent by the task, which opens the plan, with the teammate who started the agent", async () => {
+test("a task's agent opens on its plan sent by the task, which opens the plan in the side panel, with the teammate who started the agent", async () => {
   const { container, chosen } = await mount({ reader: DEAN.userId, main: { agent: AGENT.id } });
 
   const line = senderLine(container);
@@ -174,7 +175,7 @@ test("a task's agent opens on its plan sent by the task, which opens the plan, w
   assert.ok(task, "the task's name is a press");
   act(() => task.click());
 
-  assert.deepEqual(chosen, [MAIN_TAB.PLAN]);
+  assert.deepEqual(chosen, [SIDE_PANEL_TAB.PLAN]);
 });
 
 test("the reader's own agent opens on its plan sent by the task alone, never by them", async () => {
@@ -206,7 +207,7 @@ test("the line naming who sent the plan stands under its card, then when it was 
 test("a worker's tab opens on its task sent by the agent that delegated it, whose name opens that agent's tab", async () => {
   const { container, chosen } = await mount({
     reader: DEAN.userId,
-    main: MAIN_TAB.PLAN,
+    main: MAIN_TAB.CALL,
     side: { subagent: "call-1", delegation: { agent: AGENT.id, task: "Audit retries" } },
   });
 

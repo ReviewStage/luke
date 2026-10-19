@@ -48,15 +48,18 @@ A reviewer can hold the build to these as easily as to the layout:
   accepted: there is no checkbox, no Accept, and nothing that moves one
   elsewhere.
 - The document is the record. What was said on the task's calls can be read
-  back in the side panel's Transcript tab, but nothing there is a second
+  back in the task's Call tab, but nothing there is a second
   document: it is never copied, edited, or handed to an agent. The document
   itself is what Start hands to a coding agent, as the Markdown Copy puts on
   the clipboard ("From a plan to a pull request" below).
-- The document is always the page. The whiteboard ("Whiteboard" below), the
-  code Luke has on screen, the transcript, and each coding agent started on
-  the task stand beside it in a side panel ("Side panel" below) that the
-  developer opens and closes; only a first drawing, first code, or an agent
-  just started opens it on its own, and there are no second documents.
+- The work column is the agents'. The task's Call with Luke anchors it, and
+  each coding agent started on the task stands beside the Call in a tab of
+  its own; everything else, the plan's document, the task's Inbox, the
+  whiteboard ("Whiteboard" below), and the code Luke has on screen, stands
+  in a side panel ("Side panel" below) that the developer opens and closes.
+  A task opens with the panel shown on its plan; only a first drawing, first
+  code, or an Inbox item not yet seen opens it on its own, and there are no
+  second documents.
 - No window of its own. Tasks live in Luke's one window (LUKE-347): there
   is no separate task window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -457,15 +460,15 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 ### Agent tabs
 
 Each coding agent started on the task has a tab of its own in the task's
-column, after the task's tab (`desktop/main-tabs.tsx`,
+column, after the Call's tab (`desktop/main-tabs.tsx`,
 `planning/use-main-tabs.ts`, `planning/agent-tab.tsx`,
 `planning/use-coding-agents.ts`), opened and selected the moment its Start
 lands, and showing its transcript and composer where the document stands.
 The column's strip is the side panel's: tabs drag and step among
 themselves, close by ×, Delete, ⌘W, or Close and Close others, hang their
-cards, and pin to the sidebar. The task's tab stands first for good: it
-never closes or moves, a press chooses it, and its right-click offers Close
-others and Rename. The tab each task last showed is kept, so a task opens
+cards, and pin to the sidebar. The Call's tab stands first: it never moves,
+closes only beside another tab, a press chooses it, and its right-click
+offers Close others and Pin tab. The tab each task last showed is kept, so a task opens
 as it was left. ⌘T and ⌘W answer the column holding the focus, the side
 panel's once the pointer goes into it. A subagent's tab stays in the side
 panel.

@@ -144,8 +144,8 @@ async function mount(input: {
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [MAIN_TAB.PLAN, ...agentTabs],
-      tab: input.main ?? MAIN_TAB.PLAN,
+      tabs: [MAIN_TAB.CALL, ...agentTabs],
+      tab: input.main ?? MAIN_TAB.CALL,
       openAgents: listed.map((each) => each.id),
     },
     sidePanel: {

@@ -601,7 +601,7 @@ const FIXTURE_CODE_PANEL: SidePanelState = {
   width: SIDE_PANEL_WIDTH.DEFAULT,
 };
 const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
-const FIXTURE_CALL_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.CALL };
+const FIXTURE_DOCUMENT_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.PLAN };
 const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
 
 /**
@@ -653,9 +653,9 @@ export function fixtureTasksView(run: {
 /**
  * The side panel a fixture run opens its task with: on the code Luke has on
  * screen under the tasks profile, on the whiteboard under the
- * tasks-board profile, on the call under the tasks-transcript and
- * tasks-work profiles, the latter with Luke at work on it, and closed
- * under any other. Nothing for a live
+ * tasks-board profile, on the plan under the tasks-transcript and
+ * tasks-work profiles, whose call the task's column shows, the latter with
+ * Luke at work on it, and closed under any other. Nothing for a live
  * run, which opens the panel as the developer last left it.
  */
 export function fixtureSidePanel(run: {
@@ -665,7 +665,7 @@ export function fixtureSidePanel(run: {
   if (!run.fixtureMode) return undefined;
   if (run.profile === RUN_PROFILE.TASKS) return FIXTURE_CODE_PANEL;
   if (run.profile === RUN_PROFILE.TASKS_BOARD) return FIXTURE_BOARD_PANEL;
-  if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_CALL_PANEL;
-  if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_CALL_PANEL;
+  if (run.profile === RUN_PROFILE.TASKS_TRANSCRIPT) return FIXTURE_DOCUMENT_PANEL;
+  if (run.profile === RUN_PROFILE.TASKS_WORK) return FIXTURE_DOCUMENT_PANEL;
   return FIXTURE_CLOSED_PANEL;
 }

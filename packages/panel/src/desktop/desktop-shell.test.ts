@@ -27,8 +27,8 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
-import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
+import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -367,7 +367,7 @@ test("the window is called by what stands in it: the plan on screen in its own w
   assert.equal(document.title, "Factory — Acme");
 });
 
-test("a plan opened on its Inbox tab rather than its own is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
+test("a plan opened with its Inbox tab shown rather than its plan is read at once, its row out of the unread weight, while the window's Inbox standing in its place leaves it unread", () => {
   const unreadOnOpen = (inboxOpen: boolean) => {
     window.localStorage.setItem("luke.planLooks", JSON.stringify({ [DOCUMENT_TASK.id]: 1 }));
     window.localStorage.setItem("luke.planLooksSeeded", "1");
@@ -379,10 +379,12 @@ test("a plan opened on its Inbox tab rather than its own is read at once, its ro
         tasks: [DOCUMENT_TASK],
         activeTaskId: DOCUMENT_TASK.id,
         region: { kind: DOCUMENT_REGION.READY, task: DOCUMENT_TASK },
-        mainTabs: {
-          ...tasksControl().mainTabs,
-          tabs: [MAIN_TAB.PLAN, MAIN_TAB.INBOX],
-          tab: MAIN_TAB.INBOX,
+        sidePanel: {
+          ...tasksControl().sidePanel,
+          open: true,
+          tabs: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+          strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
+          tab: SIDE_PANEL_TAB.INBOX,
         },
       },
       PANEL_TAB.TASKS,

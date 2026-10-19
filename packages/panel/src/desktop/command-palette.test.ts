@@ -36,7 +36,7 @@ import {
 } from "../app-commands.js";
 import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-at-hand.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
-import { SIDE_PANEL_TAB, type SidePanelControl } from "../tasks/use-side-panel.js";
+import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
@@ -1181,7 +1181,7 @@ test("with the side panel filling the window over an agent's tab, ⌥⌘C copies
         ...ON_AGENT_TAB.sidePanel,
         open: true,
         fullScreen: true,
-        tab: SIDE_PANEL_TAB.CALL,
+        tab: { changes: LINKED_AGENT },
       },
     }),
   );
@@ -1191,7 +1191,9 @@ test("with the side panel filling the window over an agent's tab, ⌥⌘C copies
   });
   await act(async () => undefined);
 
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/call`]);
+  assert.deepEqual(copied, [
+    `https://tryluke.dev/acme/plan/${DOCUMENT_TASK.id}/agent/${LINKED_AGENT}/changes`,
+  ]);
 });
 
 test("⌘K pressed with the keyboard in the side panel offers its tab's link first, wearing ⌥⌘C, as ⌥⌘C there copies", () => {
@@ -1202,7 +1204,7 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
   openPalette(
     tasksControl({
       ...ON_AGENT_TAB,
-      sidePanel: { ...ON_AGENT_TAB.sidePanel, open: true, tab: SIDE_PANEL_TAB.CALL },
+      sidePanel: { ...ON_AGENT_TAB.sidePanel, open: true, tab: { changes: LINKED_AGENT } },
     }),
   );
   type("copy link");
@@ -1211,7 +1213,7 @@ test("⌘K pressed with the keyboard in the side panel offers its tab's link fir
   assert.deepEqual(
     rows().filter((row) => row.startsWith("Copy link to ")),
     [
-      "Copy link to call",
+      "Copy link to pull request",
       "Copy link to agent · Expire old invites",
       `Copy link to task · ${DOCUMENT_TASK.name}`,
     ],

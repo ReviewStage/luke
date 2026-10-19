@@ -5978,6 +5978,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding: var(--luke-space-8) var(--row-inset) var(--luke-space-4);
 }
 
+/* The plan's tab, kept mounted while another tab is shown, laid out still
+   but not drawn, as the document once was in the column. */
+.side-panel-content[hidden] {
+  display: none;
+}
+
 .side-panel-content {
   /* What the panel leaves either side of a column at each measure, read
      where it is spent: a percentage there is of the box's frame, which is

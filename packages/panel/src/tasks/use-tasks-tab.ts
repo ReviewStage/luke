@@ -115,7 +115,6 @@ import { shownFiles } from "@luke/voice/code-pane-model";
 import {
   type HeardCall,
   heardCalls,
-  TRANSCRIPT_REGION,
   type TranscriptRegion,
   transcriptRegion,
 } from "@luke/voice/transcript-model";
@@ -1047,26 +1046,21 @@ function secondCallQuestion(taskName: string): DialogQuestion {
   };
 }
 
-/** What the open task holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too. */
-function taskHolds(
-  view: Pick<TasksView, "board" | "shownCode" | "conversation">,
-  transcript: TranscriptRegion,
-): TaskHolds {
-  const { board, shownCode, conversation } = view;
-  const work = conversation?.messages;
+/**
+ * What the open task holds of each fixed tab's kind, each unknown until its
+ * read lands: its plan always, and of its Inbox whether it may draw one, an
+ * agent held, an archived one among them, or an item waiting (`inbox`).
+ */
+function taskHolds(view: Pick<TasksView, "board" | "shownCode">, inbox: boolean): TaskHolds {
+  const { board, shownCode } = view;
   return {
+    [SIDE_PANEL_TAB.PLAN]: true,
+    [SIDE_PANEL_TAB.INBOX]: inbox,
     [SIDE_PANEL_TAB.BOARD]:
       board === undefined
         ? undefined
         : board.elements.length > 0 || (board.drawing?.elements.length ?? 0) > 0,
     [SIDE_PANEL_TAB.CODE]: shownCode === undefined ? undefined : shownCode.length > 0,
-    // A call holds something once a line was said on it or Luke worked on the task, and nothing yet while neither has been read.
-    [SIDE_PANEL_TAB.CALL]:
-      transcript.kind === TRANSCRIPT_REGION.READY || (work?.length ?? 0) > 0
-        ? true
-        : transcript.kind === TRANSCRIPT_REGION.EMPTY && work !== undefined
-          ? false
-          : undefined,
   };
 }
 
@@ -1490,9 +1484,12 @@ export function useTasksTab(input: {
     viewed.activeTaskId,
     agents.agentIds,
     agents.draft?.id,
-    input.inboxWaiting.some((task) => task.taskId === viewed.activeTaskId),
-    agents.heldIds,
   );
+  // The task's Inbox stands on a task holding an agent, an archived one among them, since only an
+  // agent posts, or one main's read across the account says an item waits on.
+  const inboxHeld =
+    (agents.heldIds?.length ?? 0) > 0 ||
+    input.inboxWaiting.some((task) => task.taskId === viewed.activeTaskId);
   mainRef.current = mainTabs;
   // A page's tab is held to the pages agents wrote for the task.
   const pages = useMemo(() => (viewed.pages ?? []).map((page) => page.id), [viewed.pages]);
@@ -1538,7 +1535,7 @@ export function useTasksTab(input: {
       : inboxView !== undefined
         ? { id: inboxTask ?? inboxAgent, holds: NO_HOLDS, bare: true }
         : pageAgents === undefined
-          ? { id: viewed.activeTaskId, holds: taskHolds(viewed, transcript) }
+          ? { id: viewed.activeTaskId, holds: taskHolds(viewed, inboxHeld) }
           : { id: pageAgent, holds: NO_HOLDS },
     issuesStand
       ? NO_IDS
@@ -1619,12 +1616,19 @@ export function useTasksTab(input: {
       : columnShown && isAgentTab(mainTabs.tab)
         ? mainTabs.tab.agent
         : null;
+  // The task's Inbox is the side panel's, on screen while the panel shows it beside the task.
+  const panelShown =
+    shown &&
+    historyFor === undefined &&
+    standIn === undefined &&
+    fixture === undefined &&
+    sidePanel.open;
   const shownInbox =
     shown && fixture === undefined && inboxView !== undefined
       ? inboxChosen !== undefined && "taskId" in inboxChosen
         ? inboxChosen.taskId
         : null
-      : columnShown && mainTabs.tab === MAIN_TAB.INBOX
+      : panelShown && sidePanel.tab === SIDE_PANEL_TAB.INBOX
         ? (viewed.activeTaskId ?? null)
         : null;
   // Chat on screen is where what waits in it is read, so main announces none of that then: the
@@ -2409,11 +2413,12 @@ export function useTasksTab(input: {
 
   // A started task becomes the host's open one, which turns the page to it,
   // so the dialog closes and the Inbox or a version history standing behind
-  // it gives way. It opens with the side panel hidden, since it has nothing
-  // in it yet. Note that the panel is hidden as the start is sent, while the
-  // modal dialog stands over it, because the host turns to the new plan
-  // before the start answers, and a hide on the answer would close a panel
-  // opened on the new plan since; a refusal shows it again as it stood.
+  // it gives way. It opens with the side panel shown, on the plan, the one
+  // tab a new task holds, which Luke writes as the developer talks. Note
+  // that the panel is shown as the start is sent, while the modal dialog
+  // stands over it, because the host turns to the new plan before the start
+  // answers, and a show on the answer would open a panel hidden on the new
+  // plan since; a refusal hides it again where it stood hidden.
   // It starts in the chosen workspace; with none listed the
   // service starts it in the account's first one. A name left blank is not
   // sent, and the plan stands as Untitled. A start opens its
@@ -2438,9 +2443,9 @@ export function useTasksTab(input: {
     from: NewTaskStart = {},
   ): Promise<string | undefined> => {
     const panelWasOpen = sidePanel.open;
-    sidePanel.onSetOpen(false);
+    sidePanel.onSetOpen(true);
     const refusedWith = (note: string): string => {
-      if (panelWasOpen) sidePanel.onSetOpen(true);
+      if (!panelWasOpen) sidePanel.onSetOpen(false);
       return note;
     };
     return act(ACT_KIND.TASKS_START, {
@@ -2563,7 +2568,7 @@ export function useTasksTab(input: {
   };
 
   // A version's Open lands where its writer wrote it: an agent's tab as a
-  // notification opens it, or the side panel's Call tab, asked to
+  // notification opens it, or the task's Call tab, asked to
   // bring the call or the turn into view once it draws.
   const showSource = (taskId: string, source: RevisionSource) => {
     if (source.kind === REVISION_SOURCE.AGENT) {
@@ -2571,12 +2576,12 @@ export function useTasksTab(input: {
       return;
     }
     setReveal({ taskId, source });
-    showPanelTab(taskId, SIDE_PANEL_TAB.CALL);
+    showColumnTab(taskId, MAIN_TAB.CALL);
   };
 
   // Each ask is its own, so the same section asked twice scrolls twice.
   const showMention = (mention: PlanMention) => {
-    showColumnTab(mention.taskId, MAIN_TAB.PLAN);
+    showPanelTab(mention.taskId, SIDE_PANEL_TAB.PLAN);
     const anchor = mention.kind === MENTION_KIND.SECTION ? mention.anchor : undefined;
     sectionAsks.current += 1;
     setSectionReveal({ taskId: mention.taskId, reveal: { anchor, ask: sectionAsks.current } });
@@ -2605,7 +2610,7 @@ export function useTasksTab(input: {
         showMention({ kind: MENTION_KIND.SECTION, taskId: place.planId, anchor: place.anchor });
         return;
       case LINK_PLACE.COMMENT:
-        showColumnTab(place.planId, MAIN_TAB.PLAN);
+        showPanelTab(place.planId, SIDE_PANEL_TAB.PLAN);
         setCommentReveal((last) => ({
           planId: place.planId,
           thread: place.threadId,
@@ -2623,7 +2628,7 @@ export function useTasksTab(input: {
         showPanelTab(place.planId, { page: place.pageId });
         return;
       case LINK_PLACE.CALL:
-        if (place.callId === undefined) showPanelTab(place.planId, SIDE_PANEL_TAB.CALL);
+        if (place.callId === undefined) showColumnTab(place.planId, MAIN_TAB.CALL);
         else showSource(place.planId, { kind: REVISION_SOURCE.CALL, callId: place.callId });
         return;
       case LINK_PLACE.TURN:
@@ -2765,9 +2770,9 @@ export function useTasksTab(input: {
   }, [fileFor, tasks.activeTaskId, onOpenFile]);
 
   // Every tab closed is kept as it stood for ⇧⌘T to open again, but a draft's,
-  // which lets its draft go, and the task's while it stands alone, which
+  // which lets its draft go, and the Call's while it stands alone, which
   // does not close. Note that a tab's place is counted among those after the
-  // plan's, which stand there whether or not the plan's tab is open.
+  // Call's, which stand there whether or not the Call's tab is open.
   const openTabs = mainTabs.tabs;
   const closeMainTab = mainTabs.onClose;
   // The brain's worker's tab reads its session as an agent's worker's tab does, the task standing in the agent's place.
@@ -2782,9 +2787,9 @@ export function useTasksTab(input: {
   );
   const closeColumnTab = useCallback(
     (tab: MainTab) => {
-      const after = openTabs.filter((each) => each !== MAIN_TAB.PLAN);
+      const after = openTabs.filter((each) => each !== MAIN_TAB.CALL);
       const at = after.findIndex((each) => sameTab(each, tab));
-      const closes = tab === MAIN_TAB.PLAN ? openTabs.includes(tab) && after.length > 0 : at >= 0;
+      const closes = tab === MAIN_TAB.CALL ? openTabs.includes(tab) && after.length > 0 : at >= 0;
       const task = viewed.activeTaskId;
       if (task !== undefined && closes && !isDraftTab(tab)) {
         const closed = { strip: CLOSED_TAB_STRIP.COLUMN, task, tab, at: Math.max(0, at) };
@@ -2817,8 +2822,9 @@ export function useTasksTab(input: {
     const { tab } = closed;
     const agentIds = agents.agentIds;
     if (closed.strip === CLOSED_TAB_STRIP.COLUMN) {
-      if (isAgentTab(tab)) return agentIds === undefined || agentIds.includes(tab.agent);
-      if (tab !== MAIN_TAB.INBOX) return true;
+      return !isAgentTab(tab) || agentIds === undefined || agentIds.includes(tab.agent);
+    }
+    if (tab === SIDE_PANEL_TAB.INBOX) {
       const held = agents.heldIds;
       const waiting = input.inboxWaiting.some((task) => task.taskId === closed.task);
       return held === undefined || held.length > 0 || waiting;
@@ -2887,7 +2893,7 @@ export function useTasksTab(input: {
   // Showing the panel on a plan whose strip holds no tab opens one first, so
   // the panel is never shown empty beside the summary that lists the same:
   // the tab last closed on the plan this launch, where ⇧⌘T would open it,
-  // else the kind last closed on it, kept across launches, else Call. An
+  // else the kind last closed on it, kept across launches, else Plan. An
   // agent's page, and the Inbox beside an item, have no kind to fall back on,
   // so their panel shows empty, offering what its "+" does.
   const toggleSidePanel = () => {
@@ -2913,7 +2919,7 @@ export function useTasksTab(input: {
       reopenHere(closed);
       return;
     }
-    sidePanel.onChoose(sidePanel.closedTabs.at(-1) ?? SIDE_PANEL_TAB.CALL);
+    sidePanel.onChoose(sidePanel.closedTabs.at(-1) ?? SIDE_PANEL_TAB.PLAN);
   };
 
   // The home page is where the tab rests, so only an open task steps back,
@@ -3179,7 +3185,7 @@ export function useTasksTab(input: {
     callTaskId: callInProgress(reported) ? reported.callTaskId : undefined,
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
-    // notification opens it, or the side panel's Call tab, asked to
+    // notification opens it, or the task's Call tab, asked to
     // bring the call or the turn into view once it draws.
     onShowSource: guard(showSource),
     // The call card's way back lands where the task's call bar is in sight.
@@ -3187,7 +3193,7 @@ export function useTasksTab(input: {
       confirm: secondCall,
       question: secondCallQuestion(callCard({ view: voice.view, tasks }).taskName),
     },
-    onShowTask: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.PLAN)),
+    onShowTask: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.PLAN)),
     // Each ask is its own, so the same section asked twice scrolls twice.
     onShowMention: guard(showMention),
     onOpenLink: guard((link: ReadLink) => openLink(link)),
@@ -3199,7 +3205,7 @@ export function useTasksTab(input: {
     // Only the ask shown is let go; a newer one stands until its own task shows it.
     onSectionRevealed: (ask) =>
       setSectionReveal((last) => (last?.reveal.ask === ask ? undefined : last)),
-    onShowInbox: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.INBOX)),
+    onShowInbox: guard((taskId: string) => showPanelTab(taskId, SIDE_PANEL_TAB.INBOX)),
     onShowChat: guard((taskId: string) => showColumnTab(taskId, MAIN_TAB.CHAT)),
     // A pinned tab is in one of the task's columns, so a version history over it gives way as well.
     onOpenPinnedTab: guard((pin: PinnedTab) => {

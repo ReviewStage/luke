@@ -97,7 +97,7 @@ function pinSubject(pin: PinnedTab, agent: TaskAgentLine | undefined): TabSubjec
     const pinned = pin.model === undefined ? undefined : { model: pin.model };
     return { kind: TAB_KIND.AGENT, name: pin.label, agent: agent ?? pinned };
   }
-  if (tab === MAIN_TAB.INBOX) return { kind: TAB_KIND.INBOX };
+  if (tab === MAIN_TAB.CALL) return { kind: TAB_KIND.CALL };
   if (isChangesTab(tab)) return { kind: TAB_KIND.CHANGES };
   return isFileTab(tab) ? { kind: TAB_KIND.FILE, path: tab.file } : { kind: TAB_KIND.PANEL, tab };
 }

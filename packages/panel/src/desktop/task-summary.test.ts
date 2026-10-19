@@ -362,7 +362,7 @@ test("a column with room for the rail draws it, and one widened to that room dra
 
 test("a plan with nothing yet to list draws no summary and no toolbar button, and both stand once it holds a row", () => {
   const listed = tasksControl();
-  const bare = tasksControl({ sidePanel: { ...listed.sidePanel, used: [] } });
+  const bare = tasksControl({ sidePanel: { ...listed.sidePanel, tabs: [], used: [] } });
   for (const width of [1200, 600, 280]) {
     const column = columnAt(width, bare);
     assert.equal(column.rail(), null, `no summary at ${width}px`);

@@ -5,6 +5,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArrowUpRightIcon,
+  CallIcon,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
@@ -57,7 +58,6 @@ import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import { useMinute } from "../tasks/task-time.js";
-import { SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "../tasks/use-side-panel.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { useWaitingItems, type WaitingItems } from "../tasks/use-waiting-items.js";
 import { RowHint, RowHintOptions } from "../tooltip.js";
@@ -127,8 +127,6 @@ const STEPS = {
   [FACTORY_STEP.BUILD]: { name: "Build", Icon: BlocksIcon, idle: "No agents working" },
   [FACTORY_STEP.SHIP]: { name: "Ship", Icon: GitMergeIcon, idle: "Nothing shipped today" },
 } as const;
-
-const CallGlyph = SIDE_PANEL_TAB_KIND[SIDE_PANEL_TAB.CALL].icon;
 
 /** What a block's row says it waits for. */
 const BLOCK_WORDS = {
@@ -503,7 +501,7 @@ function Line({
     <FactoryRow
       key={task.id}
       slide={task.id}
-      glyph={<CallGlyph />}
+      glyph={<CallIcon />}
       words={task.name}
       context="On a call with Luke"
       actor={who(task)}
