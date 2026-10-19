@@ -11,6 +11,7 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
@@ -1598,4 +1599,110 @@ test("⌘K offers the open task's Chat tab only while the account has Chat on", 
   await paletteUnderState(tasks);
   chooseFilter("Agents");
   assert.ok(!rows().some((row) => row.startsWith("Chat")), "Chat off offers no Chat");
+});
+
+/** An issue of Acme's, numbered and titled, standing in the status given. */
+function acmeIssue(number: number, title: string, status: Issue["status"]): Issue {
+  return {
+    id: `3f0e6f5c-7d1a-4f6e-9a55-${String(number).padStart(12, "0")}`,
+    workspaceId: ACME.id,
+    number,
+    title,
+    description: "",
+    status,
+    priority: ISSUE_PRIORITY.NONE,
+    creator: null,
+    archivedAt: null,
+    createdAt: number,
+    updatedAt: number,
+  };
+}
+
+/** A window whose issues list answers `issues` for the workspace asked, every other act refused; the workspaces asked for, in order. */
+function issuesAnswer(issues: () => Promise<ActOutcome>): string[] {
+  const asked: string[] = [];
+  fakeAppBridge({
+    act: (request: Act): Promise<ActOutcome> => {
+      if (request.kind !== ACT_KIND.ISSUES_LIST) {
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+      }
+      asked.push(request.payload.workspaceId);
+      return issues();
+    },
+  });
+  return asked;
+}
+
+test("with Issues on, ⌘K finds the listed workspace's issues by title or identifier under Issues, and Enter opens the issue's page", async () => {
+  const fix = acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.IN_PROGRESS);
+  const asked = issuesAnswer(() =>
+    Promise.resolve({
+      status: ACT_OUTCOME_STATUS.DONE,
+      value: { issues: [fix, acmeIssue(7, "Billing alerts", ISSUE_STATUS.TODO)] },
+    }),
+  );
+  handState(experimentsOn(EXPERIMENT.ISSUES));
+  const opened: unknown[] = [];
+  const base = tasksControl();
+  const tasks = tasksControl({
+    workspace: ACME,
+    issuesView: { ...base.issuesView, onOpen: (place) => opened.push(place) },
+  });
+  await paletteUnderState(tasks);
+  await settle();
+
+  type("login redir");
+  assert.deepEqual(rows(), ["Fix the login redirect · ACME-12 · In progress"]);
+  const group = document.querySelector('[role="option"]')?.closest("[cmdk-group]");
+  assert.equal(group?.querySelector("[cmdk-group-heading]")?.textContent, "Issues");
+  type("ACME-7");
+  assert.equal(rows()[0], "Billing alerts · ACME-7 · Todo");
+  key({ key: "Enter", code: "Enter" });
+  await settle();
+
+  assert.deepEqual(asked, [ACME.id]);
+  assert.deepEqual(opened, [
+    { kind: ISSUES_PAGE.ISSUE, issueId: acmeIssue(7, "", ISSUE_STATUS.TODO).id },
+  ]);
+});
+
+test("with Issues off, ⌘K draws no Issues filter, lists no issue, and reads none", async () => {
+  const asked = issuesAnswer(() =>
+    Promise.resolve({
+      status: ACT_OUTCOME_STATUS.DONE,
+      value: { issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] },
+    }),
+  );
+  handState({});
+  await paletteUnderState(tasksControl({ workspace: ACME }));
+  await settle();
+  type("login redirect");
+
+  assert.ok(!filterChips().some((chip) => chip.textContent === "Issues"));
+  assert.deepEqual(rows(), []);
+  assert.deepEqual(asked, []);
+});
+
+test("Issues says the issues are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
+  let answer: (outcome: ActOutcome) => void = () => undefined;
+  const asked = issuesAnswer(
+    () =>
+      new Promise<ActOutcome>((resolve) => {
+        answer = resolve;
+      }),
+  );
+  handState(experimentsOn(EXPERIMENT.ISSUES));
+  await paletteUnderState(tasksControl({ workspace: ACME }));
+  chooseFilter("Issues");
+  assert.equal(emptyLine(), "Reading the workspace's issues…");
+
+  answer({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
+  await settle();
+  assert.match(emptyLine() ?? "", /The workspace's issues could not be read\./u);
+  const retry = [...document.querySelectorAll("button")].find(
+    (each) => each.textContent === "Retry",
+  );
+  assert.ok(retry, "Retry is offered");
+  act(() => retry.click());
+  assert.equal(asked.length, 2, "Retry reads the issues again");
 });
