@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
@@ -9,14 +9,18 @@ import { cloneFolder, openOnMacScript, worktreeFolder, worktreesRoot } from "./o
 /**
  * Open on this Mac's script over real Git and bash, an origin on disk
  * standing in for GitHub: the first run clones it into Luke's own folder
- * and makes a worktree at the agent's branch, and the shell opens there; a
- * later run after the agent pushes more, or force-pushes, brings the
- * worktree to the branch's new head and keeps what Git ignores there; a
- * worktree with the developer's own changes, or commits of theirs GitHub
- * does not have, is left as it stands and its run command not run; the
- * worktree is on the branch itself, tracking GitHub's; a clone over HTTPS that fails is made over SSH; a
- * branch that cannot be fetched is said and the shell still opens, its run
- * command not run; and no two branches share a worktree.
+ * and makes a worktree on the agent's branch, tracking GitHub's, and the
+ * shell opens there; a later run after the agent pushes more, or
+ * force-pushes, brings the worktree to the branch's new head and keeps what
+ * Git ignores there; a worktree with the developer's own changes, or
+ * commits of theirs GitHub does not have, is left as it stands and its run
+ * command not run; a clone over HTTPS that fails is made over SSH; a branch
+ * that cannot be fetched is said and the shell still opens; a branch GitHub
+ * deleted once its pull request merged opens at that pull request's last
+ * head; a worktree folder deleted by hand is made again; one an earlier
+ * Luke kept under its application data is left there and said; two opens of
+ * the shared clone at once each bring in their own branch; and no two
+ * branches share a worktree or reach outside its repository's folder.
  */
 
 const GIT_ENVIRONMENT = {
@@ -403,130 +407,80 @@ test(
 );
 
 test(
-  "a worktree made under its earlier, percent-encoded folder is moved to its folder now, what it holds kept",
+  "a worktree an earlier Luke kept under its application data is left there and said, and a fresh one made",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
-    push("first\n");
-    const clone = cloneFolder(state, "acme/app");
-    const earlier = path.join(state, "worktrees", "acme", "app", "luke%2Ffix-relay");
-    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
-    const script = openOnMacScript({
-      repository: "acme/app",
-      clone,
-      worktree: earlier,
-      branch: "luke/fix-relay",
-      remotes: { https: origin, ssh: origin },
-    });
-    run(scratch, shell, script);
-    writeFileSync(path.join(clone, ".git", "info", "exclude"), "installed.txt\n");
-    writeFileSync(path.join(earlier, "installed.txt"), "");
-    const second = push("second\n");
+    const head = push("first\n");
+    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const earlier = path.join(earlierRoot, "worktrees", "acme", "app", "luke%2Ffix-relay");
+    mkdirSync(path.join(earlier, ".git"), { recursive: true });
+    writeFileSync(path.join(earlier, "mine.txt"), "");
+    const root = path.join(state, ".luke");
+    const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
 
-    run(
+    const printed = run(
       scratch,
       shell,
       openOnMacScript({
         repository: "acme/app",
-        clone,
+        clone: cloneFolder(root, "acme/app"),
         worktree,
         branch: "luke/fix-relay",
         remotes: { https: origin, ssh: origin },
+        earlier: { worktrees: path.dirname(earlier) },
       }),
     );
 
-    assert.equal(existsSync(earlier), false);
-    assert.equal(git(worktree, ["rev-parse", "HEAD"]), second);
-    assert.equal(readFileSync(path.join(worktree, "installed.txt"), "utf8"), "");
-    assert.equal(shellOpenedIn(scratch), worktree);
-  },
-  GIT_DEADLINE,
-);
-
-test(
-  "a worktree under its earlier folder that Git will not move is left there, and a fresh one made",
-  async (t) => {
-    const { scratch, origin, push, shell, state } = await fixture(t);
-    const head = push("first\n");
-    const clone = cloneFolder(state, "acme/app");
-    const earlier = path.join(state, "worktrees", "acme", "app", "luke%2Ffix-relay");
-    const worktree = worktreeFolder(state, "acme/app", "luke/fix-relay");
-    const script = (folder: string) =>
-      openOnMacScript({
-        repository: "acme/app",
-        clone,
-        worktree: folder,
-        branch: "luke/fix-relay",
-        command: "touch ran",
-        remotes: { https: origin, ssh: origin },
-      });
-    run(scratch, shell, script(earlier));
-    // Note that a worktree under its earlier folder was made detached, as the script then made every one.
-    git(earlier, ["checkout", "--quiet", "--detach"]);
-    // Note that a locked worktree is one Git refuses to move, as it refuses one holding submodules.
-    git(clone, ["worktree", "lock", earlier]);
-
-    const printed = run(scratch, shell, script(worktree));
-
-    assert.match(printed, /Could not move it/u);
-    assert.doesNotMatch(printed, /Could not bring/u);
-    assert.equal(existsSync(path.join(earlier, ".git")), true);
+    assert.match(printed, /An earlier worktree of luke\/fix-relay stays at .*luke%2Ffix-relay/u);
+    assert.equal(existsSync(path.join(earlier, "mine.txt")), true);
     assert.equal(git(worktree, ["rev-parse", "HEAD"]), head);
-    assert.equal(existsSync(path.join(worktree, "ran")), true);
   },
   GIT_DEADLINE,
 );
 
 test(
-  "a clone an earlier Luke kept under its application data is moved, worktrees and what they hold with it",
+  "two opens of the shared clone at once, before it is made, each bring in their own branch",
   async (t) => {
     const { scratch, origin, push, shell, state } = await fixture(t);
-    push("first\n");
-    git(origin, ["branch", "luke/other"]);
-    const earlierRoot = path.join(scratch, "Application Support", "Luke Dev");
+    const relay = push("relay\n");
+    git(origin, ["checkout", "--quiet", "-b", "luke/other", "main"]);
+    writeFileSync(path.join(origin, "README.md"), "other\n");
+    git(origin, ["commit", "--quiet", "-am", "other"]);
+    const other = git(origin, ["rev-parse", "HEAD"]);
     const root = path.join(state, ".luke");
-    const script = (stateRoot: string, branch: string, earlier?: string) =>
-      openOnMacScript({
-        repository: "acme/app",
-        clone: cloneFolder(stateRoot, "acme/app"),
-        worktree: worktreeFolder(stateRoot, "acme/app", branch),
-        branch,
-        command: "touch ran",
-        remotes: { https: origin, ssh: origin },
-        earlier:
-          earlier === undefined
-            ? undefined
-            : {
-                clone: cloneFolder(earlier, "acme/app"),
-                worktrees: path.dirname(worktreeFolder(earlier, "acme/app", branch)),
-              },
-      });
-    run(scratch, shell, script(earlierRoot, "luke/fix-relay"));
-    run(scratch, shell, script(earlierRoot, "luke/other"));
-    const earlierClone = cloneFolder(earlierRoot, "acme/app");
-    writeFileSync(path.join(earlierClone, ".git", "info", "exclude"), "installed.txt\nran\n");
-    writeFileSync(
-      path.join(worktreeFolder(earlierRoot, "acme/app", "luke/other"), "installed.txt"),
-      "",
-    );
+    const opening = (branch: string, name: string) => {
+      const file = path.join(scratch, `${name}.sh`);
+      writeFileSync(
+        file,
+        openOnMacScript({
+          repository: "acme/app",
+          clone: cloneFolder(root, "acme/app"),
+          worktree: worktreeFolder(root, "acme/app", branch),
+          branch,
+          remotes: { https: origin, ssh: origin },
+        }),
+        { mode: 0o700 },
+      );
+      return new Promise<void>((resolve) =>
+        execFile(
+          "/bin/bash",
+          [file],
+          { env: { ...GIT_ENVIRONMENT, HOME: scratch, SHELL: shell } },
+          () => resolve(),
+        ),
+      );
+    };
 
-    const printed = run(scratch, shell, script(root, "luke/fix-relay", earlierRoot));
-    const other = worktreeFolder(root, "acme/app", "luke/other");
-    run(scratch, shell, script(root, "luke/other", earlierRoot));
+    await Promise.all([opening("luke/fix-relay", "one"), opening("luke/other", "two")]);
 
-    assert.match(printed, /Moving the clone and its worktrees/u);
-    assert.equal(existsSync(earlierClone), false);
-    assert.equal(existsSync(path.join(cloneFolder(root, "acme/app"), ".git")), true);
-    assert.equal(readFileSync(path.join(other, "installed.txt"), "utf8"), "");
-    assert.equal(git(other, ["symbolic-ref", "--short", "HEAD"]), "luke/other");
     assert.equal(
-      existsSync(path.join(worktreeFolder(root, "acme/app", "luke/fix-relay"), "ran")),
-      true,
+      git(worktreeFolder(root, "acme/app", "luke/fix-relay"), ["rev-parse", "HEAD"]),
+      relay,
     );
-    assert.equal(shellOpenedIn(scratch), other);
+    assert.equal(git(worktreeFolder(root, "acme/app", "luke/other"), ["rev-parse", "HEAD"]), other);
   },
   GIT_DEADLINE,
 );
-
 test("the shared root sits in the home folder, its path holding no space", () => {
   assert.equal(worktreesRoot("/Users/someone"), "/Users/someone/.luke");
 });

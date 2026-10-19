@@ -159,8 +159,8 @@ it.effect("an open runs the branch's script, its output out on the port and typi
       terminal.script,
       /worktree='\/home\/\.luke\/worktrees\/acme\/app\/luke\+2Fadd-thing'/u,
     );
-    // Note that the clone and worktrees an earlier Luke kept under its application data are named, to be moved from there.
-    assert.match(terminal.script, /earlier_clone='\/state\/clones\/acme\/app'/u);
+    // Note that the worktrees an earlier Luke kept under its application data are named, to be pointed to.
+    assert.match(terminal.script, /earlier_worktrees='\/state\/worktrees\/acme\/app'/u);
     assert.match(terminal.script, /pnpm dev/u);
 
     terminal.output("ready");

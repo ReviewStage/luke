@@ -57,7 +57,7 @@ export interface MacTerminalActsDependencies {
   host: Pick<HostOperator, "macRepositories" | "setMacRepository">;
   /** Where every Luke install keeps its clones and worktrees (`worktreesRoot`). */
   worktreesRoot: string;
-  /** Where Luke keeps its application data, which an earlier Luke kept its clones and worktrees under, moved from there the first time. */
+  /** Where Luke keeps its application data, which an earlier Luke kept its clones and worktrees under. */
   stateRoot: string;
   ports: {
     /** A fresh channel: main's end, with the other end already posted to the panel under the agent's id. */
@@ -179,7 +179,6 @@ export function macTerminalActRows(
             clone: cloneFolder(worktreesRoot, params.repository),
             worktree: worktreeFolder(worktreesRoot, params.repository, params.branch),
             earlier: {
-              clone: cloneFolder(stateRoot, params.repository),
               worktrees: path.dirname(worktreeFolder(stateRoot, params.repository, params.branch)),
             },
             branch: params.branch,

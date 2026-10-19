@@ -5,8 +5,9 @@ import path from "node:path";
  *
  * Nothing is asked of the developer first. Luke keeps one clone of each
  * repository under `~/.luke`, shared by every Luke install, made the first
- * time a branch of it is opened, and a worktree per branch beside it; one an
- * earlier Luke kept under its application data is moved there. The script runs in the
+ * time a branch of it is opened, under a lock, and a worktree per branch
+ * beside it; a worktree an earlier Luke kept under its application data is
+ * left there and said. The script runs in the
  * developer's login shell with their own Git login, so their credentials
  * and tools are the ones used: it clones over HTTPS, and over SSH where
  * that fails, without checking anything out; fetches the branch; makes the
@@ -90,8 +91,8 @@ export function openOnMacScript(input: {
   readonly pullRequest?: number | null | undefined;
   /** The repository's run command on this Mac, run in the worktree before the shell opens; none where it has none. */
   readonly command?: string | null | undefined;
-  /** Where an earlier Luke kept this repository's clone and its worktrees' folder, under its application data; moved to `clone` and beside `worktree` the first time, where `clone` is not yet made. */
-  readonly earlier?: { readonly clone: string; readonly worktrees: string } | undefined;
+  /** The folder an earlier Luke kept this repository's worktrees in, under its application data, whose worktree of the branch is pointed to rather than moved; none for none. */
+  readonly earlier?: { readonly worktrees: string } | undefined;
   /** Where the script writes its terminal's device, which Luke resizes it through; none where nothing resizes it. */
   readonly ttyFile?: string | undefined;
   /** The terminal's size in cells as the tab first draws it. */
@@ -118,49 +119,58 @@ export function openOnMacScript(input: {
     `branch=${shellQuoted(input.branch)}`,
     `https=${shellQuoted(remotes.https)}`,
     `ssh=${shellQuoted(remotes.ssh)}`,
-    `legacy=${shellQuoted(path.join(path.dirname(input.worktree), encodeURIComponent(input.branch)))}`,
-    `earlier_clone=${shellQuoted(input.earlier?.clone ?? "")}`,
     `earlier_worktrees=${shellQuoted(input.earlier?.worktrees ?? "")}`,
+    `earlier_names=${shellQuoted(`${path.basename(input.worktree)} ${encodeURIComponent(input.branch)}`)}`,
     `pull=${input.pullRequest == null ? "''" : shellQuoted(String(Math.trunc(input.pullRequest)))}`,
     // Note that every step returns on failure by hand: `set -e` is ignored in a function called from an `||` list, as this one is.
     "opened() {",
-    // Note that a clone an earlier Luke made under its application data is moved here with its worktrees, rather than cloned and installed again, and each worktree's link to it repaired.
-    '  if [ -n "$earlier_clone" ] && [ ! -e "$clone" ] && [ -e "$earlier_clone/.git" ]; then',
-    '    echo "▸ Moving the clone and its worktrees from $earlier_clone to $clone"',
-    '    mkdir -p "$(dirname "$clone")" "$(dirname "$worktree")" || return 1',
-    '    mv "$earlier_clone" "$clone" || return 1',
-    '    for each in "$earlier_worktrees"/*; do',
-    '      [ -e "$each/.git" ] && [ ! -e "$(dirname "$worktree")/$(basename "$each")" ] || continue',
-    '      mv "$each" "$(dirname "$worktree")/" && git -C "$clone" worktree repair "$(dirname "$worktree")/$(basename "$each")"',
-    "    done",
-    "  fi",
+    '  mkdir -p "$(dirname "$clone")" || return 1',
     '  if [ ! -e "$clone/.git" ]; then',
-    '    echo "▸ Cloning ${https%.git}"',
-    '    mkdir -p "$(dirname "$clone")" || return 1',
-    '    rm -rf "$clone"',
-    '    git clone --no-checkout --filter=blob:none "$https" "$clone" ||',
-    '      { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; } || return 1',
+    // Note that every Luke install shares the clone, so it is made under a lock, and one made while this waited is taken as it stands.
+    '    lock="$clone.lock"',
+    "    waited=0",
+    '    until mkdir "$lock" 2>/dev/null; do',
+    '      holder="$(cat "$lock/pid" 2>/dev/null)"',
+    '      if { [ -n "$holder" ] && ! kill -0 "$holder" 2>/dev/null; } || [ "$waited" -ge 600 ]; then rm -rf "$lock"; continue; fi',
+    "      sleep 1",
+    "      waited=$((waited + 1))",
+    "    done",
+    '    echo "$$" > "$lock/pid"',
+    '    if [ ! -e "$clone/.git" ]; then',
+    '      echo "▸ Cloning ${https%.git}"',
+    '      rm -rf "$clone"',
+    '      git clone --no-checkout --filter=blob:none "$https" "$clone" ||',
+    '        { rm -rf "$clone"; git clone --no-checkout --filter=blob:none "$ssh" "$clone"; } ||',
+    '        { rm -rf "$lock"; return 1; }',
+    "    fi",
+    '    rm -rf "$lock"',
     "  fi",
     '  cd "$clone" || return 1',
     '  echo "▸ Fetching $branch"',
-    '  if ! git fetch origin "$branch"; then',
+    // Note that each branch is fetched into a ref of its own, never FETCH_HEAD, which two opens of the shared clone at once would write over each other.
+    '  if git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"; then',
+    '    fetched="refs/remotes/origin/$branch"',
+    "  else",
     // Note that GitHub deletes a pull request's branch once it merges, and keeps its last head under refs/pull for good.
     '    [ -n "$pull" ] || return 1',
     '    echo "▸ $branch is no longer on GitHub, as once its pull request merged; fetching the last head of pull request #$pull instead"',
-    '    git fetch origin "refs/pull/$pull/head" || return 1',
+    '    git fetch origin "+refs/pull/$pull/head:refs/luke/pull/$pull" || return 1',
+    '    fetched="refs/luke/pull/$pull"',
     "  fi",
     // Note that the head is read once, in the clone, as a commit every worktree of it shares, so the worktree fetches nothing of its own.
-    '  head="$(git rev-parse --verify --quiet "FETCH_HEAD^{commit}")" || return 1',
-    // Note that a worktree made under its earlier, percent-encoded folder is moved to its folder now, what it holds kept; one Git will not move, as one holding submodules, is left where it stands and a fresh one made.
-    '  if [ "$legacy" != "$worktree" ] && [ ! -e "$worktree" ] && [ -e "$legacy/.git" ]; then',
-    '    echo "▸ Moving the worktree to $worktree"',
-    '    mkdir -p "$(dirname "$worktree")" || return 1',
-    '    git worktree move "$legacy" "$worktree" ||',
-    '      echo "▸ Could not move it; left at $legacy, and a fresh worktree made"',
+    '  head="$(git rev-parse --verify --quiet "$fetched^{commit}")" || return 1',
+    // Note that a worktree an earlier Luke made of the branch under its application data is left there, with anything of the developer's in it, and said.
+    '  if [ ! -e "$worktree" ] && [ -n "$earlier_worktrees" ]; then',
+    "    for name in $earlier_names; do",
+    '      if [ -e "$earlier_worktrees/$name/.git" ]; then',
+    '        echo "▸ An earlier worktree of $branch stays at $earlier_worktrees/$name, anything of yours in it kept there; this one is made fresh."',
+    "        break",
+    "      fi",
+    "    done",
     "  fi",
     // Note that a commit is the developer's own where neither GitHub, the head just fetched, nor the head Luke last checked out holds it; one that cannot be read is taken for theirs.
     "  unpushed() {",
-    '    found="$(git rev-list --max-count=1 "$1" --not --remotes "$head" ${opened:+"$opened"})" || return 0',
+    '    found="$(git rev-list --max-count=1 "$1" --not --remotes --glob=refs/luke/* "$head" ${opened:+"$opened"})" || return 0',
     '    [ -n "$found" ]',
     "  }",
     "  opened=",
