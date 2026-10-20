@@ -48,6 +48,7 @@ import { type ReactNode, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
+import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import type { ShellRoom } from "../shell-room.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
@@ -231,8 +232,8 @@ function TaskListRow({
       title={
         <>
           {task.name}
-          {/* Note that the leading marks are decoration to a screen reader, so the key and status are said here. */}
-          <span className="visually-hidden">
+          {/* Note that the leading marks are decoration to a screen reader, so the key and status are said here, and left out of find, which finds them drawn. */}
+          <span className="visually-hidden" {...{ [FIND_SKIP_ATTRIBUTE]: "" }}>
             {[
               task.number === undefined ? undefined : taskKey(workspaceName, task.number),
               task.status === undefined ? undefined : TASK_STATUS_WORDS[task.status],
