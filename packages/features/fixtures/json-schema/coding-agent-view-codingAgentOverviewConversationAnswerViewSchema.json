@@ -502,6 +502,119 @@
                         "comments": {
                           "type": "number",
                           "minimum": 0
+                        },
+                        "drafts": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "threadId": {
+                                "type": "string"
+                              },
+                              "by": {
+                                "type": "object",
+                                "properties": {
+                                  "login": {
+                                    "type": "string"
+                                  },
+                                  "avatarUrl": {
+                                    "type": "string"
+                                  },
+                                  "bot": {
+                                    "type": "boolean"
+                                  },
+                                  "userId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "login",
+                                  "bot"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "line": {
+                                "anyOf": [
+                                  {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "startLine": {
+                                "anyOf": [
+                                  {
+                                    "type": "number",
+                                    "minimum": 0
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "side": {
+                                "type": "string",
+                                "enum": [
+                                  "left",
+                                  "right"
+                                ]
+                              },
+                              "startSide": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "enum": [
+                                      "left",
+                                      "right"
+                                    ]
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "html": {
+                                "anyOf": [
+                                  {
+                                    "type": "string"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "body": {
+                                "type": "string"
+                              },
+                              "at": {
+                                "type": "number",
+                                "minimum": 0
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "by",
+                              "path",
+                              "line",
+                              "startLine",
+                              "side",
+                              "startSide",
+                              "html",
+                              "body",
+                              "at"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "maxItems": 100
                         }
                       },
                       "required": [

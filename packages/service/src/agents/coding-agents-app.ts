@@ -75,6 +75,7 @@ import {
   changesPeople,
   namedOverviewConversation,
   namedOverviewPullRequest,
+  namedPendingReview,
   namedReviewOptions,
 } from "../github/github-people.js";
 import { githubReadOrRefusal, logGitHubReadFailure } from "../github/github-refusal.js";
@@ -82,7 +83,9 @@ import { pullRequestMerging } from "../github/pull-request-merging.js";
 import {
   addLineComment,
   commentOnPullRequest,
+  deletePendingComment,
   discardPendingReview,
+  editPendingComment,
   type GitHubWriteFailure,
   mergePullRequest,
   pullRequestNodeId,
@@ -965,7 +968,10 @@ const overviewConversationEndpoint = /* @__PURE__ */ Effect.fn(
             ),
             (read) => namedOverviewConversation(agent, pullRequest.number, read),
           ),
-          memberPendingReview(userId, agent.repository, pullRequest.number),
+          Effect.flatMap(
+            memberPendingReview(userId, agent.repository, pullRequest.number),
+            (pending) => namedPendingReview(agent, pullRequest.number, pending),
+          ),
         ],
         { concurrency: "unbounded" },
       ),
@@ -1039,6 +1045,10 @@ function writeOf(
     }
     case PULL_REQUEST_ACTION.DISCARD_REVIEW:
       return discardPendingReview(token, id);
+    case PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT:
+      return editPendingComment(token, id, request);
+    case PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT:
+      return deletePendingComment(token, id, request.commentId);
     case PULL_REQUEST_ACTION.MARK_FILE_VIEWED:
     case PULL_REQUEST_ACTION.UNMARK_FILE_VIEWED:
       return setFileViewed(

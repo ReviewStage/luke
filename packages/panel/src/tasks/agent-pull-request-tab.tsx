@@ -17,6 +17,7 @@ import {
   type ConversationEntry,
   DEPLOYMENT_STATE,
   type DeploymentState,
+  type PendingReviewComment,
   PULL_REQUEST_STATE,
   type PullRequestCheck,
   type PullRequestDeployment,
@@ -124,6 +125,16 @@ import {
 import { PierreDiff, useDiffLook } from "./file-diff.js";
 import type { TreeShown } from "./file-view.js";
 import { MergeControl } from "./merge-box.js";
+import {
+  PENDING_WORDS,
+  PendingBadge,
+  PendingComment,
+  type PendingComments,
+  PendingCommentsProvider,
+  pendingThreadsOf,
+  usePendingComment,
+  usePendingThread,
+} from "./pending-comments.js";
 import { ANCHOR_KIND, anchorIn } from "./pull-request-anchors.js";
 import {
   type PullRequestComment,
@@ -270,7 +281,9 @@ const PULL_REQUEST_WORDS = {
 } as const;
 
 /** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
-function threadLines(thread: ReviewThread): string | undefined {
+function threadLines(
+  thread: Pick<ReviewThread, "line" | "startLine" | "originalLine" | "originalStartLine">,
+): string | undefined {
   const line = thread.line ?? thread.originalLine;
   const start = thread.line === null ? thread.originalStartLine : thread.startLine;
   if (line === null) return undefined;
@@ -936,6 +949,75 @@ function ThreadCard({
   );
 }
 
+/** One comment of a review thread: who and when, their words, and the reactions it wears; one of the member's own pending comments as such (`pending-comments.tsx`). */
+function ThreadComment({
+  comment,
+  now,
+  picture,
+}: {
+  comment: ReviewThread["comments"][number];
+  now: number;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element {
+  const draft = usePendingComment(comment.url);
+  const head = (
+    <>
+      <PersonRef person={comment.by} />
+      <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
+    </>
+  );
+  const words = <EntryWords entry={comment} picture={picture} />;
+  return (
+    <li className="pull-request-thread-comment">
+      {draft === undefined ? (
+        <>
+          <span className="changes-comment-head">{head}</span>
+          {words}
+          <Reactions reactions={comment.reactions} subject={comment.subject} />
+        </>
+      ) : (
+        <PendingComment draft={draft} head={head} words={words} />
+      )}
+    </li>
+  );
+}
+
+/** The member's pending comments as the Review panel lists them: each one's file and lines, then the comment, Edit and Delete with it. */
+function PendingList({
+  drafts,
+  now,
+  picture,
+}: {
+  drafts: readonly PendingReviewComment[];
+  now: number;
+  picture: GitHubPictureDrawer;
+}): React.JSX.Element {
+  return (
+    <ol className="pull-request-pending-list" aria-label={PENDING_WORDS.PENDING}>
+      {drafts.map((draft) => (
+        <li key={draft.id} className="pull-request-thread-comment">
+          <span className="pull-request-quiet pull-request-pending-where">
+            {draft.path}
+            {draft.line === null
+              ? ""
+              : ` · ${threadLines({ ...draft, originalLine: draft.line, originalStartLine: draft.startLine })}`}
+          </span>
+          <PendingComment
+            draft={draft}
+            head={
+              <>
+                <PersonRef person={draft.by} />
+                <RelativeTime className="changes-comment-time" at={draft.at} now={now} />
+              </>
+            }
+            words={<EntryWords entry={draft} picture={picture} />}
+          />
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** A review thread's comments, oldest first, as the conversation draws an entry, with the replies a read left on GitHub counted after them, then its Reply and Resolve (`pull-request-thread-actions.tsx`), wherever the thread is drawn. */
 function ThreadComments({
   thread,
@@ -952,14 +1034,7 @@ function ThreadComments({
     <>
       <ol className="pull-request-thread-comments">
         {thread.comments.map((comment) => (
-          <li key={comment.url} className="pull-request-thread-comment">
-            <span className="changes-comment-head">
-              <PersonRef person={comment.by} />
-              <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
-            </span>
-            <EntryWords entry={comment} picture={picture} />
-            <Reactions reactions={comment.reactions} subject={comment.subject} />
-          </li>
+          <ThreadComment key={comment.url} comment={comment} now={now} picture={picture} />
         ))}
       </ol>
       {thread.more === 0 || last === undefined ? null : (
@@ -997,6 +1072,8 @@ function InlineThread({
   const lines = place === THREAD_PLACE.ABOVE ? threadLines(thread) : undefined;
   const first = thread.comments[0];
   const landed = useLandedThread(thread, labels.length === 0);
+  // A thread the member's pending comment starts is theirs alone until they submit it, with no page to link or jump to.
+  const pending = usePendingThread(thread);
   return (
     <div
       ref={landed.ref}
@@ -1013,14 +1090,17 @@ function InlineThread({
               {label}
             </span>
           ))}
+          {pending ? <PendingBadge /> : null}
           <span className="pull-request-quiet">
             {PULL_REQUEST_WORDS.commentCount(thread.comments.length + thread.more)}
           </span>
-          <ThreadMenu
-            thread={thread}
-            here={PULL_REQUEST_THREAD_VIEW.FILES}
-            there={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
-          />
+          {pending ? null : (
+            <ThreadMenu
+              thread={thread}
+              here={PULL_REQUEST_THREAD_VIEW.FILES}
+              there={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
+            />
+          )}
           <span className="pull-request-thread-turn">
             <DisclosureChevron />
           </span>
@@ -1992,13 +2072,23 @@ function PullRequestTabBody({
   // for new ones.
   const conversation = landed(parts.conversation);
   const threadList = useMemo(() => reviewThreadsOf(conversation), [conversation]);
+  // The member's pending comments drawn among the threads on their lines, a reply in its thread's card.
+  const drafts = pendingReview?.drafts;
+  const pendingComments = useMemo<PendingComments>(
+    () => new Map((drafts ?? []).map((draft) => [draft.id, draft])),
+    [drafts],
+  );
+  const filesThreads = useMemo(
+    () => pendingThreadsOf(threadList, drafts ?? []),
+    [threadList, drafts],
+  );
   const drawThread = useCallback<ChangesThreads["draw"]>(
     (thread, place) => <InlineThread thread={thread} place={place} now={now} picture={picture} />,
     [now, picture],
   );
   const changesThreads = useMemo<ChangesThreads>(
-    () => ({ list: threadList, draw: drawThread, refresh: conversationRead.ask }),
-    [threadList, drawThread, conversationRead.ask],
+    () => ({ list: filesThreads, draw: drawThread, refresh: conversationRead.ask }),
+    [filesThreads, drawThread, conversationRead.ask],
   );
   const threadJumps = useThreadJumps({
     agentId,
@@ -2021,117 +2111,127 @@ function PullRequestTabBody({
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
-      <ThreadJumpContext.Provider value={threadJumps.jumps}>
-        <AnchorsContext.Provider value={anchors.open}>
-          <div className="file-view pull-request-tab ph-no-capture">
-            <PullRequestWriteNote writes={writes} />
-            {none ? (
-              <EmptyState icon={<GitPullRequestIcon />}>
-                {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
-              </EmptyState>
-            ) : (
-              <>
-                <header className="pull-request-header">
-                  <div className="pull-request-title-row">
-                    {held === undefined ? null : (
-                      <PullRequestStateMenu pullRequest={held} writes={writes} />
-                    )}
-                    <HeaderTitle title={title} writes={writes} />
-                    <div className="pull-request-title-actions">
-                      {overview === undefined ? null : (
-                        <MergeControl
-                          pullRequest={overview}
-                          repository={repository}
-                          shown={shown}
-                          writes={writes}
-                        />
-                      )}
+      <PendingCommentsProvider value={pendingComments}>
+        <ThreadJumpContext.Provider value={threadJumps.jumps}>
+          <AnchorsContext.Provider value={anchors.open}>
+            <div className="file-view pull-request-tab ph-no-capture">
+              <PullRequestWriteNote writes={writes} />
+              {none ? (
+                <EmptyState icon={<GitPullRequestIcon />}>
+                  {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
+                </EmptyState>
+              ) : (
+                <>
+                  <header className="pull-request-header">
+                    <div className="pull-request-title-row">
                       {held === undefined ? null : (
-                        <PullRequestMenu url={held.url} reading={reading} onRefresh={refresh} />
+                        <PullRequestStateMenu pullRequest={held} writes={writes} />
                       )}
+                      <HeaderTitle title={title} writes={writes} />
+                      <div className="pull-request-title-actions">
+                        {overview === undefined ? null : (
+                          <MergeControl
+                            pullRequest={overview}
+                            repository={repository}
+                            shown={shown}
+                            writes={writes}
+                          />
+                        )}
+                        {held === undefined ? null : (
+                          <PullRequestMenu url={held.url} reading={reading} onRefresh={refresh} />
+                        )}
+                      </div>
                     </div>
+                    <PullRequestHead
+                      parts={parts}
+                      now={now}
+                      writes={writes}
+                      editing={{ options, refreshing: pullRequestRead.out }}
+                    />
+                  </header>
+                  <div className="pull-request-tabs">
+                    <ChoiceBar<PullRequestView>
+                      label="Pull request"
+                      items={tabsOf(parts, published, held, changes)}
+                      hint={Tooltip}
+                      value={view}
+                      onChange={onView}
+                      look={CHOICE_BAR_LOOK.FILL}
+                      fold={CHOICE_BAR_FOLD.TOGETHER}
+                      panels={ids}
+                    />
+                    {reviewable ? (
+                      <PullRequestReview
+                        writes={review}
+                        pending={pendingReview}
+                        pendingList={
+                          drafts === undefined || drafts.length === 0 ? null : (
+                            <PendingList drafts={drafts} now={now} picture={picture} />
+                          )
+                        }
+                      />
+                    ) : null}
                   </div>
-                  <PullRequestHead
-                    parts={parts}
-                    now={now}
-                    writes={writes}
-                    editing={{ options, refreshing: pullRequestRead.out }}
-                  />
-                </header>
-                <div className="pull-request-tabs">
-                  <ChoiceBar<PullRequestView>
-                    label="Pull request"
-                    items={tabsOf(parts, published, held, changes)}
-                    hint={Tooltip}
-                    value={view}
-                    onChange={onView}
-                    look={CHOICE_BAR_LOOK.FILL}
-                    fold={CHOICE_BAR_FOLD.TOGETHER}
-                    panels={ids}
-                  />
-                  {reviewable ? (
-                    <PullRequestReview writes={review} pending={pendingReview} />
-                  ) : null}
-                </div>
-                <div
-                  className="pull-request-view"
-                  role="tabpanel"
-                  id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
-                  aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
-                  hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
-                >
-                  <ConversationView
-                    agentId={agentId}
-                    parts={parts}
-                    url={title?.url}
-                    comment={comment}
-                    kept={kept}
-                    landing={threadJumps.conversationLanding ?? anchors.landing}
-                  />
-                </div>
-                <div
-                  className="pull-request-view"
-                  role="tabpanel"
-                  id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
-                  aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
-                  hidden={view !== PULL_REQUEST_VIEW.CHECKS}
-                >
-                  <DetailPage
-                    frame={PAGE_FRAME.TOOLBAR}
-                    label="Pull request checks"
-                    inset={DETAIL_PAGE_INSET.READING}
+                  <div
+                    className="pull-request-view"
+                    role="tabpanel"
+                    id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
+                    aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
+                    hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
                   >
-                    <ChecksPart
+                    <ConversationView
                       agentId={agentId}
                       parts={parts}
-                      live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                      url={title?.url}
+                      comment={comment}
+                      kept={kept}
+                      landing={threadJumps.conversationLanding ?? anchors.landing}
                     />
-                  </DetailPage>
-                </div>
-              </>
-            )}
-            <div
-              className="pull-request-view"
-              role="tabpanel"
-              id={ids(PULL_REQUEST_VIEW.FILES).panel}
-              aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
-              hidden={none || view !== PULL_REQUEST_VIEW.FILES}
-            >
-              <AgentChangesTab
-                agentId={agentId}
-                control={control}
-                shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-                repository={repository}
-                tree={tree}
-                threads={changesThreads}
-                lineComments={{ pending: pendingReview, onWritten: written }}
-                reads={changes}
-                reveal={threadJumps.filesReveal}
-              />
+                  </div>
+                  <div
+                    className="pull-request-view"
+                    role="tabpanel"
+                    id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
+                    aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
+                    hidden={view !== PULL_REQUEST_VIEW.CHECKS}
+                  >
+                    <DetailPage
+                      frame={PAGE_FRAME.TOOLBAR}
+                      label="Pull request checks"
+                      inset={DETAIL_PAGE_INSET.READING}
+                    >
+                      <ChecksPart
+                        agentId={agentId}
+                        parts={parts}
+                        live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                      />
+                    </DetailPage>
+                  </div>
+                </>
+              )}
+              <div
+                className="pull-request-view"
+                role="tabpanel"
+                id={ids(PULL_REQUEST_VIEW.FILES).panel}
+                aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
+                hidden={none || view !== PULL_REQUEST_VIEW.FILES}
+              >
+                <AgentChangesTab
+                  agentId={agentId}
+                  control={control}
+                  shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+                  repository={repository}
+                  tree={tree}
+                  threads={changesThreads}
+                  lineComments={{ pending: pendingReview, onWritten: written }}
+                  reads={changes}
+                  reveal={threadJumps.filesReveal}
+                />
+              </div>
             </div>
-          </div>
-        </AnchorsContext.Provider>
-      </ThreadJumpContext.Provider>
+          </AnchorsContext.Provider>
+        </ThreadJumpContext.Provider>
+      </PendingCommentsProvider>
     </ThreadWritesProvider>
   );
 }

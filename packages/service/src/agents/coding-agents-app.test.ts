@@ -1838,6 +1838,86 @@ function mutationName(query: string): string {
   return /\{\s*(\w+)\(/u.exec(query)?.[1] ?? "";
 }
 
+/**
+ * The pull request's threads as the member's own token reads them for their
+ * pending review: a published thread they replied on in it, a thread their
+ * pending review starts on a range of the old side, a thread another's
+ * pending review starts, and one whose comments are all published.
+ */
+const PENDING_THREADS = [
+  {
+    id: "PRRT_published",
+    path: "src/invite.ts",
+    line: 12,
+    startLine: 12,
+    diffSide: "RIGHT",
+    startDiffSide: null,
+    comments: {
+      nodes: [
+        {
+          id: "PRRC_first",
+          state: "SUBMITTED",
+          body: "Rename this.",
+          bodyHTML: "<p>Rename this.</p>",
+          createdAt: "2026-09-30T10:00:00Z",
+          author: { __typename: "User", login: "reviewer", databaseId: 7 },
+          pullRequestReview: { id: "PRR_submitted" },
+        },
+        {
+          id: "PRRC_reply",
+          state: "PENDING",
+          body: "Still?",
+          bodyHTML: "<p>Still?</p>",
+          createdAt: "2026-10-01T10:00:00Z",
+          author: { __typename: "User", login: "teammate", databaseId: 8 },
+          pullRequestReview: { id: "PRR_own" },
+        },
+      ],
+    },
+  },
+  {
+    id: "PRRT_started",
+    path: "src/invite.ts",
+    line: 40,
+    startLine: 38,
+    diffSide: "LEFT",
+    startDiffSide: "LEFT",
+    comments: {
+      nodes: [
+        {
+          id: "PRRC_start",
+          state: "PENDING",
+          body: "Why drop these?",
+          bodyHTML: null,
+          createdAt: "2026-10-01T11:00:00Z",
+          author: { __typename: "User", login: "teammate", databaseId: 8 },
+          pullRequestReview: { id: "PRR_own" },
+        },
+      ],
+    },
+  },
+  {
+    id: "PRRT_others",
+    path: "src/invite.ts",
+    line: 3,
+    startLine: 3,
+    diffSide: "RIGHT",
+    startDiffSide: null,
+    comments: {
+      nodes: [
+        {
+          id: "PRRC_others",
+          state: "PENDING",
+          body: "Not yours.",
+          createdAt: "2026-10-01T09:00:00Z",
+          author: { __typename: "User", login: "someone", databaseId: 9 },
+          pullRequestReview: { id: "PRR_other" },
+        },
+      ],
+    },
+  },
+];
+
 /** The head a line comment names, as GitHub spells a commit. */
 const LINE_HEAD = "c0ffee1c0ffee1c0ffee1c0ffee1c0ffee1c0ffe";
 
@@ -2785,6 +2865,81 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
   );
 
   it.effect(
+    "a member edits and deletes a comment of their own pending review on this pull request, and is refused in words for another's, a published one, or one on another pull request",
+    () =>
+      Effect.gen(function* () {
+        // The comments GitHub answers for, by id, as the member's token reads them.
+        const commentNode = (viewerDidAuthor: boolean, state: string, pullRequest: string) => ({
+          viewerDidAuthor,
+          state,
+          pullRequest: { id: pullRequest },
+        });
+        const COMMENTS = new Map([
+          ["PRRC_own", commentNode(true, "PENDING", PULL_REQUEST_NODE_ID)],
+          ["PRRC_theirs", commentNode(false, "PENDING", PULL_REQUEST_NODE_ID)],
+          ["PRRC_published", commentNode(true, "SUBMITTED", PULL_REQUEST_NODE_ID)],
+          ["PRRC_elsewhere", commentNode(true, "PENDING", "PR_elsewhere")],
+        ]);
+        const { other, agent, calls, ask } = yield* published({
+          otherToken: "ghu_teammate",
+          answer: (call) => {
+            if (call.query.includes("mutation")) return Response.json({ data: {} });
+            if (call.query.includes("PullRequestReviewComment")) {
+              return Response.json({
+                data: { node: COMMENTS.get(String(call.variables.id)) ?? null },
+              });
+            }
+            return Response.json({
+              data: { repository: { pullRequest: { id: PULL_REQUEST_NODE_ID } } },
+            });
+          },
+        });
+
+        const edited = yield* ask(
+          actionAs(other, agent.id, "edit-review-comment", {
+            commentId: "PRRC_own",
+            body: "Renamed.",
+          }),
+        );
+        const deleted = yield* ask(
+          actionAs(other, agent.id, "delete-review-comment", { commentId: "PRRC_own" }),
+        );
+        const refusals = [];
+        for (const commentId of ["PRRC_theirs", "PRRC_published", "PRRC_elsewhere", "PRRC_gone"]) {
+          refusals.push(
+            yield* ask(actionAs(other, agent.id, "edit-review-comment", { commentId, body: "x" })),
+            yield* ask(actionAs(other, agent.id, "delete-review-comment", { commentId })),
+          );
+        }
+
+        assert.deepEqual(edited, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(deleted, { status: HOSTED_HTTP_STATUS.OK, body: { outcome: "done" } });
+        assert.deepEqual(
+          calls
+            .filter((call) => call.query.includes("mutation"))
+            .map((call) => [mutationName(call.query), call.variables, call.authorization]),
+          [
+            [
+              "updatePullRequestReviewComment",
+              { id: "PRRC_own", body: "Renamed." },
+              "Bearer ghu_teammate",
+            ],
+            ["deletePullRequestReviewComment", { id: "PRRC_own" }, "Bearer ghu_teammate"],
+          ],
+        );
+        for (const refused of refusals) {
+          assert.deepEqual(refused, {
+            status: HOSTED_HTTP_STATUS.OK,
+            body: {
+              outcome: "refused",
+              words: "That comment is not one of your pending review's on this pull request.",
+            },
+          });
+        }
+      }),
+  );
+
+  it.effect(
     "each member reads the review they hold pending beside the conversation, on their own token, and one with no sign-in or whom GitHub would not answer reads none",
     () =>
       Effect.gen(function* () {
@@ -2793,11 +2948,23 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
           if (call.authorization === "Bearer ghu_broken") {
             return Response.json({ message: "Server Error" }, { status: 502 });
           }
-          const nodes =
-            call.authorization === "Bearer ghu_teammate"
-              ? [{ viewerDidAuthor: true, comments: { totalCount: 2 } }]
-              : [];
-          return Response.json({ data: { repository: { pullRequest: { reviews: { nodes } } } } });
+          const teammate = call.authorization === "Bearer ghu_teammate";
+          const nodes = teammate
+            ? [
+                { id: "PRR_other", viewerDidAuthor: false, comments: { totalCount: 1 } },
+                { id: "PRR_own", viewerDidAuthor: true, comments: { totalCount: 2 } },
+              ]
+            : [];
+          return Response.json({
+            data: {
+              repository: {
+                pullRequest: {
+                  reviews: { nodes },
+                  reviewThreads: { nodes: teammate ? PENDING_THREADS : [] },
+                },
+              },
+            },
+          });
         };
         const pendingOf = (
           opened: { readonly ask: (request: Request) => Effect.Effect<Answer> },
@@ -2817,7 +2984,36 @@ it.layer(getTestDB())("changing an agent's pull request", (it) => {
         const unsigned = yield* published({ otherToken: null, answer: pendingAnswer });
         const broken = yield* published({ otherToken: "ghu_broken", answer: pendingAnswer });
 
-        assert.deepEqual(yield* pendingOf(two, two.other, two.agent.id), { comments: 2 });
+        assert.deepEqual(yield* pendingOf(two, two.other, two.agent.id), {
+          comments: 2,
+          drafts: [
+            {
+              id: "PRRC_reply",
+              threadId: "PRRT_published",
+              path: "src/invite.ts",
+              line: 12,
+              startLine: null,
+              side: "right",
+              startSide: null,
+              html: "<p>Still?</p>",
+              body: "Still?",
+              at: Date.parse("2026-10-01T10:00:00Z"),
+              by: { login: "teammate", bot: false },
+            },
+            {
+              id: "PRRC_start",
+              path: "src/invite.ts",
+              line: 40,
+              startLine: 38,
+              side: "left",
+              startSide: "left",
+              html: null,
+              body: "Why drop these?",
+              at: Date.parse("2026-10-01T11:00:00Z"),
+              by: { login: "teammate", bot: false },
+            },
+          ],
+        });
         assert.equal(yield* pendingOf(two, two.owner, two.agent.id), null);
         assert.equal(yield* pendingOf(unsigned, unsigned.other, unsigned.agent.id), null);
         assert.equal(yield* pendingOf(broken, broken.other, broken.agent.id), null);

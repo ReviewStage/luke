@@ -2307,23 +2307,61 @@ export function pullRequestDeployments(
   );
 }
 
-/** The member's own pending review on a pull request, as the conversation's read carries it: how many comments it holds. */
+/** One comment of the member's own pending review, as GitHub holds it: where it stands, the published thread it replies on where it does, its words, and who, as an account. */
+interface GitHubPendingComment {
+  readonly id: string;
+  readonly threadId: string | undefined;
+  readonly account: GitHubAccount;
+  readonly path: string;
+  readonly line: number | null;
+  readonly startLine: number | null;
+  readonly side: DiffSide;
+  readonly startSide: DiffSide | null;
+  readonly html: string | null;
+  readonly body: string;
+  readonly at: number;
+}
+
+/** The member's own pending review on a pull request, as the conversation's read carries it: how many comments it holds, and those comments, up to the bound. */
 export interface ViewerPendingReview {
   readonly comments: number;
+  readonly drafts: readonly GitHubPendingComment[];
 }
 
 /** At most this many pending reviews are read to find the member's own; GitHub shows a member only theirs, so one is the most ever answered. */
 const VIEWER_PENDING_READ = 10;
 
+/**
+ * Note that a pending comment's lines are read off its thread: GitHub keeps
+ * the side a comment counts on on the thread alone, and its REST reads of a
+ * pending comment answer no line at all; the member's own pending threads
+ * stand among the pull request's threads on their own token, the newest
+ * last.
+ */
 const VIEWER_PENDING_QUERY = `query ViewerPendingReview($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
       reviews(states: PENDING, first: ${VIEWER_PENDING_READ}) {
-        nodes { viewerDidAuthor comments { totalCount } }
+        nodes { id viewerDidAuthor comments { totalCount } }
+      }
+      reviewThreads(last: ${OVERVIEW_BOUNDS.MAX_THREADS}) {
+        nodes {
+          id path line startLine diffSide startDiffSide
+          comments(last: ${OVERVIEW_BOUNDS.MAX_THREAD_COMMENTS}) {
+            nodes {
+              id state body bodyHTML createdAt
+              author { __typename login avatarUrl ... on User { databaseId } ... on Bot { databaseId } }
+              pullRequestReview { id }
+            }
+          }
+        }
       }
     }
   }
 }`;
+
+/** A side as GitHub's GraphQL spells it. */
+const GraphQLSideSchema = Schema.Literals(["LEFT", "RIGHT"]);
 
 const ViewerPendingAnswerSchema = Schema.Struct({
   data: Schema.optionalKey(
@@ -2337,12 +2375,53 @@ const ViewerPendingAnswerSchema = Schema.Struct({
                   nodes: Schema.Array(
                     Schema.NullOr(
                       Schema.Struct({
+                        id: Schema.String,
                         viewerDidAuthor: Schema.Boolean,
                         comments: Schema.Struct({ totalCount: Schema.Number }),
                       }),
                     ),
                   ),
                 }),
+                reviewThreads: Schema.optionalKey(
+                  Schema.Struct({
+                    nodes: Schema.Array(
+                      Schema.NullOr(
+                        Schema.Struct({
+                          id: Schema.String,
+                          path: Schema.String,
+                          line: Schema.NullOr(Schema.Number),
+                          startLine: Schema.NullOr(Schema.Number),
+                          diffSide: GraphQLSideSchema,
+                          startDiffSide: Schema.NullOr(GraphQLSideSchema),
+                          comments: Schema.Struct({
+                            nodes: Schema.Array(
+                              Schema.NullOr(
+                                Schema.Struct({
+                                  id: Schema.String,
+                                  state: Schema.String,
+                                  body: Schema.String,
+                                  bodyHTML: Schema.optionalKey(Schema.NullOr(Schema.String)),
+                                  createdAt: Schema.String,
+                                  author: Schema.NullOr(
+                                    Schema.Struct({
+                                      __typename: Schema.String,
+                                      login: Schema.String,
+                                      avatarUrl: Schema.optionalKey(Schema.String),
+                                      databaseId: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+                                    }),
+                                  ),
+                                  pullRequestReview: Schema.NullOr(
+                                    Schema.Struct({ id: Schema.String }),
+                                  ),
+                                }),
+                              ),
+                            ),
+                          }),
+                        }),
+                      ),
+                    ),
+                  }),
+                ),
               }),
             ),
           }),
@@ -2352,11 +2431,70 @@ const ViewerPendingAnswerSchema = Schema.Struct({
   ),
 });
 
+type PendingAnswerPull = NonNullable<
+  NonNullable<NonNullable<typeof ViewerPendingAnswerSchema.Type.data>["repository"]>["pullRequest"]
+>;
+
+/** GitHub's GraphQL word for a side, as the wire spells it. */
+const SIDE_OF_GRAPHQL = { LEFT: DIFF_SIDE.LEFT, RIGHT: DIFF_SIDE.RIGHT } as const satisfies Record<
+  "LEFT" | "RIGHT",
+  DiffSide
+>;
+
+/** The pending review's state, as GitHub's GraphQL spells a comment's. */
+const PENDING_STATE = "PENDING";
+
+/**
+ * The comments of the review `reviewId` on the pull request's threads that
+ * are still pending, oldest first, up to the bound, each placed by its
+ * thread; a range of one line is named by its line alone, as a thread made
+ * on one line is. One on a thread a comment already published on is a reply
+ * there, and names that thread, which the window draws it in.
+ */
+function pendingCommentsOf(pull: PendingAnswerPull, reviewId: string): GitHubPendingComment[] {
+  const drafts = (pull.reviewThreads?.nodes ?? []).flatMap((thread) => {
+    if (thread === null) return [];
+    const side = SIDE_OF_GRAPHQL[thread.diffSide];
+    const startSide = thread.startDiffSide === null ? null : SIDE_OF_GRAPHQL[thread.startDiffSide];
+    const oneLine = thread.startLine === thread.line && (startSide === null || startSide === side);
+    const published = thread.comments.nodes.some(
+      (each) => each !== null && each.state !== PENDING_STATE,
+    );
+    return thread.comments.nodes.flatMap((comment) => {
+      if (comment?.state !== PENDING_STATE || comment.pullRequestReview?.id !== reviewId) return [];
+      const author = comment.author;
+      const account: GitHubAccount = {
+        id: author?.databaseId ?? 0,
+        login: author?.login ?? "",
+        bot: author?.__typename === GITHUB_BOT_TYPE,
+        avatarUrl: githubAvatarUrl(author?.avatarUrl),
+      };
+      return [
+        {
+          id: comment.id,
+          threadId: published ? thread.id : undefined,
+          account,
+          path: thread.path,
+          line: thread.line,
+          startLine: oneLine ? null : thread.startLine,
+          side,
+          startSide: oneLine ? null : startSide,
+          html: comment.bodyHTML ?? null,
+          body: comment.body,
+          at: timeOf(comment.createdAt) ?? 0,
+        },
+      ];
+    });
+  });
+  return drafts.toSorted((a, b) => a.at - b.at).slice(0, OVERVIEW_BOUNDS.MAX_PENDING_COMMENTS);
+}
+
 /**
  * The review the member holds pending on the pull request, read on their
- * own token, since nobody else sees it; none where they hold none, and none
- * where GitHub would not answer them, which leaves the conversation without
- * it rather than failing it, said once in the log.
+ * own token, since nobody else sees it: how many comments it holds, and
+ * those comments where its threads name them; none where they hold none,
+ * and none where GitHub would not answer them, which leaves the
+ * conversation without it rather than failing it, said once in the log.
  */
 export function viewerPendingReviewOf(
   token: Redacted.Redacted,
@@ -2372,9 +2510,10 @@ export function viewerPendingReviewOf(
     Effect.flatMap(send(request), (response) => readBody(response, ViewerPendingAnswerSchema)),
   ).pipe(
     Effect.map((answer) => {
-      const nodes = answer.data?.repository?.pullRequest?.reviews.nodes ?? [];
-      const own = nodes.find((node) => node?.viewerDidAuthor === true);
-      return own == null ? null : { comments: own.comments.totalCount };
+      const pull = answer.data?.repository?.pullRequest;
+      const own = pull?.reviews.nodes.find((node) => node?.viewerDidAuthor === true);
+      if (pull == null || own == null) return null;
+      return { comments: own.comments.totalCount, drafts: pendingCommentsOf(pull, own.id) };
     }),
     Effect.catch((failure) =>
       Effect.as(

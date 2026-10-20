@@ -121,6 +121,10 @@ export const PULL_REQUEST_ACTION = {
   ADD_REVIEW_COMMENT: "add-review-comment",
   /** The member's own pending review thrown away, the comments it held with it. */
   DISCARD_REVIEW: "discard-review",
+  /** A comment of the member's own pending review on this pull request given new words. */
+  EDIT_REVIEW_COMMENT: "edit-review-comment",
+  /** A comment of the member's own pending review on this pull request taken out of it. */
+  DELETE_REVIEW_COMMENT: "delete-review-comment",
   /** One of the pull request's files marked viewed by the member, as GitHub's own Viewed box does. */
   MARK_FILE_VIEWED: "mark-file-viewed",
   /** One of the pull request's files the member marked viewed unmarked. */
@@ -206,6 +210,16 @@ const filePathSchema = EffectSchema.NonEmptyString.check(
 
 /** A reply's or a comment's words, Markdown, never blank; GitHub's bound. */
 const replyBodySchema = reviewBodySchema.check(EffectSchema.isPattern(/\S/u));
+
+/**
+ * GitHub's own id for a comment of the member's pending review, as the
+ * conversation's read carries it (`PendingReviewComment.id`); the service
+ * holds it to their own pending review on this pull request before it
+ * changes it.
+ */
+const reviewCommentIdSchema = EffectSchema.NonEmptyString.check(
+  EffectSchema.isMaxLength(PULL_REQUEST_WRITE_BOUNDS.MAX_NODE_ID_CHARS),
+);
 
 /** One change, as the tab asks the service to make it (POST). */
 export const pullRequestActionRequestSchema = EffectSchema.Union([
@@ -297,6 +311,15 @@ export const pullRequestActionRequestSchema = EffectSchema.Union([
     headSha: headShaSchema,
   }),
   EffectSchema.Struct({ action: EffectSchema.Literal(PULL_REQUEST_ACTION.DISCARD_REVIEW) }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT),
+    commentId: reviewCommentIdSchema,
+    body: replyBodySchema,
+  }),
+  EffectSchema.Struct({
+    action: EffectSchema.Literal(PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT),
+    commentId: reviewCommentIdSchema,
+  }),
   EffectSchema.Struct({
     action: EffectSchema.Literal(PULL_REQUEST_ACTION.MARK_FILE_VIEWED),
     path: filePathSchema,

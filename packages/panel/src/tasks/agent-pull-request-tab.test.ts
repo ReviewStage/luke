@@ -24,6 +24,7 @@ import {
   type GitHubPerson,
   MERGE_STATE,
   type MergeState,
+  type PendingReviewComment,
   PULL_REQUEST_STATE,
   type PullRequestMerging,
   type PullRequestState,
@@ -4793,4 +4794,128 @@ test("where the read stopped short of every file, the whole is what was publishe
   );
   assert.equal(tabCount(tab, "Files changed"), "+40 −13 left");
   assert.equal(await filesHint(tab), "+100 −20 total");
+});
+
+/** A comment of the member's own pending review on the invite file, starting a thread of its own on line 12 unless told otherwise. */
+function draftOf(overrides: Partial<PendingReviewComment> = {}): PendingReviewComment {
+  return {
+    id: "PRRC_start",
+    by: { login: "dana", bot: false },
+    path: INVITE_FILE.path,
+    line: 12,
+    startLine: null,
+    side: DIFF_SIDE.RIGHT,
+    startSide: null,
+    html: '<p dir="auto">Why <strong>four</strong>?</p>',
+    body: "Why **four**?",
+    at: 3_000,
+    ...overrides,
+  };
+}
+
+/** Writes words into the field labelled as given, as the member would. */
+function typeInto(within: Element, label: string, words: string): void {
+  const field =
+    within.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`) ??
+    assert.fail(`a field for ${label}`);
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+test("the member's pending comments stand on their lines in Files changed, marked Pending in their own name: a reply as its thread's last comment, a new one as a card of its own; Edit sends new words, Delete asks first, and the Review panel lists them", async () => {
+  const reply = draftOf({
+    id: "PRRC_reply",
+    threadId: JUMPED,
+    line: 13,
+    html: null,
+    body: "Still once?",
+  });
+  const tab = await draw(
+    controlAnswering(
+      {
+        conversation: () =>
+          Promise.resolve({
+            pullRequest: {
+              ...reviewWith([thread({ id: JUMPED })]),
+              pendingReview: { comments: 2, drafts: [reply, draftOf()] },
+            },
+          }),
+      },
+      PULL_REQUEST_STATE.OPEN,
+      () =>
+        Promise.resolve({
+          pullRequest: { url: PAGE, headSha: READ_HEAD, truncated: false, files: [INVITE_FILE] },
+        }),
+    ),
+  );
+  await act(async () => option(tab, "Files changed").click());
+  await settle();
+
+  const list = lists.at(-1) ?? assert.fail("the files are drawn");
+  assert.deepEqual(
+    list.files[0]?.annotations.map(({ key, side, line }) => [key, side, line]),
+    [
+      [`${PAGE}#discussion_r1`, "additions", 13],
+      ["PRRC_start", "additions", 12],
+    ],
+    "the reply adds no card of its own",
+  );
+  const card = list.renderAnnotation(INVITE_FILE.path, "PRRC_start");
+  assert.match(card.textContent ?? "", /dana.*Pending/u);
+  assert.match(card.textContent ?? "", /Why four\?/u, "its words as GitHub rendered them");
+  const replied = list.renderAnnotation(INVITE_FILE.path, `${PAGE}#discussion_r1`);
+  const comments = [...replied.querySelectorAll<HTMLElement>(".pull-request-thread-comment")];
+  assert.equal(comments.length, 2);
+  assert.match(comments[1]?.textContent ?? "", /dana.*Pending.*Still once\?/u);
+  assert.doesNotMatch(
+    comments[0]?.textContent ?? "",
+    /Pending/u,
+    "the published comment stays as it was",
+  );
+
+  // Edit opens the words in place; Cancel keeps nothing, Save sends the new words.
+  act(() => commentOffer(card, "Edit").click());
+  typeInto(card, "Pending comment", "Thrown away");
+  act(() => commentOffer(card, "Cancel").click());
+  assert.equal(card.querySelector("textarea"), null);
+  act(() => commentOffer(card, "Edit").click());
+  assert.equal(card.querySelector("textarea")?.value, "Why **four**?");
+  typeInto(card, "Pending comment", "Why **five**?");
+  act(() => commentOffer(card, "Save").click());
+  await settle();
+
+  // Delete asks first, since it cannot be undone.
+  act(() => commentOffer(comments[1] ?? assert.fail(), "Delete").click());
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Delete asks first");
+  act(() => commentOffer(question, "Delete comment").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT,
+        commentId: "PRRC_start",
+        body: "Why **five**?",
+      },
+    ],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT, commentId: "PRRC_reply" }],
+  ]);
+
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>('[aria-label="Review, 2 pending comments"]') ??
+      assert.fail("Review counts the pending comments")
+    ).click(),
+  );
+  const panel =
+    tab.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("Review opens its panel");
+  const listed = [...panel.querySelectorAll(".pull-request-pending-list > li")].map(
+    (each) => each.querySelector(".pull-request-pending-where")?.textContent,
+  );
+  assert.deepEqual(listed, ["src/invite.ts · line 13", "src/invite.ts · line 12"]);
 });

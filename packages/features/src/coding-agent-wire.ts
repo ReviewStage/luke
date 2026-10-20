@@ -1052,6 +1052,8 @@ export const OVERVIEW_BOUNDS = {
   MAX_REACTORS: 10,
   /** The most labels, users, or teams the reviewer and label pickers are offered, each. */
   MAX_OPTIONS: 300,
+  /** The most comments of the member's own pending review one read carries, its first kept, the rest only counted. */
+  MAX_PENDING_COMMENTS: 100,
 } as const;
 
 /** The side of a diff a review thread's line counts on: the old file's, or the new file's. */
@@ -1183,6 +1185,33 @@ const reviewThreadSchema = EffectSchema.Struct({
 });
 
 export type ReviewThread = typeof reviewThreadSchema.Type;
+
+/**
+ * One comment of the member's own pending review, which nobody else sees
+ * until they submit it: GitHub's own id for it, which an edit or a deletion
+ * names it by; the published review thread it replies on, by GitHub's id
+ * for it (`ReviewThread.id`), absent for a comment that starts a thread of
+ * its own; who, the member; the file it is on; the line it stands on
+ * and the first of its range, each null where it is on the whole file, and
+ * the side each counts on; their words whole, as GitHub renders them, or,
+ * where GitHub sent no rendering, null with their words as markdown in
+ * `body`, which an edit starts from; and when, in epoch milliseconds.
+ */
+const pendingReviewCommentSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  threadId: EffectSchema.optionalKey(EffectSchema.String),
+  by: githubPersonSchema,
+  path: EffectSchema.String,
+  line: EffectSchema.NullOr(countedNumber),
+  startLine: EffectSchema.NullOr(countedNumber),
+  side: diffSideSchema,
+  startSide: EffectSchema.NullOr(diffSideSchema),
+  html: EffectSchema.NullOr(EffectSchema.String),
+  body: EffectSchema.String,
+  at: countedNumber,
+});
+
+export type PendingReviewComment = typeof pendingReviewCommentSchema.Type;
 
 /**
  * One entry of a pull request's conversation: a comment on it, or a review
@@ -1365,7 +1394,9 @@ export type CodingAgentOverviewChecks = NonNullable<
  * conversation rather than the description itself, since they are read in
  * the same ask as the reactions of its comments; and, read beside it on the
  * reader's own token, the review they hold pending on it, by how many
- * comments it holds, null where they hold none or it could not be read as
+ * comments it holds and those comments themselves, the first up to the
+ * bound (`drafts`, absent where they could not be read, or from a service
+ * before them), null where they hold none or it could not be read as
  * theirs, absent from a service before it. Null where the agent has opened
  * no pull request yet.
  */
@@ -1382,7 +1413,16 @@ export const codingAgentOverviewConversationAnswerSchema = EffectSchema.Struct({
       descriptionReactions: EffectSchema.optionalKey(reactionsSchema),
       descriptionSubject: reactionSubjectSchema,
       pendingReview: EffectSchema.optionalKey(
-        EffectSchema.NullOr(EffectSchema.Struct({ comments: countedNumber })),
+        EffectSchema.NullOr(
+          EffectSchema.Struct({
+            comments: countedNumber,
+            drafts: EffectSchema.optionalKey(
+              EffectSchema.Array(pendingReviewCommentSchema).check(
+                EffectSchema.isMaxLength(OVERVIEW_BOUNDS.MAX_PENDING_COMMENTS),
+              ),
+            ),
+          }),
+        ),
       ),
     }),
   ),
