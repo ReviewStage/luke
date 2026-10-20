@@ -2488,7 +2488,7 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
   }
 });
 
-test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press asks first, in GitHub's words, and merges the head it read", async () => {
+test("a pull request ready to merge offers the first method the repository allows as its press, its chevron choosing another, kept for the repository; the press merges at once, as stage-cli's does, at the head it read", async () => {
   const first = await draw(merging(MERGE_STATE.CLEAN));
   const chevron =
     first.querySelector<HTMLButtonElement>('.merge-control [aria-label="Choose how to merge"]') ??
@@ -2507,12 +2507,11 @@ test("a pull request ready to merge offers the first method the repository allow
   const again = await draw(merging(MERGE_STATE.CLEAN));
   assert.equal(mergeShown(again)?.press, "Rebase and merge", "the method chosen is kept");
   await pressBox(again, "Rebase and merge");
-  assert.deepEqual(changes, [], "a merge asks first");
-  const dialog =
-    document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]') ??
-    assert.fail("the merge is asked about");
-  assert.match(dialog.textContent ?? "", /Rebase and merge #42\?/u);
-  await answerQuestion("Confirm rebase and merge");
+  assert.equal(
+    document.querySelector('[role="dialog"], [role="alertdialog"]'),
+    null,
+    "a merge asks nothing first",
+  );
   assert.deepEqual(changes, [
     [
       AGENT.id,
@@ -2586,11 +2585,11 @@ test("while a merge's change is out its press stands busy, and where GitHub refu
     outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
     words: "Pull request is not mergeable.",
   };
-  const tab = await draw(merging(MERGE_STATE.CLEAN, { queue: true }));
-  await pressBox(tab, "Merge when ready");
+  const tab = await draw(merging(MERGE_STATE.CLEAN));
+  await pressBox(tab, "Squash and merge");
   const [press] = mergePresses(tab);
   assert.equal(press?.getAttribute("aria-busy"), "true");
-  assert.equal(press?.getAttribute("aria-label"), "Turning on auto-merge");
+  assert.equal(press?.getAttribute("aria-label"), "Merging");
   resolve();
   await settle();
   assert.equal(
@@ -2630,50 +2629,6 @@ test("Review stands at the end of the tabs' row while the pull request is open o
     act(() => root?.unmount());
     root = undefined;
   }
-});
-
-test("a merge asked about merges the head it was asked about, though a read landing under the question names a newer one", async () => {
-  let reads = 0;
-  const tab = await draw(
-    controlAnswering({
-      pullRequest: () => {
-        reads += 1;
-        const headSha = reads === 1 ? "c0ffee1" : "beef002";
-        return Promise.resolve({
-          pullRequest: {
-            ...PULL_REQUEST,
-            merge: MERGE_STATE.CLEAN,
-            merging: { ...MERGING, headSha },
-          },
-        });
-      },
-    }),
-  );
-  await pressBox(tab, "Squash and merge");
-  const dialog =
-    document.querySelector<HTMLElement>('[role="dialog"], [role="alertdialog"]') ??
-    assert.fail("the merge is asked about");
-  assert.match(dialog.textContent ?? "", /at commit c0ffee1/u);
-
-  await pressToolbar(tab, "Refresh");
-  await settle();
-  assert.ok(reads > 1, "a newer head was read under the question");
-
-  const merge =
-    [
-      ...document.querySelectorAll<HTMLButtonElement>(
-        '[role="dialog"] button, [role="alertdialog"] button',
-      ),
-    ].find((each) => each.textContent === "Confirm squash and merge") ??
-    assert.fail("the dialog still offers the merge");
-  act(() => merge.click());
-  await settle();
-  assert.deepEqual(changes, [
-    [
-      AGENT.id,
-      { action: PULL_REQUEST_ACTION.MERGE, method: MERGE_METHOD.SQUASH, headSha: "c0ffee1" },
-    ],
-  ]);
 });
 
 /** The Review press at the end of the tabs' row. */
@@ -4432,14 +4387,18 @@ test("Discard's question stands busy until GitHub answers, and says GitHub's ref
   assert.match(question().textContent ?? "", /GitHub said: Review is not pending/u);
 });
 
-test("a merge asked about goes with its panel: hidden, the question is let go and nothing merges, and shown again it asks nothing", async () => {
+test("Remove from queue's question goes with its panel: hidden, the question is let go and nothing leaves the queue, and shown again it asks nothing", async () => {
   let show: (shown: boolean) => void = () => undefined;
   function Hiding() {
     const [shown, setShown] = useState(true);
     show = setShown;
     return createElement(AgentPullRequestTab, {
       agentId: AGENT.id,
-      control: merging(MERGE_STATE.CLEAN),
+      control: merging(MERGE_STATE.CLEAN, {
+        queue: true,
+        queued: { position: 2 },
+        autoMerge: { method: null },
+      }),
       shown,
       repository: "acme/relay",
       tree: { open: false, onToggle: () => undefined },
@@ -4451,8 +4410,8 @@ test("a merge asked about goes with its panel: hidden, the question is let go an
   // Note that the question is read as whether it stands, so a failure prints a word rather than a whole DOM node.
   const question = () => document.querySelector('[role="dialog"], [role="alertdialog"]') !== null;
 
-  await pressBox(tab, "Squash and merge");
-  assert.equal(question(), true, "the merge is asked about");
+  await pressBox(tab, "Remove from queue");
+  assert.equal(question(), true, "leaving the queue is asked about");
   act(() => show(false));
   assert.equal(question(), false, "the question goes as its panel hides");
   act(() => show(true));

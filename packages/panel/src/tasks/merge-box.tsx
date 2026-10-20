@@ -64,8 +64,7 @@ import type { PullRequestWrites } from "./pull-request-writes.js";
  *
  * - ready to merge, the method chosen as its words ("Squash and merge"), a
  *   split button whose chevron chooses among the methods the repository
- *   allows, asked first in GitHub's own words ("Confirm squash and merge"),
- *   since a merge cannot be undone from here, where stage-cli merges at once;
+ *   allows, merging at once, as stage-cli's does;
  * - on a base merged through a merge queue, Merge when ready, which turns
  *   auto-merge on with no method, so GitHub adds it to the queue once it is
  *   ready, as `gh pr merge --auto` does;
@@ -113,13 +112,6 @@ const METHOD_NOUNS = {
   [MERGE_METHOD.MERGE]: "merge commit",
   [MERGE_METHOD.SQUASH]: "squash",
   [MERGE_METHOD.REBASE]: "rebase",
-} as const satisfies Record<MergeMethod, string>;
-
-/** What a merge's question presses, as GitHub's own second press says it. */
-const CONFIRM_WORDS = {
-  [MERGE_METHOD.MERGE]: "Confirm merge",
-  [MERGE_METHOD.SQUASH]: "Confirm squash and merge",
-  [MERGE_METHOD.REBASE]: "Confirm rebase and merge",
 } as const satisfies Record<MergeMethod, string>;
 
 /** The control's own words. */
@@ -412,46 +404,19 @@ function MethodPress({
   );
 }
 
-/** What the control asks first: a merge as it stood when pressed, or leaving the queue. */
-type Asked =
-  | {
-      readonly kind: typeof PULL_REQUEST_ACTION.MERGE;
-      readonly method: MergeMethod;
-      readonly headSha: string;
-    }
-  | { readonly kind: typeof PULL_REQUEST_ACTION.DEQUEUE };
-
-/** The question a press asks first, in GitHub's words. */
-function questionOf(asked: Asked, pullRequest: CodingAgentOverviewPullRequest): DialogQuestion {
-  if (asked.kind === PULL_REQUEST_ACTION.DEQUEUE) {
-    return {
-      title: "Remove from the merge queue?",
-      body: "Removing this pull request from the queue could impact other pull requests in the queue.",
-      verb: BOX_WORDS.DEQUEUE,
-      running: BUSY_WORDS[PULL_REQUEST_ACTION.DEQUEUE],
-      tone: DIALOG_TONE.DANGER,
-    };
-  }
-  return {
-    title: `${PRESS_WORDS[asked.method]} #${pullRequest.number}?`,
-    body: `GitHub merges it into ${pullRequest.base} as you, at commit ${asked.headSha.slice(0, 7)}. A merge can't be undone from here.`,
-    verb: CONFIRM_WORDS[asked.method],
-    running: BUSY_WORDS[PULL_REQUEST_ACTION.MERGE],
-    tone: DIALOG_TONE.PRIMARY,
-  };
-}
-
-/** The change a question answered sends. */
-function askedWrite(asked: Asked): Parameters<PullRequestWrites["write"]>[0] {
-  return asked.kind === PULL_REQUEST_ACTION.DEQUEUE
-    ? { action: PULL_REQUEST_ACTION.DEQUEUE }
-    : { action: PULL_REQUEST_ACTION.MERGE, method: asked.method, headSha: asked.headSha };
-}
+/** The question Remove from queue asks first, as stage-cli's does. */
+const DEQUEUE_QUESTION: DialogQuestion = {
+  title: "Remove from the merge queue?",
+  body: "Removing this pull request from the queue could impact other pull requests in the queue.",
+  verb: BOX_WORDS.DEQUEUE,
+  running: BUSY_WORDS[PULL_REQUEST_ACTION.DEQUEUE],
+  tone: DIALOG_TONE.DANGER,
+};
 
 /**
  * The merge control for an open pull request or a draft, as its overview
- * read it: the chip, the press, and the question a merge or leaving the
- * queue asks first. Nothing for one merged or closed, or where neither a
+ * read it: the chip, the press, and the question leaving the queue asks
+ * first. Nothing for one merged or closed, or where neither a
  * chip nor a press has anything to say.
  */
 export function MergeControl({
@@ -470,17 +435,14 @@ export function MergeControl({
   const { merging } = pullRequest;
   const methods = merging?.methods ?? [];
   const [method, choose] = useMergeMethod(repository, methods);
-  // What a press asked, as it stood when pressed: a read landing under the question never changes what it does.
-  const [asked, setAsked] = useState<Asked | undefined>();
-  const confirm = useConfirmDialog(
-    { subject: asked !== undefined, surfaceOpen: shown },
-    async () => {
-      if (asked !== undefined) await writes.write(askedWrite(asked));
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-    },
-  );
+  // Whether Remove from queue is being asked about.
+  const [asked, setAsked] = useState(false);
+  const confirm = useConfirmDialog({ subject: asked, surfaceOpen: shown }, async () => {
+    await writes.write({ action: PULL_REQUEST_ACTION.DEQUEUE });
+    return { status: ACTION_RESULT_STATUS.ACCEPTED };
+  });
   // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
-  if (!shown && asked !== undefined && !confirm.busy) setAsked(undefined);
+  if (!shown && asked && !confirm.busy) setAsked(false);
 
   const live =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
@@ -493,8 +455,8 @@ export function MergeControl({
   const pending = isMergeWrite(writes.pending) ? writes.pending : undefined;
   const busy = writes.pending !== undefined;
   const headSha = merging?.headSha ?? "";
-  const ask = (next: Asked) => {
-    setAsked(next);
+  const askDequeue = () => {
+    setAsked(true);
     confirm.ask();
   };
   const busyAs = (write: MergeWrite) => (pending === write ? BUSY_WORDS[write] : undefined);
@@ -521,7 +483,9 @@ export function MergeControl({
             busy={busy}
             busyLabel={busyAs(PULL_REQUEST_ACTION.MERGE)}
             onChoose={choose}
-            onPress={() => ask({ kind: PULL_REQUEST_ACTION.MERGE, method, headSha })}
+            onPress={() =>
+              void writes.write({ action: PULL_REQUEST_ACTION.MERGE, method, headSha })
+            }
           />
         );
       case MERGE_ACTION.ENABLE_AUTO_MERGE:
@@ -556,21 +520,19 @@ export function MergeControl({
         );
       case MERGE_ACTION.DEQUEUE:
         return plain(BUTTON_VARIANT.OUTLINE, BOX_WORDS.DEQUEUE, PULL_REQUEST_ACTION.DEQUEUE, () =>
-          ask({ kind: PULL_REQUEST_ACTION.DEQUEUE }),
+          askDequeue(),
         );
       default:
         return null;
     }
   };
   const drawn = press();
-  if (face === undefined && drawn === null && asked === undefined) return null;
+  if (face === undefined && drawn === null && !asked) return null;
   return (
     <span className="merge-control">
       {face === undefined ? null : <MergeChip face={face} sentence={sentenceOf(pullRequest)} />}
       {drawn}
-      {asked === undefined ? null : (
-        <ConfirmDialog confirm={confirm} question={questionOf(asked, pullRequest)} />
-      )}
+      {asked ? <ConfirmDialog confirm={confirm} question={DEQUEUE_QUESTION} /> : null}
     </span>
   );
 }
