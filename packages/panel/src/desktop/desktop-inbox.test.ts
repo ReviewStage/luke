@@ -5837,7 +5837,7 @@ test("an approve-or-request-changes ask is two small buttons: the one pressed is
   assert.deepEqual(askBoxes(pane), [["answered", "Pick oneYou requested changes"]]);
 });
 
-test("a to-do's steps are ticked in its box, Mark done waiting for every one, and Mark done sent carries the steps ticked; one naming no step stands its item's title as its one step", async () => {
+test("a to-do's steps are ticked in its box, Mark done needs none ticked and ticks every one, and Mark done sent carries every step; one naming no step stands its item's title as its one step", async () => {
   const shown = threadItem([
     askingMessage({
       type: INBOX_ASK.DO,
@@ -5847,14 +5847,24 @@ test("a to-do's steps are ticked in its box, Mark done waiting for every one, an
   const pane = await mountThread(shown);
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000013"));
   const steps = () => [...pane.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")];
-  assert.equal(askPress(pane, "Mark done").disabled, true);
+  assert.equal(askPress(pane, "Mark done").disabled, false, "Mark done waits for no tick");
   assert.deepEqual(askBoxes(pane), [["open", "Steps · 0 of 2Waiting on you"]]);
 
   act(() => steps()[0]?.click());
-  assert.equal(askPress(pane, "Mark done").disabled, true, "one step is not every step");
-  act(() => steps()[1]?.click());
+  assert.deepEqual(askBoxes(pane), [["open", "Steps · 1 of 2Waiting on you"]]);
+  act(() => askPress(pane, "Mark done").click());
+  assert.deepEqual(
+    steps().map((step) => step.checked),
+    [true, true],
+    "Mark done ticks the step left unticked",
+  );
   assert.deepEqual(askBoxes(pane), [["open", "Steps · 2 of 2Waiting on you"]]);
-  assert.equal(askPress(pane, "Mark done").disabled, false);
+  act(() => askPress(pane, "Couldn't do it").click());
+  assert.deepEqual(
+    steps().map((step) => step.checked),
+    [true, false],
+    "Couldn't do it after Mark done keeps only the step ticked by hand",
+  );
   act(() => askPress(pane, "Mark done").click());
   assert.equal(sendWords(pane), "Mark done");
   act(() =>

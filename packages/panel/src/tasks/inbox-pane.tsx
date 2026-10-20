@@ -97,7 +97,6 @@ import {
   decideButtons,
   decidedOf,
   decisionsOf,
-  everyStepTicked,
   fieldValueOf,
   formFilled,
   INBOX_HOLDER,
@@ -121,6 +120,7 @@ import {
   sentStamp,
   settledAt,
   settlementOf,
+  shownTicks,
   THREAD_ENTRY,
   threadCut,
   threadEntries,
@@ -1577,7 +1577,7 @@ function AskPress({
  * An open ask's controls, each attaching its answer to the reply rather
  * than sending it: a `decide`'s options numbered for the keys, or its two
  * small buttons where it is a yes or no in other words; a `do`'s steps as
- * checkboxes, then Mark done once every one is ticked, and Couldn't do it;
+ * checkboxes, then Mark done, which ticks every one, and Couldn't do it;
  * an `answer`'s fields, then Submit once the required ones are filled, or
  * its Answer, whose reply's words are the answer.
  */
@@ -1619,7 +1619,7 @@ function AskControls({
       );
     case INBOX_ASK.DO: {
       const steps = ask.steps.length === 0 ? [title] : ask.steps;
-      const ticked = new Set(draft.steps ?? []);
+      const ticked = new Set(shownTicks(ask, draft));
       return (
         <>
           <ul className="inbox-ask-steps" aria-label="Steps">
@@ -1629,7 +1629,7 @@ function AskControls({
                 <Checkbox
                   checked={ticked.has(at)}
                   disabled={disabled}
-                  onChange={() => onDraft(withStep(draft, at))}
+                  onChange={() => onDraft(withStep(ask, draft, at))}
                 >
                   {step}
                 </Checkbox>
@@ -1639,7 +1639,7 @@ function AskControls({
           <div className="inbox-ask-presses">
             <AskPress
               label={ASK_PRESS.DONE}
-              disabled={disabled || !everyStepTicked(ask, draft)}
+              disabled={disabled}
               onPress={() => press(INBOX_REPLY.DONE)}
             />
             <AskPress
@@ -1780,7 +1780,14 @@ function AskBox({
   }
   const open = ask.status === INBOX_ASK_STATUS.OPEN;
   const drafted = open ? doors?.draft : undefined;
-  const head = askHeadWords(ask, drafted === undefined ? undefined : (drafted.steps ?? []));
+  const head = askHeadWords(
+    ask,
+    drafted === undefined
+      ? undefined
+      : ask.type === INBOX_ASK.DO
+        ? shownTicks(ask, drafted)
+        : (drafted.steps ?? []),
+  );
   const standing = (() => {
     switch (ask.status) {
       case INBOX_ASK_STATUS.OPEN:
