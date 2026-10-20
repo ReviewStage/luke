@@ -342,7 +342,7 @@ test("in a narrow room the board shows one column at a time, Todo first, and a t
   assert.deepEqual(columns(board), [["In progress", ["ACME-42"]]]);
 });
 
-test("in a narrow room Canceled adds its tab, and hiding it again while shown goes back to Todo", async () => {
+test("in a narrow room Canceled adds its tab, and hiding it again while shown goes back to Todo, which showing it again keeps", async () => {
   const board = await mountBoard(TASKS, SHELL_ROOM.NARROW);
   const canceled = board.querySelector<HTMLButtonElement>("button[aria-pressed]");
   assert.ok(canceled, "the toolbar offers Canceled");
@@ -351,6 +351,9 @@ test("in a narrow room Canceled adds its tab, and hiding it again while shown go
   pressTab(board, "Canceled");
   assert.deepEqual(columns(board), [["Canceled", ["ACME-33"]]]);
 
+  act(() => canceled.click());
+  assert.equal(columnTabs(board).chosen, "Todo");
+  assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);
   act(() => canceled.click());
   assert.equal(columnTabs(board).chosen, "Todo");
   assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);

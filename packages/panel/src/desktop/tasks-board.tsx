@@ -288,6 +288,8 @@ export function TasksBoard({
           aria-pressed={canceled}
           onClick={() => {
             setCanceled(!canceled);
+            // Note that Canceled hidden while its column is shown lets the choice go, so showing it again does not bring it back unasked.
+            if (canceled && chosen === TASK_STATUS.CANCELED) setChosen(FIRST_SHOWN);
             writeKept(CANCELED_KEY, storedCanceled, !canceled);
           }}
         >
