@@ -17,32 +17,10 @@ import { installAppPlatform } from "@luke/panel/app-platform";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import { Effect } from "effect";
-import { type ReactNode, useEffect } from "react";
-import { createRoot } from "react-dom/client";
+import type { ReactNode } from "react";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
-import { startDesktopSentry } from "./desktop-sentry";
-
-/**
- * How long a window that has drawn waits for an idle moment before it loads
- * Sentry's SDK anyway, so a window that is never idle still reports.
- */
-const SENTRY_LOAD_DEADLINE_MS = 2_000;
-
-/**
- * Loads Sentry's SDK in the first idle moment after the window's first
- * commit. Note that this waits on a passive effect rather than on
- * `root.render` returning, because a concurrent root commits later than
- * that, and a passive effect runs once the commit is done; the idle callback
- * then waits past the frame that paints it. Note too that it waits on no
- * animation frame, because the hidden voice window draws none.
- */
-function LoadAfterFirstPaint({ load }: { readonly load: () => void }): null {
-  useEffect(() => {
-    const idle = requestIdleCallback(load, { timeout: SENTRY_LOAD_DEADLINE_MS });
-    return () => cancelIdleCallback(idle);
-  }, [load]);
-  return null;
-}
+import { BLANK_WINDOW, startDesktopSentry } from "./desktop-sentry";
+import { createReportingRoot } from "./desktop-sentry-root";
 
 /**
  * Installs the window's bridge and platform, draws `surface` into its root
@@ -77,7 +55,7 @@ export function mountWindow(surface: ReactNode): void {
 
   const rootElement = document.getElementById("root");
   if (!rootElement) throw new Error("Renderer root element is missing");
-  const root = createRoot(rootElement);
+  const draw = createReportingRoot(rootElement, sentry);
 
   void (async () => {
     try {
@@ -94,15 +72,13 @@ export function mountWindow(surface: ReactNode): void {
       // rather than through main's Effect reporter, because providing a
       // reporter layer on this path put 90 to 130 KB gzipped on every
       // window's first load.
-      sentry.reportBlankWindow(error instanceof Error ? error : new Error(String(error)));
+      sentry.reportBlankWindow(
+        error instanceof Error ? error : new Error(String(error)),
+        BLANK_WINDOW.FIRST_READ,
+      );
       sentry.load();
       return;
     }
-    root.render(
-      <RegistryContext.Provider value={rendererRegistry}>
-        {surface}
-        <LoadAfterFirstPaint load={sentry.load} />
-      </RegistryContext.Provider>,
-    );
+    draw(<RegistryContext.Provider value={rendererRegistry}>{surface}</RegistryContext.Provider>);
   })();
 }

@@ -18,13 +18,13 @@ import {
   init,
   withStreamedSpan,
 } from "@sentry/electron/renderer";
-import type { DesktopSentry } from "./desktop-sentry";
+import { BLANK_WINDOW, type BlankWindow, type DesktopSentry } from "./desktop-sentry";
 
-/** The mechanism a blank window's report names, so Sentry's issue says which path caught it. */
+/** The mechanism each blank window's report names, so Sentry's issue says which path caught it. */
 const BLANK_WINDOW_MECHANISM = {
-  type: "auto.electron.renderer.first_read",
-  handled: false,
-} as const;
+  [BLANK_WINDOW.FIRST_READ]: { type: "auto.electron.renderer.first_read", handled: false },
+  [BLANK_WINDOW.RENDER]: { type: "auto.electron.renderer.render", handled: false },
+} as const satisfies Record<BlankWindow, { readonly type: string; readonly handled: false }>;
 
 /**
  * Starts the window's SDK with its default data collection and the
@@ -45,8 +45,8 @@ export function initDesktopSentry(): DesktopSentry {
     beforeSendSpan: withStreamedSpan(spanWithoutAccessTokens),
   });
   return {
-    reportBlankWindow: (error) => {
-      captureException(error, { mechanism: BLANK_WINDOW_MECHANISM });
+    reportBlankWindow: (error, why) => {
+      captureException(error, { mechanism: BLANK_WINDOW_MECHANISM[why] });
     },
   };
 }

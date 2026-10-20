@@ -7,8 +7,9 @@
  * panels, the voice window, and the call window alike, would otherwise pay
  * for it on its way to its first paint. The web tab loads its own the same
  * way (`apps/web/src/app/web-sentry.ts`). What is reported before it lands,
- * a window whose state could not be read, is kept for it, a few at most, and
- * sent once it stands (`@luke/features/sentry-early-reports`).
+ * a window whose state could not be read or whose surface failed to render,
+ * is kept for it, a few at most, and sent once it stands
+ * (`@luke/features/sentry-early-reports`).
  *
  * The SDK's tracing starts the window's page load at the document's own
  * start, and reads the page's web vitals from what the browser buffered,
@@ -19,16 +20,20 @@
 
 import { reportsOnceStarted } from "@luke/features/sentry-early-reports";
 
+/** Why a window drew nothing: its state could not be read, or its surface failed to render. */
+export const BLANK_WINDOW = { FIRST_READ: "first_read", RENDER: "render" } as const;
+export type BlankWindow = (typeof BLANK_WINDOW)[keyof typeof BLANK_WINDOW];
+
 /** What the window reports through once the SDK stands. */
 export interface DesktopSentry {
-  /** Reports a window whose state could not be read, so nothing is drawn. */
-  readonly reportBlankWindow: (error: Error) => void;
+  /** Reports a window that could draw nothing, and why. */
+  readonly reportBlankWindow: (error: Error, why: BlankWindow) => void;
 }
 
 /** What the window reports through from the moment it starts, whether the SDK stands yet or not. */
 export interface DesktopSentryReports {
-  /** Reports a window that could draw nothing. */
-  readonly reportBlankWindow: (error: Error) => void;
+  /** Reports a window that could draw nothing, and why. */
+  readonly reportBlankWindow: (error: Error, why: BlankWindow) => void;
   /** Loads and starts the SDK, once however often it is asked. */
   readonly load: () => void;
   /** Settles once the SDK stands, or never will, and what was said before then was sent or dropped. */
@@ -61,8 +66,8 @@ export function startDesktopSentry(): DesktopSentryReports {
   const asked = Promise.withResolvers<void>();
   const { say, settled } = reportsOnceStarted(asked.promise.then(loadedSentry), EARLY_REPORTS_KEPT);
   return {
-    reportBlankWindow: (error) => {
-      say((sentry) => sentry.reportBlankWindow(error));
+    reportBlankWindow: (error, why) => {
+      say((sentry) => sentry.reportBlankWindow(error, why));
     },
     load: () => asked.resolve(),
     settled,
