@@ -28,9 +28,12 @@ import { RPCLink } from "@orpc/client/message-port";
 let installed: AppBridge | undefined;
 let installedActPort: ActPortClient | undefined;
 
-/** Installs the bridge this window reaches main through; its root does this once, before anything is drawn. */
-export function installAppBridge(bridge: AppBridge): void {
+/** Installs the bridge this window reaches main through; its root does this once, before anything is drawn, and calls what it answers as it closes. */
+export function installAppBridge(bridge: AppBridge): () => void {
   installed = bridge;
+  return () => {
+    if (installed === bridge) installed = undefined;
+  };
 }
 
 /** The bridge this window's root installed. */
@@ -43,19 +46,24 @@ export function appBridge(): AppBridge {
  * Installs this window's end of its act port, the other end of which its
  * root has handed main, and starts it; its root does this once, beside the
  * bridge. A shell that acts on some calls as they leave hands its client
- * `through` what does so, as the web app's does for a connect's press.
+ * `through` what does so, as the web app's does for a connect's press. What
+ * it answers takes the client down again; the port is its host's to close.
  */
 export function installActPort(
   port: MessagePort,
   through: (client: ActPortClient) => ActPortClient = (client) => client,
-): void {
-  installActPortClient(through(createORPCClient(new RPCLink({ port }))));
+): () => void {
+  const uninstall = installActPortClient(through(createORPCClient(new RPCLink({ port }))));
   port.start();
+  return uninstall;
 }
 
-/** Installs the act port's client itself, which a test answers with a fake of its own. */
-export function installActPortClient(client: ActPortClient): void {
+/** Installs the act port's client itself, which a test answers with a fake of its own; answers how to take it down. */
+export function installActPortClient(client: ActPortClient): () => void {
   installedActPort = client;
+  return () => {
+    if (installedActPort === client) installedActPort = undefined;
+  };
 }
 
 /** The act port's client this window's root installed. */

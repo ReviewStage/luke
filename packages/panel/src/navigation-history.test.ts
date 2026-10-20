@@ -16,6 +16,8 @@ import { runAppCommand } from "./app-commands.js";
 import { useCopyLink } from "./links-at-hand.js";
 import {
   installWindowHistory,
+  MOUSE_BUTTON,
+  useHistoryMouseButtons,
   useWindowHistory,
   type WindowHistory,
 } from "./navigation-history.js";
@@ -135,6 +137,7 @@ function mount(
       room: SHELL_ROOM.WIDE,
       tasks,
     });
+    useHistoryMouseButtons(history, true);
     return null;
   }
   const container = document.createElement("div");
@@ -194,6 +197,26 @@ test("leaving a plan for the home page is a step Back returns from", () => {
   );
   window.stand(tasksControl());
   assert.equal(window.history().canGoBack, true);
+});
+
+test("a press of the mouse's Back or Forward button takes one step and cancels the browser's own, so a browser tab takes no second step", () => {
+  const window = mount(
+    tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
+  );
+  window.stand(tasksControl());
+  const press = (button: number) => {
+    const release = new MouseEvent("mouseup", { button, bubbles: true, cancelable: true });
+    act(() => {
+      document.body.dispatchEvent(release);
+    });
+    return release;
+  };
+
+  assert.equal(press(MOUSE_BUTTON.BACK).defaultPrevented, true);
+  assert.equal(window.history().canGoBack, false, "Back took one step, to the plan");
+  assert.equal(press(MOUSE_BUTTON.FORWARD).defaultPrevented, true);
+  assert.equal(window.history().canGoForward, false, "Forward took one step, home again");
+  assert.equal(press(0).defaultPrevented, false, "any other button keeps its own");
 });
 
 test("a step back cancelled at the leave ask leaves the trail where the window stands, so the next step is the same step", () => {

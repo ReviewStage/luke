@@ -70,9 +70,12 @@ export interface AppPlatform {
 
 let installed: AppPlatform | undefined;
 
-/** Installs what this window's shell can do; its root does this once, before anything is drawn. */
-export function installAppPlatform(platform: AppPlatform): void {
+/** Installs what this window's shell can do; its root does this once, before anything is drawn, and calls what it answers as it closes. */
+export function installAppPlatform(platform: AppPlatform): () => void {
   installed = platform;
+  return () => {
+    if (installed === platform) installed = undefined;
+  };
 }
 
 /** What this window's root installed. */
