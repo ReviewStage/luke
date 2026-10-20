@@ -8,6 +8,9 @@
     "file-tree": 74719,
     "terminal": 133117,
     "diagram": 168296,
-    "diff-view": 244054
+    "diff-view": 244054,
+    "session-recorder": 61749,
+    "session-replay": 88260,
+    "sentry": 55123
   }
 }
