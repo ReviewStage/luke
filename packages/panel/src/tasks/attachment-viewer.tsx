@@ -157,6 +157,7 @@ function AttachmentBody({
           lit={undefined}
           notes={NO_NOTES}
           findFrom={1}
+          findable={false}
         />
       </div>
     );
