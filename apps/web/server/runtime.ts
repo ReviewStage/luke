@@ -1,6 +1,9 @@
+import { type CoderHost, coderHost } from "@luke/service/agents/coder-host/host";
+import { productionCoderHostSeams } from "@luke/service/agents/coder-host/production";
+import { hostedEnvironment } from "@luke/service/environment";
 import { sentryLayer } from "@luke/service/observability/sentry";
 import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";
-import { type Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 
 /**
  * Module scope is the memoization: Vercel keeps a warm instance's module
@@ -10,6 +13,9 @@ import { type Effect, Layer, ManagedRuntime } from "effect";
  * every service a `Context.Service` was supposed to identify.
  */
 let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | undefined;
+
+/** The coder host a web function serves an agent's tools through, composed on first use and kept for the instance. */
+let standingCoderHost: CoderHost | undefined;
 
 /**
  * The one runtime a web function runs an effect on, with Sentry started
@@ -24,6 +30,21 @@ function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesErr
 /** The one place `apps/web` runs an effect, which is what makes this the edge. */
 export function runWeb<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<A> {
   return webRuntime().runPromise(effect);
+}
+
+/**
+ * The coding agent's host over the deployment's seams, for a function that
+ * runs the agent's tools outside eve: Luke's MCP server, which a native
+ * harness's runner calls. It is composed here, on this runtime's runner, as
+ * the coding agent's eve root composes its own (`apps/dev/host.ts`): the
+ * seams take a runner for their promise-shaped doors, and the environment
+ * read is a `Config` over `process.env`, which suspends on nothing.
+ */
+export function webCoderHost(): CoderHost {
+  standingCoderHost ??= coderHost(
+    Effect.runSync(Effect.provide(productionCoderHostSeams(runWeb), hostedEnvironment)),
+  );
+  return standingCoderHost;
 }
 
 /**

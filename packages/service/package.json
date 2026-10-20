@@ -96,6 +96,7 @@
     "./agents/coder-host/tool-set": "./src/agents/coder-host/tool-set.js",
     "./agents/coder-host/transcript": "./src/agents/coder-host/transcript.js",
     "./agents/coder-host/usage": "./src/agents/coder-host/usage.js",
+    "./agents/luke-mcp/app": "./src/agents/luke-mcp/app.js",
     "./agents/coding-agent-tools": "./src/agents/coding-agent-tools.js",
     "./agents/task-section-tools": "./src/agents/task-section-tools.js",
     "./agents/task-tools": "./src/agents/task-tools.js",
@@ -281,6 +282,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "@types/node": "catalog:",
     "@types/pg": "8.21.0",
     "@types/ws": "8.18.1",

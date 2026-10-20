@@ -908,6 +908,38 @@ const updateAgentNativeSession = SqlSchema.findAll({
     ),
 });
 
+/**
+ * The coding agent's conversation whose runner holds the bearer of this
+ * digest, read with no account in hand, because the digest is what admits
+ * the runner; a deleted conversation is found by none.
+ */
+const findRunnerTokenConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ runnerTokenHash: Schema.String }),
+  Result: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    runtimeSessionId: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ runnerTokenHash }) =>
+    Database.use((db) =>
+      db
+        .select({
+          userId: conversations.userId,
+          conversationId: conversations.id,
+          runtimeSessionId: conversations.runtimeSessionId,
+        })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.runnerTokenHash, runnerTokenHash),
+            eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
 const updateAgentRunnerToken = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2192,6 +2224,25 @@ export function recordCodingAgentRunnerToken(
     updateAgentRunnerToken({ userId, agentId, runnerTokenHash }),
     (rows) => rows.length > 0,
   );
+}
+
+/** A coding agent's conversation, as the runner whose bearer has this digest reaches it. */
+export interface RunnerTokenConversation {
+  /** The account that started the agent and opened its conversation, which the runner's tools act as. */
+  readonly userId: string;
+  readonly conversationId: string;
+  readonly runtimeSessionId: string | null;
+}
+
+/**
+ * The coding agent's conversation whose runner was handed the bearer of this
+ * digest (`recordCodingAgentRunnerToken`); nothing for a digest no standing
+ * conversation holds, a retired bearer's among them.
+ */
+export function readRunnerTokenConversation(
+  runnerTokenHash: string,
+): CodingAgentStoreEffect<Option.Option<RunnerTokenConversation>> {
+  return findRunnerTokenConversation({ runnerTokenHash });
 }
 
 /** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */
