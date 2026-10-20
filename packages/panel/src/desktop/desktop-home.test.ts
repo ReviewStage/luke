@@ -26,6 +26,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import type { InboxChoice, NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
@@ -257,8 +258,12 @@ function newTaskControl(started: Started[]): TasksControl["newTask"] {
   };
 }
 
-/** The home page over `overrides`, every door it opens recorded. */
-function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Stratakos") {
+/** The home page over `overrides`, in the room given, every door it opens recorded. */
+function mount(
+  overrides: Partial<TasksControl> = {},
+  accountName = "Dean Stratakos",
+  room: ShellRoom = SHELL_ROOM.WIDE,
+) {
   const opened: Opened = { tasks: [], inbox: [], newTasks: 0, started: [] };
   const tasks = tasksControl({
     tasks: TASKS,
@@ -288,7 +293,7 @@ function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Strata
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopHome, { tasks, accountName })),
+      onRegistry(AtomRegistry.make(), createElement(DesktopHome, { tasks, room, accountName })),
     ),
   );
   return { page: container, opened, tasks };
@@ -417,6 +422,24 @@ test("Home offers no line to search every task, though Recent lists fewer than t
   assert.doesNotMatch(page.textContent ?? "", /Search all/u);
   const palette = commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE);
   assert.equal(page.querySelector(`[aria-keyshortcuts="${palette}"]`), null);
+});
+
+test("on a phone, where the sidebar is a drawer, Recent lists the 20 plans saved latest rather than 6", async () => {
+  const many = Array.from({ length: 30 }, (_, n) =>
+    task(100 + n, `Plan ${n + 1}`, (n + 1) * 60_000, "acme/relay"),
+  );
+  const listed = { tasks: many, archived: [], ...HOLDING };
+  const latest = many.map((each) => `${each.name} · acme/relay`);
+
+  const phone = mount({ tasks: many, listed }, "Dean", SHELL_ROOM.NARROW);
+  await settle();
+  assert.deepEqual(rows(phone.page, "home-recent"), latest.slice(0, 20));
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const desktop = mount({ tasks: many, listed }, "Dean", SHELL_ROOM.WIDE);
+  await settle();
+  assert.deepEqual(rows(desktop.page, "home-recent"), latest.slice(0, 6));
 });
 
 test("a waiting item's row opens the Inbox on its item, and a recent plan opens the plan", async () => {
