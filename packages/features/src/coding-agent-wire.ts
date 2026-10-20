@@ -1762,6 +1762,14 @@ const codingAgentUsageSchema = EffectSchema.Struct({
   outputTokens: countedNumber,
   cachedInputTokens: EffectSchema.optionalKey(countedNumber),
   costUsd: EffectSchema.optionalKey(countedNumber),
+  /**
+   * Who paid for the turns (`CODING_AGENT_PAYER`), on the agent's own
+   * transcript where its row records one: a plan's turns are drawn as the
+   * plan's usage rather than in dollars, since a subscription has no bill
+   * per token. Absent on a worker's, an agent from before payers were
+   * recorded, and from a service older than it.
+   */
+  payer: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_PAYER))),
 });
 
 export type CodingAgentUsage = typeof codingAgentUsageSchema.Type;
