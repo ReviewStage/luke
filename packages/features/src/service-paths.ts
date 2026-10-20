@@ -292,11 +292,6 @@ export function automationPath(automationId: string): string {
   return `${HOSTED_SERVICE_PATH.AUTOMATIONS}/${encodeURIComponent(automationId)}`;
 }
 
-/** An automation's "Run now" (POST), answered with the run as it came out. */
-export function automationRunPath(automationId: string): string {
-  return `${automationPath(automationId)}/run`;
-}
-
 /**
  * An automation's webhook address (POST), called by the sender the developer
  * hands it to under the trigger's secret rather than an account bearer.
@@ -305,13 +300,8 @@ export function automationWebhookPath(automationId: string): string {
   return `${automationPath(automationId)}/webhook`;
 }
 
-/** An automation's runs, newest first (GET). */
-export function automationRunsPath(automationId: string): string {
-  return `${automationPath(automationId)}/runs`;
-}
-
 /** One task the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
-export function taskPath(taskId: string): string {
+function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
 }
 

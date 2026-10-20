@@ -26,7 +26,7 @@ import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   hostedJsonResponse,
-  hostedRefusalResponse,
+  hostedRefusing,
   repositoryNotReachable,
 } from "../http/http-effect.js";
 import type { WebServices } from "../runtime.js";
@@ -88,7 +88,7 @@ const testRouter = test.router({
   }),
 });
 
-/** The old groups' way of answering the same values: `hostedJsonResponse`, `hostedRefusalResponse`, and a defect left to the platform. */
+/** The route groups' way of answering the same values: `hostedJsonResponse`, `hostedRefusing`, and a defect left to the platform. */
 const oldGroup = Layer.mergeAll(
   HttpRouter.add(
     HTTP_METHOD.GET,
@@ -98,12 +98,12 @@ const oldGroup = Layer.mergeAll(
   HttpRouter.add(
     HTTP_METHOD.GET,
     REACH_PATH,
-    hostedRefusalResponse(repositoryNotReachable(UNREACHED)),
+    hostedRefusing(Effect.fail(repositoryNotReachable(UNREACHED))),
   ),
   HttpRouter.add(
     HTTP_METHOD.POST,
     ITEMS_PATH,
-    hostedRefusalResponse(HOSTED_REFUSAL.INVALID_REQUEST),
+    hostedRefusing(Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
   ),
   HttpRouter.add(HTTP_METHOD.GET, DEFECT_PATH, Effect.die(new Error("a defect"))),
 );
@@ -158,7 +158,7 @@ it.effect(
 );
 
 it.effect(
-  "a repository out of reach is refused with why, beside the slug at the top level, as hostedRefusalResponse refused it",
+  "a repository out of reach is refused with why, beside the slug at the top level, as a route group refuses it",
   () =>
     Effect.gen(function* () {
       const { orpc, old } = yield* bothAnswer({ path: REACH_PATH });

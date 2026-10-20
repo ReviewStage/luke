@@ -1,12 +1,9 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readPlanAttachment } from "@luke/database/models/plan-attachments";
-import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
-import { type HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
-import type { EveReach } from "../agents/coder-host/stop.js";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { unparsedWire, wireUuidSchema } from "../core.js";
-import type { GitHubApp } from "../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_BYTES_HEADERS,
@@ -17,11 +14,6 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import type {
-  IntegrationConnect,
-  WorkspaceLinearConnect,
-} from "../integrations/integration-connect.js";
-import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 
 /**
@@ -50,20 +42,12 @@ const TASK_ID_QUERY = "id";
 /** The query naming one picture of the plan by its id. */
 const ATTACHMENT_QUERY = "attachment";
 
-export interface TasksAppSeams extends EveReach {
+export interface TasksAppSeams {
   resolveUserId: UserIdResolver;
-  /** The plugin's write that makes an account's first workspace, the first time a start needs it. */
-  workspaces: WorkspaceSeams;
 }
 
-/** What the routes may require of the function that stands them: the store, GitHub through the App for a repository's check, and the model catalog a brain worker's transcript prices its turns at. */
-export type TasksAppServices =
-  | DatabaseServices
-  | GitHubApp
-  | HttpClient.HttpClient
-  | ModelCatalog
-  | IntegrationConnect
-  | WorkspaceLinearConnect;
+/** What the route may require of the function that stands it: the store. */
+export type TasksAppServices = DatabaseServices;
 
 type TasksServices = TasksAppServices | HttpServerRequest.HttpServerRequest;
 

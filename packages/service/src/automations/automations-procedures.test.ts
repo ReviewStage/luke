@@ -15,13 +15,7 @@ import {
   openWorkspace,
   startTask,
 } from "@luke/database/testing";
-import {
-  automationPath,
-  automationRunPath,
-  automationRunsPath,
-  HOSTED_API_ERROR,
-  HOSTED_SERVICE_PATH,
-} from "@luke/features";
+import { automationPath, HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@luke/features";
 import { SCHEDULE_PRESET } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
@@ -82,6 +76,12 @@ import {
   openGithubUser,
 } from "../testing/github-app-fake.js";
 import { automationsProcedures } from "./automations-procedures.js";
+
+/** An automation's "Run now" (POST). */
+const automationRunPath = (automationId: string): string => `${automationPath(automationId)}/run`;
+
+/** An automation's runs, newest first (GET). */
+const automationRunsPath = (automationId: string): string => `${automationPath(automationId)}/runs`;
 
 /**
  * The automation routes, answered by the hosted oRPC router the way the web

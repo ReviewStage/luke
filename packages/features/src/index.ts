@@ -128,13 +128,9 @@ export {
 } from "./mac-command-client.js";
 export {
   automationPath,
-  automationRunPath,
-  automationRunsPath,
   automationWebhookPath,
   HOSTED_SERVICE_PATH,
-  taskPath,
   VOICE_SERVICE_PATH,
-  workspacePhotoPath,
 } from "./service-paths.js";
 export {
   HOSTED_API_ERROR,
