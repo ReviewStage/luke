@@ -98,20 +98,30 @@ async function prepare(t: TestContext, scenario: Scenario) {
   for (const name of STOOD_IN) symlinkSync(join(root, "stand-in"), join(bin, name));
   const log = join(root, "calls");
   writeFileSync(log, "");
-  const ran = spawnSync("/bin/bash", ["-c", PREPARE_SCRIPT], {
-    cwd: root,
-    encoding: "utf8",
-    env: {
-      PATH: `${bin}:/usr/bin:/bin`,
-      HOME: root,
-      PREPARE_LOG: log,
-      PREPARE_STATE: state,
-      SUDO_DROPS: scenario.sudoDrops ? "1" : "0",
-      SETPRIV_EXIT: String(scenario.setprivExit),
-      CODEX_PRINTS: scenario.codexPrints ?? "0.163.0",
+  // The script looks for an install already in place under `/opt/luke`, which a machine
+  // prepared from the image has, so that directory is the temporary one's instead.
+  const opt = join(root, "opt");
+  const ran = spawnSync(
+    "/bin/bash",
+    ["-c", PREPARE_SCRIPT.replaceAll("/opt/luke/", `${opt}/luke/`)],
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        PATH: `${bin}:/usr/bin:/bin`,
+        HOME: root,
+        PREPARE_LOG: log,
+        PREPARE_STATE: state,
+        SUDO_DROPS: scenario.sudoDrops ? "1" : "0",
+        SETPRIV_EXIT: String(scenario.setprivExit),
+        CODEX_PRINTS: scenario.codexPrints ?? "0.163.0",
+      },
     },
-  });
-  const calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
+  );
+  const calls = readFileSync(log, "utf8")
+    .replaceAll(`${opt}/luke/`, "/opt/luke/")
+    .split("\n")
+    .filter(Boolean);
   return { exitCode: ran.status, stderr: ran.stderr, calls };
 }
 
