@@ -77,8 +77,6 @@ export interface ReachedBrowserTab {
 export interface BrowserTabAction {
   /** The conversation of the agent whose browser holds it: a coding agent's, the task's for Luke, a worker's parent's. */
   readonly conversationId: string;
-  /** The task the agent is on; null for one on none. */
-  readonly taskId: string | null;
   readonly targetId: string;
   readonly address: string;
   readonly title: string;
@@ -113,6 +111,19 @@ const ReachedTabSchema = Schema.Struct({
 /** An address or a title cut where the Browser tab cuts one, since it is only drawn. */
 function shown(text: string): string {
   return text.length > BROWSER_SHOWN_MAX_CHARS ? text.slice(0, BROWSER_SHOWN_MAX_CHARS) : text;
+}
+
+/**
+ * The task of the agent whose conversation is named, read from the agent's
+ * own row rather than taken from the caller: a coding agent's task, or the
+ * task whose Luke the conversation is; null for an agent on none. So a tab
+ * is never listed on a task its agent is not on.
+ */
+function taskOfConversation(conversationId: string) {
+  return sql<string | null>`coalesce(
+  (select ${codingAgent.taskId} from ${codingAgent} where ${codingAgent.conversationId} = ${conversationId}),
+  (select ${task.id} from ${task} where ${task.conversationId} = ${conversationId})
+)`;
 }
 
 /**
@@ -179,7 +190,6 @@ const findAgentTabs = SqlSchema.findAll({
 const upsertTab = SqlSchema.findOne({
   Request: Schema.Struct({
     conversationId: Schema.String,
-    taskId: Schema.NullOr(Schema.String),
     targetId: Schema.String,
     address: Schema.String,
     title: Schema.String,
@@ -192,7 +202,12 @@ const upsertTab = SqlSchema.findOne({
     Database.use((db) =>
       db
         .insert(agentBrowserTab)
-        .values({ ...tab, createdAt: now, lastActedAt: now })
+        .values({
+          ...tab,
+          taskId: taskOfConversation(tab.conversationId),
+          createdAt: now,
+          lastActedAt: now,
+        })
         .onConflictDoUpdate({
           target: [agentBrowserTab.conversationId, agentBrowserTab.targetId],
           // Who opened it and when stand from its first report; the page and the instant move on.
@@ -228,7 +243,11 @@ const takeTab = SqlSchema.findAll({
     Database.use((db) =>
       db
         .update(agentBrowserTab)
-        .set({ driverUserId: userId, heldUntil })
+        .set({
+          driverUserId: userId,
+          // A member's own standing takeover moves on and never back, so an earlier take landing late shortens nothing.
+          heldUntil: sql`case when ${agentBrowserTab.driverUserId} = ${userId} and ${agentBrowserTab.heldUntil} > ${now} then greatest(${agentBrowserTab.heldUntil}, ${heldUntil}) else ${heldUntil}::timestamptz end`,
+        })
         .where(
           and(
             eq(agentBrowserTab.id, tabId),
@@ -340,8 +359,8 @@ export function listAgentBrowserTabs(
 
 /**
  * Records an agent's action on a tab: the tab its browser names, made where
- * none stands, its page as it now stands, cut at the Browser tab's bound,
- * and the instant. Who opened it stands from its first report, and a
+ * none stands on the task its agent is on, its page as it now stands, cut
+ * at the Browser tab's bound, and the instant. Who opened it stands from its first report, and a
  * member's takeover is left as it is, for the agent's side to heed.
  */
 export function upsertBrowserTab(action: BrowserTabAction): BrowserTabEffect<AgentBrowserTabRow> {
@@ -350,7 +369,6 @@ export function upsertBrowserTab(action: BrowserTabAction): BrowserTabEffect<Age
     const { openedBy } = action;
     return yield* upsertTab({
       conversationId: action.conversationId,
-      taskId: action.taskId,
       targetId: action.targetId,
       address: shown(action.address),
       title: shown(action.title),
@@ -372,7 +390,8 @@ export function closeBrowserTab(conversationId: string, tabId: string): BrowserT
 /**
  * Makes the member the tab's driver until the instant given, answering
  * whether they now drive it: taken where no one drove it or the driver's
- * takeover had lapsed at `now`, and moved on where they drove it already;
+ * takeover had lapsed at `now`, and moved on, never back, where they drove
+ * it already;
  * a tab another member drives stays theirs. Reaching the tab is the
  * caller's to have checked.
  */

@@ -37,12 +37,12 @@ const shownSchema = EffectSchema.String.check(EffectSchema.isMaxLength(BROWSER_S
 /** A member's account, by its id. */
 const memberIdSchema = EffectSchema.String.check(EffectSchema.isNonEmpty());
 
-/** Who opened a tab: its agent, or a member by their account's id. */
+/** Who opened a tab: its agent, or a member by their account's id, null once that account is gone. */
 const agentBrowserTabOpenedBySchema = EffectSchema.Union([
   EffectSchema.Struct({ kind: EffectSchema.Literal(AGENT_BROWSER_TAB_OPENER.AGENT) }),
   EffectSchema.Struct({
     kind: EffectSchema.Literal(AGENT_BROWSER_TAB_OPENER.MEMBER),
-    userId: memberIdSchema,
+    userId: EffectSchema.NullOr(memberIdSchema),
   }),
 ]);
 

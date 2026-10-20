@@ -9,6 +9,7 @@ import { saveGitHubToken } from "@luke/database/models/github-token-store";
 import { createTask } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { conversations } from "@luke/database/schemas/storage";
+import { task } from "@luke/database/schemas/task";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
@@ -20,6 +21,7 @@ import {
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
+import { eq } from "drizzle-orm";
 import { type Context, DateTime, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
@@ -127,10 +129,12 @@ const openTask = Effect.gen(function* () {
       .returning({ id: conversations.id }),
   );
   assert.ok(luke);
+  yield* Database.use((db) =>
+    db.update(task).set({ conversationId: luke.id }).where(eq(task.id, taskId)),
+  );
   const open = (conversationId: string, address: string) =>
     upsertBrowserTab({
       conversationId,
-      taskId,
       targetId: randomUUID(),
       address,
       title: address,

@@ -58,7 +58,7 @@ function browserTabOf({ tab, agent }: ReachedBrowserTab, now: Date): AgentBrowse
     address: tab.address,
     title: tab.title,
     openedBy:
-      tab.openedBy === AGENT_BROWSER_TAB_OPENER.MEMBER && tab.openedByUserId !== null
+      tab.openedBy === AGENT_BROWSER_TAB_OPENER.MEMBER
         ? { kind: AGENT_BROWSER_TAB_OPENER.MEMBER, userId: tab.openedByUserId }
         : { kind: AGENT_BROWSER_TAB_OPENER.AGENT },
     driver:
