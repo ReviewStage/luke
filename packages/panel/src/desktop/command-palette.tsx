@@ -714,9 +714,17 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
   }));
 }
 
-/** Whether the side panel is the open plan's, as it is but while an agent's page holds it (`use-plans-tab.ts`). */
+/**
+ * Whether the side panel is the open plan's: not while an agent's page holds
+ * it, nor while the Inbox does, unless the item chosen there is of the open
+ * plan (`use-tasks-tab.ts`). Over an Inbox with nothing chosen the panel has
+ * no task, so a tab or a file opened there could not be shown.
+ */
 function holdsTaskPanel(tasks: TasksControl): boolean {
-  return tasks.agentView.agentId === undefined;
+  if (tasks.agentView.agentId !== undefined) return false;
+  if (!tasks.inboxView.open) return true;
+  const { chosen } = tasks.inboxView;
+  return chosen !== undefined && "taskId" in chosen && chosen.taskId === tasks.activeTaskId;
 }
 
 /**

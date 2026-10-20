@@ -37,7 +37,7 @@ import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-a
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
-import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
@@ -820,6 +820,67 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
   assert.deepEqual([changes, board], [[], []]);
   assert.deepEqual(read, [], "the hidden task's files are not read");
   assert.equal(notice, "Open a task with a repository to search its files.");
+});
+
+/** The palette over the plan with a repository, or over the Inbox in front of it with `chosen` chosen there, each file it opens recorded. */
+async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | undefined): Promise<{
+  opened: string[];
+  boards: string[];
+}> {
+  const opened: string[] = [];
+  const base = tasksControl();
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, repository: "acme/relay" } },
+    inboxView: { ...base.inboxView, open: inbox !== undefined, chosen: inbox?.chosen },
+    sidePanel: { ...base.sidePanel, onOpenFile: (ref) => opened.push(ref.path) },
+  });
+  openPalette(tasks, () =>
+    Promise.resolve({
+      folder: {
+        path: "",
+        repository: "acme/relay",
+        branch: "main",
+        entries: [{ name: "accept.ts", kind: TASK_TREE_ENTRY.FILE }],
+        truncated: false,
+      },
+    }),
+  );
+  type("Show board");
+  const boards = rows().filter((row) => row.startsWith("Show board"));
+  chooseFilter("Files");
+  type("accept");
+  await act(async () => undefined);
+  if (rows().includes("accept.ts")) press("accept.ts");
+  return { opened, boards };
+}
+
+test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K offers none of the plan's files or panel tabs behind it; on the plan, or over an item of it, a file found opens", async () => {
+  assert.deepEqual(await paletteOverPanel(undefined), {
+    opened: ["accept.ts"],
+    boards: ["Show board"],
+  });
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  assert.deepEqual(
+    await paletteOverPanel({ chosen: { taskId: DOCUMENT_TASK.id, itemId: "item-1" } }),
+    { opened: ["accept.ts"], boards: ["Show board"] },
+  );
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  assert.deepEqual(await paletteOverPanel({ chosen: undefined }), { opened: [], boards: [] });
 });
 
 test('a file found wears the look the side panel\'s "+" gives it, hangs its card with Luke\'s note, and opens through the panel\'s one door for a file, as the "+" row of a file whose tab stands does', async () => {
