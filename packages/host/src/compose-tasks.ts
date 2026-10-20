@@ -1118,10 +1118,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function followBoard(taskId: string) {
     const following = () => gate() && view.activeTaskId === taskId;
-    const seal = () =>
-      Effect.map(served(client.boardLive(taskId)), (sealed) =>
+    const seal = (poll = false) =>
+      Effect.map(served(client.boardLive(taskId, poll)), (sealed) =>
         sealed.ok ? sealed.answer : { failure: sealed.failure },
       );
+    // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing or polling it.
+    const sealedFor = (poll: boolean) =>
+      following()
+        ? Effect.map(seal(poll), (renewed) =>
+            "failure" in renewed && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
+              ? { ...renewed, gone: true }
+              : renewed,
+          )
+        : Effect.succeed({ failure: BOARD_FOLLOW_ENDED, gone: true });
     /** One seal followed until it stops: whether it delivered, or why it never did. */
     const attempt = Effect.gen(function* () {
       if (!following()) return yield* Effect.fail(BOARD_FOLLOW_ENDED);
@@ -1130,15 +1139,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       let delivered = false;
       const moves = boardMoves(
         {
-          // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing it.
-          seal: () =>
-            following()
-              ? Effect.map(seal(), (renewed) =>
-                  "failure" in renewed && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
-                    ? { ...renewed, gone: true }
-                    : renewed,
-                )
-              : Effect.succeed({ failure: BOARD_FOLLOW_ENDED, gone: true }),
+          seal: () => sealedFor(false),
+          poll: () => sealedFor(true),
           openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
         },

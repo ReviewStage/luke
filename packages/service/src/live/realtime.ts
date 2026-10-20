@@ -1,8 +1,9 @@
 import type { LiveStatement } from "@luke/database/core/live-statement";
-import type { SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { createRealtime, rawSql } from "@neon/realtime/server";
 import { drizzleAdapter } from "@neon/realtime-drizzle";
-import { Config, Context, Data, Effect, Layer, Option, Redacted } from "effect";
+import { Clock, Config, Context, Data, Effect, Layer, Option, Redacted } from "effect";
+import type { SqlClient } from "effect/sql";
 import { databaseUrl } from "../db/index.js";
 
 /**
@@ -43,6 +44,33 @@ export const LiveSealing = Context.Reference<Option.Option<LiveSealer>>(
   "@luke/service/LiveSealing",
   { defaultValue: () => Option.none() },
 );
+
+/**
+ * The sealer that reads rather than seals: each statement run now on the
+ * service's own database client and answered with its rows, already
+ * expired, at `LIVE_POLL_URL`. It is what a reader polling while Realtime
+ * fails it is answered with, and what a read is answered with where
+ * Realtime could not seal it. No secret stands here, so the capability and
+ * fingerprint say only where to poll.
+ */
+export function pollSealer(sql: SqlClient.SqlClient): LiveSealer {
+  return {
+    url: LIVE_POLL_URL,
+    seal: (statement) =>
+      Effect.all({
+        rows: sql.unsafe<object>(statement.sql, statement.params),
+        now: Clock.currentTimeMillis,
+      }).pipe(
+        Effect.map(({ rows, now }) => ({
+          capability: LIVE_POLL_URL,
+          queryFingerprint: LIVE_POLL_URL,
+          expiresAt: now,
+          rows,
+        })),
+        Effect.mapError(() => new SealRefused({ reason: "the statement could not be read" })),
+      ),
+  };
+}
 
 /** The database a connection string names, which Realtime binds each sealed read to. */
 function databaseNameOf(url: Redacted.Redacted): Option.Option<string> {

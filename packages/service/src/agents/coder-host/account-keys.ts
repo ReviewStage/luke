@@ -14,6 +14,7 @@ import {
 import type { TaskStoreEffect, TaskStoreFailure } from "@luke/database/models/task-store";
 import {
   type FastAccess,
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
@@ -31,7 +32,8 @@ import type { LukeKeys, ProviderKey, ProviderKeys } from "./model.js";
  * holds a row for runs on that row's key and never on Luke's: where the
  * deployment's ring cannot open the row, or the deployment holds no ring at
  * all, the provider answers unreadable and its steps are refused, so a key
- * the account meant to pay for is never quietly replaced by Luke's. Each
+ * the account meant to pay for is never quietly replaced by Luke's. Only
+ * API keys are read here; a subscription credential runs no eve step. Each
  * opened key carries where its status is reported, through the runner the
  * edge hands in, since the model's middleware that reports it is a promise
  * with no fiber to compose into.
@@ -60,7 +62,7 @@ function keyOf(
     return luke === undefined ? undefined : { key: luke, meter: seams.meter(userId) };
   }
   if (ring === undefined) return PROVIDER_KEY_UNREADABLE;
-  const opened = openProviderKey(ring, { userId, provider }, row);
+  const opened = openProviderKey(ring, { userId, provider, kind: PROVIDER_KEY_KIND.API_KEY }, row);
   if (Result.isFailure(opened)) return PROVIDER_KEY_UNREADABLE;
   return {
     key: opened.success,
@@ -84,7 +86,7 @@ export function accountProviderKeys(
   userId: string,
   seams: AccountKeysSeams,
 ): TaskStoreEffect<ProviderKeys> {
-  return Effect.map(listProviderKeyRows(userId), (rows) => {
+  return Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY), (rows) => {
     const parsed = seams.ring === undefined ? undefined : parseKeyRing(seams.ring);
     const ring = parsed !== undefined && Result.isSuccess(parsed) ? parsed.success : undefined;
     const rowOf = (provider: ProviderKeyProvider) => rows.find((row) => row.provider === provider);
@@ -117,7 +119,7 @@ export function anthropicFastAccess(
   userId: string,
 ): Effect.Effect<FastAccess | undefined, TaskStoreFailure, DatabaseServices | ModelCatalog> {
   return Effect.gen(function* () {
-    const rows = yield* listProviderKeyRows(userId);
+    const rows = yield* listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY);
     const own = rows.find((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC);
     if (own !== undefined) return own.fastAccess ?? undefined;
     const catalog = yield* ModelCatalog;
@@ -138,7 +140,7 @@ export function spendingKeyOf(
   luke: LukeKeys,
   ring: Redacted.Redacted | undefined,
 ): TaskStoreEffect<{ readonly key: Redacted.Redacted; readonly lukes: boolean } | undefined> {
-  return Effect.map(listProviderKeyRows(userId), (rows) => {
+  return Effect.map(listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY), (rows) => {
     const row = rows.find((each) => each.provider === provider);
     if (row === undefined) {
       const lukes = provider === PROVIDER_KEY_PROVIDER.ANTHROPIC ? luke.anthropic : luke.openAi;
@@ -146,7 +148,11 @@ export function spendingKeyOf(
     }
     const parsed = ring === undefined ? undefined : parseKeyRing(ring);
     if (parsed === undefined || Result.isFailure(parsed)) return undefined;
-    const opened = openProviderKey(parsed.success, { userId, provider }, row);
+    const opened = openProviderKey(
+      parsed.success,
+      { userId, provider, kind: PROVIDER_KEY_KIND.API_KEY },
+      row,
+    );
     return Result.isFailure(opened) ? undefined : { key: opened.success, lukes: false };
   });
 }

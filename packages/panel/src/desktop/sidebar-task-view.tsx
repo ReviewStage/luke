@@ -317,8 +317,8 @@ function StatusFilterMenuDrawn({
 }
 
 /**
- * The Tasks head's status filter: its button, revealed while the head is
- * hovered, reached, or its menu stands, and the menu it drops.
+ * The Tasks head's status filter: its button, which always stands, and the
+ * menu it drops.
  */
 export function TaskStatusFilter({
   menu,
@@ -332,10 +332,7 @@ export function TaskStatusFilter({
 }): React.JSX.Element {
   return (
     <>
-      <span
-        className="sidebar-status-filter"
-        data-menu-open={menu.open === undefined ? undefined : "true"}
-      >
+      <span className="sidebar-status-filter">
         <Tooltip label={STATUS_FILTER}>
           <IconButton icon={<ListFilterIcon />} label={STATUS_FILTER} {...menu.trigger()} />
         </Tooltip>

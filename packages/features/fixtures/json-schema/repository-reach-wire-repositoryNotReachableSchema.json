@@ -202,6 +202,30 @@
             "reason": {
               "type": "string",
               "enum": [
+                "token-sso"
+              ]
+            },
+            "repository": {
+              "type": "string",
+              "maxLength": 140
+            },
+            "authorizeUrl": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "reason",
+            "repository",
+            "authorizeUrl"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "reason": {
+              "type": "string",
+              "enum": [
                 "other-workspace"
               ]
             },

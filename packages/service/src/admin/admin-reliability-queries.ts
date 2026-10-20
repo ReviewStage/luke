@@ -31,7 +31,11 @@ import {
 } from "@luke/features/automation-wire";
 import { CODING_AGENT_STATUS, type CodingAgentFailure } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
-import { PROVIDER_KEY_PROVIDER, PROVIDER_KEY_STATUS } from "@luke/features/provider-key-wire";
+import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+} from "@luke/features/provider-key-wire";
 import { and, count, countDistinct, eq, gte, inArray, notExists, sql } from "drizzle-orm";
 import { alias, type PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect, Result, Schema } from "effect";
@@ -305,7 +309,13 @@ const findBrokenKeys = SqlSchema.findAll({
         })
         .from(accountProviderKey)
         .innerJoin(user, eq(user.id, accountProviderKey.userId))
-        .where(and(inArray(accountProviderKey.status, BROKEN_KEY_STATUSES), keptByScope(scope))),
+        .where(
+          and(
+            inArray(accountProviderKey.status, BROKEN_KEY_STATUSES),
+            eq(accountProviderKey.kind, PROVIDER_KEY_KIND.API_KEY),
+            keptByScope(scope),
+          ),
+        ),
     ),
 });
 

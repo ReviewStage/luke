@@ -229,8 +229,8 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * wearing where each stands, the reviewer and label pickers, and its labels
  * in their GitHub colours (`pull-request-labels.tsx`) at the line's end, so
  * a pull request with no labels spends no line on them. Under it, a row of
- * tabs ending in Review while it is open or a draft
- * (`pull-request-review.tsx`), each tab its glyph, its name, and a quiet
+ * tabs ending in Review, merged or closed too, as GitHub takes a review
+ * then (`pull-request-review.tsx`), each tab its glyph, its name, and a quiet
  * count: Conversation, its description and its comments and
  * reviews in time order, as GitHub renders them (`body_html`), drawn
  * through the transcript's own markdown drawing (`GitHubWords`), with an
@@ -691,6 +691,7 @@ function CheckRow({
       description={check.app ?? undefined}
       meta={running ? live ? <RunningTime startedAt={startedAt} /> : null : duration}
       onPress={url === null ? undefined : () => openLink(url)}
+      linkHref={url ?? undefined}
     />
   );
 }
@@ -1060,7 +1061,11 @@ function ThreadComments({
       </ol>
       {thread.more === 0 || last === undefined ? null : (
         <p className="pull-request-more pull-request-thread-more">
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(last.url)}>
+          <TextButton
+            tone={TEXT_BUTTON_TONE.LINK}
+            onClick={() => openLink(last.url)}
+            linkHref={last.url}
+          >
             {PULL_REQUEST_WORDS.moreReplies(thread.more)}
           </TextButton>
         </p>
@@ -1227,7 +1232,11 @@ function PullRequestHead({
   return (
     <div className="changes-people pull-request-people">
       <span className="pull-request-branch-row">
-        <PullRequestBranches base={pullRequest.base} head={pullRequest.head} />
+        <PullRequestBranches
+          base={pullRequest.base}
+          head={pullRequest.head}
+          headOwner={pullRequest.headOwner}
+        />
         <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
       </span>
       <OpenedLine
@@ -1283,6 +1292,7 @@ function DeploymentRow({
         )
       }
       onPress={url === null ? undefined : () => openLink(url)}
+      linkHref={url ?? undefined}
     />
   );
 }
@@ -1434,7 +1444,7 @@ function ConversationPart({
       {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
       {earlier === 0 || url === undefined ? null : (
         <p className="pull-request-more pull-request-earlier">
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(url)}>
+          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(url)} linkHref={url}>
             {PULL_REQUEST_WORDS.earlier(earlier)}
           </TextButton>
         </p>
@@ -2227,9 +2237,8 @@ function PullRequestTabBody({
   );
   const overview = landed(parts.pullRequest);
   const title = overview ?? published;
-  // Review stands at the end of the tabs while the pull request is open or a draft, as the pill says it stands.
-  const reviewable =
-    held?.state === PULL_REQUEST_STATE.OPEN || held?.state === PULL_REQUEST_STATE.DRAFT;
+  // Review stands at the end of the tabs once the pull request is held, whatever it stands as, because GitHub takes a review of one merged or closed too; where GitHub refuses one, as on a locked conversation, the panel says why in GitHub's words.
+  const reviewable = held !== undefined;
   const now = useMinute();
   // A change is read back as Refresh reads: the tab, and what the agent published, which the plan's own marks draw.
   const written = refresh;
@@ -2306,7 +2315,11 @@ function PullRequestTabBody({
                   <div className="pull-request-title-row">
                     <HeaderTitle title={title} writes={writes} />
                     {held === undefined ? null : (
-                      <PullRequestStateMenu pullRequest={held} writes={writes} />
+                      <PullRequestStateMenu
+                        pullRequest={held}
+                        queued={overview?.merging?.queued}
+                        writes={writes}
+                      />
                     )}
                     <div className="pull-request-title-actions">
                       {overview === undefined ? null : (

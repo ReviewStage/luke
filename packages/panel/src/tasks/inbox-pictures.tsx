@@ -34,6 +34,8 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * bytes are held, and one whose read failed is left out. The bytes are
  * the Inbox's own reads (`use-task-inbox.ts`), asked for as a picture is
  * first drawn, so one inside a card no one opened is never fetched. A
+ * picture a comment carried that its words do not draw, a member's file,
+ * is drawn after them by the same `InboxPicture` and walked with the rest. A
  * picture of another item, one copied across, is that item's to read, and
  * stands as its link here; a picture from outside Luke is never fetched.
  * Every picture is left out of the session recording (`picture-block.tsx`).
@@ -52,6 +54,8 @@ const UNSAVEABLE = /[/\\:]/gu;
 interface DrawnPicture {
   readonly attachmentId: string;
   readonly alt: string;
+  /** The file's own name, where it has one, which the viewer saves it by. */
+  readonly name: string | undefined;
   readonly anchor: RefObject<HTMLElement | null>;
 }
 
@@ -69,12 +73,17 @@ interface InboxPicturesDoor {
 
 const InboxPicturesContext = createContext<InboxPicturesDoor | undefined>(undefined);
 
-/** The picture as the viewer takes a file: named by its words under the type's own extension, since the viewer saves it by that name, and its type read off the `data:` URL. */
-function viewerFile(alt: string, url: string): FileChip {
+/**
+ * The picture as the viewer takes a file: by the file's own name where it
+ * has one, a file a member attached, or else named by its words under the
+ * type's own extension, since the viewer saves it by that name; its type
+ * read off the `data:` URL.
+ */
+function viewerFile(alt: string, name: string | undefined, url: string): FileChip {
   const mediaType = url.slice("data:".length, url.indexOf(";"));
   const words = alt === "" ? UNNAMED_PICTURE : alt;
-  const name = `${words.replace(UNSAVEABLE, "-")}.${mediaType.slice("image/".length)}`;
-  return { name, mediaType, url };
+  const saved = name ?? `${words}.${mediaType.slice("image/".length)}`;
+  return { name: saved.replace(UNSAVEABLE, "-"), mediaType, url };
 }
 
 /**
@@ -89,10 +98,13 @@ export function InboxPicture({
   attachmentId,
   alt,
   caption,
+  name,
 }: {
   attachmentId: string;
   alt: string;
   caption: string | undefined;
+  /** The file's own name, where it has one, which the viewer names it by; one drawn from Markdown has none. */
+  name?: string | undefined;
 }): React.JSX.Element | null {
   const door = useContext(InboxPicturesContext);
   const key = useId();
@@ -106,8 +118,8 @@ export function InboxPicture({
     if (!held && itemId !== undefined) onImage?.(itemId, attachmentId);
   }, [held, itemId, attachmentId, onImage]);
   useLayoutEffect(
-    () => register?.(key, { attachmentId, alt, anchor }),
-    [register, key, attachmentId, alt],
+    () => register?.(key, { attachmentId, alt, name, anchor }),
+    [register, key, attachmentId, alt, name],
   );
   if (door === undefined) return null;
   if (image === undefined) {
@@ -143,17 +155,18 @@ interface WalkedPicture {
   readonly key: string;
   readonly attachmentId: string;
   readonly alt: string;
+  readonly name: string | undefined;
 }
 
 /** The item's pictures drawn now, in the order they stand in the window. */
 function inDrawnOrder(drawn: ReadonlyMap<string, DrawnPicture>): readonly WalkedPicture[] {
-  const standing = [...drawn].flatMap(([key, { attachmentId, alt, anchor }]) =>
-    anchor.current === null ? [] : [{ key, attachmentId, alt, element: anchor.current }],
+  const standing = [...drawn].flatMap(([key, { attachmentId, alt, name, anchor }]) =>
+    anchor.current === null ? [] : [{ key, attachmentId, alt, name, element: anchor.current }],
   );
   standing.sort((one, other) =>
     one.element.compareDocumentPosition(other.element) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
   );
-  return standing.map(({ key, attachmentId, alt }) => ({ key, attachmentId, alt }));
+  return standing.map(({ key, attachmentId, alt, name }) => ({ key, attachmentId, alt, name }));
 }
 
 /**
@@ -174,10 +187,10 @@ function ItemViewer({
   onShow: (key: string) => void;
   onClose: () => void;
 }): React.JSX.Element | null {
-  const held = pictures.flatMap(({ key, attachmentId, alt }) => {
+  const held = pictures.flatMap(({ key, attachmentId, alt, name }) => {
     const image = images.get(attachmentId);
     if (image === undefined || "failed" in image) return [];
-    return [{ key, file: viewerFile(alt, image.url) }];
+    return [{ key, file: viewerFile(alt, name, image.url) }];
   });
   const at = held.findIndex((each) => each.key === shownKey);
   if (at < 0) return null;

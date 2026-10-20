@@ -19,6 +19,9 @@
             "expiresAt": {
               "type": "number",
               "minimum": 0
+            },
+            "rows": {
+              "type": "string"
             }
           },
           "required": [

@@ -44,6 +44,7 @@ import {
 } from "./plan-document-template.js";
 import {
   PROVIDER_KEY_PROVIDER,
+  providerKeyKindSchema,
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "./provider-key-wire.js";
@@ -149,9 +150,10 @@ export const providerKeySaveParamsSchema = providerKeySaveRequestSchema;
 
 export type ProviderKeySaveParams = typeof providerKeySaveParamsSchema.Type;
 
-/** Removing a key, as the window asks it: the provider. */
+/** Removing a key, as the window asks it: the provider, and the kind where it is no API key. */
 export const providerKeyRemoveParamsSchema = EffectSchema.Struct({
   provider: EffectSchema.Literals(Object.values(PROVIDER_KEY_PROVIDER)),
+  kind: EffectSchema.optionalKey(providerKeyKindSchema),
 });
 
 export type ProviderKeyRemoveParams = typeof providerKeyRemoveParamsSchema.Type;

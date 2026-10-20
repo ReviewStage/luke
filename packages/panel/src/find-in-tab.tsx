@@ -43,8 +43,9 @@ import { Tooltip } from "./tooltip.js";
  * opens on the last one, as a browser's does. Choosing another tab closes
  * the bar.
  *
- * A tab whose words are drawn on a canvas, which the DOM holds none of, as
- * a Terminal tab's are, hands the scope a source of its own
+ * A tab whose words the window's DOM holds none of, drawn on a canvas as a
+ * Terminal tab's are or in a sandboxed frame as a page's are, hands the
+ * scope a source of its own
  * (`useFindSource`), which finds, steps, and tallies in its own words in the
  * DOM's place, and seeds the field from its own selection.
  *
@@ -65,7 +66,7 @@ export const FIND_STEP = {
 type FindStep = (typeof FIND_STEP)[keyof typeof FIND_STEP];
 
 /** What the bar says of the matches: how many there are, and which the find is at, -1 for none. */
-interface FindTally {
+export interface FindTally {
   readonly count: number;
   readonly at: number;
   /** Whether there are more matches than the count, which a source that stops counting says. */

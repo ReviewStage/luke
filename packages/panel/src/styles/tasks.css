@@ -3460,46 +3460,34 @@
   color: var(--luke-color-text-subtle);
 }
 
-/* The merge control at the title row's end (`merge-box.tsx`): `@luke/ui`'s
-   Button in the look of where the merge stands, its words then a muted
-   chevron saying it opens a panel, which hangs from it. A narrow header
-   draws its shorter words, its name still the whole. */
+/* The merge control at the title row's end (`merge-box.tsx`), as
+   stage-cli's merge status stands: a status chip at the pill's size saying
+   what holds the merge up, then the one press. A narrow header draws the
+   chip's glyph alone, its word still read, so the press keeps its words and
+   nothing runs past the row. It stands a control's height with or without
+   a press, so a chip alone is level with the title's first line too. */
 .merge-control {
-  position: relative;
   display: flex;
+  min-width: 0;
+  min-height: var(--luke-control-height);
+  align-items: center;
+  gap: var(--luke-space-8);
 }
 
-.merge-control-short {
-  display: none;
-}
-
-.merge-control-chevron {
-  margin-inline-start: var(--luke-space-2);
-  opacity: 0.7;
-  vertical-align: middle;
+.merge-chip {
+  display: inline-flex;
+  min-width: 0;
 }
 
 @container pull-request-header (max-width: 520px) {
-  .merge-control-words {
-    display: none;
+  .merge-chip .luke-badge-words {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
-
-  .merge-control-short {
-    display: inline;
-  }
-}
-
-/* The panel's mergeability under GitHub's sentence, and its press at the
-   foot's end, as the review panel's foot stands its own. */
-.merge-panel-words {
-  margin: calc(-1 * var(--luke-space-8)) 0 0;
-  color: var(--luke-color-text-muted);
-}
-
-.merge-panel-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--luke-control-gap);
 }
 
 .pull-request-section {
@@ -6932,6 +6920,13 @@ button.subagent-line:hover {
 .transcript-pictures > .picture-block {
   flex: 1 1 0;
   min-width: 0;
+  margin: 0;
+}
+
+/* The pictures a comment on an Inbox thread carried, after its words
+   (`inbox-pane.tsx`'s CommentFiles): the row a picture in its words stands
+   in, its room around it the comment's own gap between what it holds. */
+.inbox-comment-body > .transcript-pictures {
   margin: 0;
 }
 

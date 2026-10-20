@@ -69,6 +69,9 @@ const EFFECT_MODULE_SCHEMAS = {
     accountInboxLiveAnswerSchema: liveWire.accountInboxLiveAnswerSchema,
     taskBoardLiveAnswerSchema: liveWire.taskBoardLiveAnswerSchema,
     taskBoardLiveRowsSchema: liveWire.taskBoardLiveRowsSchema,
+    agentTranscriptLiveAnswerSchema: liveWire.agentTranscriptLiveAnswerSchema,
+    agentTranscriptLiveRowsSchema: liveWire.agentTranscriptLiveRowsSchema,
+    transcriptNowAnswerSchema: liveWire.transcriptNowAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,
@@ -461,7 +464,9 @@ const EFFECT_MODULE_SCHEMAS = {
     taskSkillsAnswerSchema: taskWire.taskSkillsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof taskWire>,
   "provider-key-wire": {
+    providerKeyKindSchema: providerKeyWire.providerKeyKindSchema,
     providerKeySummarySchema: providerKeyWire.providerKeySummarySchema,
+    subscriptionKeySummarySchema: providerKeyWire.subscriptionKeySummarySchema,
     providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,

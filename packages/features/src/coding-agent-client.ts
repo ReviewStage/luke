@@ -105,6 +105,12 @@ import {
   inboxReadAllRequestSchema,
 } from "./inbox-wire.js";
 import {
+  type AgentTranscriptLiveAnswer,
+  LIVE_POLL,
+  TRANSCRIPT_NOW_QUERY,
+  type TranscriptNowAnswer,
+} from "./live-wire.js";
+import {
   codingAgentDefaultWriteSchema,
   type ModelChoice,
   modelChoiceSchema,
@@ -495,14 +501,17 @@ export class HostedCodingAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
   }
 
-  /** One provider's key removed, answering the keys as they then stand. */
+  /** One provider's key of the kind named, an API key where none is, removed, answering the keys as they then stand. */
   removeProviderKey(
     params: ProviderKeyRemoveParams,
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
     // The provider rides in the query, since a DELETE carries no body.
     return hostedAnswer(
       askHosted(this.#hosted.account.removeProviderKey, {
-        query: { [PROVIDER_KEY_QUERY.PROVIDER]: params.provider },
+        query: {
+          [PROVIDER_KEY_QUERY.PROVIDER]: params.provider,
+          ...(params.kind === undefined ? undefined : { [PROVIDER_KEY_QUERY.KIND]: params.kind }),
+        },
       }),
       {},
     );
@@ -608,21 +617,44 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One agent's transcript past the cursor, or a worker's where the delegation call that started it is named, held by the service while the agent or the worker runs and nothing new stands. */
-  messages(
+  /**
+   * One agent's transcript past the cursor, or a worker's, read at once
+   * rather than held, with whether the held read would have held on it: for
+   * a reader following the transcript's live statements, which reads again
+   * once they move.
+   */
+  messagesNow(
     agentId: string,
     after: string,
     callId?: string,
-  ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
+  ): Effect.Effect<TranscriptNowAnswer | Failed, never, HttpClient.HttpClient> {
+    const wait = TRANSCRIPT_NOW_QUERY.NONE;
     const asked =
       callId === undefined
-        ? askHosted(this.#hosted.messages.agent, { id: agentId, after }, HOSTED_DEADLINE.HELD)
-        : askHosted(
-            this.#hosted.messages.agentWorker,
-            { id: agentId, call: callId, after },
-            HOSTED_DEADLINE.HELD,
-          );
-    return hostedAnswer(asked, ROW_REFUSALS);
+        ? askHosted(this.#hosted.messages.agent, { id: agentId, after, wait })
+        : askHosted(this.#hosted.messages.agentWorker, { id: agentId, call: callId, after, wait });
+    return Effect.map(hostedAnswer(asked, ROW_REFUSALS), (answer) =>
+      "failure" in answer || answer.holds === undefined
+        ? UNANSWERED
+        : { ...answer, holds: answer.holds },
+    );
+  }
+
+  /**
+   * One agent's transcript, or a worker's where the delegation call is
+   * named, sealed for following over Neon Realtime, answered at once: not
+   * found where the account reaches no such agent, unanswered for anything
+   * else, which the caller answers by sealing it again; with `poll`, its
+   * rows inline, for a reader polling while Realtime fails it.
+   */
+  agentTranscriptLive(
+    agentId: string,
+    callId?: string,
+    poll = false,
+  ): Effect.Effect<AgentTranscriptLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    const named = callId === undefined ? { id: agentId } : { id: agentId, call: callId };
+    const asked = poll ? { ...named, [LIVE_POLL.QUERY]: LIVE_POLL.ON } : named;
+    return hostedAnswer(askHosted(this.#hosted.live.agentTranscript, asked), ROW_REFUSALS);
   }
 
   /**
