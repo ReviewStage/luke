@@ -8,7 +8,7 @@ import {
   pinPositionsForMove,
 } from "@luke/features/pin-order";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
@@ -45,10 +45,12 @@ import {
   agentRow,
   type CreatorGroup,
   creatorGroups,
+  hiddenStatuses,
   orderTaskRows,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
+  shownStatuses,
   TASK_GROUPING,
   TASK_ROW,
   type TaskOrder,
@@ -56,6 +58,7 @@ import {
   taskRow,
   taskRowRepository,
   taskRowsCreatedBy,
+  taskRowsInStatuses,
   taskRowTime,
 } from "@luke/ui/task-list-model";
 import {
@@ -74,6 +77,7 @@ import {
   InboxIcon,
   ListTodoIcon,
   MessagesSquareIcon,
+  SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
 import { useRef } from "react";
@@ -120,7 +124,9 @@ import {
   useSectionDialogs,
 } from "./sidebar-sections.js";
 import {
+  HiddenStatusesLine,
   SidebarSectionHead,
+  TaskStatusFilter,
   TaskViewOptions,
   useTaskViewCommands,
   ViewChips,
@@ -1096,6 +1102,32 @@ function SidebarFactoryRow({
 }
 
 /**
+ * The Board's row, under the Inbox's: the board's columns, and its name. A
+ * press opens the listed workspace's tasks by status (`tasks-board.tsx`),
+ * and the row is the place shown while it stands. It is always offered.
+ */
+function SidebarBoardRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <NavItem
+      icon={<SquareKanbanIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      Board
+    </NavItem>
+  );
+}
+
+/**
  * The Issues page's row, after the Automations page's and drawn as it is:
  * its glyph, its name, and its chord. A press opens the window's Issues page
  * (`issues-page.tsx`), and the row is the place shown while it stands.
@@ -1190,6 +1222,19 @@ function sectionedTasks(
       .map((entry) => entry.taskId),
   );
   return { sections, taskIds };
+}
+
+/** A section as the status filter leaves it: its tasks of the statuses shown, and any with no status, each with its entry, in its order. */
+function sectionInStatuses(drawn: DrawnSection, statuses: readonly TaskStatus[]): DrawnSection {
+  const kept = drawn.tasks.filter(
+    (task) => task.status === undefined || statuses.includes(task.status),
+  );
+  const keptIds = new Set(kept.map((task) => task.id));
+  return {
+    ...drawn,
+    entries: drawn.entries.filter((entry) => keptIds.has(entry.taskId)),
+    tasks: kept,
+  };
 }
 
 /** New section, at the head of Tasks while the account keeps sections: it opens the section dialog in the listed workspace. */
@@ -1311,6 +1356,7 @@ function SidebarColumn({
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
   const inIssues = onTasks && tasks.issuesView.open;
+  const inBoard = onTasks && tasks.boardView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   const automationFailed = useFailedRunsMark(
@@ -1327,6 +1373,7 @@ function SidebarColumn({
     inAutomations ||
     inChat ||
     inIssues ||
+    inBoard ||
     (onTasks && tasks.agentView.agentId !== undefined);
   // Factory, Chat, and the Issues page are experiments: each row stands only while the account has it on.
   const chatOn = useChatOn();
@@ -1363,6 +1410,10 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.issuesView.onOpen();
   };
+  const openBoard = () => {
+    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    tasks.boardView.onOpen();
+  };
   const openAutomations = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.automationsView.onOpen();
@@ -1384,6 +1435,8 @@ function SidebarColumn({
   };
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
+  // The status filter's menu, which its button on the Tasks head and the hidden tasks' line both open.
+  const statusMenu = useMenu(tasks.shown && overlay.inSight);
   const reader = useMemberDirectory();
   // Only a workspace somebody shares has creators to group and filter by.
   const { memberCount } = tasks.workspace ?? {};
@@ -1443,6 +1496,9 @@ function SidebarColumn({
     sectionsShown ? tasks.workspace?.id : undefined,
     tasks.listed.tasks.filter((task) => task.pinnedAt === undefined),
   );
+  // The status filter thins the sections' tasks as it thins the list's, a row dropped among them landing among those drawn.
+  const statuses = shownStatuses(taskView.view);
+  const shownSections = sectioned.sections.map((drawn) => sectionInStatuses(drawn, statuses));
   const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
   // Note that the sidebar draws a task in one place, so a row dragged into
   // Pinned leaves its section, and one dragged out of Pinned is unpinned and
@@ -1460,7 +1516,7 @@ function SidebarColumn({
       tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]);
       return;
     }
-    const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
+    const target = shownSections.find((drawn) => drawn.section.id === zone);
     if (target === undefined) return;
     tasks.onWriteSections(placeWrites(target.entries, taskId, zone, at, Date.now()));
   };
@@ -1476,7 +1532,7 @@ function SidebarColumn({
       if (task !== undefined) tasks.onWriteSections(leaveSection(tasks, task.id));
       return;
     }
-    const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
+    const target = shownSections.find((drawn) => drawn.section.id === zone);
     if (target === undefined || task === undefined) return;
     unpin(row, tasks);
     tasks.onWriteSections([
@@ -1534,9 +1590,13 @@ function SidebarColumn({
     : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
   const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsCreatedBy(unpinned, createdBy);
+  // The status filter thins the tasks listed, never the archived ones, which are all settled out of the way.
+  const sectionRows = sectioned.sections.flatMap((drawn) => drawn.tasks.map(taskRow));
+  const hidden = archive.shown ? [] : hiddenStatuses([...sectionRows, ...rows], statuses);
+  const statusRows = archive.shown ? rows : taskRowsInStatuses(rows, statuses);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
-    rows,
+    statusRows,
     grouping === TASK_GROUPING.CREATOR && !shared ? TASK_GROUPING.REPOSITORY : grouping,
     order,
     tasks,
@@ -1553,7 +1613,7 @@ function SidebarColumn({
   // away, the open row standing in its place even under a fold, so walking
   // the list still moves from it.
   const pinnedDrawn = pinnedTaskRows(pinnedSection);
-  const sectionsDrawn = sectioned.sections.flatMap(({ section, tasks: held }) =>
+  const sectionsDrawn = shownSections.flatMap(({ section, tasks: held }) =>
     (folds.sectionFolded(section.id) ? held.filter((task) => current(task.id)) : held).map(taskRow),
   );
   const drawn = [
@@ -1622,6 +1682,7 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openInbox)}
         />
+        <SidebarBoardRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
         {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
         {chatOn && tasks.signedIn && tasks.chatView.available ? (
           <SidebarChatRow
@@ -1669,9 +1730,9 @@ function SidebarColumn({
                 onDropOut={sectionsShown ? dropPinned : undefined}
               />
             ) : null}
-            {sectioned.sections.length > 0 ? (
+            {shownSections.length > 0 ? (
               <SidebarSections
-                sections={sectioned.sections}
+                sections={shownSections}
                 context={{
                   tasks,
                   dialogs: sectionDialogs,
@@ -1712,6 +1773,13 @@ function SidebarColumn({
                       })}
                     />
                   ) : null}
+                  {archive.shown ? null : (
+                    <TaskStatusFilter
+                      menu={statusMenu}
+                      statuses={statuses}
+                      onStatuses={taskView.onStatuses}
+                    />
+                  )}
                   <TaskViewOptions
                     shown={tasks.shown && overlay.inSight}
                     control={taskView}
@@ -1783,6 +1851,7 @@ function SidebarColumn({
                 onNewTaskIn={chosen(newTaskIn)}
                 context={context}
               />
+              <HiddenStatusesLine menu={statusMenu} hidden={hidden} />
             </nav>
           </div>
         </ScrollArea>

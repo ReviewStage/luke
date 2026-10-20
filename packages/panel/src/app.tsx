@@ -614,6 +614,7 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_ISSUES)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
       // An open task unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       tasks.back();

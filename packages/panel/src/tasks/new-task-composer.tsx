@@ -9,10 +9,13 @@ import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { TASK_BOUNDS, TASK_STATUS } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
   CHIP_LOOK,
   CHIP_WIDTH,
   Chip,
@@ -124,7 +127,12 @@ import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./u
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on an Agent-mode
  * box with neither words nor files starts a bare task: an empty plan, no
- * call, and no agent. Escape closes a menu or a dictation standing first,
+ * call, and no agent. File for later, beside Start in either mode but on
+ * a card opened to start an agent, files the task in the backlog instead:
+ * no call and no agent, named by its issue where one was picked and else
+ * by the words' first line, the words kept as its brief for whoever takes
+ * it up; it stands once there are words or an issue. Start's task starts
+ * to do. Escape closes a menu or a dictation standing first,
  * and then whatever the owner says (`onLeave`), the dialog's card. A start
  * that was refused keeps the card and its words, with why under it and
  * Retry. Nothing typed here reaches the model as conversation.
@@ -183,7 +191,26 @@ const COMPOSER_WORDS = {
   TOGGLE_KEYS: "Shift+Tab",
   DROP_ISSUE: "Remove issue",
   NEEDS_REPOSITORY: "An agent needs a repository to work in. Choose one, or turn on Plan.",
+  FILE: "File for later",
+  FILE_HINT: "Add it to the backlog without starting it",
 } as const;
+
+/**
+ * The name a task filed for later stands under: its issue's, else its
+ * words' first line, cut to a name's bound. Note that the bound counts
+ * UTF-16 units, as the wire does, and the cut falls between characters, so
+ * an emoji is kept whole or left out rather than split.
+ */
+function filedName(issueName: string | undefined, said: string): string {
+  if (issueName !== undefined) return issueName;
+  const line = said.split("\n", 1)[0]?.trim() ?? "";
+  let name = "";
+  for (const character of line) {
+    if (name.length + character.length > TASK_BOUNDS.MAX_NAME_CHARS) break;
+    name += character;
+  }
+  return name;
+}
 
 /** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
 interface AgentAsk {
@@ -424,7 +451,7 @@ export function NewTaskComposer({
   const begin = (
     name: string,
     withCall: boolean,
-    handing: Pick<NewTaskStart, "agent" | "handed" | "brief"> = {},
+    handing: Pick<NewTaskStart, "agent" | "handed" | "brief" | "status"> = {},
   ) => {
     if (starting) return;
     setStarting(true);
@@ -453,8 +480,11 @@ export function NewTaskComposer({
   };
   // Note that an agent on the workspace's own issue with nothing written is
   // started on the task's plan, the issue's, as its Start agent… starts one.
+  // Which press a Retry repeats: Start's, or File for later's.
+  const filing = useRef(false);
   const start = () => {
     if (!canStart) return;
+    filing.current = false;
     if (planning) begin(issueName ?? "", true, said === "" ? {} : { brief: said });
     else if (!filled && issue === undefined) begin(issueName ?? "", false, { agent: true });
     else {
@@ -474,7 +504,20 @@ export function NewTaskComposer({
     }
   };
   // ⌘Return on an Agent-mode box with nothing in it starts a bare task: no call and no agent.
-  const bare = () => begin(issueName ?? "", false);
+  const bare = () => {
+    filing.current = false;
+    begin(issueName ?? "", false);
+  };
+  // File for later is a bare task in the backlog, its words kept as its brief.
+  const filable = said !== "" || named !== undefined;
+  const file = () => {
+    if (!filable) return;
+    filing.current = true;
+    begin(filedName(issueName, said), false, {
+      status: TASK_STATUS.BACKLOG,
+      ...(said === "" ? undefined : { brief: said }),
+    });
+  };
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (turnsMode(event) && !agentOnly) {
@@ -554,7 +597,7 @@ export function NewTaskComposer({
     note,
     closed: undefined,
     send: start,
-    retry: start,
+    retry: () => (filing.current ? file() : start()),
     sent: [],
   };
 
@@ -606,6 +649,20 @@ export function NewTaskComposer({
           )
         }
         tools={heading === undefined ? chips : undefined}
+        beforeSend={
+          agentOnly ? undefined : (
+            <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                size={BUTTON_SIZE.COMPACT}
+                disabled={starting || !filable}
+                onClick={file}
+              >
+                {COMPOSER_WORDS.FILE}
+              </Button>
+            </Tooltip>
+          )
+        }
         actions={
           agentOnly
             ? undefined

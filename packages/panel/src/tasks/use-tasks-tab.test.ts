@@ -19,7 +19,7 @@ import {
 } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
@@ -2896,6 +2896,29 @@ test("a task started from an issue's Start agent… presses its Start once it st
   await startFrom();
   assert.equal(agentStarts().length, 2);
   assert.ok(tab.control().agents.start.note, "why the agent did not start stands beside the Start");
+});
+
+test("a task New task files for later asks the host to start it in the backlog, with no planning and its brief", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }) },
+  );
+  await settle();
+  await act(async () => {
+    await tab.control().newTask.start("Rate limit search", "acme/web", "workspace-acme", false, {
+      status: TASK_STATUS.BACKLOG,
+      brief: "Thirty a minute.",
+    });
+  });
+
+  assert.deepEqual(tab.payloads.find(({ kind }) => kind === ACT_KIND.TASKS_START)?.payload, {
+    name: "Rate limit search",
+    repository: "acme/web",
+    workspaceId: "workspace-acme",
+    brief: "Thirty a minute.",
+    status: TASK_STATUS.BACKLOG,
+    planning: false,
+  });
 });
 
 test("an agent asked of Start agent… whose task was left before it could start starts nothing when the task is opened again", async () => {
