@@ -317,3 +317,20 @@ test("⌘F counts a note's words as its card shows them: a link by its words and
   typeFind("seat**s");
   assert.equal(findTally(), "1 of 1");
 });
+
+test("a note's card drawing new words of its own while ⌘F stands open, as its age moves on, is counted again", async () => {
+  const container = await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("seat");
+  assert.equal(findTally(), "1 of 5");
+
+  // The card's own words change with no draw of the tab's, as its age does each minute.
+  const words =
+    noteSlot(container).querySelector(".file-note-words") ??
+    assert.fail("the note's words are drawn");
+  act(() => words.append(document.createTextNode(" One more seat.")));
+
+  await vi.waitFor(() => assert.equal(findTally(), "1 of 6"));
+});

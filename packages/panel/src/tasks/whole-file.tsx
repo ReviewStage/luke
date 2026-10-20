@@ -13,6 +13,7 @@ import {
   repaint,
   reveal,
   selectedWords,
+  watchText,
 } from "../find-matches.js";
 import { SpinnerRegion } from "../spinner.js";
 import { useDiffLook } from "./file-diff.js";
@@ -132,6 +133,8 @@ function useWholeFileFind(
       // The text and notes the matches were read from.
       searched: { text: "", notes: [] as readonly ReadNote[] },
       listeners: new Set<(tally: FindTally) => void>(),
+      // The note cards watched while a query stands, each with what stops its watch.
+      watching: new Map<string, () => void>(),
     };
     const tell = () => {
       const tally = { count: state.matches.length, at: state.at };
@@ -166,7 +169,23 @@ function useWholeFileFind(
         line: note.line,
         words: noteElement(note.key).textContent ?? "",
       }));
+    // Note that a card is watched while a query stands, since it draws its own words anew, its age among them, with no draw of the file's.
+    const watchNotes = () => {
+      for (const note of read.current.notes) {
+        if (!state.watching.has(note.key)) {
+          state.watching.set(
+            note.key,
+            watchText(noteElement(note.key), () => refresh()),
+          );
+        }
+      }
+    };
+    const unwatchNotes = () => {
+      for (const stop of state.watching.values()) stop();
+      state.watching.clear();
+    };
     const readMatches = () => {
+      watchNotes();
       const { text, notes } = read.current;
       state.searched = { text, notes: readNotes() };
       const counted = notes.map((note) => ({
@@ -212,6 +231,7 @@ function useWholeFileFind(
         state.matches = [];
         state.at = -1;
         state.pending = false;
+        unwatchNotes();
         for (const listener of state.listeners) listener(NO_TALLY);
       },
       onTally: (listener) => {
