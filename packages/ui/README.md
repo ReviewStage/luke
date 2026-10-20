@@ -83,7 +83,7 @@ Every token is a `--luke-*` custom property under `src/tokens/`.
   its motions `face/face-motion.css`, which `@luke/brand`'s
   `generate-brand-assets.mjs` writes; an app sets only the face's size where
   it lays one out. A component reads
-  only `--luke-*` custom properties (`scripts/repository-checks.sh`).
+  only `--luke-*` custom properties.
 - **Placement hooks**: the few properties an app may set on a component's
   container, each the one way a measurement of the app's reaches inside.
   `--luke-combobox-list-max` caps a `ComboboxList`'s height (280px where

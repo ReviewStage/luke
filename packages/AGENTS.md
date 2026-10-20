@@ -31,8 +31,7 @@ those fixture trees for the same reason.
 ## A cycle means a module is in the wrong package
 
 `pnpm --recursive run typecheck` from a clean `node_modules` fails on a cycle,
-and `repository-checks.sh` fails on a `packages/` → `apps/` import. Neither tells
-you the fix: put wire vocabulary below behavior, keep behavior out of transport
+and a package never imports from `apps/`. Neither tells you the fix: put wire vocabulary below behavior, keep behavior out of transport
 packages, and move the module rather than adding the edge. A cycle that exists
 only in tests is still an edge pnpm records, and usually means the test belongs
 with the layer it is really exercising.

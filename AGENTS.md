@@ -34,12 +34,10 @@ web's tab alike, in `packages/panel`, the hosted service's logic in
 wire value in `packages/wire`. A
 `.ts` module whose imports name no module of its app and no platform
 library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
-`@vercel/*`) is logic and belongs in a package. The logic-lives-in-packages
-check in `scripts/repository-checks.sh` refuses one under
-`apps/desktop/src`, `apps/web/src`, `apps/web/server`, `apps/luke`, or `apps/dev` unless it is shell:
-an app entry in `knip.json`, a `runtimeEdges` row in
-`tools/anti-slop/effect-edges.json`, or a deployment or test-support file
-the check names. A component is placed by review under the same rule.
+`@vercel/*`) is logic and belongs in a package unless it is shell: an app
+entry in `knip.json`, a `runtimeEdges` row in
+`tools/anti-slop/effect-edges.json`, or a deployment or test-support file.
+Review places a module and a component alike under this rule.
 
 ## Never
 
@@ -165,8 +163,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 
 What the checks hold a test to is narrower than the rules above:
 `anti-slop/no-node-test` refuses `node:test` in TypeScript, so every test runs
-on vitest, and `scripts/repository-checks.sh` refuses a hand-rolled `mkdtemp`
-in a desktop or host test (`temporaryDirectory` instead) and a workspace whose
+on vitest, and `scripts/repository-checks.sh` refuses a workspace whose
 `vitest.config.ts` the root `vitest.config.ts` projects list does not name.
 
 ## Effect idioms

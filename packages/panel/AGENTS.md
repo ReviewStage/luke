@@ -3,8 +3,7 @@
 `@luke/panel` is the panel every client mounts: the desktop's panel window
 mounts `App` from here, and the web will mount the same. It may draw with the
 DOM (`packages/AGENTS.md`), and it reaches no shell: no Electron, no
-`window.luke`, and no alias of the desktop's, which `repository-checks.sh`
-refuses here. What only a shell can do, its root installs before anything is
+`window.luke`, and no alias of the desktop's. What only a shell can do, its root installs before anything is
 drawn: the bridge to the host (`app-bridge.ts`), what its platform answers
 (`app-platform.ts`), and the bundles only it can reach (`shell-bundles.ts`;
 the Factory's scene through `SideBundlesContext`). The panel reads each through
@@ -78,9 +77,9 @@ dialog goes on showing; a row holding a bare `useState(false)` keeps neither.
 
 ## Brand artwork
 
-`repository-checks.sh` runs `packages/brand/scripts/generate-brand-assets.mjs --check` and fails
-on drift, so the generated outputs cannot be hand-edited. What the check does not
-say is why the app draws the face rather than loading the SVGs: it needs
+The generated outputs are regenerated from `packages/brand`'s sources
+(`generate-brand-assets.mjs`, whose `--check` reports drift when run by hand),
+never hand-edited. The app draws the face rather than loading the SVGs because it needs
 `currentColor` and CSS animation, and `@luke/ui`'s `--luke-face-motion` is what holds every loop
 still for a capture run and for reduced motion. SMIL answers to neither.
 
