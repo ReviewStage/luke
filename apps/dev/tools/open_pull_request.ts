@@ -1,8 +1,9 @@
 import { OPEN_PULL_REQUEST_TOOL } from "@luke/service/agents/coder-host/pull-request";
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
-import { defineTool } from "eve/tools";
-import { runPullRequestTool } from "../host.js";
+import { defineDynamic, defineTool } from "eve/tools";
+import { offeredRepositoryTools, runPullRequestTool } from "../host.js";
 
 /**
  * open_pull_request.ts -- the agent's pull request, opened by the service as the developer it writes as, or as the App.
@@ -11,12 +12,26 @@ import { runPullRequestTool } from "../host.js";
  * `edit_plan` does, which opens the pull request on GitHub with the
  * developer's own token where the agent writes as them
  * (`packages/service/src/agents/coder-host/pull-request.ts`), so that token
- * never stands at the sandbox's firewall.
+ * never stands at the sandbox's firewall. It is offered at each turn's start
+ * only to an agent working in a repository (`repositoryToolsOf`).
  */
-export default defineTool({
-  description: OPEN_PULL_REQUEST_TOOL.description,
-  inputSchema: emitJsonSchema(OPEN_PULL_REQUEST_TOOL.inputSchema),
-  execute: async (input, ctx) =>
-    // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
-    runPullRequestTool(ctx.session.auth, ctx.session.id, unparsedWire(input as WireBoundaryInput)),
+export default defineDynamic({
+  events: {
+    "turn.started": async (_event, ctx) =>
+      (await offeredRepositoryTools(ctx.session.auth, ctx.session.id)).has(
+        CODER_TOOL.OPEN_PULL_REQUEST,
+      )
+        ? defineTool({
+            description: OPEN_PULL_REQUEST_TOOL.description,
+            inputSchema: emitJsonSchema(OPEN_PULL_REQUEST_TOOL.inputSchema),
+            execute: async (input, toolContext) =>
+              runPullRequestTool(
+                toolContext.session.auth,
+                toolContext.session.id,
+                // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
+                unparsedWire(input as WireBoundaryInput),
+              ),
+          })
+        : null,
+  },
 });
