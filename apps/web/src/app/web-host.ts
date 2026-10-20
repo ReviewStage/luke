@@ -267,24 +267,10 @@ function platformRows(
 }
 
 /** The host's own rows' dependencies, answered for a tab: no voice, no keys, and links opened in a tab of their own, a connect's in the tab its press opened. */
-function hostRowDependencies(
-  operator: OperatorClient,
-  state: AppStateStore,
-  tabs: ConnectTabs,
-): HostActDependencies {
+function hostRowDependencies(operator: OperatorClient): HostActDependencies {
   const host = operator.host;
-  const nothing = () => undefined;
   return {
-    tasks: {
-      host,
-      openExternal: async (url) => tabs.open(url),
-      serviceBaseUrl: location.origin,
-      activeTaskId: () => state.snapshot().tasks.activeTaskId,
-      talkAboutTask: nothing,
-      voiceReady: () => false,
-      callStanding: () => false,
-      colourCode: highlightSnippet,
-    },
+    tasks: { host, colourCode: highlightSnippet },
     codingAgents: { host },
   };
 }
@@ -296,6 +282,7 @@ function hostRowDependencies(
  */
 function portDependencies(
   operator: OperatorClient,
+  state: AppStateStore,
   notices: AgentProceduresDependencies["notices"],
   reporter: string,
   tabs: ConnectTabs,
@@ -328,6 +315,16 @@ function portDependencies(
       },
       // A tab claims no global key, so no chord is ever held.
       stopChordHolder: () => undefined,
+    },
+    // No voice stands in a tab, so a started task opens no call and the microphone's press reaches none.
+    tasks: {
+      host,
+      openExternal: async (url) => tabs.open(url),
+      serviceBaseUrl: location.origin,
+      activeTaskId: () => state.snapshot().tasks.activeTaskId,
+      talkAboutTask: nothing,
+      voiceReady: () => false,
+      callStanding: () => false,
     },
     workspaces: { host, openExternal: async (url) => tabs.open(url) },
   };
@@ -434,10 +431,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       const made = yield* createInProcessBridge<WebSender>({
         sender: window,
         routerFor: () =>
-          createHostActRouter(
-            hostRowDependencies(operator, state, tabs),
-            platformRows(http, doors),
-          ),
+          createHostActRouter(hostRowDependencies(operator), platformRows(http, doors)),
         run,
         state,
         windowFacts: () => ({ fullScreen: document.fullscreenElement !== null }),
@@ -447,11 +441,11 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       });
       events = made.events;
       const actPort = yield* servedActPort(
-        portDependencies(operator, notices, crypto.randomUUID(), tabs),
+        portDependencies(operator, state, notices, crypto.randomUUID(), tabs),
         services,
       );
       return {
-        bridge: tabs.bridge(made.bridge),
+        bridge: made.bridge,
         actPort,
         actPortClient: tabs.portClient,
         platform: webPlatform({ recordSurfaceEvent: count }),

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import type { AppBridge } from "@luke/host/bridge";
+import { ACT_KIND } from "@luke/host/acts";
+import type { ActPortClient } from "@luke/host/contract";
 import { afterEach, expect, test } from "vitest";
 import { type ConnectBrowser, type ConnectTab, connectTabs } from "../src/app/connect-tab";
 import { CONNECT_RETURN, connectReturn } from "../src/connect-return";
@@ -62,21 +62,25 @@ function fakeBrowser(options: { readonly refusesTabs: boolean }) {
   return { browser, tabs, navigated, links };
 }
 
-const DONE: ActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
-
-/** The host behind the bridge: each act answers once the service has, opening the address it answered where it opens one. */
-function hostBridge(open: (url: string) => void, opens: boolean): AppBridge {
-  // SAFETY: the connect wraps the bridge's `act` alone and hands every other door through untouched.
-  return {
-    act: async (_act: Act) => {
+/**
+ * The host behind the act port: the account's GitHub connect and a web link
+ * each answer once the service has, opening the address it answered where
+ * it opens one.
+ */
+function hostPort(open: (url: string) => void, opens: boolean): ActPortClient {
+  const host: Partial<ActPortClient> = {
+    [ACT_KIND.GITHUB_CONNECT]: async () => {
       await Promise.resolve();
       if (opens) open(PROVIDER_ADDRESS);
-      return DONE;
     },
-  } as AppBridge;
+    [ACT_KIND.WEB_OPEN]: async ({ url }) => {
+      await Promise.resolve();
+      open(url);
+    },
+  };
+  // SAFETY: the connect wraps the procedures it names and hands every other one through untouched, so a test answers only those it calls.
+  return host as ActPortClient;
 }
-
-const CONNECT: Act = { kind: ACT_KIND.GITHUB_CONNECT };
 
 afterEach(() => {
   sessionStorage.clear();
@@ -85,9 +89,9 @@ afterEach(() => {
 test("a connect's late address lands in the tab its press opened, and this tab stays put", async () => {
   const { browser, tabs, navigated } = fakeBrowser({ refusesTabs: false });
   const connect = connectTabs(browser);
-  const bridge = connect.bridge(hostBridge(connect.open, true));
+  const port = connect.portClient(hostPort(connect.open, true));
 
-  await bridge.act(CONNECT);
+  await port[ACT_KIND.GITHUB_CONNECT]();
 
   expect(tabs.map((tab) => tab.sentTo())).toEqual([PROVIDER_ADDRESS]);
   expect(tabs.map((tab) => tab.closed())).toEqual([false]);
@@ -97,9 +101,9 @@ test("a connect's late address lands in the tab its press opened, and this tab s
 test("a refused tab sends this tab on, leaving its address for the landing page's way back", async () => {
   const { browser, navigated } = fakeBrowser({ refusesTabs: true });
   const connect = connectTabs(browser);
-  const bridge = connect.bridge(hostBridge(connect.open, true));
+  const port = connect.portClient(hostPort(connect.open, true));
 
-  await bridge.act(CONNECT);
+  await port[ACT_KIND.GITHUB_CONNECT]();
 
   expect(navigated).toEqual([PROVIDER_ADDRESS]);
   expect(connectReturn()).toEqual({
@@ -111,9 +115,9 @@ test("a refused tab sends this tab on, leaving its address for the landing page'
 test("a press whose act opened nothing closes its empty tab", async () => {
   const { browser, tabs } = fakeBrowser({ refusesTabs: false });
   const connect = connectTabs(browser);
-  const bridge = connect.bridge(hostBridge(connect.open, false));
+  const port = connect.portClient(hostPort(connect.open, false));
 
-  await bridge.act(CONNECT);
+  await port[ACT_KIND.GITHUB_CONNECT]();
 
   expect(tabs.map((tab) => tab.closed())).toEqual([true]);
 });
@@ -121,9 +125,9 @@ test("a press whose act opened nothing closes its empty tab", async () => {
 test("an act that is no connect opens no tab, and its address opens as a link", async () => {
   const { browser, tabs, navigated, links } = fakeBrowser({ refusesTabs: false });
   const connect = connectTabs(browser);
-  const bridge = connect.bridge(hostBridge(connect.open, true));
+  const port = connect.portClient(hostPort(connect.open, true));
 
-  await bridge.act({ kind: ACT_KIND.WEB_OPEN, payload: { url: PROVIDER_ADDRESS } });
+  await port[ACT_KIND.WEB_OPEN]({ url: PROVIDER_ADDRESS });
 
   expect(tabs).toEqual([]);
   expect(navigated).toEqual([]);
@@ -134,17 +138,18 @@ test("connects answered out of order each open in a tab, and the one that opened
   const { browser, tabs } = fakeBrowser({ refusesTabs: false });
   const connect = connectTabs(browser);
   // The first press's act is still out when the second's answers with its address; then the first opens nothing.
-  let refuseFirst: (outcome: ActOutcome) => void = () => undefined;
-  // SAFETY: the connect wraps the bridge's `act` alone and hands every other door through untouched.
-  const first: AppBridge = {
-    act: (_act: Act) =>
-      new Promise<ActOutcome>((resolve) => {
-        refuseFirst = resolve;
+  let refuseFirst: (error: Error) => void = () => undefined;
+  const first: Partial<ActPortClient> = {
+    [ACT_KIND.GITHUB_CONNECT]: () =>
+      new Promise<void>((_resolve, reject) => {
+        refuseFirst = reject;
       }),
-  } as AppBridge;
-  const firstPress = connect.bridge(first).act(CONNECT);
-  await connect.bridge(hostBridge(connect.open, true)).act(CONNECT);
-  refuseFirst({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "GitHub could not be reached." });
+  };
+  // SAFETY: the connect wraps the procedures it names, and this test calls the account's GitHub connect alone.
+  const firstPort = connect.portClient(first as ActPortClient);
+  const firstPress = firstPort[ACT_KIND.GITHUB_CONNECT]().catch(() => undefined);
+  await connect.portClient(hostPort(connect.open, true))[ACT_KIND.GITHUB_CONNECT]();
+  refuseFirst(new Error("GitHub could not be reached."));
   await firstPress;
 
   const open = tabs.filter((tab) => !tab.closed());

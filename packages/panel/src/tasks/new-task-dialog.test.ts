@@ -563,12 +563,17 @@ test("with Issues on, an @ offers the workspace's issues, and the one chosen is 
 });
 
 test("a skill chosen from the / list is its chip, which opens its SKILL.md in the chosen repository on GitHub", async () => {
-  const told: Act[] = [];
+  const onGitHub: string[] = [];
   fakeAppPlatform(DESKTOP_LINKS);
+  fakeActPort({
+    [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
+      onGitHub.push(url);
+      return Promise.resolve();
+    },
+  });
   fakeAppBridge({
-    act: (request: Act) => {
-      told.push(request);
-      return Promise.resolve(
+    act: (request: Act) =>
+      Promise.resolve(
         request.kind === ACT_KIND.TASKS_SKILLS
           ? {
               status: ACT_OUTCOME_STATUS.DONE,
@@ -587,8 +592,7 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
               },
             }
           : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      );
-    },
+      ),
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -618,10 +622,9 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
     assert.fail("the skill is a chip that opens");
   act(() => chip.click());
 
-  assert.deepEqual(
-    told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
-    [{ url: "https://github.com/acme/web/blob/HEAD/.agents/skills/release/SKILL.md" }],
-  );
+  assert.deepEqual(onGitHub, [
+    "https://github.com/acme/web/blob/HEAD/.agents/skills/release/SKILL.md",
+  ]);
 });
 
 test("Plan mode: Shift+Tab turns it on, the model chip stands down, and Start begins the plan and its call, Untitled, handing Luke the words as its brief", async () => {

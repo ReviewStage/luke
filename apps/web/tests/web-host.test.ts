@@ -13,6 +13,7 @@ import { composeWeb, WebHostTag } from "../src/app/web-host";
 import {
   fakeService,
   GITHUB_INSTALL,
+  GITHUB_REPOSITORIES,
   NOTION_SIGN_IN,
   WORKSPACE_MEMBER,
 } from "./support/fake-service";
@@ -117,6 +118,20 @@ it.effect("a workspace act rides the tab's act port to the service and back", ()
       );
 
       assert.deepEqual(members, [WORKSPACE_MEMBER]);
+    }),
+  ),
+);
+
+it.effect("a task act rides the tab's act port to the service and back", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+      installAppBridge(bridge);
+      installActPort(actPort);
+
+      const listed = yield* Effect.promise(() => askAct(ACT_KIND.TASKS_REPOSITORIES, {}));
+
+      assert.deepEqual(listed, { repositories: GITHUB_REPOSITORIES });
     }),
   ),
 );

@@ -11,7 +11,12 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeAppBridge,
+  type OpenedLink,
+  openingLinks,
+} from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -83,7 +88,7 @@ const SECTION_LINKS = {
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
-let sent: Act[] = [];
+let sent: (Act | OpenedLink)[] = [];
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -98,6 +103,7 @@ beforeEach(() => {
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
+  fakeActPort(openingLinks((link) => sent.push(link)));
 });
 
 afterEach(() => {
