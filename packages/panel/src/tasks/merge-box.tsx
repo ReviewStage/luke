@@ -29,7 +29,7 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
-import { ACTION_RESULT_STATUS } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Schema } from "effect";
 import {
   CircleDotIcon,
@@ -433,14 +433,21 @@ export function MergeControl({
   const { merging } = pullRequest;
   const methods = merging?.methods ?? [];
   const [method, choose] = useMergeMethod(repository, methods);
-  // Whether Remove from queue is being asked about.
+  // Whether Remove from queue is being asked about; the question goes once a read finds it out of the queue, so it never asks to dequeue what no longer stands in it.
   const [asked, setAsked] = useState(false);
-  const confirm = useConfirmDialog({ subject: asked, surfaceOpen: shown }, async () => {
-    await writes.write({ action: PULL_REQUEST_ACTION.DEQUEUE });
-    return { status: ACTION_RESULT_STATUS.ACCEPTED };
-  });
+  const inQueue = (merging?.queued ?? null) !== null;
+  const confirm = useConfirmDialog({ subject: asked && inQueue, surfaceOpen: shown }, () =>
+    writes
+      .write({ action: PULL_REQUEST_ACTION.DEQUEUE })
+      .then(
+        (outcome): ActionResult =>
+          outcome.done
+            ? { status: ACTION_RESULT_STATUS.ACCEPTED }
+            : { status: ACTION_RESULT_STATUS.REJECTED, reason: outcome.words },
+      ),
+  );
   // Note that a question left behind as its panel hides is let go whole, so the panel comes back asking nothing; one already answered finishes.
-  if (!shown && asked && !confirm.busy) setAsked(false);
+  if ((!shown || !inQueue) && asked && !confirm.busy) setAsked(false);
 
   const live =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;

@@ -4407,6 +4407,45 @@ test("Discard's question stands busy until GitHub answers, and says GitHub's ref
   assert.match(question().textContent ?? "", /GitHub said: Review is not pending/u);
 });
 
+test("Remove from queue's question goes once a read finds the pull request out of the queue, and a refusal stands in the question for another try", async () => {
+  let reads = 0;
+  const queued = { queue: true, queued: { position: 2 }, autoMerge: { method: null } } as const;
+  const question = () => document.querySelector('[role="dialog"], [role="alertdialog"]');
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () => {
+        reads += 1;
+        const left = reads > 1 ? { queued: null, autoMerge: null } : {};
+        return Promise.resolve({
+          pullRequest: {
+            ...PULL_REQUEST,
+            merge: MERGE_STATE.CLEAN,
+            merging: { ...MERGING, ...queued, ...left },
+          },
+        });
+      },
+    }),
+  );
+  await pressBox(tab, "Remove from queue");
+  assert.notEqual(question(), null, "leaving the queue is asked about");
+  await pressToolbar(tab, "Refresh");
+  await settle();
+  assert.equal(question(), null, "out of the queue, the question goes");
+  assert.deepEqual(changes, []);
+  act(() => root?.unmount());
+  root = undefined;
+
+  changeAnswer = { outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED, words: "Not in the queue." };
+  const again = await draw(merging(MERGE_STATE.CLEAN, queued));
+  await pressBox(again, "Remove from queue");
+  await answerQuestion("Remove from queue");
+  assert.match(
+    question()?.textContent ?? "",
+    /Not in the queue\./u,
+    "the refusal stands in the question",
+  );
+});
+
 test("Remove from queue's question goes with its panel: hidden, the question is let go and nothing leaves the queue, and shown again it asks nothing", async () => {
   let show: (shown: boolean) => void = () => undefined;
   function Hiding() {
