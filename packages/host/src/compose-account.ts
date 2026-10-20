@@ -82,6 +82,8 @@ export interface AccountComposer extends Composer {
    * answer reaches the windows as its own event.
    */
   refreshAccess: Effect.Effect<void>;
+  /** Forgets the access read, and any read still out, as the gate closes; no admin until the next read. */
+  forgetAccess: Effect.Effect<void>;
   link: (links: AccountLinks) => Effect.Effect<void>;
 }
 
@@ -143,9 +145,10 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
 
   /**
    * What the account may open, held for the account it was read for: a
-   * sign-in reads it (`refreshAccess`, from the gate opening), and a change
-   * of account publishes it again, so another account, or nobody, is never
-   * told an admin's answer.
+   * sign-in reads it (`refreshAccess`, from the gate opening), a sign-out
+   * forgets it (`forgetAccess`, from the gate closing), and a change of
+   * account publishes it again, so another account, or nobody, is never told
+   * an admin's answer.
    */
   const access = accountAccessHolder({
     client: new AccountAccessClient({
@@ -375,6 +378,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     sessionReplayState,
     accessState: Effect.sync(access.current),
     refreshAccess: Effect.asVoid(FiberSet.run(accessReads, access.refresh)),
+    forgetAccess: access.forget,
     link: (next) => Effect.asVoid(late.set(next)),
     // The session holds no timer this host started beyond its own
     // subscription: what a sign-in began is stopped by the capabilities it

@@ -57,22 +57,29 @@ interface AccountAccessHolderOptions {
 export interface AccountAccessHolder {
   /** The access of whoever is signed in now. */
   readonly current: () => AppAccessSlice;
-  /** Reads the signed-in account's access afresh and publishes it, unless the account changed while it read. */
+  /** Reads the signed-in account's access afresh and publishes it, unless the account changed or signed out while it read. */
   readonly refresh: Effect.Effect<void>;
-  /** The account moved: publishes what stands for whoever is signed in now, and forgets every read on a sign-out. */
+  /** The account moved: publishes what stands for whoever is signed in now. */
   readonly accountChanged: Effect.Effect<void>;
+  /** The account gate closed (a sign-out, or a switch away): forgets every read, and every read still out, and publishes no admin. */
+  readonly forget: Effect.Effect<void>;
 }
 
 /**
  * The access as the host holds it: the last read, kept beside the account it
  * was read for, so it answers for that account alone. Note that the account
- * is compared at every answer rather than the read cleared when the account
- * moves, because the change and a sign-in's read land in either order, and a
- * clear that landed after the read would drop it.
+ * is compared at every answer rather than the read cleared when the change
+ * event arrives, because that event and a sign-in's read land in either
+ * order, and a clear that landed after the read would drop it. What clears
+ * it is the gate closing (`forget`), which runs in order with the gate's
+ * opening, so a sign-out and the same account's return still forget the
+ * answer read before, and a read still out across them is dropped by its
+ * generation rather than by the account it names.
  */
 export function accountAccessHolder(options: AccountAccessHolderOptions): AccountAccessHolder {
   const { client, accountKey, publish } = options;
   let held: { readonly accountKey: string; readonly admin: boolean } | undefined;
+  let generation = 0;
 
   const current = (): AppAccessSlice => {
     const key = accountKey();
@@ -82,16 +89,20 @@ export function accountAccessHolder(options: AccountAccessHolderOptions): Accoun
   const refresh = Effect.gen(function* () {
     const key = accountKey();
     if (key === undefined) return;
+    const asked = generation;
     const admin = yield* client.readAdmin();
-    if (accountKey() !== key) return;
+    if (generation !== asked || accountKey() !== key) return;
     held = { accountKey: key, admin };
     publish(current());
   });
 
-  const accountChanged = Effect.sync(() => {
-    if (accountKey() === undefined) held = undefined;
+  const accountChanged = Effect.sync(() => publish(current()));
+
+  const forget = Effect.sync(() => {
+    generation += 1;
+    held = undefined;
     publish(current());
   });
 
-  return { current, refresh, accountChanged };
+  return { current, refresh, accountChanged, forget };
 }

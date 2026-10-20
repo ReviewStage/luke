@@ -263,6 +263,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
 
     /** The gate closing: what a sign-out means. */
     const closeCapabilities = Effect.gen(function* () {
+      yield* account.forgetAccess;
       yield* tasks.reset;
       yield* terminals.reset;
       yield* account.applyVoiceCredential;

@@ -79,7 +79,9 @@ it.effect("an admin's read is an admin, and a sign-out leaves no admin standing"
     assert.deepEqual(held.current(), { admin: true });
     assert.deepEqual(published, [{ admin: true }]);
 
+    // The gate closes as the account signs out, and its change event follows.
     account.key = undefined;
+    yield* held.forget;
     yield* held.accountChanged;
     assert.deepEqual(held.current(), { admin: false });
     assert.deepEqual(published.at(-1), { admin: false });
@@ -88,6 +90,21 @@ it.effect("an admin's read is an admin, and a sign-out leaves no admin standing"
     account.key = "admin@luke.test";
     yield* held.accountChanged;
     assert.deepEqual(held.current(), { admin: false });
+  }),
+);
+
+it.effect("a sign-out the same account returned from before its change landed still forgets", () =>
+  Effect.gen(function* () {
+    const { client } = service([json({ admin: true })]);
+    const { held, published } = holder(client, "admin@luke.test");
+    yield* held.refresh;
+
+    // The gate closed and opened again before either change event was taken: both read the account back.
+    yield* held.forget;
+    yield* held.accountChanged;
+    yield* held.accountChanged;
+    assert.deepEqual(held.current(), { admin: false });
+    assert.deepEqual(published.at(-1), { admin: false });
   }),
 );
 
@@ -126,6 +143,26 @@ it.effect("a read answered after the account changed is kept for nobody", () =>
 
     account.key = "admin@luke.test";
     assert.deepEqual(held.current(), { admin: false });
+  }),
+);
+
+it.effect("a read still out across a sign-out and the same account's return is dropped", () =>
+  Effect.gen(function* () {
+    let whileAnswering = () => undefined;
+    const accessClient = client(async () => {
+      whileAnswering();
+      return jsonResponse({ admin: true });
+    });
+    const { held, published } = holder(accessClient, "admin@luke.test");
+    // The gate closes and the same account signs back in while the read is out.
+    whileAnswering = () => {
+      Effect.runSync(held.forget);
+      return undefined;
+    };
+
+    yield* held.refresh;
+    assert.deepEqual(held.current(), { admin: false });
+    assert.deepEqual(published, [{ admin: false }]);
   }),
 );
 
