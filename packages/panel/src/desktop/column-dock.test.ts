@@ -8,8 +8,9 @@ import { useColumnDock } from "./column-dock.js";
 
 /**
  * column-dock.test.ts -- what floats over a column's foot reads how tall its
- * dock stands: on the Chat page, the channel's composer at its foot, and
- * never a thread's reply box open among the messages above it. jsdom lays
+ * dock stands: on a phone's Chat page, the channel's composer at its foot,
+ * and never a thread's reply box open among the messages above it; beside
+ * the work, where the floating card stands over the rail, nothing. jsdom lays
  * nothing out, so each box is staged where a phone lays it.
  */
 
@@ -31,9 +32,9 @@ const STAGED = new Map<string, { top: number; bottom: number }>([
 ]);
 
 /** The Chat rail standing alone in a narrow room, the channel it left mounted in a pane hidden beside it. */
-function RailShell(): React.JSX.Element {
+function RailShell({ narrow }: { narrow: boolean }): React.JSX.Element {
   const shell = useRef<HTMLDivElement>(null);
-  useColumnDock(shell, false, "chat");
+  useColumnDock(shell, false, narrow, "chat");
   return createElement(
     "div",
     { ref: shell, className: "desktop-shell" },
@@ -50,9 +51,9 @@ function RailShell(): React.JSX.Element {
 }
 
 /** The Chat page as the shell draws it, a thread's reply open above the channel's composer. */
-function ChatShell(): React.JSX.Element {
+function ChatShell({ narrow }: { narrow: boolean }): React.JSX.Element {
   const shell = useRef<HTMLDivElement>(null);
-  useColumnDock(shell, false, "chat");
+  useColumnDock(shell, false, narrow, "chat");
   return createElement(
     "div",
     { ref: shell, className: "desktop-shell" },
@@ -85,18 +86,22 @@ function stage(): void {
 }
 
 /** Draws `shell`, answering the dock it writes on the document's root. */
-function dockOf(shell: () => React.JSX.Element): string {
+function dockOf(shell: (props: { narrow: boolean }) => React.JSX.Element, narrow: boolean): string {
   stage();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(createElement(shell)));
+  act(() => root?.render(createElement(shell, { narrow })));
   return document.documentElement.style.getPropertyValue("--column-dock");
 }
 
-test("on the Chat page the dock is the channel's composer at its foot, not a thread's reply above it", () => {
-  assert.equal(dockOf(ChatShell), "100px");
+test("on a phone's Chat page the dock is the channel's composer at its foot, not a thread's reply above it", () => {
+  assert.equal(dockOf(ChatShell, true), "100px");
+});
+
+test("beside the work the Chat page docks nothing, the folded sidebar's card standing over its rail rather than its composer", () => {
+  assert.equal(dockOf(ChatShell, false), "");
 });
 
 test("on the Chat rail a channel's composer left in a hidden pane docks nothing", () => {
-  assert.equal(dockOf(RailShell), "0px");
+  assert.equal(dockOf(RailShell, true), "0px");
 });

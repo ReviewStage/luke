@@ -4,9 +4,16 @@
 
 import { type RefObject, useLayoutEffect } from "react";
 
-/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, a chat's composer (never a thread's reply box, which scrolls with the messages), and a task's call bar, whichever stand. */
-const DOCKED =
-  '.agent-todos-dock, .agent-published-dock, .agent-composer, .chat-composer[data-compact="false"], .desktop-call-bar';
+/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, and a task's call bar, whichever stand. */
+const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .desktop-call-bar";
+
+/**
+ * A chat's composer at its foot, never a thread's reply box, which scrolls
+ * with the messages. It docks only where it spans under what floats: in a
+ * narrow room, or in the side panel filling the window. Beside the work on
+ * the Chat page the card stands over the rail, never over the composer.
+ */
+const CHAT_DOCKED = '.chat-composer[data-compact="false"]';
 
 /** The length the dock's height is written in. */
 const COLUMN_DOCK = "--column-dock";
@@ -15,10 +22,10 @@ const COLUMN_DOCK = "--column-dock";
 const FLOATING_CARD = '.call-card[data-surface="floating"]';
 
 /** From the column's foot to the top of its highest docked part, or nothing where none stands. */
-function dockHeight(column: Element): number {
+function dockHeight(column: Element, docked: string): number {
   const foot = column.getBoundingClientRect().bottom;
   let top = foot;
-  for (const part of column.querySelectorAll(DOCKED)) {
+  for (const part of column.querySelectorAll(docked)) {
     const box = part.getBoundingClientRect();
     // A part in a pane a narrow room hides draws no box, and docks nothing.
     if (box.width === 0 && box.height === 0) continue;
@@ -34,7 +41,8 @@ function dockHeight(column: Element): number {
  * clear. The dock is written on the document's root, because the toasts,
  * which a phone stands above it too, are portalled out of the shell; the
  * card's height on the shell. The column is the task's, or an agent's page standing in
- * its place, or the side panel while it fills the window. One ResizeObserver follows the column, its docked parts, and
+ * its place, or the Chat page in a narrow room, or the side panel while it
+ * fills the window, where a chat's composer docks too (`CHAT_DOCKED`). One ResizeObserver follows the column, its docked parts, and
  * the card; a MutationObserver re-reads when the column or a part arrives
  * or goes, a task's column once it has loaded, a to-do list appearing over
  * the composer. `key` names what the shell is drawing,
@@ -44,6 +52,7 @@ function dockHeight(column: Element): number {
 export function useColumnDock(
   shell: RefObject<HTMLElement | null>,
   panelFull: boolean,
+  narrow: boolean,
   key: string,
 ): void {
   useLayoutEffect(() => {
@@ -54,13 +63,14 @@ export function useColumnDock(
     // loading draws its column only once its document lands.
     const columnSelector = panelFull
       ? ".side-panel"
-      : ".desktop-task-main, .agent-page, .chat-view";
+      : `.desktop-task-main, .agent-page${narrow ? ", .chat-view" : ""}`;
+    const docked = panelFull || narrow ? `${DOCKED}, ${CHAT_DOCKED}` : DOCKED;
     let column = host.querySelector(columnSelector);
     const sized = new ResizeObserver(() => write());
     function write(): void {
       if (host === null) return;
       if (column === null) root.style.removeProperty(COLUMN_DOCK);
-      else root.style.setProperty(COLUMN_DOCK, `${dockHeight(column)}px`);
+      else root.style.setProperty(COLUMN_DOCK, `${dockHeight(column, docked)}px`);
       const card = host.querySelector(FLOATING_CARD);
       if (card === null) host.style.removeProperty("--floating-card");
       else host.style.setProperty("--floating-card", `${card.getBoundingClientRect().height}px`);
@@ -70,7 +80,7 @@ export function useColumnDock(
       sized.disconnect();
       if (column !== null) {
         sized.observe(column);
-        for (const part of column.querySelectorAll(DOCKED)) sized.observe(part);
+        for (const part of column.querySelectorAll(docked)) sized.observe(part);
       }
       const card = host.querySelector(FLOATING_CARD);
       if (card !== null) sized.observe(card);
@@ -89,5 +99,5 @@ export function useColumnDock(
       root.style.removeProperty(COLUMN_DOCK);
       host.style.removeProperty("--floating-card");
     };
-  }, [shell, panelFull, key]);
+  }, [shell, panelFull, narrow, key]);
 }

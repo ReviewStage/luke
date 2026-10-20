@@ -456,6 +456,7 @@ export function DesktopShell({
   useColumnDock(
     shell,
     tasks.sidePanel.fullScreen,
+    room === SHELL_ROOM.NARROW,
     `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.boardView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;

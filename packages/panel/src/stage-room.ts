@@ -23,6 +23,7 @@ import { useCallback, useLayoutEffect, useState } from "react";
 import { COARSE_POINTER, coarsePointerNow } from "./coarse-pointer.js";
 import { compactStage } from "./desktop/sidebar-collapse.js";
 import { narrowStage, SHELL_ROOM, type ShellRoom } from "./shell-room.js";
+import { keyboardInsetNow } from "./use-visual-viewport.js";
 
 /** Which of the stage's lines its width stands past. */
 interface StageLines {
@@ -63,8 +64,12 @@ export function useStageRoom(): StageRoom {
   const ref = useCallback((element: HTMLElement | null) => {
     if (element === null) return undefined;
     const measure = () => {
-      const { width, height } = element.getBoundingClientRect();
+      const { width, height: seen } = element.getBoundingClientRect();
       if (width <= 0) return;
+      // The stage stops where the keyboard begins, but a keyboard coming up
+      // makes no stage short: a tablet would flip to a phone's layout on every
+      // focus, and the field it focused could go with it.
+      const height = seen + keyboardInsetNow();
       const coarse = coarsePointerNow();
       setLines((was) => {
         const narrow = narrowStage({ width, height, coarse }, was.narrow);

@@ -32,6 +32,7 @@ afterEach(() => {
   reading = undefined;
   vi.restoreAllMocks();
   document.body.innerHTML = "";
+  document.documentElement.removeAttribute("style");
 });
 
 /** A root that reads its stage as the panel's does, and draws what it read. */
@@ -138,4 +139,16 @@ test("a short stage turns narrow when its main pointer becomes a finger, with no
     for (const listener of heard) listener();
   });
   assert.equal(reading?.room, "narrow");
+});
+
+test("a tall stage under a finger that the on-screen keyboard shortens stays wide, as a tablet's does on every focus", () => {
+  onTouchScreen();
+  mount(1180, 740);
+  assert.equal(reading?.room, "wide");
+
+  document.documentElement.style.setProperty("--luke-keyboard-inset", "420px");
+  assert.equal(resizeTo(1180, 320)?.room, "wide", "the keyboard makes no stage short");
+
+  document.documentElement.style.setProperty("--luke-keyboard-inset", "0px");
+  assert.equal(resizeTo(1180, 740)?.room, "wide");
 });

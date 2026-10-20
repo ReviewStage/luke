@@ -94,3 +94,11 @@ export function useVisualViewport(): void {
     };
   }, []);
 }
+
+/** How much of the window the on-screen keyboard covers now, as last written on the root; none where nothing is written. */
+export function keyboardInsetNow(): number {
+  const written = Number.parseFloat(
+    document.documentElement.style.getPropertyValue(KEYBOARD_INSET),
+  );
+  return Number.isFinite(written) ? written : 0;
+}

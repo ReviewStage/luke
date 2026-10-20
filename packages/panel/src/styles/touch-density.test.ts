@@ -294,10 +294,21 @@ test("on a touch screen every field takes at least 16px words, so focusing it ne
   }
 });
 
-test("with a mouse a field keeps the type it stands in", () => {
+test("with a mouse a field keeps the size it had: the type it stands in, or its own role's", () => {
   layFor(false, { "data-luke-profile": "desktop" });
+  const before = new Map([
+    ["a tab's rename", "14px"],
+    ["a workspace's or an integration's rename", "14px"],
+    ["a list row's rename", role("--luke-type-body-size")],
+    ["a Browser tab's address", role("--luke-type-caption-size")],
+    ["a comment's field", "13px"],
+  ]);
   for (const [name, field] of fields()) {
-    assert.doesNotMatch(getComputedStyle(field).fontSize, /16px/, `${name} keeps its size`);
+    assert.equal(
+      resolved(getComputedStyle(field).fontSize),
+      before.get(name),
+      `${name} keeps its size`,
+    );
   }
 });
 

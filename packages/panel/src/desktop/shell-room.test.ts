@@ -367,3 +367,34 @@ test("a phone's installed app, with no browser around it, keeps Back and Forward
   act(() => sidebarToggle(page).click());
   assert.equal(historyArrows(page), true);
 });
+
+test("Escape puts a phone's drawer away and gives the keyboard back to the work it was opened from", () => {
+  const focus = HTMLElement.prototype.focus;
+  vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (
+    this: HTMLElement,
+    options?: FocusOptions,
+  ) {
+    // As a browser does, which jsdom does not: an inert element takes no focus.
+    if (this.closest("[inert]") !== null) return;
+    focus.call(this, options);
+  });
+  const page = mount(PHONE);
+  const work =
+    page.querySelector<HTMLElement>("main.desktop-main button:not([disabled])") ??
+    assert.fail("the work holds a button");
+  work.focus();
+
+  act(() => sidebarToggle(page).click());
+  assert.equal(sidebarStanding(page), "drawer");
+  const held = document.activeElement;
+  assert.ok(
+    held instanceof HTMLElement && sidebarOf(page).contains(held),
+    "the drawer takes the keyboard",
+  );
+
+  act(() => {
+    held.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(sidebarStanding(page), "away");
+  assert.ok(document.activeElement === work, "the keyboard is back where it was");
+});

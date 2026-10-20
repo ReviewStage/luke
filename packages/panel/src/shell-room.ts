@@ -51,6 +51,7 @@ const SHELL_ROOM_SHORT = {
 /** What the room is read off: the stage's box, and whether a finger works it. */
 export interface StageBox {
   readonly width: number;
+  /** The stage's height with the on-screen keyboard down, so a keyboard coming up never makes a stage short. */
   readonly height: number;
   /** Whether the device's main pointer is coarse (`coarse-pointer.ts`). */
   readonly coarse: boolean;
