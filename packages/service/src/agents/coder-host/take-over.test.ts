@@ -3,8 +3,14 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { createAutomation, readAutomation } from "@luke/database/models/automation-store";
-import { archiveCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  archiveCodingAgent,
+  readCodingAgent,
+  readCodingAgentByKey,
+} from "@luke/database/models/coding-agent-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { createTask } from "@luke/database/models/task-store";
+import { storeWriter } from "@luke/database/models/writer";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
   AUTOMATION_ACTION,
@@ -13,6 +19,7 @@ import {
   AUTOMATION_TARGET,
   AUTOMATION_TRIGGER,
 } from "@luke/features/automation-wire";
+import { BRAIN_RUN_EVENT, BRAIN_TURN_ORIGIN, BRAIN_TURN_TRIGGER } from "@luke/features/brain";
 import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
 import {
   INBOX_REPLY,
@@ -21,7 +28,9 @@ import {
   type InboxPost,
 } from "@luke/features/inbox-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
-import { Effect, Layer, Option, Result, Stream } from "effect";
+import { sessionKey } from "@luke/runtime/vocabulary";
+import { TURN_ORIGIN } from "@luke/wire";
+import { DateTime, Effect, Layer, Option, Result, Stream } from "effect";
 import { HOSTED_REFUSAL } from "../../http/http-effect.js";
 import {
   agentInboxItems,
@@ -45,6 +54,7 @@ import {
 } from "../brain-host/eve-sessions.js";
 import { type StartAsk, startCodingAgent } from "./start.js";
 import { TAKEN_OVER_REASON, takeOverCodingAgent } from "./take-over.js";
+import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
  * take-over.test.ts -- a teammate's coding agent taken over: a new agent of the member who asks goes on from it, and the teammate's is archived, its open inbox items and its automations moved to the new one.
@@ -67,7 +77,7 @@ import { TAKEN_OVER_REASON, takeOverCodingAgent } from "./take-over.js";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_REPOSITORY = `${RELAY.owner}/${RELAY.name}`;
 /** One installation for each test's workspace, since one installation connects to one workspace and the suite's tests share a database. */
-const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 8 }, (_, index) => ({
+const INSTALLATIONS: readonly InstallationFixture[] = Array.from({ length: 16 }, (_, index) => ({
   id: 9_100 + index,
   login: RELAY.owner,
   accountId: 91_000 + index,
@@ -347,6 +357,62 @@ it.layer(getTestDB())("a teammate's agent taken over", (it) => {
         );
         const archived = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
         assert.equal(archived.archivedBy?.userId, teammate);
+      }),
+  );
+
+  it.effect(
+    "an agent that lost the race whose running turn eve would not cancel is left standing, not archived out of sight",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, workspaceId } = yield* openTeam;
+        const second = yield* openGithubUser();
+        yield* joinWorkspace(workspaceId, second);
+        const source = yield* ownersAgent(owner, workspaceId);
+        const store = yield* Effect.context<DatabaseServices>();
+        const winner = fakeEve();
+        const key = randomUUID();
+        // The second member's agent is running a turn of eve's by the time the teammate's take-over lands.
+        const racing: EveSessions = {
+          ...winner.sessions,
+          open: (message) =>
+            Effect.gen(function* () {
+              const target = { userId: second, conversationId: message.conversationId };
+              const sessionId = `wrun_${randomUUID()}`;
+              yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate);
+              const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+              const turnId = randomUUID();
+              yield* writer.enqueueTurn(target, {
+                turnId,
+                origin: TURN_ORIGIN.TYPED,
+                eveTurnId: "turn_0",
+              });
+              yield* writer.consume(target, {
+                kind: BRAIN_RUN_EVENT.TURN_STARTED,
+                conversationId: sessionKey(message.conversationId),
+                turnId,
+                sequence: 1,
+                origin: BRAIN_TURN_ORIGIN.TYPED,
+                trigger: BRAIN_TURN_TRIGGER.ASK,
+                at: 1_800_000_000_000,
+              });
+              yield* takeOverCodingAgent(winner.eve, teammate, source.id, randomUUID()).pipe(
+                Effect.provide(services),
+              );
+              return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId };
+            }).pipe(Effect.provide(store), Effect.orDie),
+          cancel: () => Effect.succeed({ outcome: EVE_CANCEL_OUTCOME.FAILED, status: 503 }),
+        };
+
+        const lost = yield* Effect.result(
+          takeOverCodingAgent(Effect.succeed(racing), second, source.id, key).pipe(
+            Effect.provide(services),
+          ),
+        );
+
+        assert.ok(Result.isFailure(lost));
+        assert.equal(lost.failure, HOSTED_REFUSAL.AGENT_RETIRED);
+        const theirs = Option.getOrThrow(yield* readCodingAgentByKey(second, key));
+        assert.equal(theirs.archivedAt, null, "still working, so still in sight");
       }),
   );
 
