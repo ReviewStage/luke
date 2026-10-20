@@ -614,6 +614,31 @@ test("a chapter is viewed once every file it holds is; Mark chapter viewed and â
   ]);
 });
 
+/** The Chapters tab answering ready chapters, made by `model` for `headSha`. */
+function readyChapters(headSha: string): Extract<PullRequestChaptersState, { model: string }> {
+  const chapters = ready(headSha);
+  return chapters.status === PULL_REQUEST_CHAPTERS_STATE.READY ? chapters : assert.fail("ready");
+}
+
+function madeBy(model: string, headSha = HEAD): CodingAgentsControl {
+  return controlAnswering({
+    readChapters: () => Promise.resolve(answering({ ...readyChapters(headSha), model })),
+  });
+}
+
+test("the chapters say which model made them, inside the tab's ph-no-capture root", async () => {
+  const tab = await draw(madeBy("claude-haiku-5-5"));
+  const line = tab.querySelector(".chapters-made-by") ?? assert.fail("the model is named");
+  assert.equal(line.textContent, "Made by Haiku 5.5");
+  assert.notEqual(line.closest(".ph-no-capture"), null);
+});
+
+test("stale chapters still say which model made them, and a model Settings does not offer is named by its id", async () => {
+  const tab = await draw(madeBy("scripted", OLDER));
+  assert.notEqual(tab.querySelector(".chapters-stale"), null);
+  assert.equal(tab.querySelector(".chapters-made-by")?.textContent, "Made by scripted");
+});
+
 test("chapters made for an older head stand under a line saying new commits came since, with Regenerate, drawing no diff, counts, Viewed, or press to their lines, since their hunks name an older head", async () => {
   let generates = 0;
   const tab = await draw(

@@ -2527,6 +2527,13 @@
   padding: var(--luke-space-8) var(--column-inset) var(--luke-space-12);
 }
 
+/* Which model told the chapters, a quiet line over them. */
+.chapters-made-by {
+  margin: 0;
+  padding: var(--luke-space-4) var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
 .chapter-head-row {
   display: flex;
   min-width: 0;
