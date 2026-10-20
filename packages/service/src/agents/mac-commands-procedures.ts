@@ -1,10 +1,11 @@
 /**
  * mac-commands-procedures.ts -- the developer's Mac takes the shell commands the account's agents queued for it, and says what each did.
  *
- * `GET /api/mac-commands` is the Mac's held read: it counts the Mac
- * listening, and answers every command waiting for the account, claimed
- * for this Mac, as soon as one waits, or none once the hold ends
- * (`agents/mac-command.ts`). `POST` keeps one claimed command's result,
+ * `GET /api/mac-commands` is the Mac's held read, naming in its `kinds`
+ * query the kinds the Mac runs beyond shell (none from an older Mac): it
+ * counts the Mac listening for them, and answers every command of those
+ * kinds waiting for the account, claimed for this Mac, as soon as one
+ * waits, or none once the hold ends (`agents/mac-command.ts`). `POST` keeps one claimed command's result,
  * which the agent's call is looking for; a command the account does not
  * hold claimed and unsettled is not found. Every request resolves the
  * bearer before it touches a row, and every row it touches is the
@@ -12,6 +13,7 @@
  */
 
 import { settleMacCommand } from "@luke/database/models/mac-command-store";
+import { macCommandKindsRead } from "@luke/features/mac-command-wire";
 import { Effect } from "effect";
 import {
   HOSTED_REFUSAL,
@@ -35,8 +37,9 @@ export interface MacCommandsProcedureSeams {
 export function macCommandsProcedures(seams: MacCommandsProcedureSeams) {
   const macCommands = hosted.macCommands.use(bearerOnlyMiddleware(seams.resolveUserId));
   return {
-    waiting: macCommands.waiting.effect(function* ({ context }) {
-      const commands = yield* hostedStoreOrUnavailable(macCommandsFor(context.userId));
+    waiting: macCommands.waiting.effect(function* ({ context, input }) {
+      const kinds = macCommandKindsRead(input.kinds);
+      const commands = yield* hostedStoreOrUnavailable(macCommandsFor(context.userId, kinds));
       return { commands };
     }),
     settle: macCommands.settle.effect(function* ({ context, input }) {
