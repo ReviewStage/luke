@@ -134,7 +134,7 @@ function HoverCards(): React.JSX.Element {
               <HoverCard>
                 <HoverCardHead
                   name="Move every scheduled automation onto the workspace's own timezone, and say which ones ran late"
-                  corner="Working…"
+                  corner="4m 12s"
                 />
                 <HoverCardHead
                   oneLine

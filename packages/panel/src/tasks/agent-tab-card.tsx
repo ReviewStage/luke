@@ -41,9 +41,10 @@ import { WorkingTime } from "./working-time.js";
  * not yet titled, its task on one line faded where it is cut short, as a
  * tab's label is; under the name, the model and the effort it runs at as
  * every place draws the pair (`model-label.tsx`), where they are known; and
- * the time at the head's right: "Working…" and the run's count while
- * the agent works, as its transcript's last line says it, and how long ago
- * it last moved once it has ended, in the sidebar's letters, after how it
+ * the time at the head's right: the run's count while the agent works, its
+ * tile's mark in its harness's place saying that it works, as a tab's glyph
+ * does, with no word beside it; and how long ago it last moved once it has
+ * ended, in the sidebar's letters, after how it
  * ended where it stopped or failed ("Stopped · 3m"): when its
  * latest turn finished, where the tab holds it, or else when its newest
  * run began, the latest moment its summary knows. Under
@@ -51,7 +52,9 @@ import { WorkingTime } from "./working-time.js";
  * tab's label is: the agent's last words as plain text, or its last call as
  * the concise copy says it (`transcript-copy.ts`'s `latestActivity`).
  *
- * An agent's card wears its tile beside its name (`actor-ref.tsx`), its
+ * An agent's card, and a subagent's or a brain's worker's, wears its tile
+ * beside its name (`actor-ref.tsx`), its harness giving way to the working
+ * mark while it works. An agent's card also wears its
  * pull request at the corner's lead where the place holds one, and
  * "Started by" and who did: the automation whose run started it, by its
  * clock and name, where the window knows it, or else, for a teammate's
@@ -69,7 +72,7 @@ import { WorkingTime } from "./working-time.js";
 
 /** What a card's head says at its right. */
 const CARD_CORNER = {
-  /** The agent works: "Working…", and how long its run has gone where its start is known. */
+  /** The agent works: how long its run has gone where its start is known, its tile's mark saying that it works. */
   WORKING: "working",
   /** The agent ended: how it ended where its glyph does not say it, a stop or a failure, and how long ago it last moved, where known. */
   ENDED: "ended",
@@ -87,9 +90,6 @@ export type CardCorner =
 
 /** What parts how an agent ended from how long ago it did. */
 const ENDED_SEPARATOR = " · ";
-
-/** What the corner says before the count while the agent works, as its transcript's last line does. */
-const WORKING_WORD = "Working…";
 
 /** The transcript an agent's or a worker's tab last drew, and where the agent stood, since when its run began, and the titles it and its workers bear, as the page it was read from said. */
 export interface HeldTranscript {
@@ -123,11 +123,9 @@ function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
   const now = useMinute();
   switch (corner.kind) {
     case CARD_CORNER.WORKING:
-      return (
-        <>
-          {WORKING_WORD}
-          {corner.startedAt === undefined ? null : <WorkingTime startedAt={corner.startedAt} />}
-        </>
+      // Note that no word stands before the count, because the tile's working mark already says it.
+      return corner.startedAt === undefined ? null : (
+        <WorkingTime startedAt={corner.startedAt} className="" />
       );
     case CARD_CORNER.ENDED:
       return (
@@ -142,12 +140,18 @@ function Corner({ corner }: { corner: CardCorner }): React.JSX.Element | null {
   }
 }
 
+/** Whether a corner says anything: a working one only where it has a start to count from. */
+function cornerSays(corner: CardCorner): boolean {
+  if (corner.kind === CARD_CORNER.NONE) return false;
+  return corner.kind !== CARD_CORNER.WORKING || corner.startedAt !== undefined;
+}
+
 /** What the head says at its right: the agent's pull request where the place holds one, then where the agent stands; nothing where neither is known. */
 function headCorner(
   corner: CardCorner,
   pullRequest: CardReading["pullRequest"],
 ): React.ReactNode | undefined {
-  const standing = corner.kind === CARD_CORNER.NONE ? undefined : <Corner corner={corner} />;
+  const standing = cornerSays(corner) ? <Corner corner={corner} /> : undefined;
   if (pullRequest === undefined) return standing;
   return (
     <>
@@ -226,7 +230,7 @@ function ActivityLine({ transcript }: { transcript: CopiedTranscript }): React.J
 
 /**
  * The corner a card wears: working, counted from `startedAt` where it is
- * known, while the agent may still write; once it has ended, how it ended
+ * known and saying nothing where not, while the agent may still write; once it has ended, how it ended
  * where its tab's glyph does not say it (`state`: "Stopped", "Failed"),
  * as the tab's hint said it, and how long ago it last moved, or nothing
  * where neither is known.

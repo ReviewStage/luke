@@ -86,7 +86,12 @@ import {
 import { BrowserPane, browserTitleOf, useBrowserPages } from "../tasks/browser-pane.js";
 import { ChangesCard, peopleOf } from "../tasks/changes-card.js";
 import { CodePane, centreWithin } from "../tasks/code-pane.js";
-import { agentGlyphState, agentStateWords, agentTabLabel } from "../tasks/coding-agent-model.js";
+import {
+  agentGlyphState,
+  agentStateWords,
+  agentTabLabel,
+  subagentActor,
+} from "../tasks/coding-agent-model.js";
 import { FileCard, fileLook, newestFileNote } from "../tasks/file-ref.js";
 import { snippetOf } from "../tasks/file-tab-model.js";
 import { FileView, type TreeShown } from "../tasks/file-view.js";
@@ -1125,6 +1130,13 @@ export function workerCardReading(
       state: stateWords,
     }),
     choice: worker && workerChoice(worker),
+    tile:
+      worker &&
+      subagentActor(
+        workerChoice(worker)?.model,
+        state,
+        worker.session?.title ?? workerJob(worker.call),
+      ),
     transcript:
       worker &&
       messages &&
@@ -1232,6 +1244,7 @@ function subagentCardReading(
     const running = state === GLYPH_STATE.WORKING;
     const own = held.workers.get(tab.subagent);
     const messages = heldLatest(own, { writing: running, runStartedAt: own?.runStartedAt }, chosen);
+    const choice = delegationChoices(delegation, tab.subagent, agents, held).delegated;
     return {
       corner: cardCorner({
         writing: running,
@@ -1239,7 +1252,8 @@ function subagentCardReading(
         movedAt: lastFinished(messages),
         state: stateWords,
       }),
-      choice: delegationChoices(delegation, tab.subagent, agents, held).delegated,
+      choice,
+      tile: subagentActor(choice?.model, state, label),
       transcript:
         messages &&
         agentTranscript({
