@@ -152,12 +152,17 @@ export function hostedCarriesBearer(request: Request): boolean {
  * own (`sandbox`). Note that the policy is what keeps markup among them, an
  * SVG's, from acting as this origin, because every account route takes the
  * browser's session cookie (`auth/bearer.ts`'s `resolveHostedUserId`) and a
- * tab opened on one of these paths carries it.
+ * tab opened on one of these paths carries it. For the same reason no other
+ * site's page may embed them (`cross-origin-resource-policy`): an `<img>` there
+ * would load them with the cookie of whoever is looking. Every reader of them
+ * is same-origin: the web app's own tab, and the Mac's host, which fetches
+ * them with its bearer and hands its renderer the bytes.
  */
 export const HOSTED_BYTES_HEADERS = {
   "x-content-type-options": "nosniff",
   "cache-control": "private, no-store",
   "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+  "cross-origin-resource-policy": "same-origin",
 } as const;
 
 /**

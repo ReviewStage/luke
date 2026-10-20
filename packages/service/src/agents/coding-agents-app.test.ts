@@ -1761,6 +1761,8 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         assert.deepEqual(openedPagePolicy(served.headers), SANDBOXED_PAGE);
         assert.equal(served.headers.get("x-content-type-options"), "nosniff");
         assert.equal(served.headers.get("cache-control"), "private, no-store");
+        // No other site's page may embed it, since its <img> would load it with the viewer's cookie.
+        assert.equal(served.headers.get("cross-origin-resource-policy"), "same-origin");
         assert.deepEqual(
           new Uint8Array(yield* Effect.promise(() => served.arrayBuffer())),
           SCRIPTED_SVG,

@@ -110,6 +110,83 @@
           "dest": "/api/default.js?route=orpc&route-path=$1"
         },
         {
+          "src": "/app\\.html",
+          "status": 308,
+          "headers": {
+            "Location": "/app"
+          }
+        },
+        {
+          "src": "/app/?",
+          "dest": "/app.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io wss://*.compute.c-10.us-east-1.aws.neon.tech; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person)(?:/[^/]+)*/?",
+          "dest": "/app.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io wss://*.compute.c-10.us-east-1.aws.neon.tech; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/page-in-mac-app\\.html",
+          "dest": "/page-in-mac-app.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'none'; style-src 'sha256-T8LCl/OB0jEsLle1y3r4VpAUju2q/bJyH99iBqhrZi8='; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+            "X-Frame-Options": "SAMEORIGIN",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/(connect-github|github-installed|integration-connected)\\.html",
+          "dest": "/$1.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' https://us-assets.i.posthog.com; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/admin(?:\\.html)?",
+          "dest": "/admin.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.googleusercontent.com https://avatars.githubusercontent.com; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/(?!api/|assets/).*",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' https://us-assets.i.posthog.com; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          },
+          "continue": true
+        },
+        {
           "src": "/about",
           "dest": "/about.html"
         },
@@ -128,35 +205,6 @@
         {
           "src": "/changelog/(\\d+\\.\\d+\\.\\d+)",
           "dest": "/changelog/$1.html"
-        },
-        {
-          "src": "/admin",
-          "dest": "/admin.html"
-        },
-        {
-          "src": "/app\\.html",
-          "status": 308,
-          "headers": {
-            "Location": "/app"
-          }
-        },
-        {
-          "src": "/app/?",
-          "dest": "/app.html",
-          "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io wss://*.us-east-1.aws.neon.tech; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
-            "X-Content-Type-Options": "nosniff",
-            "Referrer-Policy": "strict-origin-when-cross-origin"
-          }
-        },
-        {
-          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person)(?:/[^/]+)*/?",
-          "dest": "/app.html",
-          "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io wss://*.us-east-1.aws.neon.tech; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
-            "X-Content-Type-Options": "nosniff",
-            "Referrer-Policy": "strict-origin-when-cross-origin"
-          }
         }
       ]
     },
