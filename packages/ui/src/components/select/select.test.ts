@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { Select, type SelectOption } from "./select.js";
 
 /**
@@ -24,9 +24,20 @@ const OPTIONS: readonly SelectOption<Theme>[] = THEMES.map((value) => ({
 
 const roots: Root[] = [];
 
+/** jsdom's stand-in observer for the field's words: jsdom lays nothing out, so nothing ever reports a resize. */
+class SilentResizeObserver {
+  observe(): void {}
+  disconnect(): void {}
+}
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", SilentResizeObserver);
+});
+
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  vi.unstubAllGlobals();
 });
 
 /** A theme the caller holds, every change it is handed in order. */

@@ -10,19 +10,17 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
-import { COARSE_POINTER } from "../coarse-pointer.js";
 import {
   PLACEMENT_END,
   type PlanEditorModule,
   type PlanEditorPlacement,
   type PlanEditorProps,
 } from "../plan-editor/contract.js";
-import { fakeAppPlatform } from "../testing/app-platform.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
+import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { PlanBody } from "./plan-body.js";
-import { SECOND_TAP_WINDOW } from "./use-plan-editing.js";
 
 /**
  * The editor itself is TipTap in a bundle of its own (`../plan-editor/`),
@@ -43,6 +41,9 @@ const mounted: {
   placed: PlanEditorPlacement[];
 }[] = [];
 
+/** Where the line of the words the stand-in opened on stands in the window, as a laid-out editor answers; none, as when the words were not found, unless a test lays it out. */
+let wordsLine: (() => number) | undefined;
+
 /** The stand-in for the editor's bundle: it records what it is handed and takes a merged answer whole. */
 const STAND_IN: PlanEditorModule = {
   mount: (_host, props) => {
@@ -60,6 +61,7 @@ const STAND_IN: PlanEditorModule = {
       focusAt: (placement) => {
         placed.push(placement);
       },
+      wordsTop: () => wordsLine?.(),
       insertPictures: () => undefined,
       settlePicture: () => undefined,
       removePicture: () => undefined,
@@ -95,25 +97,18 @@ beforeAll(async () => {
 
 const roots: Root[] = [];
 
-/** Whether the window is worked by a finger, as `(pointer: coarse)` answers; a mouse's unless a test says so. */
-let finger = false;
-
 beforeEach(() => {
   installScrollIntoView();
   // A document arriving is drawn at once under reduced motion, which jsdom has no answer to.
   const ignore = () => undefined;
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: (query: string) => ({
-      matches: query === COARSE_POINTER ? finger : true,
-      addEventListener: ignore,
-      removeEventListener: ignore,
-    }),
+    value: () => ({ matches: true, addEventListener: ignore, removeEventListener: ignore }),
   });
 });
 
 afterEach(() => {
-  finger = false;
+  wordsLine = undefined;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
@@ -537,150 +532,129 @@ test("words typed in one plan are saved to that plan when another opens", async 
   assert.equal(container.querySelector(".plan-document-editor"), null);
 });
 
-/** A tap at the point given, `after` milliseconds past the page's first tap, as a browser stamps the click it ends in. */
-function tapAt(target: Element, x: number, y: number, after = 0): void {
-  const click = new MouseEvent("click", {
-    bubbles: true,
-    cancelable: true,
-    clientX: x,
-    clientY: y,
+/** A browser's answer to where a point stands in the page's words: `offset` into `words`, its line `top` down the window. */
+function pointLandsOn(words: Text, offset: number, top: number): void {
+  const range = document.createRange();
+  range.setStart(words, offset);
+  Object.defineProperty(range, "getClientRects", {
+    value: () => [DOMRect.fromRect({ x: 0, y: top, width: 0, height: 20 })],
   });
-  Object.defineProperty(click, "timeStamp", { value: 1000 + after });
-  act(() => {
-    target.dispatchEvent(click);
+  Object.defineProperty(document, "caretRangeFromPoint", {
+    configurable: true,
+    value: () => range,
   });
 }
 
-function editorOpen(container: HTMLElement): boolean {
-  return container.querySelector(".plan-document-editor") !== null;
+/** The text node of `words` drawn in `within`, the `nth` (from 0) where several are. */
+function wordsNode(within: HTMLElement, words: string, nth = 0): Text {
+  const walker = document.createTreeWalker(within, NodeFilter.SHOW_TEXT);
+  const found: Text[] = [];
+  for (let at = walker.nextNode(); at !== null; at = walker.nextNode()) {
+    if (at instanceof Text && at.data === words) found.push(at);
+  }
+  return found[nth] ?? assert.fail(`the words ${words}`);
 }
 
-test("on a finger's device one tap on a section opens nothing, and a second tap on it opens the text where that tap landed", () => {
-  finger = true;
-  const { container } = mount();
-  const goal = block(container, "Goal");
-
-  tapAt(goal, 120, 48);
-  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
-  assert.ok(!editorOpen(container), "the first tap only reads");
-
-  tapAt(goal, 130, 52, 400);
-  assert.equal(open().markdown, BODY);
-  assert.deepEqual(open().placement, { x: 130, y: 52 });
-});
-
-test("on a finger's device taps on two sections, or two taps on one too far apart, open nothing", () => {
-  finger = true;
-  const { container } = mount();
-
-  tapAt(block(container, "Goal"), 120, 48);
-  tapAt(block(container, "Approach"), 120, 148, 300);
-  tapAt(block(container, "Goal"), 120, 48, 300 + SECOND_TAP_WINDOW + 1);
-
-  assert.ok(!editorOpen(container), "no tap was a second on the block it landed on");
-});
-
-test("on a finger's device a tap on a link opens it and a tap on a task's checkbox ticks it, and neither, however often, opens an editor", async () => {
-  finger = true;
-  const opened: string[] = [];
-  fakeAppPlatform({ openWeb: (url) => opened.push(url) });
-  const body = "## Steps\n- [ ] Send the [invite](https://example.com/invite)\n";
-  const { container, sent, render } = mount();
-  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
-  await settle();
-  const link = block(container, "Steps").querySelector("a") ?? assert.fail("the link");
-  const box = block(container, "Steps").querySelector<HTMLInputElement>("input[type=checkbox]");
-  assert.ok(box, "the box");
-
-  tapAt(link, 60, 20);
-  tapAt(link, 60, 20, 200);
-  tapAt(box, 10, 20, 400);
-  await settle();
-  tapAt(box, 10, 20, 600);
-  await settle();
-
-  assert.deepEqual(opened, ["https://example.com/invite", "https://example.com/invite"]);
-  assert.equal(sent[0]?.document.value, body.replace("[ ]", "[x]"), "the first tap ticked the box");
-  assert.ok(!editorOpen(container), "no editor opened");
-});
-
-test("on a finger's device an empty plan opens at the first tap on its room, while one with text opens at a second", () => {
-  finger = true;
-  layTextOut();
-  const empty = mount();
-  empty.render({ ...DOCUMENT_TASK, document: { body: "", assumptions: [] } });
-  tapAt(scrollerOf(empty.container), 300, 900);
-  assert.deepEqual(open().placement, PLACEMENT_END);
-  empty.unmount();
-
-  const written = mount();
-  const scroller = scrollerOf(written.container);
-  tapAt(scroller, 300, 500);
-  assert.ok(!editorOpen(written.container), "the first tap under the text only reads");
-  tapAt(scroller, 300, 500, 500);
-  assert.deepEqual(open().placement, PLACEMENT_END, "a second starts a new line at the end");
-});
-
-test("on a finger's device the title reads as words a tap does not type in, a second tap types in it, and leaving it reads again", () => {
-  finger = true;
-  const { container } = mount();
-  const name = title(container);
-  assert.equal(name.getAttribute("contenteditable"), "false");
-
-  tapAt(name, 40, 10);
-  assert.equal(name.getAttribute("contenteditable"), "false", "the first tap only reads");
-  assert.notEqual(document.activeElement, name);
-
-  tapAt(name, 40, 10, 300);
-  assert.equal(name.getAttribute("contenteditable"), "plaintext-only");
-  assert.equal(document.activeElement, name, "the caret stands in the title");
-
-  act(() => name.blur());
-  assert.equal(name.getAttribute("contenteditable"), "false");
-});
-
-test("on a finger's device a scroll or a tap on a control between two taps on a section lets the first go, so the second only reads", async () => {
-  finger = true;
-  fakeAppPlatform({ openWeb: () => undefined });
-  const body = "## Steps\nSend the [invite](https://example.com/invite) first.\n";
+test("a click hands the editor the words it landed on, so the caret finds them however the editor draws what stands above", () => {
+  const body = "## Goal\n\nShip it.\n\nShip it.\n";
   const { container, render } = mount();
   render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
-  await settle();
-  const steps = block(container, "Steps");
-  const link = steps.querySelector("a") ?? assert.fail("the link");
+  const goal = block(container, "Goal");
+  pointLandsOn(wordsNode(goal, "Ship it.", 1), 5, 300);
+  try {
+    act(() => {
+      goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+    });
+  } finally {
+    Reflect.deleteProperty(document, "caretRangeFromPoint");
+  }
 
-  tapAt(steps, 120, 48);
-  act(() => {
-    scrollerOf(container).dispatchEvent(new Event("scroll"));
+  assert.deepEqual(open().placement, {
+    x: 60,
+    y: 310,
+    words: { section: 0, text: "Ship it.", occurrence: 1, offset: 5, code: false, top: 300 },
   });
-  tapAt(steps, 120, 48, 200);
-  assert.ok(!editorOpen(container), "the tap after the scroll was a first");
-
-  tapAt(link, 60, 20, 400);
-  tapAt(steps, 120, 48, 600);
-  assert.ok(!editorOpen(container), "the tap after the link was a first");
-
-  tapAt(steps, 120, 48, 800);
-  assert.equal(open().markdown, body, "two taps with nothing between still open the text");
 });
 
-test("on a finger's device a second tap on the title puts the caret where it landed, in a browser that answers the point as Firefox does", () => {
-  finger = true;
+test("the words a click opened the editor on stay under the finger, as it opens and as what it draws later changes its height, until the developer scrolls", () => {
   const { container } = mount();
-  const name = title(container);
-  const words = name.firstChild ?? assert.fail("the title's words");
-  Object.defineProperty(document, "caretPositionFromPoint", {
-    configurable: true,
-    value: () => ({ offsetNode: words, offset: 3 }),
-  });
+  const goal = block(container, "Goal");
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  pointLandsOn(wordsNode(goal, "Invites land by email."), 3, 300);
+  // The words stand this far down the column in the editor: 59 lower than the text drew them, for a taller picture above.
+  let wordsDown = 859;
+  wordsLine = () => wordsDown - scroller.scrollTop;
   try {
-    tapAt(name, 40, 10);
-    tapAt(name, 40, 10, 300);
-
-    const selection = window.getSelection();
-    assert.equal(selection?.anchorNode, words);
-    assert.equal(selection?.anchorOffset, 3);
+    act(() => {
+      goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+    });
   } finally {
-    Reflect.deleteProperty(document, "caretPositionFromPoint");
+    Reflect.deleteProperty(document, "caretRangeFromPoint");
+  }
+  assert.equal(wordsLine(), 300, "the words stand where they were clicked as the editor opens");
+
+  // A diagram's preview above them lands later, 200 tall.
+  wordsDown += 200;
+  act(() => relayout());
+  assert.equal(wordsLine(), 300, "and again once the preview has drawn");
+
+  act(() => {
+    scroller.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+  });
+  wordsDown += 100;
+  act(() => relayout());
+  assert.equal(wordsLine(), 400, "a scroll of the developer's lets the words go");
+});
+
+test("a click whose words the editor did not find scrolls nothing", () => {
+  const { container } = mount();
+  const goal = block(container, "Goal");
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  pointLandsOn(wordsNode(goal, "Invites land by email."), 3, 300);
+  try {
+    act(() => {
+      goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+    });
+  } finally {
+    Reflect.deleteProperty(document, "caretRangeFromPoint");
+  }
+
+  assert.ok(open().placement !== undefined, "the editor opened");
+  assert.equal(scroller.scrollTop, 500);
+});
+
+test("a press on the room after a click while the editor's bundle loads opens the editor where the room says, scrolling nothing for the click's words", async () => {
+  layTextOut();
+  const landed = bundles;
+  const gate = Promise.withResolvers<PlanEditorModule>();
+  bundles = sideBundles({ planEditor: () => gate.promise });
+  try {
+    const { container } = mount();
+    const scroller = scrollerOf(container);
+    scroller.scrollTop = 500;
+    pointLandsOn(wordsNode(block(container, "Goal"), "Invites land by email."), 3, 300);
+    try {
+      act(() => {
+        block(container, "Goal").dispatchEvent(
+          new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }),
+        );
+      });
+    } finally {
+      Reflect.deleteProperty(document, "caretRangeFromPoint");
+    }
+    pressAt(scroller, 300, 500);
+    wordsLine = () => 700;
+    await act(async () => {
+      gate.resolve(STAND_IN);
+      await gate.promise;
+    });
+    await settle();
+
+    assert.deepEqual(open().placement, PLACEMENT_END);
+    assert.equal(scroller.scrollTop, 500);
+  } finally {
+    bundles = landed;
   }
 });

@@ -13,6 +13,7 @@ import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useCallback, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
+import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
@@ -125,7 +126,7 @@ export function SidebarAgent({
         meta={
           <span className="sidebar-task-time">
             {repository === undefined ? null : (
-              <span className="sidebar-task-repository">{repository}</span>
+              <FadingWords className="sidebar-task-repository" words={repository} />
             )}
             {starter === undefined ? null : <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />}
             {agentEndMark(agent, false)}

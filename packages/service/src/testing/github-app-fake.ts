@@ -73,7 +73,9 @@ export interface FakeGitHub {
 const GITHUB_APP_LAYER: Layer.Layer<GitHubApp> = GitHubApp.layer(GITHUB_APP_SETTINGS);
 
 /** The ring members' own tokens are sealed under here: fixed bytes written for the fixtures. */
-const GITHUB_FIXTURE_TOKEN_RING = Redacted.make(`1:${Buffer.alloc(32, 7).toString("base64")}`);
+export const GITHUB_FIXTURE_TOKEN_RING = Redacted.make(
+  `1:${Buffer.alloc(32, 7).toString("base64")}`,
+);
 
 /** The App over the fixture settings that opens a member's own token, sealed under the fixture ring. */
 export const GITHUB_APP_WITH_TOKENS: Layer.Layer<GitHubApp> = GitHubApp.layer(

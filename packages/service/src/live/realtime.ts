@@ -1,6 +1,7 @@
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import type { SealedLiveQueryWire } from "@luke/features/live-wire";
 import { createRealtime, rawSql } from "@neon/realtime/server";
+import { drizzleAdapter } from "@neon/realtime-drizzle";
 import { Config, Context, Data, Effect, Layer, Option, Redacted } from "effect";
 import { databaseUrl } from "../db/index.js";
 
@@ -9,7 +10,9 @@ import { databaseUrl } from "../db/index.js";
  *
  * A live read is sealed here, for the account the request's bearer names,
  * as Neon's own guide does it ("Sealing authorized queries"): the statement
- * is built on the server with the account's id in it and sealed, so the
+ * is built on the server with the account's id in it and its Drizzle select
+ * sealed through Neon's Drizzle adapter (`drizzleAdapter()`), which refuses
+ * one whose selected key is not the name Postgres answers it under, so the
  * desktop can subscribe to it and can neither read nor change it. The
  * secret never leaves this service. A sealed read is itself a short-lived
  * bearer, so it travels in an answer body alone, never a URL or a log.
@@ -59,14 +62,22 @@ function liveSealer(options: {
 }): Effect.Effect<LiveSealer, SealRefused> {
   return Effect.map(
     Effect.try({
-      try: () => createRealtime({ secret: Redacted.value(options.secret), db: options.database }),
+      try: () =>
+        createRealtime({
+          secret: Redacted.value(options.secret),
+          db: options.database,
+          adapter: drizzleAdapter(),
+        }),
       catch: () => new SealRefused({ reason: "Realtime refused its secret" }),
     }),
     (realtime) => ({
       url: options.url,
       seal: (statement) =>
         Effect.tryPromise({
-          try: () => realtime.seal({ query: rawSql(statement.sql, statement.params) }),
+          try: () =>
+            realtime.seal({
+              query: statement.query ?? rawSql(statement.sql, statement.params),
+            }),
           catch: () => new SealRefused({ reason: "Realtime refused to seal a statement" }),
         }).pipe(
           Effect.map(({ capability, queryFingerprint, expiresAt }) => ({

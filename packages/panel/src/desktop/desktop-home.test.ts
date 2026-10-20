@@ -1085,3 +1085,17 @@ test("Plan turned on in the dialog over Home and the dialog put away, Home's com
     [{ planning: true, agent: undefined }],
   );
 });
+
+test("Home's composer is drawn as the dialog's: New task's title with the repository chip after it in the head row over the box, and no chip in the box's foot", async () => {
+  const page = await mountUnderDialog();
+  /** A card's head row, by its title and the chip after it, and what its box's foot holds besides the +. */
+  const drawn = (card: HTMLElement) => ({
+    title: card.querySelector(".new-task-head h2")?.textContent,
+    chip: card.querySelector(".new-task-head .repository-chip")?.textContent,
+    footChips: card.querySelectorAll(".prompt-input-tools .repository-chip").length,
+  });
+
+  const home = drawn(page.home());
+  assert.deepEqual(home, { title: "New task", chip: "acme/relay", footChips: 0 });
+  assert.deepEqual(drawn(page.dialog()), home, "the dialog's card is drawn the same");
+});

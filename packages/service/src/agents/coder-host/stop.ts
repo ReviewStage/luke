@@ -13,9 +13,8 @@ import type { TaskArchivedAgent } from "@luke/database/models/task-store";
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { StoreWriter } from "@luke/database/models/writer";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
-import { Clock, DateTime, Effect, Option, Redacted, Result } from "effect";
+import { Clock, DateTime, Effect, Redacted, Result } from "effect";
 import type { HttpClient } from "effect/http";
-import { HostedEnvironment } from "../../environment.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -32,6 +31,7 @@ import {
   type EveSessions,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
+import { deploymentEve } from "../deployment-eve.js";
 import {
   type AgentTurnStanding,
   codingAgentStatusOf,
@@ -77,14 +77,14 @@ export interface EveReach {
  * request that carries none is one a browser's session cookie named
  * (`hostedCarriesBearer`, the question `auth/bearer.ts`'s `requestUserId`
  * asks too), which eve's channels never read, so it reaches eve as the
- * deployment acting for the account, under the deployment's own secret: the
- * channel's door admits that caller only for what its actor admits
- * (`brain-host/auth.ts`), and only on a session or a conversation the
- * account reaches, as it holds every caller. `account` is the one the
- * route resolved from this request (`resolveUserId`), never one a request
- * or a row names, so the cookie names the account eve acts for exactly as
- * the bearer would have. A deployment that names no origin for eve, or no
- * secret for a cookie's request, answers unavailable.
+ * deployment acting for the account, under the deployment's own secret
+ * (`../deployment-eve.ts`): the channel's door admits that caller only for
+ * what its actor admits (`brain-host/auth.ts`), and only on a session or a
+ * conversation the account reaches, as it holds every caller. `account` is
+ * the one the route resolved from this request (`resolveUserId`), never one
+ * a request or a row names, so the cookie names the account eve acts for
+ * exactly as the bearer would have. A deployment that names no origin for
+ * eve, or no secret for a cookie's request, answers unavailable.
  *
  * The client sends the kinds of turn `Turn` names and none unless a caller
  * names one, so a route that holds it to stop, retire, or follow a session
@@ -109,13 +109,8 @@ export function eveFor<Turn extends BrainHostTurn = never>(
     // Note that a runtime without the deployment's environment refuses a cookie's request as
     // unavailable on purpose, as one whose environment names no secret does: the deployment acts
     // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
-    const environment = yield* Effect.serviceOption(HostedEnvironment);
-    const secret = Option.getOrUndefined(environment)?.eveDeploymentSecret;
-    const origin = reach.eveOrigin();
-    if (secret === undefined || origin === undefined) {
-      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-    }
-    return yield* eveSessions<Turn>({ origin, caller: { secret, account }, mount });
+    const eveAs = yield* deploymentEve<Turn>(reach.eveOrigin(), mount);
+    return eveAs(account);
   });
 }
 

@@ -27,6 +27,7 @@ import {
   Text,
 } from "@luke/ui";
 import { cloneElement, createContext, useContext } from "react";
+import { FADING_ELEMENT, FadingWords } from "./fading-words.js";
 import { MarkdownMessage } from "./markdown-message.js";
 import { Highlighted } from "./search-field.js";
 import { Tooltip } from "./tooltip.js";
@@ -155,16 +156,17 @@ export function IntegrationToolList({
               ref={rowRef === undefined ? undefined : (press) => rowRef(tool, press)}
               title={
                 <span className="integration-tool-name">
-                  <span
+                  <FadingWords
                     className="integration-tool-title"
                     data-name={namedApart(tool) ? undefined : "true"}
+                    words={toolTitle(tool)}
                   >
                     <Highlighted text={toolTitle(tool)} tokens={tokens} />
-                  </span>
+                  </FadingWords>
                   {namedApart(tool) ? (
-                    <span className="integration-tool-id">
+                    <FadingWords className="integration-tool-id" words={tool.name}>
                       <Highlighted text={tool.name} tokens={tokens} />
-                    </span>
+                    </FadingWords>
                   ) : null}
                   <ToolBadge tool={tool} />
                 </span>
@@ -303,14 +305,18 @@ export function IntegrationToolDetail({
             />
           </Tooltip>
         ) : null}
-        <h2
+        <FadingWords
+          as={FADING_ELEMENT.H2}
           className="integration-tool-detail-title"
           data-name={namedApart(tool) ? undefined : "true"}
-        >
-          {title}
-        </h2>
+          words={title}
+        />
         {namedApart(tool) ? (
-          <code className="integration-tool-detail-name">{tool.name}</code>
+          <FadingWords
+            as={FADING_ELEMENT.CODE}
+            className="integration-tool-detail-name"
+            words={tool.name}
+          />
         ) : null}
       </header>
       {/* The page's one scroller, focused by script so its keys scroll it as any focused scroller's do. */}

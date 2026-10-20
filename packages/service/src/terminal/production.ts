@@ -17,11 +17,13 @@ import {
   holdSandbox,
   releaseCredentialRenewal,
 } from "@luke/database/models/sandbox-terminal-lease";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Duration, Effect, Option, Redacted, Schedule } from "effect";
 import { HttpClient } from "effect/http";
 import { WebSocket } from "ws";
 import { controlsAgent } from "../agents/agent-reach.js";
 import { agentRepositoryToken } from "../agents/coder-host/checkout.js";
+import { agentTurnUnderWay } from "../agents/coder-host/snapshot.js";
 import { AgentSandbox, agentSandboxLayer } from "../agents/terminal/agent-sandbox.js";
 import { type InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
 import type { GitHubApp } from "../github/github-app.js";
@@ -102,9 +104,9 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
             return Option.some({
               conversationId: agent.conversationId,
               sessionId: session?.sessionId,
-              repositoryToken: run(
-                Effect.map(agentRepositoryToken(target, agent), (minted) => minted.token),
-              ),
+              repositoryCredential: run(agentRepositoryToken(target, agent)),
+              memberToken: agent.githubAccess === GITHUB_ACCESS.TOKEN,
+              turnUnderWay: run(agentTurnUnderWay(agent.conversationId)),
             });
           }),
         ),

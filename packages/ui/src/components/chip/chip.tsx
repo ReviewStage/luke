@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
+import { useClipped } from "../../use-clipped.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -40,7 +41,8 @@ import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
  *
  * A chip that opens a menu of values ends in the menu's small, muted
  * chevron where `chevron` asks for one. Its words go in a `ChipName`, which
- * cuts them short rather than letting them push past the row around it, in
+ * cuts them short rather than letting them push past the row around it,
+ * fading out at their end while it does, as a browser's tab does, and in
  * the code face where they name code (`mono`, a branch). A leading mark, a
  * glyph or a picture, stands at the control's glyph size. It takes no class
  * or style: its outer layout is its container's.
@@ -182,7 +184,7 @@ export function Chip(props: ChipProps): React.JSX.Element {
   );
 }
 
-/** A chip's words, cut short at its end rather than pushing past the row it stands in; in the code face where they name code. */
+/** A chip's words, cut short and fading out at its end rather than pushing past the row it stands in; in the code face where they name code. */
 export function ChipName({
   mono = false,
   children,
@@ -191,8 +193,14 @@ export function ChipName({
   mono?: boolean;
   children: ReactNode;
 }): React.JSX.Element {
+  const [measured, clipped] = useClipped();
   return (
-    <span className="luke-chip-name" data-mono={mono ? "true" : undefined}>
+    <span
+      ref={measured}
+      className="luke-chip-name"
+      data-mono={mono ? "true" : undefined}
+      data-overflow={String(clipped)}
+    >
       {children}
     </span>
   );

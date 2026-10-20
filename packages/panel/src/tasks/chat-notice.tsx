@@ -16,6 +16,7 @@ import {
 import type { ChatNoticeMetadata } from "@luke/wire";
 import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { FadingWords } from "../fading-words.js";
 import { useChatActor } from "./chat-actors.js";
 import { RelativeTime } from "./relative-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -118,7 +119,7 @@ export function ChatNoticeCard({
             </span>
           </>
         )}
-        <span className="chat-notice-place">
+        <FadingWords className="chat-notice-place">
           {where === undefined ? null : `${where} · `}m {notice.chat_seq}
           {held === undefined ? null : (
             <>
@@ -126,7 +127,7 @@ export function ChatNoticeCard({
               <RelativeTime at={held.postedAt} now={now} />
             </>
           )}
-        </span>
+        </FadingWords>
         {channel === undefined || doors === undefined ? null : (
           <Button onClick={() => doors.onOpen({ kind: CHAT_PLACE.CHANNEL, channelId: channel.id })}>
             {OPEN_IN_CHAT}

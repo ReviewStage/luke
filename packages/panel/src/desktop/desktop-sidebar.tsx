@@ -108,6 +108,7 @@ import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
+import { FACTORY } from "./pages-on-demand.js";
 import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse.js";
@@ -1114,6 +1115,8 @@ function SidebarFactoryRow({
       icon={<FactoryIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
       disabled={disabled}
+      // The pointer on the row is the way to Factory, so its chunk is read now rather than at the press.
+      onPointerEnter={FACTORY.prefetch}
       onClick={onOpen}
     >
       Factory

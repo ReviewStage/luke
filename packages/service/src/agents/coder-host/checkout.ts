@@ -5,6 +5,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { Data, Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
@@ -27,6 +28,7 @@ import {
   runInSandbox,
   setCheckoutIdentity,
 } from "../repository-shell.js";
+import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
@@ -41,13 +43,16 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * requests write, since the agent pushes a branch and opens a pull request
  * from it, and the clone is the whole history, since a branch and a pull
  * request are cut from it. The token is then handed back for the authored
- * sandbox file to set at the firewall for the session's own commands,
- * through eve's `authenticateGitHub`, which is where `gh` and `git push`
- * reach GitHub as the App; it never enters the sandbox's filesystem or
- * environment. A token is good for an hour, so the host mints another on
- * the same terms when the session's step hook finds the one standing old.
- * No developer's own token ever stands at the firewall: the sandbox is the
- * workspace's, and any member may open a terminal in it.
+ * sandbox file to set at the firewall for the session's own commands, in
+ * the shape `credentialPolicy` gives it (`terminal/agent-sandbox.ts`), which
+ * is where `gh` and `git push` reach GitHub; it never enters the sandbox's
+ * filesystem or environment. An installation token is good for an hour, so
+ * the host mints another on the same terms when the session's step hook
+ * finds the one standing old. No developer's sign-in token ever stands at
+ * the firewall. Where only its starter's own classic token reaches the
+ * repository (`agent.githubAccess`), that token is the agent's credential:
+ * set on the repository's own git and REST paths alone, taken off as each
+ * turn ends, and set again as the next begins.
  *
  * Who the agent writes as is settled once, as its first session starts, and
  * kept on its row (`CODING_AGENT_AUTHOR`), so the instructions that session
@@ -60,7 +65,10 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * the person it worked for, and its pull request is opened as them by the
  * service (`pull-request.ts`). An agent an automation started writes as the
  * App's bot, since no developer's hand started it, and so does one whose
- * developer has no GitHub sign-in or may not push, the row saying why. The
+ * developer has no GitHub sign-in or may not push, the row saying why. An
+ * agent on its starter's own token writes as the account the token belongs
+ * to, read on it, with the same trailer, and its pull request is opened on
+ * that token alone. The
  * identity is set here, as the checkout opens, and never by the model,
  * whose instructions say so.
  *
@@ -99,10 +107,11 @@ function identityOf(user: GitHubUser): CheckoutIdentity {
 
 /**
  * Who the agent writes as, read now: the App's bot for an agent an
- * automation started; the developer where their GitHub sign-in may push to
- * the repository; the App's bot otherwise, with why. A GitHub that would
- * not answer is the App's bot too, since an agent's start does not wait on
- * it, and only the store's failure is the caller's.
+ * automation started; its starter's own token for an agent on it; the
+ * developer where their GitHub sign-in may push to the repository; the
+ * App's bot otherwise, with why. A GitHub that would not answer is the
+ * App's bot too, since an agent's start does not wait on it, and only the
+ * store's failure is the caller's.
  */
 const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
   target: ConversationTarget,
@@ -112,6 +121,7 @@ const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
   if (agent.automationId !== null || agent.automationOrigin !== null) {
     return CODING_AGENT_AUTHOR.APP_AUTOMATION;
   }
+  if (agent.githubAccess === GITHUB_ACCESS.TOKEN) return CODING_AGENT_AUTHOR.TOKEN;
   const app = yield* GitHubApp;
   return yield* app.userPusher(target.userId, agent.repository).pipe(
     Effect.map((pusher) =>
@@ -147,8 +157,9 @@ const agentAuthor = /* @__PURE__ */ Effect.fn("web/agentAuthor")(function* (
 
 /**
  * The trailer naming the App's bot as co-author of the agent's commits,
- * where the agent writes as its developer. Told to the session as it
- * starts, so a read that fails is logged and answers none, which words the
+ * where the agent writes as its developer, through their sign-in or their
+ * own token, which the bot is read on. Told to the session as it starts, so
+ * a read that fails is logged and answers none, which words the
  * instructions as the App's and leaves the commits without the trailer
  * rather than failing the start.
  */
@@ -158,8 +169,16 @@ export const agentCoAuthor = /* @__PURE__ */ Effect.fn("web/agentCoAuthor")(func
 ): Effect.fn.Return<string | undefined, never, CheckoutServices> {
   const app = yield* GitHubApp;
   return yield* Effect.gen(function* () {
-    if ((yield* agentAuthor(target, agent)) !== CODING_AGENT_AUTHOR.DEVELOPER) return undefined;
-    const bot = yield* Effect.flatMap(app.userToken(target.userId), app.appBot);
+    const author = yield* agentAuthor(target, agent);
+    if (author !== CODING_AGENT_AUTHOR.DEVELOPER && author !== CODING_AGENT_AUTHOR.TOKEN) {
+      return undefined;
+    }
+    // Note that an agent on its starter's own token reads the bot on that token, which stands where their sign-in may not.
+    const token =
+      author === CODING_AGENT_AUTHOR.TOKEN
+        ? (yield* agentRepositoryToken(target, agent)).token
+        : yield* app.userToken(target.userId);
+    const bot = yield* app.appBot(token);
     return `Co-authored-by: ${bot.login} <${noreplyAddress(bot)}>`;
   }).pipe(
     Effect.catch((failure) =>
@@ -242,17 +261,22 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
 /**
  * Who the checkout's commits are by: the developer's GitHub account where
  * the agent writes as them and that account still pushes to the repository,
- * and the App's bot otherwise, read on the token just minted for the
- * repository. Note that a developer whose push lapsed since the agent
- * started is said in the log and leaves the commits the bot's.
+ * the account a member's own token belongs to where the agent writes on it,
+ * read on that token, and the App's bot otherwise, read on the token just
+ * minted for the repository. Note that a developer whose push lapsed since
+ * the agent started is said in the log and leaves the commits the bot's, as
+ * does an agent on a token whose repository an installation reaches since.
  */
 const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(function* (
   target: ConversationTarget,
   agent: CodingAgent,
   author: CodingAgentAuthor,
-  token: Redacted.Redacted,
+  credential: RepositoryCredential,
 ): Effect.fn.Return<CheckoutIdentity, CheckoutRefused, CheckoutServices> {
   const app = yield* GitHubApp;
+  if (author === CODING_AGENT_AUTHOR.TOKEN && credential.access.kind === GITHUB_ACCESS.TOKEN) {
+    return identityOf(yield* app.tokenUser(credential.token).pipe(Effect.mapError(refusedBy)));
+  }
   if (author === CODING_AGENT_AUTHOR.DEVELOPER) {
     const pusher = yield* Effect.option(app.userPusher(target.userId, agent.repository));
     const developer = Option.flatten(pusher);
@@ -261,29 +285,29 @@ const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(func
       `The developer of conversation ${target.conversationId} no longer pushes to its repository; its commits are the App's`,
     );
   }
-  const bot = yield* app.appBot(token).pipe(Effect.mapError(refusedBy));
+  const bot = yield* app.appBot(credential.token).pipe(Effect.mapError(refusedBy));
   return { name: bot.login, email: noreplyAddress(bot) };
 });
 
 /**
  * The agent's repository checked out whole, at the branch it was started on
  * where its row names one and at the current default branch otherwise, into
- * the sandbox, with its commit identity set in it; answers the token
+ * the sandbox, with its commit identity set in it; answers the credential
  * minted for it, for the caller to set at the firewall for the commands
  * that follow. The checkout is recorded under the name the agent's row
- * holds. Note that the identity is read ahead of the clone, so a bot GitHub
- * cannot name costs no clone; and that a start branch deleted since the
- * start fails the clone, which says so in git's own words.
+ * holds. Note that the identity is read ahead of the clone, so an account
+ * GitHub cannot name costs no clone; and that a start branch deleted since
+ * the start fails the clone, which says so in git's own words.
  */
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
     target: ConversationTarget,
     agent: CodingAgent,
     sandbox: RepositorySandbox,
-  ): Effect.fn.Return<Redacted.Redacted, CheckoutRefused | StoreFailure, CheckoutServices> {
+  ): Effect.fn.Return<RepositoryCredential, CheckoutRefused | StoreFailure, CheckoutServices> {
     const minted = yield* agentRepositoryToken(target, agent);
     const author = yield* agentAuthor(target, agent);
-    const identity = yield* commitIdentity(target, agent, author, minted.token);
+    const identity = yield* commitIdentity(target, agent, author, minted);
     const refused = (failure: { readonly reason: string }) =>
       new CheckoutRefused({ reason: failure.reason });
     yield* cloneRepository(
@@ -297,7 +321,7 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
       { access: minted.access },
     ).pipe(Effect.mapError(refused));
     yield* setCheckoutIdentity(sandbox, identity).pipe(Effect.mapError(refused));
-    return minted.token;
+    return { token: minted.token, fullName: minted.fullName, access: minted.access };
   },
 );
 

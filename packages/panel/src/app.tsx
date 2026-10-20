@@ -268,6 +268,7 @@ function AppWindow(): React.JSX.Element {
   const fixtureMuted = fixture?.muted ?? false;
   const {
     view: voiceView,
+    callTranscript,
     speaking,
     listening,
     stopSpeaking,
@@ -310,7 +311,7 @@ function AppWindow(): React.JSX.Element {
     inboxTasks: state?.inbox.tasks ?? NO_TASKS_HOLDING,
     inboxTaskless: state?.inbox.taskless ?? NOTHING_TASKLESS,
     failedRuns: state?.inbox.failedRuns ?? NO_FAILED_RUNS,
-    voice: { view: voiceView, listening, requestMicrophoneAccess },
+    voice: { view: voiceView, callTranscript, listening, requestMicrophoneAccess },
     onOpenSettings: (link) => openSettings(link),
     onOpenIntegrations: () => openSettings({ page: SETTINGS_VIEW.INTEGRATIONS }),
     onOpenApiKeys: () => openSettings({ page: SETTINGS_VIEW.CODING_AGENTS }),

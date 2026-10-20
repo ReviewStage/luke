@@ -94,7 +94,8 @@
                     "app-unlinked",
                     "app-no-push",
                     "app-automation",
-                    "app-unread"
+                    "app-unread",
+                    "token"
                   ]
                 },
                 "requested": {

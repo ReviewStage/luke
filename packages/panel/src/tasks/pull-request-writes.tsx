@@ -31,6 +31,7 @@ import {
   type InlineEditEnd,
   useMenu,
 } from "@luke/ui";
+import { useClipped } from "@luke/ui/use-clipped";
 import {
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
@@ -380,6 +381,7 @@ export function PullRequestTitle({
   onOpen?: (() => void) | undefined;
 }): React.JSX.Element {
   const [editing, setEditing] = useState(false);
+  const [titleBox, titleClipped] = useClipped(`${title} ${number}`);
   const busy = writes.pending !== undefined;
   const end = ({ value }: InlineEditEnd) => {
     setEditing(false);
@@ -410,7 +412,12 @@ export function PullRequestTitle({
   const numberWords = <span className="pull-request-number">{number}</span>;
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the ⌘-click is a pointer's shortcut alone; the header's ⋯ offers Open on GitHub to the keyboard.
-    <h2 className="pull-request-title pull-request-title-editable" onClick={open}>
+    <h2
+      ref={titleBox}
+      className="pull-request-title pull-request-title-editable"
+      data-overflow={String(titleClipped)}
+      onClick={open}
+    >
       {title}{" "}
       {/* Note that the number and the pencil wrap as one, because a pencil wrapped alone would spend a line of its own. */}
       <span className="pull-request-title-end">

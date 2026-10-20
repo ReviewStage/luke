@@ -2,7 +2,8 @@
    ground, insets, and width, its slide away and back, its float over the
    work and its drawer in a narrow room, the title bar's row and the toggle
    that stands in it, Luke's head over the column, the places under it, and
-   the foot under them.
+   the foot under them; and the work column beside it, with the toolbar that
+   heads a page there and the room it leaves the title bar's buttons.
 
    The panel lays it just before desktop.css (index.css), which restages
    these elements for each of the window's own screens. Anything else that
@@ -259,4 +260,80 @@
   align-items: center;
   gap: var(--luke-space-4);
   container: sidebar-foot / inline-size;
+}
+
+/* Work column ------------------------------------------------------------- */
+
+/* The work column is one layer of the shell's: what it raises inside it,
+   the strip's pinned tab and fades, a floating bar, a menu hung in it,
+   stands among the column's own layers and never over the shell's, so the
+   sidebar floating open over the column, a phone's drawer among it, and the
+   title bar's buttons draw over all of it. */
+.desktop-main {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* A page's toolbar: one row at the one bar height the side panel's bar
+   shares, so the two bars' bottom borders are one line across the window,
+   its title or its way back at the start and the page's acts at the end. */
+.desktop-toolbar {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--luke-control-gap);
+  min-height: var(--desktop-bar-height);
+  padding: var(--luke-space-8) var(--content-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+/* A pane sliding in finds the work column already narrowed for it, so the
+   toolbar's hairline draws on past both its sides, beneath everything else,
+   and no gap opens between the column and a pane still on its way. */
+.desktop-toolbar::before {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: -100vw;
+  bottom: -1px;
+  left: -100vw;
+  border-bottom: 1px solid var(--luke-color-border);
+  content: "";
+}
+
+/* While the sidebar is folded, or a narrow room's drawer is away, the title
+   bar's buttons stand over the toolbar's start, so it starts past them. */
+.desktop-shell[data-sidebar-collapsed="true"] .desktop-main .desktop-toolbar {
+  padding-left: var(--sidebar-toggle-clearance);
+}
+
+.desktop-toolbar-heading {
+  min-width: 0;
+  flex: 1;
+}
+
+/* Its room reaches 6px left of the words, so the title's own hover fill and
+   field ring, which start there, are not clipped. */
+.desktop-toolbar-title {
+  margin: 0 0 0 calc(-1 * var(--luke-space-6));
+  padding-left: var(--luke-space-6);
+  overflow: hidden;
+  font-size: var(--luke-type-dialog-size);
+  font-weight: var(--luke-weight-bold);
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desktop-toolbar-actions {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--luke-control-gap);
 }

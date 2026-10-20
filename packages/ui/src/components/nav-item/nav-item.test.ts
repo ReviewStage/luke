@@ -2,7 +2,7 @@
 
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useMenu } from "../menu/menu.js";
 import {
   NAV_COUNT_SHOWN,
@@ -22,14 +22,46 @@ import {
  * press; a hint's words describe the item they hang from; and one that
  * keeps focus leaves it on the field that held it. A nav item link is a
  * link to its address, named by its words or its label, announced as the
- * page where it is shown, and handing its press to its caller.
+ * page where it is shown, and handing its press to its caller. A name, a
+ * row's or a link's, fades out at its end only while its row cuts it short,
+ * and a row's detail keeps its ellipsis.
  */
 
 const roots: Root[] = [];
 
+/** The measurement each observed box was handed, fired as a resize; jsdom lays nothing out, so nothing reports one of its own accord. */
+const resizes: (() => void)[] = [];
+
+class StandInResizeObserver {
+  readonly #fire: () => void;
+  constructor(fire: () => void) {
+    this.#fire = fire;
+  }
+  observe(): void {
+    resizes.push(this.#fire);
+  }
+  disconnect(): void {}
+}
+
+/** Stands every box's words `wide` pixels in a box 100px wide, and fires every observed box's measurement, as a resize would. */
+function resize(wide: number): void {
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(wide);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
+  act(() => {
+    for (const fire of resizes) fire();
+  });
+}
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+});
+
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  resizes.splice(0);
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** Draws `element` into a fresh container on the page. */
@@ -256,4 +288,29 @@ test("a link's label names it where its words are not drawn whole, and its press
   expect(link?.getAttribute("aria-label")).toBe("Animations");
   expect(link?.hasAttribute("aria-current")).toBe(false);
   expect(pressed).toEqual(["/admin/animations"]);
+});
+
+test("a row's name fades out at its end only while the row cuts it short, and its detail keeps its ellipsis", () => {
+  const container = mount(
+    createElement(NavItem, { detail: "acme/web", children: "Fix the sidebar's long names" }),
+  );
+  const name = () => container.querySelector(".luke-nav-item-name");
+  resize(80);
+  expect(name()?.getAttribute("data-end")).toBe("fade");
+  expect(name()?.getAttribute("data-overflow")).toBe("false");
+  resize(160);
+  expect(name()?.getAttribute("data-overflow")).toBe("true");
+  expect(container.querySelector(".luke-nav-item-detail")?.hasAttribute("data-end")).toBe(false);
+});
+
+test("a link's name fades out at its end only while the row cuts it short", () => {
+  const container = mount(
+    createElement(NavItemLink, { href: "/settings", children: "Workspace settings" }),
+  );
+  const name = () => container.querySelector(".luke-nav-item-name");
+  resize(80);
+  expect(name()?.getAttribute("data-overflow")).toBe("false");
+  resize(160);
+  expect(name()?.getAttribute("data-end")).toBe("fade");
+  expect(name()?.getAttribute("data-overflow")).toBe("true");
 });

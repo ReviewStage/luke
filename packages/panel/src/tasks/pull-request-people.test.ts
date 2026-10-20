@@ -23,8 +23,8 @@ import { ChangesTabReading } from "../testing/changes-tab.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { Tooltip } from "../tooltip.js";
-import { ChangesCard, peopleOf } from "./agent-changes-tab.js";
 import { agentSubject, NOTHING_HELD } from "./agent-ref.js";
+import { ChangesCard, peopleOf } from "./changes-card.js";
 
 /**
  * pull-request-people.test.ts -- an agent's Changes card says who its pull

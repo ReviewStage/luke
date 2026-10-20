@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import {
   HOVER_CARD_ROW_LOOK,
   HoverCard,
@@ -18,15 +18,46 @@ import {
  * hover-card.test.ts -- a card reads its subject's name, the line under it,
  * and its corner, then its notes, in that order; a part left out says
  * nothing; the rule before what it lists is a separator to a reader; and
- * its rows open what they name where they can, in a list named and counted.
+ * its rows open what they name where they can, in a list named and counted,
+ * their words fading out at their end only while the card cuts them short.
  * Synthetic plans.
  */
 
 const roots: Root[] = [];
 
+/** The measurement each observed box was handed, fired as a resize; jsdom lays nothing out, so nothing reports one of its own accord. */
+const resizes: (() => void)[] = [];
+
+class StandInResizeObserver {
+  readonly #fire: () => void;
+  constructor(fire: () => void) {
+    this.#fire = fire;
+  }
+  observe(): void {
+    resizes.push(this.#fire);
+  }
+  disconnect(): void {}
+}
+
+/** Stands every box's words `wide` pixels in a box 100px wide, and fires every observed box's measurement, as a resize would. */
+function resize(wide: number): void {
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(wide);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
+  act(() => {
+    for (const fire of resizes) fire();
+  });
+}
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+});
+
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  resizes.splice(0);
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** The element `card` draws, mounted in the document. */
@@ -135,4 +166,22 @@ test("a list is named, reads its rows and their ends, and counts what it leaves 
     [...list.querySelectorAll("li")].map((each) => each.textContent),
     ["#42 Invite flow+12 −3", "2 more"],
   );
+});
+
+test("a row's words fade out at their end only while the card cuts them short", () => {
+  const card = drawn(
+    createElement(HoverCard, {
+      children: createElement(HoverCardRow, {
+        look: HOVER_CARD_ROW_LOOK.DETAIL,
+        glyph: null,
+        label: "acme/relay-service-monorepo",
+      }),
+    }),
+  );
+  const label = () => card.querySelector(".luke-hover-card-row-label");
+  resize(80);
+  assert.equal(label()?.getAttribute("data-end"), "fade");
+  assert.equal(label()?.getAttribute("data-overflow"), "false");
+  resize(160);
+  assert.equal(label()?.getAttribute("data-overflow"), "true");
 });

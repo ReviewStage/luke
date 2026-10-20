@@ -56,6 +56,7 @@ import {
 } from "@luke/ui/agent-servers-model";
 import { matchIntegration, shownTools } from "@luke/ui/integration-search";
 import { searchTokens } from "@luke/ui/search-tokens";
+import { useClipped } from "@luke/ui/use-clipped";
 import {
   cloneElement,
   createContext,
@@ -67,6 +68,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { FadingWords } from "../fading-words.js";
 import { useIntegrationGrant } from "../integration-grant.js";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import {
@@ -189,6 +191,26 @@ function ServerSwitch({
   );
 }
 
+/** A server's name in its row, faded where the row cuts it short. */
+function ServerName({ name }: { name: string }): React.JSX.Element {
+  const [box, clipped] = useClipped(name);
+  return (
+    <span ref={box} className="agent-servers-name" data-overflow={String(clipped)}>
+      {name}
+    </span>
+  );
+}
+
+/** A server's name heading its own page, faded where the head cuts it short. */
+function ServerPageTitle({ name }: { name: string }): React.JSX.Element {
+  const [box, clipped] = useClipped(name);
+  return (
+    <span ref={box} className="agent-servers-page-title" data-overflow={String(clipped)}>
+      {name}
+    </span>
+  );
+}
+
 /**
  * What a server's row says between its mark and its end, here and on the
  * card a mention of the server hangs (`server-card.tsx`): its name, how many
@@ -199,7 +221,7 @@ export function ServerRowWords({ row }: { row: ServerRow }): React.JSX.Element {
     // Note that the words stand in a line of their own, because a list row's
     // title would otherwise clip the reason behind a long name.
     <span className="agent-servers-words">
-      <span className="agent-servers-name">{row.name}</span>
+      <ServerName name={row.name} />
       {row.tools !== undefined ? (
         <span className="agent-servers-count">{toolsCount(row.tools.length)}</span>
       ) : null}
@@ -648,9 +670,9 @@ function ServersPopover({
       index: pickIndex(row, tool),
       row,
       title: (
-        <span className="integration-tool-id">
+        <FadingWords className="integration-tool-id" words={tool.name}>
           <Highlighted text={tool.name} tokens={searchTokens(query)} />
-        </span>
+        </FadingWords>
       ),
       meta: row.name,
       onPress: () => open(row, query),
@@ -705,7 +727,7 @@ function ServersPopover({
             <IconButton icon={<ArrowLeftIcon />} label={PAGE.BACK} keepFocus onClick={back} />
           </Tooltip>
           <ProviderMark provider={row.provider} size={PROVIDER_MARK_SIZE.ICON} />
-          <span className="agent-servers-page-title">{row.name}</span>
+          <ServerPageTitle name={row.name} />
           <span className="agent-servers-count">{toolsCount(row.tools?.length ?? 0)}</span>
           <span className="agent-servers-end">
             <ServerSwitch row={row} servers={servers} />

@@ -1,7 +1,7 @@
 /* chip.css -- the chip: a control of the shared contract in one of four
    looks, in a state's tone where it says one, at its place's width, giving
-   way before the row around it does, its words cut short rather than
-   pushing past it. A mark beside the words, a glyph or a picture, stands at
+   way before the row around it does, its words cut short and fading out
+   rather than pushing past it. A mark beside the words, a glyph or a picture, stands at
    the control's glyph size, and a menu's chevron is the small, muted one a
    menu draws. */
 
@@ -39,10 +39,16 @@
     cursor: default;
   }
 
+  /* A chip's words fade out over their last few pixels only while they are
+     measured cut short, as a browser's tab ends a long title, so short words
+     end on their last letter. */
   .luke-chip-name {
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .luke-chip-name[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
   }
 
   /* Words naming code, a branch, read in the code face at a caption's

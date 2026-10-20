@@ -62,6 +62,10 @@ import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl } from "../testing/tasks-control.js";
 import { newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
+// Note that a Pull request tab is loaded as the side panel loads it, on first use
+// (`pages-on-demand.ts`), so the module is read here first and its load settles
+// within the test's own ticks.
+import "../tasks/agent-pull-request-tab.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
 
 /**

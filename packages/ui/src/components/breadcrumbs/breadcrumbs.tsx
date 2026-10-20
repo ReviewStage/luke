@@ -1,6 +1,7 @@
 import type { ComponentProps, ComponentType, ReactNode } from "react";
 import { BUTTON_VARIANT } from "../button/button.js";
 import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding-button.js";
+import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 
 /**
  * breadcrumbs.tsx -- a path to where the reader stands: a named landmark holding an ordered list of crumbs, each words, a press, or a press that opens a menu or a dialog, the chevrons between them punctuation alone.
@@ -16,7 +17,7 @@ import { FoldingButton, type FoldingButtonHint } from "../folding-button/folding
  * place, the app's hint raising it as it raises a pill.
  *
  * Two looks: a bar's path in the caption type, every crumb a quiet pill
- * that narrows by its share, cut short at its end, the current one last of
+ * that narrows by its share, fading out at its end, the current one last of
  * all; and a toolbar's heading, a way back then the page's name in the
  * dialog heading type.
  *
@@ -205,7 +206,14 @@ function CrumbFace({ glyph, label }: { glyph: ReactNode; label: string }): React
           {glyph}
         </span>
       )}
-      <span className="luke-breadcrumb-label">{label}</span>
+      <ClippedLine
+        className="luke-breadcrumb-label"
+        as={ONE_LINE_ELEMENT.SPAN}
+        end={ONE_LINE_END.FADE}
+        words={label}
+      >
+        {label}
+      </ClippedLine>
     </>
   );
 }

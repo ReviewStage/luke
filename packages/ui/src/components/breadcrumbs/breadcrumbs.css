@@ -70,10 +70,11 @@
     height: var(--luke-control-icon);
   }
 
+  /* A crumb's words cut short fade out over their last few pixels
+     (`one-line.css`), as a browser's tab ends a long title. */
   .luke-breadcrumb-label {
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
@@ -100,7 +101,7 @@
   }
 
   /* A bar's path, in the caption type. A crumb gives way, by its share, down
-     to its first letters and the ellipsis, its chevron always standing
+     to its first letters, fading out, its chevron always standing
      before it, and the current one, last, gives way last of all. */
   .luke-breadcrumbs[data-variant="caption"] {
     font-size: var(--luke-type-caption-size);
