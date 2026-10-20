@@ -1010,7 +1010,9 @@ function agentOrigin(input: {
       body: run?.body,
     };
   }
-  if (agent.brief === CODING_AGENT_BRIEF.PROMPT) return undefined;
+  if (agent.brief === CODING_AGENT_BRIEF.PROMPT || agent.brief === CODING_AGENT_BRIEF.BLANK) {
+    return undefined;
+  }
   return {
     sender:
       task === undefined && starter === undefined ? undefined : (
@@ -1485,7 +1487,7 @@ function AgentTranscriptView({
   endTrail,
 }: {
   messages: readonly CodingAgentMessage[];
-  /** What the agent was handed first: the plan, drawn as the plan's card, or a prompt, drawn as the developer's message; nothing reads as the plan. */
+  /** What the agent was handed first: the plan, drawn as the plan's card, a prompt, drawn as the developer's message, or nothing, for one started blank, whose first line is drawn as any other; unsaid reads as the plan. */
   brief?: CodingAgentBrief | undefined;
   /** Whose transcript this is: an agent's, with its plan, unless said otherwise. */
   lead?: TranscriptLead;
@@ -1560,10 +1562,13 @@ function AgentTranscriptView({
     // The plan is the first of the developer's messages, unless the agent
     // was handed a prompt in its place, which is the developer's message as
     // any other is, but where something sent it, an automation, when it is
-    // that sender's card; the rest the developer sent since.
-    const carded = brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined;
+    // that sender's card; the rest the developer sent since. An agent
+    // started blank was handed nothing, so its first line, typed or spoken,
+    // is a line as any other is, under whoever sent it.
+    const blank = brief === CODING_AGENT_BRIEF.BLANK && origin === undefined;
+    const carded = !blank && (brief !== CODING_AGENT_BRIEF.PROMPT || origin !== undefined);
     const plan = carded ? first : undefined;
-    const task = carded ? undefined : first;
+    const task = carded || blank ? undefined : first;
     return (
       <LiveDoors value={live}>
         <Conversation>

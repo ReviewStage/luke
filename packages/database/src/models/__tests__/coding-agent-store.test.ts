@@ -6,6 +6,7 @@ import {
   CHECK_SUMMARY,
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
+  CODING_AGENT_BRIEF,
   CODING_AGENT_PAYER,
   PULL_REQUEST_STATE,
   type PullRequestState,
@@ -1439,7 +1440,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
   const said = (line: CodingAgentLine) => ({
     id: line.id,
     title: line.title,
-    handedPrompt: line.handedPrompt,
+    brief: line.brief,
     automationName: line.automationName,
     startedFrom: line.startedFrom,
     text: ["planSnapshot", "prompt", "automationOrigin"].filter((column) => column in line),
@@ -1505,7 +1506,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           snapshotted: {
             id: snapshotted.id,
             title: "Invite emails",
-            handedPrompt: false,
+            brief: CODING_AGENT_BRIEF.PLAN,
             automationName: null,
             startedFrom: null,
             text: [],
@@ -1513,7 +1514,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           continued: {
             id: continued.id,
             title: null,
-            handedPrompt: true,
+            brief: CODING_AGENT_BRIEF.PROMPT,
             automationName: null,
             startedFrom: source,
             text: [],
@@ -1521,7 +1522,7 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           run: {
             id: run.id,
             title: null,
-            handedPrompt: true,
+            brief: CODING_AGENT_BRIEF.PROMPT,
             automationName: "Nightly triage",
             startedFrom: null,
             text: [],
@@ -1550,7 +1551,11 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           prompt: _prompt,
           ...rest
         } = whole;
-        const expected = { ...rest, automationName: "Nightly triage", handedPrompt: true };
+        const expected = {
+          ...rest,
+          automationName: "Nightly triage",
+          brief: CODING_AGENT_BRIEF.PROMPT,
+        };
         const [listed] = yield* listWorkspaceCodingAgentLines(starter, workspace, { limit: 1 });
         assert.deepEqual(listed, expected);
         assert.deepEqual(codingAgentLineOf(whole), expected);
@@ -1597,9 +1602,10 @@ it.layer(getTestDB())("the coding-agent store's agent with no repository, starte
         );
         const lines = yield* listCodingAgentLines(teammate, task.id);
         assert.deepEqual(
-          lines.map((line) => [line.id, line.repository, line.handedPrompt]),
-          [[agent.id, null, false]],
+          lines.map((line) => [line.id, line.repository, line.brief]),
+          [[agent.id, null, CODING_AGENT_BRIEF.BLANK]],
         );
+        assert.equal(codingAgentLineOf(read).brief, CODING_AGENT_BRIEF.BLANK);
         const [stored] = yield* Database.use((db) =>
           db
             .select({ repositories: codingAgent.repositories })

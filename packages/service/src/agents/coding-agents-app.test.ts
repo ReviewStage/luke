@@ -57,6 +57,8 @@ import {
   savePlanText,
   updateTask,
 } from "@luke/database/models/task-store";
+import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
+import { voiceWriter } from "@luke/database/models/voice-writer";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import { member, organization, user } from "@luke/database/schemas/auth";
@@ -65,6 +67,7 @@ import { githubInstallation } from "@luke/database/schemas/github-installation";
 import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
+import { voiceSessions, voiceTranscriptSegments } from "@luke/database/schemas/voice";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   fakeWorkspaceSeams,
@@ -73,6 +76,7 @@ import {
   openWorkspace,
   startTask,
 } from "@luke/database/testing";
+import { VOICE_SEGMENT_ROLE } from "@luke/database/voice-vocabulary";
 import { HOSTED_API_ERROR } from "@luke/features";
 import {
   ACCOUNT_CHAT_REASON,
@@ -175,6 +179,8 @@ import {
   taskListAnswerSchema,
   taskStartAnswerSchema,
 } from "@luke/features/task-wire";
+import { taskTranscriptAnswerSchema } from "@luke/features/transcript-wire";
+import { LIVE_CLOSE_REASON, TRANSCRIPT_SPEAKER } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { CHAT_NOTICE_FROM_CHARS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -314,6 +320,7 @@ const TASK_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
 const SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
 const AGENT = "/api/agents/agent";
+const AGENT_CALLS = "/api/agents/calls";
 const AGENT_INBOX = "/api/agents/{id}/inbox";
 const WORKSPACE_AGENTS = "/api/agents";
 /** The overview's three reads, each its own route. */
@@ -554,6 +561,7 @@ const countedFor = (userId: string, name: string) =>
 const ORPC_PUBLIC_PATH: ReadonlyMap<string, (id: string) => string> = new Map([
   ["/api/plans/agents", (id: string) => `/api/plans/${id}/agents`],
   ["/api/agents/agent", (id: string) => `/api/agents/${id}`],
+  ["/api/agents/calls", (id: string) => `/api/agents/${id}/calls`],
   ["/api/agents/stop", (id: string) => `/api/agents/${id}/stop`],
   ["/api/agents/changes", (id: string) => `/api/agents/${id}/changes`],
   ["/api/agents/review-options", (id: string) => `/api/agents/${id}/review-options`],
@@ -2137,6 +2145,332 @@ function lineCommentAs(
 function linesAnswering(pending: readonly PendingNode[]): (call: GraphqlCall) => Response {
   return reviewsAnswering(pending);
 }
+
+it.layer(getTestDB())("a blank agent and the calls into an agent", (it) => {
+  /** A call into the agent registered under the account, its segments one line by each speaker, the voice's rows written into the agent's conversation as the voice writes them; answers the call's session id and its start. */
+  const callInto = (
+    agent: { readonly id: string; readonly conversationId: string },
+    caller: string,
+    starter: string,
+    taskId: string,
+    words: readonly [developer: string, agent: string],
+  ) =>
+    Effect.gen(function* () {
+      const liveSessionId = `live-${randomUUID()}`;
+      const voiceSessionId = yield* voiceSessionRecord().register({
+        userId: caller,
+        sessionId: liveSessionId,
+        taskId,
+        agentId: agent.id,
+        attachId: randomUUID(),
+        model: "gpt-live",
+      });
+      assert.ok(voiceSessionId !== undefined);
+      const db = yield* Database;
+      yield* db.insert(voiceTranscriptSegments).values([
+        {
+          voiceSessionId,
+          seq: 1,
+          role: VOICE_SEGMENT_ROLE.USER,
+          text: words[0],
+          startMs: 0,
+          endMs: 900,
+        },
+        {
+          voiceSessionId,
+          seq: 2,
+          role: VOICE_SEGMENT_ROLE.ASSISTANT,
+          text: words[1],
+          startMs: 1_500,
+          endMs: 2_400,
+        },
+      ]);
+      const voice = voiceWriter({ store: yield* storeWriter({ tools: CODER_TOOL_SET }) });
+      const target = {
+        userId: caller,
+        liveSessionId,
+        conversation: { userId: starter, conversationId: agent.conversationId },
+      };
+      const developerRow = randomUUID();
+      const agentRow = randomUUID();
+      yield* voice.upsertSpokenRow(target, {
+        rowId: developerRow,
+        speaker: TRANSCRIPT_SPEAKER.USER,
+        startMs: 0,
+        endMs: 900,
+      });
+      yield* voice.upsertSpokenRow(target, {
+        rowId: agentRow,
+        speaker: TRANSCRIPT_SPEAKER.ASSISTANT,
+        startMs: 1_500,
+        endMs: 2_400,
+      });
+      const [session] = yield* db
+        .select({ startedAt: voiceSessions.startedAt })
+        .from(voiceSessions)
+        .where(eq(voiceSessions.id, voiceSessionId));
+      assert.ok(session !== undefined);
+      return { voiceSessionId, startedAt: session.startedAt.getTime(), developerRow, agentRow };
+    });
+
+  it.effect(
+    "a blank Start, on a task with no repository or with one, hands the agent nothing and opens no session, and the agent reads as blank and as done, not failed, long past the grace a first turn lands in; a blank Start naming a prompt is refused, and any other Start on a task with no repository still is",
+    () =>
+      Effect.gen(function* () {
+        const bare = yield* openTask({ repository: null });
+        const coded = yield* openTask();
+
+        const blankOn = (opened: typeof bare) =>
+          Effect.map(
+            opened.ask(
+              startAs(opened.owner, opened.task.id, { idempotencyKey: randomUUID(), blank: true }),
+            ),
+            (started) =>
+              readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).agent,
+          );
+        const onBare = yield* blankOn(bare);
+        const onCoded = yield* blankOn(coded);
+
+        for (const agent of [onBare, onCoded]) {
+          assert.equal(agent.brief, CODING_AGENT_BRIEF.BLANK);
+          assert.equal(agent.model, CODING_AGENT_DEFAULT_CHOICE.model);
+          assert.equal(agent.effort, CODING_AGENT_DEFAULT_CHOICE.effort);
+          assert.equal(agent.status, CODING_AGENT_STATUS.COMPLETED);
+        }
+        const stored = (owner: string, id: string) =>
+          Effect.map(readCodingAgent(owner, id), (read) => {
+            const { planSnapshot, prompt, repository } = Option.getOrThrow(read);
+            return { planSnapshot, prompt, repository };
+          });
+        assert.deepEqual(yield* stored(bare.owner, onBare.id), {
+          planSnapshot: null,
+          prompt: null,
+          repository: null,
+        });
+        assert.deepEqual(yield* stored(coded.owner, onCoded.id), {
+          planSnapshot: null,
+          prompt: null,
+          repository: RELAY_FULL_NAME,
+        });
+        assert.deepEqual([...bare.eve.opened, ...coded.eve.opened], []);
+
+        yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.minutes(1)));
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* bare.ask(request(TASK_AGENTS, bare.owner, { id: bare.task.id })),
+        );
+        assert.deepEqual(
+          listed.agents.map((agent) => [agent.id, agent.brief, agent.status]),
+          [[onBare.id, CODING_AGENT_BRIEF.BLANK, CODING_AGENT_STATUS.COMPLETED]],
+        );
+        const page = readAnswer(
+          codingAgentPageAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* bare.ask(request(AGENT, bare.owner, { id: onBare.id })),
+        );
+        assert.equal(page.agent.status, CODING_AGENT_STATUS.COMPLETED);
+
+        assert.deepEqual(
+          yield* bare.ask(
+            startAs(bare.owner, bare.task.id, {
+              idempotencyKey: randomUUID(),
+              blank: true,
+              prompt: "Expire invitations.",
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* bare.ask(startAs(bare.owner, bare.task.id, { idempotencyKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
+        );
+        assert.deepEqual(bare.eve.opened, []);
+      }),
+  );
+
+  it.effect(
+    "an agent's transcript carries the lines said on calls into it in the order said, each on the voice channel naming its call and at the instant its words began, the agent's own with no turn's record though it was read aloud from one, and a line said awaits no turn",
+    () =>
+      Effect.gen(function* () {
+        const { owner, task, ask } = yield* openTask({ repository: null });
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
+        ).agent;
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        const call = yield* callInto(agent, owner, owner, task.id, [
+          "What did you change?",
+          "I moved the export.",
+        ]);
+        const read = Effect.map(ask(request(AGENT_MESSAGES, owner, { id: agent.id })), (answered) =>
+          readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+        );
+
+        const page = yield* read;
+        assert.deepEqual(
+          page.messages.map((message) => ({
+            role: message.role,
+            words: message.parts.map((part) => (isRecord(part) ? part.text : undefined)),
+            channel: isRecord(message.metadata) ? message.metadata.channel : undefined,
+            call: isRecord(message.metadata) ? message.metadata.voice_session_id : undefined,
+            sentAt: message.sentAt,
+          })),
+          [
+            {
+              role: MESSAGE_ROLE.USER,
+              words: ["What did you change?"],
+              channel: MESSAGE_CHANNEL.VOICE,
+              call: call.voiceSessionId,
+              sentAt: call.startedAt,
+            },
+            {
+              role: MESSAGE_ROLE.ASSISTANT,
+              words: ["I moved the export."],
+              channel: MESSAGE_CHANNEL.VOICE,
+              call: call.voiceSessionId,
+              sentAt: call.startedAt + 1_500,
+            },
+          ],
+        );
+        // A line the voice answered itself opened no turn and waits on none.
+        assert.equal(page.status, CODING_AGENT_STATUS.COMPLETED);
+
+        // The store names the turn the agent's words were read aloud from; the line still carries no turn's record.
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        const target = { userId: owner, conversationId: agent.conversationId };
+        yield* writer.enqueueTurn(target, {
+          turnId,
+          origin: TURN_ORIGIN.SPOKEN,
+          eveTurnId: "turn_0",
+        });
+        const db = yield* Database;
+        yield* db
+          .update(messages)
+          .set({ turnId })
+          .where(
+            and(
+              eq(messages.conversationId, agent.conversationId),
+              eq(messages.clientId, call.agentRow),
+            ),
+          );
+        const spoken = (yield* read).messages.find(
+          (message) => message.role === MESSAGE_ROLE.ASSISTANT,
+        );
+        assert.ok(spoken !== undefined);
+        assert.deepEqual(
+          { startedAt: spoken.startedAt, model: spoken.model, sentAt: spoken.sentAt },
+          { startedAt: undefined, model: undefined, sentAt: call.startedAt + 1_500 },
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent's calls are read by every member of its workspace, each call with when it started and ended, its record, whose it was, and its lines naming their rows, and by no one outside it, as an agent that is none is not found",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other: teammate, task, ask } = yield* openTask({ repository: null });
+        const outsider = yield* openTask();
+        yield* joinWorkspace(task.workspaceId, teammate);
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
+        ).agent;
+        const agent = Option.getOrThrow(yield* readCodingAgent(owner, started.id));
+        const sibling = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID(), blank: true })),
+        ).agent;
+        const first = yield* callInto(agent, owner, owner, task.id, [
+          "Start on the export.",
+          "Starting on it.",
+        ]);
+        yield* Database.use((db) =>
+          db
+            .update(voiceSessions)
+            .set({
+              closedAt: new Date(first.startedAt + 60_000),
+              closeReason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+            })
+            .where(eq(voiceSessions.id, first.voiceSessionId)),
+        );
+        yield* TestClock.adjust(Duration.minutes(5));
+        const second = yield* callInto(agent, teammate, owner, task.id, ["Is it done?", "It is."]);
+        yield* callInto(
+          Option.getOrThrow(yield* readCodingAgent(owner, sibling.id)),
+          owner,
+          owner,
+          task.id,
+          ["Not this one.", "No."],
+        );
+        const callsAs = (reader: string, id: string) => ask(request(AGENT_CALLS, reader, { id }));
+
+        const read = readAnswer(
+          taskTranscriptAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* callsAs(owner, agent.id),
+        );
+        assert.deepEqual(
+          read.transcript.calls.map((each) => ({
+            id: each.id,
+            startedAt: each.startedAt,
+            endedAt: each.endedAt,
+            ending: each.ending,
+            by: each.by?.userId,
+            lines: each.messages.map((line) => [
+              line.role,
+              line.parts.map((part) => part.text).join(""),
+              line.metadata?.rowIds,
+            ]),
+          })),
+          [
+            {
+              id: first.voiceSessionId,
+              startedAt: first.startedAt,
+              endedAt: first.startedAt + 60_000,
+              ending: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+              by: owner,
+              lines: [
+                [TRANSCRIPT_SPEAKER.USER, "Start on the export.", [first.developerRow]],
+                [TRANSCRIPT_SPEAKER.ASSISTANT, "Starting on it.", [first.agentRow]],
+              ],
+            },
+            {
+              id: second.voiceSessionId,
+              startedAt: second.startedAt,
+              endedAt: undefined,
+              ending: undefined,
+              by: teammate,
+              lines: [
+                [TRANSCRIPT_SPEAKER.USER, "Is it done?", [second.developerRow]],
+                [TRANSCRIPT_SPEAKER.ASSISTANT, "It is.", [second.agentRow]],
+              ],
+            },
+          ],
+        );
+        assert.deepEqual(
+          readAnswer(
+            taskTranscriptAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* callsAs(teammate, agent.id),
+          ),
+          read,
+        );
+
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        assert.deepEqual(
+          yield* outsider.ask(request(AGENT_CALLS, outsider.owner, { id: agent.id })),
+          notFound,
+        );
+        assert.deepEqual(yield* callsAs(owner, randomUUID()), notFound);
+        assert.deepEqual(yield* callsAs(owner, "not-an-id"), notFound);
+      }),
+  );
+});
 
 it.layer(getTestDB())("changing an agent's pull request", (it) => {
   /** The owner's plan with an agent that published a pull request, and the other account where the test makes it a member. */

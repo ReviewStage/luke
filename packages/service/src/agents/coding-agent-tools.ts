@@ -109,7 +109,12 @@ import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
 import { accountModelChoices, startCodingAgent } from "./coder-host/start.js";
-import { codingAgentFailureOf, codingAgentStatusOf, lineAwaitsTurn } from "./coder-host/status.js";
+import {
+  codingAgentFailureOf,
+  codingAgentStatusOf,
+  lineAwaitsTurn,
+  startedBlank,
+} from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { cancelledTurn, standsStopped, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -1100,6 +1105,7 @@ const standingsOf = (agents: readonly CodingAgent[]) =>
         createdAt: agent.createdAt,
         now,
         awaitingLineAt: awaiting.get(agent.conversationId),
+        blank: startedBlank(agent),
       });
       // Why the newest turn failed is said only while the agent reads as failed: a line awaiting the next turn makes it running again.
       return {
@@ -1755,8 +1761,11 @@ const idleForArchive = (agent: CodingAgent) =>
     }
     if (turn !== undefined) return !RUNNING_TURN_STATUSES.has(turn.status);
     return (
-      codingAgentStatusOf(undefined, { createdAt: agent.createdAt, now }) !==
-      CODING_AGENT_STATUS.STARTING
+      codingAgentStatusOf(undefined, {
+        createdAt: agent.createdAt,
+        now,
+        blank: startedBlank(agent),
+      }) !== CODING_AGENT_STATUS.STARTING
     );
   });
 
@@ -2117,6 +2126,7 @@ const stopOf = (
       createdAt: agent.createdAt,
       now: yield* Clock.currentTimeMillis,
       awaitingLineAt: after.awaitingLineAt,
+      blank: startedBlank(agent),
     });
     const standing = stopStands(before.turn) && after.turn?.id === before.turn?.id;
     return { stopped: earlier || cancelled || standing, status };

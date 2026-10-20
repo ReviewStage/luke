@@ -68,6 +68,7 @@ import {
   brainWorkerSession,
 } from "../tasks/brain-transcript.js";
 import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
+import { startedBlank } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -266,13 +267,14 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       const { agent, target } = yield* reachedAgent(context.userId, input.id);
       const titleAwaited = yield* titleAwaitedOf(target);
       const cursor = cursorOfWire(after);
+      const standing = { createdAt: agent.createdAt, blank: startedBlank(agent) };
       const { page, holds, wakeIn } = readsNow(input.wait)
         ? yield* hostedStoreOrUnavailable(
             transcriptNow(
               target,
               CODER_TOOL_SET,
               cursor,
-              agent,
+              standing,
               agent,
               titleAwaited,
               yield* titleEdgeOf(target),
@@ -280,7 +282,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
           )
         : {
             page: yield* hostedStoreOrUnavailable(
-              transcriptPast(target, CODER_TOOL_SET, cursor, agent, agent, titleAwaited),
+              transcriptPast(target, CODER_TOOL_SET, cursor, standing, agent, titleAwaited),
             ),
             holds: undefined,
             wakeIn: undefined,

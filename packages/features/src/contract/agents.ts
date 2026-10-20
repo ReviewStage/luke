@@ -39,6 +39,7 @@ import {
   terminalRenameRequestSchema,
   terminalsAnswerSchema,
 } from "../terminal-wire.js";
+import { taskTranscriptAnswerSchema } from "../transcript-wire.js";
 import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
 /** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
@@ -131,6 +132,18 @@ export const agentsContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: AGENT_PATH }))
     .input(idParams)
     .output(EffectSchema.flip(codingAgentPageAnswerSchema)),
+  /**
+   * The calls into one agent, oldest first, as a task's calls are read
+   * (`transcript-wire.ts`): each by its session's id, when it started and,
+   * where its record holds it, ended and why, its metered seconds, its
+   * voice model, and whose call it was, with the lines said on it, each
+   * naming the rows its voice wrote in the agent's conversation. What the
+   * agent's tab draws a call's boundaries from beside its transcript.
+   */
+  calls: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: `${AGENT_PATH}/calls` }))
+    .input(idParams)
+    .output(EffectSchema.flip(taskTranscriptAnswerSchema)),
   /** One change of an agent, answering it as it then stands. */
   change: hostedProcedure
     .meta(bodyCap(CHOICE_BODY_BYTES))

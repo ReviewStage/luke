@@ -82,7 +82,8 @@
                 "type": "string",
                 "enum": [
                   "plan",
-                  "task"
+                  "task",
+                  "blank"
                 ]
               },
               "archivedAt": {

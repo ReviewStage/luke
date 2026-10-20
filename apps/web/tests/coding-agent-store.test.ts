@@ -137,13 +137,14 @@ const LARGE_TEXT = "Any member may invite a teammate by email, and the invite ex
 );
 
 /** What a list reads of an agent: its row without the text it was handed, whether that was a prompt, and its automation's name. */
-function listedLine({
-  planSnapshot: _planSnapshot,
-  prompt,
-  automationOrigin,
-  ...row
-}: CodingAgent) {
-  return { ...row, automationName: automationOrigin?.name ?? null, handedPrompt: prompt !== null };
+function listedLine({ planSnapshot, prompt, automationOrigin, ...row }: CodingAgent) {
+  const brief =
+    prompt !== null
+      ? CODING_AGENT_BRIEF.PROMPT
+      : planSnapshot !== null
+        ? CODING_AGENT_BRIEF.PLAN
+        : CODING_AGENT_BRIEF.BLANK;
+  return { ...row, automationName: automationOrigin?.name ?? null, brief };
 }
 
 it.layer(getTestDB())("the coding agents of an account's plans", (it) => {

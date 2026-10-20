@@ -55,6 +55,7 @@ import {
 } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
 import { planRevisionSeqSchema } from "./task-wire.js";
+import { taskTranscriptAnswerSchema } from "./transcript-wire.js";
 
 /**
  * coding-agent-view.ts -- a task's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
@@ -343,6 +344,14 @@ export const codingAgentPageAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentPageAnswerView = typeof codingAgentPageAnswerViewSchema.Type;
+
+/** The calls into one agent, as the window hears them: each call's lines and its record, or why there is no answer. */
+export const codingAgentCallsAnswerViewSchema = EffectSchema.Union([
+  taskTranscriptAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentCallsAnswerView = typeof codingAgentCallsAnswerViewSchema.Type;
 
 /** One agent, as the window asks what it published. */
 export const codingAgentPullRequestParamsSchema = EffectSchema.Struct({

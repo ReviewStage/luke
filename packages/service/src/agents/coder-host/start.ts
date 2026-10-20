@@ -162,6 +162,11 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * its automation's own prompt mentions, never those of the webhook body or
  * the GitHub event its prompt carries after it, since whoever wrote those
  * is not the agent's developer.
+ * A blank Start, on a task, hands the agent nothing, neither the plan nor
+ * a prompt, and opens no session: its first words, typed or spoken, open
+ * one as they reach it (`steer.ts`). It runs on the choice any Start does,
+ * and on a task with no repository it works in none and asks nothing of
+ * GitHub, where any other Start on such a task is refused.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An agent started is minted as a member
  * of its workspace's chat in the order agents were started, so it answers
@@ -336,6 +341,8 @@ export type StartPlace =
       readonly noteHeading?: StartNoteHeading | undefined;
       /** Another agent of the plan to take over from, handed its brief and its transcript replayed in place of the plan or a prompt; none for an agent started afresh. */
       readonly from?: CodingAgentStartFrom | undefined;
+      /** Whether the agent is handed nothing, neither the plan nor a prompt, its first words coming later; such a Start names no prompt, note, or source. */
+      readonly blank?: boolean | undefined;
     }
   | {
       readonly taskId: null;
@@ -428,19 +435,13 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** Where a Start through this path puts its agent: handed the plan or a prompt, never started blank. */
-type HandedPlace = Exclude<
-  CodingAgentPlace,
-  { readonly planSnapshot: null; readonly prompt: null }
->;
-
-/** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
+/** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, none for a blank Start on a task with none, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
 interface StartLanding {
   readonly workspaceId: string;
-  readonly repository: string;
+  readonly repository: string | null;
   readonly task: Task | undefined;
   readonly mover: string | undefined;
-  readonly place: HandedPlace;
+  readonly place: CodingAgentPlace;
   /** What the new agent keeps of the agent it was started from; none for one started afresh. */
   readonly startedFrom: StoredStartedFrom | undefined;
 }
@@ -496,7 +497,7 @@ const startBranchOf = Effect.fnUntraced(function* (
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   const branch = ask.branch ?? inherited ?? undefined;
-  if (branch === undefined) return undefined;
+  if (branch === undefined || landing.repository === null) return undefined;
   const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
   if (Option.isSome(made)) return branch;
   const confirmed = confirmedBranch(landing.workspaceId, landing.repository, member, branch);
@@ -511,7 +512,7 @@ const startBranchOf = Effect.fnUntraced(function* (
   );
 });
 
-/** The task read as the account, its repository required, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, with the replay of the agent it takes over from after either where there is one; in a workspace, the prompt. */
+/** The task read as the account, its repository required unless the Start is blank, or the workspace the account must be a member of; either refused as naming nothing. On a task the agent is handed its document or the prompt, with the replay of the agent it takes over from after either where there is one, or nothing for a blank Start; in a workspace, the prompt. */
 const landingOf = Effect.fnUntraced(function* (
   userId: string,
   place: StartPlace,
@@ -538,6 +539,17 @@ const landingOf = Effect.fnUntraced(function* (
   const read = yield* hostedStoreOrUnavailable(readTask(userId, place.taskId));
   if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const { task, ownerId, issueLinks } = read.value;
+  const mover = ownerId === userId ? userId : undefined;
+  if (place.blank === true) {
+    return {
+      startedFrom: undefined,
+      workspaceId: task.workspaceId,
+      repository: task.repository,
+      task,
+      mover,
+      place: { taskId: place.taskId, planSnapshot: null, prompt: null },
+    };
+  }
   if (task.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   const brief = fitter === undefined ? place.prompt : fitter.prompt;
   const words = brief ?? planBrief(task, issueLinks);
@@ -553,7 +565,7 @@ const landingOf = Effect.fnUntraced(function* (
     workspaceId: task.workspaceId,
     repository: task.repository,
     task,
-    mover: ownerId === userId ? userId : undefined,
+    mover,
     place:
       prompt === undefined
         ? { taskId: place.taskId, planSnapshot: written(replay), prompt: null }
@@ -747,13 +759,12 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
         ]);
   const landing = yield* landingOf(userId, ask, fitter, noteFiles);
   // An automation's agent reaches through the workspace's installation alone; a Start by hand, on the starter's token too.
+  // A blank agent on a task with no repository reaches none.
   const member = ask.automationOrigin === undefined ? userId : undefined;
-  const reached = yield* workspaceRepository(
-    landing.workspaceId,
-    landing.repository,
-    member,
-    landing.mover,
-  );
+  const reached =
+    landing.repository === null
+      ? undefined
+      : yield* workspaceRepository(landing.workspaceId, landing.repository, member, landing.mover);
   // An agent started from another goes on from the branch that one was started on.
   const branch = yield* startBranchOf(
     userId,
@@ -807,7 +818,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,
-      githubAccess: reached.access,
+      githubAccess: reached?.access,
       startBranch: branch,
       disabledServers: ask.disabledServers ?? from?.disabledServers,
       // The servers those words mention are its first turn's, whatever the switches say.
@@ -819,38 +830,35 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   const { agent, created } = started.value;
   if (!created) return { agent, created };
   // The session opens with the plan or the prompt as its first message; an eve that did not take
-  // it leaves no agent behind, so the retry under the same key starts afresh.
-  const sessions = yield* eve;
-  const opened = yield* sessions
-    .open({
-      conversationId: agent.conversationId,
-      turn: BRAIN_HOST_TURN.TYPED,
-      message:
-        brief.prompt === null
-          ? eveContent(
-              brief.planSnapshot,
-              from === undefined ? [] : attachments,
-              words === undefined ? undefined : mentionedContext(words, landing.task, reads),
-            )
-          : eveContent(
-              brief.prompt,
-              attachments,
-              words === undefined ? undefined : mentionedContext(words, landing.task, reads),
-            ),
-    })
-    .pipe(
-      Effect.catchTag("EveUnreachable", (failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `eve could not be reached to start a coding agent: ${describeUnreachable(failure)}`,
-          ),
-          undefined,
+  // it leaves no agent behind, so the retry under the same key starts afresh. A blank agent opens
+  // none: its first words open its session as they reach it (`steer.ts`).
+  const handed = brief.prompt ?? brief.planSnapshot;
+  if (handed !== null) {
+    const sessions = yield* eve;
+    const opened = yield* sessions
+      .open({
+        conversationId: agent.conversationId,
+        turn: BRAIN_HOST_TURN.TYPED,
+        message: eveContent(
+          handed,
+          brief.prompt === null && from === undefined ? [] : attachments,
+          words === undefined ? undefined : mentionedContext(words, landing.task, reads),
         ),
-      ),
-    );
-  if (opened === undefined || opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
-    yield* hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id));
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      })
+      .pipe(
+        Effect.catchTag("EveUnreachable", (failure) =>
+          Effect.as(
+            Effect.logWarning(
+              `eve could not be reached to start a coding agent: ${describeUnreachable(failure)}`,
+            ),
+            undefined,
+          ),
+        ),
+      );
+    if (opened === undefined || opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
+      yield* hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id));
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
   if (continued) yield* stoppedSource(eve, from.source);
@@ -931,6 +939,7 @@ export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     disabledServers: request.disabledServers,
     from: request.from,
     note: note === "" ? undefined : note,
+    blank: request.blank,
     summaryModel,
   }).pipe(Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)));
   if (!created) return { agent: yield* summaryOf(userId, agent), created };

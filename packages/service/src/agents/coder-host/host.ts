@@ -5,6 +5,7 @@ import { askRecord } from "@luke/database/models/asks";
 import { readBoard } from "@luke/database/models/board-store";
 import {
   type CodingAgent,
+  codingAgentBriefOf,
   hasRepository,
   readCodingAgentOfConversation,
   readDelegation,
@@ -26,7 +27,7 @@ import { readTask } from "@luke/database/models/task-store";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { EMPTY_BOARD } from "@luke/features/board-wire";
 import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
+import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
@@ -691,7 +692,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     workspace: string,
     chatOn: boolean,
   ): CoderSessionPrompt => {
-    const brief = agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT;
+    const brief = codingAgentBriefOf(agent);
     const taskLink =
       agent.taskId === null
         ? null

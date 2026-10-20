@@ -27,6 +27,7 @@ import {
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
@@ -777,6 +778,11 @@ export class HostedCodingAgentClient {
   /** One agent read whole as its own page by its id, on a task or with none. */
   agent(agentId: string): Effect.Effect<CodingAgentPageAnswerView, never, HttpClient.HttpClient> {
     return hostedAnswer(askHosted(this.#hosted.agents.read, { id: agentId }), ROW_REFUSALS);
+  }
+
+  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's boundaries from; not found for an agent the account does not reach. */
+  calls(agentId: string): Effect.Effect<CodingAgentCallsAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.agents.calls, { id: agentId }), ROW_REFUSALS);
   }
 
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */

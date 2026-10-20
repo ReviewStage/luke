@@ -2,9 +2,11 @@ import { automationFiringSchema } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_AUTHOR,
+  CODING_AGENT_BRIEF,
   CODING_AGENT_PAYER,
   CONTEXT_WINDOW,
   type CodingAgentAuthor,
+  type CodingAgentBrief,
   type CodingAgentPayer,
   type CodingAgentPullRequest,
   type CodingAgentSubagentTitle,
@@ -200,15 +202,15 @@ export interface CodingAgent {
  * One coding agent as a list line reads it (`CODING_AGENT_LINE_COLUMNS`):
  * the agent without what it was handed, the plan's text or the developer's
  * prompt, and without the run that started it, which only its own page and
- * its own turns read; whether it was handed a prompt, which its tab's brief
- * is drawn from, and its automation's name stand in their place.
+ * its own turns read; which of the two it was handed, or neither, which its
+ * tab's brief is drawn from, and its automation's name stand in their place.
  */
 export interface CodingAgentLine
   extends Omit<CodingAgent, "automationOrigin" | "planSnapshot" | "prompt"> {
   /** The name of the automation whose run started the agent, as it stood then; null for one started by hand. */
   readonly automationName: string | null;
-  /** Whether the agent was handed the developer's prompt rather than the plan. */
-  readonly handedPrompt: boolean;
+  /** What the agent was handed as its first message: the plan, the developer's prompt, or nothing, for one started blank. */
+  readonly brief: CodingAgentBrief;
 }
 
 /** One agent with no plan as the sidebar lists it for its reader: the agent's line, when the reader pinned it, and where they dragged the pin; null where they hold no pin of it, or it stands by that instant. */
@@ -360,7 +362,11 @@ const CODING_AGENT_LINE_COLUMNS = {
   model: codingAgent.model,
   effort: codingAgent.effort,
   contextWindow: codingAgent.contextWindow,
-  handedPrompt: sql<boolean>`${codingAgent.prompt} is not null`,
+  brief: sql<CodingAgentBrief>`case
+    when ${codingAgent.prompt} is not null then ${CODING_AGENT_BRIEF.PROMPT}
+    when ${codingAgent.planSnapshot} is not null then ${CODING_AGENT_BRIEF.PLAN}
+    else ${CODING_AGENT_BRIEF.BLANK}
+  end`,
   repository: codingAgent.repository,
   branch: codingAgent.branch,
   startBranch: codingAgent.startBranch,
@@ -373,13 +379,21 @@ const CODING_AGENT_LINE_COLUMNS = {
   createdAt: codingAgent.createdAt,
 } as const;
 
+/** What an agent was handed as its first message, as `CODING_AGENT_LINE_COLUMNS` reads it from the row: its prompt, else the plan, else nothing. */
+export function codingAgentBriefOf(
+  agent: Pick<CodingAgent, "planSnapshot" | "prompt">,
+): CodingAgentBrief {
+  if (agent.prompt !== null) return CODING_AGENT_BRIEF.PROMPT;
+  return agent.planSnapshot === null ? CODING_AGENT_BRIEF.BLANK : CODING_AGENT_BRIEF.PLAN;
+}
+
 /** The line a full read of an agent draws, as `CODING_AGENT_LINE_COLUMNS` reads it from the row. */
 export function codingAgentLineOf(agent: CodingAgent): CodingAgentLine {
-  const { automationOrigin, planSnapshot: _planSnapshot, prompt, ...line } = agent;
+  const { automationOrigin, planSnapshot: _planSnapshot, prompt: _prompt, ...line } = agent;
   return {
     ...line,
     automationName: automationOrigin?.name ?? null,
-    handedPrompt: prompt !== null,
+    brief: codingAgentBriefOf(agent),
   };
 }
 
@@ -479,7 +493,7 @@ const {
 const CodingAgentLineRowSchema = Schema.Struct({
   ...LINE_ROW_FIELDS,
   automationName: Schema.NullOr(Schema.String),
-  handedPrompt: Schema.Boolean,
+  brief: Schema.Literals(Object.values(CODING_AGENT_BRIEF)),
 });
 
 /** An agent's line with the reader's own pin beside it; null where they hold none. */
