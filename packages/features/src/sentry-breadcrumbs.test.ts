@@ -203,7 +203,7 @@ test("a span whose name names the token as it starts is never sent", async () =>
 });
 
 test("a token in a span's fragment, path, or query is scrubbed from what is sent", async () => {
-  const pathToken = "ghs_fixturePathTokenNeverReported0123456789";
+  const pathToken = "0f".repeat(20);
   const spans = await sentSpans(() => {
     Sentry.startSpan({ name: "/app", op: "pageload" }, (page) => {
       // Note that the page's own address is set once the span stands, as the SDK's HTTP context does.
