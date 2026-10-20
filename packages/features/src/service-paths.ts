@@ -71,6 +71,8 @@ export const HOSTED_SERVICE_PATH = {
    * Realtime. `live-wire.ts` declares the answer.
    */
   LIVE_INBOX: "/api/live/inbox",
+  /** One task's whiteboard under `?id=`, sealed for following over Neon Realtime (GET): where it stands, or `not-found` or `unavailable`. */
+  LIVE_TASK_BOARD: "/api/live/task-board",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to

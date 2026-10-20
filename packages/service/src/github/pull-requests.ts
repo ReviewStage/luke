@@ -302,7 +302,7 @@ function segment(value: string): string {
 }
 
 /** The repository's own path under the API, each half a segment of its own. */
-function repositoryPath(fullName: string): string {
+export function repositoryPath(fullName: string): string {
   const [owner = "", name = ""] = fullName.split("/");
   return `/repos/${segment(owner)}/${segment(name)}`;
 }

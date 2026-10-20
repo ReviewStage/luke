@@ -188,6 +188,42 @@ test("a toggle is announced pressed while it is on, in any look, and a plain but
   ).toBe(false);
 });
 
+test("a read-only labelled button records a press: it takes none and no Tab stop, is not faded as an unavailable one is, and is announced pressed where it was the one given", () => {
+  const heard: string[] = [];
+  const container = mount(
+    createElement(
+      "div",
+      null,
+      createElement(Button, {
+        variant: BUTTON_VARIANT.OUTLINE,
+        readOnly: true,
+        pressed: true,
+        onClick: () => heard.push("Approve"),
+        children: "Approve",
+      }),
+      createElement(Button, {
+        variant: BUTTON_VARIANT.OUTLINE,
+        readOnly: true,
+        pressed: false,
+        onClick: () => heard.push("Decline"),
+        children: "Decline",
+      }),
+    ),
+  );
+  const [given, other] = [...container.querySelectorAll("button")];
+  act(() => {
+    given?.click();
+    other?.click();
+  });
+  expect(heard).toEqual([]);
+  expect([given?.disabled, given?.dataset.readOnly, given?.getAttribute("aria-pressed")]).toEqual([
+    true,
+    "true",
+    "true",
+  ]);
+  expect(other?.getAttribute("aria-pressed")).toBe("false");
+});
+
 test("a labelled button given a label is named by it, its words within it, and by its busy words while busy", () => {
   const container = mount(
     createElement(

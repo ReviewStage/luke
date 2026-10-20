@@ -3474,6 +3474,16 @@ ul.actor-stack {
   padding: var(--luke-space-6) var(--luke-control-inset);
 }
 
+/* An answered text field holds its words as a sent message draws them, at
+   the field's insets, a line tall where it was left empty, in the field's
+   own frame rather than a faded one. */
+.inbox-field-words {
+  min-height: calc(var(--luke-type-body-leading) + 2 * var(--luke-space-6));
+  box-sizing: border-box;
+  padding: var(--luke-space-6) var(--luke-control-inset);
+  overflow-wrap: anywhere;
+}
+
 /* A settled form's values, a field a line in the form's order: its name in
    the muted ink, then what was put in it, a text field's words drawn as a
    sent message's are, their mentions chips. */
@@ -3579,7 +3589,9 @@ ul.actor-stack {
 
 /* The ask closing the message that asks it: a bordered card, its head the
    ask's kind and where it stands, its controls under a hairline while it
-   waits. A settled ask is its head alone; a replaced one is struck through. */
+   waits. Once answered, the card heads the reply that answered it, its
+   controls under the same hairline as the answer left them. A replaced or
+   withdrawn ask is its head alone, a replaced one struck through. */
 .inbox-ask {
   display: flex;
   min-width: 0;
@@ -3621,13 +3633,25 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
-.inbox-ask-body {
+.inbox-ask-body,
+.inbox-ask-answered {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-12);
   border-top: 1px solid var(--luke-color-border);
+}
+
+/* The press an answer gave wears its glyph in the tone of what it did,
+   green going ahead and red holding back, as the answer's stamp does. */
+.inbox-ask-pressed {
+  display: inline-flex;
+  color: var(--luke-color-complete);
+}
+
+.inbox-ask-pressed[data-tone="back"] {
+  color: var(--luke-color-danger-text);
 }
 
 .inbox-ask-presses {
@@ -6260,6 +6284,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .side-panel-content .conversation-log,
 .side-panel-content .agent-todos-dock,
 .side-panel-content .agent-published-dock,
+.side-panel-content .draft-fork-dock,
 .side-panel-content .agent-composer {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
@@ -7623,9 +7648,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   }
 }
 
-/* The issue picked, over the words inside the card: drawn as a
-   forked draft's chip is (`.draft-fork-chip`), its mark, its key, its title
-   cut short, a Linear issue's state, and the × at its end. */
+/* The issue picked, over the words inside the card: one outlined line,
+   its mark, its key, its title cut short, a Linear issue's state, and the
+   × at its end. */
 .new-task-issue {
   display: flex;
   min-width: 0;

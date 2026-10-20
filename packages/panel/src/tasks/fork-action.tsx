@@ -225,7 +225,9 @@ export function ForkChip({
         ) : (
           <SplitIcon className="draft-fork-glyph" aria-hidden="true" />
         )}
-        <span>{messageId === undefined ? FORK_WORDS.CONTINUE_OF : FORK_WORDS.OF}</span>
+        <span className="draft-fork-lead">
+          {messageId === undefined ? FORK_WORDS.CONTINUE_OF : FORK_WORDS.OF}
+        </span>
         {agentChip(agentId, source, cards, open === undefined ? undefined : () => open())}
         {messageId === undefined ? null : (
           <>
