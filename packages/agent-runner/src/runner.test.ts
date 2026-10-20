@@ -4,10 +4,10 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { type FakeResponder, fakeHttpClientLayer } from "@luke/wire/testing";
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { EventsUndelivered } from "./events.js";
+import { RunnerFailed } from "./launch.js";
 import {
   EFFORT,
   IMAGE_MEDIA_TYPE,
@@ -19,8 +19,10 @@ import {
   type RunnerConfig,
   type RunnerEvent,
 } from "./protocol.js";
-import { RunnerFailed, runAgent } from "./runner.js";
+import { runAgent } from "./runner.js";
+import { fakeAppServer } from "./testing/fake-app-server.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
+import { ANSWER, type Answer, makeFakeLuke } from "./testing/fake-luke.js";
 import {
   FOLLOW_UP_TURNS,
   SHORT_TURN,
@@ -68,59 +70,20 @@ const FIRST_MESSAGE: InputLine = {
   ],
 };
 
-/** How a fake Luke answers one post: take it, fail as a server, or fail before answering. */
-const ANSWER = {
-  TAKE: "take",
-  SERVER_ERROR: "server_error",
-  TAKE_THEN_FAIL: "take_then_fail",
-  UNREACHABLE: "unreachable",
-  REFUSE: "refuse",
-} as const;
-type Answer = (typeof ANSWER)[keyof typeof ANSWER];
-
-/**
- * A fake Luke events route. It applies each sequence at most once, as the
- * real route does, so a batch posted again changes nothing; answers each post
- * as the next of `answers` says, then takes every later one; and settles
- * `seen` once an applied message holds `watchFor`.
- */
+/** The fake Luke events route these launches post to. */
 function fakeLuke(answers: readonly Answer[] = [], watchFor?: string) {
-  const applied: RunnerEvent[] = [];
-  const bearers: (string | null)[] = [];
-  let posts = 0;
-  const seen = Deferred.makeUnsafe<void>();
-
-  const respond: FakeResponder = async (url, init) => {
-    assert.equal(url, EVENTS_URL);
-    bearers.push(new Headers(init.headers).get("authorization"));
-    const answer = answers[posts] ?? ANSWER.TAKE;
-    posts += 1;
-    if (answer === ANSWER.UNREACHABLE) throw new Error("connection reset");
-    if (answer === ANSWER.REFUSE) return new Response(null, { status: 401 });
-    if (answer === ANSWER.SERVER_ERROR) return new Response(null, { status: 503 });
-    const batch: { events: RunnerEvent[] } = JSON.parse(String(init.body));
-    const last = applied.at(-1)?.sequence ?? FIRST_SEQUENCE - 1;
-    for (const event of batch.events) {
-      if (event.sequence <= last) continue;
-      applied.push(event);
-      if (watchFor !== undefined && JSON.stringify(event.message).includes(watchFor)) {
-        Deferred.doneUnsafe(seen, Exit.void);
-      }
-    }
-    return new Response(null, { status: answer === ANSWER.TAKE_THEN_FAIL ? 500 : 204 });
-  };
-  return {
-    layer: fakeHttpClientLayer(respond),
-    applied,
-    bearers,
-    posts: () => posts,
-    seen: Deferred.await(seen),
-  };
+  return makeFakeLuke({
+    url: EVENTS_URL,
+    firstSequence: FIRST_SEQUENCE,
+    answers,
+    watchFor,
+  });
 }
 
 /** The `type`, and `subtype` where it has one, of each message applied, in order. */
 function kinds(events: readonly RunnerEvent[]): string[] {
   return events.map(({ message }) => {
+    if (!("type" in message)) return message.method;
     const subtype = "subtype" in message ? message.subtype : undefined;
     return subtype === undefined ? message.type : `${message.type}/${subtype}`;
   });
@@ -139,7 +102,7 @@ function launch(
     const write = (line: RunnerConfig | InputLine) => writeText(JSON.stringify(line));
     const run = yield* runAgent({ lines: Stream.fromQueue(stdin), env }).pipe(
       Effect.scoped,
-      Effect.provide(Layer.mergeAll(cli.layer, luke.layer)),
+      Effect.provide(Layer.mergeAll(cli.layer, luke.layer, fakeAppServer([]).layer)),
       Effect.forkScoped,
     );
     return { cli: cli.record, prompted: cli.prompted, release: cli.release, write, writeText, run };
@@ -186,7 +149,7 @@ it.effect("posts a waiting turn in order and ends the launch only once nothing i
       luke.applied.map((_, index) => FIRST_SEQUENCE + index),
     );
     const waiting = luke.applied[8]?.message;
-    assert.ok(waiting?.type === RUNNER_EVENT.WAITING);
+    assert.ok(waiting !== undefined && "type" in waiting && waiting.type === RUNNER_EVENT.WAITING);
     assert.equal(waiting.background_tasks.length, 1);
     assert.equal(waiting.session_crons.length, 1);
     assert.ok(JSON.stringify(luke.applied[11]?.message).includes(TURN_DONE.FIRST));
