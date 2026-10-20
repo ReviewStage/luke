@@ -1376,7 +1376,7 @@ const startedBefore = (call: CodingAgentCall) =>
     // A continue run again names the agents that continued its source before it, as its first answer did.
     const from = agent.startedFrom;
     const continuedBy =
-      from === null || from.messageId !== undefined || agent.taskId === null
+      from === null || from.messageId !== undefined
         ? []
         : yield* earlierContinuationsOf(
             { userId, workspaceId: workspace.value, taskId: agent.taskId },
