@@ -89,34 +89,22 @@ const AutomationsPage = lazy(() =>
   })),
 );
 
-/** The Board, its own chunk, loaded the first time it is opened. */
-const TasksBoard = lazy(() =>
-  import("./tasks-board.js").then((loaded) => ({ default: loaded.TasksBoard })),
-);
-
-/** The Tasks page that stands in the Board's place while the inbox-first sidebar is on, its own chunk too. */
+/** The Tasks page, its List and its Board, its own chunk, loaded the first time it is opened. */
 const TasksPage = lazy(() =>
   import("./tasks-page.js").then((loaded) => ({ default: loaded.TasksPage })),
 );
 
-/** What stands while the Board's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the Board rather than reaching the plan behind it. */
-function BoardLoading({
-  title,
-  onExit,
-}: {
-  /** The page's name: the Board's, or the Tasks page's standing in its place. */
-  title: string;
-  onExit: () => void;
-}): React.JSX.Element {
+/** What stands while the Tasks page's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the page rather than reaching the plan behind it. */
+function TasksLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, onExit);
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
-      label={title}
+      label="Tasks"
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">{title}</h1>
+            <h1 className="desktop-toolbar-title">Tasks</h1>
           </div>
         </header>
       }
@@ -126,7 +114,7 @@ function BoardLoading({
   );
 }
 
-/** What stands while Factory's chunk loads (`pages-on-demand.ts`): its frame and title over quiet blocks, and its own way out, as the Board's does. */
+/** What stands while Factory's chunk loads (`pages-on-demand.ts`): its frame and title over quiet blocks, and its own way out, as the Tasks page's does. */
 function FactoryLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_FACTORY, onExit);
   return (
@@ -447,8 +435,6 @@ function titleSubject(
   tab: PanelTab,
   tasks: TasksControl,
   shownTask: Task | undefined,
-  /** Whether the account has the inbox-first sidebar on, under which the Board's place is the Tasks page. */
-  inboxFirst: boolean,
 ): Parameters<typeof useWindowTitle>[0] {
   const { signedIn } = tasks;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
@@ -464,9 +450,7 @@ function titleSubject(
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
   if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
-  if (tasks.boardView.open) {
-    return { signedIn, subject: inboxFirst ? "Tasks" : "Board", workspace: tasks.workspace };
-  }
+  if (tasks.boardView.open) return { signedIn, subject: "Tasks", workspace: tasks.workspace };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
@@ -579,12 +563,11 @@ export function DesktopShell({
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
-  // With the inbox-first sidebar on, the Board's place is the Tasks page, which holds the Board as one of its views.
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
   const inboxListing = useInboxListing(tasks, inboxFirst && tasks.signedIn);
   const sharedListing = inboxFirst && tasks.signedIn ? inboxListing : undefined;
-  useWindowTitle(titleSubject(tab, tasks, shownTask, inboxFirst));
+  useWindowTitle(titleSubject(tab, tasks, shownTask));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = useTaskLooks(shownTask, tasks.me);
   const mentionedAgents = useMemo(
@@ -794,19 +777,11 @@ export function DesktopShell({
                   <FACTORY.Route tasks={tasks} />
                 </Suspense>
               </PageFind>
-            ) : boardOpen && inboxFirst ? (
+            ) : boardOpen ? (
               // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
-              <Suspense fallback={<BoardLoading title="Tasks" onExit={tasks.boardView.onClose} />}>
+              <Suspense fallback={<TasksLoading onExit={tasks.boardView.onClose} />}>
                 <TasksPage tasks={tasks} room={room} />
               </Suspense>
-            ) : boardOpen ? (
-              <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>
-                <Suspense
-                  fallback={<BoardLoading title="Board" onExit={tasks.boardView.onClose} />}
-                >
-                  <TasksBoard tasks={tasks} room={room} />
-                </Suspense>
-              </PageFind>
             ) : automationsOpen ? (
               <PageFind
                 page={FIND_PAGE.AUTOMATIONS}

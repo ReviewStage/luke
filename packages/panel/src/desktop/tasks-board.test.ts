@@ -158,7 +158,7 @@ async function mountBoard(
         createElement(
           Fragment,
           null,
-          createElement(TasksBoard, { tasks: control, room }),
+          createElement(TasksBoard, { tasks: control, room, title: "Tasks", switcher: null }),
           createElement(ToastHost),
         ),
       ),
