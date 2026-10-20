@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { INBOX_REPLY } from "@luke/features/inbox-wire";
+import { INBOX_REPLY, type InboxAnswers } from "@luke/features/inbox-wire";
+import { TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import {
   carried,
   GATEWAY_ERROR,
@@ -103,6 +104,35 @@ it.effect(
     }),
 );
 
+it.effect("a task filed for later carries its status and priority to the host", () =>
+  Effect.gen(function* () {
+    const { client, requests } = recordingClient();
+    const operator = operatorOver(client);
+
+    yield* operator.tasksStart({
+      name: "Rate limit search",
+      planning: false,
+      status: TASK_STATUS.BACKLOG,
+      priority: TASK_PRIORITY.HIGH,
+    });
+
+    assert.deepEqual(
+      requests.map((request) => [request.method, request.params]),
+      [
+        [
+          GATEWAY_METHOD.TASKS_START,
+          {
+            name: "Rate limit search",
+            planning: false,
+            status: TASK_STATUS.BACKLOG,
+            priority: TASK_PRIORITY.HIGH,
+          },
+        ],
+      ],
+    );
+  }),
+);
+
 it.effect("an inbox answer's files travel to the host with its words, under the answer's key", () =>
   Effect.gen(function* () {
     const { client, requests } = recordingClient();
@@ -137,6 +167,46 @@ it.effect("an inbox answer's files travel to the host with its words, under the 
       ],
     );
   }),
+);
+
+it.effect(
+  "a message on an inbox item's thread carries the answer to its open ask to the host beside its words, and a plain reply carries none",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const answers: InboxAnswers = {
+        ask: "7f4d0b2a-3c5e-4a81-9d9f-4e6a8c0d2f3b",
+        reply: INBOX_REPLY.CHOSE,
+        choices: ["Ship it"],
+      };
+
+      yield* operator.codingAgentInboxMessage({
+        itemId: "item-1",
+        text: "Ship it today.",
+        clientKey: "message-1",
+        answers,
+      });
+      yield* operator.codingAgentInboxMessage({
+        itemId: "item-1",
+        text: "Any news?",
+        clientKey: "message-2",
+      });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [
+            GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE,
+            { itemId: "item-1", text: "Ship it today.", clientKey: "message-1", answers },
+          ],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE,
+            { itemId: "item-1", text: "Any news?", clientKey: "message-2" },
+          ],
+        ],
+      );
+    }),
 );
 
 it.effect(

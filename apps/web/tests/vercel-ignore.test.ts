@@ -104,7 +104,7 @@ test("a branch that predates the script is built rather than failed", async (t) 
 
 test("a push that changes anything a service installs or builds from is built", async (t) => {
   for (const path of [
-    "apps/web/server/routes/plans.ts",
+    "apps/web/server/routes/github/webhook.ts",
     "apps/luke/agent.ts",
     "apps/dev/sandbox.ts",
     "packages/service/src/index.ts",

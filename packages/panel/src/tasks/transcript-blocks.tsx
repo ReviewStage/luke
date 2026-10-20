@@ -759,6 +759,7 @@ const CALL_ICON = {
   [CALL_KIND.INBOX_CLOSE]: InboxIcon,
   [CALL_KIND.INBOX_READ]: InboxIcon,
   [CALL_KIND.INBOX_REPLY]: InboxIcon,
+  [CALL_KIND.INBOX_WITHDRAW]: InboxIcon,
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
@@ -1207,7 +1208,7 @@ export function TranscriptSubagent({
   onOpen,
   card,
 }: TranscriptSubagentProps): ReactNode {
-  const [words, clipped] = useClipped();
+  const [words, clipped] = useClipped(job);
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   const line = (
     <>

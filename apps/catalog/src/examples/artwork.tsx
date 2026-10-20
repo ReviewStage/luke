@@ -1,8 +1,10 @@
 import {
   AgentPlaceholderIcon,
   ArchiveIcon,
+  ArrowDownIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
+  ArrowUpIcon,
   BackIcon,
   BoardIcon,
   CallIcon,
@@ -69,8 +71,10 @@ import { CatalogSection } from "../section";
 const GLYPHS = Object.entries({
   AgentPlaceholderIcon,
   ArchiveIcon,
+  ArrowDownIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
+  ArrowUpIcon,
   BackIcon,
   BoardIcon,
   CallIcon,

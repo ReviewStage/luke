@@ -6,15 +6,25 @@
  */
 
 import { accountContract } from "./account.js";
+import { adminContract } from "./admin.js";
+import { agentPullRequestsContract } from "./agent-pull-requests.js";
+import { agentsContract } from "./agents.js";
 import { automationsContract } from "./automations.js";
 import { dictationContract } from "./dictation.js";
+import { eventsContract } from "./events.js";
 import { factoryContract } from "./factory.js";
 import { githubContract } from "./github.js";
+import { githubTokenContract } from "./github-token.js";
+import { inboxContract } from "./inbox.js";
 import { integrationsContract } from "./integrations.js";
-import { issuesContract } from "./issues.js";
+import { liveContract } from "./live.js";
+import { macCommandsContract } from "./mac-commands.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
+import { planCommentsContract } from "./plan-comments.js";
+import { pullRequestChaptersContract } from "./pull-request-chapters.js";
 import { repositoryPinsContract } from "./repository-pins.js";
+import { taskFilesContract } from "./task-files.js";
 import { taskSectionsContract } from "./task-sections.js";
 import { tasksContract } from "./tasks.js";
 import { workspaceGithubContract } from "./workspace-github.js";
@@ -22,24 +32,36 @@ import { workspaceInvitationsContract } from "./workspace-invitations.js";
 import { workspaceLinearContract } from "./workspace-linear.js";
 import { workspacesContract } from "./workspaces.js";
 
+export { AGENT_START_STATUS } from "./agents.js";
+export { bodyCap, getBodyCap } from "./base.js";
 export { HOSTED_ERRORS } from "./errors.js";
+export { EVENTS_MAXIMUM_BODY_BYTES } from "./events.js";
 export { integrationStatusesReadSchema } from "./integrations.js";
-export { ISSUE_ARCHIVED_QUERY } from "./issues.js";
 export { TASK_START_STATUS } from "./tasks.js";
 
 /** Every resource's procedures, one line each, in alphabetical order. */
 export const hostedContract = {
   account: accountContract,
+  admin: adminContract,
+  agentPullRequests: agentPullRequestsContract,
+  agents: agentsContract,
   automations: automationsContract,
   dictation: dictationContract,
+  events: eventsContract,
   factory: factoryContract,
   github: githubContract,
+  githubToken: githubTokenContract,
+  inbox: inboxContract,
   integrations: integrationsContract,
-  issues: issuesContract,
+  live: liveContract,
+  macCommands: macCommandsContract,
   messages: messagesContract,
   models: modelsContract,
+  planComments: planCommentsContract,
   plans: tasksContract,
+  pullRequestChapters: pullRequestChaptersContract,
   repositoryPins: repositoryPinsContract,
+  taskFiles: taskFilesContract,
   taskSections: taskSectionsContract,
   workspaceGithub: workspaceGithubContract,
   workspaceInvitations: workspaceInvitationsContract,

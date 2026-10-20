@@ -21,6 +21,7 @@ import {
   ListRow,
   PinIcon,
   ProviderMark,
+  TaskStatusMark as TaskStandingMark,
   TrashIcon,
   UnarchiveIcon,
   UnpinIcon,
@@ -64,6 +65,7 @@ import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { useAppState, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
+import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
 import { TaskStatusMark, taskCardOf } from "./task-card.js";
 
@@ -383,6 +385,8 @@ function useTaskMenu(
   const moving = useMoveTaskDialog(tasks, task);
   const copy = useCopyToast();
   const { open, drawn, close, trigger, contextMenu } = useMenu(tasks.shown && doors.drawn);
+  // The place the row stands in a list that reorders, which the menu moves it from under a finger; none for the toolbar's ⋯.
+  const place = useRowPlace();
   // Note that an archived task stands in no section, so it is offered none until it is brought back.
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
@@ -396,20 +400,23 @@ function useTaskMenu(
         label="Task actions"
         menu={drawn}
         footer={task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />}
-        groups={taskActionGroups(tasks, taskId, {
-          rename: doors.rename,
-          askDelete: deletion.ask,
-          archive,
-          askMove: moving.ask,
-          copy,
-          section,
-          read: {
-            unread: doors.unread,
-            onMark: (unread) => {
-              if (task !== undefined) reads.mark(task, unread);
+        groups={withRowMoves(
+          taskActionGroups(tasks, taskId, {
+            rename: doors.rename,
+            askDelete: deletion.ask,
+            archive,
+            askMove: moving.ask,
+            copy,
+            section,
+            read: {
+              unread: doors.unread,
+              onMark: (unread) => {
+                if (task !== undefined) reads.mark(task, unread);
+              },
             },
-          },
-        })}
+          }),
+          place,
+        )}
         onClose={close}
       />
     );
@@ -480,7 +487,8 @@ export function TaskActions({
 }
 
 /**
- * A task in the sidebar, pinned, listed, or archived alike: its name, in the
+ * A task in the sidebar, pinned, listed, or archived alike: led by its
+ * status's mark (`task-marks.tsx`), where its service gives it one; its name, in the
  * body's weight unless the task is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`task-card.tsx`),
@@ -561,6 +569,9 @@ export function SidebarTask({
           ref={hold}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
+          leading={
+            task.status === undefined ? undefined : <TaskStandingMark status={task.status} />
+          }
           title={
             rename.editing ? (
               <InlineEdit

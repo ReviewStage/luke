@@ -1,5 +1,6 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
 import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -23,11 +24,9 @@ import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { Database, type DatabaseServices, type QueryError } from "../core/query.js";
 import { attachment } from "../schemas/attachment.js";
-import { organization } from "../schemas/auth.js";
 import { automation } from "../schemas/automation.js";
 import { codingAgent, type StoredArchive } from "../schemas/coding-agent.js";
 import { inboxItem } from "../schemas/inbox.js";
-import { issue } from "../schemas/issue.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { conversations } from "../schemas/storage.js";
 import { task, taskNumberCounter } from "../schemas/task.js";
@@ -134,6 +133,8 @@ export interface StoredTask {
   readonly task: Task;
   /** The account that started the task, the one that may move it to another workspace. */
   readonly ownerId: string;
+  /** How the task's repository was reached as it was named: the workspace's GitHub App, or its owner's own token. */
+  readonly githubAccess: GitHubAccess;
   /** The plan's whole text. */
   readonly text: string;
   readonly agentEdits: readonly LabelledAgentEdit[];
@@ -146,30 +147,12 @@ export interface StoredTask {
   readonly issueLinks: readonly TaskIssueLink[];
   /** The developer's own words about the task as they started it; nothing for a task started with none. */
   readonly brief: string | undefined;
-  /** The workspace's own issue the plan was started from, as it reads now; nothing for a plan started from none, or once it is gone. */
-  readonly issue: StoredTaskIssue | undefined;
-}
-
-/**
- * The workspace's own issue a task was started from, as it reads now: its
- * number and what it says, and its workspace's name and slug, which its
- * identifier and its link are written from.
- */
-export interface StoredTaskIssue {
-  readonly id: string;
-  readonly number: number;
-  readonly title: string;
-  readonly description: string;
-  readonly workspaceName: string;
-  readonly workspaceSlug: string;
 }
 
 /**
  * A plan to start: the workspace it starts in, its name where one is given,
  * the repository it is about where one is chosen, the external issues it
- * links from the start, as the service read them, where any were picked, and
- * the workspace's own issue it starts from, where it was started from one, which
- * the caller confirms is an issue of the workspace it starts in. A plan started
+ * links from the start, as the service read them, where any were picked. A plan started
  * with no name, or a blank one, stands as `UNTITLED_PLAN_NAME` until it is
  * renamed. A plan started with `planning` false skips its planning phase and
  * starts empty rather than as the template. A brief is the developer's own
@@ -179,8 +162,9 @@ export interface NewTask {
   readonly organizationId: string;
   readonly name?: string;
   readonly repository?: string | null;
+  /** How the repository was reached as it was named; the App's where none is named. */
+  readonly githubAccess?: GitHubAccess;
   readonly issueLinks?: readonly NewTaskIssueLink[];
-  readonly issueId?: string;
   readonly planning?: boolean;
   readonly brief?: string;
   /** Where the task stands as it starts; to do where none is named. */
@@ -199,6 +183,8 @@ export interface TaskChanges {
   readonly name?: string;
   readonly organizationId?: string;
   readonly repository?: string | null;
+  /** How a repository the change names was reached, written with it; the App's where it names none. */
+  readonly githubAccess?: GitHubAccess;
   readonly pinned?: boolean;
   /** Where the pin stands in the sidebar's Pinned section, which comes only with a pin. */
   readonly pinPosition?: string;
@@ -206,6 +192,9 @@ export interface TaskChanges {
   readonly status?: TaskStatus;
   readonly priority?: TaskPriority;
 }
+
+/** How a task's repository was reached, as a write takes it. */
+const GitHubAccessSchema = Schema.Literals(Object.values(GITHUB_ACCESS));
 
 /**
  * The columns a line of the list reads: none of the document. Note that the
@@ -223,7 +212,7 @@ const TASK_SUMMARY_COLUMNS = {
   status: task.status,
   priority: task.priority,
   repository: task.repository,
-  issueId: task.issueId,
+  githubAccess: task.githubAccess,
   archivedAt: task.archivedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -247,7 +236,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   repository: Schema.NullOr(Schema.String),
-  issueId: Schema.NullOr(Schema.String),
+  githubAccess: GitHubAccessSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -452,6 +441,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
         sectionEdits: sectionWriters.map((writer) => sectionEditOf(writer, labels)),
       },
       ownerId: row.userId,
+      githubAccess: row.githubAccess,
       text: row.document,
       agentEdits,
       conversationId: row.conversationId ?? undefined,
@@ -459,12 +449,6 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
       sectionWriters,
       issueLinks: yield* listTaskIssues(userId, row.id),
       brief: row.brief ?? undefined,
-      issue:
-        row.issueId === null
-          ? undefined
-          : Option.getOrUndefined(
-              yield* findTaskIssue({ issueId: row.issueId, organizationId: row.organizationId }),
-            ),
     };
   });
 }
@@ -504,7 +488,6 @@ function summaryOf(
     ...(pin === null ? undefined : { pinnedAt: pin.pinnedAt.getTime() }),
     ...(pin === null || pin.pinPosition === null ? undefined : { pinPosition: pin.pinPosition }),
     ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
-    ...(row.issueId === null ? undefined : { issueId: row.issueId }),
     status: row.status,
     priority: row.priority,
     number: row.number,
@@ -520,8 +503,8 @@ const TaskInsertSchema = Schema.Struct({
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   repository: Schema.NullOr(Schema.String),
+  githubAccess: GitHubAccessSchema,
   document: Schema.String,
-  issueId: Schema.NullOr(Schema.String),
   brief: Schema.NullOr(Schema.String),
   now: Schema.Date,
 });
@@ -537,8 +520,8 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     status: write.status,
     priority: write.priority,
     repository: write.repository,
+    githubAccess: write.githubAccess,
     document: write.document,
-    issueId: write.issueId,
     brief: write.brief,
     createdAt: write.now,
     updatedAt: write.now,
@@ -615,38 +598,6 @@ const findTasks = SqlSchema.findAll({
     ),
 });
 
-/**
- * The issue a task names, where it is an issue of the task's own workspace,
- * with that workspace's name and slug; none where it is gone.
- */
-const findTaskIssue = SqlSchema.findOneOption({
-  Request: Schema.Struct({ issueId: Schema.String, organizationId: Schema.String }),
-  Result: Schema.Struct({
-    id: Schema.String,
-    number: Schema.Number,
-    title: Schema.String,
-    description: Schema.String,
-    workspaceName: Schema.String,
-    workspaceSlug: Schema.String,
-  }),
-  execute: ({ issueId, organizationId }) =>
-    Database.use((db) =>
-      db
-        .select({
-          id: issue.id,
-          number: issue.number,
-          title: issue.title,
-          description: issue.description,
-          workspaceName: organization.name,
-          workspaceSlug: organization.slug,
-        })
-        .from(issue)
-        .innerJoin(organization, eq(organization.id, issue.organizationId))
-        .where(and(eq(issue.id, issueId), eq(issue.organizationId, organizationId)))
-        .limit(1),
-    ),
-});
-
 const findTask = SqlSchema.findOneOption({
   Request: TaskKeySchema,
   Result: TaskRowSchema,
@@ -663,6 +614,34 @@ const findTaskWorkspace = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({ organizationId: task.organizationId })
+        .from(task)
+        .where(reachableTask(userId, taskId))
+        .limit(1),
+    ),
+});
+
+/** The columns of a task `readTaskHeader` answers: every one but its plan's. */
+const findTaskHeader = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: Schema.Struct({
+    organizationId: Schema.String,
+    userId: Schema.String,
+    name: Schema.String,
+    repository: Schema.NullOr(Schema.String),
+    archived: Schema.Boolean,
+    conversationId: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .select({
+          organizationId: task.organizationId,
+          userId: task.userId,
+          name: task.name,
+          repository: task.repository,
+          archived: sql<boolean>`${task.archivedAt} is not null`,
+          conversationId: task.conversationId,
+        })
         .from(task)
         .where(reachableTask(userId, taskId))
         .limit(1),
@@ -707,7 +686,7 @@ const TaskColumnChangesSchema = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   organizationId: Schema.optionalKey(Schema.String),
   repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  issueId: Schema.optionalKey(Schema.Null),
+  githubAccess: Schema.optionalKey(GitHubAccessSchema),
   number: Schema.optionalKey(Schema.Number),
   status: Schema.optionalKey(taskStatusSchema),
   priority: Schema.optionalKey(taskPrioritySchema),
@@ -943,8 +922,8 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       organizationId: started.organizationId,
       name: named.length > 0 ? named : UNTITLED_TASK_NAME,
       repository: started.repository ?? null,
+      githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
       document: template ?? DEFAULT_PLAN_TEMPLATE,
-      issueId: started.issueId ?? null,
       brief: brief.length > 0 ? brief : null,
       status: started.status ?? TASK_STATUS.TODO,
       priority: started.priority ?? TASK_PRIORITY.NONE,
@@ -963,8 +942,12 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
         );
         for (const link of started.issueLinks ?? []) {
           yield* linkTaskIssue(userId, row.id, link).pipe(
-            // A new task's links are its starter's few, each named once, so a refusal is the caller breaking its contract.
-            Effect.catchTags({ TaskIssuesFull: Effect.die, TaskIssueLinked: Effect.die }),
+            // A new task's links are its starter's few, each named once, on a task not yet archived, so a refusal is the caller breaking its contract.
+            Effect.catchTags({
+              TaskIssuesFull: Effect.die,
+              TaskIssueLinked: Effect.die,
+              TaskArchived: Effect.die,
+            }),
           );
         }
         return yield* taskOf(userId, row);
@@ -1043,6 +1026,40 @@ export function readTaskWorkspace(
   );
 }
 
+/** A task as `readTaskHeader` reads it: where it stands and whose it is, without its plan. */
+export interface TaskHeader {
+  readonly workspaceId: string;
+  readonly ownerId: string;
+  readonly name: string;
+  readonly repository: string | null;
+  readonly archived: boolean;
+  /** Its brain's conversation; none before Luke first ran on it. */
+  readonly conversationId: string | undefined;
+}
+
+/**
+ * A task the account reaches, as `readTask` would answer it, in one
+ * statement and without its plan, its history, or its issues: what a read
+ * that only refuses a task, finds its workspace, its repository, or its
+ * conversation, or names it needs. Nothing where the account reaches none.
+ */
+export function readTaskHeader(
+  userId: string,
+  taskId: string,
+): TaskStoreEffect<Option.Option<TaskHeader>> {
+  return Effect.map(
+    findTaskHeader({ userId, taskId }),
+    Option.map((row) => ({
+      workspaceId: row.organizationId,
+      ownerId: row.userId,
+      name: row.name,
+      repository: row.repository,
+      archived: row.archived,
+      conversationId: row.conversationId ?? undefined,
+    })),
+  );
+}
+
 /**
  * The task as `readTask` reads it, held under the row's lock until the
  * enclosing transaction ends, so a save formatted from it is not crossed by
@@ -1107,11 +1124,15 @@ function columnChangesOf(
 ): TaskColumnChanges {
   return {
     ...(changes.name === undefined ? undefined : { name: changes.name }),
-    // An issue is its workspace's, so a task moved to another lets its issue go.
     ...(movedNumber === undefined || changes.organizationId === undefined
       ? undefined
-      : { organizationId: changes.organizationId, issueId: null, number: movedNumber }),
-    ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
+      : { organizationId: changes.organizationId, number: movedNumber }),
+    ...(changes.repository === undefined
+      ? undefined
+      : {
+          repository: changes.repository,
+          githubAccess: changes.githubAccess ?? GITHUB_ACCESS.APP,
+        }),
     ...(changes.status === undefined ? undefined : { status: changes.status }),
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.archived === undefined

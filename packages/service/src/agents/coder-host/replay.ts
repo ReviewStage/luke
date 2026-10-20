@@ -11,7 +11,7 @@ import {
   messageSeqOf,
   type StoredMessageRecord,
 } from "@luke/database/models/message-reads";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import type { StoredStartedFrom } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -54,6 +54,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { controlsAgent } from "../agent-reach.js";
 import { agentPublished } from "./published.js";
 import { copySourceWork, type SnapshotOutcome, type SourceCopyServices } from "./snapshot.js";
 import { CODER_TOOL, CODER_TOOL_SET, RETIRED_CODER_TOOL } from "./tool-set.js";
@@ -974,8 +975,10 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const { agent: source, published } = found;
-  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
-  const repository = Option.isSome(task) ? task.value.task.repository : null;
+  // An agent on its starter's own GitHub token is continued or forked by its starter alone, before its work is copied.
+  if (!controlsAgent(userId, source)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
+  const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
+  const repository = Option.isSome(task) ? task.value.repository : null;
   const { lineage, carried: carriedWork } = yield* hostedStoreOrUnavailable(
     lineageOf(userId, source, repository),
   );

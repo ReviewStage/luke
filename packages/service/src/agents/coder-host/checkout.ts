@@ -10,10 +10,14 @@ import type * as HttpClient from "effect/http/HttpClient";
 import {
   GITHUB_HTTP_STATUS,
   GitHubApp,
+  type GitHubTokenAccess,
   type GitHubUser,
   noreplyAddress,
 } from "../../github/github-app.js";
-import { agentWorkspace as workspaceOfAgent } from "../../github/workspace-repository.js";
+import {
+  agentMember,
+  agentWorkspace as workspaceOfAgent,
+} from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import {
   type CheckoutIdentity,
@@ -184,7 +188,7 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
   return yield* Effect.gen(function* () {
     const workspace = yield* agentWorkspace(target, agent);
     if (Option.isNone(workspace)) return false;
-    return yield* app.repositoryCiReadable(workspace.value, agent.repository);
+    return yield* app.repositoryCiReadable(workspace.value, agent.repository, agentMember(agent));
   }).pipe(
     Effect.catch((failure) =>
       Effect.as(
@@ -211,6 +215,8 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
       readonly token: Redacted.Redacted;
       readonly defaultBranch: string;
       readonly fullName: string;
+      /** Whose the token is: the App's, or the starter's own with their GitHub login. */
+      readonly access: GitHubTokenAccess;
     },
     CheckoutRefused,
     CheckoutServices
@@ -219,12 +225,17 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
     const reached = yield* Effect.gen(function* () {
       const workspace = yield* agentWorkspace(target, agent);
       if (Option.isNone(workspace)) return Option.none();
-      return yield* app.repositoryWriteToken(workspace.value, agent.repository);
+      return yield* app.repositoryWriteToken(workspace.value, agent.repository, agentMember(agent));
     }).pipe(Effect.mapError(refusedBy));
     if (Option.isNone(reached))
       return yield* new CheckoutRefused({ reason: CODER_REFUSAL.NOT_REACHABLE });
-    const { repository, token } = reached.value;
-    return { token, defaultBranch: repository.defaultBranch, fullName: repository.fullName };
+    const { repository, token, access } = reached.value;
+    return {
+      token,
+      defaultBranch: repository.defaultBranch,
+      fullName: repository.fullName,
+      access,
+    };
   },
 );
 
@@ -283,6 +294,7 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
         recordedAs: agent.repository,
       },
       minted.token,
+      { access: minted.access },
     ).pipe(Effect.mapError(refused));
     yield* setCheckoutIdentity(sandbox, identity).pipe(Effect.mapError(refused));
     return minted.token;

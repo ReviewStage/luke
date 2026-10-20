@@ -14,6 +14,12 @@ import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW, type AdminMetricsScope } fro
  * Overview used to: every account the scope keeps, by each method it linked,
  * whatever the search narrowed the rows to, and an admin's own left out
  * while admins are hidden. Synthetic accounts throughout.
+ *
+ * The file has its database to itself (`getTestDB` opens a fresh PGlite, or
+ * clones the migrated Postgres, per file), so a user id needs no random part
+ * to stay unique, and must carry none: the search matches a substring of the
+ * email, which is built from the id, and a random hex UUID holds "ada" often
+ * enough to make a second account match it.
  */
 
 const NOW = Date.UTC(2026, 9, 21, 12);
@@ -21,7 +27,7 @@ const NOW = Date.UTC(2026, 9, 21, 12);
 const openAccount = (name: string, providers: readonly string[], role: string = USER_ROLE.USER) =>
   Effect.gen(function* () {
     const db = yield* Database;
-    const id = `user-${name}-${randomUUID()}`;
+    const id = `user-${name}`;
     yield* db.insert(user).values({ id, name, email: `${id}@luke.test`, role });
     for (const providerId of providers) {
       yield* db.insert(account).values({

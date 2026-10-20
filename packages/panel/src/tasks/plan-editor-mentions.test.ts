@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -12,7 +12,7 @@ import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
@@ -39,28 +39,22 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installEditorLayout();
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.TASKS_TREE
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                folder: {
-                  path: "",
-                  repository: "acme/relay",
-                  branch: "main",
-                  entries: [
-                    { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
-                    { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
-                    { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
-                  ],
-                  truncated: false,
-                },
-              },
-            }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      ),
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.TASKS_TREE]: () =>
+      Promise.resolve({
+        folder: {
+          path: "",
+          repository: "acme/relay",
+          branch: "main",
+          entries: [
+            { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
+            { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
+            { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
+          ],
+          truncated: false,
+        },
+      }),
   });
 });
 

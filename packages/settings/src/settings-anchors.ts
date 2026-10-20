@@ -34,6 +34,7 @@ export const SETTINGS_SEARCH_ROW = {
   CODING_AGENT_MODEL: "coding-agent-model",
   CODING_AGENT_EFFORT: "coding-agent-effort",
   CODING_AGENT_FAST: "coding-agent-fast",
+  CHAPTERS_MODEL: "chapters-model",
   API_KEY_ANTHROPIC: "api-key-anthropic",
   API_KEY_OPENAI: "api-key-openai",
 } as const;
@@ -51,7 +52,5 @@ export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.FACTORY]: "experiment-factory",
   [EXPERIMENT.CODE_REVIEW]: "experiment-code-review",
   [EXPERIMENT.VIDEO_CALLS]: "experiment-video-calls",
-  [EXPERIMENT.ISSUES]: "experiment-issues",
   [EXPERIMENT.SECTIONS]: "experiment-sections",
-  [EXPERIMENT.GITHUB_TOKEN]: "experiment-github-token",
 } as const satisfies Record<Experiment, string>;

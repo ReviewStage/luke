@@ -26,13 +26,15 @@ import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { conversations } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, startTask } from "@luke/database/testing";
+import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_BRIEF,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { withTaskAgents } from "@luke/service/agents/task-agents";
+import { listTasklessAgents, withTaskAgents } from "@luke/service/agents/task-agents";
 import { count, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -129,6 +131,21 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   changedFiles: 3,
 };
 
+/** Text the size of a long plan, which an agent may be handed and no list line carries. */
+const LARGE_TEXT = "Any member may invite a teammate by email, and the invite expires.\n".repeat(
+  4_000,
+);
+
+/** What a list reads of an agent: its row without the text it was handed, whether that was a prompt, and its automation's name. */
+function listedLine({
+  planSnapshot: _planSnapshot,
+  prompt,
+  automationOrigin,
+  ...row
+}: CodingAgent) {
+  return { ...row, automationName: automationOrigin?.name ?? null, handedPrompt: prompt !== null };
+}
+
 it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
   it.effect(
     "the pull request an agent published reads back beside the agents of the plans named, as last recorded, and nothing of another account's is read or written",
@@ -143,15 +160,15 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
         // Another account's write names no agent of theirs, and another account's read names none of this one's.
         yield* recordCodingAgentPublished(userId, theirs.id, PULL_REQUEST);
         assert.deepEqual(yield* listPublishedCodingAgents(userId, [taskId, other.taskId]), [
-          { agent, published: PULL_REQUEST },
+          { agent: listedLine(agent), published: PULL_REQUEST },
         ]);
         assert.deepEqual(yield* listPublishedCodingAgents(other.userId, [other.taskId]), [
-          { agent: theirs, published: null },
+          { agent: listedLine(theirs), published: null },
         ]);
 
         yield* recordCodingAgentPublished(userId, agent.id, null);
         assert.deepEqual(yield* listPublishedCodingAgents(userId, [taskId]), [
-          { agent, published: null },
+          { agent: listedLine(agent), published: null },
         ]);
       }),
   );
@@ -167,7 +184,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
       assert.deepEqual(yield* listPublishedCodingAgents(userId, [taskId]), []);
       assert.deepEqual(
         yield* listPublishedCodingAgents(userId, [taskId], { includeArchived: true }),
-        [{ agent: archived, published: null }],
+        [{ agent: listedLine(archived), published: null }],
       );
     }),
   );
@@ -302,7 +319,7 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
 
         assert.deepEqual(yield* listCodingAgents(teammate, task.id), [agent]);
         assert.deepEqual(yield* listPublishedCodingAgents(teammate, [task.id]), [
-          { agent, published: null },
+          { agent: listedLine(agent), published: null },
         ]);
         assert.deepEqual(yield* readCodingAgent(teammate, agent.id), Option.some(agent));
         assert.deepEqual(
@@ -345,6 +362,87 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
           Option.none(),
         );
         assert.deepEqual(yield* createCodingAgent(stranger, start(task.id)), Option.none());
+      }),
+  );
+});
+
+it.layer(getTestDB())("the plan list's agent lines", (it) => {
+  it.effect(
+    "agents handed a large plan or prompt are listed beside their task and with none, naming their brief, automation, and source, and carrying none of the text they were handed",
+    () =>
+      Effect.gen(function* () {
+        const { userId, taskId } = yield* openTask;
+        const snapshotted = started(
+          yield* createCodingAgent(
+            userId,
+            start(taskId, { title: "Invite emails" }, { planSnapshot: LARGE_TEXT, prompt: null }),
+          ),
+        );
+        yield* TestClock.adjust("1 minute");
+        const source = { agentId: snapshotted.id, steps: 3, totalSteps: 5, branch: "luke/invite" };
+        const continued = started(
+          yield* createCodingAgent(
+            userId,
+            start(taskId, { startedFrom: source }, { planSnapshot: null, prompt: LARGE_TEXT }),
+          ),
+        );
+        yield* TestClock.adjust("1 minute");
+        const workspaceId = snapshotted.organizationId;
+        const taskless = started(
+          yield* createCodingAgent(userId, {
+            taskId: null,
+            organizationId: workspaceId,
+            planSnapshot: null,
+            prompt: LARGE_TEXT,
+            automationOrigin: {
+              name: "Nightly triage",
+              firing: { kind: AUTOMATION_FIRING.WEBHOOK, bytes: LARGE_TEXT.length },
+              prompt: LARGE_TEXT,
+              body: LARGE_TEXT,
+            },
+            startedFrom: source,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "reviewstage/luke",
+          }),
+        );
+
+        const [listed] = yield* withTaskAgents(userId, yield* listTasks(userId));
+        assert.deepEqual(
+          listed?.agents?.agents.map(({ id, title, model }) => ({ id, title, model })),
+          [
+            { id: continued.id, title: null, model: continued.model },
+            { id: snapshotted.id, title: "Invite emails", model: snapshotted.model },
+          ],
+        );
+        const rows = yield* listTasklessAgents(userId, { includeArchived: false });
+        assert.deepEqual(
+          rows.map((row) => ({
+            id: row.id,
+            planId: row.planId,
+            brief: row.brief,
+            automationId: row.automationId,
+            automationName: row.automationName,
+            from: row.from,
+            workspaceId: row.workspaceId,
+            repository: row.repository,
+          })),
+          [
+            {
+              id: taskless.id,
+              planId: null,
+              brief: CODING_AGENT_BRIEF.PROMPT,
+              automationId: null,
+              automationName: "Nightly triage",
+              from: source,
+              workspaceId,
+              repository: "reviewstage/luke",
+            },
+          ],
+        );
+        const answered = JSON.stringify([listed, rows]);
+        assert.ok(!answered.includes(LARGE_TEXT.slice(0, 40)), "the list carries no text");
       }),
   );
 });

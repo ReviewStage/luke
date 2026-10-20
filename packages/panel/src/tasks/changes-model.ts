@@ -70,6 +70,11 @@ import {
  * line; the rows kept are written again as a patch of their own, its header
  * counting them, with the thread's own lines selected.
  *
+ * A review thread on a line of the head no hunk shows stands above the
+ * diff until a gap opened over its line draws it, and on that line from then
+ * on (`gapLines`, `threadsOn`); an outdated one stands above whatever is
+ * opened, its line being on an older commit.
+ *
  * A comment on lines of the head alone may suggest a change to them, which
  * starts from those lines as the file's patch holds them (`suggestedLines`).
  */
@@ -352,35 +357,106 @@ function linesDrawnBy(file: CodingAgentChangedFile): DrawnLines {
 }
 
 /**
+ * Where each line after a hunk stands on the new side: the first old line
+ * past each hunk and the first new one, in order, every unchanged line
+ * after it counted on from there until the next hunk.
+ */
+function hunkEnds(patch: string): readonly { readonly old: number; readonly now: number }[] {
+  // A side a hunk holds no line of names the line before its place, as a patch does.
+  const past = (start: number, count: number) => (count === 0 ? start + 1 : start + count);
+  return (rawHunks(patch) ?? []).map((hunk) => ({
+    old: past(hunk.oldStart, hunk.oldLines),
+    now: past(hunk.newStart, hunk.newLines),
+  }));
+}
+
+/**
+ * The new side's line a line between a file's hunks stands on, as Pierre
+ * counts the lines a gap opens: a line of the new side as it is, and one of
+ * the old side counted on by what the hunks before it added and removed,
+ * since every line between hunks is the same on both sides. None where the
+ * file draws no patch.
+ */
+function gapLineOf(file: CodingAgentChangedFile, side: DiffSide, line: number): number | undefined {
+  if (side === DIFF_SIDE.RIGHT) return line;
+  if (file.patch === null) return undefined;
+  const before = hunkEnds(file.patch).findLast((end) => end.old <= line);
+  return before === undefined ? line : line + before.now - before.old;
+}
+
+/** Whether a thread may stand on a line a gap opened: one standing on a line of the head now, not outdated. */
+function openable(thread: ReviewThread): thread is ReviewThread & { readonly line: number } {
+  return thread.line !== null && !thread.outdated;
+}
+
+/**
+ * The lines of the new side between a file's hunks its review threads
+ * stand on, in ascending order, which the list is asked to tell of as a
+ * gap opens over them (`threadsOn`'s `opened`): every thread on a line of
+ * the head its patch draws no row for, not outdated, its old side's line
+ * counted on to the new side's (`gapLineOf`). None on a file whose patch
+ * is not drawn.
+ */
+export function gapLines(
+  threads: readonly ReviewThread[],
+  file: CodingAgentChangedFile,
+): readonly number[] {
+  const own = threads.filter(
+    (thread): thread is ReviewThread & { readonly line: number } =>
+      thread.path === file.path && openable(thread),
+  );
+  if (own.length === 0 || fileNotice(file) !== undefined) return [];
+  const lines = drawnLines(file);
+  const hidden = new Set<number>();
+  for (const thread of own) {
+    if (lines[thread.side].has(thread.line)) continue;
+    const gap = gapLineOf(file, thread.side, thread.line);
+    if (gap !== undefined) hidden.add(gap);
+  }
+  return [...hidden].toSorted((a, b) => a - b);
+}
+
+/**
  * A file's review threads as Files changed draws them, as GitHub's own
  * diff does: each on the line it stands on now, under that line on the
- * side it counts on, where the file's diff draws a row for that line; and,
- * at the top of the diff, in the order the pull request holds them, those
- * it draws none for: a thread whose line a later push took away, outdated;
- * one on a line no hunk shows; and every one on a file whose diff is not
- * drawn, binary, too large, or empty. A file drawn whole draws a row for
- * every one of its lines, so its threads stand on any of them. Each is keyed
- * by its first comment's page, which no other thread shares; one with no
- * comment is drawn nowhere.
+ * side it counts on, where the file's diff draws a row for that line, or
+ * where a gap it opened draws that line (`opened`, lines of the new side,
+ * as `gapLines` names them); and, at the top of the diff, in the order the
+ * pull request holds them, those it draws none for: a thread whose line a
+ * later push took away, outdated, which no opened gap draws; one on a line
+ * no hunk shows; and every one on a file whose diff is not drawn, binary,
+ * too large, or empty. A file drawn whole draws a row for every one of its
+ * lines, so its threads stand on any of them. Each is keyed by its first
+ * comment's page, which no other thread shares; one with no comment is
+ * drawn nowhere.
  */
 export function threadsOn(
   threads: readonly ReviewThread[],
   file: CodingAgentChangedFile,
   /** The file's texts where it is drawn whole; none where it draws its patch. */
   whole?: DiffFileTexts | undefined,
+  /** The lines of the new side between its hunks the file draws now, its gaps opened over them. */
+  opened?: ReadonlySet<number> | undefined,
 ): FileThreads {
   const placed: PlacedThread[] = [];
   const above: PlacedThread[] = [];
   // Note that a file no thread is on reads none of its lines, which would parse its patch.
   if (!threads.some((thread) => thread.path === file.path)) return { placed, above };
   const lines = whole === undefined ? drawnLines(file) : wholeLines(whole);
+  const inGap = (thread: ReviewThread) => {
+    if (opened === undefined || opened.size === 0 || !openable(thread)) return false;
+    const gap =
+      fileNotice(file) === undefined ? gapLineOf(file, thread.side, thread.line) : undefined;
+    return gap !== undefined && opened.has(gap);
+  };
   for (const thread of threads) {
     const key = thread.comments[0]?.url;
     if (thread.path !== file.path || key === undefined) continue;
     const side = SELECTION_SIDE[thread.side];
     const line = thread.line;
-    if (line !== null && lines[thread.side].has(line)) placed.push({ thread, key, side, line });
-    else above.push({ thread, key, side, line: line ?? thread.originalLine ?? 0 });
+    if (line !== null && (lines[thread.side].has(line) || inGap(thread))) {
+      placed.push({ thread, key, side, line });
+    } else above.push({ thread, key, side, line: line ?? thread.originalLine ?? 0 });
   }
   return { placed, above };
 }

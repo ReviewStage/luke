@@ -58,9 +58,11 @@ function SchemaSwitchRow({
       adornment={changed ? <ChangedMark /> : null}
       description={detail}
       error={rejection}
+      labelsControl
     >
       {(control) => (
         <Switch
+          id={control.controlId}
           {...anchorOf(id)}
           checked={checked}
           label={label}

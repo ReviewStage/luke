@@ -97,7 +97,7 @@ function said(id: string, role: CodingAgentMessage["role"], text: string): Codin
 test("a chat notice is copied under the member it tells of a message from, never as the developer's words nor as the plan, and is no step of the agent's own", () => {
   const notice: CodingAgentMessage = {
     ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
-    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "Invite emails" },
   };
   const transcript = agentTranscript({
     title: "Add teammate invitations",
@@ -116,11 +116,11 @@ test("a chat notice is copied under the member it tells of a message from, never
       "# Add teammate invitations",
       "## Plan",
       "Build invitations.",
-      "## Chat from @agent-2",
+      "## Chat from Invite emails",
       "@agent-1 are you changing memberships?",
       "## Agent",
       "Yes, base on my migration.",
-      "## Chat from @agent-2",
+      "## Chat from Invite emails",
       "@agent-1 are you changing memberships?",
     ].join("\n\n") + "\n",
   );
@@ -141,7 +141,7 @@ test("a notice in its whole shape is copied as the message alone under who said 
         chatNoticeReplyLine(43),
       ].join("\n\n"),
     ),
-    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "Invite emails" },
   };
   const answer = said(
     "answer",
@@ -160,7 +160,7 @@ test("a notice in its whole shape is copied as the message alone under who said 
       "# Add teammate invitations",
       "## Plan",
       "Build invitations.",
-      "## Chat from @agent-2",
+      "## Chat from Invite emails",
       "Are you changing memberships?",
       "## Developer",
       'Inbox answer on "Ship it?": Approved.',
@@ -171,7 +171,7 @@ test("a notice in its whole shape is copied as the message alone under who said 
 test("with Chat off, a chat notice is copied as the plain line it is drawn as, under the developer's heading, and still never as the plan", () => {
   const notice: CodingAgentMessage = {
     ...said("notice", MESSAGE_ROLE.USER, "@agent-1 are you changing memberships?"),
-    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+    metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "Invite emails" },
   };
   const transcript = agentTranscript({
     title: "Add teammate invitations",
@@ -324,4 +324,53 @@ test("a replay longer than the card draws at first is copied whole, every kept s
       Array.from({ length: count }, (_, at) => at + 1),
     );
   }
+});
+
+test("an agent's inbox posts and withdrawals from version 5 are copied as the rows the tab draws, never as their inputs' JSON, and a post from before it as it was", () => {
+  const call = (name: string, tool: string, input: WireRecord): WireRecord => ({
+    type: `tool-${tool}`,
+    toolCallId: `call-${name}`,
+    state: "output-available",
+    input,
+    output: { status: "accepted", inbox: [] },
+  });
+  const messages: readonly CodingAgentMessage[] = [
+    said("task", MESSAGE_ROLE.USER, "Ask about invites."),
+    {
+      id: "journal",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        STEP,
+        call("post", "post_to_inbox", {
+          key: "invite-ttl",
+          title: "7 days or 14?",
+          body: "The plan leaves this open.",
+          ask: { type: "decide", options: [{ label: "7 days" }, { label: "14 days" }] },
+        }),
+        call("withdraw", "withdraw_ask", { key: "invite-ttl", reason: "The plan says 7." }),
+        call("old", "post_to_inbox", {
+          key: "invite-ttl",
+          title: "Still 7 days?",
+          response: { type: "approval" },
+        }),
+      ],
+    },
+  ];
+  const copied = agentTranscript({
+    title: "Invites",
+    messages,
+    brief: CODING_AGENT_BRIEF.PROMPT,
+    chatOn: true,
+  });
+  const markdown = transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE);
+  assert.ok(
+    markdown.includes(
+      "- Posted to your inbox: 7 days or 14?\n- Withdrew an ask in your inbox: invite-ttl\n- Posted to your inbox: Still 7 days?",
+    ),
+    markdown,
+  );
+  const full = transcriptMarkdown(copied, TRANSCRIPT_COPY.FULL);
+  assert.ok(full.includes("The plan leaves this open.\nPick one\n- 7 days\n- 14 days"), full);
+  assert.ok(full.includes("The plan says 7."), full);
+  assert.ok(!full.includes('"body"'), "no input is copied as its JSON");
 });

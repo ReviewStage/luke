@@ -246,6 +246,19 @@ test("the pointer resting on the tree's toggle floats the tree over the diff, an
   assert.ok(!treeDrawn(), "leaving the tree takes it down");
 });
 
+test("a finger's arrival on the tree's toggle floats nothing, so iOS spends no tap on it, and its tap opens the tree", async () => {
+  const { toggle, diff, treeDrawn } = changesParts(await drawChangesTab());
+  act(() => {
+    const touch = { bubbles: true, pointerType: "touch" };
+    diff.dispatchEvent(new PointerEvent("pointerout", { ...touch, relatedTarget: toggle }));
+    toggle.dispatchEvent(new PointerEvent("pointerover", { ...touch, relatedTarget: diff }));
+  });
+  assert.ok(!treeDrawn(), "the arrival floats nothing");
+
+  await act(async () => toggle.click());
+  assert.ok(treeDrawn(), "the tap opens the tree");
+});
+
 test("the pointer at the tab's right edge floats the tree, though not with a button held, as a drag on the scrollbar there holds one", async () => {
   const { body, diff, treeDrawn } = changesParts(await drawChangesTab());
   vi.spyOn(body, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 280, 400));

@@ -22,6 +22,8 @@ import { MAINTENANCE_SWEEP_PATH } from "./maintenance-bounds.js";
  */
 
 const CRON_SECRET = "cron-secret-1";
+/** The deployment's own secret at eve's door, which every deployment here holds beside the cron's. */
+const EVE_DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 
 function environment(cronSecret: string | undefined): HostedEnvironmentValues {
   return {
@@ -33,6 +35,7 @@ function environment(cronSecret: string | undefined): HostedEnvironmentValues {
     posthogProjectApiKey: undefined,
     posthogIngestHost: undefined,
     cronSecret: cronSecret === undefined ? undefined : Redacted.make(cronSecret),
+    eveDeploymentSecret: Redacted.make(EVE_DEPLOYMENT_SECRET),
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
   };
@@ -99,6 +102,22 @@ it.effect("a call that is not the cron's checks nothing in", () =>
     assert.equal(status, 401);
     assert.deepEqual(checkIns(sentry.sent), []);
   }),
+);
+
+it.effect(
+  "a call under the deployment's own secret at eve's door is not the cron's, beside the cron's secret or without it, and checks nothing in",
+  () =>
+    Effect.gen(function* () {
+      const sentry = recordingSentry();
+      const beside = yield* sweep(CRON_SECRET, EVE_DEPLOYMENT_SECRET).pipe(
+        Effect.provide(sentry.layer),
+      );
+      const without = yield* sweep(undefined, EVE_DEPLOYMENT_SECRET).pipe(
+        Effect.provide(sentry.layer),
+      );
+      assert.deepEqual([beside, without], [401, 503]);
+      assert.deepEqual(checkIns(sentry.sent), []);
+    }),
 );
 
 it.layer(getTestDB())("a sweep that runs", (it) => {

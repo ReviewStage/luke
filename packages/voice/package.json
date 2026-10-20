@@ -8,6 +8,7 @@
     ".": "./src/index.js",
     "./effect": "./src/effect/index.js",
     "./live-session": "./src/live-session/index.js",
+    "./live-socket": "./src/live-socket.js",
     "./orchestrator": "./src/orchestrator/index.js",
     "./testing": "./src/testing.js",
     "./live-captions": "./src/live-captions.js",

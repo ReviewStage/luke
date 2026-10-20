@@ -15,7 +15,7 @@ import {
 import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema, type Scope } from "effect";
+import { Data, Effect, Result, type Schema, type Scope } from "effect";
 import { Base64Url, Hex } from "effect/encoding";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
@@ -60,12 +60,20 @@ function mintedWebhookSecret(): string {
 }
 
 /** The secret's SHA-256 as lowercase hex, the one form of it the service holds. */
-function webhookSecretHash(secret: string): Effect.Effect<string> {
+function webhookSecretHash(secret: string): Effect.Effect<string, WebhookSecretHashFailed> {
   return Effect.map(
-    Effect.promise(() => crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret))),
+    Effect.tryPromise({
+      try: () => crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret)),
+      catch: (cause) => new WebhookSecretHashFailed({ cause }),
+    }),
     (digest) => Hex.encode(new Uint8Array(digest)),
   );
 }
+
+/** Web Crypto refused to hash a minted webhook secret. */
+class WebhookSecretHashFailed extends Data.TaggedError("WebhookSecretHashFailed")<{
+  readonly cause: unknown;
+}> {}
 
 export function composeAutomations(
   dependencies: AutomationsDependencies,
@@ -152,10 +160,13 @@ function composed(
         // Note that the secret is minted here and only its hash leaves for the service, so the
         // service never holds it, and the window that asked is the one place it is answered.
         const secret = mintedWebhookSecret();
+        // A secret that cannot be hashed is never sent, and the call is answered as unanswered.
+        const hashed = yield* Effect.result(webhookSecretHash(secret));
+        if (Result.isFailure(hashed)) return carried<AutomationView>(UNANSWERED);
         const replaced = yield* asked(
           client.replaceWebhookSecret({
             automationId: named.automationId,
-            webhookSecretHash: yield* webhookSecretHash(secret),
+            webhookSecretHash: hashed.success,
           }),
         );
         return carried<AutomationView>(

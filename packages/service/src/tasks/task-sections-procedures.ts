@@ -18,10 +18,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
-
-/** A write is two ids, a title, and an emoji at most, so a body past this is not one. */
-const MAXIMUM_WRITE_BODY_BYTES = 2_048;
+import { accountMiddleware, hosted } from "../orpc/base.js";
 
 export interface TaskSectionsProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -29,9 +26,7 @@ export interface TaskSectionsProcedureSeams {
 
 /** The sections resource: the account's sections, and one change written to them. */
 export function taskSectionsProcedures(seams: TaskSectionsProcedureSeams) {
-  const sections = hosted.taskSections
-    .use(accountMiddleware(seams.resolveUserId))
-    .use(bodyLimit(MAXIMUM_WRITE_BODY_BYTES));
+  const sections = hosted.taskSections.use(accountMiddleware(seams.resolveUserId));
   return {
     list: sections.list.effect(function* ({ context }) {
       return yield* hostedStoreOrUnavailable(listTaskSections(context.userId));

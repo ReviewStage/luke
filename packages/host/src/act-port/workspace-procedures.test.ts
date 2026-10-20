@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
-import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
-import type { TasksWorkspaceGitHubConnectAnswer } from "@luke/features/tasks-view";
+import { GITHUB_AUTHOR_ASSOCIATION, ISSUE_STATE } from "@luke/features/github-repositories-wire";
+import {
+  TASK_CALL_FAILURE,
+  type TasksWorkspaceGitHubConnectAnswer,
+} from "@luke/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { createORPCClient, ORPCError } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
+import { ORPCError } from "@orpc/client";
+import { Effect } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,
   LINEAR_UNAVAILABLE_REFUSAL,
@@ -21,15 +22,12 @@ import {
   type PortActResult,
   WORKSPACE_ACT_KIND,
 } from "../contract/index.js";
+import type { ActSender } from "./base.js";
+import { type TestActPort, testActPort } from "./testing.js";
 import {
-  type AccountAskProceduresDependencies,
-  type ActPortDependencies,
-  createActPortHandler,
-  type IssueProceduresDependencies,
-  type PlatformActProcedures,
-  type TasksProceduresDependencies,
   type WorkspaceProceduresDependencies,
-} from "./index.js";
+  workspaceProcedures,
+} from "./workspace-procedures.js";
 
 /**
  * The workspace acts, through the act port as a window calls them: only a
@@ -81,6 +79,19 @@ const LINEAR_ISSUE = {
   title: "Start a plan from Linear",
   url: "https://linear.app/acme/issue/ENG-1",
 };
+const RELAY = "acme/relay";
+const GITHUB_ISSUE = {
+  nodeId: "I_kwDOAcme7",
+  repository: RELAY,
+  number: 7,
+  title: "Invitations expire too soon",
+  url: "https://github.com/acme/relay/issues/7",
+  state: ISSUE_STATE.OPEN,
+  author: "octo-dev",
+  authorAssociation: GITHUB_AUTHOR_ASSOCIATION.CONTRIBUTOR,
+  updatedAt: 1_760_000_000_000,
+};
+const GRANT_URL = "https://github.com/organizations/acme/settings/installations/7811";
 
 /** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
 const REFUSAL = {
@@ -100,6 +111,8 @@ const REFUSAL = {
     "Could not disconnect Linear from that workspace on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES]:
     "Could not read that workspace's Linear issues on this system.",
+  [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES]:
+    "Could not read that repository's issues on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]:
     "Could not read that workspace's members on this system.",
   [WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]:
@@ -139,6 +152,10 @@ const ACTS: readonly { kind: WorkspaceKind; payload: AnyPayload }[] = [
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_CONNECT, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_DISCONNECT, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_LINEAR_ISSUES, payload: WORKSPACE },
+  {
+    kind: WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES,
+    payload: { ...WORKSPACE, repository: RELAY },
+  },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ, payload: WORKSPACE },
   { kind: WORKSPACE_ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ, payload: WORKSPACE },
   {
@@ -167,21 +184,11 @@ interface Script {
   linearConnectUrl: string;
 }
 
-const opened: MessagePort[] = [];
+const ports: TestActPort<unknown>[] = [];
 
 afterEach(() => {
-  for (const port of opened.splice(0)) port.close();
+  for (const port of ports.splice(0)) port.close();
 });
-
-/** The issue procedures' host, never asked here. */
-const NO_ISSUES: IssueProceduresDependencies = {
-  host: {
-    issueList: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-    issueRead: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-    issueCreate: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-    issueChange: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-  },
-};
 
 /**
  * A window's act port, opened as the bridge opens one, over a fake host
@@ -246,6 +253,15 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
           ? { issues: [LINEAR_ISSUE] }
           : ({ failure: WORKSPACE_CALL_FAILURE.LINEAR_UNAVAILABLE } as const),
       ),
+    // Acme's relay lists its one issue, its ledger's installation grants none, and anything else went unanswered.
+    tasksGitHubIssues: (params) =>
+      ask(`github-issues:${params.workspaceId}:${params.repository}`, () => {
+        if (params.workspaceId !== ACME.id)
+          return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+        return params.repository === RELAY
+          ? { issues: [GITHUB_ISSUE] }
+          : { ungranted: { settingsUrl: GRANT_URL } };
+      }),
     workspaceMembers: (params) =>
       ask(`members:${params.workspaceId}`, () =>
         params.workspaceId === ACME.id ? { members: [GRACE], former: [ALAN] } : refusal(),
@@ -285,53 +301,17 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     workspaceInvitationCancel: (params) =>
       ask(`cancel:${params.workspaceId}:${params.invitationId}`, () => ({ invitations: [] })),
   };
-  // SAFETY: no account ask is called here, so the account asks' host is never reached.
-  const accountAsks = { host: {} } as AccountAskProceduresDependencies;
-  // SAFETY: no platform act is called here, so no platform procedure is reached.
-  const NO_PLATFORM = {} as PlatformActProcedures<unknown>;
-  // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
-  const tasks = { host: {} } as TasksProceduresDependencies;
-  // SAFETY: no account or settings act is called here, so neither's dependencies are reached.
-  const unreached = { account: {}, settings: {} } as unknown as Pick<
-    ActPortDependencies,
-    "account" | "settings"
-  >;
-  // SAFETY: no agent, automation, factory, or integration act is called here, so their hosts are never reached.
-  const elsewhere = {
-    agents: { host: {}, notices: {} },
-    automations: { host: {} },
-    factory: { host: {} },
-    integrations: { host: {} },
-  } as Pick<ActPortDependencies, "agents" | "automations" | "factory" | "integrations">;
-  const handler = createActPortHandler(
-    {
-      ...unreached,
-      ...elsewhere,
-      accountAsks,
-      issues: NO_ISSUES,
-      tasks,
-      workspaces: {
-        host,
-        openExternal: (url) => {
-          browsed.push(url);
-          return Promise.resolve();
-        },
+  const port = testActPort(
+    workspaceProcedures({
+      host,
+      openExternal: (url) => {
+        browsed.push(url);
+        return Promise.resolve();
       },
-    },
-    NO_PLATFORM,
-  );
-  const { port1, port2 } = new MessageChannel();
-  opened.push(port1, port2);
-  handler.upgrade(port1, {
-    context: () => ({
-      actor,
-      trusted: options.trusted ?? true,
-      "effect/context": Context.empty(),
     }),
-  });
-  port1.start();
-  const client: ActPortClient = createORPCClient(new RPCLink({ port: port2 }));
-  port2.start();
+  );
+  ports.push(port);
+  const client = port.as(actor, { trusted: options.trusted ?? true });
   return { client, asked, browsed, script };
 }
 
@@ -528,6 +508,25 @@ it("a workspace's Linear sign-in opens only an https address, and its issues are
   assert.deepEqual(none, { refused: LINEAR_UNAVAILABLE_REFUSAL });
 });
 
+it("a repository's GitHub issues are answered from a panel, an installation that grants none answers so with its settings page rather than an empty list, and one unanswered is refused in the kind's own words", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const read = (workspaceId: string, repository: string) =>
+    settled(client, WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES, { workspaceId, repository });
+
+  const listed = await read(ACME.id, RELAY);
+  const ungranted = await read(ACME.id, "acme/ledger");
+  const unanswered = await read("workspace-other", RELAY);
+
+  assert.deepEqual(listed, { answer: { issues: [GITHUB_ISSUE] } });
+  assert.deepEqual(ungranted, { answer: { ungranted: { settingsUrl: GRANT_URL } } });
+  assert.deepEqual(unanswered, { refused: REFUSAL[WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES] });
+  assert.deepEqual(asked, [
+    `github-issues:${ACME.id}:${RELAY}`,
+    `github-issues:${ACME.id}:acme/ledger`,
+    "github-issues:workspace-other:acme/relay",
+  ]);
+});
+
 it("a workspace write the account's role does not allow is refused in words that say so, and one unanswered in its kind's own", async () => {
   const { client, browsed, script } = windowPort(PANEL);
   script.notPermitted = true;
@@ -572,7 +571,7 @@ it("a payload its kind's schema refuses is refused in the kind's own words, and 
   assert.deepEqual(asked, []);
 });
 
-it("a payload carrying a key its kind's schema does not name is refused, as app:act refused it, and the host is not asked", async () => {
+it("a payload carrying a key its kind's schema does not name is refused, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
 
   assert.deepEqual(

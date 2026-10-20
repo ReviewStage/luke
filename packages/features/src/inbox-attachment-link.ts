@@ -1,5 +1,6 @@
 import { isLinkHome, LINK_HOME } from "./link-home.js";
 import { type LINK_PLACE, type LinkPlace, linkOf } from "./luke-link.js";
+import { insideCode } from "./mention-link.js";
 
 /**
  * inbox-attachment-link.ts -- a picture in an Inbox item's Markdown as its address on tryluke.dev: written, read back, and found in the item's words.
@@ -15,7 +16,9 @@ import { type LINK_PLACE, type LinkPlace, linkOf } from "./luke-link.js";
  * pasted anywhere else it names a picture only the item's readers can
  * fetch. The item and the attachment are what the picture is read by;
  * the workspace and the holder are the link's, read and never trusted.
- * Nothing here reaches the bytes.
+ * Nothing here reaches the bytes. Before it is kept, the agent's picture
+ * names a file in its sandbox by its path, which the post reads there and
+ * writes as its address; a path is any destination naming no scheme.
  */
 
 /** The step the picture's id follows in its address. */
@@ -46,6 +49,17 @@ const ADDRESS_IN_TEXT = new RegExp(
 
 /** The most characters an address is read from; past this no picture's address is that long. */
 const MAX_ADDRESS_CHARS = 1_024;
+
+/**
+ * A picture in a message's words, `![alt](destination`, its opening
+ * unescaped: the alt text the first group, the destination, bare or in
+ * angle brackets, the second; each bounded, so the scan stays linear.
+ */
+export const INBOX_PICTURE_IN_WORDS =
+  /(?<!\\)!\[((?:\\.|[^[\]\\\n]){0,1000})\]\([ \t]*(<[^<>\n]{1,1024}>|[^\s()<>]{1,1024})/gu;
+
+/** A destination that names a scheme, `https:`, `data:`, or Luke's own, and so no file in the agent's sandbox. */
+const SCHEMED = /^[A-Za-z][A-Za-z0-9+.-]*:/u;
 
 /** An item of the Inbox as its link names it: under its task, or under its agent with no task. */
 export type InboxItemPlace = Extract<LinkPlace, { readonly kind: typeof LINK_PLACE.INBOX_ITEM }>;
@@ -104,4 +118,24 @@ export function inboxAttachmentIdsIn(text: string, itemId: string): readonly str
     if (item === itemId && attachment !== undefined && UUID.test(attachment)) named.add(attachment);
   }
   return [...named];
+}
+
+/** A picture's destination as the path or address it names, out of its angle brackets. */
+export function inboxPictureDestination(destination: string): string {
+  return destination.startsWith("<") ? destination.slice(1, -1) : destination;
+}
+
+/**
+ * The path in the agent's sandbox of every picture its words draw from a
+ * file there, in the order first drawn, each once: a destination that
+ * names no scheme, read as the post's own write reads it, so a picture in
+ * code is none.
+ */
+export function inboxSandboxPicturePaths(text: string): readonly string[] {
+  const paths = new Set<string>();
+  for (const match of text.matchAll(INBOX_PICTURE_IN_WORDS)) {
+    const path = inboxPictureDestination(match[2] ?? "");
+    if (path !== "" && !SCHEMED.test(path) && !insideCode(text, match.index)) paths.add(path);
+  }
+  return [...paths];
 }

@@ -21,6 +21,7 @@ import {
   Badge,
   BUTTON_SIZE,
   CHIP_LOOK,
+  CHIP_SIZE,
   Chip,
   ChipName,
   ErrorState,
@@ -89,6 +90,8 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.COMMENT]: "Comment",
   [PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT]: "Comment on lines",
   [PULL_REQUEST_ACTION.DISCARD_REVIEW]: "Discard review",
+  [PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT]: "Edit pending comment",
+  [PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT]: "Delete pending comment",
   [PULL_REQUEST_ACTION.CLOSE]: "Close pull request",
   [PULL_REQUEST_ACTION.REOPEN]: "Reopen pull request",
   [PULL_REQUEST_ACTION.EDIT_TITLE]: "Edit title",
@@ -260,8 +263,10 @@ const ACTION_GLYPHS = {
 
 /**
  * The pill saying where the pull request stands, in its tone; a press
- * opens the changes that may be made from there, and a pull request merged
- * or closed is a badge.
+ * opens the changes that may be made from there, and a merged pull request,
+ * which no change leaves, is a badge. Note that the pill is a compact one,
+ * which `@luke/ui` draws in a badge's box, so every state stands at the one
+ * size the app's status badges do, the one with a menu adding its chevron.
  */
 export function PullRequestStateMenu({
   pullRequest,
@@ -292,6 +297,7 @@ export function PullRequestStateMenu({
     <>
       <Chip
         look={CHIP_LOOK.PILL}
+        size={CHIP_SIZE.COMPACT}
         tone={tone}
         chevron
         aria-label={label}

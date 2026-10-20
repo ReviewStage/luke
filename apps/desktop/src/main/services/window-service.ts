@@ -14,13 +14,12 @@ import type {
 } from "@luke/host/agent-notices";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "@luke/host/app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "@luke/host/appearance";
-import { channels } from "@luke/host/bridge";
 import type { OperatorClient } from "@luke/host/client";
-import { type AppStateStore, voiceWindowGone, voiceWindowState } from "@luke/host/client";
+import { type AppStateStore, voiceWindowGone, WindowAppStates } from "@luke/host/client";
+import { PUSH, type PushName, type PushPayload } from "@luke/host/contract";
 import type { DesktopService } from "@luke/host/desktop-service";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import type { UnparsedWireValue } from "@luke/wire";
 import { Effect, Exit, Scope } from "effect";
 import {
   app,
@@ -42,7 +41,8 @@ import { pageResponse } from "../window/page-protocol";
 import { PanelManager } from "../window/panel-manager";
 import { reportRendererErrors } from "../window/renderer-errors";
 import { VoiceWindow } from "../window/voice-window";
-import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom";
+import { windowPushes } from "../window/window-pushes";
+import { PanelWindows, zoomFactorOf, zoomSteer } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNode } from "./native-node";
 
@@ -92,7 +92,7 @@ export interface WindowService extends DesktopService {
    */
   windowFactsFor: (sender: WebContents) => AppWindowFacts;
   /** Hands a payload to the voice window alone, the one peer of the host's live session. */
-  sendToVoice: <Payload>(channel: string, payload: Payload) => void;
+  sendToVoice: <Name extends PushName>(push: Name, payload: PushPayload<Name>) => void;
   /** Asks the panels to open a task on one agent's tab: a notification's click. */
   showAgent: (place: AgentPlace) => void;
   /** A panel has painted and hears the links it is handed: every Luke link held opens now, and each later one as it comes. */
@@ -226,30 +226,41 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const withPanelWindows = Effect.provideService(PanelWindows, {
     standing: () => panels.windows(),
   });
+  /** The stored zoom, applied to the panels only when it moved. */
+  const steerZoom = zoomSteer();
   const applyAppearance = (): Effect.Effect<void> =>
     Effect.suspend(() => {
       const stored = state.snapshot().settings?.stored;
       return Effect.andThen(
         applyThemePreference(stored?.theme).pipe(withNativeTheme),
-        applyZoomPreference(stored?.zoom).pipe(withPanelWindows),
+        steerZoom(stored?.zoom).pipe(withPanelWindows),
       );
     });
+  /** The document as each window was last handed it, so one is handed it again only when something it draws moved. */
+  const windowStates = new WindowAppStates<WebContents>();
 
   function raiseVoiceWindow(): void {
     if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
   }
 
-  /** The one place a payload crosses to a window, and the one assertion that says why. */
-  function sendTo<Payload>(sender: WebContents, channel: string, payload: Payload): void {
-    // SAFETY: Main-process sends carry structured-clone snapshots produced for channels fixed by this build.
-    sender.send(channel, payload as UnparsedWireValue);
+  /** The one place a payload crosses to a window: its push stream. */
+  function sendTo<Name extends PushName>(
+    sender: WebContents,
+    push: Name,
+    payload: PushPayload<Name>,
+  ): boolean {
+    return windowPushes.push(sender, push, payload);
   }
 
-  function broadcast<Payload>(channel: string, payload: Payload, except?: WebContents): void {
-    panels.broadcast(channel, payload, except);
+  function broadcast<Name extends PushName>(
+    push: Name,
+    payload: PushPayload<Name>,
+    except?: WebContents,
+  ): void {
+    panels.broadcast(push, payload, except);
     const voice = voiceWindow.current();
     if (!voice || voice.webContents === except) return;
-    sendTo(voice.webContents, channel, payload);
+    sendTo(voice.webContents, push, payload);
   }
 
   function windowFactsFor(sender: WebContents): AppWindowFacts {
@@ -259,35 +270,35 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   function publishAppState(): void {
     const held = state.snapshot();
-    const send = (sender: WebContents, shown: typeof held) => {
-      const snapshot: AppStateSnapshot = { ...shown, window: windowFactsFor(sender) };
-      sendTo(sender, channels.onAppState, snapshot);
+    const send = (sender: WebContents, role: { voice: boolean; call: boolean }) => {
+      const snapshot: AppStateSnapshot = { ...held, window: windowFactsFor(sender) };
+      windowStates.offer(sender, role, snapshot, (shown) => sendTo(sender, PUSH.APP_STATE, shown));
     };
-    for (const sender of panels.senders()) send(sender, held);
+    for (const sender of panels.senders()) send(sender, { voice: false, call: false });
     const voice = voiceWindow.current();
-    if (voice && !voice.isDestroyed()) send(voice.webContents, voiceWindowState(held));
+    if (voice && !voice.isDestroyed()) send(voice.webContents, { voice: true, call: false });
     const call = callWindow.current();
-    if (call) send(call.webContents, voiceWindowState(held));
+    if (call) send(call.webContents, { voice: false, call: true });
     // The call window follows the document it draws, so it stands, goes, and
     // grows for the avatar on the same version every window is told.
     callPresence.voiceChanged(held.voice);
   }
 
-  function sendToVoice<Payload>(channel: string, payload: Payload): void {
+  function sendToVoice<Name extends PushName>(push: Name, payload: PushPayload<Name>): void {
     const voice = voiceWindow.current();
-    if (voice) sendTo(voice.webContents, channel, payload);
+    if (voice) sendTo(voice.webContents, push, payload);
   }
 
   function showAgent(place: AgentPlace): void {
-    panels.broadcast(channels.onShowAgent, place);
+    panels.broadcast(PUSH.SHOW_AGENT, place);
   }
 
   function toastAgentEnd({ place, words, detail, failed }: AgentEndToast): void {
-    panels.broadcast(channels.onAgentEnded, { ...place, words, detail, failed });
+    panels.broadcast(PUSH.AGENT_ENDED, { ...place, words, detail, failed });
   }
 
   function showInbox(taskId: string): void {
-    panels.broadcast(channels.onShowInbox, { taskId });
+    panels.broadcast(PUSH.SHOW_INBOX, { taskId });
   }
 
   function showInboxItem(item: {
@@ -295,7 +306,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     readonly itemId: string;
     readonly workspaceId?: string;
   }): void {
-    panels.broadcast(channels.onShowInboxItem, {
+    panels.broadcast(PUSH.SHOW_INBOX_ITEM, {
       agentId: item.agentId,
       itemId: item.itemId,
       ...(item.workspaceId === undefined ? undefined : { workspaceId: item.workspaceId }),
@@ -303,27 +314,27 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function showSettings(): void {
-    panels.broadcast(channels.onMenuCommand, APP_COMMAND.SETTINGS);
+    panels.broadcast(PUSH.MENU_COMMAND, APP_COMMAND.SETTINGS);
   }
 
   function toastInboxItem(item: InboxItemToast): void {
-    panels.broadcast(channels.onInboxItemOpened, item);
+    panels.broadcast(PUSH.INBOX_ITEM_OPENED, item);
   }
 
   function showFailedRun(place: FailedRunPlace): void {
-    panels.broadcast(channels.onShowFailedRun, place);
+    panels.broadcast(PUSH.SHOW_FAILED_RUN, place);
   }
 
   function toastFailedRun({ place, words, detail }: FailedRunToast): void {
-    panels.broadcast(channels.onRunFailed, { ...place, words, detail });
+    panels.broadcast(PUSH.RUN_FAILED, { ...place, words, detail });
   }
 
   function showChat(workspaceId: string): void {
-    panels.broadcast(channels.onShowChat, { workspaceId });
+    panels.broadcast(PUSH.SHOW_CHAT, { workspaceId });
   }
 
   function toastChatMessage(message: ChatMessageToast): void {
-    panels.broadcast(channels.onChatMessageWaiting, message);
+    panels.broadcast(PUSH.CHAT_MESSAGE_WAITING, message);
   }
 
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
@@ -436,7 +447,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   // A Luke link's place opens in the panels, the window brought forward.
   const openAppLink = (link: ReadLink): void => {
     panels.focusExpanded();
-    panels.broadcast(channels.onShowLink, link);
+    panels.broadcast(PUSH.SHOW_LINK, link);
   };
   // The Dock tile pressed: the window comes back, whether it was closed or
   // only behind another app.
@@ -446,7 +457,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   // Named one at a time because Electron's `on` is typed per event name.
   const wake = (eventName: "resume" | "unlock-screen" | "user-did-become-active") => () => {
     handleDisplayChange();
-    broadcast(channels.onLifecycle, eventName);
+    broadcast(PUSH.LIFECYCLE, eventName);
     // A terminal's socket may have died in the sleep without a word, and one waiting out a backoff need not wait on.
     if (eventName === "resume") void run(operator.host.terminalWake());
   };

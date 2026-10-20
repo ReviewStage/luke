@@ -46,7 +46,7 @@ import { defineEval } from "eve/evals";
  * store through the writer. A read of the repository on a task that has none
  * is refused ahead of any sandbox, in words the model repeats, so the eval
  * opens no Vercel Sandbox and needs no GitHub. Asked to post, the model
- * posts in the plan's chat as `@luke`, and the message stands in the plan's
+ * posts in the plan's chat as the plan's Luke, and the message stands in the plan's
  * channel. The eve server runs in this process with the database the
  * environment names, so the eval reads the rows back from the same Postgres.
  * Where no database is named the eval skips rather than pretending: the

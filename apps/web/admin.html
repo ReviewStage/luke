@@ -1,13 +1,15 @@
 <!doctype html>
-<html lang="en" data-luke-profile="web" data-luke-theme="dark" data-luke-density="compact">
+<html lang="en" data-luke-profile="web" data-luke-theme="light" data-luke-density="compact">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
     <meta name="robots" content="noindex" />
     <title>Luke admin</title>
-    <!-- Matches the page background so mobile browser chrome blends into it. -->
-    <meta name="theme-color" content="#08090b" />
+    <!-- The light ground, as the app names it, so mobile browser chrome blends into it;
+         the theme the app keeps, dark included, rewrites it (`public/app-theme.js`). -->
+    <meta name="theme-color" content="#fbfbfa" />
+    <!-- The theme the account last chose in the app, worn before the first frame; after the meta it tints. -->
+    <script src="/app-theme.js"></script>
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Luke" />

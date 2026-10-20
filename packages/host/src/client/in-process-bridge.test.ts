@@ -2,25 +2,14 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Context, Effect } from "effect";
-import { hostActRows } from "../act-router/host-act-rows.js";
-import {
-  type ActRouter,
-  createHostActRouter,
-  type HostActDependencies,
-  type PlatformActRows,
-  refusedRows,
-} from "../act-router/index.js";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, type ActKind } from "../acts.js";
 import type { AppStateSnapshot } from "../app-state.js";
-import { isPortActKind } from "../contract/index.js";
 import { runModeFor } from "../run-mode.js";
 import { AppStateStore, createInProcessBridge, initialAppState } from "./index.js";
 
 /**
- * The bridge a shell installs when the host runs in its own page: an act
- * reaches the host's real rows and comes back, the document is read and
- * pushed from the store, a kind the shell cannot carry is refused in its own
- * words, and a subscription ended hears nothing more.
+ * The bridge a shell installs when the host runs in its own page: the
+ * document is read and pushed from the store, and a subscription ended hears
+ * nothing more.
  */
 
 const RUN = {
@@ -31,71 +20,22 @@ const RUN = {
   platform: "web",
 } as const;
 
-const REPORTER = "reporter-1";
-
 const AGENT_PLACE = { taskId: "task-1", agentId: "agent-1" };
 
-// SAFETY: the acts these tests send reach a row of the platform's alone, and
-// building the host's rows reads none of these.
-const UNREACHED = {
-  tasks: {},
-  codingAgents: {},
-} as unknown as HostActDependencies;
-
-/**
- * Every kind the host's rows leave, refused, but the copy, which records the
- * reporter its window is named by: the table of a shell that carries one.
- */
-function platformRows(
-  reporterOf: (sender: symbol) => string,
-  reporters: string[],
-): PlatformActRows<symbol> {
-  const hosts = new Set<string>(Object.keys(hostActRows(UNREACHED)));
-  const kinds: readonly ActKind[] = Object.values(ACT_KIND).filter(
-    (kind): kind is ActKind => !hosts.has(kind) && !isPortActKind(kind),
-  );
-  // SAFETY: the kinds are exactly those the host's rows leave, each once.
-  const refused = refusedRows(kinds) as unknown as PlatformActRows<symbol>;
-  return {
-    ...refused,
-    [ACT_KIND.WINDOW_COPY_TEXT]: (_payload, { sender }) => {
-      reporters.push(reporterOf(sender));
-    },
-  };
-}
-
-/** A bridge over the real router and a fresh store, its acts run on the test's own services. */
+/** A bridge over a fresh store. */
 const bridgeFixture = Effect.gen(function* () {
-  const services = yield* Effect.context<never>();
   const state = new AppStateStore(initialAppState(RUN, false, []), Context.empty());
-  const reporters: string[] = [];
   const reported: string[] = [];
   const made = yield* createInProcessBridge({
-    sender: Symbol("page"),
-    routerFor: (reporterOf): ActRouter<symbol> =>
-      createHostActRouter(UNREACHED, platformRows(reporterOf, reporters)),
-    run: (effect) => Effect.runPromiseWith(services)(effect),
     state,
     windowFacts: () => ({ fullScreen: false }),
-    createId: () => REPORTER,
     reports: { notifyReady: () => {}, recordSurfaceEvent: () => {} },
     report: (message) => reported.push(message),
   });
   // The push's first reading is of the document as it stood, before anything subscribed.
   yield* Effect.yieldNow;
-  return { ...made, state, reporters, reported };
+  return { ...made, state, reported };
 });
-
-it.effect("an act round-trips through the router, under the reporter the bridge minted", () =>
-  Effect.gen(function* () {
-    const { bridge, reporters } = yield* bridgeFixture;
-    const outcome = yield* Effect.promise(() =>
-      bridge.act({ kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: "copied" } }),
-    );
-    assert.ok(outcome.status === ACT_OUTCOME_STATUS.DONE);
-    assert.deepEqual(reporters, [REPORTER]);
-  }).pipe(Effect.scoped),
-);
 
 it.effect("the document is read on request and every change of it reaches a subscription", () =>
   Effect.gen(function* () {
@@ -113,21 +53,12 @@ it.effect("the document is read on request and every change of it reaches a subs
   }).pipe(Effect.scoped),
 );
 
-it.effect(
-  "a microphone act is refused in its kind's own words, and a voice subscription ends cleanly",
-  () =>
-    Effect.gen(function* () {
-      const { bridge } = yield* bridgeFixture;
-      const outcome = yield* Effect.promise(() =>
-        bridge.act({ kind: ACT_KIND.MICROPHONE_REQUEST }),
-      );
-      assert.deepEqual(outcome, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.MICROPHONE_REQUEST].refusal,
-      });
-      const unsubscribe = bridge.onVoiceHotkeyPress(() => assert.fail("no talk key in the page"));
-      unsubscribe();
-    }).pipe(Effect.scoped),
+it.effect("a voice subscription ends cleanly", () =>
+  Effect.gen(function* () {
+    const { bridge } = yield* bridgeFixture;
+    const unsubscribe = bridge.onVoiceHotkeyPress(() => assert.fail("no talk key in the page"));
+    unsubscribe();
+  }).pipe(Effect.scoped),
 );
 
 it.effect("an ended subscription hears neither the document nor an event again", () =>

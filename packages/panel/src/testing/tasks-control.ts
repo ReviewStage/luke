@@ -15,7 +15,6 @@ import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TABS, SIDE_PANEL_WIDTH } from "../tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
-  ISSUES_PAGE,
   type TasksControl,
   type VersionHistoryControl,
 } from "../tasks/use-tasks-tab.js";
@@ -129,6 +128,8 @@ export function codingAgentsControl(
     numberedPullRequests: new Map(),
     readNumberedPullRequest: () => Promise.resolve(false),
     readChanges: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readChapters: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    generateChapters: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readOverviewPullRequest: () =>
       Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readReviewOptions: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -139,7 +140,6 @@ export function codingAgentsControl(
     changesPeople: new Map(),
     readInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     answerInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
-    closeInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     messageInbox: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     readInboxImage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     ...overrides,
@@ -264,6 +264,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     agents: codingAgentsControl(),
     history: versionHistoryControl(),
     onSelect: ignore,
+    onRestoreTask: ignore,
     onShowAgent: ignore,
     onShowSource: ignore,
     onShowTask: ignore,
@@ -318,19 +319,14 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     inboxTaskless: [],
     failedRuns: [],
     factoryView: { open: false, onOpen: ignore, onClose: ignore },
+    boardView: { open: false, onOpen: ignore, onClose: ignore },
     automationsView: {
       open: false,
       place: { kind: AUTOMATIONS_PAGE.LIST },
+      runs: false,
       onOpen: ignore,
+      onRuns: ignore,
       onClose: ignore,
-    },
-    issuesView: {
-      open: false,
-      place: { kind: ISSUES_PAGE.LIST },
-      onOpen: ignore,
-      onClose: ignore,
-      peeked: undefined,
-      onPeek: ignore,
     },
     callTaskId: undefined,
     chatView: {
@@ -365,7 +361,6 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     onRetryDocument: ignore,
     onNewTask: ignore,
     onNewTaskIn: ignore,
-    onNewTaskFrom: ignore,
     newTask: {
       open: false,
       preset: undefined,
@@ -380,7 +375,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
       tasks: [],
       onShowMention: ignore,
       linearIssuesIn: () => undefined,
-      issuesIn: () => undefined,
+      githubIssuesIn: () => undefined,
     },
     onLeaveTask: ignore,
     onGoHome: ignore,

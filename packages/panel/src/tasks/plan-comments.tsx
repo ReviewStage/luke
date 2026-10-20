@@ -73,7 +73,7 @@ import {
 import { ActorMark, ActorRef } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useSideBundles } from "../bundle-loader.js";
-import { coarsePointerNow } from "../coarse-pointer.js";
+import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { MarkdownMessage } from "../markdown-message.js";
@@ -144,7 +144,7 @@ const REVEAL_ROOM = 96;
 const CARD_GAP = 8;
 
 /** The room a finger's bubble needs under the words, its gap past the handle and its own height, short of which it stands over them after all. */
-const BUBBLE_ROOM_TOUCH = 16 + 48;
+const BUBBLE_ROOM_TOUCH = FINGER_SELECTION_GAP + 48;
 
 /** The words a thread's controls are named by. */
 const COMMENT_WORDS = {
@@ -557,7 +557,13 @@ function MentionCommentText({
       chip={() => null}
       mentions={{
         onTrigger: picker.onTrigger,
-        chip: (mention) => <MentionNodeChip mention={mention} doors={mentions.doors} />,
+        chip: (mention, node) => (
+          <MentionNodeChip
+            mention={mention}
+            doors={mentions.doors}
+            edit={{ node, pickDate: picker.pickDate }}
+          />
+        ),
         pasted: (words) =>
           pastedMentionNode(words, mentions.doors.place, {
             known,
@@ -1149,6 +1155,8 @@ export function PlanCommentLayer({
   const caretOpened = useRef(false);
   // Whether a pointer is down, whose press moves the focus before its own rule says what becomes of the thread.
   const pressing = useRef(false);
+  // Whether the last press was a finger's, whose tap names the block its button stands by.
+  const touching = useRef(false);
   const [bubble, setBubble] = useState<
     { top: number; left: number; below: boolean; start: () => void } | undefined
   >(undefined);
@@ -1231,17 +1239,17 @@ export function PlanCommentLayer({
       room.getBoundingClientRect().top + top - element.getBoundingClientRect().top - REVEAL_ROOM;
   });
 
-  // A block under the pointer shows its button at the column's end; words selected raise the bubble over them.
+  // A block under the pointer, or the one a finger last tapped, shows its button at the column's end; words selected raise the bubble over them.
   useEffect(() => {
     const element = body.current;
     if (element === null) return;
-    const over = (event: PointerEvent) => {
+    const point = (target: EventTarget | null) => {
       const marked =
-        event.target instanceof Element
-          ? event.target.closest<HTMLElement>(`.${COMMENT_MARK_CLASS}[data-threads]`)
+        target instanceof Element
+          ? target.closest<HTMLElement>(`.${COMMENT_MARK_CLASS}[data-threads]`)
           : null;
       setPointed(marked?.dataset.threads?.split(" ")[0]);
-      const found = blockAt(event.target, unitClass);
+      const found = blockAt(target, unitClass);
       if (found === undefined) return;
       // Note that a block whose words a thread already covers is commented on through that thread, so it offers no button.
       if (threadedWhole(found.block)) {
@@ -1275,6 +1283,16 @@ export function PlanCommentLayer({
           if (begun !== undefined) setPending(begun);
         },
       });
+    };
+    // Note that a finger's arrival names no block, because iOS plays a tap's
+    // arrival as a hover and spends the tap on a button that comes in with
+    // it, a link's in the block among them; its tap names the block once
+    // the tap has gone where it leads.
+    const over = (event: PointerEvent) => {
+      if (event.pointerType !== "touch") point(event.target);
+    };
+    const tapped = (event: MouseEvent) => {
+      if (touching.current) point(event.target);
     };
     // In the editor, a caret standing in a thread's words opens it, and leaving them closes the one it opened.
     const letCaretGo = () => {
@@ -1397,13 +1415,15 @@ export function PlanCommentLayer({
       onActive(thread);
     };
     const left = () => setPointed(undefined);
-    const down = () => {
+    const down = (event: PointerEvent) => {
       pressing.current = true;
+      touching.current = event.pointerType === "touch";
     };
     const up = () => {
       pressing.current = false;
     };
     element.addEventListener("pointerover", over);
+    element.addEventListener("click", tapped);
     element.addEventListener("pointerleave", left);
     element.addEventListener("focusout", blurred);
     document.addEventListener("pointerdown", down, true);
@@ -1425,6 +1445,7 @@ export function PlanCommentLayer({
     return () => {
       hiding.disconnect();
       element.removeEventListener("pointerover", over);
+      element.removeEventListener("click", tapped);
       element.removeEventListener("pointerleave", left);
       element.removeEventListener("focusout", blurred);
       document.removeEventListener("pointerdown", down, true);

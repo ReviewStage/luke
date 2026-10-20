@@ -64,6 +64,7 @@ import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
+import { DraftMark } from "../draft-mark.js";
 import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
@@ -138,6 +139,7 @@ import {
 } from "../tasks/work-model.js";
 import { Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
+import type { MenuAction } from "./action-menu.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { paneTiming } from "./pane-motion.js";
 import {
@@ -223,7 +225,7 @@ function documentReserve(area: HTMLElement): number {
 }
 
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
-export const PANEL_LEAVING = {
+const PANEL_LEAVING = {
   NONE: "none",
   CLOSE: "close",
   FULL_SCREEN: "full-screen",
@@ -339,6 +341,12 @@ export interface ChangesOffer {
   readonly agent: CodingAgentSummary;
   readonly label: string;
   readonly pullRequest: CodingAgentPullRequest;
+}
+
+/** What the chosen tab's body hands its toolbar's ⋯ (`useHandedTabActions`), and the tab it was drawn for, which alone offers them. */
+interface HandedTabActions {
+  readonly tab: SidePanelTab;
+  readonly actions: MenuAction[];
 }
 
 /** What the "+" calls the row that opens a Browser tab. */
@@ -656,6 +664,8 @@ function stripTabs(input: {
   taskId: string;
   /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
   inboxWaiting: number;
+  /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
+  inboxDrafted: boolean;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
   const { repository, copied, readWorker, onOpenAgent, shownAgent, taskId } = input;
@@ -670,13 +680,17 @@ function stripTabs(input: {
   });
   // The Inbox counts what waits on the developer after its name, dimmed as a
   // model's effort is after the model's, so an item posted while the
-  // developer reads elsewhere is seen from any tab.
-  const { inboxWaiting } = input;
+  // developer reads elsewhere is seen from any tab, and wears the Draft
+  // pencil at its end while a card's answer waits unsent and another tab is
+  // chosen (`draft-mark.tsx`).
+  const { inboxWaiting, inboxDrafted } = input;
   const fixed = panel.tabs.map((tab) => ({
     tab,
     look: look(tab, {
       ...tabLook({ kind: TAB_KIND.PANEL, tab }),
       detail: tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0 ? String(inboxWaiting) : undefined,
+      endMark:
+        tab === SIDE_PANEL_TAB.INBOX && inboxDrafted && !chosen(tab) ? <DraftMark /> : undefined,
     }),
     close: () => panel.onClose(tab),
   }));
@@ -856,9 +870,11 @@ function PanelTabs({
   held,
   readWorker,
   actionsSlot,
+  handed,
   onOpenAgent,
   shownAgent,
   inboxWaiting,
+  inboxDrafted,
 }: {
   panel: SidePanelControl;
   holder: SidePanelHolder;
@@ -894,12 +910,16 @@ function PanelTabs({
   readWorker: TranscriptReader;
   /** The bar's slot the chosen tab's ⋯ stands in. */
   actionsSlot: HTMLElement | null;
+  /** What the chosen tab's body hands its ⋯, under the tab it was drawn for (`useHandedTabActions`). */
+  handed: HandedTabActions | undefined;
   /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
   onOpenAgent: (agentId: string) => void;
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
   shownAgent: string | undefined;
   /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
   inboxWaiting: number;
+  /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
+  inboxDrafted: boolean;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const kinds = stripTabs({
@@ -922,6 +942,7 @@ function PanelTabs({
     shownAgent,
     taskId,
     inboxWaiting,
+    inboxDrafted,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   const copyLink = useCopyLinkItem();
@@ -954,6 +975,10 @@ function PanelTabs({
       pin: pinOf(entry),
       onCopy: entry.copy,
       copyLink: linked === undefined ? undefined : copyLink(linked),
+      handed:
+        entry.look.selected && handed !== undefined && sameTab(handed.tab, entry.tab)
+          ? handed.actions
+          : undefined,
     };
   };
   return (
@@ -1365,6 +1390,7 @@ function TabContent({
   onBrowserOpened,
   plan,
   inbox,
+  onTabActions,
 }: {
   tab: SidePanelTab;
   taskId: string;
@@ -1426,6 +1452,8 @@ function TabContent({
   plan: React.ReactNode;
   /** The task's Inbox, drawn by the task's page on the same terms. */
   inbox: React.ReactNode;
+  /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
+  onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   if (isMacTerminalTab(tab)) {
@@ -1488,6 +1516,7 @@ function TabContent({
           tree={fileTree}
           view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
           onView={(view) => onPullRequestView(tab, view)}
+          onActions={(actions) => onTabActions(tab, actions)}
         />
       </PullRequestsOnGitHub>
     );
@@ -1633,7 +1662,7 @@ function TabContent({
  * traffic lights: one button in one place whether the panel is hidden,
  * beside the document, full screen, or still sliding, so a press lands on
  * it however fast the presses come. Where the room holds the panel only full
- * screen, a narrow one's, it reads Close while the panel is open, since the
+ * screen, a narrow one's, it reads Close panel while the panel is open, since the
  * panel covers everything else. It stands on every task's page, so it
  * is also what offers the panel's shortcut. ⌘T is the task's page's, which hands it to the column
  * holding the window's focus (desktop-tasks.tsx). While the task is not
@@ -1648,7 +1677,7 @@ export function SidePanelToggle({
 }): React.JSX.Element {
   // A panel standing only full screen covers the whole window, so its toggle is the way out of it.
   const closes = panel.open && panel.fullScreenOnly;
-  const label = closes ? "Close" : panel.open ? "Hide panel" : "Show panel";
+  const label = closes ? "Close panel" : panel.open ? "Hide panel" : "Show panel";
   const offer = (run: () => void) => (disabled ? undefined : run);
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, offer(panel.onToggle));
   return (
@@ -1881,11 +1910,24 @@ export function SidePanel({
   banner?: React.ReactNode;
   /** The plan's document, which its Plan tab shows; none beside anything but a task's page. */
   plan?: React.ReactNode;
-  /** The task's Inbox, which its Inbox tab shows, and how many of its items wait on the developer, which the tab counts; none beside anything but a task's page. */
-  inbox?: { readonly body: React.ReactNode; readonly waiting: number } | undefined;
+  /** The task's Inbox, which its Inbox tab shows, how many of its items wait on the developer, which the tab counts, and whether a card holds a draft, which the tab marks; none beside anything but a task's page. */
+  inbox?:
+    | { readonly body: React.ReactNode; readonly waiting: number; readonly drafted: boolean }
+    | undefined;
 }): React.JSX.Element {
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  // What the chosen tab's body offers that ⋯ beyond what the strip does, let go only by the tab that handed it.
+  const [handed, setHanded] = useState<HandedTabActions | undefined>(undefined);
+  const handTabActions = useCallback((tab: SidePanelTab, actions: MenuAction[] | undefined) => {
+    setHanded((was) =>
+      actions !== undefined
+        ? { tab, actions }
+        : was !== undefined && sameTab(was.tab, tab)
+          ? undefined
+          : was,
+    );
+  }, []);
   const { tab } = panel;
   // A Pull request tab naming another pull request by its number is named by
   // that pull request, read once for each such tab the strip draws, since
@@ -2057,9 +2099,11 @@ export function SidePanel({
           held={drawnTranscripts}
           readWorker={work.readWorker}
           actionsSlot={actionsSlot}
+          handed={handed}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           shownAgent={shownAgent}
           inboxWaiting={inbox?.waiting ?? 0}
+          inboxDrafted={inbox?.drafted ?? false}
         />
       }
       actions={<span ref={setActionsSlot} className="toolbar-tab-actions" />}
@@ -2136,6 +2180,7 @@ export function SidePanel({
             onBrowserOpened={panel.onBrowserOpened}
             plan={plan}
             inbox={inbox?.body}
+            onTabActions={handTabActions}
           />
         </FindScope>
       )}
@@ -2144,8 +2189,8 @@ export function SidePanel({
 }
 
 /**
- * The frame every side panel stands in, the task's, an agent's page's, the
- * Inbox's, and the Issues page's peek: the panel's pane at the window's
+ * The frame every side panel stands in, the task's, an agent's page's, and
+ * the Inbox's: the panel's pane at the window's
  * right, its width the window's, over its top row of `tabs`, the chosen
  * tab's `actions`, and its full-screen button, with what it shows under the
  * row and its resize edge at its left. Full screen, it covers what it stood
@@ -2155,7 +2200,7 @@ export function SidePanel({
  * screen it has neither the button nor the edge, and keeps no room. It plays its own exits (`playExit`);
  * its arrival is played by the pane motion around it (`pane-motion.tsx`).
  */
-export function PanelFrame({
+function PanelFrame({
   panel,
   leaving,
   onLeft,

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { ACT_KIND } from "@luke/host/acts";
+import { fakeActPortAnswering, type SentPortAct } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -282,13 +282,11 @@ test("closing the last tab shuts the panel and leaves full screen, and the toggl
 });
 
 test("a Browser tab opens chosen on its plan alone, closes with its page, and is kept across no launch", () => {
-  const sent: Act[] = [];
-  // The act channel is the window's door to main, the process boundary a closed tab's page is let go across.
-  fakeAppBridge({
-    act: (request: Act) => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
+  const sent: SentPortAct[] = [];
+  // The act port is the window's door to main, the process boundary a closed tab's page is let go across.
+  fakeActPortAnswering((request) => {
+    sent.push(request);
+    return Promise.resolve(undefined);
   });
   const first = launch({ task: TASK, taskAgents: [] });
   act(() => first.control().onOpenBrowser("http://localhost:3000/"));
@@ -324,13 +322,11 @@ test("a Browser tab opens chosen on its plan alone, closes with its page, and is
 });
 
 test("the Browser tab experiment going off closes every Browser tab on every plan, each page with it", () => {
-  const sent: Act[] = [];
-  // The act channel is the window's door to main, the process boundary a closed tab's page is let go across.
-  fakeAppBridge({
-    act: (request: Act) => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
+  const sent: SentPortAct[] = [];
+  // The act port is the window's door to main, the process boundary a closed tab's page is let go across.
+  fakeActPortAnswering((request) => {
+    sent.push(request);
+    return Promise.resolve(undefined);
   });
   const panel = launch({ task: TASK, taskAgents: [] });
   act(() => panel.control().onOpenBrowser("http://localhost:3000/"));
@@ -347,7 +343,7 @@ test("the Browser tab experiment going off closes every Browser tab on every pla
   panel.render({ task: TASK, taskAgents: [] });
   assert.deepEqual(panel.control().browsers, []);
   assert.deepEqual(
-    sent.map((request) => ("payload" in request ? request.payload : undefined)),
+    sent.map((request) => request.payload),
     [{ browserId: here.tab.browser }, { browserId: there.tab.browser }],
   );
 });
@@ -424,13 +420,22 @@ test("beside the window's Inbox the panel stands for the item's plan with none o
 });
 
 /** Mounts the panel over a task holding its plan and, where `inbox` says, an Inbox it may draw, answering the control. */
-function inboxPanel(inbox: { task: string; held: boolean }) {
+function inboxPanel(inbox: { task: string; held: boolean }, room: ShellRoom = SHELL_ROOM.WIDE) {
   let control: SidePanelControl | undefined;
   function Probe({ held }: { held: { task: string; held: boolean } }) {
-    control = useSidePanel(undefined, {
-      id: held.task,
-      holds: { [SIDE_PANEL_TAB.PLAN]: true, [SIDE_PANEL_TAB.INBOX]: held.held },
-    });
+    control = useSidePanel(
+      undefined,
+      {
+        id: held.task,
+        holds: { [SIDE_PANEL_TAB.PLAN]: true, [SIDE_PANEL_TAB.INBOX]: held.held },
+      },
+      undefined,
+      [],
+      [],
+      [],
+      undefined,
+      room,
+    );
     return null;
   }
   const root = createRoot(document.body.appendChild(document.createElement("div")));
@@ -463,6 +468,23 @@ test("a task's Inbox stands only once an item the developer has not seen waits, 
   assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN], "an item seen opens nothing");
   act(() => panel.control().onInboxRead(TASK, ["item-1", "item-2"]));
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.INBOX, "a newer item opens it again");
+});
+
+test("in a narrow room an Inbox item not seen opens the Inbox's tab at the strip's end without choosing it, so the plan the panel stood on, or the column it stood shut over, stays", () => {
+  const panel = inboxPanel({ task: TASK, held: true }, SHELL_ROOM.NARROW);
+  assert.deepEqual(
+    { open: panel.control().open, tab: panel.control().tab },
+    { open: true, tab: SIDE_PANEL_TAB.PLAN },
+  );
+  act(() => panel.control().onInboxRead(TASK, ["item-1"]));
+  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.PLAN, "the plan stays chosen");
+
+  act(() => panel.control().onClose(SIDE_PANEL_TAB.INBOX));
+  act(() => panel.control().onSetOpen(false));
+  act(() => panel.control().onInboxRead(TASK, ["item-1", "item-2"]));
+  assert.deepEqual(panel.control().strip, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX]);
+  assert.equal(panel.control().open, false, "a newer item leaves the panel shut");
 });
 
 test("a task that may draw no Inbox, holding no agent and nothing waiting, draws none, though an item read on it was not seen", () => {
@@ -521,4 +543,30 @@ test("a narrow room holds the open panel full screen alone, so the window's ways
   room = SHELL_ROOM.WIDE;
   render();
   assert.deepEqual([now().open, now().fullScreen, now().fullScreenOnly], [true, false, false]);
+});
+
+test("the Inbox with nothing chosen has no task, so the panel left open shows over it in no room, neither full screen on a phone nor empty beside it", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ at, task }: { at: ShellRoom; task: OpenTask }) {
+    control = useSidePanel(undefined, task, [], [], [], [], [], at);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const now = () => control ?? assert.fail("the panel is held");
+  const render = (at: ShellRoom, task: OpenTask) =>
+    act(() => root.render(createElement(Probe, { at, task })));
+  // The panel stands open on a plan, and is kept open for the next launch.
+  render(SHELL_ROOM.NARROW, usedTask(TASK));
+  assert.equal(now().open, true);
+  assert.equal(JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").open, true);
+
+  for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
+    render(room, { id: undefined, holds: {}, bare: true });
+    assert.deepEqual(
+      [now().open, now().fullScreen, now().fullScreenOnly],
+      [false, false, false],
+      `the ${room} room shows the Inbox with no panel over it`,
+    );
+  }
 });

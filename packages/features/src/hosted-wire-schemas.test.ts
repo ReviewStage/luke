@@ -19,8 +19,6 @@ import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as inboxWire from "./inbox-wire.js";
 import * as integrationView from "./integration-view.js";
 import * as integrationWire from "./integration-wire.js";
-import * as issueView from "./issue-view.js";
-import * as issueWire from "./issue-wire.js";
 import * as linearWire from "./linear-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as liveWire from "./live-wire.js";
@@ -33,9 +31,12 @@ import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as providerKeyWire from "./provider-key-wire.js";
 import * as pullRequestArea from "./pull-request-area.js";
+import * as pullRequestChaptersView from "./pull-request-chapters-view.js";
+import * as pullRequestChaptersWire from "./pull-request-chapters-wire.js";
 import * as pullRequestWriteWire from "./pull-request-write-wire.js";
 import * as repositoryReachWire from "./repository-reach-wire.js";
 import * as serviceWire from "./service-wire.js";
+import * as taskIssueWire from "./task-issue-wire.js";
 import * as taskSectionWire from "./task-section-wire.js";
 import * as taskWire from "./task-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
@@ -166,9 +167,7 @@ const EFFECT_MODULE_SCHEMAS = {
     inboxFieldSchema: inboxWire.inboxFieldSchema,
     inboxResponseSchema: inboxWire.inboxResponseSchema,
     inboxPostInputSchema: inboxWire.inboxPostInputSchema,
-    inboxCloseInputSchema: inboxWire.inboxCloseInputSchema,
     inboxReadInputSchema: inboxWire.inboxReadInputSchema,
-    inboxReplyInputSchema: inboxWire.inboxReplyInputSchema,
     inboxFieldValueSchema: inboxWire.inboxFieldValueSchema,
     inboxFormValueSchema: inboxWire.inboxFormValueSchema,
     inboxFormValuesSchema: inboxWire.inboxFormValuesSchema,
@@ -177,6 +176,8 @@ const EFFECT_MODULE_SCHEMAS = {
     inboxReadResponseSchema: inboxWire.inboxReadResponseSchema,
     inboxAskSchema: inboxWire.inboxAskSchema,
     inboxReadAskSchema: inboxWire.inboxReadAskSchema,
+    inboxThreadPostInputSchema: inboxWire.inboxThreadPostInputSchema,
+    inboxWithdrawInputSchema: inboxWire.inboxWithdrawInputSchema,
     inboxAnswersSchema: inboxWire.inboxAnswersSchema,
     inboxAnswerFileSchema: inboxWire.inboxAnswerFileSchema,
     inboxMessageSchema: inboxWire.inboxMessageSchema,
@@ -255,6 +256,9 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxReadStateParamsSchema: codingAgentView.codingAgentInboxReadStateParamsSchema,
     codingAgentInboxReadStateViewSchema: codingAgentView.codingAgentInboxReadStateViewSchema,
     codingAgentInboxReadAllViewSchema: codingAgentView.codingAgentInboxReadAllViewSchema,
+    codingAgentAccountInboxParamsSchema: codingAgentView.codingAgentAccountInboxParamsSchema,
+    codingAgentAccountInboxAnswerViewSchema:
+      codingAgentView.codingAgentAccountInboxAnswerViewSchema,
     codingAgentInboxAttachmentParamsSchema: codingAgentView.codingAgentInboxAttachmentParamsSchema,
     codingAgentPictureParamsSchema: codingAgentView.codingAgentPictureParamsSchema,
     codingAgentChatAttachmentParamsSchema: codingAgentView.codingAgentChatAttachmentParamsSchema,
@@ -284,6 +288,9 @@ const EFFECT_MODULE_SCHEMAS = {
       githubRepositoriesWire.githubRepositoryPullRequestAnswerSchema,
     githubIssueSummarySchema: githubRepositoriesWire.githubIssueSummarySchema,
     githubRepositoryIssueAnswerSchema: githubRepositoriesWire.githubRepositoryIssueAnswerSchema,
+    githubIssueNodeIdSchema: githubRepositoriesWire.githubIssueNodeIdSchema,
+    githubIssuePickSchema: githubRepositoriesWire.githubIssuePickSchema,
+    githubRepositoryIssuesAnswerSchema: githubRepositoriesWire.githubRepositoryIssuesAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof githubRepositoriesWire>,
   "integration-view": {
     integrationProviderParamsSchema: integrationView.integrationProviderParamsSchema,
@@ -309,23 +316,6 @@ const EFFECT_MODULE_SCHEMAS = {
     integrationToolsAnswerSchema: integrationWire.integrationToolsAnswerSchema,
     integrationRemoteCallSchema: integrationWire.integrationRemoteCallSchema,
   } satisfies RecordedEffectJsonSchemas<typeof integrationWire>,
-  "issue-view": {
-    issueListParamsSchema: issueView.issueListParamsSchema,
-    issueIdParamsSchema: issueView.issueIdParamsSchema,
-    issueCreateParamsSchema: issueView.issueCreateParamsSchema,
-    issueChangeParamsSchema: issueView.issueChangeParamsSchema,
-    issueListViewSchema: issueView.issueListViewSchema,
-    issueViewSchema: issueView.issueViewSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof issueView>,
-  "issue-wire": {
-    issueStatusSchema: issueWire.issueStatusSchema,
-    issuePrioritySchema: issueWire.issuePrioritySchema,
-    issueSchema: issueWire.issueSchema,
-    issueListAnswerSchema: issueWire.issueListAnswerSchema,
-    issueAnswerSchema: issueWire.issueAnswerSchema,
-    issueCreateRequestSchema: issueWire.issueCreateRequestSchema,
-    issueChangeRequestSchema: issueWire.issueChangeRequestSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof issueWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
     sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,
@@ -402,6 +392,17 @@ const EFFECT_MODULE_SCHEMAS = {
     taskSectionsAnswerSchema: taskSectionWire.taskSectionsAnswerSchema,
     taskSectionWriteSchema: taskSectionWire.taskSectionWriteSchema,
   } satisfies RecordedEffectJsonSchemas<typeof taskSectionWire>,
+  "task-issue-wire": {
+    taskIssueRelationSchema: taskIssueWire.taskIssueRelationSchema,
+    taskIssueChoiceSchema: taskIssueWire.taskIssueChoiceSchema,
+    taskIssueStandingSchema: taskIssueWire.taskIssueStandingSchema,
+    taskIssueLinkViewSchema: taskIssueWire.taskIssueLinkViewSchema,
+    taskIssueLinksAnswerSchema: taskIssueWire.taskIssueLinksAnswerSchema,
+    taskIssueLinkAnswerSchema: taskIssueWire.taskIssueLinkAnswerSchema,
+    taskIssueRelateRequestSchema: taskIssueWire.taskIssueRelateRequestSchema,
+    taskIssueLinkChangedAnswerSchema: taskIssueWire.taskIssueLinkChangedAnswerSchema,
+    taskIssueUnlinkAnswerSchema: taskIssueWire.taskIssueUnlinkAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof taskIssueWire>,
   "task-wire": {
     workspaceIdSchema: taskWire.workspaceIdSchema,
     taskStatusSchema: taskWire.taskStatusSchema,
@@ -457,6 +458,18 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
+  "pull-request-chapters-wire": {
+    pullRequestChaptersStateSchema: pullRequestChaptersWire.pullRequestChaptersStateSchema,
+    pullRequestChaptersRequestSchema: pullRequestChaptersWire.pullRequestChaptersRequestSchema,
+    pullRequestChaptersAnswerSchema: pullRequestChaptersWire.pullRequestChaptersAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pullRequestChaptersWire>,
+  "pull-request-chapters-view": {
+    pullRequestChaptersParamsSchema: pullRequestChaptersView.pullRequestChaptersParamsSchema,
+    pullRequestChaptersAnswerViewSchema:
+      pullRequestChaptersView.pullRequestChaptersAnswerViewSchema,
+    chaptersModelWriteParamsSchema: pullRequestChaptersView.chaptersModelWriteParamsSchema,
+    chaptersModelAnswerViewSchema: pullRequestChaptersView.chaptersModelAnswerViewSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof pullRequestChaptersView>,
   "pull-request-write-wire": {
     mergeMethodSchema: pullRequestWriteWire.mergeMethodSchema,
     pullRequestActionRequestSchema: pullRequestWriteWire.pullRequestActionRequestSchema,

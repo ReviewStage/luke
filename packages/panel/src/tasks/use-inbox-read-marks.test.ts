@@ -9,13 +9,13 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { useAct } from "../act.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { isUnread } from "./inbox-model.js";
 import { useSettledItems } from "./inbox-settling.js";
@@ -79,30 +79,24 @@ afterEach(() => {
 function marks(first: readonly InboxItem[]) {
   const sent: Sent[] = [];
   let rereads = 0;
-  fakeAppBridge({
-    act: (request: Act) =>
-      new Promise<ActOutcome>((resolve) => {
-        const words =
-          request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_ALL
-            ? `all:${request.payload.workspaceId}`
-            : request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE
-              ? `${request.payload.unread ? "unread" : "read"}:${request.payload.itemId}`
-              : request.kind;
-        sent.push({
-          words,
-          answer: async (failed = false) => {
-            const value = failed
-              ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
-              : request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_STATE
-                ? { id: request.payload.itemId, unread: request.payload.unread }
-                : { marked: 1 };
-            await act(async () => {
-              resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-              for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
-            });
-          },
-        });
-      }),
+  /** One write held until the test answers it, with the value it answers when it does not fail. */
+  const sending = <Value>(words: string, value: Value) =>
+    new Promise<Value | { failure: typeof CODING_AGENT_CALL_FAILURE.NOT_FOUND }>((resolve) => {
+      sent.push({
+        words,
+        answer: async (failed = false) => {
+          await act(async () => {
+            resolve(failed ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } : value);
+            for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+          });
+        },
+      });
+    });
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: ({ workspaceId }) =>
+      sending(`all:${workspaceId}`, { marked: 1 }),
+    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
+      sending(`${unread ? "unread" : "read"}:${itemId}`, { id: itemId, unread }),
   });
   let control: InboxReadMarks | undefined;
   let drawn: readonly InboxItem[] = [];

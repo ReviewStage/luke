@@ -23,6 +23,7 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
+  agentSeenBy,
   taskReachableBy,
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
@@ -46,7 +47,12 @@ import {
   type CodingAgentAttachment,
   type CodingAgentAttachmentType,
 } from "@luke/features/coding-agent-wire";
-import { type InboxItemPlace, inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
+import {
+  INBOX_PICTURE_IN_WORDS,
+  type InboxItemPlace,
+  inboxAttachmentAddress,
+  inboxPictureDestination,
+} from "@luke/features/inbox-attachment-link";
 import {
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
@@ -88,6 +94,7 @@ import {
   count,
   desc,
   eq,
+  exists,
   getTableName,
   isNotNull,
   isNull,
@@ -191,6 +198,8 @@ export const INBOX_POST_REFUSAL = {
   TOO_MANY_OPEN: "too-many-open",
   /** The agent is no longer the account's. */
   NO_AGENT: "no-agent",
+  /** The post names no title and opens a thread under a key with no item, which needs one. */
+  NO_TITLE: "no-title",
 } as const;
 
 export type InboxPostRefusal = (typeof INBOX_POST_REFUSAL)[keyof typeof INBOX_POST_REFUSAL];
@@ -556,12 +565,23 @@ function storedItem(row: InboxRow): StoredInboxItem {
 
 const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.String });
 
-/** An item row's workspace: its own, or its task's on a row the backfill has not reached yet. */
-const ITEM_WORKSPACE = sql<string>`coalesce(${inboxItem.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${inboxItem.taskId}))`;
+/** An item row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
+const ITEM_WORKSPACE = sql<string>`${inboxItem.organizationId}`;
 
-/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task. */
+/** The condition that the item a statement reads names no agent, or one the account sees as its GitHub access allows (`agentSeenBy`). */
+function itemAgentSeenBy(userId: string): SQL {
+  const seen = exists(
+    queryBuilder
+      .select({ one: codingAgent.id })
+      .from(codingAgent)
+      .where(and(eq(codingAgent.id, inboxItem.agentId), agentSeenBy(userId))),
+  );
+  return sql`(${isNull(inboxItem.agentId)} or ${seen})`;
+}
+
+/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task, and sees the agent that posted it. */
 function itemReachableBy(userId: string): SQL {
-  return workspaceReachableBy(userId, ITEM_WORKSPACE);
+  return sql`(${workspaceReachableBy(userId, ITEM_WORKSPACE)} and ${itemAgentSeenBy(userId)})`;
 }
 
 /** The step a link names the agent's workspace by: its slug, or its id where it has none, as a plan's picture names it. */
@@ -973,7 +993,7 @@ const upsertItem = SqlSchema.findOne({
   },
 });
 
-/** The agent's item under the key closed with why, its revision moved on and no ask held open; its id, or nothing where the agent has no item under it. */
+/** The agent's open item under the key closed with why, its revision moved on and no ask held open; its id, or nothing where the agent has no open item under it. */
 const closeItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
     ...AgentKeySchema.fields,
@@ -996,7 +1016,12 @@ const closeItem = SqlSchema.findOneOption({
           openAskMessageId: null,
         })
         .where(
-          and(eq(inboxItem.userId, userId), eq(inboxItem.agentId, agentId), eq(inboxItem.key, key)),
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.agentId, agentId),
+            eq(inboxItem.key, key),
+            eq(inboxItem.status, INBOX_STATUS.OPEN),
+          ),
         )
         .returning({ id: inboxItem.id }),
     ),
@@ -1116,6 +1141,7 @@ const findSettledStamps = SqlSchema.findAll({
 function accountWaiting(userId: string) {
   return and(
     taskReachableBy(userId),
+    itemAgentSeenBy(userId),
     eq(inboxItem.status, INBOX_STATUS.OPEN),
     isNull(task.archivedAt),
   );
@@ -1723,22 +1749,9 @@ function bodyOfBlocks(blocks: readonly InboxBlock[], addressOf: PictureAddress):
   return blocks.map((block) => blockParagraph(block, addressOf)).join("\n\n");
 }
 
-/**
- * A picture in a message's words, `![alt](destination`, its opening
- * unescaped: the alt text the first group, the destination, bare or in
- * angle brackets, the second; each bounded, so the scan stays linear.
- */
-const PICTURE_IN_WORDS =
-  /(?<!\\)!\[((?:\\.|[^[\]\\\n]){0,1000})\]\([ \t]*(<[^<>\n]{1,1024}>|[^\s()<>]{1,1024})/gu;
-
 /** A line that is one picture alone, its caption in quotes where it has one: alt text the first group, destination the second. */
 const PICTURE_LINE =
   /^[ \t]*!\[((?:\\.|[^[\]\\\n]){0,1000})\]\([ \t]*(<[^<>\n]{1,1024}>|[^\s()<>]{1,1024})(?:[ \t]+"(?:\\.|[^"\\\n]){0,1000}")?[ \t]*\)[ \t]*$/u;
-
-/** A picture's destination as the path or address it names, out of its angle brackets. */
-function destinationOf(destination: string): string {
-  return destination.startsWith("<") ? destination.slice(1, -1) : destination;
-}
 
 /**
  * The agent's words with each picture's path written as the address of the
@@ -1751,9 +1764,11 @@ function withPictureAddresses(
   addressOf: PictureAddress,
 ): string {
   return body.replace(
-    PICTURE_IN_WORDS,
+    INBOX_PICTURE_IN_WORDS,
     (whole: string, _alt: string, destination: string, offset: number) => {
-      const id = insideCode(body, offset) ? undefined : pictureOfPath(destinationOf(destination));
+      const id = insideCode(body, offset)
+        ? undefined
+        : pictureOfPath(inboxPictureDestination(destination));
       if (id === undefined) return whole;
       return `${whole.slice(0, whole.length - destination.length)}${addressOf(id)}`;
     },
@@ -1766,7 +1781,7 @@ function pictureBlock(
   pictureOfPath: (path: string) => string | undefined,
 ): InboxBlock | undefined {
   const [, alt = "", destination = ""] = PICTURE_LINE.exec(line) ?? [];
-  const attachmentId = pictureOfPath(destinationOf(destination));
+  const attachmentId = pictureOfPath(inboxPictureDestination(destination));
   const words = alt.replace(/\\(.)/gu, "$1").replace(/\s+/gu, " ").trim();
   if (attachmentId === undefined || words === "" || words.length > INBOX_BOUNDS.MAX_ALT_CHARS) {
     return undefined;
@@ -1883,7 +1898,7 @@ interface PostPicture extends InboxNamedImage {
 }
 
 /** One picture the agent's words name by its path in the agent's sandbox, as the caller read it there: the path as written, its file's own name, its type, and its bytes. */
-interface InboxBodyPicture extends InboxNamedImage {
+export interface InboxBodyPicture extends InboxNamedImage {
   readonly path: string;
 }
 
@@ -2083,10 +2098,11 @@ export function postInboxItem(
   );
 }
 
-/** A post as the tool from version 5 writes one: the item's key and title, the agent's words in Markdown, the ask they end with, if any, and whether the agent is to hear the answer. */
+/** A post as the tool from version 5 writes one: the item's key, its title where the post names one, the agent's words in Markdown, the ask they end with, if any, and whether the agent is to hear the answer. */
 interface InboxThreadPost {
   readonly key: string;
-  readonly title: string;
+  /** The item's title; absent keeps the title of the item standing under the key, which a first post must name. */
+  readonly title?: string | undefined;
   readonly body: string;
   readonly ask?: InboxAsk | undefined;
   readonly needsReply?: boolean | undefined;
@@ -2130,8 +2146,10 @@ function followUp(
  * items than the bound. A post that asks nothing is a message on the
  * thread of the item standing under its key, as the agent's reply is,
  * which moves nothing of the item but its last change; under a key with
- * no item it opens a thread that waits on nobody. Refused where the agent
- * is no longer the account's.
+ * no item it opens a thread that waits on nobody. A post naming no title
+ * keeps the standing item's, read under the same lock; refused where no
+ * item stands under the key, which a first post opens and must name. Refused
+ * where the agent is no longer the account's.
  */
 export function postInboxThread(
   agent: InboxAgent,
@@ -2149,13 +2167,15 @@ export function postInboxThread(
             yield* followUp(agent, locked.value, standing.value.id, post, pictures),
           );
         }
+        const title = post.title ?? Option.getOrUndefined(standing)?.title;
+        if (title === undefined) return Result.fail(INBOX_POST_REFUSAL.NO_TITLE);
         if (post.ask !== undefined && !(yield* roomToAsk(agent, post.key))) {
           return Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN);
         }
         const now = yield* DateTime.nowAsDate;
         const { kept, idOf } = yield* Effect.sync(() => picturesByPath(pictures));
         const view = {
-          title: post.title,
+          title,
           blocks: viewBlocks(post.body, post.ask, idOf),
           response:
             post.ask === undefined ? { type: INBOX_RESPONSE.NONE } : inboxAskResponse(post.ask),
@@ -2182,7 +2202,9 @@ export function readInboxAttachment(
 /**
  * The agent's item under the key closed with why, its revision moved on,
  * and the ask it held open withdrawn with the same why; nothing where it
- * has none under the key.
+ * has none under the key, or the item is not open, since an answered
+ * item's ask is no longer one to withdraw. Note that the status is checked
+ * in the write itself, so an answer that lands first is never closed over.
  */
 export function closeInboxItem(
   agent: Pick<InboxAgent, "userId" | "agentId">,
@@ -2765,6 +2787,9 @@ export const INBOX_ASK_ANSWER = {
 
 type InboxAskAnswer = (typeof INBOX_ASK_ANSWER)[keyof typeof INBOX_ASK_ANSWER];
 
+/** Why an answer under a key the thread already holds is refused: the key names another message, or the same key with other words, files, or answer. */
+const KEY_NAMES_ANOTHER_MESSAGE = "The key names another message of the thread.";
+
 /** What an answer to an ask came to: the item as it then stands, what this write did, and why it was refused, where it was. */
 interface InboxAskAnswered {
   readonly item: InboxItem;
@@ -2779,8 +2804,11 @@ interface InboxAskAnswered {
  * message carrying it under the client's key, with its words and files,
  * the ask stood answered, and the item answered with the answer's view for
  * a desktop before version 5; nothing where the account reaches no such
- * item. An answer sent again under the key it was taken by finds it taken;
- * an ask the item no longer holds open takes none.
+ * item. The same answer sent again under the key it was taken by, by the
+ * same member with the same words and files, finds it taken; any other
+ * under a key the thread already holds is refused, so the agent never hears
+ * what the thread does not show. An ask the item no longer holds open
+ * takes none.
  */
 export function answerInboxAsk(
   userId: string,
@@ -2804,9 +2832,23 @@ export function answerInboxAsk(
             outcome,
             ...(refusal === undefined ? undefined : { refusal }),
           });
-        if (found.value.answerKey === sent.clientKey) return standing(INBOX_ASK_ANSWER.REPEATED);
-        if (yield* keyTaken(itemId, sent.clientKey)) {
-          return standing(INBOX_ASK_ANSWER.REFUSED, "The key names another message of the thread.");
+        const keyed = yield* findKeyedMessage({ itemId, clientKey: sent.clientKey });
+        if (Option.isSome(keyed)) {
+          // Only the same answer sent again is the one taken, so the agent never hears what the thread does not hold.
+          const resent =
+            found.value.answerKey === sent.clientKey &&
+            sameAnswers(keyed.value.answers, sent.answers) &&
+            sameMessage(keyed.value, {
+              userId,
+              text: sent.text,
+              files: files.map((file) => ({ name: file.name, contentType: file.mediaType })),
+            });
+          return resent
+            ? standing(INBOX_ASK_ANSWER.REPEATED)
+            : standing(INBOX_ASK_ANSWER.REFUSED, KEY_NAMES_ANOTHER_MESSAGE);
+        }
+        if (found.value.answerKey === sent.clientKey) {
+          return standing(INBOX_ASK_ANSWER.REFUSED, KEY_NAMES_ANOTHER_MESSAGE);
         }
         const asking = yield* findOpenAsk({ userId, itemId });
         if (
@@ -2883,9 +2925,10 @@ const KeyedMessageSchema = Schema.Struct({
   userId: Schema.NullOr(Schema.String),
   text: Schema.String,
   files: Schema.Array(Schema.Struct({ name: Schema.String, mediaType: Schema.String })),
+  answers: Schema.NullOr(inboxAnswersSchema),
 });
 
-/** The message standing under a member's key on the item: who wrote it, its words, and its files by name and type in order. */
+/** The message standing under a member's key on the item: who wrote it, its words, its files by name and type in order, and the answer it carries. */
 const findKeyedMessage = SqlSchema.findOneOption({
   Request: Schema.Struct({ itemId: Schema.String, clientKey: Schema.String }),
   Result: KeyedMessageSchema,
@@ -2896,11 +2939,45 @@ const findKeyedMessage = SqlSchema.findOneOption({
           userId: inboxMessage.userId,
           text: inboxMessage.text,
           files: sql<unknown>`(select coalesce(jsonb_agg(jsonb_build_object('name', ${attachment.name}, 'mediaType', ${attachment.contentType}) order by ${attachment.position}), '[]'::jsonb) from ${attachment} where ${attachment.inboxMessageId} = ${MESSAGE.id})`,
+          answers: inboxMessage.answers,
         })
         .from(inboxMessage)
         .where(and(eq(inboxMessage.itemId, itemId), eq(inboxMessage.clientKey, clientKey))),
     ),
 });
+
+/** Whether two lists hold the same entries in the same order, by the test given; an absent list holds none. */
+function sameList<T>(
+  standing: readonly T[] | undefined,
+  sent: readonly T[] | undefined,
+  same: (left: T, right: T) => boolean = (left, right) => left === right,
+): boolean {
+  const left = standing ?? [];
+  const right = sent ?? [];
+  return (
+    left.length === right.length &&
+    left.every((each, at) => {
+      const other = right[at];
+      return other !== undefined && same(each, other);
+    })
+  );
+}
+
+/** Whether the answer standing on a message is the one sent again: the same ask, reply, picks, values, and ticks, in order. */
+function sameAnswers(standing: InboxAnswers | null, sent: InboxAnswers): boolean {
+  return (
+    standing !== null &&
+    standing.ask === sent.ask &&
+    standing.reply === sent.reply &&
+    sameList(standing.choices, sent.choices) &&
+    sameList(standing.steps, sent.steps) &&
+    sameList(
+      standing.values,
+      sent.values,
+      (left, right) => left.label === right.label && left.value === right.value,
+    )
+  );
+}
 
 /** Whether the message standing under the key is the one sent again: the same member, the same words, and the same files by name and type. */
 function sameMessage(
@@ -2908,7 +2985,7 @@ function sameMessage(
   sent: {
     readonly userId: string;
     readonly text: string;
-    readonly files: readonly MessageFile[];
+    readonly files: readonly Pick<MessageFile, "name" | "contentType">[];
   },
 ): boolean {
   return (
@@ -3033,11 +3110,11 @@ export function postInboxMessage(
 /** The agent's own item under the key, as its tools name one, where the member who started the agent is still a member of the item's workspace. */
 const findAgentItem = SqlSchema.findOneOption({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, title: Schema.String }),
   execute: ({ userId, agentId, key }) =>
     Database.use((db) =>
       db
-        .select({ id: inboxItem.id })
+        .select({ id: inboxItem.id, title: inboxItem.title })
         .from(inboxItem)
         .where(
           and(

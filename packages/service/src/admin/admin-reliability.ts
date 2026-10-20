@@ -25,16 +25,14 @@ import type { AdminDatabaseHealth, AdminIntegration } from "./admin-health.js";
 import { lastNDayKeys, sum } from "./admin-metrics.js";
 import {
   type ADMIN_ATTENTION_KIND,
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
   ADMIN_RELIABILITY_WINDOWS,
   type AdminMetricsScope,
   type AdminMetricsWindow,
+  type AdminWindowedQuery,
   adminMetricsScope,
   adminMetricsWindow,
-  errorResponse,
-  jsonResponse,
 } from "./http.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /** How many accounts the attention list names, newest breakage first. */
@@ -228,15 +226,15 @@ export function buildAdminReliability(
  * The window a Reliability read asked for: the shared default where it named
  * none, and nothing where it named one outside the week and the month.
  */
-function adminReliabilityWindow(url: string): AdminMetricsWindow | undefined {
-  const windowDays = adminMetricsWindow(url);
+function adminReliabilityWindow(value: string | undefined): AdminMetricsWindow | undefined {
+  const windowDays = adminMetricsWindow(value);
   return windowDays !== undefined && ADMIN_RELIABILITY_WINDOWS.includes(windowDays)
     ? windowDays
     : undefined;
 }
 
 export interface AdminReliabilityOptions {
-  request: Request;
+  query: AdminWindowedQuery;
   readReliability: (
     now: number,
     scope: AdminMetricsScope,
@@ -251,18 +249,15 @@ export interface AdminReliabilityOptions {
  */
 export function handleAdminReliability(
   options: AdminReliabilityOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<AdminReliability, AdminRefusal, DatabaseServices> {
+  const { query } = options;
 
-  const windowDays = adminReliabilityWindow(request.url);
-  if (windowDays === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
-  }
+  const windowDays = adminReliabilityWindow(query.window);
+  if (windowDays === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_WINDOW);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    options.readReliability(now, adminMetricsScope(request.url), windowDays).pipe(
-      Effect.map((reliability) => jsonResponse(ADMIN_HTTP_STATUS.OK, reliability)),
-      Effect.catchCause((cause) => unavailableSeam("admin reliability read failed", cause)),
-    ),
+    options
+      .readReliability(now, adminMetricsScope(query.scope), windowDays)
+      .pipe(Effect.catchCause((cause) => unavailableSeam("admin reliability read failed", cause))),
   );
 }

@@ -9,6 +9,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { sessionKey } from "@luke/runtime/vocabulary";
 import {
   MESSAGE_AUTHOR,
@@ -32,15 +33,21 @@ import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
   archiveUnmovedCodingAgent,
+  type CodingAgent,
+  type CodingAgentLine,
+  codingAgentLineOf,
   continuationsOf,
   createCodingAgent,
   delegationsOf,
   IDLE_ARCHIVE,
   linePlacesOf,
   lineSendersOf,
+  listCodingAgentLines,
   listCodingAgentsOnPullRequest,
+  listPublishedCodingAgents,
   listPublishedCodingAgentsById,
   listTasklessCodingAgents,
+  listWorkspaceCodingAgentLines,
   listWorkspaceCodingAgents,
   listWorldCodingAgents,
   pinCodingAgent,
@@ -1324,6 +1331,221 @@ it.layer(getTestDB())("the coding-agent store's agent started from another", (it
           continues.slice(0, 20),
         );
         assert.deepEqual(read.get(quiet), [{ agentId: latest, title: null }]);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the GitHub access a task and an agent recorded", (it) => {
+  it.effect(
+    "the access a repository was reached through is kept on the task that named it and the agent a Start made, and one that names none is the App's",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const onToken = yield* createTask(starter, {
+          organizationId: workspace,
+          repository: "octo-member/side",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const onApp = yield* createTask(starter, {
+          organizationId: workspace,
+          repository: "acme/api",
+        });
+        const start = (taskId: string, githubAccess?: typeof GITHUB_ACCESS.TOKEN) =>
+          createCodingAgent(starter, {
+            taskId,
+            planSnapshot: "# Billing",
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: "octo-member/side",
+            ...(githubAccess === undefined ? undefined : { githubAccess }),
+          });
+        const tokenAgent = Option.getOrThrow(yield* start(onToken.id, GITHUB_ACCESS.TOKEN)).agent;
+        const appAgent = Option.getOrThrow(yield* start(onApp.id)).agent;
+        const accessOf = (taskId: string) =>
+          Effect.map(
+            db.select({ access: task.githubAccess }).from(task).where(eq(task.id, taskId)),
+            (rows) => rows[0]?.access,
+          );
+
+        assert.equal(yield* accessOf(onToken.id), GITHUB_ACCESS.TOKEN);
+        assert.equal(yield* accessOf(onApp.id), GITHUB_ACCESS.APP);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(starter, tokenAgent.id)).githubAccess,
+          GITHUB_ACCESS.TOKEN,
+        );
+        assert.equal(appAgent.githubAccess, GITHUB_ACCESS.APP);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's GitHub access", (it) => {
+  it.effect(
+    "an agent keeps how its repository was reached as it started, read back by its starter, and one started with none named reads as the App's",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const task = yield* createTask(starter, { organizationId: workspace, name: "Billing" });
+        const startOn = (githubAccess?: GitHubAccess) =>
+          Effect.map(
+            createCodingAgent(starter, {
+              taskId: task.id,
+              planSnapshot: "# Billing",
+              prompt: null,
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              repository: "acme/api",
+              ...(githubAccess === undefined ? undefined : { githubAccess }),
+            }),
+            (started) => Option.getOrThrow(started).agent,
+          );
+
+        const onToken = yield* startOn(GITHUB_ACCESS.TOKEN);
+        const unnamed = yield* startOn();
+
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(starter, onToken.id)).githubAccess,
+          GITHUB_ACCESS.TOKEN,
+        );
+        assert.equal(unnamed.githubAccess, GITHUB_ACCESS.APP);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
+  /** Text the size of a long plan, which an agent may be handed and no line carries. */
+  const largeText = "Any member may invite a teammate by email.\n".repeat(6_000);
+
+  /** What a line says of an agent, and which of the text columns it carries, which should be none. */
+  const said = (line: CodingAgentLine) => ({
+    id: line.id,
+    title: line.title,
+    handedPrompt: line.handedPrompt,
+    automationName: line.automationName,
+    startedFrom: line.startedFrom,
+    text: ["planSnapshot", "prompt", "automationOrigin"].filter((column) => column in line),
+  });
+
+  /** The agent a Start made, failing the test where it made none. */
+  const made = (answer: Option.Option<{ readonly agent: CodingAgent }>) =>
+    Option.getOrElse(answer, () => assert.fail("the start made no agent")).agent;
+
+  it.effect(
+    "every list reads an agent handed a large plan, a prompt, or an automation's run as its line: its brief, its automation's name, and its source, with none of the text, for a member alone",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const onTask = yield* createTask(starter, { organizationId: workspace, name: "Invites" });
+        const asked = {
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: "acme/api",
+        };
+        const snapshotted = made(
+          yield* createCodingAgent(starter, {
+            ...asked,
+            taskId: onTask.id,
+            planSnapshot: largeText,
+            prompt: null,
+            title: "Invite emails",
+            idempotencyKey: randomUUID(),
+          }),
+        );
+        yield* TestClock.adjust("1 minute");
+        const source = { agentId: snapshotted.id, steps: 2, totalSteps: 4 };
+        const continued = made(
+          yield* createCodingAgent(starter, {
+            ...asked,
+            taskId: onTask.id,
+            planSnapshot: null,
+            prompt: largeText,
+            startedFrom: source,
+            idempotencyKey: randomUUID(),
+          }),
+        );
+        yield* TestClock.adjust("1 minute");
+        const run = made(
+          yield* createCodingAgent(starter, {
+            ...asked,
+            taskId: null,
+            organizationId: workspace,
+            planSnapshot: null,
+            prompt: largeText,
+            automationOrigin: {
+              name: "Nightly triage",
+              firing: { kind: "webhook", bytes: largeText.length },
+              prompt: largeText,
+              body: largeText,
+            },
+            idempotencyKey: randomUUID(),
+          }),
+        );
+        const lines = {
+          snapshotted: {
+            id: snapshotted.id,
+            title: "Invite emails",
+            handedPrompt: false,
+            automationName: null,
+            startedFrom: null,
+            text: [],
+          },
+          continued: {
+            id: continued.id,
+            title: null,
+            handedPrompt: true,
+            automationName: null,
+            startedFrom: source,
+            text: [],
+          },
+          run: {
+            id: run.id,
+            title: null,
+            handedPrompt: true,
+            automationName: "Nightly triage",
+            startedFrom: null,
+            text: [],
+          },
+        };
+
+        assert.deepEqual((yield* listCodingAgentLines(starter, onTask.id)).map(said), [
+          lines.snapshotted,
+          lines.continued,
+        ]);
+        assert.deepEqual(
+          (yield* listPublishedCodingAgents(starter, [onTask.id])).map(({ agent }) => said(agent)),
+          [lines.snapshotted, lines.continued],
+        );
+        assert.deepEqual(
+          (yield* listWorkspaceCodingAgentLines(starter, workspace, { limit: 10 })).map(said),
+          [lines.run, lines.continued, lines.snapshotted],
+        );
+        assert.deepEqual((yield* listTasklessCodingAgents(starter)).map(said), [lines.run]);
+
+        // Every other column reads as a whole read reads it, and the line a whole read draws is the listed one.
+        const whole = Option.getOrThrow(yield* readCodingAgent(starter, run.id));
+        const {
+          automationOrigin: _origin,
+          planSnapshot: _snapshot,
+          prompt: _prompt,
+          ...rest
+        } = whole;
+        const expected = { ...rest, automationName: "Nightly triage", handedPrompt: true };
+        const [listed] = yield* listWorkspaceCodingAgentLines(starter, workspace, { limit: 1 });
+        assert.deepEqual(listed, expected);
+        assert.deepEqual(codingAgentLineOf(whole), expected);
+
+        assert.deepEqual(yield* listCodingAgentLines(outsider, onTask.id), []);
+        assert.deepEqual(
+          yield* listWorkspaceCodingAgentLines(outsider, workspace, { limit: 10 }),
+          [],
+        );
       }),
   );
 });

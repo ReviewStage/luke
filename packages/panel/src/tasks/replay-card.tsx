@@ -233,7 +233,9 @@ function LineSender({
   if (readerId !== undefined && view.sentBy?.userId === readerId) return null;
   return (
     <div className="message-meta">
-      <span className="message-sender">{view.sender}</span>
+      <span className="message-sender">
+        <span className="message-sender-words">{view.sender}</span>
+      </span>
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
+import type { PushName, PushPayload } from "@luke/host/contract";
 import { PanelAvatarRelay } from "@luke/host/panel-avatar";
 import type { AvatarFeed } from "@luke/voice/avatar";
 import type { AvatarViewSignal } from "@luke/voice/avatar-view";
-import type { UnparsedWireValue } from "@luke/wire";
 import {
   app,
   BrowserWindow,
@@ -21,6 +21,7 @@ import {
   readWindowPlacement,
   writeWindowPlacement,
 } from "./window-placement";
+import { windowPushes } from "./window-pushes";
 import { trafficLightsAt } from "./zoom";
 
 interface PanelDuck {
@@ -125,9 +126,13 @@ export class PanelManager {
   #dark = true;
   /** The windows whose renderer has drawn its first frame, the ones the avatar's grant may reach. */
   readonly #drawn = new WeakSet<BrowserWindow>();
+  /** Whether the avatar's grant stands, so the panel running its session is left unthrottled. */
+  #avatarSession = false;
   readonly #avatar = new PanelAvatarRelay(() => {
     const window = this.primaryPanel();
-    return window && this.#drawn.has(window) ? window.webContents : undefined;
+    if (!window || !this.#drawn.has(window)) return undefined;
+    const page = window.webContents;
+    return { push: (push, payload) => windowPushes.push(page, push, payload) };
   });
 
   constructor(options: PanelManagerOptions) {
@@ -162,11 +167,14 @@ export class PanelManager {
    * already holds the answer in its reply and must redraw from that rather
    * than race a broadcast.
    */
-  broadcast<Payload>(channel: string, payload: Payload, except?: WebContents): void {
+  broadcast<Name extends PushName>(
+    push: Name,
+    payload: PushPayload<Name>,
+    except?: WebContents,
+  ): void {
     for (const window of this.#windows.values()) {
       if (window.isDestroyed() || window.webContents === except) continue;
-      // SAFETY: Main-process broadcasts carry structured-clone snapshots produced for channels fixed by this build.
-      window.webContents.send(channel, payload as UnparsedWireValue);
+      windowPushes.push(window.webContents, push, payload);
     }
   }
 
@@ -185,7 +193,19 @@ export class PanelManager {
    * its video at the top of the Call tab.
    */
   showAvatarSession(grant: AvatarGrant | undefined): void {
+    this.#avatarSession = grant !== undefined;
+    for (const window of this.windows()) this.#throttle(window);
     this.#avatar.showAvatarSession(grant);
+  }
+
+  /**
+   * A window runs the avatar's session, whose video and lip-sync must go on
+   * while it is hidden or covered, only for as long as a grant stands; any
+   * other time it is throttled as Chromium does by default. Applied to a
+   * page that has just loaded as well, so a reload cannot drop it.
+   */
+  #throttle(window: BrowserWindow): void {
+    window.webContents.setBackgroundThrottling(!this.#avatarSession);
   }
 
   /** One message of Luke's voice feed, for the avatar to lip-sync. */
@@ -350,7 +370,11 @@ export class PanelManager {
       titleBarStyle: "hiddenInset",
       trafficLightPosition: trafficLightsAt(zoomFactor),
       webPreferences: {
-        ...hardenedWebPreferences({ preloadPath: this.#preloadPath, runMode: this.#runMode }),
+        ...hardenedWebPreferences({
+          preloadPath: this.#preloadPath,
+          runMode: this.#runMode,
+          backgroundThrottling: !this.#avatarSession,
+        }),
         zoomFactor,
       },
     };
@@ -365,6 +389,7 @@ export class PanelManager {
     const drew = () => {
       if (window.isDestroyed()) return;
       this.#drawn.add(window);
+      if (this.#avatarSession) this.#throttle(window);
       this.#avatar.pageDrew();
     };
     window.webContents.on("did-finish-load", drew);

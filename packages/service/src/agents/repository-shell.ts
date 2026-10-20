@@ -1,11 +1,12 @@
 import type { DatabaseServices } from "@luke/database/core/query";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import type { UnparsedWireValue } from "@luke/wire";
 import { describeWire, readEither } from "@luke/wire/effect";
 import { Data, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { SandboxSession } from "eve/sandbox";
 import type { VercelSandboxSession } from "eve/sandbox/vercel";
-import { GitHubApp } from "../github/github-app.js";
+import { GitHubApp, type GitHubTokenAccess } from "../github/github-app.js";
 import { taskWorkspace } from "../github/workspace-repository.js";
 import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
@@ -238,10 +239,12 @@ export interface CheckoutRepository {
   readonly recordedAs?: string;
 }
 
-/** How deep a checkout is cloned: one commit for a read, the whole history for a coding agent. */
+/** How deep a checkout is cloned: one commit for a read, the whole history for a coding agent; and whose the token is. */
 export interface CheckoutDepth {
   /** The commits kept; absent, every one. */
   readonly depth?: string;
+  /** Whose the token is; absent, an installation token. */
+  readonly access?: GitHubTokenAccess;
 }
 
 function notRun(reason: string): RepositoryShellResult {
@@ -258,13 +261,28 @@ function cloneUrl(repository: string): string {
 }
 
 /**
+ * The username git over HTTPS takes beside the token: `x-access-token` for
+ * an installation token
+ * (https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation#about-authentication-as-a-github-app-installation),
+ * the member's own login for their personal access token
+ * (https://docs.github.com/en/get-started/git-basics/about-remote-repositories#cloning-with-https-urls).
+ */
+function gitUsername(access: GitHubTokenAccess): string {
+  return access.kind === GITHUB_ACCESS.TOKEN ? access.githubLogin : "x-access-token";
+}
+
+/**
  * The firewall for the clone: open internet, and the token as GitHub's
  * header on requests under the one repository's git endpoint alone, so a
  * request for a neighbouring repository, or for the repository's pages
  * outside git, carries nothing.
  */
-function cloneNetworkPolicy(repository: string, token: Redacted.Redacted) {
-  const basic = Buffer.from(`x-access-token:${Redacted.value(token)}`).toString("base64");
+function cloneNetworkPolicy(
+  repository: string,
+  token: Redacted.Redacted,
+  access: GitHubTokenAccess,
+) {
+  const basic = Buffer.from(`${gitUsername(access)}:${Redacted.value(token)}`).toString("base64");
   return {
     allow: {
       "*": [],
@@ -313,7 +331,7 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
   sandbox: RepositorySandbox,
   confirmed: CheckoutRepository,
   token: Redacted.Redacted,
-  { depth }: CheckoutDepth = {},
+  { depth, access = { kind: GITHUB_ACCESS.APP } }: CheckoutDepth = {},
 ): Effect.fn.Return<void, RepositoryRefusal> {
   const setNetworkPolicy = sandbox.setNetworkPolicy;
   if (setNetworkPolicy === undefined)
@@ -343,7 +361,7 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
       orElse: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
     }),
   );
-  yield* policy(cloneNetworkPolicy(confirmed.fullName, token));
+  yield* policy(cloneNetworkPolicy(confirmed.fullName, token, access));
   // Note that the policy is opened again whatever the clone answered, and in
   // a finalizer, so an interrupted clone leaves no credential standing either.
   const cloned = yield* Effect.ensuring(clone, Effect.ignore(policy(OPEN_INTERNET)));
@@ -383,8 +401,9 @@ export const setCheckoutIdentity = /* @__PURE__ */ Effect.fn("web/setCheckoutIde
 });
 
 /**
- * The brain's checkout: the repository confirmed reachable and a read
- * token minted for it, then the clone, one commit deep. Note that the
+ * The brain's checkout: the repository confirmed reachable, through the
+ * installation or the member's own token, and a read token for it,
+ * then the clone, one commit deep. Note that the
  * repository is recorded under the name the task holds, which is what the
  * checkout probe compares, so a task whose spelling differs from GitHub's
  * is still checked out once.
@@ -398,15 +417,16 @@ const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
   const reached = yield* Effect.gen(function* () {
     const workspace = yield* taskWorkspace(call.task.userId, call.task.taskId);
     if (Option.isNone(workspace)) return Option.none();
-    return yield* app.repositoryReadToken(workspace.value, repository);
+    return yield* app.repositoryReadToken(workspace.value, repository, call.task.userId);
   }).pipe(
     Effect.mapError(() => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.GITHUB_UNAVAILABLE })),
   );
   if (Option.isNone(reached))
     return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NOT_REACHABLE });
-  const { repository: confirmed, token } = reached.value;
+  const { repository: confirmed, token, access } = reached.value;
   yield* cloneRepository(sandbox, { ...confirmed, recordedAs: repository }, token, {
     depth: BRAIN_CLONE_DEPTH,
+    access,
   });
 });
 

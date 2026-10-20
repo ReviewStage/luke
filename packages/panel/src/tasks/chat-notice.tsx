@@ -26,7 +26,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * A line the chat steered into a coding agent's turn is no message of the
  * developer's, so it never draws as their bubble. It draws as a card across
  * the column instead, washed in Luke's blue, headed by its sender's mark,
- * handle, the channel the message was posted in, its place in the
+ * name, the channel the message was posted in, its place in the
  * workspace's chat as `m 41`, and how long ago it was posted, with Open in
  * Chat at the head's end, which opens the window's Chat on that channel.
  * Its body is the message as the chat holds it, Markdown as the transcript
@@ -76,7 +76,7 @@ export function ChatNoticeCard({
   notice: ChatNoticeMetadata;
   /** The notice's own words, drawn where the chat the window holds does not carry the message, without the lines that are the agent's alone (`chatNoticeWords`). */
   words: string;
-  /** Who posted, drawn in the handle's place: another coding agent's own chip; none to name the poster by their mark and handle. */
+  /** Who posted, drawn in the name's place: another coding agent's own chip; none to name the poster by their mark and name. */
   from?: ReactNode | undefined;
   doors: ChatNoticeDoors | undefined;
   now: number;
@@ -113,7 +113,9 @@ export function ChatNoticeCard({
             {who?.member === undefined ? null : (
               <ActorMark actor={actorOf(who.member.id)} size={ACTOR_SIZE.INLINE} />
             )}
-            <span className="chat-notice-from">@{notice.from}</span>
+            <span className="chat-notice-from">
+              {who?.member === undefined ? notice.from : who.name}
+            </span>
           </>
         )}
         <span className="chat-notice-place">

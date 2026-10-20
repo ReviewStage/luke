@@ -373,8 +373,25 @@
     height: var(--luke-space-12);
   }
 
-  .luke-list-row:is(:hover, :has(:focus-visible), [data-current="true"]) .luke-list-row-chevron {
+  .luke-list-row:is(:has(:focus-visible), [data-current="true"]) .luke-list-row-chevron {
     opacity: 1;
+  }
+
+  /* Note that the pointer's own reveals, here and below, stand only where
+     there is a hover, because iOS plays a first tap as a hover and spends
+     it on a reveal: the row opens on the second tap alone. */
+  @media (hover: hover) {
+    .luke-list-row:hover .luke-list-row-chevron {
+      opacity: 1;
+    }
+  }
+
+  /* A screen with no hover shows every row's chevron at rest, so a row that
+     goes deeper says so before it is tapped. */
+  @media (hover: none) {
+    .luke-list-row-chevron {
+      opacity: 1;
+    }
   }
 
   /* Acts offered to the row in hand come in at its end while the pointer
@@ -404,20 +421,32 @@
     height: var(--luke-type-label-leading);
   }
 
-  .luke-list-row[data-actions="hover"]:is(:hover, :has(:focus-visible), [data-menu-open="true"])
+  .luke-list-row[data-actions="hover"]:is(:has(:focus-visible), [data-menu-open="true"])
     .luke-list-row-actions {
     opacity: 1;
     pointer-events: auto;
   }
 
+  @media (hover: hover) {
+    .luke-list-row[data-actions="hover"]:hover .luke-list-row-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+  }
+
   /* Note that a row offering no acts keeps its metadata, since nothing
      steps in for it. */
   .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions):is(
-    :hover,
     :has(:focus-visible),
     [data-menu-open="true"]
   ) .luke-list-row-meta {
     visibility: hidden;
+  }
+
+  @media (hover: hover) {
+    .luke-list-row[data-actions="hover"]:has(.luke-list-row-actions):hover .luke-list-row-meta {
+      visibility: hidden;
+    }
   }
 
   /* Where the metadata stands at the row's middle, the acts that come in
@@ -432,7 +461,6 @@
   }
 
   .luke-list-row[data-actions="hover"]:not([data-meta="title"]):is(
-      :hover,
       :has(:focus-visible),
       [data-menu-open="true"]
     )
@@ -442,7 +470,6 @@
   }
 
   .luke-list-row[data-actions="hover"]:not([data-meta="title"]):has(.luke-list-row-actions):is(
-      :hover,
       :has(:focus-visible),
       [data-menu-open="true"]
     )
@@ -451,12 +478,28 @@
   }
 
   .luke-list-row[data-actions="hover"]:not([data-meta="title"]):has(.luke-list-row-actions):is(
-      :hover,
       :has(:focus-visible),
       [data-menu-open="true"]
     )
     .luke-list-row-meta {
     display: none;
+  }
+
+  @media (hover: hover) {
+    .luke-list-row[data-actions="hover"]:not([data-meta="title"]):hover .luke-list-row-actions {
+      position: static;
+      transition: opacity var(--luke-duration-hover) ease;
+    }
+
+    .luke-list-row[data-actions="hover"]:not([data-meta="title"]):has(.luke-list-row-actions):hover
+      .luke-list-row-main {
+      padding-inline-end: 0;
+    }
+
+    .luke-list-row[data-actions="hover"]:not([data-meta="title"]):has(.luke-list-row-actions):hover
+      .luke-list-row-meta {
+      display: none;
+    }
   }
 
   /* A screen with no hover never has a row in hand, so each row there keeps

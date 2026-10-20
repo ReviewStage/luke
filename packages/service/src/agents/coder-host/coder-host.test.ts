@@ -30,7 +30,14 @@ import { getTestDB, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import { CHAT_BLOCK, CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
+import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_CURSOR_START,
+  INBOX_STATUS,
+  INBOX_TOOL,
+} from "@luke/features/inbox-wire";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
@@ -337,7 +344,8 @@ function scriptedTitleModel(answers: readonly string[]) {
 const STEP_START = "step-start";
 
 /** A chat notice as the chat steers one in: another agent's words, which are no task of the developer's. */
-const CHAT_NOTICE = "@agent-2 in #teammate-invitations: the invite table is mine, leave it.";
+const CHAT_NOTICE =
+  "Chat · [@Invite emails](https://tryluke.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) in #teammate-invitations (m 41):\n\nThe invite table is mine, leave it.";
 
 /** A second turn as eve emits it for a line it received while the agent was idle: the line, then a word of answer. */
 function answeredTurn(turnId: string, received: string): MessageStreamEvent[] {
@@ -724,6 +732,120 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
   );
 
   it.effect(
+    "an agent's inbox calls run under its session: a post opens a thread, withdraw_ask settles its ask, and read_inbox reads it back",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+        const post = {
+          key: "region",
+          title: "Which region?",
+          body: "Both cost the same.",
+          ask: { type: INBOX_ASK.DECIDE, options: [{ label: "iad1" }, { label: "fra1" }] },
+        };
+
+        const posted = yield* host.inbox(admitted, {
+          tool: INBOX_TOOL.POST,
+          input: unparsedWire(post),
+          sandbox: noSandbox,
+        });
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const withdrawn = yield* host.inbox(admitted, {
+          tool: INBOX_TOOL.WITHDRAW,
+          input: unparsedWire({ key: "region", reason: "Picked iad1." }),
+        });
+        assert.equal(withdrawn.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const read = yield* host.inbox(admitted, {
+          tool: INBOX_TOOL.READ,
+          input: unparsedWire({}),
+        });
+
+        assert.deepEqual(read, {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          inbox: [
+            {
+              key: "region",
+              title: "Which region?",
+              status: INBOX_STATUS.CLOSED,
+              thread: [
+                {
+                  from: "you",
+                  text: "Both cost the same.",
+                  ask: {
+                    type: INBOX_ASK.DECIDE,
+                    status: INBOX_ASK_STATUS.WITHDRAWN,
+                    withdrawnReason: "Picked iad1.",
+                  },
+                },
+              ],
+            },
+          ],
+        });
+      }),
+  );
+
+  it.effect(
+    "a transcript written before the inbox moved to threads still reads its close_inbox_item and reply_inbox calls, which no agent is offered now",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, auth, sessionId, admitted, agent } = yield* openAgent(host);
+        const at = { turnId: "turn_0", sequence: 0, stepIndex: 0 };
+        const calls = [
+          { callId: "call-reply", toolName: "reply_inbox", input: { key: "k", text: "Done." } },
+          {
+            callId: "call-close",
+            toolName: "close_inbox_item",
+            input: { key: "k", reason: "Done." },
+          },
+        ];
+        const events: MessageStreamEvent[] = [
+          stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } }),
+          stamped({ type: "step.started", data: { ...at, modelId: "m" } }),
+          stamped({
+            type: "actions.requested",
+            data: { ...at, actions: calls.map((call) => ({ kind: "tool-call", ...call })) },
+          }),
+          ...calls.map((call) =>
+            stamped({
+              type: "action.result",
+              data: {
+                ...at,
+                status: "completed",
+                result: {
+                  kind: "tool-result",
+                  callId: call.callId,
+                  toolName: call.toolName,
+                  output: { status: ACTION_RESULT_STATUS.ACCEPTED, inbox: [] },
+                },
+              },
+            }),
+          ),
+          stamped({ type: "step.completed", data: { ...at, finishReason: "tool-calls" } }),
+          stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
+        ];
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of events) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const parts = page.messages.flatMap((message) => message.parts).filter(isToolUIPart);
+        assert.deepEqual(
+          parts.map((part) => [part.type, part.state]),
+          [
+            ["tool-reply_inbox", TOOL_PART_STATE.OUTPUT_AVAILABLE],
+            ["tool-close_inbox_item", TOOL_PART_STATE.OUTPUT_AVAILABLE],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
     "the turn-end stop is told an agent's sandbox is held while a developer's terminal lease reaches past now, and not once it lapsed",
     () =>
       Effect.gen(function* () {
@@ -830,7 +952,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           author: MESSAGE_AUTHOR.AGENT,
           channel: MESSAGE_CHANNEL.CHAT,
           chat_seq: 41,
-          from: "agent-2",
+          from: "Invite emails",
         } as const;
         const written = yield* writer.writeAwaitingLine(
           target,
@@ -840,7 +962,7 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
             sender: {
               kind: MESSAGE_SENDER.AGENT,
               agentId: randomUUID(),
-              name: "agent-2",
+              name: "Invite emails",
               model: agent.model,
             },
             metadata: notice,
@@ -902,12 +1024,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           {
             text: CHAT_NOTICE,
             clientKey: "chat-notice-mid-turn",
-            sender: { kind: MESSAGE_SENDER.AGENT, name: "agent-2" },
+            sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
             metadata: {
               author: MESSAGE_AUTHOR.AGENT,
               channel: MESSAGE_CHANNEL.CHAT,
               chat_seq: 41,
-              from: "agent-2",
+              from: "Invite emails",
             },
           },
           Effect.succeed(true),
@@ -951,12 +1073,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
             {
               text: CHAT_NOTICE,
               clientKey: `chat-notice-steered-${at}`,
-              sender: { kind: MESSAGE_SENDER.AGENT, name: "agent-2" },
+              sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
               metadata: {
                 author: MESSAGE_AUTHOR.AGENT,
                 channel: MESSAGE_CHANNEL.CHAT,
                 chat_seq: 40 + at,
-                from: "agent-2",
+                from: "Invite emails",
               },
             },
             Effect.succeed(true),
@@ -997,12 +1119,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           {
             text: CHAT_NOTICE,
             clientKey: `chat-notice-${at}`,
-            sender: { kind: MESSAGE_SENDER.AGENT, name: "agent-2" },
+            sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
             metadata: {
               author: MESSAGE_AUTHOR.AGENT,
               channel: MESSAGE_CHANNEL.CHAT,
               chat_seq: 40 + at,
-              from: "agent-2",
+              from: "Invite emails",
             },
           },
           Effect.succeed(true),
@@ -1051,12 +1173,12 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
             {
               text: CHAT_NOTICE,
               clientKey: `chat-notice-opening-${at}`,
-              sender: { kind: MESSAGE_SENDER.AGENT, name: "agent-2" },
+              sender: { kind: MESSAGE_SENDER.AGENT, name: "Invite emails" },
               metadata: {
                 author: MESSAGE_AUTHOR.AGENT,
                 channel: MESSAGE_CHANNEL.CHAT,
                 chat_seq: 40 + at,
-                from: "agent-2",
+                from: "Invite emails",
               },
             },
             Effect.succeed(true),
@@ -1176,13 +1298,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const { userId, agent, admitted } = yield* openAgent(host);
         yield* chatOn(userId);
         const workspace = Option.getOrThrow(yield* agentWorkspace(userId, agent.id));
-        const person = Option.getOrThrow(
-          yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
-        );
+        yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId });
         const posted = yield* host
           .chat(admitted, {
             tool: CHAT_TOOL.POST,
-            input: unparsedWire({ text: `@${person.handle} the invite table is yours.` }),
+            input: unparsedWire({
+              text: `${mentionMarkdown({ kind: MENTION_KIND.PERSON, userId }, "Test User", { workspace: "acme", repository: null })} the invite table is yours.`,
+            }),
             clientKey: "call-mention",
             postsInTurn: 0,
             sandbox: () => Promise.reject(new Error("the sandbox was opened")),
@@ -1242,7 +1364,6 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           authorMemberId: person.id,
           to: { channelId: general.id },
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
-          mentions: [],
           clientKey: "post-1",
         });
         assert.equal(yield* host.chatDigest(admitted), undefined);

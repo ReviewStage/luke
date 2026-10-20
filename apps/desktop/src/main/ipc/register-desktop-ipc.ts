@@ -7,10 +7,8 @@ import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { highlightSnippet } from "@luke/host";
 import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
-import { createHostActRouter, type PlatformActRows } from "@luke/host/act-router";
-import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import { channels } from "@luke/host/bridge";
+import { PUSH } from "@luke/host/contract";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -28,13 +26,15 @@ import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { createBrowserViews } from "../window/browser-views";
 import { HOTKEY_RANK } from "../window/hotkey-registrar";
+import { windowPushes } from "../window/window-pushes";
 import { avatarProcedures, avatarReports } from "./avatar-acts";
-import { browserActRows } from "./browser-acts";
+import { browserProcedures } from "./browser-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 import { clientSettingSideEffects } from "./settings-side-effects";
 import { terminalProcedures, whenPageGone } from "./terminal-acts";
+import { updateProcedures } from "./update-acts";
 import { voiceRuntimeProcedures, voiceRuntimeReports } from "./voice-runtime";
-import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
+import { windowSurfaceProcedures, windowSurfaceReports } from "./window-surface";
 
 /**
  * Every channel the sandboxed renderers reach this process through, composed
@@ -42,9 +42,9 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
  * loaded before its channels were registered would meet an unhandled invoke,
  * and the windows open in the window service's own start.
  *
- * What is composed here is the act table — the host's rows, handed what they
- * reach of this process, over the rows only Electron can answer, total by
- * their type together — and the reports beside it. Nothing else registers IPC.
+ * What is composed here is the act port — the host's procedures, handed what
+ * they reach of this process, beside the procedures only Electron can answer,
+ * total by their type together — and the reports beside it. Nothing else registers IPC.
  */
 export function registerDesktopIpc(services: DesktopServices): void {
   const {
@@ -86,49 +86,21 @@ export function registerDesktopIpc(services: DesktopServices): void {
 
   // A Browser tab's page is told to the panel that opened it alone, and goes with that panel's page.
   const browserViews = createBrowserViews({
-    tellPage: (sender, page) => sender.send(channels.onBrowserState, page),
-    tellKey: (sender, key) => sender.send(channels.onBrowserKey, key),
-    tellFocus: (sender, focus) => sender.send(channels.onBrowserFocus, focus),
+    tellPage: (sender, page) => windowPushes.push(sender, PUSH.BROWSER_STATE, page),
+    tellKey: (sender, key) => windowPushes.push(sender, PUSH.BROWSER_KEY, key),
+    tellFocus: (sender, focus) => windowPushes.push(sender, PUSH.BROWSER_FOCUS, focus),
     whenGone: whenPageGone,
   });
 
-  const platformRows: PlatformActRows<WebContents> = {
-    ...windowSurfaceActRows({
-      panels,
-      requestMicrophone: () => native.requestMicrophone(),
-      microphoneRoute: () => state.snapshot().audio.microphoneRoute,
-      microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
-      recordProductEvent,
-      openExternal: config.openExternal,
-      testNotification,
-      saveFile: async (sender, name, text) => {
-        const window = BrowserWindow.fromWebContents(sender);
-        const options = { defaultPath: name };
-        const chosen = await (window === null
-          ? dialog.showSaveDialog(options)
-          : dialog.showSaveDialog(window, options));
-        if (chosen.canceled || chosen.filePath === undefined) return false;
-        await fs.promises.writeFile(chosen.filePath, text, "utf8");
-        return true;
-      },
-    }),
-    ...browserActRows({
+  // The acts main answers itself on the act port: its windows', ports', and
+  // system's, the ones only it can answer.
+  const platformProcedures: PlatformActProcedures<WebContents> = {
+    ...avatarProcedures({ avatar }),
+    ...browserProcedures({
       views: browserViews,
       experimentOn: () =>
         experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER),
     }),
-    [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
-    [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
-    [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),
-    [ACT_KIND.UPDATE_OPEN_CHANGELOG]: () => updates.openChangelog(),
-    [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
-    [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => clipboard.writeText(words),
-  };
-
-  // The acts main answers itself on the act port: its windows', ports', and
-  // system's, as the platform's rows on `app:act` are the rows only it can answer.
-  const platformProcedures: PlatformActProcedures<WebContents> = {
-    ...avatarProcedures({ avatar }),
     ...macTerminalProcedures({
       host: operator.host,
       worktreesRoot: worktreesRoot(os.homedir()),
@@ -169,16 +141,30 @@ export function registerDesktopIpc(services: DesktopServices): void {
       createId: randomUUID,
       run,
     }),
+    ...updateProcedures({ updates }),
     ...voiceRuntimeProcedures(voiceRuntime),
+    ...windowSurfaceProcedures({
+      panels,
+      requestMicrophone: () => native.requestMicrophone(),
+      microphoneRoute: () => state.snapshot().audio.microphoneRoute,
+      microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
+      recordProductEvent,
+      openExternal: config.openExternal,
+      testNotification,
+      copyText: (words) => clipboard.writeText(words),
+      saveFile: async (sender, name, text) => {
+        const window = BrowserWindow.fromWebContents(sender);
+        const options = { defaultPath: name };
+        const chosen = await (window === null
+          ? dialog.showSaveDialog(options)
+          : dialog.showSaveDialog(window, options));
+        if (chosen.canceled || chosen.filePath === undefined) return false;
+        await fs.promises.writeFile(chosen.filePath, text, "utf8");
+        return true;
+      },
+      deliverFeedback: (submission) => telemetry.deliverFeedback(submission),
+    }),
   };
-
-  const router = createHostActRouter<WebContents>(
-    {
-      tasks: { host: operator.host, colourCode: highlightSnippet },
-      codingAgents: { host: operator.host },
-    },
-    platformRows,
-  );
 
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
@@ -221,8 +207,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       voice: voiceWindow.owns(sender),
       call: callWindow.owns(sender),
     }),
-    router,
-    run,
     actPort: createActPortHandler(
       {
         account: {
@@ -231,11 +215,13 @@ export function registerDesktopIpc(services: DesktopServices): void {
           resumeSessionReplay: operator.resumeSessionReplay,
         },
         accountAsks: { host: operator.host },
+        agentInbox: { host: operator.host },
         agents: { host: operator.host, notices },
         automations: { host: operator.host },
+        chapters: { host: operator.host },
         factory: { host: operator.host },
         integrations: { host: operator.host },
-        issues: { host: operator.host },
+        pushes: windowPushes,
         settings: {
           host: operator.host,
           // The port names its window as an unknown sender; only a window of
@@ -255,11 +241,13 @@ export function registerDesktopIpc(services: DesktopServices): void {
         },
         tasks: {
           host: operator.host,
+          colourCode: highlightSnippet,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
           activeTaskId: () => state.snapshot().tasks.activeTaskId,
           talkAboutTask: (taskId) => {
-            voiceWindow.current()?.webContents.send(channels.onTasksTalk, { taskId });
+            const voice = voiceWindow.current();
+            if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, { taskId });
           },
           voiceReady: () => {
             const snapshot = state.snapshot();
@@ -270,6 +258,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           },
           callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
         },
+        taskIssues: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },
       },
       platformProcedures,

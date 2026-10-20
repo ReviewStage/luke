@@ -127,8 +127,6 @@ export interface AccountCallEffects {
    * requests are under.
    */
   readonly requestTimeoutMs: number;
-  /** The address a path is asked at, for a caller that reports its endpoint. */
-  address(path: string): string;
   send(request: CallRequest): Effect.Effect<CallAnswer, never, HttpClient.HttpClient>;
   /**
    * The whole of an answer a caller only wants read: anything but a body the
@@ -378,7 +376,6 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
 
   return {
     requestTimeoutMs,
-    address: (path) => `${address}${path}`,
     send: (request) =>
       Effect.map(answered(request, responseReader), (end) =>
         "answer" in end ? end.answer : end.failure,

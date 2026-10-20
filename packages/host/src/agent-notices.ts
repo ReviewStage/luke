@@ -11,6 +11,7 @@ import {
 import { failedRunText } from "@luke/features/automation-list-model";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountInboxAnswerView,
   type CodingAgentListAnswer,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
@@ -22,6 +23,7 @@ import {
   type CodingAgentSummary,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
+import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { linkLabels } from "@luke/features/mention-link";
 import { agentTabLabel, modelLabel } from "@luke/features/model-label";
 import type { CatalogModel } from "@luke/features/models-wire";
@@ -30,6 +32,9 @@ import { scheduleOnce } from "@luke/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 import type { ChatShown } from "./contract/agents.js";
+
+/** A look at the account inbox that heard no answer for the account still signed in. */
+const UNANSWERED_LOOK = "unanswered";
 
 /**
  * agent-notices.ts -- tells the developer when a coding agent's turn ends or an inbox item lands: the ledger of where each agent stands, the poll that keeps it current while no tab does, the held read of what waits across the account, and the notification, toast, and badge they announce by.
@@ -111,7 +116,7 @@ import type { ChatShown } from "./contract/agents.js";
  * mention of the developer's, each announced once as it first waits, by
  * the same doors and gates, nowhere while the window is focused on its
  * Chat, and counted in the Dock's badge beside the items. A chat
- * announcement says who and why, "@agent-2 messaged you", under the task of
+ * announcement says who and why, "Invite emails messaged you", under the task of
  * the channel it stands in, and nothing of what was said. Another account, or nobody,
  * ends the read held for the last, and lets go of its items, its counts,
  * and its badge before anything of the next is read. A read that did not
@@ -151,8 +156,42 @@ const ENDED_WORD = {
   [CODING_AGENT_STATUS.FAILED]: "failed",
 } as const;
 
-/** The notification as the OS posts it: what it says, and what its click does. */
+/** What kind of event a notice tells of. */
+export const NOTICE_KIND = {
+  AGENT_END: "agent-end",
+  INBOX_ITEM: "inbox-item",
+  FAILED_RUN: "failed-run",
+  CHAT_MESSAGE: "chat-message",
+  TEST: "test",
+} as const;
+
+/**
+ * The event a notice tells of, by the identifiers that name it: the same in
+ * every window that hears it, and different for every other event,
+ * whatever the words, so a browser's tabs can show it once
+ * (`apps/web/src/app/web-notices.ts`).
+ */
+type NoticeSubject =
+  | {
+      readonly kind: typeof NOTICE_KIND.AGENT_END;
+      readonly agentId: string;
+      /** The turn that ended; null where the agent ended before its first turn was read. */
+      readonly turnId: string | null;
+      readonly status: CodingAgentStatus;
+    }
+  | {
+      readonly kind: typeof NOTICE_KIND.INBOX_ITEM;
+      readonly itemId: string;
+      readonly revision: number;
+    }
+  | { readonly kind: typeof NOTICE_KIND.FAILED_RUN; readonly runId: string }
+  | { readonly kind: typeof NOTICE_KIND.CHAT_MESSAGE; readonly messageId: string }
+  /** Settings' test, one press of it: each press is an event of its own. */
+  | { readonly kind: typeof NOTICE_KIND.TEST; readonly pressId: string };
+
+/** The notification as the OS posts it: the event it tells of, what it says, and what its click does. */
 export interface AgentNotice {
+  subject: NoticeSubject;
   title: string;
   body: string;
   onClick: () => void;
@@ -236,6 +275,38 @@ export class AgentNoticeDoors extends Context.Service<AgentNoticeDoors, AgentNot
   "@luke/desktop/AgentNoticeDoors",
 ) {}
 
+/**
+ * The doors as the notices call them: one that throws is reported and its
+ * notice dropped. Note that the throw never reaches the caller, because the
+ * doors are called from the loop that announces each end and from the
+ * inbox's answers, and a throw there would end the loop, and every notice
+ * after it, for the rest of the run.
+ */
+function guardedDoors(
+  doors: AgentNoticeDoorsSurface,
+  report: (message: string) => void,
+): AgentNoticeDoorsSurface {
+  const guarded =
+    <Said>(door: string, say: (said: Said) => void) =>
+    (said: Said): void => {
+      try {
+        say(said);
+      } catch (defect) {
+        report(
+          `the notice's ${door} door failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+        );
+      }
+    };
+  return {
+    post: guarded("post", (notice: AgentNotice) => doors.post(notice)),
+    toast: guarded("toast", (end: AgentEndToast) => doors.toast(end)),
+    toastInbox: guarded("inbox toast", (item: InboxItemToast) => doors.toastInbox(item)),
+    toastFailedRun: guarded("failed-run toast", (run: FailedRunToast) => doors.toastFailedRun(run)),
+    toastChat: guarded("chat toast", (message: ChatMessageToast) => doors.toastChat(message)),
+    badge: guarded("badge", (count: number) => doors.badge(count)),
+  };
+}
+
 export interface AgentNoticesDependencies {
   /** The plan's agents with their status, as the host answers them: the watch's read of a plan's agents. */
   listAgents: (taskId: string) => Effect.Effect<CodingAgentListAnswer>;
@@ -261,12 +332,8 @@ export interface AgentNoticesDependencies {
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
   /** An agent started or ended, or a read found it published something new: the task list is read again, so its rows say so. */
   onTaskAgentsMoved: () => void;
-  /** What waits across the account followed by the host, heard through `onAccountInboxChanged` until let go: the inbox read's one read. */
-  followAccountInbox: () => Effect.Effect<void>;
-  /** The account's inbox let go. */
-  unfollowAccountInbox: () => Effect.Effect<void>;
-  /** What waits across the account, whole, each time it changes while it is followed, for as long as the subscription stands. */
-  onAccountInboxChanged: (listener: (inbox: AccountInboxAnswer) => void) => () => void;
+  /** What waits across the account past a cursor, as the host answers it: the inbox read's one read. */
+  readAccountInbox: (after: string) => Effect.Effect<CodingAgentAccountInboxAnswerView>;
   /** Who is signed in, by the account's own key, from where the launch stands and at each change: whose items the inbox read reads. */
   accounts: Stream.Stream<string | undefined>;
   /** Where each task's waiting items, and every task holding an item, are written, for the window's Inbox. */
@@ -449,7 +516,7 @@ function chatNoticeText(
 ): Pick<AgentNotice, "title" | "body"> {
   return {
     title: taskName ?? CHAT_NOTICE_TITLE,
-    body: `@${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
+    body: `${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
   };
 }
 
@@ -583,7 +650,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     dependencies: AgentNoticesDependencies,
   ): Effect.fn.Return<AgentNotices, never, Scope.Scope | AgentNoticeDoors> {
     const { listAgents, readPullRequest, taskName, open, onUnseenChanged, report } = dependencies;
-    const doors = yield* AgentNoticeDoors;
+    const doors = guardedDoors(yield* AgentNoticeDoors, report);
     const ledger = new Map<string, HeldAgent>();
     /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
     const tasklessSubjects = new Map<string, string>();
@@ -691,7 +758,18 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         });
         return;
       }
-      if (dependencies.notifying()) doors.post({ ...text, onClick: () => open(place) });
+      if (dependencies.notifying()) {
+        doors.post({
+          ...text,
+          subject: {
+            kind: NOTICE_KIND.AGENT_END,
+            agentId: end.agentId,
+            turnId: end.agent.turnId,
+            status: end.agent.status,
+          },
+          onClick: () => open(place),
+        });
+      }
     });
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
@@ -736,6 +814,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         const text = tasklessNoticeText(item, models);
         doors.post({
           ...text,
+          subject: { kind: NOTICE_KIND.INBOX_ITEM, itemId: item.id, revision: item.revision },
           onClick: () =>
             dependencies.openTasklessItem({
               agentId: item.agentId,
@@ -756,6 +835,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       }
       if (dependencies.notifying()) {
         doors.post({
+          subject: { kind: NOTICE_KIND.FAILED_RUN, runId: run.id },
           title: run.automationName,
           body: words,
           onClick: () => dependencies.openFailedRun(place),
@@ -781,7 +861,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         return;
       }
       if (dependencies.notifying()) {
-        doors.post({ ...text, onClick: () => dependencies.openChat(entry.workspaceId) });
+        doors.post({
+          ...text,
+          subject: { kind: NOTICE_KIND.CHAT_MESSAGE, messageId: entry.messageId },
+          onClick: () => dependencies.openChat(entry.workspaceId),
+        });
       }
     }
 
@@ -799,7 +883,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         return;
       }
       if (dependencies.notifying()) {
-        doors.post({ ...text, onClick: () => dependencies.openInbox(item.planId) });
+        doors.post({
+          ...text,
+          subject: { kind: NOTICE_KIND.INBOX_ITEM, itemId: item.id, revision: item.revision },
+          onClick: () => dependencies.openInbox(item.planId),
+        });
       }
     }
 
@@ -885,14 +973,13 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     }
 
     /**
-     * What waits for one account, followed for as long as it stays signed
-     * in: whatever the last account left is let go first, and nobody's is
-     * nothing to follow. The host follows it, over Neon Realtime where the
-     * service seals it, and each change is heard as one answer whole. Note
-     * that an answer is let go where the account it was read for is no
-     * longer signed in, because one may land in the tick before the change
-     * ends the follow. Letting go of the follow ends both the subscription
-     * to its answers and the host's follow.
+     * What waits for one account, read for as long as it stays signed in:
+     * whatever the last account left is let go first, and nobody's is
+     * nothing to read. Note that an answer is let go where the account it
+     * was read for is no longer signed in, because the read may land in the
+     * tick before the change ends it, and the next read waits on the
+     * watch's clock rather than asking again at once for an account that
+     * has left.
      */
     const waitingOf = (reader: string | undefined): Effect.Effect<void> =>
       Effect.suspend(() => {
@@ -900,30 +987,30 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         seenRevision.clear();
         publishWaiting({ items: [], plans: [] }, []);
         if (reader === undefined) return Effect.void;
-        return Effect.scoped(
-          Effect.gen(function* () {
-            yield* Effect.acquireRelease(
-              Effect.sync(() =>
-                dependencies.onAccountInboxChanged((answer) => {
-                  if (dependencies.signedInAs() !== reader) return;
-                  // An answer that could not be observed is reported, and the next change is heard as it lands.
-                  try {
-                    observeWaiting(answer);
-                  } catch (defect) {
-                    report(
-                      `the inbox read failed: ${defect instanceof Error ? defect.message : String(defect)}`,
-                    );
-                  }
-                }),
+        let cursor = INBOX_CURSOR_START;
+        // A read left unanswered, or answered for an account that has since left, is no answer: it is asked again on the watch's clock.
+        const look = Effect.gen(function* () {
+          const answer = yield* dependencies.readAccountInbox(cursor);
+          if (dependencies.signedInAs() !== reader || "failure" in answer) {
+            return yield* Effect.fail(UNANSWERED_LOOK);
+          }
+          cursor = answer.cursor;
+          observeWaiting(answer);
+        });
+        // A look that died is reported and asked again on the watch's clock, as a tick of the watch is.
+        const reported = Effect.catchDefect(look, (defect) =>
+          Effect.andThen(
+            Effect.sync(() =>
+              report(
+                `the inbox read failed: ${defect instanceof Error ? defect.message : String(defect)}`,
               ),
-              (unsubscribe) => Effect.sync(unsubscribe),
-            );
-            yield* Effect.acquireRelease(dependencies.followAccountInbox(), () =>
-              dependencies.unfollowAccountInbox(),
-            );
-            return yield* Effect.never;
-          }),
+            ),
+            Effect.fail(UNANSWERED_LOOK),
+          ),
         );
+        // An answered read is followed at once by the next, held from its cursor.
+        // The schedule never runs out, so no failure is left once it is retried.
+        return Effect.forever(Effect.ignore(Effect.retry(reported, Schedule.spaced(interval))));
       });
 
     /** One agent as an answer carried it, against where the ledger last had it. */

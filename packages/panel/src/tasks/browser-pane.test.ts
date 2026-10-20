@@ -2,11 +2,12 @@
 
 import assert from "node:assert/strict";
 import { BROWSER_STEP, type BrowserKey, type BrowserPage } from "@luke/features/browser-acts";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
+import type { WireBoundaryInput } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPortAnswering, fakeAppBridge, type SentPortAct } from "../testing/app-bridge.js";
 import { BrowserPane } from "./browser-pane.js";
 import type { OpenBrowser } from "./use-side-panel.js";
 
@@ -54,27 +55,27 @@ const pageAt = (
 /** Main as the window's doors reach it: every act it was sent, what it answers, and its two events; a capture held until `release` while `holdCapture`. */
 function main(options: { holdCapture?: boolean } = {}) {
   const held: (() => void)[] = [];
-  const sent: Act[] = [];
+  const sent: SentPortAct[] = [];
   let tellPage: ((page: BrowserPage) => void) | undefined;
   let tellKey: ((key: BrowserKey) => void) | undefined;
-  const answer = (request: Act): ActOutcome => {
+  const answer = (request: SentPortAct): WireBoundaryInput => {
     if (request.kind === ACT_KIND.BROWSER_OPEN) {
-      const { browserId, address } = request.payload;
-      return { status: ACT_OUTCOME_STATUS.DONE, value: pageAt(browserId, address) };
+      // SAFETY: the pane sends an open its view and address, as its procedure takes them.
+      const { browserId, address } = request.payload as { browserId: string; address: string };
+      return pageAt(browserId, address);
     }
-    if (request.kind === ACT_KIND.BROWSER_CAPTURE) {
-      return { status: ACT_OUTCOME_STATUS.DONE, value: STILL };
-    }
-    return { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
+    if (request.kind === ACT_KIND.BROWSER_CAPTURE) return STILL;
+    return undefined;
   };
+  // Note that the Browser tab's acts ride the act port, which main answers.
+  fakeActPortAnswering((request) => {
+    sent.push(request);
+    if (options.holdCapture !== true || request.kind !== ACT_KIND.BROWSER_CAPTURE) {
+      return Promise.resolve(answer(request));
+    }
+    return new Promise<WireBoundaryInput>((resolve) => held.push(() => resolve(answer(request))));
+  });
   fakeAppBridge({
-    act: (request: Act) => {
-      sent.push(request);
-      if (options.holdCapture !== true || request.kind !== ACT_KIND.BROWSER_CAPTURE) {
-        return Promise.resolve(answer(request));
-      }
-      return new Promise<ActOutcome>((resolve) => held.push(() => resolve(answer(request))));
-    },
     onBrowserState: (listener: (page: BrowserPage) => void) => {
       tellPage = listener;
       return () => undefined;
@@ -197,7 +198,7 @@ function mount(address: string | undefined, browserId: string = crypto.randomUUI
 test("a blank tab asks for an address, and opens a dev server on the Mac over plain http", async () => {
   const doors = main();
   const tab = mount(undefined);
-  assert.match(tab.container.textContent ?? "", /Type an address above/u);
+  assert.match(tab.field().placeholder, /localhost:3000/u);
   assert.ok(tab.container.querySelector(".browser-view.ph-no-capture"), "out of the recording");
 
   await tab.go("localhost:3000");
@@ -208,6 +209,23 @@ test("a blank tab asks for an address, and opens a dev server on the Mac over pl
   });
   assert.deepEqual(tab.opened, ["http://localhost:3000/"]);
   assert.equal(tab.field().value, "http://localhost:3000/");
+});
+
+test("the bar's steps are the app's own glyph buttons, as every other tab's bar draws them", () => {
+  main();
+  const tab = mount(undefined);
+  const steps = [...tab.container.querySelectorAll(".browser-view-bar button")];
+
+  assert.deepEqual(
+    steps.map((step) => step.getAttribute("aria-label")),
+    ["Back", "Forward", "Reload", "Open in your browser"],
+  );
+  for (const step of steps) {
+    assert.ok(
+      step.matches('.luke-button[data-icon-only="true"]'),
+      step.getAttribute("aria-label") ?? "",
+    );
+  }
 });
 
 test("the bar's steps follow how main says the page stands, and a typed line moves the open page", async () => {

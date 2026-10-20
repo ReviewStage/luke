@@ -13,7 +13,7 @@ import {
   type RemoteNodeInvoker,
 } from "@luke/gateway";
 import { isWireString } from "@luke/wire";
-import { Effect, type Scope } from "effect";
+import { Data, Effect, type Scope } from "effect";
 import { createHostOperator, type HostOperator } from "../host-operator.js";
 import {
   HOST_NATIVE_NODE_ID,
@@ -70,12 +70,15 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("client/wireGateway")(funct
         case HOST_NODE_CAPABILITY.OPEN_EXTERNAL: {
           const { url } = params;
           if (!isWireString(url)) return failed("open needs a url");
-          return Effect.as(
-            Effect.promise(() => dependencies.node.openExternal(url)),
-            {
+          return Effect.tryPromise({
+            try: () => dependencies.node.openExternal(url),
+            catch: (cause) => new OpenExternalFailed({ cause }),
+          }).pipe(
+            Effect.as<NodeCapabilityResult>({
               status: NODE_CAPABILITY_STATUS.OK,
               value: undefined,
-            },
+            }),
+            Effect.catch((error) => failed(error.message)),
           );
         }
         default:
@@ -112,3 +115,13 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("client/wireGateway")(funct
 
   return { host };
 });
+
+/** The client's node could not open an address the host asked it to. */
+class OpenExternalFailed extends Data.TaggedError("OpenExternalFailed")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    const { cause } = this;
+    return cause instanceof Error ? cause.message : String(cause);
+  }
+}

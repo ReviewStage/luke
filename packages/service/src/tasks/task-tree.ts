@@ -1,5 +1,5 @@
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readTask, type TaskStoreFailure } from "@luke/database/models/task-store";
+import { readTaskHeader, type TaskStoreFailure } from "@luke/database/models/task-store";
 import {
   CODE_PATH_MAX_CHARS,
   isSecretFile,
@@ -8,16 +8,12 @@ import {
   TASK_TREE_ENTRY,
   type TaskTreeAnswer,
   type TaskTreeRequest,
-  taskTreeRequestSchema,
 } from "@luke/features/task-wire";
-import { unparsedWire } from "@luke/wire";
-import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { GitHubApp } from "../github/github-app.js";
+import { type GitHubApp, markRefusedToken } from "../github/github-app.js";
 import { logGitHubReadFailure } from "../github/github-refusal.js";
 import { GIT_ENTRY, readRepositoryFolder } from "../github/repository-folder.js";
-import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
 import { reachTaskRepository, refused } from "./task-file.js";
 
 /**
@@ -47,39 +43,6 @@ import { reachTaskRepository, refused } from "./task-file.js";
  * listing saying it was cut, since it is then not the whole repository.
  */
 
-/** The query naming a folder of the repository from its root, the root itself where it is absent or empty. */
-const TREE_PATH_QUERY = "path";
-
-/** The query asking everything under the folder rather than its own entries, `1` where it asks. */
-const TREE_RECURSIVE_QUERY = "recursive";
-
-/**
- * The folder the query names, named at most once, the root where it is not
- * named, and whether everything under it is asked, or the invalid-request
- * refusal.
- */
-export const treeRequestOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-): Effect.fn.Return<TaskTreeRequest, HostedRefusal> {
-  const query = new URL(request.url).searchParams;
-  const named = query.getAll(TREE_PATH_QUERY);
-  const recursive = query.getAll(TREE_RECURSIVE_QUERY);
-  if (
-    named.length > 1 ||
-    recursive.length > 1 ||
-    (recursive.length === 1 && recursive[0] !== "1")
-  ) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const folder = {
-    path: named[0] ?? "",
-    ...(recursive.length === 1 ? { recursive: true } : undefined),
-  };
-  const read = readEither(taskTreeRequestSchema)(unparsedWire(folder));
-  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  return read.success;
-});
-
 /** Whether a folder is, or stands inside, one whose name is a secret file's. */
 function withinSecret(path: string): boolean {
   return path.split("/").some(isSecretFile);
@@ -105,12 +68,12 @@ export function readTaskTree(
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
   return Effect.gen(function* () {
-    const stored = yield* readTask(userId, taskId);
+    const stored = yield* readTaskHeader(userId, taskId);
     if (Option.isNone(stored)) return Option.none();
-    const repository = stored.value.task.repository;
+    const repository = stored.value.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
     return Option.some(
-      yield* readRepositoryTree(stored.value.task.workspaceId, repository, request),
+      yield* readRepositoryTree(stored.value.workspaceId, repository, userId, request),
     );
   });
 }
@@ -125,10 +88,11 @@ export function readTaskTree(
 export function readRepositoryTree(
   workspaceId: string,
   repository: string,
+  member: string,
   request: TaskTreeRequest,
 ): Effect.Effect<TaskTreeAnswer, never, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   if (withinSecret(request.path)) return Effect.succeed(refused(TASK_FILE_REFUSAL.SECRET));
-  return readFolder(workspaceId, repository, request).pipe(
+  return readFolder(workspaceId, repository, member, request).pipe(
     Effect.catchTag("GitHubUnavailable", (failure) =>
       Effect.as(logGitHubReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE)),
     ),
@@ -139,13 +103,16 @@ export function readRepositoryTree(
 const readFolder = /* @__PURE__ */ Effect.fn("web/taskTreeFolder")(function* (
   organizationId: string,
   repository: string,
+  member: string,
   request: TaskTreeRequest,
 ) {
-  const reach = yield* reachTaskRepository(organizationId, repository);
+  const reach = yield* reachTaskRepository(organizationId, repository, member);
   if ("refused" in reach) return reach.refused;
-  const { token, repository: confirmed } = reach.reached;
+  const { token, repository: confirmed, access } = reach.reached;
   const recursive = request.recursive === true;
-  const folder = yield* readRepositoryFolder(token, confirmed, request.path, recursive);
+  const folder = yield* readRepositoryFolder(token, confirmed, request.path, recursive).pipe(
+    markRefusedToken(access),
+  );
   if (!folder.found) {
     return {
       refusal: TASK_FILE_REFUSAL.MISSING,

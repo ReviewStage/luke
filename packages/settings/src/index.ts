@@ -51,6 +51,7 @@ export {
   settingIdVisible,
   settingRowsForPage,
   settingsScopeChanged,
+  settingVisible,
   snapshotAccountPreferences,
 } from "./schema-access.js";
 export { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";

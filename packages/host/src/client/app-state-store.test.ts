@@ -7,7 +7,9 @@ import { AVATAR_END_REASON, AVATAR_OFF, AVATAR_STATUS } from "@luke/voice/avatar
 import { IDLE_VOICE_VIEW } from "@luke/voice/voice-view";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Context, Effect, Fiber, Stream } from "effect";
-import { type AppState, sessionReplayBootstrap } from "../app-state.js";
+import { WindowPushes } from "../act-port/push-procedures.js";
+import { type AppState, type AppStateSnapshot, sessionReplayBootstrap } from "../app-state.js";
+import { PUSH, type PushEvent } from "../contract/index.js";
 import type { HostBootstrap } from "../host-operator.js";
 import { runModeFor } from "../run-mode.js";
 import { recordingReporter } from "../testing/recording-reporter.js";
@@ -18,6 +20,7 @@ import {
   publishAppStateChanges,
   voiceWindowGone,
   voiceWindowState,
+  WindowAppStates,
   windowAppState,
 } from "./app-state-store.js";
 
@@ -274,3 +277,45 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(sentry.layer));
   },
 );
+
+it("the voice window is not handed back the view it reported, while a panel and the call window are, and it still hears what moved after", async () => {
+  const pushes = new WindowPushes<object>();
+  const voiceWindow = { handle: {}, role: { voice: true, call: false } };
+  const windows = [
+    voiceWindow,
+    { handle: {}, role: { voice: false, call: false } },
+    { handle: {}, role: { voice: false, call: true } },
+  ];
+  const [voice, panel, call] = windows.map(({ handle }) => pushes.stream(handle, undefined));
+  if (voice === undefined || panel === undefined || call === undefined) throw new Error("unopened");
+  const sent = new WindowAppStates<object>();
+  const app = store();
+  const publish = () => {
+    const held: AppStateSnapshot = { ...app.snapshot(), window: { fullScreen: false } };
+    for (const { handle, role } of windows) {
+      sent.offer(handle, role, held, (shown) => pushes.push(handle, PUSH.APP_STATE, shown));
+    }
+  };
+  const versionOf = (read: IteratorResult<PushEvent>) =>
+    !read.done && read.value.push === PUSH.APP_STATE ? read.value.payload.version : read.value;
+  publish();
+  for (const stream of [voice, panel, call]) assert.equal(versionOf(await stream.next()), 0);
+
+  // The voice window reports its view: every window but it is told.
+  app.update({ voice: { ...app.snapshot().voice, view: IDLE_VOICE_VIEW } });
+  publish();
+  assert.equal(versionOf(await panel.next()), 1);
+  assert.equal(versionOf(await call.next()), 1);
+  pushes.push(voiceWindow.handle, PUSH.SHOW_TASK, { taskId: "task-1" });
+  assert.deepEqual((await voice.next()).value, {
+    push: PUSH.SHOW_TASK,
+    payload: { taskId: "task-1" },
+  });
+
+  // Something it draws moves, and it is told, view and all.
+  app.update({ network: { online: false } });
+  publish();
+  const after = await voice.next();
+  assert.equal(versionOf(after), 2);
+  assert.ok(!after.done && after.value.push === PUSH.APP_STATE && after.value.payload.voice.view);
+});

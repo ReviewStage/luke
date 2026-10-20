@@ -1,9 +1,5 @@
 import type { AccountProvider, AccountSnapshot } from "@luke/credentials/snapshot";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
-import {
-  type AccountInboxAnswer,
-  accountInboxAnswerSchema,
-} from "@luke/features/account-inbox-wire";
 import type { ProductEventName, ProductEventPropertiesFor } from "@luke/features/analytics";
 import {
   AUTOMATION_CALL_FAILURE,
@@ -25,6 +21,8 @@ import {
 } from "@luke/features/automation-view";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountInboxAnswerView,
+  type CodingAgentAccountInboxParams,
   type CodingAgentAgentAnswer,
   type CodingAgentAgentInboxParams,
   type CodingAgentArchiveParams,
@@ -75,6 +73,7 @@ import {
   type CodingAgentStartParams,
   type CodingAgentStopParams,
   type CodingAgentWorkspaceListParams,
+  codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentChatAnswerViewSchema,
@@ -138,22 +137,19 @@ import {
   integrationToolsViewSchema,
 } from "@luke/features/integration-view";
 import {
-  ISSUE_CALL_FAILURE,
-  type IssueChangeParams,
-  type IssueCreateParams,
-  type IssueIdParams,
-  type IssueListParams,
-  type IssueListView,
-  type IssueView,
-  issueListViewSchema,
-  issueViewSchema,
-} from "@luke/features/issue-view";
-import {
   type MacRepositoriesAnswer,
   type MacRepository,
   macRepositoriesAnswerSchema,
 } from "@luke/features/mac-terminal-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
+import {
+  type ChaptersModelAnswerView,
+  type ChaptersModelWriteParams,
+  chaptersModelAnswerViewSchema,
+  type PullRequestChaptersAnswerView,
+  type PullRequestChaptersParams,
+  pullRequestChaptersAnswerViewSchema,
+} from "@luke/features/pull-request-chapters-view";
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
@@ -169,9 +165,19 @@ import {
   type TasksFileAnswer,
   type TasksFileParams,
   type TasksGitHubDisconnectAnswer,
+  type TasksGitHubIssuesAnswer,
+  type TasksGitHubIssuesParams,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
+  type TasksIssueLinkAnswer,
+  type TasksIssueLinkParams,
+  type TasksIssueLinksAnswer,
+  type TasksIssueLinksParams,
   type TasksIssueParams,
+  type TasksIssueRelateAnswer,
+  type TasksIssueRelateParams,
+  type TasksIssueUnlinkAnswer,
+  type TasksIssueUnlinkParams,
   type TasksLinearIssuesAnswer,
   type TasksLinearIssuesParams,
   type TasksMessagesParams,
@@ -231,8 +237,13 @@ import {
   tasksEditAnswerSchema,
   tasksFileAnswerSchema,
   tasksGitHubDisconnectAnswerSchema,
+  tasksGitHubIssuesAnswerSchema,
   tasksGitHubPageAnswerSchema,
   tasksIssueAnswerSchema,
+  tasksIssueLinkAnswerSchema,
+  tasksIssueLinksAnswerSchema,
+  tasksIssueRelateAnswerSchema,
+  tasksIssueUnlinkAnswerSchema,
   tasksLinearIssuesAnswerSchema,
   tasksMoveAnswerSchema,
   tasksPageAnswerSchema,
@@ -309,10 +320,10 @@ import { Base64 } from "effect/encoding";
  * The desktop's client over the host's own vocabulary: the settings, account,
  * voice, task, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
  * composes one request and reads its answer, and nothing here runs it — the
- * act row that asked yields it, and the router runs it once on the launch's
+ * act procedure that asked yields it, and the act port runs it once on the launch's
  * own runtime. The host is this same process, so an answer that is not the
  * shape the method documents is a defect of the build rather than a reachable
- * host state, and dies where it is read; the act router words a defect as the
+ * host state, and dies where it is read; the act port words a defect as the
  * kind's own refusal. Nothing here holds host state beyond the last settings
  * snapshot a refusal is answered with.
  */
@@ -347,7 +358,12 @@ export interface HostOperator {
     value: AppSettingValue<Field>,
     reporter: string,
   ): Effect.Effect<SettingsUpdateResult>;
-  resetSettings(scope: SettingsResetScope, reporter: string): Effect.Effect<SettingsUpdateResult>;
+  /** One group returned to its defaults, but for the fields `kept`, which the asking page does not draw. */
+  resetSettings(
+    scope: SettingsResetScope,
+    kept: readonly AppSettingField[],
+    reporter: string,
+  ): Effect.Effect<SettingsUpdateResult>;
   /** One experiment turned on or off for the signed-in account, on the service. */
   setExperiment(
     experiment: Experiment,
@@ -434,6 +450,16 @@ export interface HostOperator {
   tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
   /** One issue of a repository a workspace's installation reaches, by its number; null where there is none to draw, or that the service did not answer. */
   tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
+  /** A repository's issues as New task's picker asks for them; or that its installation grants none, or that the service did not answer. */
+  tasksGitHubIssues(params: TasksGitHubIssuesParams): Effect.Effect<TasksGitHubIssuesAnswer>;
+  /** The issues a task links, each with where it stands now; or why there are none. */
+  tasksIssueLinks(params: TasksIssueLinksParams): Effect.Effect<TasksIssueLinksAnswer>;
+  /** One more issue linked to a task, read from its provider by the service; or why none was. */
+  tasksIssueLink(params: TasksIssueLinkParams): Effect.Effect<TasksIssueLinkAnswer>;
+  /** Which keyword a task's pull requests write of one of its links; or why it stands as it was. */
+  tasksIssueRelate(params: TasksIssueRelateParams): Effect.Effect<TasksIssueRelateAnswer>;
+  /** One of a task's links let go; or why it stands. */
+  tasksIssueUnlink(params: TasksIssueUnlinkParams): Effect.Effect<TasksIssueUnlinkAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -568,20 +594,24 @@ export interface HostOperator {
   automationRuns(params: AutomationIdParams): Effect.Effect<AutomationRunsView>;
   /** A webhook's secret minted again; the automation and the new secret, for the asking window alone to show once, or why there is none. */
   automationNewWebhookSecret(params: AutomationIdParams): Effect.Effect<AutomationView>;
-  /** One workspace's issues, standing or archived; or why there are none. */
-  issueList(params: IssueListParams): Effect.Effect<IssueListView>;
-  /** One issue; or why there is none. */
-  issueRead(params: IssueIdParams): Effect.Effect<IssueView>;
-  /** An issue filed; the issue as the service kept it, or why it was not filed. */
-  issueCreate(params: IssueCreateParams): Effect.Effect<IssueView>;
-  /** One issue changed; the issue as it then stands, or why it is unchanged. */
-  issueChange(params: IssueChangeParams): Effect.Effect<IssueView>;
   /** One workspace's Factory world as it stands now, null where it has no repository to draw; or why there is none. */
   factoryWorld(params: FactoryWorldParams): Effect.Effect<FactoryWorldView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
   codingAgentPullRequest(
     params: CodingAgentPullRequestReadParams,
   ): Effect.Effect<CodingAgentPullRequestAnswerView>;
+  /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it; or why there are none. */
+  pullRequestChapters(
+    params: PullRequestChaptersParams,
+  ): Effect.Effect<PullRequestChaptersAnswerView>;
+  /** One agent's pull request's chapters generated for its head, or the generation already under way; the chapters as they then stand, or why there are none. */
+  pullRequestChaptersGenerate(
+    params: PullRequestChaptersParams,
+  ): Effect.Effect<PullRequestChaptersAnswerView>;
+  /** The Claude model the account's Generate chapters runs on, read from the service; or why there is none. */
+  chaptersModelRead(): Effect.Effect<ChaptersModelAnswerView>;
+  /** The account's chapters model written to the service; the model as kept, or why it is unchanged. */
+  chaptersModelWrite(params: ChaptersModelWriteParams): Effect.Effect<ChaptersModelAnswerView>;
   /** One agent's changes: its pull request's files as GitHub holds them; or why there are none. */
   codingAgentChanges(
     params: CodingAgentPullRequestReadParams,
@@ -662,12 +692,10 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentInboxReadStateView>;
   /** Every item of the account's Inbox marked read, in the one workspace named or in all; how many were unread, or why there is no answer. */
   codingAgentInboxReadAll(params: InboxReadAllRequest): Effect.Effect<CodingAgentInboxReadAllView>;
-  /** What waits on the developer across the account, followed from now until let go or signed out, heard through `onAccountInboxChanged`; following again starts over. */
-  codingAgentAccountInboxFollow(): Effect.Effect<void>;
-  /** The account's inbox let go: nothing more is heard of it until it is followed again. */
-  codingAgentAccountInboxUnfollow(): Effect.Effect<void>;
-  /** What waits on the developer across the account, whole, each time it changes while it is followed. */
-  onAccountInboxChanged(listener: (inbox: AccountInboxAnswer) => void): () => void;
+  /** What waits on the developer across the account past a cursor, held by the service while nothing changed; or why there is none. */
+  codingAgentAccountInbox(
+    params: CodingAgentAccountInboxParams,
+  ): Effect.Effect<CodingAgentAccountInboxAnswerView>;
   /** One image of an inbox item, fetched under the account; its bytes in base64 under its media type, or why there is none. */
   codingAgentInboxAttachment(
     params: CodingAgentInboxAttachmentParams,
@@ -751,6 +779,13 @@ function pullRequestRead(
     : { agentId: params.agentId, number: params.number };
 }
 
+/** A read or a Generate of a pull request's chapters as the gateway carries it: the agent, and the number where the tab names one. */
+function pullRequestChaptersRead(params: PullRequestChaptersParams): PullRequestChaptersParams {
+  return params.number === undefined
+    ? { agentId: params.agentId }
+    : { agentId: params.agentId, number: params.number };
+}
+
 /**
  * The host refused a call, or answered a shape its method does not document:
  * a defect of this build, worded by the router as the kind's refusal. Note
@@ -809,8 +844,8 @@ const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED 
 /** An automation call that reached no answer, as every automation method answers one. */
 const AUTOMATION_UNANSWERED = { failure: AUTOMATION_CALL_FAILURE.UNANSWERED } as const;
 
-/** An issue call that reached no answer, as every issue method answers one. */
-const ISSUE_UNANSWERED = { failure: ISSUE_CALL_FAILURE.UNANSWERED } as const;
+/** A call on a task's linked issues that reached no answer. */
+const TASK_ISSUES_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
 /** A world call that reached no answer. */
 const FACTORY_WORLD_UNANSWERED = { failure: FACTORY_WORLD_CALL_FAILURE.UNANSWERED } as const;
@@ -875,20 +910,20 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? AUTOMATION_UNANSWERED;
 
-  /** An issue answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
-  const issueAnswer =
-    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
-    (answer: GatewayCallResult): Answer | typeof ISSUE_UNANSWERED =>
-      (answer.ok
-        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
-        : undefined) ?? ISSUE_UNANSWERED;
-
   /** The account an integration ask is about, as the gateway carries it: the provider, and the account and an add where the window named them. */
   const integrationTarget = (params: IntegrationProviderParams) => ({
     provider: params.provider,
     ...(params.connection !== undefined ? { connection: params.connection } : undefined),
     ...(params.add !== undefined ? { add: params.add } : undefined),
   });
+
+  /** An answer on a task's linked issues as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
+  const taskIssueAnswer =
+    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
+    (answer: GatewayCallResult): Answer | typeof TASK_ISSUES_UNANSWERED =>
+      (answer.ok
+        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+        : undefined) ?? TASK_ISSUES_UNANSWERED;
 
   /** An integration answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
   const integrationAnswer =
@@ -963,10 +998,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...wireReporter(reporter),
         }),
       ),
-    resetSettings: (scope, reporter) =>
+    resetSettings: (scope, kept, reporter) =>
       settingsResult(
         GATEWAY_METHOD.SETTINGS_RESET,
-        client.call(GATEWAY_METHOD.SETTINGS_RESET, { scope, ...wireReporter(reporter) }),
+        client.call(GATEWAY_METHOD.SETTINGS_RESET, {
+          scope,
+          kept: [...kept],
+          ...wireReporter(reporter),
+        }),
       ),
     setExperiment: (experiment, on, reporter) =>
       settingsResult(
@@ -1205,6 +1244,53 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 readEither(tasksIssueAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
+    tasksGitHubIssues: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_GITHUB_ISSUES, {
+          workspaceId: params.workspaceId,
+          repository: params.repository,
+          ...("query" in params ? { query: params.query } : undefined),
+          ...("number" in params ? { number: params.number } : undefined),
+        }),
+        (answer): TasksGitHubIssuesAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(tasksGitHubIssuesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+      ),
+    tasksIssueLinks: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, { taskId: params.taskId }),
+        taskIssueAnswer(tasksIssueLinksAnswerSchema),
+      ),
+    tasksIssueLink: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, {
+          taskId: params.taskId,
+          issue: params.issue,
+        }),
+        taskIssueAnswer(tasksIssueLinkAnswerSchema),
+      ),
+    tasksIssueRelate: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_ISSUE_RELATE, {
+          taskId: params.taskId,
+          linkId: params.linkId,
+          relation: params.relation,
+        }),
+        taskIssueAnswer(tasksIssueRelateAnswerSchema),
+      ),
+    tasksIssueUnlink: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.TASKS_ISSUE_UNLINK, {
+          taskId: params.taskId,
+          linkId: params.linkId,
+        }),
+        taskIssueAnswer(tasksIssueUnlinkAnswerSchema),
       ),
     tasksRevisions: (params) =>
       Effect.map(
@@ -1502,10 +1588,12 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...("repository" in request ? { repository: request.repository } : undefined),
           ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
           ...("linearIssueId" in request ? { linearIssueId: request.linearIssueId } : undefined),
-          ...("issueId" in request ? { issueId: request.issueId } : undefined),
+          ...("issues" in request ? { issues: request.issues } : undefined),
           ...("planning" in request ? { planning: request.planning } : undefined),
           ...("agent" in request ? { agent: request.agent } : undefined),
           ...("brief" in request ? { brief: request.brief } : undefined),
+          ...("status" in request ? { status: request.status } : undefined),
+          ...("priority" in request ? { priority: request.priority } : undefined),
         }),
         (answer): TasksStartAnswer =>
           (answer.ok
@@ -1684,14 +1772,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.AUTOMATIONS_NEW_WEBHOOK_SECRET, params),
         automationAnswer(automationViewSchema),
       ),
-    issueList: (params) =>
-      Effect.map(client.call(GATEWAY_METHOD.ISSUES_LIST, params), issueAnswer(issueListViewSchema)),
-    issueRead: (params) =>
-      Effect.map(client.call(GATEWAY_METHOD.ISSUES_READ, params), issueAnswer(issueViewSchema)),
-    issueCreate: (params) =>
-      Effect.map(client.call(GATEWAY_METHOD.ISSUES_CREATE, params), issueAnswer(issueViewSchema)),
-    issueChange: (params) =>
-      Effect.map(client.call(GATEWAY_METHOD.ISSUES_CHANGE, params), issueAnswer(issueViewSchema)),
     factoryWorld: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.FACTORY_WORLD, { workspaceId: params.workspaceId }),
@@ -1706,6 +1786,29 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, pullRequestRead(params)),
         codingAgentAnswer(codingAgentPullRequestAnswerViewSchema),
+      ),
+    pullRequestChapters: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS, pullRequestChaptersRead(params)),
+        codingAgentAnswer(pullRequestChaptersAnswerViewSchema),
+      ),
+    pullRequestChaptersGenerate: (params) =>
+      Effect.map(
+        client.call(
+          GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE,
+          pullRequestChaptersRead(params),
+        ),
+        codingAgentAnswer(pullRequestChaptersAnswerViewSchema),
+      ),
+    chaptersModelRead: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHAPTERS_MODEL_READ),
+        codingAgentAnswer(chaptersModelAnswerViewSchema),
+      ),
+    chaptersModelWrite: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: params.model }),
+        codingAgentAnswer(chaptersModelAnswerViewSchema),
       ),
     codingAgentChanges: (params) =>
       Effect.map(
@@ -1851,6 +1954,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           text: params.text,
           ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
           clientKey: params.clientKey,
+          ...(params.answers === undefined ? undefined : { answers: params.answers }),
         }),
         codingAgentAnswer(codingAgentInboxMessagedViewSchema),
       ),
@@ -1870,18 +1974,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ),
         codingAgentAnswer(codingAgentInboxReadAllViewSchema),
       ),
-    codingAgentAccountInboxFollow: () =>
-      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW, {})),
-    codingAgentAccountInboxUnfollow: () =>
-      fire(client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW, {})),
-    onAccountInboxChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED,
-        (payload) =>
-          Result.getOrUndefined(
-            readEither(accountInboxAnswerSchema, { excess: EXCESS_KEYS.DROP })(payload),
-          ),
-        listener,
+    codingAgentAccountInbox: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: params.after }),
+        codingAgentAnswer(codingAgentAccountInboxAnswerViewSchema),
       ),
     codingAgentInboxAttachment: (params) =>
       Effect.map(

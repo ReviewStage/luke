@@ -13,7 +13,6 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import type { Task } from "@luke/features/task-wire";
-import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
 import { Effect } from "effect";
@@ -22,6 +21,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer } from "../testing/app-bridge.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -120,8 +120,8 @@ beforeEach(() => {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
-      act: (_request: Act): Promise<ActOutcome> =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
+      act: (_request: AnyAct): Promise<FakeActAnswer> =>
+        Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT }),
       recordSurfaceEvent: () => undefined,
     },
   });
@@ -731,6 +731,27 @@ test("a block a thread covers whole offers no button to start another, and one a
   document.body.innerHTML = "";
   const bare = blocks(drawn("page", []).container);
   assert.ok(bare.button(bare.paragraph), "a line with no count does");
+});
+
+test("a finger's arrival on a block shows no button, so iOS spends no tap on one, a link's in it among them, and its tap shows the button by that block", () => {
+  const { container } = wide(() => drawn("page", []));
+  const paragraph =
+    [...container.querySelectorAll("p")].find((p) =>
+      p.textContent?.startsWith("Admins can withdraw"),
+    ) ?? assert.fail("the paragraph");
+  const finger = (type: string) =>
+    act(() => {
+      paragraph.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerType: "touch" }));
+    });
+  const button = () => container.querySelector(".comment-block-button button");
+
+  finger("pointerover");
+  assert.ok(button() === null, "the arrival shows none");
+
+  finger("pointerdown");
+  finger("pointerup");
+  act(() => paragraph.click());
+  assert.ok(button() !== null, "the tap shows it");
 });
 
 test("a thread being started goes on a press away while empty, and stays holding a draft", () => {

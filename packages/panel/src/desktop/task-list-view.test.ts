@@ -2,9 +2,9 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-agent-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
@@ -67,10 +67,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
 });
 
@@ -871,4 +868,89 @@ test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and a
 
   toggleArchived(sidebar);
   assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), ["Copy link"]);
+});
+
+/** A task of the workspace's standing in `status`. */
+function standing(id: string, name: string, status: TaskStatus, updatedAt: number): TaskSummary {
+  return { ...task(id, name, "acme/relay", DEAN, { createdAt: 1, updatedAt }), status };
+}
+
+const BY_STATUS = [
+  standing("s-1", "Rate limit search", TASK_STATUS.BACKLOG, 90),
+  standing("s-2", "Onboarding copy", TASK_STATUS.BACKLOG, 80),
+  standing("s-3", "Fix Safari login", TASK_STATUS.IN_PROGRESS, 70),
+  standing("s-4", "CSV export", TASK_STATUS.TODO, 60),
+  standing("s-5", "Retry webhooks", TASK_STATUS.DONE, 50),
+];
+
+/** The quiet line under the list saying what the status filter leaves out, if it stands. */
+function hiddenLine(sidebar: HTMLElement): HTMLButtonElement | null {
+  return sidebar.querySelector<HTMLButtonElement>(".sidebar-hidden-statuses button");
+}
+
+test("the list holds the tasks to do and in progress, each led by its status's mark, and a quiet line says how many it leaves out and in which statuses", () => {
+  const sidebar = mountSidebar(ACME, BY_STATUS, []);
+
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Fix Safari login", "CSV export"],
+  );
+  const marks = [
+    ...sidebar.querySelectorAll(`${TASK_LIST} .luke-list-row-leading .luke-task-status-mark`),
+  ].map((mark) => mark.getAttribute("data-status"));
+  assert.deepEqual(marks, [TASK_STATUS.IN_PROGRESS, TASK_STATUS.TODO]);
+  assert.equal(hiddenLine(sidebar)?.textContent, "3 more in Backlog, Done");
+});
+
+test("the hidden tasks' line opens the status filter, whose choice lists the backlog and is kept for the workspace on this Mac", () => {
+  const sidebar = mountSidebar(ACME, BY_STATUS, []);
+  const line = hiddenLine(sidebar);
+  assert.ok(line, "the hidden tasks' line stands");
+
+  act(() => line.click());
+  const checked = [...document.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]')]
+    .filter((item) => item.getAttribute("aria-checked") === "true")
+    .map(itemLabel);
+  assert.deepEqual(checked, ["Todo", "In progress"]);
+  act(() => menuItem("Backlog").click());
+
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Rate limit search", "Onboarding copy", "Fix Safari login", "CSV export"],
+  );
+  assert.equal(hiddenLine(sidebar)?.textContent, "1 more in Done");
+  unmountAll();
+  assert.equal(taskRows(mountSidebar(ACME, BY_STATUS, [])).length, 4);
+});
+
+test("the status filter is on the Tasks head, and listing everyone's tasks again keeps the statuses chosen", async () => {
+  const sidebar = await mountRead(ACME, BY_STATUS, []);
+  const filter = sidebar.querySelector<HTMLButtonElement>('button[aria-label="Show statuses"]');
+  assert.ok(filter, "the Tasks head offers the status filter");
+  act(() => filter.click());
+  act(() => menuItem("Done").click());
+  choose(sidebar, "Created by", "Me");
+  const lift = chip(sidebar)?.querySelector<HTMLButtonElement>("button");
+  assert.ok(lift, "the Created by chip offers its ×");
+  act(() => lift.click());
+
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Fix Safari login", "CSV export", "Retry webhooks"],
+  );
+});
+
+test("a task from a service before statuses, and the archived tasks, stand whatever the filter", () => {
+  const sidebar = mountSidebar(
+    ACME,
+    [...BY_STATUS, task("t-0", "No status", null, DEAN)],
+    [{ ...standing("s-9", "Old spike", TASK_STATUS.CANCELED, 5), archivedAt: 6 }],
+  );
+  assert.ok(taskRows(sidebar).some((row) => row.name === "No status"));
+  toggleArchived(sidebar);
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Old spike"],
+  );
+  assert.equal(hiddenLine(sidebar), null);
 });

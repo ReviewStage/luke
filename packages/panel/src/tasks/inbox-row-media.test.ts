@@ -1,13 +1,24 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@luke/features/inbox-wire";
+import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
+import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { INBOX_MEDIA, inboxMedia } from "./inbox-model.js";
 import { type RowMediaReads, useRowMediaReads } from "./inbox-row-media.js";
 
 /**
@@ -39,17 +50,14 @@ afterEach(() => {
 /** The hook over the items listed, every picture read held until the test answers it; and how to list others. */
 function reads(first: readonly string[]) {
   const out = new Map<string, () => Promise<void>>();
-  fakeAppBridge({
-    act: (request: Act) =>
-      new Promise<ActOutcome>((resolve) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return;
-        const { attachmentId } = request.payload;
+  const askedUnder = new Map<string, string>();
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: ({ attachmentId, itemId }) =>
+      new Promise((resolve) => {
+        askedUnder.set(attachmentId, itemId);
         out.set(attachmentId, async () => {
           await act(async () => {
-            resolve({
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: { contentType: "image/png", base64: BYTES.get(attachmentId) ?? "" },
-            });
+            resolve({ contentType: "image/png", base64: BYTES.get(attachmentId) ?? "" });
             for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
           });
         });
@@ -74,6 +82,8 @@ function reads(first: readonly string[]) {
     /** Answers the read out for a picture. */
     answer: (attachmentId: string) =>
       (out.get(attachmentId) ?? assert.fail(`a read is out for ${attachmentId}`))(),
+    /** The item a picture's read was asked under. */
+    askedUnder: (attachmentId: string) => askedUnder.get(attachmentId),
     /** The picture held under an attachment, as a row draws it. */
     image: (attachmentId: string) => {
       const image = hook().images.get(attachmentId);
@@ -117,5 +127,49 @@ test("an item reposted with other pictures, still listed, lets go of the one it 
   hook.draw(ITEM_A, [PICTURE_B]);
   await hook.answer(PICTURE_B);
   assert.equal(hook.image(PICTURE_A), undefined, "the old version's picture goes with it");
+  assert.equal(hook.image(PICTURE_B), "data:image/png;base64,iVBORw0KGgoB");
+});
+
+test("a thread's row reads the pictures its messages' words draw and its replies' files carry, each under its own item", async () => {
+  const place = { kind: LINK_PLACE.INBOX_ITEM, planId: "plan-billing", itemId: ITEM_A } as const;
+  const thread: InboxItem = {
+    id: ITEM_A,
+    agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    key: "chart",
+    revision: 1,
+    version: INBOX_WIRE_VERSION,
+    title: "Which chart?",
+    blocks: [],
+    response: { type: INBOX_RESPONSE.TEXT },
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: 1_000,
+    updatedAt: 2_000,
+    thread: [
+      {
+        id: "d1b2c3d4-0000-4000-8000-000000000001",
+        author: INBOX_MESSAGE_AUTHOR.AGENT,
+        text: `This one?\n\n![The chart](<${linkOf(place, "acme")}/files/${PICTURE_A}>)`,
+        ask: { type: INBOX_ASK.ANSWER, status: INBOX_ASK_STATUS.OPEN },
+        createdAt: 1_000,
+      },
+      {
+        id: "d1b2c3d4-0000-4000-8000-000000000002",
+        author: INBOX_MESSAGE_AUTHOR.MEMBER,
+        text: "Or this",
+        files: [{ attachmentId: PICTURE_B, name: "mine.png", mediaType: "image/png" }],
+        createdAt: 2_000,
+      },
+    ],
+  };
+  const hook = reads([ITEM_A]);
+  const pictures = inboxMedia(thread).flatMap((media) =>
+    media.kind === INBOX_MEDIA.IMAGE ? [media.attachmentId] : [],
+  );
+  hook.draw(ITEM_A, pictures);
+  await hook.answer(PICTURE_A);
+  await hook.answer(PICTURE_B);
+  assert.equal(hook.askedUnder(PICTURE_A), ITEM_A);
+  assert.equal(hook.image(PICTURE_A), "data:image/png;base64,iVBORw0KGgoA");
   assert.equal(hook.image(PICTURE_B), "data:image/png;base64,iVBORw0KGgoB");
 });

@@ -27,6 +27,7 @@ import {
 import type { GitHubApp } from "../../github/github-app.js";
 import { taskWorkspace } from "../../github/workspace-repository.js";
 import { logStoreFailure } from "../../http/store-failure.js";
+import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { PLAN_SAVE_REFUSAL } from "../../tasks/plan-notes.js";
@@ -201,7 +202,7 @@ export interface BrainHost extends HostAdmission {
   ): Effect.Effect<
     WireRecord,
     QueryError | Schema.SchemaError,
-    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog
+    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | WorkspaceLinearConnect
   >;
   /**
    * The model one inference runs on and the effort it is asked for, as a
@@ -392,7 +393,11 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                 {
                   // Composed to send no message at all: the deployment acting for the
                   // conversation's owner here cancels a turn and does nothing else.
-                  eve: eve<never>({ origin, caller: { secret, account: target.userId } }),
+                  eve: eve<never>({
+                    origin,
+                    caller: { secret, account: target.userId },
+                    mount: EVE_MOUNT.TASKS,
+                  }),
                   writer,
                   now: seams.now,
                   report: (message) => console.warn(message),
@@ -566,7 +571,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
 
     model: (admitted) => modelFor(admitted),
 
-    relaysQuietly: foldedQuietly,
+    relaysQuietly: (event, state) => foldedQuietly(event, state, seams.now()),
 
     relay: (event, admitted, session, state, prompt, chat) =>
       Effect.gen(function* () {
@@ -627,6 +632,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           { userId: admitted.caller, conversationId: admitted.target.conversationId },
           taskWorkspace(admitted.caller, task.task.id),
           repository,
+          admitted.caller,
           brainSkillMarkdown,
         );
       }),

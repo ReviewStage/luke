@@ -58,6 +58,16 @@ export const GATEWAY_METHOD = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_ISSUE: "tasks.issue",
+  /** A repository's issues as New task's picker asks for them, read from GitHub through the service as they stand now, or that its installation grants none; answered to the caller, never held in the view. */
+  TASKS_GITHUB_ISSUES: "tasks.githubIssues",
+  /** The issues one task links, each with where it stands now, read live through the service; answered to the caller, never held in the view. */
+  TASKS_ISSUE_LINKS: "tasks.issueLinks",
+  /** One more issue linked to a task on the service, which reads it from its provider first; answered to the caller. */
+  TASKS_ISSUE_LINK: "tasks.issueLink",
+  /** Which keyword a task's pull requests write of one of its links, changed on the service; answered to the caller. */
+  TASKS_ISSUE_RELATE: "tasks.issueRelate",
+  /** One of a task's links let go on the service; answered to the caller. */
+  TASKS_ISSUE_UNLINK: "tasks.issueUnlink",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
@@ -160,16 +170,19 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
-  /** A workspace's issues: listed, one read, one filed, and one changed. */
-  ISSUES_LIST: "issues.list",
-  ISSUES_READ: "issues.read",
-  ISSUES_CREATE: "issues.create",
-  ISSUES_CHANGE: "issues.change",
   /** A workspace's Factory world, read whole as it stands now. */
   FACTORY_WORLD: "factory.world",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes: the files of its pull request as GitHub holds them now, each with its patch. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
+  /** The workspace's newest chapters of one agent's pull request, with its head as GitHub holds it now; or why there are none. */
+  CODING_AGENTS_CHAPTERS: "codingAgents.chapters",
+  /** One agent's pull request's chapters generated for its head on Luke's own model key, or the generation already under way, answered as a read of them is. */
+  CODING_AGENTS_CHAPTERS_GENERATE: "codingAgents.chaptersGenerate",
+  /** The Claude model the account's Generate chapters runs on, read from the service now. */
+  CHAPTERS_MODEL_READ: "chapters.modelRead",
+  /** The Claude model the account's Generate chapters runs on, written to the service; the model as kept, or why it is unchanged. */
+  CHAPTERS_MODEL_WRITE: "chapters.modelWrite",
   /** One agent's pull request itself as its overview draws it: its description, branches, mergeability, and people as GitHub holds them now. */
   CODING_AGENTS_OVERVIEW_PULL_REQUEST: "codingAgents.overviewPullRequest",
   CODING_AGENTS_REVIEW_OPTIONS: "codingAgents.reviewOptions",
@@ -208,7 +221,7 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
-  /** One message of the account's on an item's thread, open or settled, under the panel's own key; the item as it then stands, its thread with the message on it, or why there is no answer. */
+  /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
   CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
   CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
@@ -232,15 +245,8 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
   INTEGRATIONS_RENAME: "integrations.rename",
-  /**
-   * What waits on the developer across the account's tasks, followed from
-   * now until it is let go or the account signs out, over Neon Realtime. What
-   * it says is heard as `ACCOUNT_INBOX_CHANGED` events, never answered.
-   * Main's own read, which no window asks; following again starts over.
-   */
-  CODING_AGENTS_ACCOUNT_INBOX_FOLLOW: "codingAgents.accountInboxFollow",
-  /** The account's inbox let go: no more `ACCOUNT_INBOX_CHANGED` events until it is followed again. */
-  CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW: "codingAgents.accountInboxUnfollow",
+  /** What waits on the developer across the account's tasks past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
+  CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
@@ -571,8 +577,6 @@ export const GATEWAY_EVENT = {
   TERMINAL_OUTPUT: "terminal.output",
   /** How an attached shell's connection stands, named by its connection. */
   TERMINAL_STATE: "terminal.state",
-  /** What waits on the developer across the account, whole, each time it changes while it is followed. */
-  ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

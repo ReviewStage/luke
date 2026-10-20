@@ -4,13 +4,13 @@ import {
   ACCOUNT_CHAT_REASON,
   type AccountChatEntry,
   type AccountFailedRun,
-  type AccountInboxAnswer,
   type AccountInboxEntry,
   type AccountTasklessEntry,
 } from "@luke/features/account-inbox-wire";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountInboxAnswerView,
   type CodingAgentListAnswer,
   type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
@@ -21,6 +21,7 @@ import {
   type CodingAgentSummary,
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
+import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import { Duration, Effect, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -62,14 +63,19 @@ function agent(
 }
 
 /** An inbox read's answer as a test gives it: its tasks holding items left out where none does. */
-type InboxAnswerGiven = Omit<AccountInboxAnswer, "plans"> & {
-  readonly plans?: AccountInboxAnswer["plans"];
-};
+type InboxAnswerGiven =
+  | Exclude<CodingAgentAccountInboxAnswerView, { readonly plans: unknown }>
+  | (Omit<Extract<CodingAgentAccountInboxAnswerView, { readonly plans: unknown }>, "plans"> & {
+      readonly plans?: Extract<
+        CodingAgentAccountInboxAnswerView,
+        { readonly plans: unknown }
+      >["plans"];
+    });
 
 /**
  * The notices over a scripted host: each task's list answers from its own
- * queue, the last answer standing, the account's inbox is heard as the test
- * says it changed while it is followed, and everything posted, toasted, opened, badged, and
+ * queue, the last answer standing, the account's inbox read holds until the
+ * test answers it, and everything posted, toasted, opened, badged, and
  * written is kept for the test to read. Electron's doors are a Layer of the
  * test's own that records what leaves through each.
  */
@@ -85,23 +91,27 @@ function fixture() {
   const chatOpened: string[] = [];
   let chatOn = true;
   const badges: number[] = [];
+  /** Whether the notification door throws, as a browser that refuses to build one does. */
+  let refusingPosts = false;
   const doors = Layer.succeed(AgentNoticeDoors, {
-    post: (notice) => posted.push(notice),
+    post: (notice) => {
+      if (refusingPosts) throw new TypeError("Illegal constructor");
+      posted.push(notice);
+    },
     toast: (end) => toasted.push(end),
     toastInbox: (item) => inboxToasted.push(item),
     toastFailedRun: (run) => runsToasted.push(run),
     toastChat: (message) => chatToasted.push(message),
     badge: (count) => badges.push(count),
   });
-  /** Each follow of the account's inbox and each letting go, in order. */
-  const follows: ("follow" | "unfollow")[] = [];
-  let inboxChanged: ((inbox: AccountInboxAnswer) => void) | undefined;
+  const inboxReads: string[] = [];
   const waiting: (readonly AppInboxTask[])[] = [];
   const holding: (readonly AppInboxTaskHolding[])[] = [];
   const taskless: AppInboxSlice["taskless"][] = [];
   const failedRuns: AppInboxSlice["failedRuns"][] = [];
   const openedAutomations: string[] = [];
   const openedInboxes: string[] = [];
+  let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
   let accounts: Queue.Queue<string | undefined> | undefined;
   const opened: AgentPlace[] = [];
   const openedTaskless: {
@@ -120,6 +130,7 @@ function fixture() {
   let notifying = true;
   let listReads = 0;
   const notices = Effect.gen(function* () {
+    inboxAnswers = yield* Queue.unbounded<CodingAgentAccountInboxAnswerView>();
     accounts = yield* Queue.unbounded<string | undefined>();
     Queue.offerUnsafe(accounts, signedInAs);
     return yield* createAgentNotices({
@@ -163,14 +174,12 @@ function fixture() {
       onTaskAgentsMoved: () => {
         listReads += 1;
       },
-      followAccountInbox: () => Effect.sync(() => void follows.push("follow")),
-      unfollowAccountInbox: () => Effect.sync(() => void follows.push("unfollow")),
-      onAccountInboxChanged: (listener) => {
-        inboxChanged = listener;
-        return () => {
-          inboxChanged = undefined;
-        };
-      },
+      readAccountInbox: (after) =>
+        Effect.suspend(() => {
+          inboxReads.push(after);
+          assert.ok(inboxAnswers);
+          return Queue.take(inboxAnswers);
+        }),
       accounts: Stream.fromQueue(accounts),
       onInboxChanged: (next) => {
         waiting.push(next.waiting);
@@ -186,11 +195,7 @@ function fixture() {
       watchInterval: WATCH,
       report: () => undefined,
     });
-    // The inbox is followed on a fiber of its own, which has subscribed once this settles.
-  }).pipe(
-    Effect.provide(doors),
-    Effect.tap(() => settled),
-  );
+  }).pipe(Effect.provide(doors));
   return {
     notices,
     listed,
@@ -222,12 +227,12 @@ function fixture() {
       accountChanged(next);
       Queue.offerUnsafe(accounts, next);
     },
-    /** The account's inbox as the host heard it change while followed; no task holds an item but where the answer says. */
+    /** The account's inbox read answered, as the host answers the one standing; no task holds an item but where the answer says. */
     answerInbox: (answer: InboxAnswerGiven) => {
-      assert.ok(inboxChanged, "the notices hear the account's inbox while they follow it");
-      inboxChanged({ plans: [], ...answer });
+      assert.ok(inboxAnswers);
+      Queue.offerUnsafe(inboxAnswers, "failure" in answer ? answer : { plans: [], ...answer });
     },
-    follows,
+    inboxReads,
     waiting,
     holding,
     taskless,
@@ -251,6 +256,10 @@ function fixture() {
     /** The developer's setting for notifications. */
     notify: (on: boolean) => {
       notifying = on;
+    },
+    /** Whether the notification door throws on each post. */
+    refusePosts: (on: boolean) => {
+      refusingPosts = on;
     },
     /** What was said, without the clicks. */
     said: () => posted.map(({ title, body }) => ({ title, body })),
@@ -314,7 +323,7 @@ const ITEM_A = "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a";
 const ITEM_B = "6f3e8d4b-2c5a-4f7b-9d0e-1a2b3c4d5e6f";
 const ITEM_C = "7a4f9e5c-3d6b-4a8c-8e1f-2b3c4d5e6f7a";
 it.effect(
-  "another account lets go of the follow of the last and of its items, its counts, and its badge, and its first answer is where it stands; nobody signed in follows nothing",
+  "another account ends the read held for the last and lets go of its items, its counts, and its badge, and its first answer is where it stands; nobody signed in reads nothing",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -328,8 +337,8 @@ it.effect(
       yield* settled;
       assert.deepEqual(f.waiting.at(-1), []);
       assert.equal(f.badges.at(-1), 0);
-      // The follow of the last account is let go before the next account's starts.
-      assert.deepEqual(f.follows, ["follow", "unfollow", "follow"]);
+      // The read held for the last account is let go: the next account reads from the start.
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", INBOX_CURSOR_START]);
 
       // The next answer is the new account's first, which announces nothing it holds.
       f.answerInbox({
@@ -345,7 +354,42 @@ it.effect(
       yield* settled;
       assert.deepEqual(f.waiting.at(-1), []);
       assert.equal(f.badges.at(-1), 0);
-      assert.deepEqual(f.follows, ["follow", "unfollow", "follow", "unfollow"]);
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", INBOX_CURSOR_START, "7"]);
+    }),
+);
+it.effect(
+  "an unanswered inbox read is asked again from the same cursor only once the watch's interval has passed, and an answer after it is read at once",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1"]);
+
+      f.answerInbox({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      yield* settled;
+      yield* TestClock.adjust(Duration.subtract(WATCH, Duration.seconds(1)));
+      yield* settled;
+      assert.deepEqual(
+        f.inboxReads,
+        [INBOX_CURSOR_START, "1"],
+        "nothing is asked before the interval",
+      );
+
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* settled;
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", "1"]);
+
+      f.answerInbox({
+        items: [waitingItem(ITEM_A), waitingItem(ITEM_B)],
+        cursor: "2",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.equal(f.badges.at(-1), 2);
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", "1", "2"]);
     }),
 );
 it.effect(
@@ -963,7 +1007,7 @@ function chatEntry(seq: number, patch: Partial<AccountChatEntry> = {}): AccountC
     seq,
     workspaceId: "workspace-acme",
     reason: ACCOUNT_CHAT_REASON.DIRECT,
-    from: "agent-2",
+    from: "Invite emails",
     planId: TASK_ID,
     touchedSeq: seq,
     updatedAt: READ_AT,
@@ -990,7 +1034,7 @@ it.effect(
           chatEntry(40),
           chatEntry(47, {
             reason: ACCOUNT_CHAT_REASON.MENTION,
-            from: "luke",
+            from: "Luke",
             workspaceId: "workspace-beta",
           }),
         ],
@@ -1000,10 +1044,10 @@ it.effect(
       yield* settled;
       // The mention that came to wait is announced; the message already waiting is not.
       assert.ok(
-        f.said().some((said) => said.title === TASK_NAME && said.body === "@luke mentioned you"),
+        f.said().some((said) => said.title === TASK_NAME && said.body === "Luke mentioned you"),
       );
       assert.equal(f.badges.at(-1), 3);
-      f.posted.find((notice) => notice.body === "@luke mentioned you")?.onClick();
+      f.posted.find((notice) => notice.body === "Luke mentioned you")?.onClick();
       // Its click opens the Chat of the workspace it waits in, whichever the window lists.
       assert.deepEqual(f.chatOpened, ["workspace-beta"]);
 
@@ -1024,7 +1068,7 @@ it.effect(
           messageId: chatEntry(51).messageId,
           workspaceId: "workspace-acme",
           taskId: null,
-          words: "@agent-2 asked you",
+          words: "Invite emails asked you",
           detail: "Chat",
         },
       ]);
@@ -1126,8 +1170,38 @@ it.effect(
       });
       yield* settled;
       assert.deepEqual(f.said(), [
-        { title: TASK_NAME, body: "@agent-2 messaged you" },
-        { title: TASK_NAME, body: "@agent-2 mentioned you" },
+        { title: TASK_NAME, body: "Invite emails messaged you" },
+        { title: TASK_NAME, body: "Invite emails mentioned you" },
       ]);
+    }),
+);
+it.effect(
+  "a notification door that throws loses that notice alone: the next end is still announced",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      const other = "a1b2c3d4-0000-4000-8000-000000000003";
+      notices.observeAgents([
+        agent(CODING_AGENT_STATUS.RUNNING),
+        agent(CODING_AGENT_STATUS.RUNNING, { id: other, title: "Second" }),
+      ]);
+
+      f.refusePosts(true);
+      notices.observeAgents([
+        agent(CODING_AGENT_STATUS.COMPLETED),
+        agent(CODING_AGENT_STATUS.RUNNING, { id: other, title: "Second" }),
+      ]);
+      yield* Effect.yieldNow;
+      f.refusePosts(false);
+      notices.observeAgents([
+        agent(CODING_AGENT_STATUS.COMPLETED),
+        agent(CODING_AGENT_STATUS.COMPLETED, { id: other, title: "Second" }),
+      ]);
+      yield* Effect.yieldNow;
+
+      assert.equal(f.posted.length, 1);
+      assert.match(f.posted[0]?.body ?? "", /Second/u);
     }),
 );

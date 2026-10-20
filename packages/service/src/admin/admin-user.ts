@@ -16,14 +16,12 @@ import {
   trailingTrend,
 } from "./admin-metrics.js";
 import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
   type AdminMetricsWindow,
+  type AdminUserQuery,
   adminMetricsWindow,
   adminUserId,
-  errorResponse,
-  jsonResponse,
 } from "./http.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
@@ -178,7 +176,7 @@ export function buildAdminUserDetail(
 }
 
 export interface AdminUserOptions {
-  request: Request;
+  query: AdminUserQuery;
   /** The named account's detail, or nothing when no user row carries that id. */
   readUser: (
     userId: string,
@@ -197,29 +195,21 @@ export interface AdminUserOptions {
  */
 export function handleAdminUser(
   options: AdminUserOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<AdminUserDetail, AdminRefusal, DatabaseServices> {
+  const { query } = options;
 
-  const userId = adminUserId(request.url);
-  if (userId === undefined) {
-    return Effect.succeed(
-      errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.MISSING_USER_ID),
-    );
-  }
+  const userId = adminUserId(query.id);
+  if (userId === undefined) return Effect.fail(ADMIN_REFUSAL.MISSING_USER_ID);
 
-  const windowDays = adminMetricsWindow(request.url);
-  if (windowDays === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
-  }
+  const windowDays = adminMetricsWindow(query.window);
+  if (windowDays === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_WINDOW);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
     options.readUser(userId, now, windowDays).pipe(
-      Effect.map((detail) =>
-        detail === undefined
-          ? errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND)
-          : jsonResponse(ADMIN_HTTP_STATUS.OK, detail),
-      ),
       Effect.catchCause((cause) => unavailableSeam("admin user read failed", cause)),
+      Effect.flatMap((detail) =>
+        detail === undefined ? Effect.fail(ADMIN_REFUSAL.USER_NOT_FOUND) : Effect.succeed(detail),
+      ),
     ),
   );
 }

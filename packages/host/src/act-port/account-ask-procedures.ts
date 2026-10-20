@@ -12,9 +12,8 @@ import type {
   ProviderKeysAnswerView,
 } from "@luke/features/coding-agent-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { ACCOUNT_ASK_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /**
  * account-ask-procedures.ts -- the account's own asks of the host from Settings and a dictating box.

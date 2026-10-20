@@ -35,12 +35,12 @@ import { type CodingAgent, readCodingAgentByKey } from "@luke/database/models/co
 import { latestTurnsOfReached } from "@luke/database/models/message-reads";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
+import { redactCredentials } from "@luke/features/credential-redaction";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, Duration, Effect, Option, type Redacted, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
-import { redactCredentials } from "../../observability/credentials.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import { githubTokenPolicy } from "../terminal/agent-sandbox.js";
 import {
@@ -325,8 +325,8 @@ export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(fu
     }
     // Note that the new agent clones the task's repository as it stands now, so a branch pushed to the
     // one the source cloned before the task moved would be none of its checkout's.
-    const task = yield* readTask(userId, source.taskId ?? "");
-    const repository = Option.isSome(task) ? task.value.task.repository : null;
+    const task = yield* readTaskHeader(userId, source.taskId ?? "");
+    const repository = Option.isSome(task) ? task.value.repository : null;
     if (repository?.toLowerCase() !== source.repository.toLowerCase()) {
       return missed(SNAPSHOT_MISS.MOVED);
     }

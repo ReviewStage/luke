@@ -27,7 +27,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -38,17 +38,24 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
-import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab.js";
+import { SHELL_ROOM } from "../shell-room.js";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  type LeaveAsk,
+  useLeaveGuard,
+} from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
-  type AnyActOutcome,
+  FAKE_ANSWER,
+  type FakeActAnswer,
   fakeActs,
   fakeAppBridge,
   fakeAppBridgeCalls,
 } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
-import { layContainersAt } from "../testing/container-width.js";
+import { layContainersAt, shown } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { playMotions } from "../testing/pane-motion.js";
 import { relayout } from "../testing/resize-observer.js";
@@ -221,13 +228,13 @@ beforeEach(() => {
   integrationsHeld = false;
   integrationsRefusals = 0;
   fakeActs({
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
         listed.push(request.payload.workspaceId);
         if (listHeld) return new Promise(() => undefined);
         const theirs = standing.filter((each) => each.workspaceId === request.payload.workspaceId);
         const value = lists.shift() ?? { automations: theirs };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
         changes.push(request.payload);
@@ -235,17 +242,17 @@ beforeEach(() => {
         const was = standing.find((each) => each.id === automationId);
         if (changeRefusal !== undefined || was === undefined) {
           const failure = changeRefusal ?? AUTOMATION_CALL_FAILURE.NOT_FOUND;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { failure } });
+          return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { failure } });
         }
         const automation = { ...was, ...change };
         standing = standing.map((each) => (each.id === automationId ? automation : each));
         if (heldChanges === undefined) {
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation } });
+          return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { automation } });
         }
         // A held write answers in words of its own, so which answer drew is told by the row's name.
         const held = heldChanges;
         const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
-        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { automation: told } };
+        const done = { status: FAKE_ANSWER.DONE, value: { automation: told } };
         return new Promise((resolve) => held.push(() => resolve(done)));
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_CREATE) {
@@ -268,13 +275,13 @@ beforeEach(() => {
         const value = hooked
           ? { automation: made, webhookSecret: MADE_SECRET }
           : { automation: made };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
         if (integrationsHeld) return new Promise(() => undefined);
         if (integrationsRefusals > 0) {
           integrationsRefusals -= 1;
-          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Unreachable." });
+          return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Unreachable." });
         }
         // Linear and Sentry are connected; the rest are not.
         const integrations = Object.fromEntries(
@@ -286,21 +293,21 @@ beforeEach(() => {
           ]),
         );
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           // SAFETY: every provider on the list is given a status above, which is the whole of the record.
           value: { integrations: integrations as Record<IntegrationProvider, IntegrationStatus> },
         });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
         if (runsHeld) return new Promise(() => undefined);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { runs } });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
         runsAsked.push(request.payload.automationId);
         if (runHeld) return new Promise(() => undefined);
         if (runRefusal !== undefined) {
           return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
+            status: FAKE_ANSWER.DONE,
             value: { failure: runRefusal },
           });
         }
@@ -314,7 +321,7 @@ beforeEach(() => {
           settledAt: 5,
         } as const;
         runs = [made, ...runs];
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { run: made } });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { run: made } });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET) {
         secretsAsked.push(request.payload.automationId);
@@ -323,31 +330,31 @@ beforeEach(() => {
           automation === undefined
             ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }
             : { automation, webhookSecret: ROTATED_SECRET };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
         deletes.push(request.payload.automationId);
         standing = standing.filter((each) => each.id !== request.payload.automationId);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { deleted: true } });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { deleted: true } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
         catalogReads += 1;
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { models: CATALOG } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
         const value = defaultRefused
           ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
           : { choice: DEFAULT_CHOICE };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         agentsAsked.push(request.payload);
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: { agents: [CI_DIGEST] },
         });
       }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
   });
 });
@@ -372,7 +379,7 @@ function render(tasks: ReturnType<typeof tasksControl>): void {
         createElement(
           Fragment,
           null,
-          createElement(AutomationsPage, { tasks }),
+          createElement(AutomationsPage, { tasks, room: SHELL_ROOM.WIDE }),
           createElement(ToastHost),
         ),
       ),
@@ -634,6 +641,7 @@ test("with no workspace listed the list and a linked automation stand as quiet b
     tasksControl({
       workspace: undefined,
       automationsView: {
+        ...tasksControl().automationsView,
         open: true,
         place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id },
         onOpen: () => undefined,
@@ -665,6 +673,9 @@ let openFactory: () => void = () => undefined;
 /** Every page the Automations pages stood on, in order, as the window moved them. */
 let places: AutomationsPlace[] = [];
 
+/** The ask the window's guard last told the shell of, as a browser tab's ways out hear it; nothing while no page holds unsaved work. */
+let shellAsk: LeaveAsk | undefined;
+
 /** Sends the window to a place among the automations, as a link opened there does. */
 let sendTo: (place: AutomationsPlace) => void = () => undefined;
 /** Lists another workspace under the mounted pages, as the switcher would. */
@@ -677,13 +688,16 @@ let moveTo: (workspace: Workspace) => void = () => undefined;
  */
 function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): HTMLElement {
   places = [start];
+  shellAsk = undefined;
   function Pages() {
     const [place, setPlace] = useState(start);
     sendTo = setPlace;
     const [listed, setListed] = useState(workspace);
     moveTo = setListed;
     // The window's own guard, over doors guarded as the Plans tab guards its own.
-    const leaveGuard = useLeaveGuard();
+    const leaveGuard = useLeaveGuard((ask) => {
+      shellAsk = ask;
+    });
     const tasks = tasksControl({
       leaveGuard,
       agentView: {
@@ -699,6 +713,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
       workspace: listed,
       workspaces: [PERSONAL, WORKSPACE],
       automationsView: {
+        ...tasksControl().automationsView,
         open: true,
         place,
         onOpen: leaveGuard.guard((next: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST }) => {
@@ -726,6 +741,7 @@ function mountPages(start: AutomationsPlace, workspace: Workspace = WORKSPACE): 
           }),
         },
       },
+      room: SHELL_ROOM.WIDE,
     });
   }
   const container = document.createElement("div");
@@ -1056,6 +1072,25 @@ test("a new automation with something written asks before any way out leaves it,
   act(() => button("Leave").click());
   await settle();
   assert.deepEqual(factoryOpens, [1]);
+});
+
+test("the shell hears the page's ask only while an edit is unsaved, and asking through it waits on the page's question", async () => {
+  const page = mountPages({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  assert.equal(shellAsk, undefined, "a page with nothing unsaved holds nothing back");
+
+  type(page.querySelector("textarea[aria-label='Prompt']"), "Fix the two flakiest tests.");
+  const left: string[] = [];
+  act(() => shellAsk?.(() => left.push("sign-in")));
+  assert.ok(leaveAsked(), "the shell's way out asks the page's question");
+  assert.deepEqual(left, []);
+  act(() => button("Leave").click());
+  await settle();
+  assert.deepEqual(left, ["sign-in"]);
+
+  act(() => button("Save").click());
+  await settle();
+  assert.equal(shellAsk, undefined, "once saved, the shell holds nothing back");
 });
 
 test("a new automation with nothing written leaves at once, and one just created stands as its own page without asking", async () => {
@@ -1512,7 +1547,7 @@ test("with no workspace listed because the workspaces could not be read, the lis
       onRetryWorkspaces: () => {
         retries += 1;
       },
-      automationsView: { open: true, place, onOpen: () => undefined, onClose: () => undefined },
+      automationsView: { ...tasksControl().automationsView, open: true, place },
     });
   const page = mount(unread({ kind: AUTOMATIONS_PAGE.LIST }));
   await settle();
@@ -2603,4 +2638,110 @@ test("a new automation started from the Code review suggestion is made on pull r
     "the settings open the task the agent is handed",
   );
   assert.equal(made.action.choice, undefined, "it runs on the creator's own model");
+});
+
+/**
+ * The Automations pages on a narrow stage, a phone's, standing on `start`,
+ * with the window's stylesheets laid: the page and whether its runs stand
+ * alone held as the Plans tab holds them, its runs' screen shown and left
+ * by their own presses.
+ */
+function mountNarrow(start: AutomationsPlace): HTMLElement {
+  function Pages() {
+    const [place, setPlace] = useState(start);
+    // As the Plans tab does, a page opened on a run's link stands its runs.
+    const [runsShown, setRunsShown] = useState(
+      start.kind === AUTOMATIONS_PAGE.EDIT && start.runId !== undefined,
+    );
+    const tasks = tasksControl({
+      workspace: WORKSPACE,
+      workspaces: [PERSONAL, WORKSPACE],
+      automationsView: {
+        ...tasksControl().automationsView,
+        open: true,
+        place,
+        runs: runsShown,
+        onOpen: (next: AutomationsPlace = { kind: AUTOMATIONS_PAGE.LIST }) => setPlace(next),
+        onRuns: setRunsShown,
+      },
+    });
+    return createElement(
+      "div",
+      { className: "desktop-shell", "data-room": SHELL_ROOM.NARROW },
+      createElement(AutomationsPage, { tasks, room: SHELL_ROOM.NARROW }),
+    );
+  }
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  registry = AtomRegistry.make();
+  act(() => root?.render(onRegistry(registry, createElement(Pages))));
+  return container;
+}
+
+/** Which of an automation's two screens are on screen: its setup, and its runs. */
+function screensShown(page: HTMLElement): string[] {
+  const setup = page.querySelector(".automation-editor-screen") ?? assert.fail("no setup");
+  const runsScreen = page.querySelector("section[aria-label='Runs']") ?? assert.fail("no runs");
+  return [...(shown(setup) ? ["setup"] : []), ...(shown(runsScreen) ? ["runs"] : [])];
+}
+
+test("on a narrow stage an automation's setup stands the whole width with its runs hidden, until Runs stands them alone under a way back that returns to the setup", async () => {
+  window.localStorage.clear();
+  runs = [SWEEP_RUN];
+  const sheets = layContainersAt({});
+  try {
+    const page = mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+    await settle();
+    assert.deepEqual(screensShown(page), ["setup"]);
+    assert.equal(
+      page.querySelector(".automation-runs-pane"),
+      null,
+      "no Runs panel stands beside the setup, kept open or not",
+    );
+
+    act(() => button("Runs").click());
+    assert.deepEqual(screensShown(page), ["runs"]);
+    const runsScreen = page.querySelector("section[aria-label='Runs']");
+    assert.equal(runsScreen?.querySelectorAll("li").length, 1, "its runs are listed");
+
+    act(() => button(SWEEP.name).click());
+    assert.deepEqual(screensShown(page), ["setup"]);
+  } finally {
+    sheets.remove();
+  }
+});
+
+test("on a narrow stage Runs takes the focus to the runs' way back, and the way back hands it to Runs", async () => {
+  window.localStorage.clear();
+  mountNarrow({ kind: AUTOMATIONS_PAGE.EDIT, automationId: SWEEP.id });
+  await settle();
+  const runsButton = button("Runs");
+  act(() => {
+    runsButton.focus();
+    runsButton.click();
+  });
+  const back = button(SWEEP.name);
+  assert.ok(document.activeElement === back, "the way back to the setup");
+
+  act(() => {
+    back.focus();
+    back.click();
+  });
+  assert.ok(document.activeElement === button("Runs"), "the setup's Runs");
+});
+
+test("on a narrow stage a link to a run opens on its runs, with the run marked and the way back to the setup", async () => {
+  runs = [SWEEP_RUN];
+  const page = mountNarrow({
+    kind: AUTOMATIONS_PAGE.EDIT,
+    automationId: SWEEP.id,
+    runId: SWEEP_RUN.id,
+  });
+  await settle();
+  assert.equal(page.querySelector(".automation-editor-screen")?.hasAttribute("hidden"), true);
+  const runsScreen = page.querySelector("section[aria-label='Runs']");
+  assert.equal(runsScreen?.hasAttribute("hidden"), false);
+  assert.ok(runsScreen?.querySelector("[aria-current]"), "the run the link named is marked");
+  assert.ok(document.activeElement === button(SWEEP.name), "the focus on the way back");
 });

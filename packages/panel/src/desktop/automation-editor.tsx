@@ -106,7 +106,7 @@ import { useClipped } from "@luke/ui/use-clipped";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { Result } from "effect";
-import { ChevronRightIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { ChevronRightIcon, HistoryIcon, PlayIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
@@ -118,6 +118,7 @@ import { useOpenSettings } from "../open-settings.js";
 import { Picker, PickerRow } from "../settings/picker-row.js";
 import { SelectRow } from "../settings/select-row.js";
 import { SwitchRow } from "../settings/switch-row.js";
+import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { Spinner } from "../spinner.js";
 import { AgentModelChip } from "../tasks/agent-model-chip.js";
 import { AgentServersButton } from "../tasks/agent-servers.js";
@@ -129,8 +130,9 @@ import { Tooltip } from "../tooltip.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { OWNER_MARK_SIZE, OwnerMark } from "./automation-owner.js";
-import { AutomationRunsPanel } from "./automation-runs-panel.js";
-import { type RunsPanel, useRunsPanel } from "./folded-groups.js";
+import { AutomationRunsPanel, AutomationRunsScreen } from "./automation-runs-panel.js";
+import { useRunsPanel } from "./folded-groups.js";
+import { type NarrowColumns, useNarrowFocus } from "./narrow-focus.js";
 import { PaneGlide } from "./pane-motion.js";
 import { useAutomationRuns } from "./use-automation-runs.js";
 import { type AgentsRead, type RunChoices, useRunChoices } from "./use-run-choices.js";
@@ -624,6 +626,9 @@ function ScheduleRows({
   );
 }
 
+/** What a new automation's page is called until it is made. */
+const NEW_AUTOMATION = "New automation";
+
 /** What the editor's ⋯ is called. */
 const ACTIONS_LABEL = "Automation actions";
 
@@ -662,7 +667,7 @@ function AutomationActions({
 
 /** The crumb naming the automation, cut short with an ellipsis where the toolbar is narrow, the pointer reading it whole. */
 function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
-  const [words, clipped] = useClipped();
+  const [words, clipped] = useClipped(name);
   return (
     <Tooltip label={clipped ? name : undefined}>
       <span ref={words} className="automation-crumb">
@@ -671,6 +676,21 @@ function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
     </Tooltip>
   );
 }
+
+/**
+ * The toolbar's Runs: the Runs panel's toggle beside the setup, or in a
+ * narrow room the way to the runs' own screen, which it names by `screen`.
+ */
+interface RunsControl {
+  /** Whether the Runs panel stands beside the setup; a narrow room's setup never stands beside them. */
+  readonly shown: boolean;
+  /** The id of the runs' own screen, in a narrow room alone. */
+  readonly screen: string | undefined;
+  readonly onPress: () => void;
+}
+
+/** What the toolbar's way to a narrow room's runs says. */
+const RUNS_LABEL = "Runs";
 
 /** The editor's toolbar: the crumbs back to the list, then where the draft stands, its save, its switch, and its ⋯ holding Copy link and Delete. */
 function EditorToolbar({
@@ -684,7 +704,7 @@ function EditorToolbar({
   onDelete,
   running,
   onRunNow,
-  runsPanel,
+  runs,
 }: {
   automation: AutomationSummary | undefined;
   /** Whether it is a code review, an experiment still, whose page says so with the tag and Send feedback. */
@@ -698,9 +718,9 @@ function EditorToolbar({
   /** Whether a Run now is out. */
   running: boolean;
   onRunNow: () => void;
-  runsPanel: RunsPanel;
+  runs: RunsControl;
 }): React.JSX.Element {
-  const runsLabel = runsPanel.open ? "Hide runs" : "Show runs";
+  const runsLabel = runs.shown ? "Hide runs" : "Show runs";
   const status =
     automation === undefined
       ? "Not created yet"
@@ -717,7 +737,7 @@ function EditorToolbar({
           <nav className="automation-crumbs" aria-label="Path">
             <FoldingButton label="Automations" icon={<ZapIcon />} onClick={onBack} />
             <ChevronRightIcon aria-hidden="true" />
-            <CurrentCrumb name={automation === undefined ? "New automation" : automation.name} />
+            <CurrentCrumb name={automation === undefined ? NEW_AUTOMATION : automation.name} />
           </nav>
           {codeReview ? <ExperimentTag /> : null}
         </div>
@@ -762,15 +782,26 @@ function EditorToolbar({
               <AutomationActions automation={automation} onDelete={onDelete} />
             </>
           )}
-          {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right. */}
-          <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
-            <IconButton
-              icon={<SidePanelIcon />}
-              label={runsLabel}
-              aria-expanded={runsPanel.open}
-              onClick={runsPanel.onToggle}
-            />
-          </Tooltip>
+          {/* The Runs panel's toggle, the side panel's own button and chord at the window's top right; in a narrow room, the way to the runs' own screen. */}
+          {runs.screen === undefined ? (
+            <Tooltip label={runsLabel} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
+              <IconButton
+                icon={<SidePanelIcon />}
+                label={runsLabel}
+                aria-expanded={runs.shown}
+                onClick={runs.onPress}
+              />
+            </Tooltip>
+          ) : (
+            <Tooltip label={RUNS_LABEL}>
+              <IconButton
+                icon={<HistoryIcon />}
+                label={RUNS_LABEL}
+                aria-controls={runs.screen}
+                onClick={runs.onPress}
+              />
+            </Tooltip>
+          )}
         </div>
       </div>
     </header>
@@ -1560,12 +1591,25 @@ function EditorForm({
   );
 }
 
+/** An automation's page's two screens in a narrow room: its setup, toolbar and all, and its runs. */
+const EDITOR_SCREENS: NarrowColumns = {
+  list: ":scope > .automation-editor-screen",
+  item: ":scope > .automation-runs-screen",
+};
+
 /**
  * One automation's page, or a new one's where none is given. A new one,
  * opened from a suggestion on the list, starts filled in from its preset;
  * once made, it is handed to `onCreated`, which stands its own page where
  * this one stood. A deleted one is handed to `onDeleted`, which goes back
  * to the list.
+ *
+ * A narrow room, a phone's, has no room for the runs beside the setup, so
+ * it stands the setup the whole width and the runs as a screen of their
+ * own (`hiddenColumns`), reached by the toolbar's Runs and left by the way
+ * back at their head, each a step of the window's history; the focus goes
+ * with each swap (`useNarrowFocus`). The Runs panel's width and fold are
+ * the wide room's alone.
  */
 export function AutomationEditor({
   automation,
@@ -1580,6 +1624,9 @@ export function AutomationEditor({
   onOpenAgent,
   linked,
   leaveGuard,
+  room,
+  runsShown,
+  onRuns,
 }: {
   automation: AutomationSummary | undefined;
   /** The preset a new automation starts filled in from, as the list's suggestion it was opened from names it; none for a blank one. */
@@ -1603,6 +1650,12 @@ export function AutomationEditor({
   linked?: { readonly runId?: string | undefined } | undefined;
   /** The window's ask before leaving unsaved work, which this page stands while it holds some. */
   leaveGuard: LeaveGuard;
+  /** The room the panel's stage gives, narrow where the runs are a screen of their own. */
+  room: ShellRoom;
+  /** Whether a narrow room stands the runs rather than the setup. */
+  runsShown: boolean;
+  /** Stands the runs' screen, or the setup again, through the window's history. */
+  onRuns: (shown: boolean) => void;
 }): React.JSX.Element {
   const runs = useAutomationRuns(automation?.id);
   const codeReviewOn = useExperiment(EXPERIMENT.CODE_REVIEW);
@@ -1639,15 +1692,23 @@ export function AutomationEditor({
     saved !== undefined && saved.repository === draft.repository ? saved.agentId : null;
   // Note that a new draft nothing was changed in is no work to lose, so Escape may leave it.
   const written = automation === undefined ? !sameDraft(draft, start) : dirty;
-  // Escape goes back to the list, asking first, as every way out does, where something written would be lost.
-  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, onBack);
+  const narrow = room === SHELL_ROOM.NARROW;
+  // A narrow room's runs stand as a screen of their own over the setup, and the setup the whole width.
+  const runsAlone = narrow && runsShown;
+  const hidden = hiddenColumns(room, !runsAlone);
+  const screen = useNarrowFocus(room, !runsAlone, EDITOR_SCREENS);
+  const runsScreen = useId();
+  // Escape goes back to the list, asking first, as every way out does, where something written would be lost;
+  // from a narrow room's runs, it goes back to the setup first.
+  useAppCommand(APP_COMMAND.EXIT_AUTOMATIONS, runsAlone ? () => onRuns(false) : onBack);
   const runsPanel = useRunsPanel();
+  const toggleRuns = narrow ? () => onRuns(!runsShown) : runsPanel.onToggle;
   // The form glides to its new middle as the Runs panel comes and goes (pane-motion.tsx).
   const editorLayout = useRef<HTMLDivElement>(null);
   // The name's Escape lets go of the caret and keeps the press, as every field's here does.
   const nameField = useRef<HTMLInputElement>(null);
   // ⌥⌘B shows and hides the Runs panel, as it does a plan's side panel.
-  useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, runsPanel.onToggle);
+  useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, toggleRuns);
   // A link to a run shows the Runs panel it is listed in, once each time it is opened, so a fold after it stands.
   const showRuns = useRef(runsPanel.onShow);
   showRuns.current = runsPanel.onShow;
@@ -1735,72 +1796,87 @@ export function AutomationEditor({
       });
     },
   );
+  const runsRead = {
+    mine: automation === undefined || automation.mine === true,
+    created: automation !== undefined,
+    automationId: automation?.id,
+    linkedRun,
+    runs: runs.read,
+    onRetry: runs.reload,
+    onOpenAgent,
+  };
   return (
-    <div className="automations-view">
-      <EditorToolbar
-        automation={automation}
-        codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
-        dirty={dirty}
-        saving={saving}
-        onBack={onBack}
-        onSave={save}
-        onToggle={toggle}
-        onDelete={deletion.ask}
-        running={running}
-        onRunNow={runNow}
-        runsPanel={runsPanel}
-      />
-      <div ref={editorLayout} className="automation-editor-layout">
-        <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">
-          <div className="automation-editor">
-            <TextField
-              ref={nameField}
-              label="Automation name"
-              size={TEXT_FIELD_SIZE.TITLE}
-              placeholder="Untitled automation"
-              value={draft.name}
-              onEscape={() => nameField.current?.blur()}
-              onChange={(name) => editDraft({ name })}
-            />
-            {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
-              <p className="error-message automation-form-problem" role="alert">
-                {problems[DRAFT_FIELD.NAME]}
-              </p>
-            ) : null}
-            {refusal === undefined ? null : (
-              <p className="error-message automation-save-refusal" role="alert">
-                {refusal}
-              </p>
-            )}
-            <EditorForm
-              draft={draft}
-              automation={automation}
-              writes={writes}
-              problems={shownProblems ? problems : {}}
-              taskBacked={taskBacked}
-              workspace={workspace}
-              offersOwner={offersOwner}
-              repositories={repositories}
-              shownSecret={shownSecret}
-              onSecret={setShownSecret}
-              savedAgentId={savedAgentId}
-              codeReviewOn={codeReviewOn}
-              onDraft={editDraft}
-            />
-          </div>
-        </DetailPage>
-        <AutomationRunsPanel
-          panel={runsPanel}
-          mine={automation === undefined || automation.mine === true}
-          created={automation !== undefined}
-          automationId={automation?.id}
-          linkedRun={linkedRun}
-          runs={runs.read}
-          onRetry={runs.reload}
-          onOpenAgent={onOpenAgent}
+    <div ref={screen} className="automations-view">
+      <div className="automation-editor-screen" hidden={hidden.list}>
+        <EditorToolbar
+          automation={automation}
+          codeReview={codeReviewOn && readCodeReviewSettings(draft.prompt) !== undefined}
+          dirty={dirty}
+          saving={saving}
+          onBack={onBack}
+          onSave={save}
+          onToggle={toggle}
+          onDelete={deletion.ask}
+          running={running}
+          onRunNow={runNow}
+          runs={{
+            shown: runsPanel.open,
+            screen: narrow ? runsScreen : undefined,
+            onPress: toggleRuns,
+          }}
         />
-        <PaneGlide root={editorLayout} layout={{ runsOpen: runsPanel.open }} />
+        <div ref={editorLayout} className="automation-editor-layout">
+          <DetailPage frame={PAGE_FRAME.TOOLBAR} label="Automation">
+            <div className="automation-editor">
+              <TextField
+                ref={nameField}
+                label="Automation name"
+                size={TEXT_FIELD_SIZE.TITLE}
+                placeholder="Untitled automation"
+                value={draft.name}
+                onEscape={() => nameField.current?.blur()}
+                onChange={(name) => editDraft({ name })}
+              />
+              {shownProblems && problems[DRAFT_FIELD.NAME] !== undefined ? (
+                <p className="error-message automation-form-problem" role="alert">
+                  {problems[DRAFT_FIELD.NAME]}
+                </p>
+              ) : null}
+              {refusal === undefined ? null : (
+                <p className="error-message automation-save-refusal" role="alert">
+                  {refusal}
+                </p>
+              )}
+              <EditorForm
+                draft={draft}
+                automation={automation}
+                writes={writes}
+                problems={shownProblems ? problems : {}}
+                taskBacked={taskBacked}
+                workspace={workspace}
+                offersOwner={offersOwner}
+                repositories={repositories}
+                shownSecret={shownSecret}
+                onSecret={setShownSecret}
+                savedAgentId={savedAgentId}
+                codeReviewOn={codeReviewOn}
+                onDraft={editDraft}
+              />
+            </div>
+          </DetailPage>
+          {narrow ? null : <AutomationRunsPanel panel={runsPanel} {...runsRead} />}
+          <PaneGlide root={editorLayout} layout={{ runsOpen: !narrow && runsPanel.open }} />
+        </div>
       </div>
+      {narrow ? (
+        <AutomationRunsScreen
+          id={runsScreen}
+          name={automation === undefined ? NEW_AUTOMATION : automation.name}
+          hidden={hidden.item}
+          onBack={() => onRuns(false)}
+          {...runsRead}
+        />
+      ) : null}
       <ConfirmDialog
         confirm={leaving}
         question={{

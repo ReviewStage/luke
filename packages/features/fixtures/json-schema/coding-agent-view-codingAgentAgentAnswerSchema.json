@@ -287,7 +287,8 @@
             "message-too-long",
             "agent-not-ready",
             "agent-retired",
-            "plan-archived"
+            "plan-archived",
+            "not-permitted"
           ]
         },
         "unreached": {
@@ -339,6 +340,86 @@
                   "type": "string",
                   "enum": [
                     "gone"
+                  ]
+                },
+                "repository": {
+                  "type": "string",
+                  "maxLength": 140
+                }
+              },
+              "required": [
+                "reason",
+                "repository"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "no-token"
+                  ]
+                },
+                "repository": {
+                  "type": "string",
+                  "maxLength": 140
+                }
+              },
+              "required": [
+                "reason",
+                "repository"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "token-invalid"
+                  ]
+                },
+                "repository": {
+                  "type": "string",
+                  "maxLength": 140
+                }
+              },
+              "required": [
+                "reason",
+                "repository"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "token-no-access"
+                  ]
+                },
+                "repository": {
+                  "type": "string",
+                  "maxLength": 140
+                }
+              },
+              "required": [
+                "reason",
+                "repository"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "reason": {
+                  "type": "string",
+                  "enum": [
+                    "token-cannot-push"
                   ]
                 },
                 "repository": {

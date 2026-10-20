@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
@@ -12,7 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { useAppCommand } from "../app-commands.js";
 import { OpenPersonProvider } from "../person-door.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPortAnswering, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { SidebarFoot } from "./sidebar-foot.js";
@@ -37,11 +37,10 @@ let sent: { kind: string }[] = [];
 
 beforeEach(() => {
   sent = [];
-  fakeAppBridge({
-    act: (request: { kind: string }) => {
-      sent.push({ kind: request.kind });
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-    },
+  fakeAppBridge({});
+  fakeActPortAnswering((request) => {
+    sent.push({ kind: request.kind });
+    return Promise.resolve(undefined);
   });
   handCapabilities(DESKTOP_CAPABILITIES);
 });
@@ -52,6 +51,13 @@ afterEach(() => {
   document.head.innerHTML = "";
   vi.restoreAllMocks();
 });
+
+/** Lets the window's document, handed through the bridge's promise, reach what is drawn. */
+async function stateArrived(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
 
 /** The Help menu's commands, offered as `App` offers them, each press written down. */
 function HelpOffers({ ran }: { ran: string[] }): null {
@@ -169,8 +175,9 @@ function dialogButton(label: string): HTMLButtonElement {
   return button ?? assert.fail(`the dialog offers ${label}`);
 }
 
-test("the account opens its menu: who is signed in, then Settings, the Help menu's offers, Contact us, and Log out, parted by rules", () => {
+test("the account opens its menu: who is signed in, then Settings, the Help menu's offers, Contact us, and Log out, parted by rules", async () => {
   const button = mount(DEAN);
+  await stateArrived();
   act(() => button.click());
 
   assert.deepEqual(accountMenuLines(), [
@@ -188,9 +195,10 @@ test("the account opens its menu: who is signed in, then Settings, the Help menu
   ]);
 });
 
-test("the account's menu offers the Help menu's own commands and opens the changelog, each closing the menu", () => {
+test("the account's menu offers the Help menu's own commands and opens the changelog, each closing the menu", async () => {
   const ran: string[] = [];
   const button = mount(DEAN, { ran });
+  await stateArrived();
   for (const label of ["Send feedback", "Suggest a feature", "Keyboard shortcuts", "Changelog"]) {
     act(() => button.click());
     act(() => accountItem(label).click());
@@ -205,8 +213,23 @@ test("the account's menu offers the Help menu's own commands and opens the chang
   assert.deepEqual(sent, [{ kind: ACT_KIND.UPDATE_OPEN_CHANGELOG }]);
 });
 
-test("Contact us flies out its own menu beside the account's, which stands whole behind it", () => {
+test("in a browser, which is no installed app, the account's menu offers no Keyboard shortcuts, since no page lists them there", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP));
   const button = mount(DEAN);
+  await stateArrived();
+  act(() => button.click());
+
+  assert.deepEqual(accountMenuLines().slice(4, 8), [
+    "Changelog",
+    "Send feedback",
+    "Suggest a feature",
+    "Contact us",
+  ]);
+});
+
+test("Contact us flies out its own menu beside the account's, which stands whole behind it", async () => {
+  const button = mount(DEAN);
+  await stateArrived();
   act(() => button.click());
   const contact = accountItem("Contact us");
   act(() =>
@@ -305,8 +328,9 @@ test("a Log out that fails keeps the dialog up saying so, and the account still 
   assert.match(dialog()?.querySelector('[role="alert"]')?.textContent ?? "", /could not log out/u);
 });
 
-test("signed out, the account says so and its menu names no one and offers no Log out", () => {
+test("signed out, the account says so and its menu names no one and offers no Log out", async () => {
   const button = mount({ status: ACCOUNT_STATUS.SIGNED_OUT });
+  await stateArrived();
 
   assert.match(button.textContent ?? "", /Not signed in$/u);
   act(() => button.click());

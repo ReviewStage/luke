@@ -10,7 +10,7 @@ const QUIT_ANSWER = 0;
 const END_CALL_AND_QUIT: MessageBoxOptions = {
   type: "warning",
   message: "End the call and quit Luke?",
-  buttons: ["End Call and Quit", "Cancel"],
+  buttons: ["End call and quit", "Cancel"],
   defaultId: QUIT_ANSWER,
   cancelId: 1,
 };

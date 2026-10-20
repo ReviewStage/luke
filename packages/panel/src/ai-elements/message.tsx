@@ -3,7 +3,7 @@ import { BUTTON_SIZE, cn, IconButton } from "@luke/ui";
 import { QUOTE_CLASS } from "@luke/ui/quote-face";
 import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
-import { type ComponentProps, type HTMLAttributes, memo, type ReactNode } from "react";
+import { type ComponentProps, type HTMLAttributes, memo, type ReactNode, useState } from "react";
 import { type Components, Streamdown } from "streamdown";
 import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
 import { Tooltip } from "../tooltip.js";
@@ -27,9 +27,8 @@ import { Tooltip } from "../tooltip.js";
  * panel of fixed height, where the log and the messages are flex items of
  * definite size, that `height: 100%` resolved against the message's own
  * column, so every text part asked for the whole column and the parts
- * beside it were shrunk to slivers. The content stacks as blocks here, and
- * `apps/desktop/src/renderer/planning/transcript-layout.test.ts` holds the
- * rule. And one more: the registry's content clips with `overflow-hidden`,
+ * beside it were shrunk to slivers. The content stacks as blocks here.
+ * And one more: the registry's content clips with `overflow-hidden`,
  * which cut the keyboard's ring off every fold, tool line, picture, and chip
  * a reply holds, so it clips past the ring instead (base.css's room).
  */
@@ -38,10 +37,37 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
 };
 
-export function Message({ className, from, ...props }: MessageProps): ReactNode {
+/** What a tap may land on in a message that is a control of its own, which a tap works rather than showing the message's actions. */
+const OWN_CONTROL =
+  "a, button, summary, input, textarea, select, label, [role='button'], [role='tab']";
+
+/** The media query a screen with no hover answers, the one the stylesheet shows a tapped message's actions under. */
+const NO_HOVER = "(hover: none)";
+
+/**
+ * A screen with no hover has none to show a message's actions by, so a tap
+ * on the message, anywhere but a control of its own, shows them, and another
+ * hides them again (`.transcript-message[data-actions-shown]`, tasks.css,
+ * under the same `(hover: none)`). The screen is asked at the tap, never
+ * kept, so a mouse changes nothing, and a press that ends a selection of the
+ * message's words leaves them be.
+ */
+export function Message({ className, from, onClick, ...props }: MessageProps): ReactNode {
+  const [actionsShown, setActionsShown] = useState(false);
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: a tap stands in for the hover a finger lacks; the keyboard reaches the actions themselves, which show while they hold it.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: as above, the keyboard needs no key here, since focusing an action shows the bar.
     <div
       className={cn("transcript-message", from === "user" ? "is-user" : "is-assistant", className)}
+      data-actions-shown={actionsShown ? "true" : undefined}
+      onClick={(event) => {
+        onClick?.(event);
+        // A tap spent on something of the message's own, a hint it opened, shows nothing more.
+        if (event.defaultPrevented || !window.matchMedia(NO_HOVER).matches) return;
+        if (window.getSelection()?.isCollapsed === false) return;
+        if (event.target instanceof Element && event.target.closest(OWN_CONTROL) !== null) return;
+        setActionsShown((shown) => !shown);
+      }}
       {...props}
     />
   );

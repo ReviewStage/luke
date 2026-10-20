@@ -1,4 +1,6 @@
+import { browserClient } from "@luke/features/contract/browser-client";
 import type { AdminDayAccount, AdminDayDetail } from "@luke/service/admin/admin-day";
+import type { AdminDayQuery } from "@luke/service/admin/http";
 import {
   DATA_TABLE_COLUMN_KIND,
   DATA_TABLE_MIN_WIDTH,
@@ -15,15 +17,18 @@ import { HideAdminsToggle, Refreshing } from "../chrome/controls";
 import { DayNote } from "../chrome/notes";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { dayReadPath } from "../routing";
+import { dayReadQuery } from "../routing";
 import { SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 const DAY_ERROR = "The day endpoint did not answer.";
 
-// SAFETY: a 200 from the admin day endpoint is an AdminDayDetail body by its contract.
-const readDayDetail: AdminReader<AdminDayDetail> = async (response) =>
-  (await response.json()) as AdminDayDetail;
+/** One day's accounts, as the admin day procedure answers them. */
+const readDayDetail =
+  (query: AdminDayQuery): AdminReader<AdminDayDetail> =>
+  async (signal) =>
+    // SAFETY: the admin day procedure answers an AdminDayDetail (`@luke/service/admin/admin-day`), which the contract cannot name.
+    (await browserClient.admin.day(query, { signal })) as AdminDayDetail;
 
 /** What the day's page says it is, under the heading the address already names. */
 const DAY_DESCRIPTION = "One UTC day of hosted-tier calls";
@@ -101,9 +106,10 @@ export function DayScreen({
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
+  const query = dayReadQuery(day, hideAdmins);
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    dayReadPath(day, hideAdmins),
-    readDayDetail,
+    { procedure: ADMIN_READ.DAY, query: query },
+    readDayDetail(query),
     DAY_ERROR,
     { keeps: (shown) => shown.day === day },
   );
@@ -115,8 +121,6 @@ export function DayScreen({
         <PageSkeleton
           title={formatDayHeading(day)}
           description={DAY_DESCRIPTION}
-          account={account}
-          onSignOut={signOut}
           controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
           back={{ tab: "dashboard", label: "Overview", onBack }}
           shapes={DAY_SHAPES}
@@ -144,8 +148,6 @@ export function DayScreen({
         <AdminPage
           title={formatDayHeading(detail.day)}
           description={`${DAY_DESCRIPTION}${stillFilling ? " — still filling" : ""}`}
-          account={account}
-          onSignOut={signOut}
           controls={<HideAdminsToggle checked={hideAdmins} onChange={onHideAdminsChange} />}
         >
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>

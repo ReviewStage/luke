@@ -10,7 +10,10 @@ const TRAFFIC_LIGHTS_END = "79px";
 
 beforeAll(() => {
   const sheet = document.createElement("style");
-  sheet.textContent = readFileSync(`${__dirname}/desktop.css`, "utf8");
+  // The shell's sheet first, as index.css lays it: the title bar's row and its names are its.
+  sheet.textContent = ["shell.css", "desktop.css"]
+    .map((name) => readFileSync(`${__dirname}/${name}`, "utf8"))
+    .join("\n");
   document.head.append(sheet);
 });
 
@@ -20,7 +23,14 @@ afterEach(() => {
 });
 
 /** The panel's sheets that declare a drag region. */
-const DRAG_SHEETS = ["call.css", "desktop.css", "sign-in.css", "tasks.css", "tooltip.css"];
+const DRAG_SHEETS = [
+  "call.css",
+  "shell.css",
+  "desktop.css",
+  "sign-in.css",
+  "tasks.css",
+  "tooltip.css",
+];
 
 /**
  * Every rule of those sheets that declares a drag region, in order, read from

@@ -2,7 +2,7 @@
   "slack": 0.05,
   "sentrySlackBytes": 1024,
   "gzipBytes": {
-    "renderer/panel.js": 998186,
+    "renderer/panel.js": 1051547,
     "renderer/voice.js": 372131,
     "renderer/call.js": 431188,
     "renderer/whiteboard.js": 441172,

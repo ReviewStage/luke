@@ -27,7 +27,8 @@
             "message-too-long",
             "agent-not-ready",
             "agent-retired",
-            "plan-archived"
+            "plan-archived",
+            "not-permitted"
           ]
         }
       },

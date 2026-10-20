@@ -33,6 +33,7 @@ import {
   type ComposerMark,
   type ComposerQuote,
   type ComposerTrigger,
+  type MentionDrawer,
   type MentionNode,
 } from "./contract.js";
 import {
@@ -547,7 +548,7 @@ function quoteNode(drawQuote: ComposerEditorProps["drawQuote"]) {
 function composerExtensions(
   drawChip: ComposerEditorProps["drawChip"],
   known: (name: string) => boolean,
-  drawMention: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
+  drawMention: MentionDrawer | undefined,
   drawQuote: ComposerEditorProps["drawQuote"],
 ): AnyExtension[] {
   const kit = StarterKit.configure({
@@ -924,7 +925,7 @@ export function mountComposer(host: HTMLElement, props: ComposerEditorProps): Co
   const guard = guardPlugin(state, props);
   const editor = new Editor({
     element: host,
-    // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`, `../index.html`) refuses; the owner's stylesheet styles the box instead.
+    // Note that TipTap's own base rules would go in as an inline `<style>`, which the panel's policy (`style-src 'self'`: the desktop's `renderer/index.html` and the web's `vercel.json`) refuses; the owner's stylesheet styles the box instead.
     injectCSS: false,
     extensions: [
       ...composerExtensions(

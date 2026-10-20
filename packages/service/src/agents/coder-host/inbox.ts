@@ -1,28 +1,28 @@
 import { posix } from "node:path";
 import type { DatabaseServices } from "@luke/database/core/query";
+import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import {
-  codeLinesReadable,
   INBOX_ANSWER_LEAD,
-  INBOX_BLOCK,
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
   INBOX_BOUNDS,
   INBOX_CLOSE_LEAD,
   INBOX_FIELD,
   INBOX_MESSAGE_AUTHOR,
   INBOX_MESSAGE_LEAD,
-  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_TOOL,
-  type InboxChoice,
-  type InboxForm,
+  type InboxAnswers,
+  type InboxAsk,
+  type InboxField,
   type InboxItem,
   type InboxMessage,
-  type InboxPost,
+  type InboxReadAsk,
   type InboxReply,
-  type InboxReplyInput,
-  inboxCloseInputSchema,
-  inboxPostInputSchema,
+  type InboxThreadPostInput,
   inboxReadInputSchema,
-  inboxReplyInputSchema,
+  inboxThreadPostInputSchema,
+  inboxWithdrawInputSchema,
 } from "@luke/features/inbox-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
@@ -33,141 +33,143 @@ import {
   closeInboxItem,
   INBOX_POST_REFUSAL,
   type InboxAgent,
-  type InboxImage,
-  type InboxNamedImage,
+  type InboxBodyPicture,
   type InboxPostRefusal,
-  postInboxItem,
-  replyInboxItem,
+  postInboxThread,
 } from "../../inbox/inbox-store.js";
 import { CODER } from "./bounds.js";
-import {
-  type InboxSandboxDoor,
-  readInboxImage,
-  readSandboxImage,
-  type SandboxImageTerms,
-} from "./inbox-image.js";
+import { type InboxSandboxDoor, readSandboxImage, type SandboxImageTerms } from "./inbox-image.js";
 
 /**
- * inbox.ts -- the coding agent's four inbox tools: post an item for the developer, close one, read them all, and reply on one's thread.
+ * inbox.ts -- the coding agent's three inbox tools: post a message on a thread of the developer's inbox, withdraw a thread's open ask, and read every thread back.
  *
  * What an agent cannot do or decide alone, a product choice, an approval
  * of a risky step, a question, or something only the developer can do by
  * hand such as a setting on GitHub, and whatever is ready for the developer
- * to look at, review, or test by hand, such as a pull request, goes in the inbox rather
- * than in a message, where it is lost in the transcript: an item of its own
- * on the service (`inbox-store.ts`), drawn on the task's Inbox tab until the
- * developer answers it or the agent takes it back. An item is a title, the
- * blocks of context under it, and the response it asks for, each a closed
- * shape the wire declares (`@luke/features/inbox-wire`). An image block
- * names a file in the agent's sandbox, a screenshot of what it rendered,
- * which a post reads there first (`inbox-image.ts`) and the store keeps as
- * an attachment of the item's; a file that is not there, not an image, or
- * past the bound refuses the whole post with the path named. The agent names
- * each item by a key of its own and keeps it current by posting under the
- * same key again, which never posts it twice. No call holds the turn, since
- * a coder session takes no input mid-turn
- * (`brain-host/eve-sessions.ts`'s `requestInput`): an answer the agent
- * needs to hear reaches it as one of the developer's messages, and so does
- * any carrying a note the developer typed or a file they attached, the
- * files with it; a bare press on one it does not need is kept for it to
- * read, and the agent reads back by name which files an answer carried.
- * Beside its answer an item holds a thread: a member of the workspace may
- * add a message to it at any point, which reaches the agent as one of the
- * developer's messages, and the agent replies on it by key, its words with
- * pictures from its sandbox, without changing what the item asks or where
- * it stands; it reads every item's thread back in order. Every call answers with the agent's
- * whole inbox as it stands, answers and all, so the model holds its items
- * whatever its context has lost to compaction. A worker gets none of these
- * tools, because the developer answers the agent it works for.
+ * to look at, review, or test by hand, such as a pull request, goes in the
+ * inbox rather than in a message, where it is lost in the transcript: a
+ * thread of its own on the service (`inbox-store.ts`), drawn on the task's
+ * Inbox tab. The agent names each thread by a key of its own. A post is one
+ * message on it, one Markdown body with its chips, its cards, and its
+ * pictures where they belong, which may end with an ask, `decide`, `do`, or
+ * `answer` (`@luke/features/inbox-wire`); the first post under a key opens
+ * the thread and names its title, and a later one adds a message, its ask
+ * replacing the one open. A picture is drawn in the body by the path of
+ * its file in the agent's sandbox, a screenshot of what it rendered, which
+ * a post reads there first (`inbox-image.ts`) and the store keeps as a file
+ * of the message, writing its address in the path's place; a file that is
+ * not there, not an image, or past the bound refuses the whole post with
+ * the path named. A post that asks nothing is a note, or the agent's reply
+ * on the thread, since replying never answers: a member's message on the
+ * thread reaches the agent as one of the developer's messages, and so does
+ * an answer it waits on. No call holds the turn, since a coder session
+ * takes no input mid-turn (`brain-host/eve-sessions.ts`'s `requestInput`).
+ * Every call answers with the agent's whole inbox as it stands, each
+ * thread's messages in order with their asks and answers, so the model
+ * holds its threads whatever its context has lost to compaction. A worker
+ * gets none of these tools, because the developer answers the agent it
+ * works for.
  */
+
+/** The inbox's picture bound in megabytes, as the words the model reads say it. */
+const MAX_PICTURE_MB = (INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1);
 
 /** The tools as the model is shown them (`apps/dev/tools/`): each one's name, words, and input. */
 export const INBOX_TOOLS = {
   POST: {
     name: INBOX_TOOL.POST,
     description:
-      "Put something you need from the developer, or something ready for them to look at or review, such as a pull request " +
-      "you opened or a page you showed, in their inbox, apart from your transcript, where they answer it. " +
-      "key is your own short lowercase slug for the item, such as branch-protection; posting under a key you used before " +
-      "replaces that item and opens it again, so keep an item current under its key and never post it twice. " +
-      "blocks is the context they need to act, in order: markdown blocks of short Markdown, a file, a pull request, or an " +
-      "issue in it written as a Markdown link to its page, such as [store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), " +
-      "so Luke draws it as a chip; link blocks naming a page, " +
-      "such as the GitHub settings page a to-do is done on, and code blocks pointing at the exact lines a decision is about: " +
-      `repo is your repository as owner/name, path is from its root, startLine to endLine spans at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, ` +
-      "and sha is the full 40-character commit you read them at, one already on GitHub; they see those lines as GitHub holds them at that commit; " +
-      "and image blocks showing them a picture, such as a screenshot " +
-      "of a UI you rendered: path is the file's path in your sandbox, relative to the checkout or absolute, a PNG, JPEG, " +
-      `or WebP of at most ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB, and alt says in a sentence what it shows. ` +
-      "response is what you ask of them: choice (two to six options, each a short label and an optional detail; name the " +
-      "label you recommend; multiple lets them pick several), approval (a yes or no on one step you propose), text (an open " +
-      "answer in their words), task (a to-do: something only they can do by hand, such as changing a GitHub setting, adding a secret, " +
-      "or testing by hand what you could not test yourself: say exactly what to do in the blocks), form (one to eight typed fields, text, number, select with its options and the one you recommend, or " +
-      "boolean, each named by its label and required where it must be filled; never ask for a credential or a secret in a " +
-      "form, since the answer reaches your transcript: that is a to-do the developer does by hand), or none (something they " +
-      "should know or look at; they acknowledge it). needsReply is whether you need to hear the answer as a message; set it false for a to-do you only " +
-      "need done or an item that asks nothing, and its answer is kept for you to read, though a note they type or a file they attach with it still reaches you as a message. " +
-      `An answer you need reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
-      `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open items. The call answers with your whole inbox as it stands.`,
-    inputSchema: inboxPostInputSchema,
+      "Put something in the developer's inbox, apart from your transcript: something you need from them, or something ready for them to look at or review, " +
+      "such as a pull request you opened or a page you showed. Each post is one message on a thread under key, your own short lowercase slug such as branch-protection. " +
+      "The first post under a key opens its thread and must name its title; a later post under the same key adds a message to that thread, never a second one, " +
+      "and a title it names renames the thread only where the post asks. " +
+      `body is the message, one Markdown body of at most ${INBOX_BOUNDS.MAX_MESSAGE_CHARS} characters. ` +
+      "Write a file, a pull request, or an issue in it as a mention, such as [@store.ts](https://github.com/<owner>/<name>/blob/HEAD/<path>), so Luke draws it as a chip. " +
+      "Put a link alone on its own line to show it as a card: a pull request, an issue, a page such as the GitHub settings page a to-do is done on, " +
+      "or the exact lines a decision is about, as a blob link into your repository at the full 40-character commit you read them at, one already on GitHub, " +
+      `ending #L<start>-L<end>, at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, which they see as GitHub holds them at that commit. ` +
+      `Draw a picture where it belongs, such as a screenshot of a UI you rendered, as ![alt](<path> "caption"): path is the file's path in your sandbox, ` +
+      `relative to the checkout or absolute, a PNG, JPEG, or WebP of at most ${MAX_PICTURE_MB} MB, at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} a message; ` +
+      "alt says in a sentence what it shows, and pictures written next to each other stand side by side. " +
+      "ask is what the message asks of them, which ends it: " +
+      `decide (two to ${INBOX_BOUNDS.MAX_OPTIONS} options, each a short label and an optional detail; name the label you recommend; multiple lets them pick several; ` +
+      "for a go-ahead on one step you propose, two short options such as Approve and Request changes), " +
+      "do (a to-do: something only they can do by hand, such as changing a GitHub setting, adding a secret, or testing by hand what you could not test yourself; " +
+      `its steps, at most ${INBOX_BOUNDS.MAX_STEPS}, say exactly what to do, and they tick each before they mark it done, or say they couldn't), ` +
+      `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options, or boolean, each named by its label and required where it must be filled; ` +
+      "or no fields for an answer in their own words); never ask for a credential or a secret in a form, since the answer reaches your transcript: " +
+      "that is a do the developer does by hand. A post without ask asks nothing: something they should only know, or your reply on the thread. " +
+      "A thread holds one open ask, and a newer ask replaces it. " +
+      "waits is whether you need to hear the answer as a message: decide and answer wait unless you set it false, and do waits only where you set it true. " +
+      "An answer you do not wait for is kept for you to read, though one carrying their words or a file still reaches you as a message. " +
+      `An answer reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
+      `Replying never answers: a member may write on a thread at any point, which reaches you as a developer's message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key; ` +
+      "answer it, or follow up after an answer, with a post under the key that asks nothing unless what you need changed. " +
+      `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your whole inbox as it stands.`,
+    inputSchema: inboxThreadPostInputSchema,
   },
-  CLOSE: {
-    name: INBOX_TOOL.CLOSE,
+  WITHDRAW: {
+    name: INBOX_TOOL.WITHDRAW,
     description:
-      "Take an item of yours out of the developer's inbox, by its key, with why: you no longer need it, " +
-      "you found the answer yourself, or you checked that the to-do is done. The call answers with your whole inbox as it stands.",
-    inputSchema: inboxCloseInputSchema,
+      "Withdraw the open ask of one of your threads, by its key, with why: you no longer need it, you found the answer yourself, " +
+      "or you checked that the to-do is done. The thread and its messages stay; refused where it holds no open ask, such as one already answered. " +
+      "The call answers with your whole inbox as it stands.",
+    inputSchema: inboxWithdrawInputSchema,
   },
   READ: {
     name: INBOX_TOOL.READ,
     description:
-      "Read every item you have put in the developer's inbox as it stands now: what is still open, what they answered and how, " +
-      "and what was closed: by you, with your reason, or by a member without an answer, whom closedBy names. " +
-      `A member's close of an item you need a reply on reaches you as a developer's message whose first line starts "${INBOX_CLOSE_LEAD}" and names the key: ` +
-      "take it as their not wanting what the item asked. " +
-      "Read it before you rely on a to-do you posted without needsReply being done.",
+      "Read your threads in the developer's inbox as they stand now: every one still asking, whole, and the latest settled ones by their last messages and their latest ask and answer; " +
+      `a thread longer than ${INBOX_BOUNDS.MAX_MESSAGES_READ} messages reads its first, its open ask, and its latest ${INBOX_BOUNDS.MAX_MESSAGES_READ}. ` +
+      "Each message reads in order with who wrote it, you or a member by name, the ask it ends with and where that stands " +
+      "(open, answered, replaced by a newer ask, or withdrawn, with your reason), and the answer a member's message carries. " +
+      "A member may close a thread without answering, which withdraws its ask with no reason, and closedBy names them; " +
+      `where you waited on it, that reaches you as a developer's message whose first line starts "${INBOX_CLOSE_LEAD}" and names the key: ` +
+      "take it as their not wanting what the ask asked. Read it before you rely on a do you posted without waits being done.",
     inputSchema: inboxReadInputSchema,
-  },
-  REPLY: {
-    name: INBOX_TOOL.REPLY,
-    description:
-      "Reply on the thread of one of your inbox items, by its key, as a comment the developer reads under the item: " +
-      `to answer a member's message on it, which reaches you as a developer's message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key, ` +
-      "or to follow up on an item after it was answered, such as saying what you did with the answer or that the to-do turned out not to be needed. " +
-      "text is your reply in short Markdown, a file, a pull request, or an issue in it written as a Markdown link to its page so Luke draws it as a chip; " +
-      `images are pictures that show what you mean, at most ${INBOX_BOUNDS.MAX_REPLY_IMAGES}, each by its path in your sandbox, relative to the checkout or absolute, ` +
-      `a PNG, JPEG, or WebP of at most ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB. ` +
-      `A reply works on an item whatever its status, leaves its status and its answer as they stand, and moves it to the top of the inbox. ` +
-      `When the item itself changes, what you need or what it asks, post it again with ${INBOX_TOOL.POST} under the same key instead. ` +
-      "The call answers with your whole inbox as it stands.",
-    inputSchema: inboxReplyInputSchema,
   },
 } as const;
 
-/** One message of an item's thread as the agent reads it back: who wrote it, you or a member by name, its words, and its files by name. */
+/**
+ * An ask as the agent reads it back: whole while it is open, since the
+ * agent still acts on it, and once settled its type and where it stands,
+ * and an answered `do`'s steps, which the answer names by their places alone.
+ */
+type AgentAskLine =
+  | InboxReadAsk
+  | (Pick<InboxReadAsk, "type" | "status" | "withdrawnReason"> & {
+      readonly steps?: readonly string[];
+    });
+
+/** One message of a thread as the agent reads it back: who wrote it, you or a member by name, its words, its files by name, its ask, and the answer it carries. */
 interface AgentThreadLine {
   readonly from: string;
   readonly text: string;
   readonly files?: readonly string[];
+  readonly ask?: AgentAskLine;
+  readonly answers?: Omit<InboxAnswers, "ask">;
 }
 
-/** One item as the agent reads it back: its key, title, where it stands, what it asks while open, and the answer or the reason where there is one. */
+/** One thread as the agent reads it back: its key, title, where it stands, whether the agent waits on its open ask, and its messages in order. */
 interface AgentInboxLine {
   readonly key: string;
   readonly title: string;
   readonly status: InboxItem["status"];
-  /** What an open item asks, as the agent posted it. */
+  /** Whether an answer to the open ask reaches the agent as a message, on a thread still asking. */
+  readonly waits?: boolean;
+  /** How many earlier messages a settled thread's read leaves out. */
+  readonly earlier?: number;
+  readonly thread: readonly AgentThreadLine[];
+  /** The member who closed the thread without answering, by name: a former member's where their account is gone. */
+  readonly closedBy?: string;
+  /** What an item from before threads asks while open, which no message of its carries. */
   readonly blocks?: InboxItem["blocks"];
   readonly response?: InboxItem["response"];
-  readonly needsReply?: boolean;
+  /** How an item from before threads was answered, and the names of the files the answer carried. */
   readonly answer?: InboxReply;
-  /** The names of the files the answer carried, in the order they were attached. */
   readonly answerFiles?: readonly string[];
+  /** Why an item from before threads was closed. */
   readonly closedReason?: string;
-  /** The member who closed the item without answering it, by name: a former member's where their account is gone. */
-  readonly closedBy?: string;
-  /** The item's thread, oldest first, where anyone wrote on it. */
-  readonly thread?: readonly AgentThreadLine[];
 }
 
 /** What a call answers, as the model reads it: the agent's inbox as it stands, or why the call did nothing beside it. */
@@ -185,43 +187,39 @@ export type InboxToolResult =
 /** Why a call did nothing, in the words the model reads. */
 export const INBOX_REFUSAL = {
   UNREADABLE_POST:
-    "Not posted: the item does not read. key is a lowercase slug of letters, digits, dots, dashes, and underscores; " +
-    "blocks are markdown, link, code, or image, a code block's sha the full 40-character lowercase commit, an image naming its path and alt; " +
-    "response is one of choice, approval, text, task, form, or none; " +
-    `a choice and a select field offer between two and ${INBOX_BOUNDS.MAX_OPTIONS} options.`,
-  UNREADABLE_CLOSE: "Not closed: name the item's key and why you close it.",
-  TOO_MANY: `Not posted: you hold ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open items already. Close one you no longer need first.`,
-  NO_ITEM: "Not closed: you have no item under that key.",
-  NO_OPTIONS: "Not posted: a choice's options each stand under a label of their own.",
+    "Not posted: the post does not read. key is a lowercase slug of letters, digits, dots, dashes, and underscores; " +
+    `body is Markdown of at most ${INBOX_BOUNDS.MAX_MESSAGE_CHARS} characters; title is one line of at most ${INBOX_BOUNDS.MAX_TITLE_CHARS}; ` +
+    `ask is decide with two to ${INBOX_BOUNDS.MAX_OPTIONS} options, do with at most ${INBOX_BOUNDS.MAX_STEPS} steps, ` +
+    `or answer with one to ${INBOX_BOUNDS.MAX_FIELDS} fields or none.`,
+  NO_TITLE:
+    "Not posted: you have no thread under that key, and the first post under a key names its title.",
+  TOO_MANY: `Not posted: you hold ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks already. Withdraw one you no longer need first.`,
+  TOO_MANY_PICTURES: `Not posted: a message draws at most ${INBOX_BOUNDS.MAX_MESSAGE_PICTURES} pictures from your sandbox.`,
+  NO_OPTIONS: "Not posted: a decide's options each stand under a label of their own.",
   UNKNOWN_RECOMMENDATION: "Not posted: recommended names no option's label.",
-  FIELD_LABELS: "Not posted: a form names each field by a label of its own.",
+  FIELD_LABELS: "Not posted: an answer names each field by a label of its own.",
   SELECT_OPTIONS:
     "Not posted: a select field offers its options, each once, and no other field offers options.",
-  SELECT_RECOMMENDATION:
-    "Not posted: a select field's recommended names one of its options, and no other field recommends one.",
-  CODE_REPOSITORY:
-    "Not posted: a code block points at lines of your own repository, named as owner/name.",
-  CODE_LINES: `Not posted: a code block's endLine is at or after its startLine, and it spans at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines.`,
-  UNREADABLE_REPLY:
-    "Not sent: name the key of one of your items, and write text, images, or both; " +
-    `text is at most ${INBOX_BOUNDS.MAX_MESSAGE_CHARS} characters, and images at most ${INBOX_BOUNDS.MAX_REPLY_IMAGES}, each naming its path.`,
-  NO_REPLY_ITEM: "Not sent: you have no item under that key.",
+  UNREADABLE_WITHDRAW: "Not withdrawn: name the thread's key and why you withdraw its ask.",
+  NO_OPEN_ASK: "Not withdrawn: you have no thread under that key with an open ask.",
   NO_AGENT: "Not done: this conversation is no coding agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
 
-const readPost = readEither(inboxPostInputSchema, { excess: EXCESS_KEYS.DROP });
-const readClose = readEither(inboxCloseInputSchema, { excess: EXCESS_KEYS.DROP });
-const readReply = readEither(inboxReplyInputSchema, { excess: EXCESS_KEYS.DROP });
+/** How many of a settled thread's latest messages its read carries: enough to see what came of it. */
+const SETTLED_MESSAGES_TOLD = 3;
 
-/** How a reply's picture is read from the sandbox: held to the inbox's picture bound, and refused in a reply's own words. */
-const REPLY_IMAGE_TERMS: SandboxImageTerms = {
+const readPost = readEither(inboxThreadPostInputSchema, { excess: EXCESS_KEYS.DROP });
+const readWithdraw = readEither(inboxWithdrawInputSchema, { excess: EXCESS_KEYS.DROP });
+
+/** How a post's picture is read from the sandbox: held to the inbox's picture bound, and refused in a post's own words. */
+const PICTURE_TERMS: SandboxImageTerms = {
   maxBytes: INBOX_BOUNDS.MAX_IMAGE_BYTES,
   refusals: {
-    NO_FILE: "Not sent: an image names no file in your sandbox:",
-    NOT_IMAGE: "Not sent: an image names a file that is not a PNG, JPEG, or WebP image:",
-    TOO_LARGE: `Not sent: an image names a file larger than ${(INBOX_BOUNDS.MAX_IMAGE_BYTES / 1_000_000).toFixed(1)} MB; render it smaller, or at one screen scale:`,
-    UNREADABLE: "Not sent: an image's file could not be read from your sandbox:",
+    NO_FILE: "Not posted: a picture names no file in your sandbox:",
+    NOT_IMAGE: "Not posted: a picture names a file that is not a PNG, JPEG, or WebP image:",
+    TOO_LARGE: `Not posted: a picture names a file larger than ${MAX_PICTURE_MB} MB; render it smaller, or at one screen scale:`,
+    UNREADABLE: "Not posted: a picture's file could not be read from your sandbox:",
   },
 };
 
@@ -231,7 +229,26 @@ function writerOf(message: InboxMessage): string {
   return message.member?.name ?? "a former member";
 }
 
-/** One message of an item's thread as the agent reads it back, its files by name, since a member's reached it with their message and its own it sent. */
+/** An ask as the agent reads it back: whole while open, and its type and standing, with why it was withdrawn, once settled. */
+function askLineOf(ask: InboxReadAsk): AgentAskLine {
+  if (ask.status === INBOX_ASK_STATUS.OPEN) return ask;
+  return {
+    type: ask.type,
+    status: ask.status,
+    ...(ask.withdrawnReason === undefined ? undefined : { withdrawnReason: ask.withdrawnReason }),
+    ...(ask.status === INBOX_ASK_STATUS.ANSWERED && ask.type === INBOX_ASK.DO && "steps" in ask
+      ? { steps: ask.steps }
+      : undefined),
+  };
+}
+
+/** An answer as the agent reads it back: how the member answered, without the id of the message it answers, which is the ask before it. */
+function answersLineOf(answers: InboxAnswers): Omit<InboxAnswers, "ask"> {
+  const { ask: _ask, ...answered } = answers;
+  return answered;
+}
+
+/** One message of a thread as the agent reads it back, its files by name, since a member's reached it with their message and its own it sent. */
 function threadLineOf(message: InboxMessage): AgentThreadLine {
   return {
     from: writerOf(message),
@@ -239,13 +256,15 @@ function threadLineOf(message: InboxMessage): AgentThreadLine {
     ...(message.files === undefined
       ? undefined
       : { files: message.files.map((file) => file.name) }),
+    ...(message.ask === undefined ? undefined : { ask: askLineOf(message.ask) }),
+    ...(message.answers === undefined ? undefined : { answers: answersLineOf(message.answers) }),
   };
 }
 
 /**
  * Who closed an item without answering it, as the agent reads it: the
- * member by name. Note that the agent's own close always says why, so a
- * closed item without a reason or a member is one a member closed whose
+ * member by name. Note that the agent's own withdrawal always says why, so
+ * a closed item without a reason or a member is one a member closed whose
  * account is gone.
  */
 function closerOf(item: InboxItem): Pick<AgentInboxLine, "closedBy"> {
@@ -255,38 +274,70 @@ function closerOf(item: InboxItem): Pick<AgentInboxLine, "closedBy"> {
 }
 
 /**
- * An item as the agent reads it back, an answer's files by their names,
- * since the files themselves reached it with the answer. Note that an open item carries what
- * it asks whole, its blocks, its response, and whether the agent waits to
- * hear back, because compaction may have taken the call that posted it out
- * of the model's context, and an open item is one the agent still acts on;
- * a settled one carries what came of it alone. Every item carries its
- * thread, oldest first, since a member may write on a settled one too.
+ * What an item from before threads carries on itself rather than on a
+ * message: what it asks while open, how it was answered, and why it was
+ * closed. Note that an item posted since carries each on its messages, so
+ * none is repeated where a message asks or answers.
  */
-function lineOf(item: InboxItem): AgentInboxLine {
-  const asks =
-    item.status === INBOX_STATUS.OPEN
-      ? { blocks: item.blocks, response: item.response, needsReply: item.needsReply }
-      : undefined;
+function legacyOf(item: InboxItem, messages: readonly InboxMessage[]): Partial<AgentInboxLine> {
+  if (messages.some((message) => message.ask !== undefined || message.answers !== undefined)) {
+    return {};
+  }
   return {
-    key: item.key,
-    title: item.title,
-    status: item.status,
-    ...asks,
+    ...(item.status === INBOX_STATUS.OPEN
+      ? { blocks: item.blocks, response: item.response }
+      : undefined),
     ...(item.answer === undefined ? undefined : { answer: item.answer }),
     ...(item.answerFiles === undefined
       ? undefined
       : { answerFiles: item.answerFiles.map((file) => file.name) }),
     ...(item.closedReason === undefined ? undefined : { closedReason: item.closedReason }),
+  };
+}
+
+/**
+ * The messages a settled thread's read carries: its latest few, and its
+ * latest ask and latest answer however long ago, which say what came of it
+ * once later words push them out, each in the thread's order.
+ */
+function settledMessages(messages: readonly InboxMessage[]): readonly InboxMessage[] {
+  const latest = (has: (message: InboxMessage) => boolean) => messages.findLast(has);
+  const kept = new Set<InboxMessage | undefined>([
+    latest((message) => message.ask !== undefined),
+    latest((message) => message.answers !== undefined),
+    ...messages.slice(-SETTLED_MESSAGES_TOLD),
+  ]);
+  return messages.filter((message) => kept.has(message));
+}
+
+/**
+ * A thread as the agent reads it back. Note that one still asking carries
+ * its messages whole, as the read holds them, because compaction may have
+ * taken the call that posted its ask out of the model's context and the
+ * agent still acts on it; a settled one carries what `settledMessages`
+ * keeps, and how many it leaves out.
+ */
+function lineOf(item: InboxItem): AgentInboxLine {
+  const messages = item.thread ?? item.messages ?? [];
+  const open = item.status === INBOX_STATUS.OPEN;
+  const told = open ? messages : settledMessages(messages);
+  const earlier = messages.length - told.length;
+  return {
+    key: item.key,
+    title: item.title,
+    status: item.status,
+    ...(open ? { waits: item.needsReply } : undefined),
+    ...(earlier > 0 ? { earlier } : undefined),
+    thread: told.map(threadLineOf),
     ...closerOf(item),
-    ...(item.messages === undefined ? undefined : { thread: item.messages.map(threadLineOf) }),
+    ...legacyOf(item, messages),
   };
 }
 
 /**
  * The agent's inbox as it reads it: what is open first, then what was
  * answered, then what was closed, each the latest changed first. Note that
- * closed items are read last, because they are settled without an answer
+ * closed threads are read last, because they are settled without an answer
  * and the open and answered ones are what it acts on.
  */
 function inboxOf(items: readonly InboxItem[]): readonly AgentInboxLine[] {
@@ -314,60 +365,32 @@ function distinct(labels: readonly string[]): boolean {
   return new Set(labels).size === labels.length;
 }
 
-/** A choice's own refusal: a label used twice, or a recommendation naming none. */
-function choiceRefusal(choice: InboxChoice): string | undefined {
-  const labels = choice.options.map((option) => option.label);
-  if (!distinct(labels)) return INBOX_REFUSAL.NO_OPTIONS;
-  if (choice.recommended !== undefined && !labels.includes(choice.recommended)) {
-    return INBOX_REFUSAL.UNKNOWN_RECOMMENDATION;
-  }
-  return undefined;
-}
-
-/** A form's own refusal: a label used twice, a select with no options or one twice, options on a field that takes none, or a recommendation naming none of a select's options. */
-function formRefusal(form: InboxForm): string | undefined {
-  if (!distinct(form.fields.map((field) => field.label))) return INBOX_REFUSAL.FIELD_LABELS;
-  for (const field of form.fields) {
-    const select = field.type === INBOX_FIELD.SELECT;
+/** An answer's fields' own refusal: a label used twice, a select with no options or one twice, or options on a field that takes none. */
+function fieldsRefusal(fields: readonly InboxField[]): string | undefined {
+  if (!distinct(fields.map((field) => field.label))) return INBOX_REFUSAL.FIELD_LABELS;
+  for (const field of fields) {
     const options = field.options;
+    const select = field.type === INBOX_FIELD.SELECT;
     if (select ? options === undefined || !distinct(options) : options !== undefined) {
       return INBOX_REFUSAL.SELECT_OPTIONS;
     }
-    if (
-      field.recommended !== undefined &&
-      !(select && options?.includes(field.recommended) === true)
-    ) {
-      return INBOX_REFUSAL.SELECT_RECOMMENDATION;
+  }
+  return undefined;
+}
+
+/** An ask's own refusal, before the store is asked: a decide's label used twice or a recommendation naming none, or an answer's fields. */
+function askRefusal(ask: InboxAsk | undefined): string | undefined {
+  switch (ask?.type) {
+    case INBOX_ASK.DECIDE: {
+      const labels = ask.options.map((option) => option.label);
+      if (!distinct(labels)) return INBOX_REFUSAL.NO_OPTIONS;
+      if (ask.recommended !== undefined && !labels.includes(ask.recommended)) {
+        return INBOX_REFUSAL.UNKNOWN_RECOMMENDATION;
+      }
+      return undefined;
     }
-  }
-  return undefined;
-}
-
-/**
- * A code block's own refusal: lines of another repository than the agent's
- * own, which the desktop reads through the task's repository alone, or a
- * range running backwards or past the bound. Note that GitHub spells a
- * repository's name in any case, so the names are compared without it.
- */
-function codeRefusal(block: InboxPost["blocks"], repository: string): string | undefined {
-  const own = repository.toLowerCase();
-  for (const each of block ?? []) {
-    if (each.type !== INBOX_BLOCK.CODE) continue;
-    if (each.repo.toLowerCase() !== own) return INBOX_REFUSAL.CODE_REPOSITORY;
-    if (!codeLinesReadable(each)) return INBOX_REFUSAL.CODE_LINES;
-  }
-  return undefined;
-}
-
-/** A post's own refusal, before the store is asked: what the blocks' and the response's shapes admit but the item cannot carry or ask. */
-function postRefusal(post: InboxPost, repository: string): string | undefined {
-  const blocks = codeRefusal(post.blocks, repository);
-  if (blocks !== undefined) return blocks;
-  switch (post.response.type) {
-    case INBOX_RESPONSE.CHOICE:
-      return choiceRefusal(post.response);
-    case INBOX_RESPONSE.FORM:
-      return formRefusal(post.response);
+    case INBOX_ASK.ANSWER:
+      return ask.fields === undefined ? undefined : fieldsRefusal(ask.fields);
     default:
       return undefined;
   }
@@ -375,57 +398,73 @@ function postRefusal(post: InboxPost, repository: string): string | undefined {
 
 /** What the store's refusal of a post reads as to the model. */
 function storeRefusal(refusal: InboxPostRefusal): string {
-  return refusal === INBOX_POST_REFUSAL.TOO_MANY_OPEN
-    ? INBOX_REFUSAL.TOO_MANY
-    : INBOX_REFUSAL.NO_AGENT;
-}
-
-/** The agent a post is written for: its own, and the repository it works in as `owner/name`, which its code blocks must name. */
-export interface PostingAgent extends InboxAgent {
-  readonly repository: string;
+  switch (refusal) {
+    case INBOX_POST_REFUSAL.TOO_MANY_OPEN:
+      return INBOX_REFUSAL.TOO_MANY;
+    case INBOX_POST_REFUSAL.NO_TITLE:
+      return INBOX_REFUSAL.NO_TITLE;
+    case INBOX_POST_REFUSAL.NO_AGENT:
+      return INBOX_REFUSAL.NO_AGENT;
+  }
 }
 
 /**
- * The post's pictures, one per image block in the blocks' order, read from
- * the sandbox, or the first refusal among them. Each distinct path is read
- * once, in the order first named, and the first path refused ends the
- * reading, so a post with a block to mend reads no further file for it.
+ * Whether the agent hears the answer to an ask as a message where it does
+ * not say: a decision or an answer it asked for, yes; a to-do, which it
+ * mostly needs only done, no.
  */
-function postImages(
-  post: InboxPost,
+function waitsByDefault(ask: InboxAsk): boolean {
+  return ask.type !== INBOX_ASK.DO;
+}
+
+/**
+ * The pictures the body draws from the sandbox, each read there under the
+ * path it is written by and named by its file's own name, or the first
+ * refusal among them. Each path is read once, in the order first drawn,
+ * and the first path refused ends the reading, so a post with a picture to
+ * mend reads no further file for it.
+ */
+function bodyPictures(
+  body: string,
   sandbox: InboxSandboxDoor,
-): Effect.Effect<Result.Result<readonly InboxImage[], string>> {
-  const paths = (post.blocks ?? []).flatMap((block) =>
-    block.type === INBOX_BLOCK.IMAGE ? [block.path] : [],
-  );
+): Effect.Effect<Result.Result<readonly InboxBodyPicture[], string>> {
+  const paths = inboxSandboxPicturePaths(body);
+  if (paths.length > INBOX_BOUNDS.MAX_MESSAGE_PICTURES) {
+    return Effect.succeed(Result.fail(INBOX_REFUSAL.TOO_MANY_PICTURES));
+  }
   return Effect.gen(function* () {
-    const read = new Map<string, InboxImage>();
+    const read: InboxBodyPicture[] = [];
     for (const path of paths) {
-      if (read.has(path)) continue;
-      const image = yield* readInboxImage(sandbox, CODER.CHECKOUT_PATH, path);
+      const image = yield* readSandboxImage(sandbox, CODER.CHECKOUT_PATH, path, PICTURE_TERMS);
       if (Result.isFailure(image)) return Result.fail(image.failure);
-      read.set(path, image.success);
+      read.push({ ...image.success, path, name: posix.basename(path) || path });
     }
-    // Every path was read above, so each lookup finds its picture.
-    return Result.succeed(paths.flatMap((path) => read.get(path) ?? []));
+    return Result.succeed(read);
   });
 }
 
-/** Runs one post: its pictures read from the sandbox, the item written under its key, and the agent's inbox answered, or why not. */
+/** The post as the store writes it: its key, title, words, and ask, and whether the agent waits on the answer, by the ask's default where it did not say. */
+function threadPost(post: InboxThreadPostInput) {
+  const { waits, ...written } = post;
+  if (post.ask === undefined) return written;
+  return { ...written, needsReply: waits ?? waitsByDefault(post.ask) };
+}
+
+/** Runs one post: its pictures read from the sandbox, the message written on the thread under its key, and the agent's inbox answered, or why not. */
 export function postToInbox(
-  agent: PostingAgent,
+  agent: InboxAgent,
   input: UnparsedWireValue,
   sandbox: InboxSandboxDoor,
 ): Effect.Effect<InboxToolResult, never, DatabaseServices> {
   const read = readPost(input);
   if (Result.isFailure(read)) return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_POST));
-  const { repository, ...owner } = agent;
-  const refused = postRefusal(read.success, repository);
-  if (refused !== undefined) return Effect.succeed(inboxRejected(refused));
   const post = read.success;
-  return Effect.flatMap(postImages(post, sandbox), (images) => {
-    if (Result.isFailure(images)) return Effect.succeed(inboxRejected(images.failure));
-    return Effect.flatMap(postInboxItem(owner, post, images.success), (posted) =>
+  if (post.body.trim() === "") return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_POST));
+  const refused = askRefusal(post.ask);
+  if (refused !== undefined) return Effect.succeed(inboxRejected(refused));
+  return Effect.flatMap(bodyPictures(post.body, sandbox), (pictures) => {
+    if (Result.isFailure(pictures)) return Effect.succeed(inboxRejected(pictures.failure));
+    return Effect.flatMap(postInboxThread(agent, threadPost(post), pictures.success), (posted) =>
       Result.isFailure(posted)
         ? Effect.succeed(inboxRejected(storeRefusal(posted.failure)))
         : accepted(agent),
@@ -436,62 +475,21 @@ export function postToInbox(
   );
 }
 
-/** Runs one close: the item under the key closed with why and the agent's inbox answered, or why not. */
-export function closeInInbox(
+/** Runs one withdrawal: the open ask of the thread under the key withdrawn with why, and the agent's inbox answered, or why not. */
+export function withdrawAsk(
   agent: InboxAgent,
   input: UnparsedWireValue,
 ): Effect.Effect<InboxToolResult, never, DatabaseServices> {
-  const read = readClose(input);
-  if (Result.isFailure(read)) return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_CLOSE));
-  return Effect.flatMap(closeInboxItem(agent, read.success.key, read.success.reason), (closed) =>
-    Option.isNone(closed) ? Effect.succeed(inboxRejected(INBOX_REFUSAL.NO_ITEM)) : accepted(agent),
-  ).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
-  );
-}
-
-/** The reply's pictures read from the sandbox in order, each named by its file's own name, or the first refusal among them. */
-function replyImages(
-  reply: InboxReplyInput,
-  sandbox: InboxSandboxDoor,
-): Effect.Effect<Result.Result<readonly InboxNamedImage[], string>> {
-  return Effect.gen(function* () {
-    const read: InboxNamedImage[] = [];
-    for (const { path } of reply.images ?? []) {
-      const image = yield* readSandboxImage(sandbox, CODER.CHECKOUT_PATH, path, REPLY_IMAGE_TERMS);
-      if (Result.isFailure(image)) return Result.fail(image.failure);
-      read.push({ ...image.success, name: posix.basename(path) });
-    }
-    return Result.succeed(read);
-  });
-}
-
-/**
- * Runs one reply: its pictures read from the sandbox, the agent's message
- * written on the thread of its own item under the key, and the agent's
- * inbox answered, or why not. A reply carries words, pictures, or both.
- */
-export function replyInInbox(
-  agent: InboxAgent,
-  input: UnparsedWireValue,
-  sandbox: InboxSandboxDoor,
-): Effect.Effect<InboxToolResult, never, DatabaseServices> {
-  const read = readReply(input);
-  if (Result.isFailure(read)) return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_REPLY));
-  const reply = read.success;
-  const text = reply.text.trim();
-  if (text === "" && (reply.images ?? []).length === 0) {
-    return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_REPLY));
+  const read = readWithdraw(input);
+  if (Result.isFailure(read)) {
+    return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_WITHDRAW));
   }
-  return Effect.flatMap(replyImages(reply, sandbox), (images) => {
-    if (Result.isFailure(images)) return Effect.succeed(inboxRejected(images.failure));
-    return Effect.flatMap(replyInboxItem(agent, reply.key, text, images.success), (replied) =>
-      Option.isNone(replied)
-        ? Effect.succeed(inboxRejected(INBOX_REFUSAL.NO_REPLY_ITEM))
-        : accepted(agent),
-    );
-  }).pipe(
+  const { key, reason } = read.success;
+  return Effect.flatMap(closeInboxItem(agent, key, reason), (withdrawn) =>
+    Option.isNone(withdrawn)
+      ? Effect.succeed(inboxRejected(INBOX_REFUSAL.NO_OPEN_ASK))
+      : accepted(agent),
+  ).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
   );

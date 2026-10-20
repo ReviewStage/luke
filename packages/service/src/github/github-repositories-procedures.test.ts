@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
+import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
 import { user } from "@luke/database/schemas/auth";
 import {
@@ -20,7 +21,11 @@ import {
   HostedTaskClient,
 } from "@luke/features";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
-import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  githubRepositoryIssuesAnswerSchema,
+  ISSUE_STATE,
+} from "@luke/features/github-repositories-wire";
 import {
   TASK_FILE_REFUSAL,
   TASK_TREE_ENTRY,
@@ -30,20 +35,37 @@ import {
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { recordingHttpClient } from "@luke/wire/testing";
-import { Clock, type Context, Effect, Layer, Option, Result, type Schema } from "effect";
+import {
+  Clock,
+  type Context,
+  Duration,
+  Effect,
+  Layer,
+  Logger,
+  Option,
+  Result,
+  type Schema,
+} from "effect";
 import type { HttpClient } from "effect/http";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import {
   type FakeGitHub,
+  GITHUB_APP_WITH_TOKENS,
   GITHUB_FIXTURE,
+  GITHUB_FIXTURE_MEMBER,
   githubReaching,
+  memberRepositoryJson,
   openGithubUser,
+  openTokenMember,
 } from "../testing/github-app-fake.js";
 import type { GitHubApp } from "./github-app.js";
+import { setInstallationStatus } from "./github-installations.js";
 import { githubProcedures } from "./github-procedures.js";
+import { KEPT_LINK, type PullRequestLinks, pullRequestLinksLayer } from "./pull-request-links.js";
 
 /**
  * The repositories route over the real `GitHubApp`, a GitHub the test
@@ -126,8 +148,30 @@ function issueRecord(number: number, title: string, state: string, reason: strin
     body: "Seen on the staging invitations page.",
     user: { login: "octo-dev" },
     comments: 3,
+    node_id: `I_kwDOrelay${number}`,
+    author_association: number === 9 ? "NONE" : "MEMBER",
+    updated_at: "2026-10-01T00:00:00Z",
   };
 }
+
+/** The picker's read of one issue of `acme/relay` as the answer carries it. */
+function relayPick(number: number, title: string, state: string, association: string) {
+  return {
+    nodeId: `I_kwDOrelay${number}`,
+    repository: "acme/relay",
+    number,
+    title,
+    url: `https://github.com/acme/relay/issues/${number}`,
+    state,
+    author: "octo-dev",
+    authorAssociation: association,
+    updatedAt: Date.parse("2026-10-01T00:00:00Z"),
+  };
+}
+
+/** `acme/relay`'s issues listing and the search of its issues. */
+const RELAY_ISSUES_PATH = "/repos/acme/relay/issues";
+const SEARCH_PATH = "/search/issues";
 
 /** The issues `acme/relay` answers on its issues path: one open, one done, one not planned, one a duplicate, and pull request 42, which GitHub answers there too. */
 const RELAY_ISSUES = new Map<number, object>([
@@ -152,7 +196,11 @@ interface Answer {
 }
 
 /** The route over the test's own database and the GitHub given: one request in, its response out. */
-const routeOver = (bearers: ReadonlyMap<string, string>, github: FakeGitHub) =>
+const routeOver = (
+  bearers: ReadonlyMap<string, string>,
+  github: FakeGitHub,
+  logger: Layer.Layer<never> = Layer.empty,
+) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     // The handler runs on oRPC's own fiber, so it is handed the test's clock: the account rows hang off it.
@@ -161,8 +209,12 @@ const routeOver = (bearers: ReadonlyMap<string, string>, github: FakeGitHub) =>
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
       github.layer,
+      pullRequestLinksLayer,
+      logger,
     );
-    const handled = yield* Effect.context<GitHubApp>().pipe(Effect.provide(services));
+    const handled = yield* Effect.context<GitHubApp | PullRequestLinks>().pipe(
+      Effect.provide(services),
+    );
     const handle = hostedFetch({
       github: githubProcedures({
         resolveUserId: (incoming) =>
@@ -173,21 +225,42 @@ const routeOver = (bearers: ReadonlyMap<string, string>, github: FakeGitHub) =>
         unlinkGitHub: () => Effect.void,
       }),
     });
-    // SAFETY: the repositories procedures yield the database, the GitHub App, and its HTTP client alone, which is all a test provides of the web runtime's services.
+    // SAFETY: the repositories procedures yield the database, the GitHub App, its HTTP client, and the kept links alone, which is all a test provides of the web runtime's services.
     const webServices = handled as Context.Context<WebServices>;
     return (request: Request) => handle(request, webServices);
   });
 
-/** The route over the test's own database and the GitHub given, answering one request. */
-const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, request: Request) =>
+/** One request answered on a route already standing. */
+const answerOn = (route: (request: Request) => Promise<Response>, request: Request) =>
   Effect.gen(function* () {
-    const route = yield* routeOver(bearers, github);
     const response = yield* Effect.promise(() => route(request));
     const text = yield* Effect.promise(() => response.text());
     // SAFETY: the route answers JSON; the test compares it as the wire value it is.
     const body = JSON.parse(text) as WireBoundaryInput;
     return { status: response.status, body } satisfies Answer;
   });
+
+/** The route over the test's own database and the GitHub given, answering one request. */
+const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, request: Request) =>
+  Effect.flatMap(routeOver(bearers, github), (route) => answerOn(route, request));
+
+/** What one route answers `acme/relay`'s pull request 42 with, to the member given, on the route standing for the instance's life. */
+const keptPullRequest = (
+  route: (request: Request) => Promise<Response>,
+  member: string,
+  workspace: string,
+) => {
+  const url = new URL(HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_PULL_REQUEST, ORIGIN);
+  url.searchParams.append(GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace);
+  url.searchParams.append(GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay");
+  url.searchParams.append(GITHUB_REPOSITORIES_QUERY.NUMBER, "42");
+  return Effect.suspend(() =>
+    answerOn(route, new Request(url, { headers: { authorization: `Bearer ${member}` } })),
+  );
+};
+
+/** Pull request 42 of `acme/relay` as GitHub answers it, under the title given. */
+const relayPull42 = (title: string) => Response.json({ ...RELAY_PULLS.get(42), title });
 
 /** The owner signed in with GitHub through the App, which reaches nothing on its own; the other signed in with Google alone. */
 const openAccounts = (github: FakeGitHub) =>
@@ -284,6 +357,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               defaultBranch: "main",
               private: true,
               updatedAt: Date.parse("2026-10-08T00:00:00Z"),
+              access: GITHUB_ACCESS.APP,
             },
             {
               owner: "octocat",
@@ -292,6 +366,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               defaultBranch: "main",
               private: false,
               updatedAt: Date.parse("2026-09-01T00:00:00Z"),
+              access: GITHUB_ACCESS.APP,
             },
           ],
           installationUrl: `https://github.com/apps/${GITHUB_FIXTURE.SLUG}/installations/new`,
@@ -299,6 +374,62 @@ it.layer(getTestDB())("the repositories route", (it) => {
         // Note that neither the account's own token nor the App's are in the answer.
         assert.equal(JSON.stringify(reached).includes("ghu_"), false);
         assert.equal(JSON.stringify(reached).includes("ghs_"), false);
+      }),
+  );
+
+  it.effect(
+    "a member's own token adds the repositories it may push to, each entry marked by what reaches it, and one the installation lists is listed once, as the App's",
+    () =>
+      Effect.gen(function* () {
+        const own = [
+          memberRepositoryJson(
+            { owner: "acme", name: "relay", updatedAt: "2026-10-02T00:00:00Z" },
+            true,
+          ),
+          memberRepositoryJson(
+            { owner: "octo-member", name: "side", updatedAt: "2026-10-05T00:00:00Z" },
+            true,
+          ),
+          memberRepositoryJson(
+            { owner: "octo-member", name: "fork", updatedAt: "2026-10-06T00:00:00Z" },
+            false,
+          ),
+        ];
+        const github = githubReaching(
+          [
+            {
+              id: 7151,
+              login: "acme",
+              repositories: [{ owner: "acme", name: "relay", updatedAt: "2026-10-02T00:00:00Z" }],
+            },
+          ],
+          GITHUB_APP_WITH_TOKENS,
+          {},
+          (sent) =>
+            new URL(sent.url).pathname === "/user/repos" &&
+            sent.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`
+              ? Response.json(own)
+              : undefined,
+        );
+        const { bearers, ask } = yield* openAccounts(github);
+        const member = yield* openTokenMember();
+        bearers.set(`Bearer ${member}`, member);
+        const workspace = yield* openInstallationWorkspace(member, {
+          installationId: 7151,
+          accountId: 9151,
+          accountLogin: "acme",
+        });
+
+        const reached = listed(yield* ask(member, "GET", [workspace]));
+
+        assert.deepEqual(
+          reached.repositories.map((one) => [one.fullName, one.access]),
+          [
+            ["octo-member/side", GITHUB_ACCESS.TOKEN],
+            ["acme/relay", GITHUB_ACCESS.APP],
+          ],
+        );
+        assert.equal(JSON.stringify(reached).includes(GITHUB_FIXTURE_MEMBER.TOKEN), false);
       }),
   );
 
@@ -660,6 +791,222 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
+    "a pull request asked for again within a minute, by one link or several at once, is read from GitHub once and answered as it was read, and read afresh once the minute is out",
+    () =>
+      Effect.gen(function* () {
+        let title = "Send invitations in batches";
+        const github = githubReaching(
+          [{ id: 7804, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => (PULL_PATH.test(new URL(sent.url).pathname) ? relayPull42(title) : undefined),
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7804,
+          accountId: 9804,
+          accountLogin: "acme",
+        });
+        const route = yield* routeOver(bearers, github);
+        const pullRequest = keptPullRequest(route, owner, workspace);
+        const titleOf = (answered: Answer) =>
+          readOf(githubRepositoryPullRequestAnswerSchema, answered).pullRequest?.title;
+
+        const together = yield* Effect.all([pullRequest, pullRequest, pullRequest], {
+          concurrency: "unbounded",
+        });
+        title = "Send invitations in batches of fifty";
+        yield* TestClock.adjust(Duration.seconds(30));
+        const kept = yield* pullRequest;
+        yield* TestClock.adjust(KEPT_LINK.ANSWER_TTL);
+        const afresh = yield* pullRequest;
+
+        assert.deepEqual(together.map(titleOf), [
+          "Send invitations in batches",
+          "Send invitations in batches",
+          "Send invitations in batches",
+        ]);
+        assert.equal(titleOf(kept), "Send invitations in batches");
+        assert.equal(titleOf(afresh), "Send invitations in batches of fifty");
+      }),
+  );
+
+  it.effect(
+    "GitHub refusing a pull request is answered unavailable and held for as long as its Retry-After asks, logged once and never sent again meanwhile, and read afresh once the hold is out",
+    () =>
+      Effect.gen(function* () {
+        let refusing = true;
+        const github = githubReaching(
+          [{ id: 7805, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            if (!PULL_PATH.test(new URL(sent.url).pathname)) return undefined;
+            return refusing
+              ? Response.json(
+                  { message: "You have exceeded a secondary rate limit." },
+                  { status: 403, headers: { "retry-after": "120" } },
+                )
+              : relayPull42("Send invitations in batches");
+          },
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7805,
+          accountId: 9805,
+          accountLogin: "acme",
+        });
+        const logged: string[] = [];
+        const route = yield* routeOver(
+          bearers,
+          github,
+          Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
+        );
+        const pullRequest = keptPullRequest(route, owner, workspace);
+
+        const refused = yield* pullRequest;
+        refusing = false;
+        yield* TestClock.adjust(Duration.seconds(90));
+        const held = yield* pullRequest;
+        yield* TestClock.adjust(Duration.seconds(30));
+        const afresh = yield* pullRequest;
+
+        const unavailable = refusal(
+          HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+          HOSTED_API_ERROR.UNAVAILABLE,
+        );
+        assert.deepEqual(refused, unavailable);
+        assert.deepEqual(held, unavailable);
+        assert.equal(logged.filter((line) => line.includes("GitHub answered 403")).length, 1);
+        assert.equal(
+          readOf(githubRepositoryPullRequestAnswerSchema, afresh).pullRequest?.title,
+          "Send invitations in batches",
+        );
+      }),
+  );
+
+  it.effect(
+    "a refusal held longer than the repository's reach is kept is still answered from the hold, without asking GitHub again however it would answer",
+    () =>
+      Effect.gen(function* () {
+        let refusingAll = false;
+        const github = githubReaching(
+          [{ id: 7808, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            const refusal = Response.json(
+              { message: "You have exceeded a secondary rate limit." },
+              { status: 403, headers: { "retry-after": "900" } },
+            );
+            if (refusingAll) return refusal;
+            return PULL_PATH.test(new URL(sent.url).pathname) ? refusal : undefined;
+          },
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7808,
+          accountId: 9808,
+          accountLogin: "acme",
+        });
+        const logged: string[] = [];
+        const route = yield* routeOver(
+          bearers,
+          github,
+          Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
+        );
+        const pullRequest = keptPullRequest(route, owner, workspace);
+
+        const refused = yield* pullRequest;
+        refusingAll = true;
+        yield* TestClock.adjust(Duration.minutes(10));
+        const held = yield* Effect.all([pullRequest, pullRequest, pullRequest]);
+
+        const unavailable = refusal(
+          HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+          HOSTED_API_ERROR.UNAVAILABLE,
+        );
+        assert.deepEqual([refused, ...held], [unavailable, unavailable, unavailable, unavailable]);
+        assert.equal(logged.filter((line) => line.includes("GitHub App read failed")).length, 1);
+      }),
+  );
+
+  it.effect(
+    "a kept pull request is answered none the moment the workspace's installation is removed, rather than when its minute is out",
+    () =>
+      Effect.gen(function* () {
+        const installations = [
+          { id: 7807, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+        ];
+        const github = githubReaching(installations, undefined, {}, (sent) =>
+          PULL_PATH.test(new URL(sent.url).pathname)
+            ? relayPull42("Send invitations in batches")
+            : undefined,
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7807,
+          accountId: 9807,
+          accountLogin: "acme",
+        });
+        const route = yield* routeOver(bearers, github);
+        const pullRequest = keptPullRequest(route, owner, workspace);
+
+        const kept = yield* pullRequest;
+        // GitHub removes the installation, and its webhook tells the store so.
+        installations.length = 0;
+        yield* setInstallationStatus(7807, GITHUB_INSTALLATION_STATUS.DELETED);
+        const removed = yield* pullRequest;
+
+        assert.equal(
+          readOf(githubRepositoryPullRequestAnswerSchema, kept).pullRequest?.title,
+          "Send invitations in batches",
+        );
+        assert.deepEqual(removed, { status: HOSTED_HTTP_STATUS.OK, body: { pullRequest: null } });
+      }),
+  );
+
+  it.effect(
+    "a pull request GitHub failed to answer for any other reason is not held: the next ask reads it afresh",
+    () =>
+      Effect.gen(function* () {
+        let failing = true;
+        const github = githubReaching(
+          [{ id: 7806, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            if (!PULL_PATH.test(new URL(sent.url).pathname)) return undefined;
+            return failing
+              ? Response.json({ message: "Server Error" }, { status: 502 })
+              : relayPull42("Send invitations in batches");
+          },
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7806,
+          accountId: 9806,
+          accountLogin: "acme",
+        });
+        const route = yield* routeOver(bearers, github);
+        const pullRequest = keptPullRequest(route, owner, workspace);
+
+        const failed = yield* pullRequest;
+        failing = false;
+        const afresh = yield* pullRequest;
+
+        assert.deepEqual(
+          failed,
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.equal(
+          readOf(githubRepositoryPullRequestAnswerSchema, afresh).pullRequest?.title,
+          "Send invitations in batches",
+        );
+      }),
+  );
+
+  it.effect(
     "a member reads one issue of a repository the workspace's installation reaches by its number, its number, title, page, state, and who opened it and nothing more, on a token minted for the one repository with issues read alone; a duplicate reads as not planned, and a pull request's number, a missing one, and an unreached repository answer none",
     () =>
       Effect.gen(function* () {
@@ -787,6 +1134,208 @@ it.layer(getTestDB())("the repositories route", (it) => {
         assert.deepEqual(notGranted, none);
         assert.deepEqual(off, none);
         assert.deepEqual(forTheIssue, []);
+      }),
+  );
+
+  it.effect(
+    "a member reads a repository's open issues newest changed first, those a search finds, and one by its number, each with who opened it and how they stand to the repository, never a pull request, read past a page of them, and never another repository's, on a token cut to issues read on the one repository",
+    () =>
+      Effect.gen(function* () {
+        const searched: URLSearchParams[] = [];
+        const listedWith: URLSearchParams[] = [];
+        const github = githubReaching(
+          [
+            {
+              id: 7821,
+              login: "acme",
+              repositories: [{ owner: "acme", name: "relay" }],
+              permissions: GRANTING_ISSUES,
+            },
+          ],
+          undefined,
+          {},
+          (sent) => {
+            const url = new URL(sent.url);
+            // The first page is all pull requests, which share the listing, and issue 7 stands on the second.
+            if (url.pathname === RELAY_ISSUES_PATH) {
+              listedWith.push(url.searchParams);
+              return Response.json(
+                url.searchParams.get("page") === "1"
+                  ? Array.from({ length: 100 }, (_, at) => ({
+                      ...issueRecord(100 + at, "A pull request", "open", null),
+                      pull_request: {},
+                    }))
+                  : [RELAY_ISSUES.get(7)],
+              );
+            }
+            if (url.pathname === SEARCH_PATH) {
+              searched.push(url.searchParams);
+              return Response.json({
+                items: [
+                  RELAY_ISSUES.get(7),
+                  {
+                    ...issueRecord(3, "Invitations on the ledger", "open", null),
+                    html_url: "https://github.com/acme/ledger/issues/3",
+                  },
+                ],
+              });
+            }
+            const named = ISSUE_PATH.exec(url.pathname);
+            const record = named === null ? undefined : RELAY_ISSUES.get(Number(named[1]));
+            return record === undefined ? undefined : Response.json(record);
+          },
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7821,
+          accountId: 9821,
+          accountLogin: "acme",
+        });
+        const issues = (...more: readonly (readonly [string, string])[]) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+            ...more,
+          ]);
+
+        const open = yield* issues();
+        const found = yield* issues([GITHUB_REPOSITORIES_QUERY.QUERY, " invite "]);
+        const one = yield* issues([GITHUB_REPOSITORIES_QUERY.NUMBER, "9"]);
+        const pull = yield* issues([GITHUB_REPOSITORIES_QUERY.NUMBER, "42"]);
+
+        const seven = relayPick(7, "Invitations expire too soon", ISSUE_STATE.OPEN, "MEMBER");
+        assert.deepEqual(open, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [seven] } });
+        assert.deepEqual(found, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [seven] } });
+        assert.deepEqual(one, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            issues: [relayPick(9, "Invite by phone number", ISSUE_STATE.NOT_PLANNED, "NONE")],
+          },
+        });
+        assert.deepEqual(pull, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [] } });
+        assert.deepEqual(
+          listedWith.map((params) => [params.get("state"), params.get("sort"), params.get("page")]),
+          [
+            ["open", "updated", "1"],
+            ["open", "updated", "2"],
+          ],
+        );
+        assert.deepEqual(
+          searched.map((params) => params.get("q")),
+          ["invite repo:acme/relay is:issue is:open"],
+        );
+        const mints = github.sent
+          .filter((sent) => sent.url.endsWith("/access_tokens"))
+          .map((sent) => JSON.parse(sent.body))
+          .filter((mint) => "repositories" in mint);
+        for (const mint of mints) {
+          assert.deepEqual(mint, { repositories: ["relay"], permissions: { issues: "read" } });
+        }
+      }),
+  );
+
+  it.effect(
+    "a repository reached on a member's own token reads its open issues on that token, never the App's",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [{ id: 7823, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          GITHUB_APP_WITH_TOKENS,
+          {},
+          (sent) => {
+            const { pathname } = new URL(sent.url);
+            const onToken =
+              sent.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`;
+            if (!onToken) return undefined;
+            if (pathname === "/repos/octo-member/side") {
+              return Response.json(
+                memberRepositoryJson({ owner: "octo-member", name: "side" }, true),
+              );
+            }
+            return pathname === "/repos/octo-member/side/issues"
+              ? Response.json([
+                  {
+                    ...issueRecord(3, "Side project bug", "open", null),
+                    html_url: "https://github.com/octo-member/side/issues/3",
+                  },
+                ])
+              : undefined;
+          },
+        );
+        const { bearers, read } = yield* openAccounts(github);
+        const member = yield* openTokenMember();
+        bearers.set(`Bearer ${member}`, member);
+        const workspace = yield* openInstallationWorkspace(member, {
+          installationId: 7823,
+          accountId: 9823,
+          accountLogin: "acme",
+        });
+
+        const answered = yield* read(member, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES, [
+          [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+          [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "octo-member/side"],
+        ]);
+
+        const issuesRead = readOf(githubRepositoryIssuesAnswerSchema, answered);
+        assert.deepEqual(
+          ("issues" in issuesRead ? issuesRead.issues : []).map((issue) => [
+            issue.repository,
+            issue.number,
+            issue.title,
+          ]),
+          [["octo-member/side", 3, "Side project bug"]],
+        );
+        assert.equal(JSON.stringify(answered).includes(GITHUB_FIXTURE_MEMBER.TOKEN), false);
+      }),
+  );
+
+  it.effect(
+    "a repository whose installation has not granted the App issues answers ungranted with the installation's settings page, never an empty list, and asks GitHub for no issue; an unreached repository has none, and a read naming a number off the wire's shape is invalid",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          {
+            id: 7822,
+            login: "acme",
+            accountType: "Organization",
+            repositories: [{ owner: "acme", name: "relay" }],
+          },
+        ]);
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7822,
+          accountId: 9822,
+          accountLogin: "acme",
+        });
+        const issues = (repository: string, ...more: readonly (readonly [string, string])[]) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, repository],
+            ...more,
+          ]);
+
+        const ungranted = yield* issues("acme/relay");
+        const unreached = yield* issues("globex/ledger");
+        const unnumbered = yield* issues("acme/relay", [GITHUB_REPOSITORIES_QUERY.NUMBER, "0"]);
+
+        assert.deepEqual(ungranted, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            ungranted: {
+              settingsUrl: "https://github.com/organizations/acme/settings/installations/7822",
+            },
+          },
+        });
+        assert.deepEqual(unreached, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [] } });
+        assert.deepEqual(
+          unnumbered,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const askedIssues = github.sent.filter((sent) => {
+          const { pathname } = new URL(sent.url);
+          return pathname.includes("/issues") || pathname === SEARCH_PATH;
+        });
+        assert.deepEqual(askedIssues, []);
       }),
   );
 

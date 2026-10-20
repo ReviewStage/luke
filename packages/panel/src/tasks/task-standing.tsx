@@ -36,8 +36,8 @@ import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
  * A task from a service before statuses has no key and no chips.
  */
 
-/** Each status as its chip and its menu's row say it. */
-const TASK_STATUS_WORDS = {
+/** Each status as its chip, its menu's row, the Board's column, and the sidebar's filter say it. */
+export const TASK_STATUS_WORDS = {
   [TASK_STATUS.BACKLOG]: "Backlog",
   [TASK_STATUS.TODO]: "Todo",
   [TASK_STATUS.IN_PROGRESS]: "In progress",
@@ -105,6 +105,41 @@ export function TaskKeyLine({
   );
 }
 
+/**
+ * A status chip dropping the five statuses, each with its mark, the one
+ * `status` names checked; a pick other than it is handed to `onPick`. The
+ * task page's head and a Board card on a phone both draw it.
+ */
+export function TaskStatusPicker({
+  label = "Status",
+  status,
+  onPick,
+}: {
+  /** The chip's name for a reader; the task page's own where none is named. */
+  label?: string | undefined;
+  status: TaskStatus;
+  /** Where a pick is sent; without one the chip only says. */
+  onPick: ((status: TaskStatus) => void) | undefined;
+}): React.JSX.Element {
+  return (
+    <Picker
+      label={label}
+      value={status}
+      valueLabel={TASK_STATUS_WORDS[status]}
+      valueIcon={<TaskStatusMark status={status} />}
+      rows={STATUS_ROWS}
+      noMatch="No such status"
+      align={PICKER_ALIGN.START}
+      width={CHIP_WIDTH.AUTO}
+      disabled={onPick === undefined}
+      onPick={(id) => {
+        const picked = statusOf(id);
+        if (picked !== undefined && picked !== status) onPick?.(picked);
+      }}
+    />
+  );
+}
+
 /** The task's status and priority chips, under its title; nothing for a task from a service before them. */
 export function TaskStandingChips({
   task,
@@ -118,20 +153,9 @@ export function TaskStandingChips({
   return (
     <div className="plan-task-standing">
       <Inline gap={GAP.CONTROL}>
-        <Picker
-          label="Status"
-          value={status}
-          valueLabel={TASK_STATUS_WORDS[status]}
-          valueIcon={<TaskStatusMark status={status} />}
-          rows={STATUS_ROWS}
-          noMatch="No such status"
-          align={PICKER_ALIGN.START}
-          width={CHIP_WIDTH.AUTO}
-          disabled={onSet === undefined}
-          onPick={(id) => {
-            const picked = statusOf(id);
-            if (picked !== undefined && picked !== status) onSet?.({ status: picked });
-          }}
+        <TaskStatusPicker
+          status={status}
+          onPick={onSet === undefined ? undefined : (picked) => onSet({ status: picked })}
         />
         <Picker
           label="Priority"

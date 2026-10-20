@@ -10,12 +10,13 @@
  * sent; but for a revision's two procedures, which read the revision their
  * path names first, as they always did.
  *
- * The preferences snapshot is four parts: the settings preferences the
+ * The preferences snapshot is five parts: the settings preferences the
  * desktop syncs, where the account's Luke links open, a synced setting of
  * its own part so a build that predates it neither refuses the snapshot nor
  * clears the choice by writing the shared part back whole, the coding
  * agents' default model, effort, and context window, which Settings and the
- * Start menu both write, and the experiments the account turned on in
+ * Start menu both write, the Claude model the account's Generate chapters
+ * runs on, one of a fixed set (`@luke/features/chapters-model-choice`), and the experiments the account turned on in
  * Settings › Experimental. A write carries any of them, a coding-agent
  * choice is accepted only as the catalog accepts it
  * (`packages/service/src/providers/model-catalog.ts`), so what is stored is
@@ -44,12 +45,12 @@ import type {
 } from "@luke/database/models/account-store";
 import type { StandingSession } from "@luke/database/models/recorded-session";
 import type { TaskStoreFailure } from "@luke/database/models/task-store";
+import { CHAPTERS_MODEL_DEFAULT, isChaptersModel } from "@luke/features/chapters-model-choice";
 import { contextWindowSchema } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
-  PLAN_TEMPLATE_BOUNDS,
   type PlanTemplateAnswer,
   type PlanTemplateRevisionAnswer,
   type PlanTemplateRevisionsAnswer,
@@ -78,13 +79,10 @@ import {
 } from "../http/http-effect.js";
 import { revokeIntegrationGrants } from "../integrations/integration-connect.js";
 import { readIntegrationConnections } from "../integrations/integration-store.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import { acceptedModelChoice, type ModelCatalog } from "../providers/model-catalog.js";
 import { forgetPosthogPersonEffect } from "../providers/posthog.js";
 import { providerKeysProcedures } from "./provider-keys-procedures.js";
-
-/** A template write is the template at its bound with every character escaped, and the key around it. */
-const MAXIMUM_PLAN_TEMPLATE_BODY_BYTES = PLAN_TEMPLATE_BOUNDS.MAX_CHARS * 6 + 1_024;
 
 export interface AccountProcedureSeams extends EveReach {
   resolveUserId: UserIdResolver;
@@ -142,6 +140,7 @@ function snapshotAnswer(row: AccountPreferencesRow | undefined) {
   return {
     ...accountPreferencesParts(row?.preferences ?? {}),
     codingAgent: row?.codingAgent ?? CODING_AGENT_DEFAULT_CHOICE,
+    chaptersModel: row?.chaptersModel ?? CHAPTERS_MODEL_DEFAULT,
     experiments: row?.experiments ?? NO_EXPERIMENTS,
     ...(updatedAt === undefined ? undefined : { updatedAt: updatedAt.getTime() }),
   };
@@ -249,7 +248,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * Writes each part the body carries — `preferences`, a validated
      * settings snapshot that replaces the stored one whole, `linkOpen`,
      * where the account's links open, `codingAgent`, a choice the catalog
-     * accepts, and `experiments`, each experiment's on or off merged over
+     * accepts, `chaptersModel`, one of the chapters' fixed set, and `experiments`, each experiment's on or off merged over
      * what stood — and answers the snapshot as it then stands. A body
      * carrying none of them asks for nothing and is refused.
      */
@@ -260,6 +259,7 @@ export function accountProcedures(seams: AccountProcedureSeams) {
         body.preferences === undefined &&
         body.linkOpen === undefined &&
         body.codingAgent === undefined &&
+        body.chaptersModel === undefined &&
         body.experiments === undefined
       ) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -278,6 +278,12 @@ export function accountProcedures(seams: AccountProcedureSeams) {
       }
       if (body.codingAgent !== undefined) {
         write.codingAgent = yield* acceptedCodingAgent(seams, context.userId, body.codingAgent);
+      }
+      if (body.chaptersModel !== undefined) {
+        if (!isChaptersModel(body.chaptersModel)) {
+          return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+        }
+        write.chaptersModel = body.chaptersModel;
       }
       if (body.experiments !== undefined) {
         const experiments = experimentChoicesFrom(body.experiments);
@@ -301,14 +307,12 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * stands. A body naming any other key, or a template past the bound, is
      * refused and nothing is written.
      */
-    writePlanTemplate: signedIn
-      .use(bodyLimit(MAXIMUM_PLAN_TEMPLATE_BODY_BYTES))
-      .writePlanTemplate.effect(function* ({ context, input }) {
-        const stored = yield* hostedStoreOrUnavailable(
-          seams.writePlanTemplate(context.userId, input.template),
-        );
-        return planTemplateAnswer(stored);
-      }),
+    writePlanTemplate: signedIn.writePlanTemplate.effect(function* ({ context, input }) {
+      const stored = yield* hostedStoreOrUnavailable(
+        seams.writePlanTemplate(context.userId, input.template),
+      );
+      return planTemplateAnswer(stored);
+    }),
 
     /** A page of the caller's template history, the newest first; an account with none answers an empty page. */
     planTemplateRevisions: signedIn.planTemplateRevisions.effect(function* ({ context, input }) {

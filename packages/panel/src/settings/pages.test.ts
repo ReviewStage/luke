@@ -3,7 +3,7 @@ import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { test } from "vitest";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
-import { shownSettingsView } from "./pages.js";
+import { shownSettingsView } from "./settings-rows.js";
 
 /**
  * The page Settings shows for the one chosen: a link to a page the platform

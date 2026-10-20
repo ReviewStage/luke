@@ -1,5 +1,5 @@
 /**
- * tasks-procedures.ts -- the Tasks tab's asks of the host about the task list and the open task.
+ * tasks-procedures.ts -- the Tasks tab's asks of the host about the task list, the open task, and what a task holds.
  *
  * The one check these procedures make is who asked. Only a panel draws the
  * Tasks tab, and the takeover and the hidden voice window draw no task, so
@@ -8,32 +8,63 @@
  * decide, and comes back as the panel's own answer. Nothing is held here.
  */
 
+import type { CodingAgentMessagesAnswerView } from "@luke/features/coding-agent-view";
 import {
+  type CodeLines,
   GITHUB_DISCONNECT_FAILURE,
   type TasksArchiveParams,
   type TasksBoardSaveParams,
+  type TasksCommentActParams,
+  type TasksCommentAnswer,
+  type TasksCommentStartParams,
+  type TasksCommentsAnswer,
+  type TasksCommentsParams,
   type TasksEditAnswer,
   type TasksEditParams,
+  type TasksFileAnswer,
+  type TasksFileParams,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
+  type TasksIssueAnswer,
+  type TasksIssueParams,
+  type TasksMessagesParams,
   type TasksMoveAnswer,
   type TasksMoveParams,
+  type TasksPageAnswer,
+  type TasksPageParams,
+  type TasksPageSourceAnswer,
+  type TasksPagesAnswer,
+  type TasksPagesParams,
+  type TasksPictureAnswer,
+  type TasksPictureKeepAnswer,
+  type TasksPictureKeepParams,
+  type TasksPictureParams,
   type TasksPinParams,
   type TasksPinRepositoryParams,
+  type TasksPullRequestAnswer,
+  type TasksPullRequestParams,
   type TasksRenameParams,
   type TasksRepositoriesAnswer,
   type TasksRepositoriesParams,
+  type TasksRevisionAnswer,
+  type TasksRevisionParams,
+  type TasksRevisionsAnswer,
+  type TasksRevisionsParams,
   type TasksSetRepositoryAnswer,
   type TasksSetRepositoryParams,
+  type TasksSetStandingParams,
+  type TasksSkillsAnswer,
+  type TasksSkillsParams,
   type TasksStartAnswer,
   type TasksStartRequest,
+  type TasksTreeAnswer,
+  type TasksTreeParams,
   type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /** What the task procedures are handed: the host, and the doors of the window's process they open or read. */
 export interface TasksProceduresDependencies {
@@ -55,7 +86,28 @@ export interface TasksProceduresDependencies {
     tasksBoardSave(params: TasksBoardSaveParams): Effect.Effect<void>;
     githubConnect(): Effect.Effect<TasksGitHubPageAnswer>;
     githubDisconnect(): Effect.Effect<TasksGitHubDisconnectAnswer>;
+    tasksSetStanding(params: TasksSetStandingParams): Effect.Effect<boolean>;
+    tasksWorkEarlier(): Effect.Effect<void>;
+    tasksConversationEarlier(): Effect.Effect<void>;
+    tasksMessages(params: TasksMessagesParams): Effect.Effect<CodingAgentMessagesAnswerView>;
+    tasksFile(params: TasksFileParams): Effect.Effect<TasksFileAnswer>;
+    tasksTree(params: TasksTreeParams): Effect.Effect<TasksTreeAnswer>;
+    tasksSkills(params: TasksSkillsParams): Effect.Effect<TasksSkillsAnswer>;
+    tasksPullRequest(params: TasksPullRequestParams): Effect.Effect<TasksPullRequestAnswer>;
+    tasksIssue(params: TasksIssueParams): Effect.Effect<TasksIssueAnswer>;
+    tasksRevisions(params: TasksRevisionsParams): Effect.Effect<TasksRevisionsAnswer>;
+    tasksRevision(params: TasksRevisionParams): Effect.Effect<TasksRevisionAnswer>;
+    tasksRestore(params: TasksRevisionParams): Effect.Effect<boolean>;
+    tasksPage(params: TasksPageParams): Effect.Effect<TasksPageAnswer>;
+    tasksPages(params: TasksPagesParams): Effect.Effect<TasksPagesAnswer>;
+    tasksPicture(params: TasksPictureParams): Effect.Effect<TasksPictureAnswer>;
+    tasksPictureKeep(params: TasksPictureKeepParams): Effect.Effect<TasksPictureKeepAnswer>;
+    tasksComments(params: TasksCommentsParams): Effect.Effect<TasksCommentsAnswer>;
+    tasksCommentStart(params: TasksCommentStartParams): Effect.Effect<TasksCommentAnswer>;
+    tasksCommentAct(params: TasksCommentActParams): Effect.Effect<TasksCommentAnswer>;
   };
+  /** A transcript's fenced block coloured as its fence's language, by the highlighter the File tab's lines are coloured with. */
+  colourCode: (language: string, code: string) => Effect.Effect<CodeLines>;
   /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
   /** The hosted service's origin, without a trailing slash, the only origin a page the host names may open on. */
@@ -73,6 +125,23 @@ export interface TasksProceduresDependencies {
 /** The refusal a window that draws no Tasks tab hears, or nothing for a panel. */
 function refuseUnlessPanel<E>(actor: ActSender, refused: () => E): Effect.Effect<void, E> {
   return actor.panel ? Effect.void : Effect.fail(refused());
+}
+
+/**
+ * The longest page whose source the procedure colours. Note that a longer
+ * one is drawn plain rather than cut, as a transcript's long block is,
+ * because colouring holds the host's thread for about a millisecond per
+ * hundred characters.
+ */
+const PAGE_SOURCE_COLOURED_MAX_CHARS = 64 * 1024;
+
+/** A page's HTML as its tab's source draws it: line by line, coloured as HTML where it is short enough to colour, plain past that. */
+function pageSourceLines(
+  html: string,
+  colourCode: TasksProceduresDependencies["colourCode"],
+): Effect.Effect<CodeLines> {
+  if (html.length <= PAGE_SOURCE_COLOURED_MAX_CHARS) return colourCode("html", html);
+  return Effect.succeed(html.split("\n").map((text) => (text === "" ? [] : [{ text }])));
 }
 
 /** Whether an address the host answered parses and stands on the service's own origin. */
@@ -279,5 +348,161 @@ export function tasksProcedures(dependencies: TasksProceduresDependencies) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       yield* host.tasksBoardSave(input);
     }),
+    [TASKS_ACT_KIND.TASKS_SET_STANDING]: actPort[TASKS_ACT_KIND.TASKS_SET_STANDING].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.tasksSetStanding(input);
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_WORK_EARLIER]: actPort[TASKS_ACT_KIND.TASKS_WORK_EARLIER].effect(
+      function* ({ context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        yield* host.tasksWorkEarlier();
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER]: actPort[
+      TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER
+    ].effect(function* ({ context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      yield* host.tasksConversationEarlier();
+    }),
+    [TASKS_ACT_KIND.TASKS_MESSAGES]: actPort[TASKS_ACT_KIND.TASKS_MESSAGES].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksMessages(input);
+    }),
+    [TASKS_ACT_KIND.TASKS_FILE]: actPort[TASKS_ACT_KIND.TASKS_FILE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksFile(input);
+    }),
+    [TASKS_ACT_KIND.TASKS_TREE]: actPort[TASKS_ACT_KIND.TASKS_TREE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksTree(input);
+    }),
+    [TASKS_ACT_KIND.TASKS_SKILLS]: actPort[TASKS_ACT_KIND.TASKS_SKILLS].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksSkills(input);
+    }),
+    // A service that did not answer is refused, so a link draws what it holds
+    // rather than reading the silence as no pull request.
+    [TASKS_ACT_KIND.TASKS_PULL_REQUEST]: actPort[TASKS_ACT_KIND.TASKS_PULL_REQUEST].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const answer = yield* host.tasksPullRequest(input);
+        if ("pullRequest" in answer) return answer.pullRequest;
+        return yield* Effect.fail(errors.REFUSED());
+      },
+    ),
+    // Likewise an issue: a service that did not answer is refused, never read as no issue.
+    [TASKS_ACT_KIND.TASKS_ISSUE]: actPort[TASKS_ACT_KIND.TASKS_ISSUE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const answer = yield* host.tasksIssue(input);
+      if ("issue" in answer) return answer.issue;
+      return yield* Effect.fail(errors.REFUSED());
+    }),
+    [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: actPort[TASKS_ACT_KIND.TASKS_COLOUR_CODE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* dependencies.colourCode(input.language, input.code);
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_REVISIONS]: actPort[TASKS_ACT_KIND.TASKS_REVISIONS].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksRevisions(input);
+    }),
+    [TASKS_ACT_KIND.TASKS_REVISION]: actPort[TASKS_ACT_KIND.TASKS_REVISION].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksRevision(input);
+    }),
+    [TASKS_ACT_KIND.TASKS_RESTORE]: actPort[TASKS_ACT_KIND.TASKS_RESTORE].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksRestore(input);
+    }),
+    // The version is read as its frame reads it and held nowhere here, so its HTML reaches the tab that asked alone.
+    [TASKS_ACT_KIND.TASKS_PAGE_SOURCE]: actPort[TASKS_ACT_KIND.TASKS_PAGE_SOURCE].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        const answer = yield* host.tasksPage(input);
+        if (!("page" in answer)) return answer;
+        const lines = yield* pageSourceLines(answer.page.html, dependencies.colourCode);
+        return { lines } satisfies TasksPageSourceAnswer;
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_PAGES]: actPort[TASKS_ACT_KIND.TASKS_PAGES].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksPages(input);
+    }),
+    // Note that the picture's answer, a failure among them, is the panel's to
+    // read, as a workspace photo's is, because a picture that hears none
+    // draws its words rather than a refusal.
+    [TASKS_ACT_KIND.TASKS_PICTURE_READ]: actPort[TASKS_ACT_KIND.TASKS_PICTURE_READ].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.tasksPicture(input);
+      },
+    ),
+    // A refusal is the editor's to say on the picture, with its retry, so it is answered rather than refused.
+    [TASKS_ACT_KIND.TASKS_PICTURE_KEEP]: actPort[TASKS_ACT_KIND.TASKS_PICTURE_KEEP].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.tasksPictureKeep(input);
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_COMMENTS]: actPort[TASKS_ACT_KIND.TASKS_COMMENTS].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.tasksComments(input);
+    }),
+    // A refused comment is the thread's to say, with its retry, so it is answered rather than refused.
+    [TASKS_ACT_KIND.TASKS_COMMENT_START]: actPort[TASKS_ACT_KIND.TASKS_COMMENT_START].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.tasksCommentStart(input);
+      },
+    ),
+    [TASKS_ACT_KIND.TASKS_COMMENT_ACT]: actPort[TASKS_ACT_KIND.TASKS_COMMENT_ACT].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.tasksCommentAct(input);
+      },
+    ),
   };
 }

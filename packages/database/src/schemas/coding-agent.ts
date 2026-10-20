@@ -6,6 +6,7 @@ import {
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import type { PullRequestArea } from "@luke/features/pull-request-area";
 import { sql } from "drizzle-orm";
 import {
@@ -243,6 +244,8 @@ export const codingAgent = pgTable(
     mentionedServers: jsonb("mentioned_servers").$type<readonly string[]>(),
     /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
     author: text("author").$type<CodingAgentAuthor>(),
+    /** How the agent's repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
+    githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: createdAt(),
   },
@@ -253,6 +256,11 @@ export const codingAgent = pgTable(
     index("coding_agent_task_created").on(table.taskId, table.createdAt),
     // A workspace's agents with no task are read newest first.
     index("coding_agent_org_created").on(table.organizationId, table.createdAt),
+    // The agents with no task, which the sidebar lists across the account's workspaces, are read
+    // by workspace newest first, apart from the task agents that outnumber them.
+    index("coding_agent_org_taskless_created")
+      .on(table.organizationId, table.createdAt)
+      .where(sql`${table.taskId} is null`),
     // An agent's summary names the agents started from it, read by the source's id.
     index("coding_agent_started_from_agent").on(sql`(${table.startedFrom}->>'agentId')`),
   ],

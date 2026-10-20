@@ -16,8 +16,8 @@
  */
 
 import path from "node:path";
+import { withoutAccessTokens } from "@luke/features/sentry-breadcrumbs";
 import { app, type BrowserWindow } from "electron";
-import { withoutAccessTokens } from "#shared/sentry-breadcrumbs";
 
 /** The document a window's page is, by its file's name: `index.html`, `voice.html`, or `call.html`. */
 function documentName(url: string): string {

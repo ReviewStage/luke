@@ -4,12 +4,13 @@ import assert from "node:assert/strict";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import {
+  type AnyAct,
   fakeActPort,
   fakeAppBridge,
   type OpenedLink,
@@ -82,17 +83,12 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
-const told: (Act | OpenedLink)[] = [];
+const told: (AnyAct | OpenedLink)[] = [];
 
 beforeEach(() => {
   told.length = 0;
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      told.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppBridge({});
   fakeActPort(openingLinks((link) => told.push(link)));
 });
 

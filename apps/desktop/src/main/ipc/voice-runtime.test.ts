@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { runModeFor } from "@luke/host";
+import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { AppStateStore, initialAppState } from "@luke/host/client";
+import { PUSH, type PushEvent } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
 import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
 import type { WireRecord } from "@luke/wire";
 import { Context, Effect, Option } from "effect";
 import type { WebContents } from "electron";
 import type { PanelManager } from "../window/panel-manager";
+import { windowPushes } from "../window/window-pushes";
 import {
   type VoiceRuntimeDependencies,
   voiceRuntimeProcedures,
@@ -39,7 +41,6 @@ afterEach(() => {
 });
 
 function fixture() {
-  const sentToVoice: { channel: string; payload: WireRecord }[] = [];
   const toPanels: { channel: string; payload: WireRecord }[] = [];
   let panelsFocused = 0;
   const liveCalls: string[] = [];
@@ -49,17 +50,23 @@ function fixture() {
   const voiceSender = {} as WebContents;
   // SAFETY: a third, for the call window.
   const callSender = {} as WebContents;
-  // SAFETY: the command path reads only `owns` and `current().webContents.send` off the voice window surface.
+  // SAFETY: the command path reads only `owns` and `current().webContents` off the voice window surface.
   const voiceWindow = {
     owns: (sender: WebContents) => sender === voiceSender,
-    current: () => ({
-      webContents: {
-        send: (channel: string, payload: WireRecord) => {
-          sentToVoice.push({ channel, payload });
-        },
-      },
-    }),
+    current: () => ({ webContents: voiceSender }),
   } as unknown as VoiceRuntimeDependencies["voiceWindow"];
+  // The voice window's push stream, open as its page holds it.
+  const voiceStream = windowPushes.stream(voiceSender, undefined);
+  /** Every push the voice window has heard so far, its stream then ended. */
+  const sentToVoice = Effect.promise(async () => {
+    windowPushes.push(voiceSender, PUSH.CALL_WINDOW_MOVED, undefined);
+    const heard: PushEvent[] = [];
+    for await (const event of voiceStream) {
+      if (event.push === PUSH.CALL_WINDOW_MOVED) break;
+      heard.push(event);
+    }
+    return heard;
+  });
   // SAFETY: these paths read only `owns`, the exchange edge, the broadcast, and the focus off the panel manager.
   const panels = {
     owns: (sender: WebContents) => sender === panelSender,
@@ -219,7 +226,7 @@ it.effect("stopping Luke with no call up stops his turn on the open task and tel
     f.state.update({ tasks: { ...f.state.snapshot().tasks, activeTaskId: OPEN_TASK } });
     yield* f.perform(f.voiceSender, { kind: ACT_KIND.LUKE_STOP, payload: {} });
     assert.deepEqual(f.liveCalls, [`stopWork:${OPEN_TASK}`]);
-    assert.deepEqual(f.sentToVoice, []);
+    assert.deepEqual(yield* f.sentToVoice, []);
   }),
 );
 
@@ -237,10 +244,9 @@ it.effect(
       });
       yield* f.perform(f.voiceSender, { kind: ACT_KIND.LUKE_STOP, payload: {} });
       assert.deepEqual(f.liveCalls, [`stopWork:${CALL_TASK}`]);
-      assert.deepEqual(
-        f.sentToVoice.map((sent) => sent.payload),
-        [{ command: VOICE_COMMAND.STOP_SPEAKING }],
-      );
+      assert.deepEqual(yield* f.sentToVoice, [
+        { push: PUSH.VOICE_COMMAND, payload: { command: VOICE_COMMAND.STOP_SPEAKING } },
+      ]);
     }),
 );
 
@@ -267,6 +273,6 @@ it.effect(
         { refused: "Could not carry that command on this system." },
       );
       assert.deepEqual(f.liveCalls, []);
-      assert.deepEqual(f.sentToVoice, []);
+      assert.deepEqual(yield* f.sentToVoice, []);
     }),
 );

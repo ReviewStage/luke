@@ -61,10 +61,23 @@
   /* A composer's card on a phone's screen gives its words the room the
      desktop's margins and inset would spend: it stands half the dimmed
      window's margin from the screen's edges, at a card's snug inset, so the
-     composer it holds keeps its chips beside the round button. The desktop's
-     window is never this narrow. */
+     composer it holds keeps its chips beside the round button. A root that
+     measures its own room says which it is in `data-luke-room` (the panel's
+     `stage-room.ts`), and the card answers that, so it turns when the page
+     behind it does; one that says nothing is answered by the dimmed window's
+     own width. The desktop's window is never this narrow. */
+  :root[data-luke-room="narrow"] .luke-dialog[data-size="composer"] {
+    width: calc(100% + 2 * var(--luke-space-12));
+    margin-right: calc(-1 * var(--luke-space-12));
+    margin-left: calc(-1 * var(--luke-space-12));
+    padding-top: var(--luke-card-inset-snug);
+    padding-right: var(--luke-card-inset-snug);
+    padding-bottom: var(--luke-card-inset-snug);
+    padding-left: var(--luke-card-inset-snug);
+  }
+
   @container luke-dialog-room (max-width: 639px) {
-    .luke-dialog[data-size="composer"] {
+    :root:not([data-luke-room]) .luke-dialog[data-size="composer"] {
       width: calc(100% + 2 * var(--luke-space-12));
       margin-right: calc(-1 * var(--luke-space-12));
       margin-left: calc(-1 * var(--luke-space-12));

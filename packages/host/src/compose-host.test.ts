@@ -26,6 +26,7 @@ import {
   VoiceSocket,
 } from "./effect/seams.js";
 import {
+  ALL_CLIENT_CAPABILITIES,
   ALL_HOST_PLATFORM_CONCERNS,
   type ClientCapability,
   HOST_CONCERN,
@@ -151,6 +152,18 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
+      ]);
+      // The desktop answers every client capability too: its Zoom, login item and Keyboard shortcuts page stand on DESKTOP_APP.
+      assert.deepEqual(hostCapabilities(asked.concerns, ALL_CLIENT_CAPABILITIES), [
+        HOST_CAPABILITY.VOICE,
+        HOST_CAPABILITY.UPDATES,
+        HOST_CAPABILITY.MICROPHONE,
+        HOST_CAPABILITY.NOTIFICATIONS,
+        HOST_CAPABILITY.MAC_COMMANDS,
+        HOST_CAPABILITY.MAC_TERMINAL,
+        HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.BROWSER,
+        HOST_CAPABILITY.DESKTOP_APP,
       ]);
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   );

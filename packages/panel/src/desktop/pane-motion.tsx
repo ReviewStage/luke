@@ -14,9 +14,8 @@
  * are played here. A smaller pane docked at the right of what it stands
  * beside, a File tab's tree, a Terminal tab's shells, or an automation's
  * Runs, slides in and out on the same tokens (`usePaneSlide`), and an
- * automation's form glides as its Runs come and go, as the document, or the
- * Issues list and board beside the side panel peeking an issue, do beside
- * the side panel.
+ * automation's form glides as its Runs come and go, as the document does
+ * beside the side panel.
  *
  * Only a change to the panes plays anything. A drag between a pane's bounds
  * changes its width alone, so the edge stays under the pointer frame for
@@ -34,8 +33,6 @@ const GLIDERS = [
   ".desktop-call-bar .call-bar",
   ".desktop-empty > *",
   ".automation-editor",
-  ".issue-groups",
-  ".issue-column",
 ].join(", ");
 
 /** The pane, read before a change whether or not it is leaving, so one brought back mid-exit carries on from where it was. */
@@ -53,8 +50,7 @@ const STILL = 0.5;
 /**
  * Which panes are drawn under the root, and how, each by a name of its
  * owner's: the window's sidebar, side panel, and the plan's pinned summary,
- * an automation's Runs, or the side panel peeking an issue beside the
- * Issues list. A change to any of them is what plays.
+ * or an automation's Runs. A change to any of them is what plays.
  */
 type PaneLayout = Readonly<Record<string, boolean>>;
 
@@ -178,7 +174,7 @@ function play(root: HTMLElement, before: Snapshot): void {
 
 /**
  * Plays the pane changes over the box at `root`: the window's shell, an
- * automation's page beside its Runs, or the Issues page beside the side panel peeking an issue. Note that this is
+ * automation's page beside its Runs. Note that this is
  * a class, because `getSnapshotBeforeUpdate` is the one moment React gives to
  * read the layout a commit is about to change, and the glide starts from
  * there; it draws nothing of its own.
@@ -204,6 +200,20 @@ export class PaneGlide extends Component<PaneGlideProps, PaneGlideState, Snapsho
   }
 }
 
+/** Which edge of what it stands beside a pane is docked at, and slides in from and out past. */
+export const PANE_EDGE = {
+  RIGHT: "right",
+  LEFT: "left",
+} as const;
+
+export type PaneEdge = (typeof PANE_EDGE)[keyof typeof PANE_EDGE];
+
+/** Where a pane stands once slid out past its edge. */
+const PAST_EDGE = {
+  [PANE_EDGE.RIGHT]: "translateX(100%)",
+  [PANE_EDGE.LEFT]: "translateX(-100%)",
+} as const satisfies Record<PaneEdge, string>;
+
 /** A pane that slides as its owner shows and hides it: whether it is drawn, whether on its way out, and its box. */
 export interface PaneSlide {
   drawn: boolean;
@@ -212,10 +222,11 @@ export interface PaneSlide {
 }
 
 /**
- * A pane docked at the right of what it stands beside, shown and hidden as
+ * A pane docked at the right of what it stands beside, or at its left
+ * (`edge`), as the Chapters view's rail is, shown and hidden as
  * the window's panes are (docs/DESIGN.md): it lands in the layout or leaves
  * it at once, so what stands beside it takes or gives its room on the frame
- * the toggle is pressed, and the pane slides in from the right edge, or out
+ * the toggle is pressed, and the pane slides in from its edge, or out
  * past it over what it uncovers, on the pane's own motion tokens. Each
  * slide starts from wherever one under way had brought it. A closed pane is
  * held drawn through its slide out, marked leaving so the stylesheet takes
@@ -224,7 +235,7 @@ export interface PaneSlide {
  * frame is drawn. A pane its owner opens with stands at once, since nothing
  * was toggled.
  */
-export function usePaneSlide(open: boolean): PaneSlide {
+export function usePaneSlide(open: boolean, edge: PaneEdge = PANE_EDGE.RIGHT): PaneSlide {
   const pane = useRef<HTMLElement>(null);
   const [shown, setShown] = useState(open);
   const [leaving, setLeaving] = useState(false);
@@ -249,15 +260,15 @@ export function usePaneSlide(open: boolean): PaneSlide {
       return;
     }
     if (open) {
-      const start = from === "" || from === "none" ? "translateX(100%)" : from;
+      const start = from === "" || from === "none" ? PAST_EDGE[edge] : from;
       element.animate([{ transform: start }, { transform: "none" }], timing);
       return;
     }
     const exit = element.animate(
-      [{ transform: from === "" ? "none" : from }, { transform: "translateX(100%)" }],
+      [{ transform: from === "" ? "none" : from }, { transform: PAST_EDGE[edge] }],
       { ...timing, fill: "forwards" },
     );
     exit.onfinish = () => setLeaving(false);
-  }, [open]);
+  }, [open, edge]);
   return { drawn: open || leaving, leaving, pane };
 }

@@ -8,10 +8,9 @@ import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { ORPCError } from "@orpc/server";
 import { Effect, Option } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { SETTINGS_ACT_KIND, type SettingUpdatePayload } from "../contract/index.js";
 import type { HostOperator } from "../host-operator.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /** What one client-side effect is handed: the snapshot, and whether to wait. */
 interface ClientSettingSideEffectContext {
@@ -185,17 +184,24 @@ export function settingsProcedures(dependencies: SettingsProceduresDependencies)
     [SETTINGS_ACT_KIND.SETTINGS_RESET]: actPort[SETTINGS_ACT_KIND.SETTINGS_RESET].effect(
       function* ({ input, context, errors }) {
         const reporter = yield* reporterFor(context.actor, errors.REFUSED);
-        return yield* write(errors.REFUSED, host.resetSettings(input.scope, reporter), (result) =>
-          result.reason
-            ? Effect.void
-            : Effect.forEach(
-                APP_SETTING_FIELDS.filter((field) => {
-                  const definition = APP_SETTING_SCHEMA[field];
-                  return "resetScope" in definition && definition.resetScope === input.scope;
-                }),
-                (field) => applyClientSettingSideEffect(field, result.settings, true),
-                { discard: true },
-              ),
+        return yield* write(
+          errors.REFUSED,
+          host.resetSettings(input.scope, input.kept, reporter),
+          (result) =>
+            result.reason
+              ? Effect.void
+              : Effect.forEach(
+                  APP_SETTING_FIELDS.filter((field) => {
+                    const definition = APP_SETTING_SCHEMA[field];
+                    return (
+                      "resetScope" in definition &&
+                      definition.resetScope === input.scope &&
+                      !input.kept.includes(field)
+                    );
+                  }),
+                  (field) => applyClientSettingSideEffect(field, result.settings, true),
+                  { discard: true },
+                ),
         );
       },
     ),

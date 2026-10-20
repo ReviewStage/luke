@@ -2,12 +2,13 @@
 
 import assert from "node:assert/strict";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import {
+  type AnyAct,
   fakeActPort,
   fakeAppBridge,
   type OpenedLink,
@@ -44,17 +45,12 @@ const WORDS = [
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
-let sent: (Act | OpenedLink)[] = [];
+let sent: (AnyAct | OpenedLink)[] = [];
 
 beforeEach(() => {
   sent = [];
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppBridge({});
   fakeActPort(openingLinks((link) => sent.push(link)));
 });
 

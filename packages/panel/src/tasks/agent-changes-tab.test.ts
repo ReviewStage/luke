@@ -22,7 +22,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { ACT_ERROR, SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import {
@@ -40,12 +40,21 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { useAppCommand, useAppKeymap } from "../app-commands.js";
 import type { SideBundles } from "../bundle-loader.js";
-import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
+import {
+  type DiffListProps,
+  type DiffViewModule,
+  GAP_CONTROL,
+  GAP_CONTROL_ATTRIBUTE,
+} from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
   fakeActPort,
   fakeActPortCalls,
+  fakeActs,
   fakeAppBridge,
   refusedOnPort,
 } from "../testing/app-bridge.js";
@@ -174,6 +183,8 @@ const standIn: DiffViewModule = {
       update: (next) => drawn.push(next),
       reveal: (path) => revealed.push(path),
       revealLine: (path, side, line) => revealed.push(`${path}:${side}:${line}`),
+      revealLines: (range) =>
+        revealed.push(`${range.path}:${range.side}:${range.startLine}-${range.endLine}`),
       unmount: () => undefined,
     };
   },
@@ -709,6 +720,54 @@ test("the pointer's first arrival on a header's letter hangs its hint, though th
   assert.equal(document.getElementById(hint)?.textContent, "Modified");
 });
 
+test("a finger's arrival on a header draws none of it anew, so iOS spends no tap on the fold", async () => {
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const fold = header("a.ts").querySelector("button") ?? assert.fail("the fold stands");
+  act(() => {
+    fold.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "touch" }));
+  });
+  await flush();
+
+  assert.ok(fold.isConnected, "the fold the finger is on still stands");
+  assert.ok(header("a.ts").querySelector("button") === fold, "the fold is the one drawn before");
+});
+
+test("on a touch screen a header's hints stand from the start, so a long press on its fold hangs the fold's", async () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query === "(pointer: coarse)",
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+  files = [changed("a.ts")];
+  await drawTab();
+  document.body.append(lastDrawn().renderHeader("a.ts"));
+  const fold = header("a.ts").querySelector("button") ?? assert.fail("the fold stands");
+  vi.useFakeTimers();
+  try {
+    act(() => {
+      fold.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          cancelable: true,
+          pointerId: 3,
+          pointerType: "touch",
+          isPrimary: true,
+        }),
+      );
+      vi.advanceTimersByTime(2000);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+
+  assert.ok(header("a.ts").contains(fold), "the hold drew no fold anew");
+  const hint = fold.getAttribute("aria-describedby");
+  assert.ok(hint !== null, "the fold is described by its hint");
+  assert.match(document.getElementById(hint)?.textContent ?? "", /^Collapse file/u);
+});
+
 test("J outside Files changed is still the Inbox's, and inside it is the view's alone", async () => {
   files = [changed("a.ts"), changed("b.ts")];
   let inboxNext = 0;
@@ -1097,15 +1156,10 @@ function comeIntoView(): void {
   }
 }
 
-/** Every `app:act` this test does not answer, refused. */
-function refuseEveryAct(): Promise<ActOutcome> {
-  return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-}
-
 /** The images the service was asked for, by address, each answered with a picture of its own. */
 function answerImages(refusing: Set<string> = new Set()): string[] {
   const asked: string[] = [];
-  fakeAppBridge({ act: refuseEveryAct });
+  fakeAppBridge({});
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
@@ -1363,7 +1417,7 @@ const MARKED: CodingAgentPullRequestViewedAnswerView = {
 /** Every mark asked of the service, answered as `answer` says. */
 function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionRequest[] {
   const asked: PullRequestActionRequest[] = [];
-  fakeAppBridge({ act: refuseEveryAct });
+  fakeAppBridge({});
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
@@ -1538,7 +1592,7 @@ function holdMarks(): Array<{
     readonly request: PullRequestActionRequest;
     readonly answer: (answer: PullRequestWriteAnswer) => void;
   }> = [];
-  fakeAppBridge({ act: refuseEveryAct });
+  fakeAppBridge({});
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
@@ -1769,6 +1823,69 @@ test("minimized, the threads on no line take a row of their own for their chip, 
   assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
 });
 
+/** The seats patch and a second hunk far below it, so a long gap stands between them, its line 30 the same line on both sides but one. */
+const GAPPED_PATCH = [
+  PATCH,
+  "@@ -59,3 +60,3 @@",
+  " const kept = 59;",
+  "-const late = 60;",
+  "+const late = 61;",
+  " const end = 61;",
+].join("\n");
+
+test("a review thread on a line between hunks moves onto its line once a gap opened over it draws it, and back above the diff as the gap closes; an outdated one stays above", async () => {
+  commits = { headSha: HEAD_SHA };
+  files = [changed("src/seats.ts", { patch: GAPPED_PATCH })];
+  const threads: ChangesThreads = {
+    list: [seatsThread(30, "in-gap"), seatsThread(null, "was-3")],
+    draw: (thread) => createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+  };
+  await drawTab({ threads });
+  const file = () => lastDrawn().files[0] ?? assert.fail("the file is drawn");
+  const onLines = () =>
+    file()
+      .annotations.filter((note) => note.line !== 0)
+      .map((note) => [note.key, note.side, note.line]);
+  const aboveWords = () => {
+    const above = file().annotations.find((note) => note.line === 0);
+    return lastDrawn()
+      .renderAnnotation("src/seats.ts", above?.key ?? "")
+      .querySelector('[aria-label="Comments on lines this diff does not show"]')?.textContent;
+  };
+  assert.deepEqual(file().hidden, [30], "the list is asked to tell of the thread's line");
+  assert.deepEqual(onLines(), []);
+  assert.equal(aboveWords(), "in-gapwas-3");
+
+  // The gap's arrow opened over line 30, as the list tells it.
+  act(() => lastDrawn().onDrawn?.("src/seats.ts", [30]));
+  await flush();
+  assert.deepEqual(onLines(), [[`${PAGE}#in-gap`, "additions", 30]]);
+  assert.equal(
+    lastDrawn().renderAnnotation("src/seats.ts", `${PAGE}#in-gap`).textContent,
+    "in-gap",
+  );
+  assert.equal(aboveWords(), "was-3", "the outdated thread stays above");
+
+  // Minimized, the thread that moved is its line's chip.
+  press(listBox(), { key: "i" });
+  await flush();
+  assert.equal(
+    lastDrawn()
+      .renderAnnotation("src/seats.ts", `${PAGE}#in-gap`)
+      .querySelector(".diff-thread-chip")
+      ?.getAttribute("aria-label"),
+    "1 comment by octo · 1 open, show",
+  );
+  press(listBox(), { key: "i" });
+  await flush();
+
+  // The gap closed again, its patch read anew.
+  act(() => lastDrawn().onDrawn?.("src/seats.ts", []));
+  await flush();
+  assert.deepEqual(onLines(), []);
+  assert.equal(aboveWords(), "in-gapwas-3");
+});
+
 test("a header copies the path it names on a press, the path a file moved from apart from the one it moved to", async () => {
   files = [
     changed("src/seats.ts"),
@@ -1834,13 +1951,13 @@ const BASE_TEXT = HEAD_TEXT.replace("five", "5");
 const HEAD_PATCH = "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8";
 
 /** Answers each read of a file whole as given, keeping every read asked. */
-function answerFileReads(answer: (path: string) => TasksFileAnswer): Act[] {
-  const asked: Act[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+function answerFileReads(answer: (path: string) => TasksFileAnswer): AnyAct[] {
+  const asked: AnyAct[] = [];
+  fakeActs({
+    act: (request: AnyAct) => {
       asked.push(request);
-      const outcome: ActOutcome = {
-        status: ACT_OUTCOME_STATUS.DONE,
+      const outcome: FakeActAnswer = {
+        status: FAKE_ANSWER.DONE,
         value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,
       };
       return Promise.resolve(outcome);
@@ -1980,24 +2097,32 @@ test("a file whose read is refused closes its gaps and says why, once, above its
   );
 });
 
-test("a gap's arrow under the pointer hangs its hint: the next twenty lines of a long gap and \u21e7 for all, or the whole of a short one", async () => {
+test("a gap's control under the pointer or the keyboard's focus hangs its hint, what it opens, and a press lets it go", async () => {
   files = [changed("src/seats.ts")];
   await drawTab();
-  const hintOver = (long: boolean) => {
-    const wrapper = listBox().appendChild(document.createElement("div"));
-    wrapper.setAttribute("data-separator-wrapper", "");
-    const arrow = wrapper.appendChild(document.createElement("div"));
-    arrow.setAttribute("data-expand-button", "");
-    if (long)
-      wrapper.appendChild(document.createElement("div")).setAttribute("data-expand-all-button", "");
-    act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
-    const words = document.querySelector('[role="tooltip"]')?.textContent;
-    act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
-    wrapper.remove();
-    return words;
-  };
-  assert.equal(hintOver(true), "Show 20 more lines\u21e7-click for all");
-  assert.equal(hintOver(false), "Show these lines");
+  const band = listBox().appendChild(document.createElement("div"));
+  const words = band.appendChild(document.createElement("span"));
+  words.setAttribute(GAP_CONTROL_ATTRIBUTE, GAP_CONTROL.ALL);
+  words.setAttribute("aria-label", "Show all 51 lines");
+  words.tabIndex = 0;
+  const arrow = band.appendChild(document.createElement("div"));
+  arrow.setAttribute(GAP_CONTROL_ATTRIBUTE, GAP_CONTROL.MORE);
+  arrow.setAttribute("aria-label", "Show 20 more lines");
+  arrow.tabIndex = 0;
+  const hint = () => document.querySelector('[role="tooltip"]')?.textContent;
+
+  act(() => words.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  assert.equal(hint(), "Show all 51 lines");
+  act(() => arrow.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  assert.equal(hint(), "Show 20 more lines");
+  act(() => listBox().dispatchEvent(new MouseEvent("pointerdown", { bubbles: true })));
+  assert.equal(hint(), undefined);
+
+  act(() => words.focus());
+  assert.equal(hint(), "Show all 51 lines");
+  act(() => words.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  assert.equal(hint(), undefined);
+  band.remove();
 });
 
 test("a file read whole that is not the contents GitHub listed its patch against opens no gap, though its hunks match", async () => {
@@ -2083,8 +2208,8 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
     changed("src/plan.ts", { patch: HEAD_PATCH }),
   ];
   const held: Array<() => void> = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+  fakeActs({
+    act: (request: AnyAct) => {
       const value =
         request.kind === ACT_KIND.TASKS_FILE
           ? {
@@ -2096,7 +2221,7 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
               },
             }
           : undefined;
-      const outcome: ActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
+      const outcome: FakeActAnswer = { status: FAKE_ANSWER.DONE, value };
       // The first file's read is held until the test lets it land.
       if (request.kind === ACT_KIND.TASKS_FILE && request.payload.path === "src/seats.ts") {
         return new Promise((resolve) => held.push(() => resolve(outcome)));

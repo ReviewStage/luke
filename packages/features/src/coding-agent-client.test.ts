@@ -8,11 +8,14 @@ import { MEMBER_KIND } from "./chat-wire.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { INBOX_REPLY } from "./inbox-wire.js";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
 } from "./provider-key-wire.js";
+import { PULL_REQUEST_CHAPTERS_CALL_FAILURE } from "./pull-request-chapters-view.js";
+import { PULL_REQUEST_CHAPTERS_STATE } from "./pull-request-chapters-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -241,7 +244,7 @@ it.effect(
 );
 
 it.effect(
-  "writes a message on an inbox item's thread at the item's own path, its words trimmed, answers the item as it then stands, names a refusal as a message's, and sends nothing that carries neither words nor files",
+  "writes a message on an inbox item's thread at the item's own path, its words trimmed, answers the item as it then stands, names a refusal as a message's, sends an answer to the open ask on a reply with no words, and sends nothing that carries neither words, files, nor an answer",
   () =>
     Effect.gen(function* () {
       const itemId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
@@ -284,15 +287,28 @@ it.effect(
         client().messageInbox(itemId, { text: " ", clientKey: "key-2" }),
         api.layer,
       );
+      const answers = {
+        ask: "7f4d0b2a-3c5e-4a81-9d9f-4e6a8c0d2f3b",
+        reply: INBOX_REPLY.CHOSE,
+        choices: ["Short"],
+      };
+      const answered = yield* Effect.provide(
+        client().messageInbox(itemId, { text: " ", clientKey: "key-3", answers }),
+        api.layer,
+      );
 
       assert.deepEqual(sent, { item });
-      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "null"), {
-        text: "Drop the emoji.",
-        clientKey: "key-1",
-      });
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
       assert.deepEqual(empty, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      assert.equal(api.requests().length, 1, "nothing is sent for a message of neither");
+      assert.deepEqual(answered, { item });
+      assert.deepEqual(
+        api.requests().map((request) => JSON.parse(request.body ?? "null")),
+        [
+          { text: "Drop the emoji.", clientKey: "key-1" },
+          { text: "", clientKey: "key-3", answers },
+        ],
+        "nothing is sent for a message of neither, and an answer goes without words",
+      );
     }),
 );
 
@@ -588,5 +604,86 @@ it.effect(
       assert.deepEqual(yield* Fiber.join(unanswered), {
         failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
       });
+    }),
+);
+
+it.effect(
+  "reads what waits across the account past a cursor, held, listing the archived tasks for the Archived tab, and a refusal or a body that is no answer is unanswered",
+  () =>
+    Effect.gen(function* () {
+      const inbox = { items: [], plans: [], cursor: "9", readAt: 1_800_000_060_000 };
+      const answering = (answer: JsonValue, status: number = HTTP_STATUS.OK) =>
+        fakeCloudApi({ "GET /api/inbox": { answer: () => answer, status } });
+
+      const api = answering(inbox);
+      const read = yield* Effect.provide(client().accountInbox("3"), api.layer);
+      const refused = yield* Effect.provide(
+        client().accountInbox("3"),
+        answering({ error: HOSTED_API_ERROR.UNAVAILABLE }, 503).layer,
+      );
+      const unread = yield* Effect.provide(
+        client().accountInbox("3"),
+        answering({ cursor: "9" }).layer,
+      );
+
+      assert.deepEqual(read, inbox);
+      const query = api.requests()[0]?.searchParams;
+      assert.equal(query?.get("after"), "3");
+      assert.equal(query?.get("archived"), "include");
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(unread, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "a pull request's chapters are read by the tab's number and generated with it in the query, each refusal the tab acts on read as its own failure",
+  () =>
+    Effect.gen(function* () {
+      const path = `/api/agents/${AGENT_ID}/chapters`;
+      const answer = {
+        pullRequest: {
+          number: 7,
+          headSha: "c0ffee1",
+          generatable: true,
+          chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+        },
+      };
+      const api = fakeCloudApi({
+        [`GET ${path}`]: { answer: () => answer },
+        [`POST ${path}`]: { answer: () => answer },
+      });
+
+      assert.deepEqual(yield* Effect.provide(client().chapters(AGENT_ID, 7), api.layer), answer);
+      assert.deepEqual(
+        yield* Effect.provide(client().generateChapters(AGENT_ID, 7), api.layer),
+        answer,
+      );
+      assert.deepEqual(yield* Effect.provide(client().chapters(AGENT_ID), api.layer), answer);
+      assert.deepEqual(
+        api.requests().map((request) => `${request.method} ${request.pathname}${request.search}`),
+        [`GET ${path}?number=7`, `POST ${path}?number=7`, `GET ${path}`],
+      );
+      assert.equal(api.requests()[1]?.body ?? "", "");
+
+      const refusals = [
+        [HOSTED_API_ERROR.NOT_FOUND, PULL_REQUEST_CHAPTERS_CALL_FAILURE.NOT_FOUND],
+        [
+          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+          PULL_REQUEST_CHAPTERS_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+        ],
+        [HOSTED_API_ERROR.GITHUB_UNANSWERED, PULL_REQUEST_CHAPTERS_CALL_FAILURE.GITHUB_UNANSWERED],
+        [HOSTED_API_ERROR.UNAVAILABLE, PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNAVAILABLE],
+        [HOSTED_API_ERROR.INVALID_REQUEST, PULL_REQUEST_CHAPTERS_CALL_FAILURE.UNANSWERED],
+      ] as const;
+      for (const [error, failure] of refusals) {
+        const refusing = fakeCloudApi({
+          [`POST ${path}`]: { answer: () => ({ error }), status: HTTP_STATUS.CONFLICT },
+        });
+        assert.deepEqual(
+          yield* Effect.provide(client().generateChapters(AGENT_ID), refusing.layer),
+          { failure },
+          error,
+        );
+      }
     }),
 );

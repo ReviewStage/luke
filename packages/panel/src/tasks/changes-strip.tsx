@@ -19,7 +19,7 @@ import type { CodingAgentChangedFile } from "@luke/features/coding-agent-wire";
 
 /** What the strip wears, from its view's room: the pointer resting on it peeks the tree. */
 export interface StripPeek {
-  readonly onPointerEnter: () => void;
+  readonly onPointerEnter: (event: React.PointerEvent<HTMLElement>) => void;
   readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
 }
 

@@ -6,15 +6,8 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ExternalLinkIcon,
-  GlobeIcon,
-  RotateCwIcon,
-  XIcon,
-} from "lucide-react";
+import { ERROR_STATE_PLACEMENT, ErrorState, IconButton } from "@luke/ui";
+import { ArrowLeftIcon, ArrowRightIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
 import {
   type FormEvent,
   type RefObject,
@@ -331,7 +324,7 @@ function pressHere(key: BrowserKey): void {
   );
 }
 
-/** One of the bar's steps: a press of its glyph, which says what it does. */
+/** One of the bar's steps: a press of its glyph, which says what it does, drawn as every tab's bar draws its glyphs. */
 function BarStep({
   label,
   icon,
@@ -345,15 +338,7 @@ function BarStep({
 }): React.JSX.Element {
   return (
     <Tooltip label={label}>
-      <button
-        type="button"
-        className="icon-button"
-        aria-label={label}
-        disabled={disabled}
-        onClick={onPress}
-      >
-        {icon}
-      </button>
+      <IconButton icon={icon} label={label} disabled={disabled} onClick={onPress} />
     </Tooltip>
   );
 }
@@ -505,11 +490,7 @@ export function BrowserPane({
         </div>
       </header>
       <div ref={body} className="browser-view-body">
-        {!opened && !refused ? (
-          <EmptyState icon={<GlobeIcon />}>
-            Type an address above. Your own dev server works too, like localhost:3000.
-          </EmptyState>
-        ) : refused ? (
+        {!opened && !refused ? null : refused ? (
           <ErrorState
             onRetry={() => openAt(browserAddressOf(address) ?? address)}
             placement={ERROR_STATE_PLACEMENT.CENTRED}

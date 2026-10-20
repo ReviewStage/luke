@@ -37,6 +37,17 @@ export const DRIZZLE_MIGRATIONS = {
   TABLE: "__drizzle_migrations",
 } as const;
 
+/**
+ * How long any statement of a run waits for a lock before it fails. Note
+ * that the run is bounded, because it runs during the production build while
+ * the deployment before it still serves: a DDL statement queued behind a
+ * long transaction holds every query on that table behind it for as long as
+ * it waits, so a statement blocked past this fails the build rather than
+ * stalling the live traffic. A second run started while one is under way
+ * fails the same way once it waits this long on the first.
+ */
+const MIGRATION_LOCK_TIMEOUT = "5s";
+
 /** The old runner's history table, read once by the transfer and otherwise left alone. */
 export const EFFECT_MIGRATIONS_TABLE = "effect_sql_migrations";
 
@@ -171,6 +182,9 @@ export const runWebMigrations = /* @__PURE__ */ Effect.fn("web/runWebMigrations"
   folder: string = MIGRATIONS_FOLDER,
 ): Effect.fn.Return<ReadonlyArray<string>, MigrationError, Database | SqlClient.SqlClient> {
   const local = yield* readFolder(folder);
+  const sql = yield* SqlClient.SqlClient;
+  // The setting stands for the session, so the caller holds one connection for the whole run.
+  yield* sql`select set_config('lock_timeout', ${MIGRATION_LOCK_TIMEOUT}, false)`;
   yield* transferHistory(local);
   const before = yield* recordedNames;
   const db = yield* Database;

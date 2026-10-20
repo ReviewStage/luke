@@ -1,9 +1,14 @@
 import { VOICE_SERVICE_PATH } from "@luke/features";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
 import {
+  PULL_REQUEST_CHAPTERS_FUNCTION,
+  PULL_REQUEST_CHAPTERS_ROUTE_PATH,
+} from "@luke/service/chapters/chapters-function";
+import {
   MAINTENANCE_SWEEP,
   MAINTENANCE_SWEEP_PATH,
 } from "@luke/service/maintenance/maintenance-bounds";
+import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
@@ -31,6 +36,7 @@ function routeKeyOf(path: string): string {
 const FUNCTION_GROUP = {
   DEFAULT: "default",
   MAINTENANCE_SWEEP: "maintenance-sweep",
+  PULL_REQUEST_CHAPTERS: "pull-request-chapters",
 } as const;
 type FunctionGroup = (typeof FUNCTION_GROUP)[keyof typeof FUNCTION_GROUP];
 
@@ -62,6 +68,12 @@ const GROUPS: readonly GroupDefinition[] = [
     maxDuration: MAINTENANCE_SWEEP.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(MAINTENANCE_SWEEP_PATH)],
   },
+  // A Generate runs one model call of up to three minutes, past the platform's default duration.
+  {
+    file: FUNCTION_GROUP.PULL_REQUEST_CHAPTERS,
+    maxDuration: PULL_REQUEST_CHAPTERS_FUNCTION.MAX_DURATION_SECONDS,
+    routes: [routeKeyOf(PULL_REQUEST_CHAPTERS_ROUTE_PATH)],
+  },
 ];
 
 /** The WebSocket services, each a function of its own: the voice sessions and the terminal relay. */
@@ -72,15 +84,19 @@ const STANDALONE_ROUTES: readonly string[] = [
 
 /**
  * The functions a deploy carries, given every route key under `server/routes/`:
- * the grouped functions, the standalone voice function, and the default
- * group over every route none of those claimed. Sorted by file, so the stubs,
- * the bundles, and the rewrites are written in one order.
+ * the grouped functions, the standalone WebSocket functions, and the default
+ * group over every route none of those claimed and the hosted oRPC route,
+ * which holds every path that is no route file's. Sorted by file, so the
+ * bundles and the rewrites are written in one order.
  */
 export function functionDefinitions(routeKeys: readonly string[]): readonly FunctionDefinition[] {
+  if (routeKeys.includes(ORPC_ROUTE_KEY)) {
+    throw new Error(`the route key ${ORPC_ROUTE_KEY} is the hosted oRPC route's, not a file's`);
+  }
   const claimed = new Set([...GROUPS.flatMap((group) => group.routes), ...STANDALONE_ROUTES]);
   const unclaimed = routeKeys.filter((key) => !claimed.has(key));
   const definitions: FunctionDefinition[] = [
-    { file: FUNCTION_GROUP.DEFAULT, routes: unclaimed, dispatches: true },
+    { file: FUNCTION_GROUP.DEFAULT, routes: [...unclaimed, ORPC_ROUTE_KEY], dispatches: true },
     ...GROUPS.map((group) => ({ ...group, dispatches: true })),
     ...STANDALONE_ROUTES.map((route) => ({
       file: route,

@@ -135,6 +135,20 @@ export function useAppState(): AppStateSnapshot | undefined {
 }
 
 /**
+ * An atom of what `derive` makes of this window's snapshot, computed once per
+ * delivery for every reader rather than once per reader, over the one
+ * subscription. `derive` is handed the snapshot `useAppState` answers, so
+ * a hook reading the atom and one reading the snapshot cannot disagree.
+ */
+export function appStateDerivedAtom<A>(
+  derive: (state: AppStateSnapshot | undefined) => A,
+): Atom.Atom<A> {
+  return Atom.map(appStateAtom, (result) =>
+    derive(Option.getOrUndefined(AsyncResult.value(result))),
+  );
+}
+
+/**
  * The settings as the document holds them, for a callback that cannot wait a
  * render: two actions asked in one breath arrive as two calls in one turn, and
  * the second has to compose against what the first stored.

@@ -12,10 +12,10 @@ import { AVATAR_END_REASON, VOICE_CLOSE_REASON } from "@luke/database/voice-voca
 import { LIVE_SERVER_EVENT } from "@luke/live";
 import {
   closeGracefully,
-  type LiveSideband,
   SIDEBAND_CLOSE_OUTCOME,
   type SidebandCloseResult,
 } from "@luke/voice/live-session";
+import type { LiveSideband } from "@luke/voice/live-socket";
 import { Deferred, Effect, Exit, Result, type Scope, Stream } from "effect";
 import type { VoiceAccounts } from "./accounts.js";
 import { upstreamSideband } from "./live-sideband.js";

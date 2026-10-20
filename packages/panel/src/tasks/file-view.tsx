@@ -107,7 +107,7 @@ type PanePlace = (typeof PANE_PLACE)[keyof typeof PANE_PLACE];
 
 /** What the toggle that floats a pane over the tab answers besides its press: the pointer resting on it peeks the pane, and its press is no press outside the pane. */
 interface FloatToggle {
-  readonly onPointerEnter: () => void;
+  readonly onPointerEnter: (event: React.PointerEvent<HTMLButtonElement>) => void;
   readonly onPointerLeave: (event: React.PointerEvent<HTMLButtonElement>) => void;
   readonly onPointerDown: () => void;
 }
@@ -209,7 +209,7 @@ export interface PaneRoom {
   readonly toggle: () => void;
   /** What a strip standing in the closed pane's place wears: the pointer resting on it peeks the pane over the tab. */
   readonly strip: {
-    readonly onPointerEnter: () => void;
+    readonly onPointerEnter: (event: React.PointerEvent<HTMLElement>) => void;
     readonly onPointerLeave: (event: React.PointerEvent<HTMLElement>) => void;
   };
   /** What the view's root wears: the marks the stylesheet places the pane by, and Escape anywhere in the view, its bar's toggle included, taking down the pane floating over the tab. */
@@ -295,7 +295,13 @@ export function usePaneRoom(shown: {
   });
   const closeOver = pane.close;
   const view = useRef<HTMLElement | null>(null);
-  const peek = () => setOver((was) => (was === PANE_FLOAT.CLOSED ? PANE_FLOAT.PEEK : was));
+  // Note that a finger's arrival peeks nothing, because iOS plays a tap's
+  // arrival as a hover and spends the tap on a pane that comes in with it:
+  // a finger opens the pane with its toggle's tap alone.
+  const peek = (event: React.PointerEvent) => {
+    if (event.pointerType === "touch") return;
+    setOver((was) => (was === PANE_FLOAT.CLOSED ? PANE_FLOAT.PEEK : was));
+  };
   const unpeek = () => setOver((was) => (was === PANE_FLOAT.PEEK ? PANE_FLOAT.CLOSED : was));
   const toggleOver = () => (over === PANE_FLOAT.OPEN ? closeOver() : pane.open());
   // A pane opened beside the tab floats over it no more.
@@ -357,7 +363,7 @@ export function usePaneRoom(shown: {
           (beside.pane.current?.contains(event.target) === true ||
             event.target.closest(PANE_STRIP) !== null);
         if (over === PANE_FLOAT.CLOSED && atEdge && event.buttons === 0) {
-          if (floats(event.currentTarget.parentElement)) peek();
+          if (floats(event.currentTarget.parentElement)) peek(event);
           return;
         }
         if (over === PANE_FLOAT.PEEK && !atEdge && !onPane) unpeek();

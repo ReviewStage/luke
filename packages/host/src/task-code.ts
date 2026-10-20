@@ -1,7 +1,7 @@
 import type { ShownCode, TaskFileWindow } from "@luke/features/task-wire";
 import type { CodeToken, TaskCode, TaskFileShown } from "@luke/features/tasks-view";
 import { catchAllButInterrupt } from "@luke/runtime/effect";
-import { Effect } from "effect";
+import { Clock, Duration, Effect } from "effect";
 import type { HighlighterCore } from "shiki/core";
 
 /**
@@ -68,36 +68,60 @@ const CODE_EXCERPT_LINES = {
 /** The themes the code is coloured in, one per appearance. */
 const THEME = { DARK: "github-dark-default", LIGHT: "github-light-default" } as const;
 
-let highlighter: HighlighterCore | undefined;
+/**
+ * How long a highlighter that could not be loaded is not asked for again:
+ * code coloured in that time is drawn plain without trying the load again or
+ * warning of it again, so a chunk that failed to download costs one try and
+ * one warning a minute rather than one for every colouring.
+ */
+const LOAD_RETRY_AFTER = Duration.minutes(1);
+
+/** The highlighter as a colouring asks for it: the one built, or none where it could not be loaded. */
+type SharedHighlighter = Effect.Effect<HighlighterCore | undefined>;
 
 /**
- * The one highlighter, loaded and built the first time code is coloured,
+ * The one highlighter `load` builds, loaded the first time code is coloured,
  * since most launches show none, and kept for the life of the process; or
- * none where its module could not be loaded or built, as where a browser's
- * chunk fails to download, so the code is drawn plain rather than not at
- * all; a caller's interruption still ends it. Note that a failure is not kept, so the next colouring tries again,
- * and that two colourings racing the first load may each build one, which
- * is harmless: the module loads once, and the later build is the one kept.
+ * none where it could not be loaded or built, as where a browser's chunk
+ * fails to download, so the code is drawn plain rather than not at all; a
+ * caller's interruption still ends it. A failure is kept for
+ * `LOAD_RETRY_AFTER` on the `Clock`, and the first colouring after that
+ * tries again. Note that two colourings racing a load may each build one,
+ * which is harmless: the module loads once, and the later build is the one
+ * kept.
  */
-const sharedHighlighter: Effect.Effect<HighlighterCore | undefined> = Effect.suspend(() =>
-  highlighter === undefined
-    ? catchAllButInterrupt(
-        Effect.tryPromise(() => import("./task-code-highlighter.js")).pipe(
-          Effect.map((module) => module.createTaskCodeHighlighter()),
-          Effect.tap((built) =>
-            Effect.sync(() => {
-              highlighter = built;
-            }),
+function sharedHighlighterOf(load: Effect.Effect<HighlighterCore, unknown>): SharedHighlighter {
+  let highlighter: HighlighterCore | undefined;
+  let failedAt: number | undefined;
+  return Effect.suspend(() => {
+    if (highlighter !== undefined) return Effect.succeed(highlighter);
+    return Effect.flatMap(Clock.currentTimeMillis, (now) =>
+      failedAt !== undefined && now - failedAt < Duration.toMillis(LOAD_RETRY_AFTER)
+        ? Effect.succeed(undefined)
+        : catchAllButInterrupt(
+            Effect.tap(load, (built) =>
+              Effect.sync(() => {
+                highlighter = built;
+                failedAt = undefined;
+              }),
+            ),
+            (cause) =>
+              Effect.as(
+                Effect.andThen(
+                  Effect.sync(() => {
+                    failedAt = now;
+                  }),
+                  Effect.logWarning(
+                    "Code is drawn plain: the highlighter could not be loaded",
+                    cause,
+                  ),
+                ),
+                undefined,
+              ),
           ),
-        ),
-        (cause) =>
-          Effect.as(
-            Effect.logWarning("Code is drawn plain: the highlighter could not be loaded", cause),
-            undefined,
-          ),
-      )
-    : Effect.succeed(highlighter),
-);
+    );
+  });
+}
 
 /** A run's colour in one theme, or nothing for that theme's own foreground. */
 function runColour(color: string | undefined, foreground: string): string | undefined {
@@ -132,6 +156,7 @@ function compactLine(
  * coloured from there.
  */
 function colouredLines(
+  sharedHighlighter: SharedHighlighter,
   language: string | undefined,
   lines: readonly string[],
 ): Effect.Effect<CodeToken[][]> {
@@ -168,7 +193,10 @@ function languageOfPath(path: string): string | undefined {
  * its fence gives: a language's own name or one of the aliases its grammar
  * declares (`ts`, `py`, `sh`), and none for a name no grammar here answers to.
  */
-function languageOfFence(name: string): Effect.Effect<string | undefined> {
+function languageOfFence(
+  sharedHighlighter: SharedHighlighter,
+  name: string,
+): Effect.Effect<string | undefined> {
   const lower = name.toLowerCase();
   return Effect.map(sharedHighlighter, (core) =>
     core?.getLoadedLanguages().includes(lower) === true ? lower : undefined,
@@ -197,34 +225,58 @@ export function codeExcerpt(code: ShownCode): ShownCode {
   };
 }
 
-/** A window of a whole file as the File tab draws it: the lines the service read from GitHub, coloured as the file's language. */
-export function highlightFile(window: TaskFileWindow): Effect.Effect<TaskFileShown> {
-  return Effect.map(colouredLines(languageOfPath(window.path), window.lines), (lines) => ({
-    ...window,
-    lines,
-  }));
-}
-
-/** The code as the screen draws it: the lines the service sent, coloured, under the place, the repository, and the commit they came from, with Luke's note where he wrote one. */
-export function highlightCode(code: ShownCode): Effect.Effect<TaskCode> {
-  return Effect.map(colouredLines(languageOfPath(code.ref.path), code.lines), (lines) => ({
-    ref: code.ref,
-    repository: code.repository,
-    ...(code.commit === undefined ? undefined : { commit: code.commit }),
-    firstLine: code.firstLine,
-    lineCount: code.lineCount,
-    lines,
-    ...(code.note === undefined ? undefined : { note: code.note }),
-  }));
+/** The three colourings the window asks for, each over one shared highlighter. */
+export interface TaskCodeColouring {
+  /** A window of a whole file as the File tab draws it: the lines the service read from GitHub, coloured as the file's language. */
+  readonly highlightFile: (window: TaskFileWindow) => Effect.Effect<TaskFileShown>;
+  /** The code as the screen draws it: the lines the service sent, coloured, under the place, the repository, and the commit they came from, with Luke's note where he wrote one. */
+  readonly highlightCode: (code: ShownCode) => Effect.Effect<TaskCode>;
+  /**
+   * A fenced block of a transcript's markdown as the window draws it: its code,
+   * line by line, coloured as the language its fence names, as the Code tab's
+   * lines are, and plain for a language the highlighter does not know.
+   */
+  readonly highlightSnippet: (language: string, code: string) => Effect.Effect<CodeToken[][]>;
 }
 
 /**
- * A fenced block of a transcript's markdown as the window draws it: its code,
- * line by line, coloured as the language its fence names, as the Code tab's
- * lines are, and plain for a language the highlighter does not know.
+ * The colourings over the highlighter `load` builds: this process's own
+ * below, over Shiki's chunk, and a test's over a load it scripts.
  */
-export function highlightSnippet(language: string, code: string): Effect.Effect<CodeToken[][]> {
-  return Effect.flatMap(languageOfFence(language), (fenced) =>
-    colouredLines(fenced, code.split("\n")),
-  );
+export function taskCodeColouring(
+  load: Effect.Effect<HighlighterCore, unknown>,
+): TaskCodeColouring {
+  const sharedHighlighter = sharedHighlighterOf(load);
+  return {
+    highlightFile: (window) =>
+      Effect.map(
+        colouredLines(sharedHighlighter, languageOfPath(window.path), window.lines),
+        (lines) => ({ ...window, lines }),
+      ),
+    highlightCode: (code) =>
+      Effect.map(
+        colouredLines(sharedHighlighter, languageOfPath(code.ref.path), code.lines),
+        (lines) => ({
+          ref: code.ref,
+          repository: code.repository,
+          ...(code.commit === undefined ? undefined : { commit: code.commit }),
+          firstLine: code.firstLine,
+          lineCount: code.lineCount,
+          lines,
+          ...(code.note === undefined ? undefined : { note: code.note }),
+        }),
+      ),
+    highlightSnippet: (language, code) =>
+      Effect.flatMap(languageOfFence(sharedHighlighter, language), (fenced) =>
+        colouredLines(sharedHighlighter, fenced, code.split("\n")),
+      ),
+  };
 }
+
+/** This process's colourings, over Shiki loaded through one dynamic `import()` the first time code is coloured. */
+export const { highlightFile, highlightCode, highlightSnippet } = taskCodeColouring(
+  Effect.map(
+    Effect.tryPromise(() => import("./task-code-highlighter.js")),
+    (module) => module.createTaskCodeHighlighter(),
+  ),
+);

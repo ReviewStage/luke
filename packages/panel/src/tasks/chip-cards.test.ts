@@ -18,7 +18,7 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -27,7 +27,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { TaskCard } from "../desktop/task-card.js";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
 import { stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -153,7 +153,7 @@ const STATE: AppStateSnapshot = (() => {
 })();
 
 /** Every act the panel told the main process, in order. */
-const told: Act[] = [];
+const told: AnyAct[] = [];
 
 /** Every workspace whose automations the act port was asked for, in order. */
 const automationReads: (string | undefined)[] = [];
@@ -169,10 +169,6 @@ afterEach(() => {
   told.length = 0;
   automationReads.length = 0;
 });
-
-function answer(): ActOutcome {
-  return { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." };
-}
 
 /** The plan's card as the window's plans make it, with what a chip hangs it for. */
 const taskCards = {
@@ -211,10 +207,6 @@ async function drawn(text: string): Promise<HTMLElement> {
   fakeAppBridge({
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(STATE),
-    act: (request: Act): Promise<ActOutcome> => {
-      told.push(request);
-      return Promise.resolve(answer());
-    },
   });
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: ({ workspaceId }) =>

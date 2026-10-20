@@ -63,6 +63,7 @@ const SHARED_REASON = {
   UNAVAILABLE: "Luke could not open a sign-in callback on this machine.",
   ALREADY_WAITING: "A sign-in is already waiting in your browser.",
   BROWSER: "Luke could not open the sign-in page in your browser.",
+  CHALLENGE: "Luke could not prepare a secure sign-in on this machine.",
 } as const;
 
 /**
@@ -264,7 +265,10 @@ export function loopbackConsent<Grant extends object>(
     redirectUri = `http://${LOOPBACK_HOST}:${port}${options.callbackPath}`;
     // The digest suspends, so it is taken here, after the cancel door is armed
     // and before the withdrawn read below: a press given while it ran is read.
-    const challenge = yield* codeChallenge(codeVerifier);
+    const challenge = yield* Effect.result(codeChallenge(codeVerifier));
+    if (Result.isFailure(challenge)) {
+      return { reason: withdrawn ? LOOPBACK_CONSENT_CANCELLED : SHARED_REASON.CHALLENGE };
+    }
 
     // A press on Cancel given while the port was binding is read back here,
     // and the scheduler is handed a turn before it is: a bound port resumes
@@ -277,7 +281,7 @@ export function loopbackConsent<Grant extends object>(
     const authorizationUrl = options.authorizationUrl({
       state,
       redirectUri,
-      codeChallenge: challenge,
+      codeChallenge: challenge.success,
     });
     reopenPage = () => {
       void Promise.resolve(options.openExternal(authorizationUrl)).catch(() => undefined);

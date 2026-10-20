@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
+import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   RESERVED_WORKSPACE_SLUGS,
@@ -24,6 +26,8 @@ import { INTEGRATION_ROW_STATUS } from "../integration-vocabulary.js";
 import { member, organization, user } from "../schemas/auth.js";
 import { codingAgent } from "../schemas/coding-agent.js";
 import { githubInstallation } from "../schemas/github-installation.js";
+import { githubPersonalToken } from "../schemas/github-personal-token.js";
+import { githubRepositoryRead } from "../schemas/github-repository-read.js";
 import { personalWorkspace } from "../schemas/personal-workspace.js";
 import { task } from "../schemas/task.js";
 import { workspaceIntegrationConnection } from "../schemas/workspace-integration.js";
@@ -57,6 +61,11 @@ import {
  * read and written by every member of the workspace it names, so a store
  * gates a task through `taskReachableBy` and `reachableTask` rather than by
  * the account that started it.
+ * A task or a coding agent reached on its owner's own GitHub token
+ * (`github_access = 'token'`) is narrower: beside its owner, it is seen only
+ * by a member whose own verified token GitHub last answered with its
+ * repository, as the service wrote that answer in `github_repository_read`;
+ * this module asks GitHub nothing.
  * A workspace's photo is the plugin's own `organization.logo`, kept as a
  * `data:` URL of one of `WORKSPACE_PHOTO_TYPE`; a list names only a digest of
  * it, and its bytes are read apart, by a member alone. The account's own
@@ -503,17 +512,63 @@ export function workspaceReachableBy(userId: string, organizationId: string | SQ
   return memberOfWorkspace(userId, organizationId);
 }
 
-/** A coding agent row's workspace: its own, or its task's on a row the backfill has not reached yet. */
-export const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${codingAgent.taskId}))`;
+/** A coding agent row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
+export const AGENT_WORKSPACE = sql<string>`${codingAgent.organizationId}`;
 
-/** The condition that the account may read and write the coding agent row a statement reads: it is a member of the agent's workspace, an agent with no task as much as one on a task. */
-export function agentReachableBy(userId: string): SQL {
-  return memberOfWorkspace(userId, AGENT_WORKSPACE);
+/** How a task or an agent row was reached on GitHub, whose it is, and its repository, as `seenThroughGitHub` reads them. */
+interface GitHubReachedColumns {
+  readonly access: SQLWrapper;
+  readonly owner: SQLWrapper;
+  readonly repository: SQLWrapper;
 }
 
-/** The condition that the account may read and write the task row a statement reads: it is a member of the task's workspace. */
+/**
+ * The condition that the account sees a row as the way it reached GitHub
+ * allows: one reached through the workspace's App by every member, and one
+ * reached on its owner's own token by that owner and by any other member
+ * whose own token stands verified and was last answered with the row's
+ * repository.
+ */
+function seenThroughGitHub(userId: string, row: GitHubReachedColumns): SQL {
+  const readsRepository = exists(
+    queryBuilder
+      .select({ one: githubRepositoryRead.userId })
+      .from(githubRepositoryRead)
+      .innerJoin(githubPersonalToken, eq(githubPersonalToken.userId, githubRepositoryRead.userId))
+      .where(
+        and(
+          eq(githubRepositoryRead.userId, userId),
+          eq(githubRepositoryRead.repository, sql`lower(${row.repository})`),
+          eq(githubRepositoryRead.readable, true),
+          eq(githubPersonalToken.status, GITHUB_TOKEN_STATUS.VERIFIED),
+        ),
+      ),
+  );
+  return sql`(${eq(row.access, GITHUB_ACCESS.APP)} or ${eq(row.owner, userId)} or ${readsRepository})`;
+}
+
+/** The condition that the account sees the coding agent row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */
+export function agentSeenBy(userId: string): SQL {
+  return seenThroughGitHub(userId, {
+    access: codingAgent.githubAccess,
+    owner: codingAgent.userId,
+    repository: codingAgent.repository,
+  });
+}
+
+/** The condition that the account may read and write the coding agent row a statement reads: it is a member of the agent's workspace, an agent with no task as much as one on a task, and sees it as its GitHub access allows. */
+export function agentReachableBy(userId: string): SQL {
+  return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)})`;
+}
+
+/** The condition that the account may read and write the task row a statement reads: it is a member of the task's workspace, and sees it as its GitHub access allows. */
 export function taskReachableBy(userId: string): SQL {
-  return memberOfWorkspace(userId, task.organizationId);
+  const seen = seenThroughGitHub(userId, {
+    access: task.githubAccess,
+    owner: task.userId,
+    repository: task.repository,
+  });
+  return sql`(${memberOfWorkspace(userId, task.organizationId)} and ${seen})`;
 }
 
 /** The task under this id, where the account is a member of its workspace; any other id reads as no task. */

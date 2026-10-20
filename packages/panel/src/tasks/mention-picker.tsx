@@ -46,7 +46,6 @@ import {
   FolderIcon,
   GitPullRequestIcon,
   HashIcon,
-  ListTodoIcon,
   UsersIcon,
 } from "lucide-react";
 import { type RefObject, useEffect, useState } from "react";
@@ -55,6 +54,13 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
+import {
+  DATE_PICKER_CLOSE,
+  type DatePicked,
+  type DatePickerOpening,
+  dateMentionNode,
+  useDatePicker,
+} from "./date-picker.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { AgentMark } from "./tab-look.js";
@@ -114,12 +120,6 @@ import { useMinute } from "./task-time.js";
  * words go to is handed who they are in the workspace. Nobody is notified
  * of a mention.
  *
- * Where the place reads the workspace's issues (`MentionSource.readIssues`,
- * while Issues is on), the list offers them too, each by its identifier and
- * title and found by either, read as each `@` word opens the list; a
- * mention of an issue names it by its id, and its chip opens it on the
- * Issues page.
- *
  * Where the words typed read as a date (`@luke/features/date-mention`),
  * `tomorrow 3pm`, `next fri`, `oct 20 to 24`, the list offers that date
  * first, said from today as its chip says it and in full beside it, a pick
@@ -140,9 +140,8 @@ import { useMinute } from "./task-time.js";
  * A pick hands the editor the mention's name and its target
  * (`@luke/features/mention-link`), which the editor writes in place of
  * the word; the name is the file's or folder's own name, the heading, the
- * plan's name, the page's title, the agent's tab's name, the issue's
- * identifier and title, the server's name, or the server's name and the
- * tool's.
+ * plan's name, the page's title, the agent's tab's name, the server's
+ * name, or the server's name and the tool's.
  */
 
 /** What the list's groups are called, in the order they stand. */
@@ -154,7 +153,6 @@ const MENTION_GROUP = {
   AGENTS: "Agents",
   PEOPLE: "People",
   PULL_REQUESTS: "Pull requests",
-  ISSUES: "Issues",
   SKILLS: "Skills",
   SERVERS: "MCP servers",
   FROM: "Mention from",
@@ -168,7 +166,6 @@ const MENTION_FROM = {
   AGENTS: "agents",
   PEOPLE: "people",
   PULL_REQUESTS: "prs",
-  ISSUES: "issues",
   SKILLS: "skills",
   DATES: "dates",
   SERVER: "server",
@@ -214,11 +211,19 @@ const DETAIL_JOIN = " · ";
 /** What a pull request's row says beside its name where no agent is named for it. */
 const PULL_REQUEST_DETAIL = "Pull request";
 
-/** What an issue's row says beside its name. */
-const ISSUE_DETAIL = "Issue";
-
 /** What the Dates kind's row says beside its name. */
 const DATES_DETAIL = "A day, a time, or a range";
+
+/** The row of a list narrowed to dates that opens the date picker, to write the day picked there. */
+const PICK_DATE_ROW: MentionRow = {
+  picksDate: true,
+  name: "Pick a date…",
+  detail: undefined,
+  terms: "Pick a date",
+};
+
+/** The key the picker's row stands under, which no mention's or kind's key spells. */
+const PICK_DATE_KEY = "pick-date";
 
 /** What a skill's row says beside its name. */
 const SKILL_DETAIL = "Skill";
@@ -296,7 +301,12 @@ type MentionRow = {
   readonly actor?: Actor | undefined;
   /** A pull request, whose mark its row wears for where it stands; none for any other row. */
   readonly pullRequest?: MentionablePullRequest | undefined;
-} & ({ readonly mention: Mention } | { readonly skill: string } | { readonly from: MentionKind });
+} & (
+  | { readonly mention: Mention }
+  | { readonly skill: string }
+  | { readonly from: MentionKind }
+  | { readonly picksDate: true }
+);
 
 interface MentionGroup {
   readonly label: string;
@@ -577,19 +587,6 @@ function pullRequestRows(
   });
 }
 
-/** Each of the workspace's issues' rows, by its identifier and title, found by either. */
-function issueRows(issues: readonly MentionableIssue[]): MentionRow[] {
-  return issues.map((issue) => {
-    const name = `${issue.identifier} ${issue.title}`;
-    return {
-      mention: { kind: MENTION_KIND.ISSUE, issueId: issue.id },
-      name,
-      detail: ISSUE_DETAIL,
-      terms: name,
-    };
-  });
-}
-
 /** Each connected server's row, and where asked each of its tools' rows as far as its read answered, found by the server's name and the tool's. */
 function serverRows(
   servers: readonly NamedServer[],
@@ -639,14 +636,18 @@ function dateRow(date: DateSpan, now: number, zone: string): MentionRow {
 /**
  * The dates the list offers for the words: the one they name, or, narrowed
  * to dates with nothing typed, today, tomorrow, and next Monday; none for
- * a wide list with nothing typed.
+ * a wide list with nothing typed. A list narrowed to dates ends on the row
+ * that opens the date picker.
  */
 function dateRows(term: string, narrowed: boolean, now: number, zone: string): MentionRow[] {
+  const pick = narrowed ? [PICK_DATE_ROW] : [];
   if (term.trim() === "") {
-    return narrowed ? suggestedDates(now, zone).map((date) => dateRow(date, now, zone)) : [];
+    return narrowed
+      ? [...suggestedDates(now, zone).map((date) => dateRow(date, now, zone)), ...pick]
+      : [];
   }
   const date = dateOfWords(term, now, zone);
-  return date === undefined ? [] : [dateRow(date, now, zone)];
+  return [...(date === undefined ? [] : [dateRow(date, now, zone)]), ...pick];
 }
 
 /** Each of the repository's skills' rows, found by its name and what it says it is for. */
@@ -700,7 +701,6 @@ interface KindRows {
   readonly agents: readonly MentionRow[];
   readonly people: readonly MentionRow[];
   readonly pullRequests: readonly MentionRow[];
-  readonly issues: readonly MentionRow[];
   readonly skills: readonly MentionRow[];
   /** The date the words name, or the dates a list narrowed to dates offers. */
   readonly dates: readonly MentionRow[];
@@ -729,8 +729,6 @@ function narrowedRows(
       return best(rows.people, term, PER_KIND);
     case MENTION_FROM.PULL_REQUESTS:
       return best(rows.pullRequests, term, PER_KIND);
-    case MENTION_FROM.ISSUES:
-      return best(rows.issues, term, PER_KIND);
     case MENTION_FROM.SKILLS:
       return best(rows.skills, term, PER_KIND);
     case MENTION_FROM.DATES:
@@ -774,7 +772,6 @@ function groupsFor(
     { label: MENTION_GROUP.AGENTS, rows: best(rows.agents, term, PER_GROUP) },
     { label: MENTION_GROUP.PEOPLE, rows: best(rows.people, term, PER_GROUP) },
     { label: MENTION_GROUP.PULL_REQUESTS, rows: best(rows.pullRequests, term, PER_GROUP) },
-    { label: MENTION_GROUP.ISSUES, rows: best(rows.issues, term, PER_GROUP) },
     { label: MENTION_GROUP.SKILLS, rows: best(rows.skills, term, PER_GROUP) },
     { label: MENTION_GROUP.SERVERS, rows: best(rows.servers, term, PER_GROUP) },
     { label: MENTION_GROUP.FROM, rows: bare ? kinds.map(kindRow) : [] },
@@ -796,8 +793,6 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
       return <UsersIcon aria-hidden="true" />;
     case MENTION_FROM.PULL_REQUESTS:
       return <GitPullRequestIcon aria-hidden="true" />;
-    case MENTION_FROM.ISSUES:
-      return <ListTodoIcon aria-hidden="true" />;
     case MENTION_FROM.SKILLS:
       return <BookOpenIcon aria-hidden="true" />;
     case MENTION_FROM.DATES:
@@ -811,6 +806,7 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
 function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
   if ("skill" in row) return <BookOpenIcon aria-hidden="true" />;
   if ("from" in row) return <KindGlyph kind={row.from} />;
+  if ("picksDate" in row) return <CalendarIcon aria-hidden="true" />;
   if (row.pullRequest !== undefined) return <PullRequestMark pullRequest={row.pullRequest} />;
   const { mention } = row;
   switch (mention.kind) {
@@ -842,8 +838,6 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
       );
     case MENTION_KIND.LUKE:
       return <ActorMark actor={LUKE_ACTOR} size={ACTOR_SIZE.INLINE} />;
-    case MENTION_KIND.ISSUE:
-      return <ListTodoIcon aria-hidden="true" />;
     case MENTION_KIND.DATE:
       return <CalendarIcon aria-hidden="true" />;
   }
@@ -852,6 +846,7 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
 /** A row's key, stable while it stands: its skill's name, its kind's narrowing, or its mention. */
 function rowKey(row: MentionRow): string {
   if ("skill" in row) return row.skill;
+  if ("picksDate" in row) return PICK_DATE_KEY;
   return JSON.stringify("from" in row ? row.from.narrow : row.mention);
 }
 
@@ -957,11 +952,12 @@ function MentionMenu({
   );
 }
 
-/** What an editor drawing an `@` list wires: the list while it stands, and the report and keys the editor hands it. */
+/** What an editor drawing an `@` list wires: the list and the date picker while they stand, the report and keys the editor hands it, and what opens the date picker over a chip. */
 export interface MentionPicker {
   readonly menu: React.ReactNode;
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly onKey: (event: KeyboardEvent) => boolean;
+  readonly pickDate: (opening: DatePickerOpening) => void;
 }
 
 /** Which side of the word the list stands: under it, as in the plan, or over it, as at the foot of an agent's tab. */
@@ -1004,22 +1000,11 @@ export type MentionAgentsReader = (
   words: string | undefined,
 ) => Promise<readonly MentionableAgent[]>;
 
-/** One of the workspace's issues, as the list offers it: its id, its identifier, as `ACME-42`, and its title. */
-export interface MentionableIssue {
-  readonly id: string;
-  readonly identifier: string;
-  readonly title: string;
-}
-
-/** Reads the workspace's issues, the archived left out; settles with none where the read failed. */
-export type MentionIssuesReader = () => Promise<readonly MentionableIssue[]>;
-
 /** The pages and agents of a place that offers none. */
 const NO_PAGES: readonly MentionablePage[] = [];
 const NO_AGENTS: readonly MentionableAgent[] = [];
 const NO_PULL_REQUESTS: readonly MentionablePullRequest[] = [];
 const NO_MEMBERS: readonly WorkspaceMember[] = [];
-const NO_ISSUES: readonly MentionableIssue[] = [];
 
 /** The plan whose sections and repository the list offers, the workspace it stands in, and its text as it stands now; `NO_TASK` for a page no task holds, which offers its repository alone. */
 export interface MentionSource {
@@ -1040,8 +1025,6 @@ export interface MentionSource {
   readonly readAgents?: MentionAgentsReader | undefined;
   /** The pull requests the plan's agents published, as its page holds them now; none where the place offers none. */
   readonly pullRequests?: readonly MentionablePullRequest[] | undefined;
-  /** Reads the workspace's issues, which the list offers; none where the place offers none. */
-  readonly readIssues?: MentionIssuesReader | undefined;
 }
 
 /** What a repository's paths are read by: the plan whose repository it is, or, with no plan, the workspace and the repository; none where neither names one. */
@@ -1060,7 +1043,7 @@ function treeKey(
  * and folders where it names one, the plan and its pages where a plan
  * stands, the workspace's agents where it reads them, its people where
  * the window has read them, the pull requests
- * the plan's agents published, the workspace's issues where it read any, the repository's skills where the words go
+ * the plan's agents published, the repository's skills where the words go
  * to an agent, dates wherever the list stands, and each connected server, the
  * first of each provider narrowed to by the provider's own word.
  */
@@ -1070,7 +1053,6 @@ function kindsOf(
   skills: MentionSkills | undefined,
   servers: readonly NamedServer[],
   people: number,
-  issues: number,
 ): readonly MentionKind[] {
   const { taskId, repository } = source;
   const pages = taskId === NO_TASK ? 0 : (source.pages ?? NO_PAGES).length;
@@ -1126,15 +1108,6 @@ function kindsOf(
             from: MENTION_FROM.PULL_REQUESTS,
             name: MENTION_GROUP.PULL_REQUESTS,
             detail: counted(pullRequests, "pull request", "pull requests"),
-          },
-        ]),
-    ...(issues === 0
-      ? []
-      : [
-          {
-            from: MENTION_FROM.ISSUES,
-            name: MENTION_GROUP.ISSUES,
-            detail: counted(issues, "issue", "issues"),
           },
         ]),
     ...(known.length === 0
@@ -1259,37 +1232,8 @@ export function useMentionPicker({
     if (askedAt !== undefined) askSkills?.();
   }, [askedAt, askSkills]);
 
-  // The workspace's issues are read as each `@` word opens the list, the last read shown until the next lands.
-  const readIssues = source?.readIssues;
-  const issueWordAt = open ? trigger.start : undefined;
-  const [workspaceIssues, setWorkspaceIssues] = useState<{
-    readonly reader: MentionIssuesReader;
-    /** The word the read was asked for; none once the list closed, so the next word, wherever it stands, reads again. */
-    readonly wordAt: number | undefined;
-    readonly issues: readonly MentionableIssue[];
-  }>();
-  const issuesRead = workspaceIssues?.reader === readIssues ? workspaceIssues : undefined;
-  const wantsIssues = issueWordAt !== undefined && issuesRead?.wordAt !== issueWordAt;
-  useEffect(() => {
-    if (!wantsIssues || readIssues === undefined || issueWordAt === undefined) return;
-    let live = true;
-    readIssues().then((issues) => {
-      if (live) setWorkspaceIssues({ reader: readIssues, wordAt: issueWordAt, issues });
-    });
-    return () => {
-      live = false;
-    };
-  }, [wantsIssues, readIssues, issueWordAt]);
-  useEffect(() => {
-    if (issueWordAt === undefined)
-      setWorkspaceIssues((was) => was && { ...was, wordAt: undefined });
-  }, [issueWordAt]);
-  const issues = issuesRead?.issues ?? NO_ISSUES;
-
   // The list is narrowed to the kind a key opened or whose word was typed, and searched by the words after it.
-  const kinds = open
-    ? kindsOf(source, self, skills, servers, members?.length ?? 0, issues.length)
-    : [];
+  const kinds = open ? kindsOf(source, self, skills, servers, members?.length ?? 0) : [];
   const scope = open ? scopeOf(trigger, narrowing, kinds) : undefined;
   const term = scope?.term ?? "";
 
@@ -1347,7 +1291,6 @@ export function useMentionPicker({
             ],
             people: personRows(members ?? NO_MEMBERS, readerId),
             pullRequests: pullRequestRows(taskId, source.pullRequests ?? NO_PULL_REQUESTS),
-            issues: issueRows(issues),
             skills: skillRows(skills?.known ?? []),
             dates: dateRows(term, narrow?.from === MENTION_FROM.DATES, now, readerZone()),
             // A list narrowed to one server offers its tools before a word is typed.
@@ -1400,11 +1343,33 @@ export function useMentionPicker({
   };
   const backTo = trigger === undefined ? undefined : backFrom(scope, trigger.start);
   const back = backTo === undefined ? undefined : () => narrowTo(backTo.to);
-  // A skill is written as the `/name` chip its own list writes; a kind's row opens; anything else is written as its mention.
+  // The date picker opened from the list hangs from the word and writes the date picked in its place.
+  const datePicker = useDatePicker(room);
+  const pickNewDate = (word: ComposerTrigger) => {
+    // Note that the editor is handed the caret back before a pick is written, because it finds the `@` word only while it has it.
+    const editing = document.activeElement;
+    setClosedAt(word.start);
+    datePicker.open({
+      at: word.rect,
+      date: undefined,
+      onClose: ({ date, changed, how }: DatePicked) => {
+        const kept = how === DATE_PICKER_CLOSE.CLEAR || !changed ? undefined : date;
+        if (
+          (kept !== undefined || how !== DATE_PICKER_CLOSE.LEAVE) &&
+          editing instanceof HTMLElement
+        )
+          editing.focus();
+        if (kept !== undefined) onChoose(dateMentionNode(kept, place));
+      },
+    });
+  };
+  // A skill is written as the `/name` chip its own list writes; a kind's row opens; the picker's row opens the picker; anything else is written as its mention.
   const choose = (row: MentionRow) => {
     if ("from" in row) openRow(row);
     else if ("skill" in row) skills?.onChoose(row.skill);
-    else onChoose({ name: row.written ?? row.name, target: encodeMention(row.mention, place) });
+    else if ("picksDate" in row) {
+      if (trigger !== undefined) pickNewDate(trigger);
+    } else onChoose({ name: row.written ?? row.name, target: encodeMention(row.mention, place) });
   };
 
   // ↑, ↓, Home, End, Enter and Escape steer the list as any combobox's do;
@@ -1477,7 +1442,7 @@ export function useMentionPicker({
       ? { left, top: word.rect.bottom - at.top + MENU_GAP }
       : { left, top: "auto", bottom: at.bottom - word.rect.top + MENU_GAP };
   };
-  const menu =
+  const list =
     !shown || box === null || placed === undefined ? null : (
       <MentionMenu
         crumb={
@@ -1494,5 +1459,12 @@ export function useMentionPicker({
       />
     );
 
-  return { menu, onTrigger: setTrigger, onKey };
+  const menu = (
+    <>
+      {list}
+      {datePicker.popover}
+    </>
+  );
+
+  return { menu, onTrigger: setTrigger, onKey, pickDate: datePicker.open };
 }

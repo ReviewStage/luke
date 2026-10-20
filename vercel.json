@@ -18,128 +18,8 @@
           "dest": "/api/default.js?route=auth/[...all]&route-path=auth/$1"
         },
         {
-          "src": "/api/account/integrations/([^/]+)/connect",
-          "dest": "/api/default.js?route=account/integrations/connect&route-path=account/integrations/$1/connect&provider=$1"
-        },
-        {
-          "src": "/api/account/integrations/([^/]+)/tools",
-          "dest": "/api/default.js?route=account/integrations/tools&route-path=account/integrations/$1/tools&provider=$1"
-        },
-        {
-          "src": "/api/account/integrations/([^/]+)/cancel",
-          "dest": "/api/default.js?route=account/integrations/cancel&route-path=account/integrations/$1/cancel&provider=$1"
-        },
-        {
-          "src": "/api/account/integrations/([^/]+)/disconnect",
-          "dest": "/api/default.js?route=account/integrations/disconnect&route-path=account/integrations/$1/disconnect&provider=$1"
-        },
-        {
-          "src": "/api/account/integrations/([^/]+)/rename",
-          "dest": "/api/default.js?route=account/integrations/rename&route-path=account/integrations/$1/rename&provider=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/board",
-          "dest": "/api/default.js?route=plans/board&route-path=plans/$1/board&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/transcript",
-          "dest": "/api/default.js?route=plans/transcript&route-path=plans/$1/transcript&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/work",
-          "dest": "/api/default.js?route=plans/work&route-path=plans/$1/work&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/subagents/([^/]+)/messages",
-          "dest": "/api/default.js?route=plans/subagent-messages&route-path=plans/$1/subagents/$2/messages&id=$1&call=$2"
-        },
-        {
-          "src": "/api/plans/([^/]+)/messages",
-          "dest": "/api/default.js?route=plans/messages&route-path=plans/$1/messages&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/code",
-          "dest": "/api/default.js?route=plans/code&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/file",
-          "dest": "/api/default.js?route=plans/file&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/tree",
-          "dest": "/api/default.js?route=plans/tree&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/skills",
-          "dest": "/api/default.js?route=plans/skills&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/edit",
-          "dest": "/api/default.js?route=plans/edit&route-path=plans/$1/edit&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/stop",
-          "dest": "/api/default.js?route=plans/stop&route-path=plans/$1/stop&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/comments/([^/]+)",
-          "dest": "/api/default.js?route=plans/comment-thread&id=$1&thread=$2"
-        },
-        {
-          "src": "/api/plans/([^/]+)/comments",
-          "dest": "/api/default.js?route=plans/comments&id=$1"
-        },
-        {
           "src": "/api/plans/([^/]+)/attachments/([^/]+)",
           "dest": "/api/default.js?route=plans/attachment&id=$1&attachment=$2"
-        },
-        {
-          "src": "/api/plans/([^/]+)/attachments",
-          "dest": "/api/default.js?route=plans/attachments&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/agents",
-          "dest": "/api/default.js?route=plans/agents&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/inbox",
-          "dest": "/api/default.js?route=plans/inbox&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/revisions/([^/]+)/restore",
-          "dest": "/api/default.js?route=plans/restore&route-path=plans/$1/revisions/$2/restore&id=$1&seq=$2"
-        },
-        {
-          "src": "/api/plans/([^/]+)/revisions/([^/]+)",
-          "dest": "/api/default.js?route=plans/revision&route-path=plans/$1/revisions/$2&id=$1&seq=$2"
-        },
-        {
-          "src": "/api/plans/([^/]+)/revisions",
-          "dest": "/api/default.js?route=plans/revisions&route-path=plans/$1/revisions&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
-          "dest": "/api/default.js?route=plans/page&id=$1&page=$2&version=$3"
-        },
-        {
-          "src": "/api/plans/([^/]+)/pages",
-          "dest": "/api/default.js?route=plans/pages&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)",
-          "dest": "/api/default.js?route=plans/plan&route-path=plans/$1&id=$1"
-        },
-        {
-          "src": "/api/account/plan-template/revisions/([^/]+)/restore",
-          "dest": "/api/default.js?route=account/plan-template/restore&route-path=account/plan-template/revisions/$1/restore&seq=$1"
-        },
-        {
-          "src": "/api/account/plan-template/revisions/([^/]+)",
-          "dest": "/api/default.js?route=account/plan-template/revision&route-path=account/plan-template/revisions/$1&seq=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/subagents/([^/]+)/messages",
-          "dest": "/api/default.js?route=agents/subagent-messages&route-path=agents/$1/subagents/$2/messages&id=$1&call=$2"
         },
         {
           "src": "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
@@ -150,92 +30,16 @@
           "dest": "/api/default.js?route=agents/picture&id=$1&picture=$2"
         },
         {
-          "src": "/api/agents/([^/]+)/messages",
-          "dest": "/api/default.js?route=agents/messages&route-path=agents/$1/messages&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/stop",
-          "dest": "/api/default.js?route=agents/stop&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/pull-request",
-          "dest": "/api/default.js?route=agents/pull-request&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/pull-request/action",
-          "dest": "/api/default.js?route=agents/pull-request-action&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/pull-request/viewed",
-          "dest": "/api/default.js?route=agents/pull-request-viewed&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/changes",
-          "dest": "/api/default.js?route=agents/changes&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/overview/pull-request",
-          "dest": "/api/default.js?route=agents/overview-pull-request&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/overview/checks",
-          "dest": "/api/default.js?route=agents/overview-checks&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/overview/conversation",
-          "dest": "/api/default.js?route=agents/overview-conversation&id=$1"
-        },
-        {
           "src": "/api/agents/([^/]+)/github-image",
           "dest": "/api/default.js?route=agents/github-image&id=$1"
         },
         {
-          "src": "/api/agents/([^/]+)/review-options",
-          "dest": "/api/default.js?route=agents/review-options&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/inbox",
-          "dest": "/api/default.js?route=agents/inbox&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/terminals/([^/]+)",
-          "dest": "/api/default.js?route=agents/terminal&id=$1&terminal=$2"
-        },
-        {
-          "src": "/api/agents/([^/]+)/terminals",
-          "dest": "/api/default.js?route=agents/terminals&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)/sandbox/resume",
-          "dest": "/api/default.js?route=agents/sandbox-resume&id=$1"
-        },
-        {
-          "src": "/api/agents/([^/]+)",
-          "dest": "/api/default.js?route=agents/agent&id=$1"
+          "src": "/api/agents/([^/]+)/chapters",
+          "dest": "/api/pull-request-chapters.js?route=agents/chapters&route-path=agents/$1/chapters"
         },
         {
           "src": "/api/inbox/([^/]+)/attachments/([^/]+)",
           "dest": "/api/default.js?route=inbox/attachment&id=$1&attachment=$2"
-        },
-        {
-          "src": "/api/inbox/([^/]+)/close",
-          "dest": "/api/default.js?route=inbox/close&id=$1"
-        },
-        {
-          "src": "/api/inbox/([^/]+)/messages",
-          "dest": "/api/default.js?route=inbox/messages&id=$1"
-        },
-        {
-          "src": "/api/inbox/([^/]+)/read",
-          "dest": "/api/default.js?route=inbox/read&id=$1"
-        },
-        {
-          "src": "/api/inbox/read",
-          "dest": "/api/default.js?route=inbox/read"
-        },
-        {
-          "src": "/api/inbox/([^/]+)",
-          "dest": "/api/default.js?route=inbox/item&id=$1"
         },
         {
           "src": "/api/workspaces/([^/]+)/photo",
@@ -246,120 +50,8 @@
           "dest": "/api/default.js?route=automations/webhook&id=$1"
         },
         {
-          "src": "/api/automations/([^/]+)/runs",
-          "dest": "/api/default.js?route=automations/runs&route-path=automations/$1/runs&id=$1"
-        },
-        {
-          "src": "/api/automations/([^/]+)/run",
-          "dest": "/api/default.js?route=automations/run&route-path=automations/$1/run&id=$1"
-        },
-        {
-          "src": "/api/automations/([^/]+)",
-          "dest": "/api/default.js?route=automations/automation&route-path=automations/$1&id=$1"
-        },
-        {
-          "src": "/api/issues/([^/]+)",
-          "dest": "/api/default.js?route=issues/issue&route-path=issues/$1&id=$1"
-        },
-        {
-          "src": "/api/account/delete",
-          "dest": "/api/default.js?route=account/delete"
-        },
-        {
-          "src": "/api/account/integrations",
-          "dest": "/api/default.js?route=account/integrations"
-        },
-        {
           "src": "/api/account/integrations/connected",
           "dest": "/api/default.js?route=account/integrations/connected"
-        },
-        {
-          "src": "/api/account/integrations/settle",
-          "dest": "/api/default.js?route=account/integrations/settle"
-        },
-        {
-          "src": "/api/account/plan-template",
-          "dest": "/api/default.js?route=account/plan-template"
-        },
-        {
-          "src": "/api/account/plan-template/revisions",
-          "dest": "/api/default.js?route=account/plan-template/revisions"
-        },
-        {
-          "src": "/api/account/preferences",
-          "dest": "/api/default.js?route=account/preferences"
-        },
-        {
-          "src": "/api/account/provider-keys",
-          "dest": "/api/default.js?route=account/provider-keys"
-        },
-        {
-          "src": "/api/admin/cost",
-          "dest": "/api/default.js?route=admin/cost"
-        },
-        {
-          "src": "/api/admin/day",
-          "dest": "/api/default.js?route=admin/day"
-        },
-        {
-          "src": "/api/admin/favorite",
-          "dest": "/api/default.js?route=admin/favorite"
-        },
-        {
-          "src": "/api/admin/metrics",
-          "dest": "/api/default.js?route=admin/metrics"
-        },
-        {
-          "src": "/api/admin/reliability",
-          "dest": "/api/default.js?route=admin/reliability"
-        },
-        {
-          "src": "/api/admin/user",
-          "dest": "/api/default.js?route=admin/user"
-        },
-        {
-          "src": "/api/admin/users",
-          "dest": "/api/default.js?route=admin/users"
-        },
-        {
-          "src": "/api/admin/workspaces",
-          "dest": "/api/default.js?route=admin/workspaces"
-        },
-        {
-          "src": "/api/agents",
-          "dest": "/api/default.js?route=agents"
-        },
-        {
-          "src": "/api/automations",
-          "dest": "/api/default.js?route=automations"
-        },
-        {
-          "src": "/api/dictation",
-          "dest": "/api/default.js?route=dictation"
-        },
-        {
-          "src": "/api/events",
-          "dest": "/api/default.js?route=events"
-        },
-        {
-          "src": "/api/factory/world",
-          "dest": "/api/default.js?route=factory/world"
-        },
-        {
-          "src": "/api/github/connect",
-          "dest": "/api/default.js?route=github/connect"
-        },
-        {
-          "src": "/api/github/connect/claim",
-          "dest": "/api/default.js?route=github/connect/claim"
-        },
-        {
-          "src": "/api/github/connection",
-          "dest": "/api/default.js?route=github/connection"
-        },
-        {
-          "src": "/api/github/disconnect",
-          "dest": "/api/default.js?route=github/disconnect"
         },
         {
           "src": "/api/github/install",
@@ -374,148 +66,136 @@
           "dest": "/api/default.js?route=github/installed/authorized"
         },
         {
-          "src": "/api/github/repositories",
-          "dest": "/api/default.js?route=github/repositories"
-        },
-        {
-          "src": "/api/github/repositories/issue",
-          "dest": "/api/default.js?route=github/repositories/issue"
-        },
-        {
-          "src": "/api/github/repositories/pull-request",
-          "dest": "/api/default.js?route=github/repositories/pull-request"
-        },
-        {
-          "src": "/api/github/repositories/skills",
-          "dest": "/api/default.js?route=github/repositories/skills"
-        },
-        {
-          "src": "/api/github/repositories/tree",
-          "dest": "/api/default.js?route=github/repositories/tree"
-        },
-        {
-          "src": "/api/github/token",
-          "dest": "/api/default.js?route=github/token"
-        },
-        {
           "src": "/api/github/webhook",
           "dest": "/api/default.js?route=github/webhook"
-        },
-        {
-          "src": "/api/inbox",
-          "dest": "/api/default.js?route=inbox"
-        },
-        {
-          "src": "/api/issues",
-          "dest": "/api/default.js?route=issues"
-        },
-        {
-          "src": "/api/live/inbox",
-          "dest": "/api/default.js?route=live/inbox"
-        },
-        {
-          "src": "/api/mac-commands",
-          "dest": "/api/default.js?route=mac-commands"
         },
         {
           "src": "/api/maintenance/provider-keys-rewrap",
           "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
         },
         {
-          "src": "/api/models",
-          "dest": "/api/default.js?route=models"
-        },
-        {
-          "src": "/api/plans",
-          "dest": "/api/default.js?route=plans"
-        },
-        {
-          "src": "/api/repository-pins",
-          "dest": "/api/default.js?route=repository-pins"
-        },
-        {
-          "src": "/api/task-sections",
-          "dest": "/api/default.js?route=task-sections"
-        },
-        {
-          "src": "/api/workspaces",
-          "dest": "/api/default.js?route=workspaces"
-        },
-        {
-          "src": "/api/workspaces/chat",
-          "dest": "/api/default.js?route=workspaces/chat"
-        },
-        {
           "src": "/api/workspaces/chat/attachment",
           "dest": "/api/default.js?route=workspaces/chat/attachment"
-        },
-        {
-          "src": "/api/workspaces/github/connect",
-          "dest": "/api/default.js?route=workspaces/github/connect"
-        },
-        {
-          "src": "/api/workspaces/github/disconnect",
-          "dest": "/api/default.js?route=workspaces/github/disconnect"
-        },
-        {
-          "src": "/api/workspaces/invitations",
-          "dest": "/api/default.js?route=workspaces/invitations"
-        },
-        {
-          "src": "/api/workspaces/invitations/cancel",
-          "dest": "/api/default.js?route=workspaces/invitations/cancel"
-        },
-        {
-          "src": "/api/workspaces/invitations/offer",
-          "dest": "/api/default.js?route=workspaces/invitations/offer"
-        },
-        {
-          "src": "/api/workspaces/leave",
-          "dest": "/api/default.js?route=workspaces/leave"
-        },
-        {
-          "src": "/api/workspaces/linear/connect",
-          "dest": "/api/default.js?route=workspaces/linear/connect"
         },
         {
           "src": "/api/workspaces/linear/connected",
           "dest": "/api/default.js?route=workspaces/linear/connected"
         },
         {
-          "src": "/api/workspaces/linear/disconnect",
-          "dest": "/api/default.js?route=workspaces/linear/disconnect"
-        },
-        {
-          "src": "/api/workspaces/linear/issues",
-          "dest": "/api/default.js?route=workspaces/linear/issues"
-        },
-        {
-          "src": "/api/workspaces/members",
-          "dest": "/api/default.js?route=workspaces/members"
-        },
-        {
-          "src": "/api/workspaces/members/remove",
-          "dest": "/api/default.js?route=workspaces/members/remove"
-        },
-        {
-          "src": "/api/workspaces/members/role",
-          "dest": "/api/default.js?route=workspaces/members/role"
-        },
-        {
-          "src": "/api/workspaces/photo/set",
-          "dest": "/api/default.js?route=workspaces/photo/set"
-        },
-        {
-          "src": "/api/workspaces/rename",
-          "dest": "/api/default.js?route=workspaces/rename"
-        },
-        {
-          "src": "/api/workspaces/transfer",
-          "dest": "/api/default.js?route=workspaces/transfer"
-        },
-        {
           "src": "/api/maintenance/sweep",
           "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
+        },
+        {
+          "src": "/api/feedback",
+          "dest": "/api/feedback"
+        },
+        {
+          "src": "/api/feedback\\.mjs",
+          "dest": "/api/feedback.mjs"
+        },
+        {
+          "src": "/api/terminal/sessions",
+          "dest": "/api/terminal/sessions"
+        },
+        {
+          "src": "/api/terminal/sessions\\.js",
+          "dest": "/api/terminal/sessions.js"
+        },
+        {
+          "src": "/api/voice/sessions",
+          "dest": "/api/voice/sessions"
+        },
+        {
+          "src": "/api/voice/sessions\\.js",
+          "dest": "/api/voice/sessions.js"
+        },
+        {
+          "src": "/api/(.*)",
+          "dest": "/api/default.js?route=orpc&route-path=$1"
+        },
+        {
+          "src": "/app\\.html",
+          "status": 308,
+          "headers": {
+            "Location": "/app"
+          }
+        },
+        {
+          "src": "/app/?",
+          "dest": "/app.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io wss://*.compute.c-10.us-east-1.aws.neon.tech; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person|chat)(?:/[^/]+)*/?",
+          "dest": "/app.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io wss://*.compute.c-10.us-east-1.aws.neon.tech; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/page-in-mac-app\\.html",
+          "dest": "/page-in-mac-app.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'none'; style-src 'sha256-T8LCl/OB0jEsLle1y3r4VpAUju2q/bJyH99iBqhrZi8='; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+            "X-Frame-Options": "SAMEORIGIN",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/(connect-github|github-installed|integration-connected)\\.html",
+          "dest": "/$1.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' https://us-assets.i.posthog.com; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/admin(?:\\.html)?",
+          "dest": "/admin.html",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.googleusercontent.com https://avatars.githubusercontent.com; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          }
+        },
+        {
+          "src": "/assets/[^/]+-[A-Za-z0-9_-]{8}\\.(?:js|css|woff2?)",
+          "headers": {
+            "Cache-Control": "public, max-age=31536000, immutable"
+          },
+          "continue": true
+        },
+        {
+          "src": "/(?!api/|assets/).*",
+          "headers": {
+            "Content-Security-Policy": "default-src 'self'; script-src 'self' https://us-assets.i.posthog.com; style-src 'self'; img-src 'self' data:; font-src 'self' data:; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "strict-origin-when-cross-origin",
+            "Cross-Origin-Opener-Policy": "same-origin",
+            "Permissions-Policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()"
+          },
+          "continue": true
         },
         {
           "src": "/about",
@@ -536,35 +216,6 @@
         {
           "src": "/changelog/(\\d+\\.\\d+\\.\\d+)",
           "dest": "/changelog/$1.html"
-        },
-        {
-          "src": "/admin",
-          "dest": "/admin.html"
-        },
-        {
-          "src": "/app\\.html",
-          "status": 308,
-          "headers": {
-            "Location": "/app"
-          }
-        },
-        {
-          "src": "/app/?",
-          "dest": "/app.html",
-          "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
-            "X-Content-Type-Options": "nosniff",
-            "Referrer-Policy": "strict-origin-when-cross-origin"
-          }
-        },
-        {
-          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person|issue)(?:/[^/]+)*/?",
-          "dest": "/app.html",
-          "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
-            "X-Content-Type-Options": "nosniff",
-            "Referrer-Policy": "strict-origin-when-cross-origin"
-          }
         }
       ]
     },

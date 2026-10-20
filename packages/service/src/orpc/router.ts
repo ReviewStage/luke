@@ -19,24 +19,45 @@ import {
   type WorkspacesProcedureSeams,
   workspacesProcedures,
 } from "../accounts/workspaces-procedures.js";
+import { type AdminProcedureSeams, adminProcedures } from "../admin/admin-procedures.js";
+import {
+  type AgentPullRequestProcedureSeams,
+  agentPullRequestProcedures,
+} from "../agents/agent-pull-request-procedures.js";
+import { type AgentsProcedureSeams, agentsProcedures } from "../agents/agents-procedures.js";
+import { instancePublishedCache } from "../agents/coder-host/published.js";
+import {
+  type MacCommandsProcedureSeams,
+  macCommandsProcedures,
+} from "../agents/mac-commands-procedures.js";
 import { type MessagesProcedureSeams, messagesProcedures } from "../agents/messages-procedures.js";
 import {
   type AutomationsProcedureSeams,
   automationsProcedures,
 } from "../automations/automations-procedures.js";
 import {
+  type PullRequestChaptersProcedureSeams,
+  pullRequestChaptersProcedures,
+} from "../chapters/pull-request-chapters-procedures.js";
+import {
   type DictationProcedureSeams,
   dictationProcedures,
 } from "../dictation/dictation-procedures.js";
+import { type EventsProcedureSeams, eventsProcedures } from "../events/events-procedures.js";
 import {
   type FactoryProcedureSeams,
   factoryProcedures,
 } from "../factory/factory-world-procedures.js";
 import { type GitHubProcedureSeams, githubProcedures } from "../github/github-procedures.js";
 import {
+  type GitHubTokenProcedureSeams,
+  githubTokenProcedures,
+} from "../github/github-token-procedures.js";
+import {
   type RepositoryPinsProcedureSeams,
   repositoryPinsProcedures,
 } from "../github/repository-pins-procedures.js";
+import { type InboxProcedureSeams, inboxProcedures } from "../inbox/inbox-procedures.js";
 import {
   type IntegrationsProcedureSeams,
   integrationsProcedures,
@@ -45,7 +66,15 @@ import {
   type WorkspaceLinearProcedureSeams,
   workspaceLinearProcedures,
 } from "../integrations/workspace-linear-procedures.js";
-import { type IssuesProcedureSeams, issuesProcedures } from "../issues/issues-procedures.js";
+import { type LiveProcedureSeams, liveProcedures } from "../live/live-procedures.js";
+import {
+  type PlanCommentsProcedureSeams,
+  planCommentsProcedures,
+} from "../tasks/plan-comments-procedures.js";
+import {
+  type TaskFilesProcedureSeams,
+  taskFilesProcedures,
+} from "../tasks/task-files-procedures.js";
 import {
   type TaskSectionsProcedureSeams,
   taskSectionsProcedures,
@@ -55,15 +84,25 @@ import { hosted } from "./base.js";
 
 /** What the resources ask of the deployment: one line per resource, in alphabetical order. */
 export type HostedRouterSeams = AccountProcedureSeams &
+  AdminProcedureSeams &
+  AgentPullRequestProcedureSeams &
+  AgentsProcedureSeams &
   AutomationsProcedureSeams &
   DictationProcedureSeams &
+  EventsProcedureSeams &
   FactoryProcedureSeams &
   GitHubProcedureSeams &
+  GitHubTokenProcedureSeams &
+  InboxProcedureSeams &
   IntegrationsProcedureSeams &
-  IssuesProcedureSeams &
+  LiveProcedureSeams &
+  MacCommandsProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams &
+  PlanCommentsProcedureSeams &
+  PullRequestChaptersProcedureSeams &
   RepositoryPinsProcedureSeams &
+  TaskFilesProcedureSeams &
   TaskSectionsProcedureSeams &
   TasksProcedureSeams &
   WorkspaceGithubProcedureSeams &
@@ -73,18 +112,30 @@ export type HostedRouterSeams = AccountProcedureSeams &
 
 /** The hosted router: one line per resource, in alphabetical order. */
 export function hostedRouter(seams: HostedRouterSeams) {
+  // One cache of the kept published answers for every resource that reads them or lets them go.
+  const published = { ...seams, published: instancePublishedCache() };
   return hosted.router({
     account: accountProcedures(seams),
+    admin: adminProcedures(seams),
+    agentPullRequests: agentPullRequestProcedures(published),
+    agents: agentsProcedures(published),
     automations: automationsProcedures(seams),
     dictation: dictationProcedures(seams),
+    events: eventsProcedures(seams),
     factory: factoryProcedures(seams),
     github: githubProcedures(seams),
+    githubToken: githubTokenProcedures(seams),
+    inbox: inboxProcedures(seams),
     integrations: integrationsProcedures(seams),
-    issues: issuesProcedures(seams),
+    live: liveProcedures(seams),
+    macCommands: macCommandsProcedures(seams),
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
+    planComments: planCommentsProcedures(seams),
     plans: tasksProcedures(seams),
+    pullRequestChapters: pullRequestChaptersProcedures(published),
     repositoryPins: repositoryPinsProcedures(seams),
+    taskFiles: taskFilesProcedures(seams),
     taskSections: taskSectionsProcedures(seams),
     workspaceGithub: workspaceGithubProcedures(seams),
     workspaceInvitations: workspaceInvitationsProcedures(seams),

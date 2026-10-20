@@ -3,12 +3,18 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { type AnyAct, type AnyActOutcome, fakeActs, fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActs,
+  fakeAppBridge,
+} from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { ItemMark } from "./inbox-list.js";
@@ -49,11 +55,11 @@ afterEach(() => {
 
 test("an item an archived agent posted wears the harness that agent ran on, read from its task's agents", async () => {
   fakeActs({
-    act: (request: AnyAct): Promise<AnyActOutcome> =>
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
       Promise.resolve(
         request.kind === ACT_KIND.CODING_AGENTS_LIST
           ? {
-              status: ACT_OUTCOME_STATUS.DONE,
+              status: FAKE_ANSWER.DONE,
               value: {
                 agents: [
                   {
@@ -70,7 +76,7 @@ test("an item an archived agent posted wears the harness that agent ran on, read
                 ],
               },
             }
-          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
+          : { status: FAKE_ANSWER.REFUSED, reason: "Not here." },
       ),
   });
   const container = document.body.appendChild(document.createElement("div"));

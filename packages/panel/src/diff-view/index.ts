@@ -25,6 +25,7 @@ import {
   type ColourRequest,
   DIFF_SELECTION_SIDE,
   type DiffAnnotation,
+  type DiffLineRange,
   type DiffListFile,
   type DiffListHandle,
   type DiffListProps,
@@ -35,11 +36,17 @@ import {
   type DiffViewHandle,
   type DiffViewModule,
   type DiffViewProps,
+  GAP_CONTROL,
+  GAP_CONTROL_ATTRIBUTE,
   GAP_LINES,
+  LINE_FLASH_HOLD_MS,
+  sameLines,
   sameListSelection,
   sameLook,
   sameNotes,
 } from "./contract.js";
+import { drawnAmong, drawnTeller } from "./drawn-lines.js";
+import { watchGapControls } from "./gap-controls.js";
 import { HIGHLIGHT_MODE, type Highlighting, startHighlighting } from "./highlight-pool.js";
 import { adoptShadowStyles } from "./inline-styles.js";
 import { pressedOnCode, selectedLines, selectionRect } from "./text-selection.js";
@@ -91,9 +98,13 @@ import { wholeOf } from "./whole-diff.js";
  * out. One diff alone offers no way to show them, since only its patch is
  * at hand; an excerpt, a review thread's lines, says nothing of the lines
  * around it. A list whose view reads its files whole (`readTexts`) offers
- * them as GitHub's diff does, twenty lines up or down or all at once, the
- * file read the first time one of its gaps is opened
- * (`expansionOptions`).
+ * them as GitHub's diff does, each arrow twenty lines up or down and the
+ * gap's words all of it at once, alike on every gap (`./gap-controls.ts`),
+ * the file read the first time one of its gaps is opened
+ * (`expansionOptions`). The view is told which lines between a file's
+ * hunks it waits to put a note under the file draws, as a gap opens over
+ * them (`./drawn-lines.ts`): read as each file is drawn, since Pierre keeps
+ * what was opened on the file's drawing and tells of no press itself.
  *
  * Files changed draws its pull request's files as one list (`mountList`),
  * through Pierre's own `CodeView`: every file under a header that sticks to
@@ -113,7 +124,11 @@ import { wholeOf } from "./whole-diff.js";
  * header beyond its one row, because Pierre reserves the header a height of
  * its own and holds it at the top while the file scrolls by. The view is
  * told which file stands at the top as the list scrolls, and scrolls it to
- * a file's header.
+ * a file's header, to one of its lines, or to a run of its lines, which
+ * stand lit a moment and fade (`revealLines`): Pierre's own lit lines,
+ * which it keeps on the rows it draws however it draws them again, worn
+ * with a fade of the file's own (`FLASH_CSS`), whose end lets them go, or
+ * a deadline of the moment's own where the rows were taken down first.
  *
  * Where the view comments on lines, code selected as text is read once the
  * drag that began in a file lets go (`watchTextSelection`): the lines it
@@ -134,6 +149,36 @@ declare const DIFF_HIGHLIGHT_WORKER: string | undefined;
 
 /** The attribute a list's file wears while it is drawn as its notes alone. */
 const LEAD_ATTRIBUTE = "data-lead";
+
+/** The attribute a list's file wears while lines of it are lit a moment, its value the moment's turn (`FLASH_TURN`). */
+const FLASH_ATTRIBUTE = "data-line-flash";
+
+/**
+ * The turns moments of lighting take by, each fading in an animation of its
+ * own, so lines lit again while still lit, the same lines among them, fade
+ * anew rather than going on with the fade they were already in.
+ */
+const FLASH_TURN = { EVEN: "even", ODD: "odd" } as const;
+
+type FlashTurn = (typeof FLASH_TURN)[keyof typeof FLASH_TURN];
+
+/** The animation each turn's lines fade in. */
+const FLASH_ANIMATION = {
+  [FLASH_TURN.EVEN]: "diff-line-flash-even",
+  [FLASH_TURN.ODD]: "diff-line-flash-odd",
+} as const satisfies Record<FlashTurn, string>;
+
+/** The fade animations, by name, whose end is a moment's. */
+const FLASH_ANIMATIONS: ReadonlySet<string> = new Set(Object.values(FLASH_ANIMATION));
+
+/**
+ * How long a moment stands at most, in milliseconds, past its hold and its
+ * fade: a fade on rows scrolled away or folded before it ends is dropped
+ * with no end told, so the moment ends by this deadline of its own. Twice
+ * the hold outlasts the fade and the scroll to the lines, whose rows start
+ * their hold only once drawn.
+ */
+const FLASH_DEADLINE_MS = LINE_FLASH_HOLD_MS * 2;
 
 /** What the find leaves out of the shadow root's words: the gutter of numbers, as a File tab's numbers are. */
 const FIND_SKIPPED = "[data-gutter]";
@@ -178,12 +223,14 @@ const LOOK_CSS = `
   [data-utility-button] {
     margin-right: 0;
   }
-  /* A band between hunks is one surface across its width: Pierre fills
+  /* A band between hunks is one calm surface across its width: Pierre fills
      the band's row with the code's ground and its arrows and its words
      with the band's, a box pasted onto a strip. Its row takes the band's
      ground, the arrows and the words stand on it with no ground of their
-     own, and only the arrow fills under the pointer; the words, a bigger
-     target opening the same lines, lift their ink. */
+     own, and the band itself answers no pointer. Only its controls do,
+     alike on every gap (\`./gap-controls.ts\`): an arrow, opening the next
+     lines, fills its own cell, and the words, opening the whole gap, lift
+     their ink to the code's, with no underline. */
   [data-separator="line-info-basic"] [data-separator-wrapper] {
     /* Pierre's own band ground, which a list sets (LIST_CSS). */
     background-color: var(--diffs-bg-separator, var(--luke-color-fill-hover));
@@ -193,30 +240,34 @@ const LOOK_CSS = `
     background-color: transparent;
     border: 0;
   }
-  [data-separator="line-info-basic"] [data-expand-button]:hover {
+  [data-separator="line-info-basic"] [data-separator-content]:hover {
+    cursor: auto;
+    text-decoration: none;
+  }
+  [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.MORE}"]:hover {
     background-color: var(--luke-color-fill-pressed);
   }
-  /* The words open what the arrow opens: Pierre opens a gap's both ends
-     from its words, which at the file's top or foot is not the arrow's, so
-     the words let the pointer through to the arrow, whose press reaches
-     across the band. A gap of two arrows keeps its words' own press,
-     which opens both of its ends, so neither arrow is covered. */
-  [data-separator="line-info-basic"] [data-separator-wrapper]:not([data-separator-multi-button])
-    [data-separator-content] {
-    pointer-events: none;
+  [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"] {
+    cursor: pointer;
   }
-  [data-separator="line-info-basic"] [data-separator-wrapper]:not([data-separator-multi-button])
-    [data-expand-button]::after {
-    content: "";
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
-    /* The arrow's column stands in the gutter alone, its words running on
-       past it over the code, so its press runs the file's width. */
-    width: 100cqi;
+  [data-separator="line-info-basic"] [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"]:hover {
+    /* The code's own ink, as an arrow's lifts under the pointer. */
+    color: var(--diffs-fg, var(--luke-color-text));
   }
-  [data-separator="line-info-basic"] [data-separator-wrapper]:hover [data-separator-content] {
-    color: var(--luke-color-text-muted);
+  /* The window's one focus ring (\`styles/base.css\`), which reaches no
+     shadow root, drawn inside the band, whose card clips what stands past
+     it, and only once the keyboard has moved the focus. */
+  [${GAP_CONTROL_ATTRIBUTE}]:focus-visible {
+    outline: var(--luke-focus-ring-width) solid var(--luke-color-focus-ring);
+    outline-offset: calc(-1 * var(--luke-focus-ring-width));
+  }
+  /* The words stand inside the band with room around them, so their ring stands clear of them, as the window's does. */
+  [${GAP_CONTROL_ATTRIBUTE}="${GAP_CONTROL.ALL}"]:focus-visible {
+    border-radius: var(--luke-focus-ring-width);
+    outline-offset: var(--luke-focus-ring-offset);
+  }
+  :host-context(:root:not([data-keyboard="true"])) [${GAP_CONTROL_ATTRIBUTE}]:focus-visible {
+    outline: none;
   }
   /* Lines lit, a comment's or a thread's, light their own rows alone: a
      note under them, the comment being written or a thread, keeps its own
@@ -256,6 +307,34 @@ const LOOK_CSS = `
   }
 }
 `;
+
+/**
+ * Lines lit a moment: Pierre's lit rows hold their light for
+ * `LINE_FLASH_HOLD_MS`, then fade to the line's own ground in the window's
+ * fast motion, which reduced motion and a capture run settle at once, so
+ * they still stand lit for the hold and only the fade is dropped. The fade's
+ * end is the moment's (`mountList`).
+ */
+const FLASH_CSS = Object.values(FLASH_TURN)
+  .map(
+    (turn) => `
+@layer unsafe {
+  :host([${FLASH_ATTRIBUTE}="${turn}"]) [data-selected-line] {
+    animation: ${FLASH_ANIMATION[turn]} var(--luke-duration-fast) var(--luke-motion-exit)
+      ${LINE_FLASH_HOLD_MS}ms both;
+  }
+}
+@keyframes ${FLASH_ANIMATION[turn]} {
+  from {
+    background-color: var(--diffs-computed-selected-line-bg);
+  }
+  to {
+    background-color: var(--diffs-computed-diff-line-bg, transparent);
+  }
+}
+`,
+  )
+  .join("");
 
 /** One diff alone: the theme's ground runs to the foot of the box it is drawn in, however few its lines. */
 const FILL_CSS = `
@@ -312,7 +391,7 @@ let sheets: { look: CSSStyleSheet; fill: CSSStyleSheet } | undefined;
 function lookSheets(): { look: CSSStyleSheet; fill: CSSStyleSheet } {
   if (sheets !== undefined) return sheets;
   const look = new CSSStyleSheet();
-  look.replaceSync(`${LOOK_CSS}${LIST_CSS}`);
+  look.replaceSync(`${LOOK_CSS}${LIST_CSS}${FLASH_CSS}`);
   const fill = new CSSStyleSheet();
   fill.replaceSync(`${LOOK_CSS}${FILL_CSS}`);
   sheets = { look, fill };
@@ -471,6 +550,9 @@ function patchOf(file: DiffListFile): FileDiffMetadata {
   }
 }
 
+/** No lines. */
+const NO_LINES: readonly number[] = [];
+
 /** A file as the list last drew it: what it was handed, and the item Pierre was given for it. */
 interface DrawnFile {
   readonly file: DiffListFile;
@@ -561,7 +643,9 @@ function expansionOptions(
 function listOptions(
   drawn: DiffLook,
   latest: () => DiffListProps,
-  dress: (element: HTMLElement, path: string) => void,
+  dress: (element: HTMLElement, path: string, phase: PostRenderPhase) => void,
+  /** Told each file drawn, as Pierre draws it, to read which of its hidden lines it draws. */
+  drawnBy: (path: string, instance: PierreFileDiff<string, undefined>) => void,
   commentable: (path: string) => boolean,
   pathOf: (fileDiff: FileDiffMetadata) => string,
 ): CodeViewOptions<string, undefined> {
@@ -585,10 +669,15 @@ function listOptions(
       latest().renderAnnotation(context.item.id, note.metadata),
     onPostRender: (
       node: HTMLElement,
-      _instance: PierreFileDiff<string, undefined> | PierreFile<string, undefined>,
-      _phase: PostRenderPhase,
+      instance: PierreFileDiff<string, undefined> | PierreFile<string, undefined>,
+      phase: PostRenderPhase,
       context: { item: { id: string } },
-    ) => dress(node, context.item.id),
+    ) => {
+      dress(node, context.item.id, phase);
+      if (phase !== "unmount" && instance instanceof PierreFileDiff) {
+        drawnBy(context.item.id, instance);
+      }
+    },
   };
 }
 
@@ -671,17 +760,51 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   const dressed = new WeakSet<HTMLElement>();
   // Each file's element by the file it draws now, which a drag's selection is read in.
   const elementPaths = new WeakMap<EventTarget, string>();
+  // The lines lit a moment, none while none are, and how many moments there were, whose count names the turn they fade in.
+  let flash: DiffLineRange | undefined;
+  let flashes = 0;
+  // The moment's deadline, run on the host's own animation clock, since the bundle holds no runtime to wait on.
+  let deadline: Animation | undefined;
+  const markFlash = (element: HTMLElement) => {
+    if (flash === undefined || elementPaths.get(element) !== flash.path)
+      return element.removeAttribute(FLASH_ATTRIBUTE);
+    element.setAttribute(FLASH_ATTRIBUTE, flashes % 2 === 0 ? FLASH_TURN.EVEN : FLASH_TURN.ODD);
+  };
   // Note that Pierre keeps a file's element for another file once the first
   // scrolls away, so each element's shadow root is dressed once, the first
-  // time it is drawn, and whether it is drawn as notes alone every time.
-  const dress = (element: HTMLElement, path: string) => {
+  // time it is drawn, and whether it is drawn as notes alone, and lit a moment, every time.
+  // Each drawn file's gaps watched for their controls (\`./gap-controls.ts\`), and let go as Pierre lets the file go, until its element draws a file again.
+  const gapWatches = new Map<HTMLElement, () => void>();
+  const watchGaps = (element: HTMLElement, phase: PostRenderPhase) => {
+    const watching = gapWatches.get(element);
+    if (phase === "unmount") {
+      watching?.();
+      gapWatches.delete(element);
+    } else if (watching === undefined && element.shadowRoot !== null) {
+      gapWatches.set(element, watchGapControls(element.shadowRoot));
+    }
+  };
+  const dress = (element: HTMLElement, path: string, phase: PostRenderPhase) => {
+    watchGaps(element, phase);
     element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
     elementPaths.set(element, path);
+    markFlash(element);
     if (dressed.has(element) || element.shadowRoot === null) return;
     dressed.add(element);
     element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
     releases.push(adoptShadowStyles(element.shadowRoot, lookSheets().look));
+    // Note that a fade's end is heard in the file's own shadow root, since an animation's events do not leave it.
+    element.shadowRoot.addEventListener("animationend", (event) => {
+      if (event instanceof AnimationEvent && FLASH_ANIMATIONS.has(event.animationName)) endFlash();
+    });
   };
+  // The hidden lines each file was last told to draw, told again only as they change.
+  const drawn = drawnTeller((path, lines) => latest.onDrawn?.(path, lines));
+  const tellDrawn = drawn.tell;
+  const drawnBy = (path: string, instance: PierreFileDiff<string, undefined>) =>
+    tellDrawn(path, drawnAmong(instance, drawnFiles.get(path)?.file.hidden ?? NO_LINES));
+  // The files whose hidden lines changed while their item stood, read again once the list is drawn.
+  const rehidden = new Set<string>();
   const itemsOf = (files: readonly DiffListFile[]) =>
     files.map((file) => {
       const held = drawnFiles.get(file.path);
@@ -694,6 +817,10 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         held.file.whole === file.whole &&
         sameNotes(held.file.annotations, file.annotations)
       ) {
+        if (!sameLines(held.file.hidden ?? NO_LINES, file.hidden ?? NO_LINES)) {
+          drawnFiles.set(file.path, { ...held, file });
+          rehidden.add(file.path);
+        }
         return held.item;
       }
       const read =
@@ -713,14 +840,32 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
       };
       drawnFiles.set(file.path, { file, item, read });
       paths.set(item.fileDiff, file.path);
+      // Note that a patch drawn anew opens none of its gaps until Pierre draws it, so none of its hidden lines stands drawn.
+      if (item.fileDiff !== held?.item.fileDiff) tellDrawn(file.path, NO_LINES);
+      else rehidden.add(file.path);
       return item;
     });
+  // Each file whose hidden lines changed read again: as Pierre draws it, or, out of view, where it stood, since nothing opens a gap there.
+  const readRehidden = () => {
+    const rendered = new Map(view.getRenderedItems().map((each) => [each.id, each]));
+    for (const path of rehidden) {
+      const hidden = drawnFiles.get(path)?.file.hidden ?? NO_LINES;
+      const standing = rendered.get(path);
+      if (standing?.type === "diff") drawnBy(path, standing.instance);
+      else
+        tellDrawn(
+          path,
+          drawn.told(path).filter((line) => hidden.includes(line)),
+        );
+    }
+    rehidden.clear();
+  };
   typeset(host, props.look);
   const commentable = (path: string) => drawnFiles.get(path)?.file.lead === false;
   // Note that a file's read patch names its file by path for Pierre's reading of it whole, since Pierre hands back the patch alone.
   const pathOf = (fileDiff: FileDiffMetadata) => paths.get(fileDiff) ?? fileDiff.name;
   const optionsFor = (next: DiffListProps) =>
-    listOptions(next.look, () => latest, dress, commentable, pathOf);
+    listOptions(next.look, () => latest, dress, drawnBy, commentable, pathOf);
   const highlighting = listHighlighting(props.look);
   const { pool } = highlighting;
   const view = new CodeView<string, undefined>(optionsFor(props), pool);
@@ -764,6 +909,45 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     view.setSelectedLines({ id: selected.path, range: { start, side, end, endSide } });
   };
   if (props.selected !== undefined) light(props.selected);
+  const drawnElements = () => host.querySelectorAll<HTMLElement>(`[${FIND_SHADOW_ATTRIBUTE}]`);
+  // Note that the lines lit before stand again only where the moment's still stand, on the same side, since a press may have picked others meanwhile.
+  const endFlash = () => {
+    const standing = flash;
+    deadline?.cancel();
+    deadline = undefined;
+    if (standing === undefined) return;
+    flash = undefined;
+    for (const element of drawnElements()) markFlash(element);
+    const now = view.getSelectedLines();
+    const picked = now === null ? undefined : selectionOf(now.range);
+    if (
+      now?.id === standing.path &&
+      picked?.start === standing.startLine &&
+      picked.end === standing.endLine &&
+      picked.side === standing.side &&
+      picked.endSide === standing.side
+    )
+      light(latest.selected);
+  };
+  const revealLines = (range: DiffLineRange) => {
+    const { path, side, startLine, endLine } = range;
+    const lines = { start: startLine, side, end: endLine, endSide: side };
+    flashes += 1;
+    flash = range;
+    deadline?.cancel();
+    deadline = host.animate([], { duration: FLASH_DEADLINE_MS });
+    deadline.onfinish = endFlash;
+    view.setSelectedLines({ id: path, range: lines });
+    for (const element of drawnElements()) markFlash(element);
+    view.scrollTo({
+      type: "range",
+      id: path,
+      range: lines,
+      align: "start",
+      offset: lineHeightOf(latest.look) * REVEAL_LINES_ABOVE,
+      behavior: "smooth-auto",
+    });
+  };
   return {
     update: (next) => {
       const was = latest;
@@ -781,8 +965,15 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         view.setOptions(optionsFor(next));
       view.setItems(itemsOf(next.files));
       view.render();
+      // A file the list no longer holds draws none of its lines, and its next drawing opens no gap.
+      drawn.forget(new Set(next.files.map((file) => file.path)));
+      readRehidden();
       tellTop(host.scrollTop);
-      if (!sameListSelection(next.selected, was.selected)) light(next.selected);
+      // Lines lit for a comment take the place of a moment's, which lights them again as it fades.
+      if (!sameListSelection(next.selected, was.selected)) {
+        if (flash === undefined) light(next.selected);
+        else endFlash();
+      }
     },
     reveal: (path) =>
       view.scrollTo({ type: "item", id: path, align: "start", behavior: "smooth-auto" }),
@@ -797,11 +988,17 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
         offset: lineHeightOf(latest.look) * REVEAL_LINES_ABOVE,
         behavior: "smooth-auto",
       }),
+    revealLines,
     unmount: () => {
+      // A list taken down draws nothing; the next one mounted opens no gap.
+      drawn.forget(new Set());
+      deadline?.cancel();
       stopWatching();
       unsubscribe();
       view.cleanUp();
       for (const release of releases) release();
+      for (const stop of gapWatches.values()) stop();
+      gapWatches.clear();
       host.replaceChildren();
     },
   };

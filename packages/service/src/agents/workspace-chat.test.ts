@@ -58,6 +58,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
@@ -151,7 +152,6 @@ const openRoom = Effect.gen(function* () {
         authorMemberId: grace.id,
         to: { channelId: general.id },
         blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
-        mentions: [],
         clientKey: randomUUID(),
       });
       return { grace, general, message: Result.getOrThrow(posted).message };
@@ -262,7 +262,6 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
               authorMemberId: grace.id,
               to: { channelId: general.id },
               blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
-              mentions: [],
               clientKey: randomUUID(),
               key: "invite-expiry",
               ask: { response: { type: CHAT_ASK.APPROVAL } },

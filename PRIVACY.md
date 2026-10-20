@@ -107,7 +107,11 @@ recordings"); those turns are never sent to Luke's voice window or his
 call window, which draw none of them. Your default model, effort, and
 context size for a coding agent are kept with your account preferences on our
 service, set in Settings › Coding agents or by the model you last started
-with.
+with. The Claude model your Generate chapters runs on is kept with them too,
+set in Settings › Coding agents. Where a Luke link you open in a browser goes, staying there or handed
+to Luke for Mac, is kept with them too, set in Settings › Account; Luke in a
+browser on a Mac reads it each time it loads a link that names something in
+Luke.
 
 A voice session on this Mac is a call about one task. It opens with nothing
 of your coding agents and no line of your conversation; what Luke knows when
@@ -465,7 +469,27 @@ GitHub's own image proxy, each up to 8 MB; other images are shown as links.
 Files changed reads each changed file's name and patch, for up to 300 files,
 leaving out a patch over 100,000 characters. It stores none of it, and Luke
 holds it in memory while the tab is open, never on disk, except that
-downloading a patch writes it where you save it. A button in the tab that
+downloading a patch writes it where you save it. Chapters splits the pull
+request into chapters only when a member presses Generate chapters, or
+Regenerate once its head has moved on; nothing makes them on its own. Our
+service then reads the pull request's title, description, the messages of up
+to its first 100 commits, and each changed file's patch as Files changed
+reads them, and sends all of it, except the patches of files a reader reads
+past (lockfiles, minified files, source maps, snapshots, images, fonts,
+videos, and documents) and of files with no patch to read, to the Claude model
+the member who pressed it chose in Settings › Coding agents (Haiku 5.5 unless
+they changed it), on our own key, never yours and never counted in your daily
+usage, as described under "Who we send it to".
+It stores the chapters that come back with the workspace, for that repository,
+pull request, and head commit, beside which member asked, when, the model
+that answered, and why a generation failed where one did: each chapter's
+title, summary, risk and reasons, the questions it puts to a reviewer, and the
+file paths and line numbers it covers, never a patch, the description, or a
+commit message. Every member of the workspace who can reach the repository
+sees them, and a Generate for the same head replaces them. They are deleted
+when the workspace is; nothing else deletes them, so they stay after the pull
+request closes, after a newer head's chapters are made, and after the member
+who asked deletes their account, which only clears who asked. A button in the tab that
 changes the pull request, such as Ready for review, Convert to draft, Merge,
 Enable auto-merge, or giving or taking back a reaction, is
 sent to GitHub by our service as you, on the token of your own GitHub sign-in,
@@ -910,8 +934,9 @@ a task or a workspace made (with where it was started from and whether from an i
 it runs on, and whether an automation started it), a pull request an agent
 opened (as you or as Luke's GitHub App, and whether as a draft), an Inbox item
 answered, a Chat message you posted, an issue filed, an automation made (with
-what triggers it), and an integration connected or disconnected (with which
-provider). These counts are event names and values from a fixed list too, and
+what triggers it), an integration connected or disconnected (with which
+provider), and a pull request's chapters generated (with how it came out, how
+many chapters and parts of the diff they hold, and how long it took). These counts are event names and values from a fixed list too, and
 carry no titles, names, repositories, branches, prompts, messages, or the
 words of any of them. They go from our service to PostHog, so PostHog never
 sees your network address for them, and deleting your account erases them
@@ -979,9 +1004,16 @@ the addresses of requests it made),
 the headers, bodies, and query parameters of requests Luke made, Electron,
 operating-system, runtime, and device context, and your Mac's IP address.
 Sentry replaces a value whose name looks like a credential, such as an
-authorization header or a token parameter, before it is sent, and Luke drops
-any report that names a call's avatar access token. Luke does not attach your
-Luke account, and does not enable Sentry Replay, screenshots, or profiling.
+authorization header or a token parameter, before it is sent. Luke drops any
+error report or breadcrumb that names a call's avatar access token, and any
+traced step whose name or request address names that token as it starts; in
+the rest of a trace, a name or a value that names the token is replaced. In
+the address of a request or of the page that a trace carries, the value of
+each query parameter and the fragment are replaced, and so is any part of its
+path shaped like a credential, such as a long token; the scheme, the host, the
+rest of the path, and the parameters' names are sent as they were. Luke does
+not attach your Luke account, and does not enable Sentry Replay, screenshots,
+or profiling.
 Fixture and evidence runs send nothing to Sentry.
 
 **Error, performance, and agent reports from our service.** Our service and
@@ -1125,12 +1157,23 @@ only when you press Send.
   Mac loads straight from Keyframe's public storage as the menu is drawn, so
   Keyframe sees your Mac's IP address then, as any site serving an image does;
   no referrer and nothing of yours is sent with it.
-- PostHog, for usage data and screen recordings from the Mac app, and the
-  counts our service makes of the work done through it. The counts
-  go through our own service; the recordings go from Luke to PostHog directly.
-- Sentry, for the Mac app's crash and performance reports, and our service's
-  and Luke's agents' error, performance, log, and agent reports, described
-  above.
+- PostHog, for usage data and screen recordings from the Mac app, screen
+  recordings from Luke in a browser, and the counts our service makes of the
+  work done through it. The counts go through our own service; the
+  recordings go from Luke, on the Mac or in your browser, to PostHog directly.
+- Sentry, for the Mac app's and Luke in a browser's crash and performance
+  reports, and our service's and Luke's agents' error, performance, log, and
+  agent reports, described above.
+- Anthropic, for a pull request's chapters. Pressing Generate chapters in a
+  coding agent's Pull request tab sends the pull request's title, description,
+  commit messages, and patches, except those of files a reader reads past, to
+  the Claude model the member chose in Settings (Haiku 5.5 unless they changed
+  it) from our service, on our key and outside their usage, in at most two
+  calls (the second places the parts of the diff the first left out), as
+  described under "A coding agent's pull request". Our service logs only how a
+  generation failed, by its kind, and counts its outcome as described under
+  "Usage data"; Anthropic keeps the request and its reply under its own
+  retention policy.
 - Anthropic and OpenAI, for a coding agent. When you, or Luke on a call, start
   one on a task, our service runs it in a Vercel Sandbox of its own with the
   task's repository checked out, and calls the model chosen (or your default)
@@ -1263,8 +1306,11 @@ only when you press Send.
   and its workers also run as sessions on Vercel Workflow, which keeps each
   session's history (the messages, files, tool calls, and answers its model
   works from) so the session can pick up where it stopped. Deleting a task or
-  your account ends each of its sessions for good, a turn still running
-  included. When a session of Luke's ends, Vercel deletes that history at
+  your account asks Vercel Workflow to end each of its sessions for good, a
+  turn still running included; a session that could not be reached or did
+  not confirm in time is noted in our service's logs and left as it stood,
+  and the delete goes on without it, its history kept under Vercel's own
+  retention. When a session of Luke's ends, Vercel deletes that history at
   once, though the session's ids, status, and times may stay as long as
   Vercel's own retention. This holds for a session started on or after
   13 October 2026. For now, a coding agent's session keeps its history after
@@ -1272,6 +1318,11 @@ only when you press Send.
   find out why a session stopped partway, and Vercel deletes it after that.
   A session of Luke's started before then, and the session of a worker
   either one hands work to, keeps its history under Vercel's own retention.
+- Neon, asked directly by Luke on your Mac or in a browser, which sees its
+  network address: while you are signed in, Luke follows what waits on you
+  across your account, for the Inbox, over Neon's Realtime service, with a
+  short-lived query our service seals for your account, and Neon sends back
+  the rows of that inbox as they change.
 - GitHub, asked by your Mac itself and unauthenticated, which sees your Mac's
   network address: to check for updates, carrying nothing about you, when Luke
   opens, every four hours, and when you ask from Luke's menu or Settings,
@@ -1305,6 +1356,27 @@ The hand-off page is one of the sign-in pages above: not recorded, its
 address cut to the page itself. Your browser contacts PostHog directly, so
 PostHog sees your network address, as it does for the app's recordings.
 
+Luke in a browser, the app at tryluke.dev/app and at every link to something
+in Luke, is not one of the site's pages above: it records and reports what the
+Mac app does. It makes screen recordings as described under "Screen
+recordings", with every word masked and the same parts left out, and with
+the tab's address, which names the workspace and what it opens, and the
+address of the page that sent you there, replaced by the app's own; only the
+site's production deployment records, never a preview of it. A recording
+follows your account in that browser: signing out files what follows under
+nobody, and deleting your account in one tab stops the recording in every
+tab of that browser until you sign in again. It sends Sentry reports of the
+errors it did not handle and of a tab that could not draw, and performance
+traces for about one page load in ten, and a warning for each kind of request
+the page's security policy refused, once in each tab, naming only the
+policy's directive and the refused address's origin, or the browser's own
+word for it, such as inline, all using Sentry's default data
+collection, as described under "Crash and performance reports from the Mac
+app", where the page's address, your browser's details, and the addresses of
+the requests it made take the place of the Mac's. Your browser contacts
+PostHog, Sentry, and Neon (see "Who we send it to") directly, so each sees
+your network address.
+
 A link to something in Luke, pasted into Slack, iMessage, or anywhere else
 that previews links, shows only Luke's own card: the Luke name and logo, the
 same for every link, and nothing of the task, the agent, the person, or the
@@ -1321,7 +1393,14 @@ Mac beyond the layout of its window described under "On your Mac", and the
 switch for commands on your Mac and each repository's run command for Run
 are kept with that Mac's settings. Luke in a browser keeps your settings in
 that browser's own storage for the site, and no sign-in token at all: it is
-signed in by the site's session cookie, which only the browser holds. Our service
+signed in by the site's session cookie, which only the browser holds. Its
+screen recording keeps, in that browser's storage for the site, the
+anonymous id it records under, the account id it files under once you sign
+in, and whether it may send, under `luke_app_replay` and
+`luke_app_replay_consent`, apart from the site's own counting. A connect
+started there, such as connecting GitHub, keeps in its tab's session storage a
+random id naming the connect, or the address it left from, until the page it
+lands on, or the app opened again in that tab, lets go of it. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and
@@ -1376,10 +1455,11 @@ and error, performance, and agent reports by Sentry.
   GitHub App (revoke it in GitHub's settings). It asks Vercel Connect to
   revoke every integration's grant it holds; if Vercel Connect cannot
   be reached, the account is deleted anyway and a grant stays until you revoke
-  Luke in that service's own settings. It ends every session of yours on
-  Vercel Workflow and, shortly after, deletes their sandboxes with the
-  snapshots no other sandbox uses; the session history Vercel Workflow keeps
-  goes as described under "Who we send it to", and anything stored only on
+  Luke in that service's own settings. It asks Vercel Workflow to end every
+  session of yours, noting in our logs any it could not, and, shortly after,
+  deletes their sandboxes with the snapshots no other sandbox uses; the
+  session history Vercel Workflow keeps goes as described under "Who we send
+  it to", and anything stored only on
   your Mac stays there until you remove it.
 
 ## Google user data

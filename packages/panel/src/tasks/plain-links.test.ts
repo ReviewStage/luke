@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
@@ -12,6 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { MARKDOWN_MARK, MarkdownMessage } from "../markdown-message.js";
 import {
+  type AnyAct,
   fakeActPort,
   fakeAppBridge,
   type OpenedLink,
@@ -88,7 +89,7 @@ const SECTION_LINKS = {
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
-let sent: (Act | OpenedLink)[] = [];
+let sent: (AnyAct | OpenedLink)[] = [];
 
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
@@ -97,12 +98,7 @@ beforeEach(() => {
   sent = [];
   installEditorLayout();
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppBridge({});
   fakeActPort(openingLinks((link) => sent.push(link)));
 });
 

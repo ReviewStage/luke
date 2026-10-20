@@ -71,6 +71,8 @@ function useStepOverTemplate(history: NavigationHistory, onExit: () => void): Na
   useEffect(() => {
     const takeBack = (event: MouseEvent) => {
       if (event.button !== MOUSE_BUTTON.BACK) return;
+      // Cancelled too, as the window's own Back press is, so a browser takes no step of its own after it.
+      event.preventDefault();
       event.stopImmediatePropagation();
       exit.current();
     };

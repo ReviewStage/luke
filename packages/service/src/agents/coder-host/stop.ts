@@ -23,6 +23,7 @@ import {
   hostedCarriesBearer,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
   describeUnreachable,
   EVE_CANCEL_OUTCOME,
@@ -84,32 +85,39 @@ export interface EveReach {
  * or a row names, so the cookie names the account eve acts for exactly as
  * the bearer would have. A deployment that names no origin for eve, or no
  * secret for a cookie's request, answers unavailable.
+ *
+ * The client sends the kinds of turn `Turn` names and none unless a caller
+ * names one, so a route that holds it to stop, retire, or follow a session
+ * cannot open or steer one: a route that sends the account's words asks for
+ * `EveTypedTurn` by name.
  */
-export const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
+export function eveFor<Turn extends BrainHostTurn = never>(
   reach: EveReach,
   request: Request,
   account: string,
   mount: EveMount = EVE_MOUNT.CODER,
-): Effect.fn.Return<EveSessions, HostedRefusal, HttpClient.HttpClient> {
-  if (hostedCarriesBearer(request)) {
-    const authorization = Redacted.make(request.headers.get("authorization") ?? "");
-    if (reach.eve !== undefined) return reach.eve(authorization);
+): Effect.Effect<EveSessions<NoInfer<Turn>>, HostedRefusal, HttpClient.HttpClient> {
+  return Effect.gen(function* () {
+    if (hostedCarriesBearer(request)) {
+      const authorization = Redacted.make(request.headers.get("authorization") ?? "");
+      if (reach.eve !== undefined) return reach.eve(authorization);
+      const origin = reach.eveOrigin();
+      if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* eveSessions<Turn>({ origin, caller: { authorization }, mount });
+    }
+    if (reach.eveAs !== undefined) return reach.eveAs(account);
+    // Note that a runtime without the deployment's environment refuses a cookie's request as
+    // unavailable on purpose, as one whose environment names no secret does: the deployment acts
+    // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
+    const environment = yield* Effect.serviceOption(HostedEnvironment);
+    const secret = Option.getOrUndefined(environment)?.eveDeploymentSecret;
     const origin = reach.eveOrigin();
-    if (origin === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-    return yield* eveSessions({ origin, caller: { authorization }, mount });
-  }
-  if (reach.eveAs !== undefined) return reach.eveAs(account);
-  // Note that a runtime without the deployment's environment refuses a cookie's request as
-  // unavailable on purpose, as one whose environment names no secret does: the deployment acts
-  // for no account it cannot prove itself to eve as, and nothing falls back to another caller.
-  const environment = yield* Effect.serviceOption(HostedEnvironment);
-  const secret = Option.getOrUndefined(environment)?.cronSecret;
-  const origin = reach.eveOrigin();
-  if (secret === undefined || origin === undefined) {
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  return yield* eveSessions({ origin, caller: { secret, account }, mount });
-});
+    if (secret === undefined || origin === undefined) {
+      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+    }
+    return yield* eveSessions<Turn>({ origin, caller: { secret, account }, mount });
+  });
+}
 
 /** Where each of the agents' conversations named stands now, read by id since the agents passed the task's gate: its newest turn, and whether a line of the developer's awaits one. */
 export const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -206,7 +214,7 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
  * again as it first ran.
  */
 export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eveOf: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  eveOf: Effect.Effect<Pick<EveSessions, "cancel">, HostedRefusal, HttpClient.HttpClient>,
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key?: string,

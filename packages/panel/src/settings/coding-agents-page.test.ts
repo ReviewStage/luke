@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
@@ -9,12 +10,12 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActKind, type ActResultFor } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { type AnyAct, type AnyActOutcome, fakeActs } from "../testing/app-bridge.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   focusedSegment,
@@ -68,13 +69,13 @@ let sent: AnyAct[] = [];
 /** Whether the service refuses the next write. */
 let refuseWrite = false;
 
-const done = (value: ActResultFor<ActKind> | PortActResult<PortActKind>): AnyActOutcome => ({
-  status: ACT_OUTCOME_STATUS.DONE,
+const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
+  status: FAKE_ANSWER.DONE,
   value,
 });
 
 /** The bridge, answering the page's acts the way the host would. */
-function answer(request: AnyAct): Promise<AnyActOutcome> {
+function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_MODELS:
@@ -83,6 +84,8 @@ function answer(request: AnyAct): Promise<AnyActOutcome> {
       return Promise.resolve(done(undefined));
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
       return Promise.resolve(done({ choice: stored }));
+    case ACT_KIND.CHAPTERS_MODEL_READ:
+      return Promise.resolve(done({ model: CHAPTERS_MODEL.HAIKU }));
     case ACT_KIND.PROVIDER_KEYS_READ:
       return Promise.resolve(done({ keys }));
     case ACT_KIND.PROVIDER_KEYS_SAVE:
@@ -98,7 +101,7 @@ function answer(request: AnyAct): Promise<AnyActOutcome> {
       stored = request.payload;
       return Promise.resolve(done({ choice: stored }));
     default:
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+      return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
   }
 }
 
@@ -174,6 +177,7 @@ test("while the default and the keys are read, placeholder rows stand in each gr
 
   assert.deepEqual(placeholders(page), [
     ["Loading your default", 3],
+    ["Loading your chapters model", 1],
     ["Loading your keys", 2],
   ]);
   await settle();

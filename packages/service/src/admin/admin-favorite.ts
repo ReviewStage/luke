@@ -1,13 +1,8 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
-import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
-  adminUserId,
-  errorResponse,
-  jsonResponse,
-} from "./http.js";
+import { adminUserId } from "./http.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
@@ -20,7 +15,9 @@ import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
  */
 
 export interface AdminFavoriteOptions {
-  request: Request;
+  /** Whether the star is set (PUT) or taken back (DELETE): the method is the whole ask. */
+  favorite: boolean;
+  query: { readonly id?: string };
   /** The signed-in admin the mark belongs to, never an id the request asserts. */
   viewer: AdminViewer;
   /**
@@ -38,25 +35,16 @@ export interface AdminFavoriteOptions {
  */
 export function handleAdminFavorite(
   options: AdminFavoriteOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
-  // The gate admitted only PUT and DELETE, and which of the two it was is the
-  // whole ask: PUT sets the star, DELETE takes it back.
-  const favorite = request.method === "PUT";
+): Effect.Effect<{ favorite: boolean }, AdminRefusal, DatabaseServices> {
+  const { favorite, query } = options;
 
-  const userId = adminUserId(request.url);
-  if (userId === undefined) {
-    return Effect.succeed(
-      errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.MISSING_USER_ID),
-    );
-  }
+  const userId = adminUserId(query.id);
+  if (userId === undefined) return Effect.fail(ADMIN_REFUSAL.MISSING_USER_ID);
 
   return options.writeFavorite(options.viewer.userId, userId, favorite).pipe(
-    Effect.map((found) =>
-      found
-        ? jsonResponse(ADMIN_HTTP_STATUS.OK, { favorite })
-        : errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND),
-    ),
     Effect.catchCause((cause) => unavailableSeam("admin favorite write failed", cause)),
+    Effect.flatMap((found) =>
+      found ? Effect.succeed({ favorite }) : Effect.fail(ADMIN_REFUSAL.USER_NOT_FOUND),
+    ),
   );
 }

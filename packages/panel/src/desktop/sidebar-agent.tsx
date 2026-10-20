@@ -18,6 +18,7 @@ import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { useRowPlace, withRowMoves } from "./row-moves.js";
 
 /**
  * sidebar-agent.tsx -- an agent an automation started with no task, as a row among the sidebar's tasks.
@@ -98,6 +99,7 @@ export function SidebarAgent({
     row.current = press;
   }, []);
   const menu = useMenu(shown);
+  const place = useRowPlace();
   const copyLink = useCopyLinkItem()(agentPlace(agent));
   const groups = [
     copyLink === undefined ? [] : [copyLink],
@@ -141,7 +143,12 @@ export function SidebarAgent({
         contextMenu={groups.length === 0 ? undefined : menu.contextMenu(row)}
       />
       {menu.drawn === undefined ? null : (
-        <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
+        <ActionMenu
+          label={ACTIONS_LABEL}
+          menu={menu.drawn}
+          groups={withRowMoves(groups, place)}
+          onClose={menu.close}
+        />
       )}
     </>
   );

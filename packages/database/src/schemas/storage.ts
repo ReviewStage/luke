@@ -98,6 +98,11 @@ export const conversations = pgTable(
       .where(sql`${table.deletedAt} is not null`),
     // The children and agents reads pick one account's rows of one kind.
     index("conversations_user_kind").on(table.userId, table.kind),
+    // A recorded session is found by the runtime's own id, by the session's reads and by the sweep
+    // that settles an ended session's turns.
+    index("conversations_runtime_session")
+      .on(table.runtimeSessionId)
+      .where(sql`${table.runtimeSessionId} is not null`),
   ],
 );
 

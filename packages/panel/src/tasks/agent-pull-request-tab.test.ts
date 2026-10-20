@@ -24,6 +24,7 @@ import {
   type GitHubPerson,
   MERGE_STATE,
   type MergeState,
+  type PendingReviewComment,
   PULL_REQUEST_STATE,
   type PullRequestMerging,
   type PullRequestState,
@@ -44,16 +45,17 @@ import {
   REVIEW_EVENT,
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
-import { act, createElement, useState } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import type { SideBundles } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import type { MenuAction } from "../desktop/action-menu.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffListProps,
@@ -225,6 +227,8 @@ const DIFF_STAND_IN: DiffViewModule = {
       update: (next) => lists.push(next),
       reveal: (path) => listReveals.push(path),
       revealLine: (path, side, line) => listReveals.push(`${path}:${side}:${line}`),
+      revealLines: (range) =>
+        listReveals.push(`${range.path}:${range.side}:${range.startLine}-${range.endLine}`),
       unmount: () => undefined,
     };
   },
@@ -284,9 +288,7 @@ beforeEach(() => {
   listReveals = [];
   changeHeld = undefined;
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
       opened.push(url);
@@ -378,15 +380,37 @@ function Switching({
   first: PullRequestView;
 }) {
   const [view, setView] = useState<PullRequestView>(first);
-  return createElement(AgentPullRequestTab, {
-    agentId: AGENT.id,
-    control,
-    shown: true,
-    repository: "acme/relay",
-    tree: { open: false, onToggle: () => undefined },
-    view,
-    onView: setView,
-  });
+  const [actions, setActions] = useState<MenuAction[] | undefined>(undefined);
+  return createElement(
+    Fragment,
+    null,
+    createElement(Toolbar, { actions }),
+    createElement(AgentPullRequestTab, {
+      agentId: AGENT.id,
+      control,
+      shown: true,
+      repository: "acme/relay",
+      tree: { open: false, onToggle: () => undefined },
+      view,
+      onView: setView,
+      onActions: setActions,
+    }),
+  );
+}
+
+/** What the side panel's toolbar ⋯ offers for the tab, as a row of presses: its items as the tab hands them up. */
+function Toolbar({ actions }: { actions: MenuAction[] | undefined }) {
+  return createElement(
+    "div",
+    { "data-toolbar": "" },
+    (actions ?? []).map((action) =>
+      createElement(
+        "button",
+        { key: action.label, type: "button", disabled: action.disabled, onClick: action.onSelect },
+        action.label,
+      ),
+    ),
+  );
 }
 
 /**
@@ -510,9 +534,19 @@ function waiting(tab: HTMLElement): string[] {
     .map((each) => each.textContent ?? "");
 }
 
-/** What the header says of where the pull request stands: its title row's first control's words. */
+/** The header's pill, which follows the title in its row's markup; none where the row holds none. */
+function pillOf(tab: HTMLElement): Element | undefined {
+  const next = tab.querySelector(
+    ".pull-request-title-row > .pull-request-title",
+  )?.nextElementSibling;
+  return next === null || next === undefined || next.matches(".pull-request-title-actions")
+    ? undefined
+    : next;
+}
+
+/** What the header says of where the pull request stands: its pill's words. */
 function standing(tab: HTMLElement): string | undefined {
-  return tab.querySelector(".pull-request-title-row")?.firstElementChild?.textContent ?? undefined;
+  return pillOf(tab)?.textContent ?? undefined;
 }
 
 /** The merge control at the title row's end, where one stands. */
@@ -520,16 +554,20 @@ function mergeControl(tab: HTMLElement): HTMLButtonElement | null {
   return tab.querySelector<HTMLButtonElement>(".pull-request-title-row .merge-control > button");
 }
 
-/** The header's ⋯, opened, and its items' words. */
-function openHeaderMenu(tab: HTMLElement): HTMLButtonElement[] {
-  act(() =>
-    (
-      tab.querySelector<HTMLButtonElement>(
-        '.pull-request-title-row [aria-label="Pull request actions"]',
-      ) ?? assert.fail("the title row has a ⋯")
-    ).click(),
+/** What the toolbar's ⋯ offers for the tab, each item's words and whether it applies now. */
+function toolbarItems(tab: HTMLElement): string[] {
+  return [...tab.querySelectorAll<HTMLButtonElement>("[data-toolbar] button")].map(
+    (each) => `${each.textContent}${each.disabled ? " (off)" : ""}`,
   );
-  return [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
+}
+
+/** Presses the toolbar ⋯'s item named as given. */
+async function pressToolbar(tab: HTMLElement, label: string): Promise<void> {
+  const item =
+    [...tab.querySelectorAll<HTMLButtonElement>("[data-toolbar] button")].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`the toolbar's ⋯ offers ${label}`);
+  await act(async () => item.click());
 }
 
 /** The words of every element the selector names, in order. */
@@ -1602,9 +1640,9 @@ test("each tab counts what Luke holds of it: the conversation its comments, revi
   });
   await settle();
   assert.equal(
-    option(tab, "Files changed").getAttribute("aria-selected"),
+    option(tab, "Chapters").getAttribute("aria-selected"),
     "true",
-    "the arrows move along the row",
+    "the arrows move along the row, Chapters after Checks",
   );
 });
 
@@ -1687,7 +1725,7 @@ test("a merged pull request says so on its pill, as its overview read it, says n
   ]);
 });
 
-test("where what the agent published is not read, the header still says where the pull request stands, and its ⋯ opens it on GitHub first, as its overview read it", async () => {
+test("where what the agent published is not read, the header still says where the pull request stands, and the toolbar's ⋯ opens it on GitHub, as its overview read it; the header holds no ⋯ of its own", async () => {
   const control = {
     ...controlAnswering(),
     pullRequests: new Map(),
@@ -1699,14 +1737,36 @@ test("where what the agent published is not read, the header still says where th
     null,
     "GitHub is no button of its own",
   );
-  const items = openHeaderMenu(tab);
-  assert.deepEqual(
-    items.map((each) => each.textContent),
-    ["Open on GitHub", "Refresh pull request", "Copy link"],
+  assert.equal(
+    tab.querySelector(".pull-request-header [aria-haspopup='menu'][aria-label$='actions']"),
+    null,
+    "the header holds no ⋯",
   );
-  act(() => items[0]?.click());
+  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
+  await pressToolbar(tab, "Open on GitHub");
   await settle();
   assert.deepEqual(opened, [PAGE]);
+});
+
+test("the toolbar's ⋯ offers Refresh dimmed while a read is out, which a refresh would only repeat", async () => {
+  const pullRequest = held<CodingAgentOverviewPullRequestAnswerView>();
+  const tab = await draw(controlAnswering({ pullRequest: pullRequest.read }));
+  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh (off)"]);
+  await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
+  await settle();
+  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
+});
+
+test("the toolbar's ⋯ offers nothing for the pull request before any of it is held", async () => {
+  const pullRequest = held<CodingAgentOverviewPullRequestAnswerView>();
+  const tab = await draw({
+    ...controlAnswering({ pullRequest: pullRequest.read }),
+    pullRequests: new Map(),
+  });
+  assert.deepEqual(toolbarItems(tab), []);
+  await act(async () => pullRequest.answer({ pullRequest: PULL_REQUEST }));
+  await settle();
+  assert.deepEqual(toolbarItems(tab), ["Open on GitHub", "Refresh"]);
 });
 
 test("a ⌘-click on the title opens the pull request on GitHub, and a plain one opens nothing", async () => {
@@ -1722,7 +1782,89 @@ test("a ⌘-click on the title opens the pull request on GitHub, and a plain one
   assert.deepEqual(opened, [PAGE]);
 });
 
-test("an agent with no pull request yet says so", async () => {
+test("a screen reader meets the title before the pill, which comes after it in the title row's markup", async () => {
+  const tab = await draw(controlAnswering());
+  const title =
+    tab.querySelector(".pull-request-title-row > .pull-request-title") ??
+    assert.fail("the title stands in the title row");
+  const pill = pillOf(tab) ?? assert.fail("the pill stands in the title row");
+  assert.ok(
+    title.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "the pill follows the title",
+  );
+  assert.match(title.textContent ?? "", /#42/u);
+  assert.match(pill.textContent ?? "", /Open/u);
+});
+
+/** Scrolls `box` to `top` from wherever it stood, as a finger dragging it does. */
+function scrollTo(box: Element, top: number): void {
+  Object.defineProperty(box, "scrollTop", { configurable: true, value: top });
+  act(() => {
+    box.dispatchEvent(new Event("scroll"));
+  });
+}
+
+/** Gives `element` the box jsdom lays out none for: how tall it stands, and how tall what it holds runs. */
+function sized(
+  element: Element,
+  box: { readonly height: number; readonly content?: number },
+): void {
+  Object.defineProperty(element, "offsetHeight", { configurable: true, value: box.height });
+  Object.defineProperty(element, "clientHeight", { configurable: true, value: box.height });
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    value: box.content ?? box.height,
+  });
+}
+
+/** A Pull request tab on its Conversation, the header and the conversation's scroller given the boxes a phone lays them out in. */
+async function phoneTab(conversationRuns: number) {
+  const tab = await draw(controlAnswering());
+  const header = tab.querySelector(".pull-request-header") ?? assert.fail("the header stands");
+  const conversation =
+    tab.querySelector("section[aria-label='Pull request conversation'] .luke-detail-page-main") ??
+    assert.fail("the conversation scrolls");
+  sized(header, { height: 200 });
+  sized(conversation, { height: 400, content: conversationRuns });
+  return { tab, conversation, folded: () => header.hasAttribute("data-folded") };
+}
+
+test("the header folds once the view under it is scrolled down, not by a sideways scroll, and unfolds back at its top or on another view", async () => {
+  const { tab, conversation, folded } = await phoneTab(2000);
+
+  scrollTo(conversation, 20);
+  assert.equal(folded(), false, "a nudge folds nothing");
+  scrollTo(conversation, 400);
+  assert.equal(folded(), true, "scrolled down, the header folds");
+  scrollTo(conversation, 400);
+  assert.equal(folded(), true, "a sideways scroll, its top where it stood, leaves it folded");
+  scrollTo(conversation, 20);
+  assert.equal(folded(), true, "near the top it stays folded");
+  scrollTo(conversation, 0);
+  assert.equal(folded(), false, "at the top it unfolds");
+
+  scrollTo(conversation, 400);
+  await choose(tab, "Checks");
+  assert.equal(folded(), false, "another view starts unfolded");
+});
+
+test("a view that runs on past its box by less than the header stands never folds it, since the box the fold grows would land back at its top", async () => {
+  const { conversation, folded } = await phoneTab(400 + 150);
+  scrollTo(conversation, 120);
+  assert.equal(folded(), false);
+});
+
+test("a box scrolled inside the view, a comment's field or its preview, folds nothing; only the view's own scroller does", async () => {
+  const { conversation, folded } = await phoneTab(2000);
+  const field = conversation.appendChild(document.createElement("textarea"));
+  sized(field, { height: 100, content: 1000 });
+  scrollTo(field, 300);
+  assert.equal(folded(), false, "the field's own scroll leaves the header whole");
+  scrollTo(conversation, 300);
+  assert.equal(folded(), true);
+});
+
+test("an agent with no pull request yet says so, and the toolbar's ⋯ offers nothing for one, though what it published is still held", async () => {
   const none = await draw(
     controlAnswering({
       pullRequest: () => Promise.resolve({ pullRequest: null }),
@@ -1732,6 +1874,7 @@ test("an agent with no pull request yet says so", async () => {
   );
   assert.match(none.textContent ?? "", /No pull request yet\./u);
   assert.equal(none.querySelector("section[aria-label='Pull request conversation']"), null);
+  assert.deepEqual(toolbarItems(none), []);
 });
 
 test("the pill, the title, and the files' count stand from what Luke holds before any read lands; each part is a skeleton until its own read lands, and is drawn the moment it does, whatever the order", async () => {
@@ -1840,15 +1983,7 @@ test("a part whose read failed says so with a Retry that reads it alone, the oth
   );
   assert.equal(tab.querySelectorAll(".pull-request-entry").length, 2, "nor is the conversation");
 
-  const more =
-    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
-    assert.fail("the header has a ⋯");
-  act(() => more.click());
-  const refresh =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Refresh pull request",
-    ) ?? assert.fail("the ⋯ offers Refresh");
-  await act(async () => refresh.click());
+  await pressToolbar(tab, "Refresh");
   await settle();
   assert.deepEqual(words(tab, "li .luke-list-row-title"), ["refreshed, passed"]);
   assert.equal(
@@ -1882,15 +2017,7 @@ test("a pull request renamed on GitHub renames its tab once Refresh is pressed, 
   const name = () => tab.querySelector("[data-tab-name]")?.textContent;
   assert.equal(name(), "#42 Expire invitations");
 
-  const more =
-    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
-    assert.fail("the header has a ⋯");
-  act(() => more.click());
-  const refresh =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Refresh pull request",
-    ) ?? assert.fail("the ⋯ offers Refresh");
-  await act(async () => refresh.click());
+  await pressToolbar(tab, "Refresh");
   await settle();
   assert.equal(
     tab.querySelector(".pull-request-title")?.textContent,
@@ -1948,10 +2075,7 @@ test("the pill wears what was published of the checks only for the pull request 
     }),
   };
   const tab = await draw(control);
-  const mark =
-    tab
-      .querySelector(".pull-request-title-row")
-      ?.firstElementChild?.querySelector("[aria-label]") ?? assert.fail("a mark");
+  const mark = pillOf(tab)?.querySelector("[aria-label]") ?? assert.fail("a mark");
   assert.match(mark.getAttribute("aria-label") ?? "", /43/u);
   assert.doesNotMatch(
     mark.getAttribute("aria-label") ?? "",
@@ -1960,10 +2084,10 @@ test("the pill wears what was published of the checks only for the pull request 
   );
 });
 
-/** The header's pill, its title row's first control, as a press; nothing where it is no press. */
+/** The header's pill, as a press; nothing where it is no press. */
 function pillPress(tab: HTMLElement): HTMLButtonElement | undefined {
-  const first = tab.querySelector(".pull-request-title-row")?.firstElementChild;
-  return first instanceof HTMLButtonElement ? first : undefined;
+  const pill = pillOf(tab);
+  return pill instanceof HTMLButtonElement ? pill : undefined;
 }
 
 /** The header's pill, as a press. */
@@ -2467,17 +2591,7 @@ test("a merge asked about merges the head it was asked about, though a read land
     assert.fail("the merge is asked about");
   assert.match(dialog.textContent ?? "", /at commit c0ffee1/u);
 
-  act(() =>
-    (
-      tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
-      assert.fail("the header has a ⋯")
-    ).click(),
-  );
-  const refresh =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Refresh pull request",
-    ) ?? assert.fail("the ⋯ offers Refresh");
-  await act(async () => refresh.click());
+  await pressToolbar(tab, "Refresh");
   await settle();
   assert.ok(reads > 1, "a newer head was read under the question");
 
@@ -2554,7 +2668,7 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   const panel = openReview(tab);
   assert.deepEqual(words(panel, '[aria-label="What the review says"] [role="radio"]'), [
     "CommentSubmit general feedback without approval.",
-    "ApproveApprove this pull request.",
+    "Approve",
     "Request changesSubmit feedback that must be addressed.",
   ]);
 
@@ -2697,17 +2811,7 @@ test("a pull request with no labels spends no line on them: its label picker sta
   assert.deepEqual(pickers(), ["Edit reviewers", "Edit labels"]);
 
   labels = [{ name: "bug", color: "d73a4a" }];
-  act(() =>
-    (
-      tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
-      assert.fail("the header has a ⋯")
-    ).click(),
-  );
-  const refresh =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Refresh pull request",
-    ) ?? assert.fail("the ⋯ offers Refresh");
-  await act(async () => refresh.click());
+  await pressToolbar(tab, "Refresh");
   await settle();
   const list = people().querySelector('[aria-label="Labels"]') ?? assert.fail("its labels stand");
   assert.equal(list.textContent, "bug");
@@ -3679,15 +3783,7 @@ test("a comment being written outlives a read of the conversation that failed, s
   );
   writeComment(tab, "Half a thought");
 
-  const more =
-    tab.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]') ??
-    assert.fail("the header has a ⋯");
-  act(() => more.click());
-  const refresh =
-    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-      (each) => each.textContent === "Refresh pull request",
-    ) ?? assert.fail("the ⋯ offers Refresh");
-  await act(async () => refresh.click());
+  await pressToolbar(tab, "Refresh");
   await settle();
   assert.equal(
     tab.querySelector(".pull-request-comment-box"),
@@ -4797,4 +4893,171 @@ test("where the read stopped short of every file, the whole is what was publishe
   );
   assert.equal(tabCount(tab, "Files changed"), "+40 −13 left");
   assert.equal(await filesHint(tab), "+100 −20 total");
+});
+
+/** A comment of the member's own pending review on the invite file, starting a thread of its own on line 12 unless told otherwise. */
+function draftOf(overrides: Partial<PendingReviewComment> = {}): PendingReviewComment {
+  return {
+    id: "PRRC_start",
+    by: { login: "dana", bot: false },
+    path: INVITE_FILE.path,
+    line: 12,
+    startLine: null,
+    side: DIFF_SIDE.RIGHT,
+    startSide: null,
+    html: '<p dir="auto">Why <strong>four</strong>?</p>',
+    body: "Why **four**?",
+    at: 3_000,
+    ...overrides,
+  };
+}
+
+/** Writes words into the field labelled as given, as the member would. */
+function typeInto(within: Element, label: string, words: string): void {
+  const field =
+    within.querySelector<HTMLTextAreaElement>(`textarea[aria-label="${label}"]`) ??
+    assert.fail(`a field for ${label}`);
+  act(() => {
+    const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    set?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+test("the member's pending comments stand on their lines in Files changed, marked Pending in their own name: a reply as its thread's last comment, a new one as a card of its own; Edit sends new words, Delete asks first, and the Review panel lists them", async () => {
+  const reply = draftOf({
+    id: "PRRC_reply",
+    threadId: JUMPED,
+    line: 13,
+    html: null,
+    body: "Still once?",
+  });
+  const tab = await draw(
+    controlAnswering(
+      {
+        conversation: () =>
+          Promise.resolve({
+            pullRequest: {
+              ...reviewWith([thread({ id: JUMPED })]),
+              pendingReview: { comments: 2, drafts: [reply, draftOf()] },
+            },
+          }),
+      },
+      PULL_REQUEST_STATE.OPEN,
+      () =>
+        Promise.resolve({
+          pullRequest: { url: PAGE, headSha: READ_HEAD, truncated: false, files: [INVITE_FILE] },
+        }),
+    ),
+  );
+  await act(async () => option(tab, "Files changed").click());
+  await settle();
+
+  const list = lists.at(-1) ?? assert.fail("the files are drawn");
+  assert.deepEqual(
+    list.files[0]?.annotations.map(({ key, side, line }) => [key, side, line]),
+    [
+      [`${PAGE}#discussion_r1`, "additions", 13],
+      ["PRRC_start", "additions", 12],
+    ],
+    "the reply adds no card of its own",
+  );
+  const card = list.renderAnnotation(INVITE_FILE.path, "PRRC_start");
+  assert.match(card.textContent ?? "", /dana.*Pending/u);
+  assert.deepEqual(
+    [...card.querySelectorAll(".pull-request-thread-head, .changes-comment-head")].map((head) =>
+      /Pending/u.test(head.textContent ?? ""),
+    ),
+    [true, false],
+    "the card it starts wears Pending in its head alone",
+  );
+  assert.match(card.textContent ?? "", /Why four\?/u, "its words as GitHub rendered them");
+  const replied = list.renderAnnotation(INVITE_FILE.path, `${PAGE}#discussion_r1`);
+  const comments = [...replied.querySelectorAll<HTMLElement>(".pull-request-thread-comment")];
+  assert.equal(comments.length, 2);
+  assert.match(comments[1]?.textContent ?? "", /dana.*Pending.*Still once\?/u);
+  assert.doesNotMatch(
+    comments[0]?.textContent ?? "",
+    /Pending/u,
+    "the published comment stays as it was",
+  );
+
+  // Edit opens the words in place; Cancel keeps nothing, Save sends the new words.
+  act(() => commentOffer(card, "Edit").click());
+  typeInto(card, "Pending comment", "Thrown away");
+  act(() => commentOffer(card, "Cancel").click());
+  assert.equal(card.querySelector("textarea"), null);
+  act(() => commentOffer(card, "Edit").click());
+  assert.equal(card.querySelector("textarea")?.value, "Why **four**?");
+  typeInto(card, "Pending comment", "Why **five**?");
+  act(() => commentOffer(card, "Save").click());
+  await settle();
+
+  // Delete asks first, since it cannot be undone.
+  act(() => commentOffer(comments[1] ?? assert.fail(), "Delete").click());
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Delete asks first");
+  act(() => commentOffer(question, "Delete comment").click());
+  await settle();
+
+  assert.deepEqual(changes, [
+    [
+      AGENT.id,
+      {
+        action: PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT,
+        commentId: "PRRC_start",
+        body: "Why **five**?",
+      },
+    ],
+    [AGENT.id, { action: PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT, commentId: "PRRC_reply" }],
+  ]);
+
+  act(() =>
+    (
+      tab.querySelector<HTMLButtonElement>('[aria-label="Review, 2 pending comments"]') ??
+      assert.fail("Review counts the pending comments")
+    ).click(),
+  );
+  const panel =
+    tab.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail("Review opens its panel");
+  const listed = [...panel.querySelectorAll(".pull-request-pending-list > li")].map(
+    (each) => each.querySelector(".pull-request-pending-where")?.textContent,
+  );
+  assert.deepEqual(listed, ["src/invite.ts · line 13", "src/invite.ts · line 12"]);
+
+  // ⌘↩ in a listed comment's edit saves that comment alone, never the whole review.
+  const entry =
+    panel.querySelector<HTMLElement>(".pull-request-pending-list > li") ?? assert.fail();
+  act(() => commentOffer(entry, "Edit").click());
+  typeInto(entry, "Pending comment", "Still once, really?");
+  const field = entry.querySelector("textarea") ?? assert.fail("the edit's field");
+  act(() => {
+    field.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  await settle();
+  assert.deepEqual(
+    changes.slice(2).map(([, change]) => change),
+    [
+      {
+        action: PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT,
+        commentId: "PRRC_reply",
+        body: "Still once, really?",
+      },
+    ],
+  );
+  act(() => commentOffer(panel, "Cancel").click());
+
+  // A Delete asked in Files changed goes as another view of the tab is chosen.
+  act(() => commentOffer(card, "Delete").click());
+  assert.ok(document.querySelector('[role="alertdialog"]'), "Delete asks first");
+  await act(async () => option(tab, "Conversation").click());
+  await settle();
+  assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });

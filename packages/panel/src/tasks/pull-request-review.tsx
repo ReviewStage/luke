@@ -17,7 +17,7 @@ import {
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { PopoverPanel } from "../popover-panel.js";
 import { Tooltip } from "../tooltip.js";
 import type { PendingReview } from "./line-comment.js";
@@ -39,6 +39,9 @@ import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-wri
  * Once GitHub took it the panel closes and lets go of its words, and the
  * tab reads the conversation again (`usePullRequestWrites`); until then
  * what was written stands, the panel closed and opened again included.
+ * Under the line counting the member's pending comments stand the comments
+ * themselves, each with Edit and Delete (`pending-comments.tsx`); a Delete's
+ * question over the window leaves the panel open.
  */
 
 /** The panel's own words. */
@@ -68,14 +71,14 @@ const DISCARD_QUESTION: DialogQuestion = {
   running: "Discarding",
 };
 
-/** What the review may say, in the order GitHub's own review box offers it, and what each means. */
+/** What the review may say, in the order GitHub's own review box offers it, and what the two that need it mean. */
 const EVENT_OPTIONS = [
   {
     value: REVIEW_EVENT.COMMENT,
     label: "Comment",
     detail: "Submit general feedback without approval.",
   },
-  { value: REVIEW_EVENT.APPROVE, label: "Approve", detail: "Approve this pull request." },
+  { value: REVIEW_EVENT.APPROVE, label: "Approve" },
   {
     value: REVIEW_EVENT.REQUEST_CHANGES,
     label: "Request changes",
@@ -88,6 +91,15 @@ function placeholderOf(event: ReviewEvent): string {
   return event === REVIEW_EVENT.REQUEST_CHANGES
     ? "Summarize the requested changes…"
     : "Leave a summary comment (optional)…";
+}
+
+/**
+ * Whether a press or the focus went to a question asked over the window
+ * from inside the panel, a pending comment's Delete, which stands outside
+ * it in the document and leaves it open.
+ */
+function inQuestion(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest('[role="alertdialog"]') !== null;
 }
 
 /** The width the panel asks for, stage-cli's own; the side panel may narrow it. */
@@ -113,6 +125,7 @@ function ReviewPanel({
   draft,
   writes,
   pending,
+  pendingList,
   onDiscard,
   onClose,
   onLeave,
@@ -121,6 +134,8 @@ function ReviewPanel({
   draft: ReviewDraft;
   writes: PullRequestWrites;
   pending: PendingReview;
+  /** The pending comments themselves, each with Edit and Delete, under the line counting them; none draws none. */
+  pendingList: ReactNode;
   /** Asks to throw the pending review away; offered only while one is held. */
   onDiscard: () => void;
   onClose: () => void;
@@ -151,6 +166,7 @@ function ReviewPanel({
           ? null
           : ` ${REVIEW_WORDS.pending(pending.comments)}`}
       </p>
+      {pendingList}
       <MarkdownField
         label={REVIEW_WORDS.BODY}
         placeholder={placeholderOf(draft.event)}
@@ -202,10 +218,13 @@ function ReviewPanel({
 export function PullRequestReview({
   writes,
   pending,
+  pendingList,
 }: {
   writes: PullRequestWrites;
   /** The member's own pending review, which the panel publishes or discards. */
   pending: PendingReview;
+  /** Its comments as the panel lists them, under the line counting them; none lists none. */
+  pendingList?: ReactNode;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [event, setEvent] = useState<ReviewEvent>(REVIEW_EVENT.COMMENT);
@@ -232,6 +251,7 @@ export function PullRequestReview({
   useEffect(() => {
     if (!open || sending) return undefined;
     const pressed = (event: PointerEvent) => {
+      if (inQuestion(event.target)) return;
       if (!(event.target instanceof Node && root.current?.contains(event.target))) setOpen(false);
     };
     document.addEventListener("pointerdown", pressed, true);
@@ -283,6 +303,7 @@ export function PullRequestReview({
             draft={{ event, body, setEvent, setBody, submit }}
             writes={writes}
             pending={pending}
+            pendingList={pendingList}
             onDiscard={discarding.ask}
             onClose={close}
             onLeave={(left) => {
@@ -290,7 +311,7 @@ export function PullRequestReview({
               // press it was sent from is disabled as it goes, which drops the
               // focus the way a click outside would, and GitHub's answer is
               // drawn in the panel.
-              if (sending) return;
+              if (sending || inQuestion(left)) return;
               if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
             }}
           />

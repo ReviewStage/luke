@@ -6,14 +6,14 @@ import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -185,17 +185,17 @@ afterEach(() => {
 
 /** The words drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
 async function drawn(text: string, workspace: Workspace) {
-  const asked: Act[] = [];
+  const asked: AnyAct[] = [];
   const state = stateWith(workspace);
-  fakeAppBridge({
+  fakeActs({
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
-    act: (request: Act): Promise<ActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       asked.push(request);
       if (request.kind === ACT_KIND.TASKS_ISSUE) {
         const { repository, number } = request.payload;
         const issue = repository === "acme/relay" ? RELAY_ISSUES.get(number) : undefined;
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: issue ?? null });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: issue ?? null });
       }
       if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
         const { repository, number } = request.payload;
@@ -205,9 +205,9 @@ async function drawn(text: string, workspace: Workspace) {
             : repository === "acme/ledger" && number === 5
               ? { number, title: "Settle nightly", url: ELSEWHERE, state: PULL_REQUEST_STATE.OPEN }
               : undefined;
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: pullRequest ?? null });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: pullRequest ?? null });
       }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
     },
   });
   const container = document.body.appendChild(document.createElement("div"));

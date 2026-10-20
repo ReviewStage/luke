@@ -20,7 +20,8 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * few. An archived task's items wait
  * nowhere, since the developer put the task out of the way: none of its open
  * items is carried, so neither the Dock nor a toast counts one. A reader
- * that asks with `archived=include` (`ACCOUNT_INBOX_QUERY`) is listed the
+ * that asks with `archived=include` (the `inbox.account` procedure's
+ * query, `contract/inbox.ts`) is listed the
  * archived tasks holding items beside the rest in `plans`, which its
  * Inbox's Archived tab reads, so an item is put away with its task and
  * comes back as it stood when the task is brought back; a build from
@@ -46,19 +47,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * under a key of its own (`chat`), on the same terms: every open ask
  * someone else posted, and the one direct message or mention their member
  * was last told of and has not read past. Each says only enough to be
- * announced and opened, who posted it by handle and the plan of the
+ * announced and opened, who posted it by name and the plan of the
  * channel it stands in, and none of its words, which the window reads
  * from the chat itself. A build that predates it reads none.
  */
-
-/**
- * The account's read's query (GET): `after` the cursor read past, and
- * `archived=include` to be listed the archived tasks holding items too.
- */
-export const ACCOUNT_INBOX_QUERY = {
-  AFTER: "after",
-  ARCHIVED: "archived",
-} as const;
 
 /** What the read's `archived` query may say. */
 export const ACCOUNT_INBOX_ARCHIVED = {
@@ -168,7 +160,7 @@ export const ACCOUNT_CHAT_REASON = {
 /**
  * One chat message that waits on the developer, as the account's read
  * carries it: the message by its id and its place in its workspace's chat,
- * the workspace, why it waits, who posted it by handle, the plan of the
+ * the workspace, why it waits, who posted it by name, the plan of the
  * channel it stands in where it stands in a plan's, the place it last
  * changed at, which an ask posted again moves, and when it last changed.
  */

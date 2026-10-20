@@ -4,7 +4,6 @@ import {
   HostedFactoryWorldClient,
   HostedGitHubConnectionClient,
   HostedIntegrationsClient,
-  HostedIssueClient,
   HostedMacCommandClient,
   HostedTaskClient,
   HostedTerminalClient,
@@ -33,7 +32,6 @@ import { composeAutomations } from "./compose-automations.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeFactory } from "./compose-factory.js";
 import { composeIntegrations } from "./compose-integrations.js";
-import { composeIssues } from "./compose-issues.js";
 import { composeLive } from "./compose-live.js";
 import { composeMacCommands } from "./compose-mac-commands.js";
 import { composeMacTerminal } from "./compose-mac-terminal.js";
@@ -76,7 +74,6 @@ const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.TASKS,
   HOST_CONCERN.CODING_AGENTS,
   HOST_CONCERN.AUTOMATIONS,
-  HOST_CONCERN.ISSUES,
   HOST_CONCERN.FACTORY,
   HOST_CONCERN.INTEGRATIONS,
   HOST_CONCERN.MAC_COMMANDS,
@@ -193,14 +190,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         credential: account.credential,
       }),
     });
-    const issues = yield* composeIssues({
-      kernel,
-      account,
-      client: new HostedIssueClient({
-        serviceBaseUrl: kernel.hostedServiceBaseUrl,
-        credential: account.credential,
-      }),
-    });
     const factory = yield* composeFactory({
       kernel,
       account,
@@ -273,7 +262,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const closeCapabilities = Effect.gen(function* () {
       yield* tasks.reset;
       yield* terminals.reset;
-      yield* codingAgents.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
@@ -303,7 +291,6 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.TASKS]: tasks,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
       [HOST_CONCERN.AUTOMATIONS]: automations,
-      [HOST_CONCERN.ISSUES]: issues,
       [HOST_CONCERN.FACTORY]: factory,
       [HOST_CONCERN.INTEGRATIONS]: integrations,
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,

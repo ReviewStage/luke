@@ -9,7 +9,7 @@ import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { type Context, Effect, Equal, type Scope, Stream, SubscriptionRef } from "effect";
-import type { AppState } from "../app-state.js";
+import type { AppState, AppStateSnapshot } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -165,6 +165,72 @@ export function windowAppState<State extends Pick<AppState, "tasks">>(
   window: { readonly voice: boolean; readonly call: boolean },
 ): State {
   return window.voice || window.call ? voiceWindowState(held) : held;
+}
+
+/** Which window a document is handed to, as far as what it draws goes. */
+interface WindowRole {
+  readonly voice: boolean;
+  readonly call: boolean;
+}
+
+/**
+ * One slice as a window draws it. The voice and call windows draw the tasks
+ * as `voiceWindowState` leaves them; and the voice window draws no voice view,
+ * because that view is the one it reports itself (`reportVoiceView`), so a
+ * view it sent is never handed back to it.
+ */
+function drawnSlice(snapshot: AppStateSnapshot, slice: keyof AppStateSnapshot, window: WindowRole) {
+  if (slice === "tasks" && (window.voice || window.call)) return voiceWindowState(snapshot).tasks;
+  if (slice === "voice" && window.voice) {
+    const { view: _view, ...drawn } = snapshot.voice;
+    return drawn;
+  }
+  return snapshot[slice];
+}
+
+/**
+ * Whether a window last handed `sent` has anything new to draw in `next`: a
+ * slice it draws, or its own facts. The version alone is not news, since a
+ * reader keeps any delivery at least as new as the one it holds.
+ */
+function drawnMoved(sent: AppStateSnapshot, next: AppStateSnapshot, window: WindowRole): boolean {
+  // SAFETY: `Object.keys` of a snapshot names its own slices, the window's facts, and its version.
+  const slices = Object.keys(next) as (keyof AppStateSnapshot)[];
+  return slices.some(
+    (slice) =>
+      slice !== "version" &&
+      !Equal.equals(drawnSlice(sent, slice, window), drawnSlice(next, slice, window)),
+  );
+}
+
+/**
+ * The document as each window was last handed it, so a window is handed it
+ * again only when a slice it draws, or its own facts, moved: the voice window
+ * is not told of the view it just reported, and neither it nor the call
+ * window of the task turns' work, which they are never sent. Note that a
+ * window is held weakly, by the platform's handle on it, so a window that
+ * goes takes its entry with it; and one that reloads reads the document on
+ * its first read, so the entry its old page left skips nothing it needs.
+ */
+export class WindowAppStates<Window extends object> {
+  readonly #sent = new WeakMap<Window, AppStateSnapshot>();
+
+  /**
+   * Hands `send` the window's own reading of `snapshot`, as `windowAppState`
+   * projects it, unless nothing it draws moved since the last one it took;
+   * `send` answers whether the window took it, which one with no stream open
+   * does not.
+   */
+  offer(
+    window: Window,
+    role: WindowRole,
+    snapshot: AppStateSnapshot,
+    send: (shown: AppStateSnapshot) => boolean,
+  ): void {
+    const sent = this.#sent.get(window);
+    if (sent !== undefined && !drawnMoved(sent, snapshot, role)) return;
+    if (send(windowAppState(snapshot, role))) this.#sent.set(window, snapshot);
+  }
 }
 
 /**

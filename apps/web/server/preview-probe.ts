@@ -75,17 +75,28 @@ const EVE_HEALTH_PATH = "/eve/v1/health";
 const PROBE_STATUS = {
   OK: 200,
   UNAUTHORIZED: 401,
+  NOT_FOUND: 404,
   METHOD_NOT_ALLOWED: 405,
   UPGRADE_REQUIRED: 426,
 } as const;
 const SERVER_ERROR_FLOOR = 500;
 const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
 
+/** A path no route answers, which the fallback lands on the hosted oRPC router. */
+const UNKNOWN_API_PATH = "/api/nope";
+/** An exception's parameterized path, held ahead of the fallback: its route refuses a read by method, where the router would not find it. */
+const EXCEPTION_PATH = "/api/automations/probe/webhook";
+/** The hosted router's own answer to a path it does not match. */
+const ROUTER_NOT_FOUND_BODY = '{"error":"not-found"}';
+
 /**
  * The requests a hand probe sends, the page, and eve's health, each with the
  * status its handler answers a caller with no credential: a 401, 405, or 426
  * is the handler present and refusing the caller, which is what a probe with no
- * credential should see. The OPTIONS door meets the same handlers' preflight refusals;
+ * credential should see. The voice sessions' 426 and the feedback courier's
+ * 405 are those functions answering at their own paths, which the fallback
+ * stands behind; an exception's 405 is its route answering ahead of the
+ * fallback; and an unknown path's 404 is the router's. The OPTIONS door meets the same handlers' preflight refusals;
  * the page is not on it, because the allowlist is a prefix and `/` would
  * unprotect every OPTIONS on the deployment, and eve's health answers OPTIONS
  * with its own 404, which the discriminator below already reads as eve.
@@ -100,6 +111,8 @@ const EXPECTED_STATUS = {
     ["/api/terminal/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/feedback", PROBE_STATUS.METHOD_NOT_ALLOWED],
     [EVE_HEALTH_PATH, PROBE_STATUS.OK],
+    [EXCEPTION_PATH, PROBE_STATUS.METHOD_NOT_ALLOWED],
+    [UNKNOWN_API_PATH, PROBE_STATUS.NOT_FOUND],
   ]),
   [PROBE_DOOR.OPTIONS_ALLOWLIST]: new Map([
     ["/api/plans", PROBE_STATUS.METHOD_NOT_ALLOWED],
@@ -107,14 +120,23 @@ const EXPECTED_STATUS = {
     ["/api/events", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/voice/sessions", PROBE_STATUS.UPGRADE_REQUIRED],
     ["/api/feedback", PROBE_STATUS.METHOD_NOT_ALLOWED],
+    [EXCEPTION_PATH, PROBE_STATUS.METHOD_NOT_ALLOWED],
+    [UNKNOWN_API_PATH, PROBE_STATUS.NOT_FOUND],
   ]),
 } satisfies Readonly<Record<ProbeDoor, ReadonlyMap<string, number>>>;
+
+/** The bodies a request is held to besides its status, the same under either door. */
+const EXPECTED_BODY: ReadonlyMap<string, string> = new Map([
+  [UNKNOWN_API_PATH, ROUTER_NOT_FOUND_BODY],
+]);
 
 export interface PlannedRequest {
   readonly method: ProbeMethod;
   readonly path: string;
   /** The exact status the table above names, or none: then any answer of the deployment's own is accepted. */
   readonly expected: number | undefined;
+  /** The exact body the request is held to, or none: then the body is never read. */
+  readonly expectedBody: string | undefined;
 }
 
 /** The paths a deployment is asked for, from the two places callers are written down. */
@@ -130,13 +152,24 @@ interface ProbePaths {
   readonly crons: readonly string[];
 }
 
-/** The requests for one door, each path once, in a fixed order so two reports of one deployment read alike. */
+/** The requests for one door, each path once, every pinned path among them, in a fixed order so two reports of one deployment read alike. */
 export function planProbes(door: ProbeDoor, paths: ProbePaths): readonly PlannedRequest[] {
   const method = METHOD_BY_DOOR[door];
   const expected = EXPECTED_STATUS[door];
   const page = door === PROBE_DOOR.BYPASS_SECRET ? [SITE_ROOT_PATH] : [];
-  const unique = new Set([...page, ...paths.callers, ...paths.crons, EVE_HEALTH_PATH]);
-  return [...unique].sort().map((path) => ({ method, path, expected: expected.get(path) }));
+  const unique = new Set([
+    ...page,
+    ...paths.callers,
+    ...paths.crons,
+    ...expected.keys(),
+    EVE_HEALTH_PATH,
+  ]);
+  return [...unique].sort().map((path) => ({
+    method,
+    path,
+    expected: expected.get(path),
+    expectedBody: EXPECTED_BODY.get(path),
+  }));
 }
 
 const VERCEL_CONFIG_FILE = "vercel.json";
@@ -179,6 +212,8 @@ export const VERDICT = {
   SERVER_ERROR: "server-error",
   /** A handler answered, but not with the status the table names for this path. */
   UNEXPECTED_STATUS: "unexpected-status",
+  /** A handler answered with the status named, but not with the body named. */
+  UNEXPECTED_BODY: "unexpected-body",
 } as const;
 export type Verdict = (typeof VERDICT)[keyof typeof VERDICT];
 
@@ -193,11 +228,12 @@ const CACHE_BUSTER = "nocache";
 /** Where Vercel Authentication sends a stranger; a redirect there is the protection answering, not the deployment. */
 const VERCEL_SSO = { host: "vercel.com", pathname: "/sso-api" } as const;
 
-/** What a probe reads of an answer: the status and the two headers that decide whose answer it is. */
+/** What a probe reads of an answer: the status, the two headers that decide whose answer it is, and the body where one is pinned. */
 interface ProbeAnswer {
   readonly status: number;
   readonly vercelError: Option.Option<string>;
   readonly location: Option.Option<string>;
+  readonly body: Option.Option<string>;
 }
 
 function redirectsToVercelSso(answer: ProbeAnswer): boolean {
@@ -213,6 +249,12 @@ function judge(request: PlannedRequest, answer: ProbeAnswer): Verdict {
   if (answer.status >= SERVER_ERROR_FLOOR) return VERDICT.SERVER_ERROR;
   if (request.expected !== undefined && answer.status !== request.expected) {
     return VERDICT.UNEXPECTED_STATUS;
+  }
+  if (
+    request.expectedBody !== undefined &&
+    Option.getOrUndefined(answer.body) !== request.expectedBody
+  ) {
+    return VERDICT.UNEXPECTED_BODY;
   }
   return VERDICT.OK;
 }
@@ -265,7 +307,7 @@ function probeRequest(
   });
 }
 
-/** Every planned request sent to the target and judged; the answer's body is never read. */
+/** Every planned request sent to the target and judged; an answer's body is read only where one is pinned. */
 export const probeDeployment = /* @__PURE__ */ Effect.fn("web/probeDeployment")(function* (
   target: ProbeTarget,
   task: readonly PlannedRequest[],
@@ -280,11 +322,17 @@ export const probeDeployment = /* @__PURE__ */ Effect.fn("web/probeDeployment")(
     task,
     (planned, index) =>
       client.execute(probeRequest(target, planned, `${now}-${index}`)).pipe(
-        Effect.map((response): ProbeResult => {
+        Effect.flatMap((response) =>
+          planned.expectedBody === undefined
+            ? Effect.succeed({ response, body: Option.none<string>() })
+            : Effect.map(response.text, (text) => ({ response, body: Option.some(text) })),
+        ),
+        Effect.map(({ response, body }): ProbeResult => {
           const answer: ProbeAnswer = {
             status: response.status,
             vercelError: Headers.get(response.headers, HEADER.VERCEL_ERROR),
             location: Headers.get(response.headers, HEADER.LOCATION),
+            body,
           };
           return {
             ...planned,

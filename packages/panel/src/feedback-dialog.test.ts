@@ -3,7 +3,8 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { FEEDBACK_KIND, type FeedbackKind, type FeedbackResult } from "@luke/features/feedback";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
+import type { PortActPayload } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -12,7 +13,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { useAppCommand, useMenuCommands } from "./app-commands.js";
 import { FeedbackDialog } from "./feedback-dialog.js";
-import { fakeAppBridge } from "./testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "./testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { ToastHost } from "./toast.js";
@@ -27,17 +28,18 @@ const SIGNED_IN: AccountSnapshot = {
   provider: ACCOUNT_PROVIDER.GITHUB,
 };
 /** What the dialog asked the main process to send, and how the next send is answered. */
-let sent: Act[] = [];
+let sent: PortActPayload<typeof ACT_KIND.FEEDBACK_SEND>[] = [];
 let answer: FeedbackResult = { delivered: true };
 let menuListener: ((command: AppCommand) => void) | undefined;
 
 beforeEach(() => {
   sent = [];
   answer = { delivered: true };
-  fakeAppBridge({
-    act: (request: Act) => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer });
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.FEEDBACK_SEND]: (payload) => {
+      sent.push(payload);
+      return Promise.resolve(answer);
     },
   });
   fakeAppPlatform({
@@ -161,7 +163,7 @@ test("opened from an experiment's row, the dialog is titled for it and its note 
   });
   await act(async () => button("Send").click());
 
-  assert.deepEqual(sent.find((request) => request.kind === ACT_KIND.FEEDBACK_SEND)?.payload, {
+  assert.deepEqual(sent[0], {
     submission: {
       kind: FEEDBACK_KIND.FEEDBACK,
       message: "The board missed a plan.",
@@ -229,9 +231,5 @@ test("a refused send says why and keeps the note, and sending again delivers it"
   answer = { delivered: true };
   await act(async () => button("Send").click());
   assert.equal(dialog(), null);
-  assert.equal(
-    sent.filter((request) => request.kind === ACT_KIND.FEEDBACK_SEND).length,
-    2,
-    "the kept note went again",
-  );
+  assert.equal(sent.length, 2, "the kept note went again");
 });

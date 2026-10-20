@@ -25,8 +25,8 @@ import {
   type MacTerminalPortOutbound,
   macTerminalPortInboundSchema,
 } from "@luke/features/mac-terminal-wire";
+import type { ActSender } from "@luke/host/act-port";
 import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import type { ActSender } from "@luke/host/act-router";
 import { MAC_REPOSITORIES_REFUSAL, MAC_TERMINAL_ACT_KIND } from "@luke/host/contract";
 import type { HostOperator } from "@luke/host/host-operator";
 import {
@@ -188,7 +188,9 @@ export function macTerminalProcedures(
             worktree: worktreeFolder(worktreesRoot, params.repository, params.branch),
             earlier: {
               worktrees: path.dirname(worktreeFolder(stateRoot, params.repository, params.branch)),
+              clone: cloneFolder(stateRoot, params.repository),
             },
+            trash: path.join(worktreesRoot, "trash"),
             branch: params.branch,
             pullRequest: params.pullRequest,
             command,

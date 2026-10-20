@@ -4,8 +4,15 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
-import { AGENT_ACT_KIND, TASKS_ACT_KIND } from "@luke/host/contract";
+import { ACT_KIND } from "@luke/host/acts";
+import {
+  AGENT_ACT_KIND,
+  AGENT_INBOX_ACT_KIND,
+  BROWSER_ACT_KIND,
+  TASKS_ACT_KIND,
+  UPDATE_ACT_KIND,
+  WINDOW_SURFACE_ACT_KIND,
+} from "@luke/host/contract";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -21,6 +28,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { useAct } from "../act.js";
 import { runAppCommand } from "../app-commands.js";
 import { type CallCardInput, callControls } from "../call/call-card.js";
+import { MOUSE_BUTTON } from "../navigation-history.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -40,9 +48,16 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 /** The task kinds on the act port, which the call-card test's fake refuses. */
 const TASK_KINDS: ReadonlySet<string> = new Set(Object.values(TASKS_ACT_KIND));
 
-/** Whether a port kind is one of the agents' reads, which a window with no agents is refused as `app:act` refused it. */
+/** The platform's updater, Browser tab, and window acts, which this window's fake refuses. */
+const PLATFORM_KINDS: ReadonlySet<string> = new Set([
+  ...Object.values(BROWSER_ACT_KIND),
+  ...Object.values(UPDATE_ACT_KIND),
+  ...Object.values(WINDOW_SURFACE_ACT_KIND),
+]);
+
+/** Whether a port kind is one of the agents' reads, their Inbox's, or the chat's, which a window with no agents is refused. */
 const isAgentRead = (kind: string): boolean =>
-  Object.values<string>(AGENT_ACT_KIND).includes(kind) &&
+  Object.values<string>({ ...AGENT_ACT_KIND, ...AGENT_INBOX_ACT_KIND }).includes(kind) &&
   kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN;
 
 /**
@@ -231,9 +246,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeAppPlatform(QUIET_PANEL);
 });
 
@@ -389,6 +402,42 @@ test("a platform without voice, notifications, Mac commands, or updates lists no
   ]) {
     assert.deepEqual(foundUnder(page, words), [], `${words} is found nowhere`);
   }
+});
+
+test("a browser, which is no installed app, draws Appearance without Zoom or Open Luke at login, lists no Keyboard shortcuts page, heads its last group This device, and its search finds none of them; the desktop draws them all", () => {
+  const drawnOn = (capabilities: readonly HostCapability[]) => {
+    const page = mount(createElement(SettingsHarness, { capabilities }));
+    const groups = pageGroups(page);
+    const appearance = openPage(page, "Appearance").textContent ?? "";
+    const found = ["Zoom", "Open Luke at login", "Keyboard shortcuts"].flatMap((words) =>
+      foundUnder(page, words),
+    );
+    act(() => root?.unmount());
+    root = undefined;
+    document.body.innerHTML = "";
+    return {
+      last: groups.at(-1),
+      zoom: appearance.includes("Zoom"),
+      login: appearance.includes("Open Luke at login"),
+      found,
+    };
+  };
+
+  const desktop = drawnOn(DESKTOP_CAPABILITIES);
+  const browser = drawnOn(
+    DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP),
+  );
+
+  assert.equal(desktop.last?.heading, "This Mac");
+  assert.ok(desktop.last?.rows.includes("Keyboard shortcuts"));
+  assert.equal(desktop.zoom, true);
+  assert.equal(desktop.login, true);
+  assert.notDeepEqual(desktop.found, []);
+  assert.equal(browser.last?.heading, "This device");
+  assert.equal(browser.last?.rows.includes("Keyboard shortcuts"), false);
+  assert.equal(browser.zoom, false);
+  assert.equal(browser.login, false);
+  assert.deepEqual(browser.found, []);
 });
 
 test("a platform with voice but without its own microphone route draws Voice without the Microphone permission row or Prefer the Mac's microphone, and its search finds neither", () => {
@@ -659,15 +708,12 @@ test("the plan template's version history keeps a call's card at the foot of its
   const sent: string[] = [];
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: (request: { kind: string }) => {
-      sent.push(request.kind);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-    },
   });
   fakeActPortAnswering((request) => {
     sent.push(request.kind);
-    // A task kind is refused here as `app:act` refused it, since a task read answered nothing is no view.
+    // A task kind is refused here, since a task read answered nothing is no view.
     if (TASK_KINDS.has(request.kind)) return Promise.reject(refusedOnPort("Not here."));
+    if (PLATFORM_KINDS.has(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     if (isAgentRead(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(
       request.kind === ACT_KIND.PLAN_TEMPLATE_READ
@@ -713,11 +759,44 @@ test("the plan template's version history keeps a call's card at the foot of its
   assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_TASK]);
 });
 
+test("the mouse's Back button from the plan template's version history goes back to the template page and cancels the browser's own, so a browser tab takes no second step", async () => {
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
+      Promise.resolve({ template: "# Context\n", custom: false }),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const history = page.querySelector<HTMLButtonElement>('button[aria-label="Version history"]');
+  assert.ok(history, "the template page offers its version history");
+  act(() => history.click());
+  assert.ok(page.querySelector('nav[aria-label="Versions"]'), "the version history stands");
+
+  const release = new MouseEvent("mouseup", {
+    button: MOUSE_BUTTON.BACK,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    document.body.dispatchEvent(release);
+  });
+
+  assert.equal(release.defaultPrevented, true);
+  assert.equal(
+    page.querySelector('nav[aria-label="Versions"]'),
+    null,
+    "Back left the version history",
+  );
+});
+
 test("while the plan template is read its page stands its name over placeholder blocks, and the template lands in their place", async () => {
   const { promise: read, resolve: land } = Promise.withResolvers<void>();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
   fakeActPort({
     [ACT_KIND.PLAN_TEMPLATE_READ]: () =>

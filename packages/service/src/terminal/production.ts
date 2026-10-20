@@ -20,6 +20,7 @@ import {
 import { Duration, Effect, Option, Redacted, Schedule } from "effect";
 import { HttpClient } from "effect/http";
 import { WebSocket } from "ws";
+import { controlsAgent } from "../agents/agent-reach.js";
 import { agentRepositoryToken } from "../agents/coder-host/checkout.js";
 import { AgentSandbox, agentSandboxLayer } from "../agents/terminal/agent-sandbox.js";
 import { type InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
@@ -94,6 +95,8 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
             const found = yield* readCodingAgent(userId, agentId);
             if (Option.isNone(found) || found.value.archivedAt !== null) return Option.none();
             const agent = found.value;
+            // Note that a shell in an agent on its starter's own GitHub token is its starter's alone.
+            if (!controlsAgent(userId, agent)) return Option.none();
             const target = { userId: agent.userId, conversationId: agent.conversationId };
             const [session] = yield* standingSessionsOf(agent.userId, [agent.conversationId]);
             return Option.some({

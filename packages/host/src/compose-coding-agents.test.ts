@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  ACCOUNT_CHAT_REASON,
-  type AccountChatEntry,
-  type AccountInboxEntry,
-  accountInboxAnswerSchema,
-} from "@luke/features/account-inbox-wire";
+import type { AccountInboxEntry } from "@luke/features/account-inbox-wire";
+import { CHAPTERS_MODEL } from "@luke/features/chapters-model-choice";
 import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
@@ -30,7 +26,6 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { AccountInboxLiveAnswer } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -41,23 +36,16 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
+import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
 import {
   PULL_REQUEST_ACTION,
   PULL_REQUEST_WRITE_OUTCOME,
 } from "@luke/features/pull-request-write-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
-import {
-  GATEWAY_CLIENT_ROLE,
-  GATEWAY_EVENT,
-  GATEWAY_METHOD,
-  type GatewayEventKind,
-  type GatewayMethod,
-} from "@luke/gateway";
-import type { WireRecord, WireValue } from "@luke/wire";
+import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
+import type { WireRecord } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Duration, Effect, Schema } from "effect";
-import { TestClock } from "effect/testing";
-import type { LiveClient } from "./account-inbox-follow.js";
+import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
 
 /** One revision of the template as the service lists it. */
@@ -129,6 +117,16 @@ const PUBLISHED = {
 };
 
 /** The agent's changes, as the service answers them. */
+/** A pull request's chapters as the service answers them: none made yet for its head. */
+const CHAPTERS = {
+  pullRequest: {
+    number: 11,
+    headSha: "c0ffee1",
+    generatable: true,
+    chapters: { status: PULL_REQUEST_CHAPTERS_STATE.NONE },
+  },
+} as const;
+
 const CHANGES = {
   pullRequest: {
     url: "https://github.com/acme/relay/pull/123",
@@ -224,7 +222,6 @@ const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERA
 /** The service as a script, writing down every ask in the order it was made. */
 function fakeService() {
   const asked: string[] = [];
-  let live: AccountInboxLiveAnswer | undefined;
   let cursor = CODING_AGENT_CURSOR_START;
   const client: CodingAgentClient = {
     models: () =>
@@ -326,6 +323,26 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`changes:${agentId}${number === undefined ? "" : `#${number}`}`);
         return CHANGES;
+      }),
+    chapters: (agentId, number) =>
+      Effect.sync(() => {
+        asked.push(`chapters:${agentId}${number === undefined ? "" : `#${number}`}`);
+        return CHAPTERS;
+      }),
+    generateChapters: (agentId, number) =>
+      Effect.sync(() => {
+        asked.push(`chapters-generate:${agentId}${number === undefined ? "" : `#${number}`}`);
+        return CHAPTERS;
+      }),
+    readChaptersModel: () =>
+      Effect.sync(() => {
+        asked.push("chapters-model");
+        return { model: CHAPTERS_MODEL.HAIKU };
+      }),
+    writeChaptersModel: (model) =>
+      Effect.sync(() => {
+        asked.push(`chapters-model-write:${model}`);
+        return { model };
       }),
     overviewPullRequest: (agentId) =>
       Effect.sync(() => {
@@ -451,7 +468,13 @@ function fakeService() {
     messageInbox: (itemId, request) =>
       Effect.sync(() => {
         const files = (request.attachments ?? []).map((file) => file.name).join(",");
-        asked.push(`inbox-message:${itemId}:${request.text}:${files}:${request.clientKey}`);
+        const answer =
+          request.answers === undefined
+            ? ""
+            : `:answers ${request.answers.ask} ${request.answers.reply} ${(request.answers.choices ?? []).join(",")}`;
+        asked.push(
+          `inbox-message:${itemId}:${request.text}:${files}:${request.clientKey}${answer}`,
+        );
         return {
           item: {
             ...ITEM,
@@ -489,10 +512,10 @@ function fakeService() {
           taken: true,
         };
       }),
-    accountInboxLive: () =>
+    accountInbox: (after) =>
       Effect.sync(() => {
-        asked.push("account-inbox-live");
-        return live ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+        asked.push(`account-inbox:${after}`);
+        return { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt };
       }),
     chat: (workspaceId, after) =>
       Effect.sync(() => {
@@ -510,131 +533,24 @@ function fakeService() {
         return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
       }),
   };
-  return {
-    client,
-    asked,
-    /** What the service seals for following the account's inbox; none answers unanswered. */
-    seal: (next: AccountInboxLiveAnswer | undefined) => {
-      live = next;
-    },
-  };
+  return { client, asked };
 }
 
 function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
   return Effect.gen(function* () {
     const service = fakeService();
-    const realtime = fakeRealtime();
-    const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
-    // The host's clock, which `advance` moves with the test's.
-    let elapsed = 0;
     const composer = yield* composeCodingAgents({
-      kernel: {
-        runMode: { sendsNetwork: options.sendsNetwork ?? true },
-        emit: (kind, payload) => void events.push({ kind, payload }),
-        now: () => NOW + elapsed,
-      },
+      kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-      openLive: realtime.open,
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    /** Every account inbox the host said changed, in order. */
-    const inboxes = () =>
-      events.flatMap((event) =>
-        event.kind === GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED ? [event.payload] : [],
-      );
-    return {
-      call,
-      asked: service.asked,
-      seal: service.seal,
-      realtime,
-      inboxes,
-      reset: composer.reset,
-      /** The host's clock and the test's moved on together, a minute at a time, so neither runs far ahead of the other. */
-      advance: (millis: number) =>
-        Effect.gen(function* () {
-          for (let left = millis; left > 0; left -= MINUTE) {
-            const step = Math.min(left, MINUTE);
-            elapsed += step;
-            yield* TestClock.adjust(Duration.millis(step));
-          }
-        }),
-    };
+    return { call, asked: service.asked };
   });
-}
-
-/** The host's clock, which an answer read live is stamped with. */
-const NOW = 1_800_000_100_000;
-
-const MINUTE = 60 * 1_000;
-const DAY = 24 * 60 * MINUTE;
-
-/** A sealed statement as the service answers one, named by the part it follows. */
-function sealed(part: string, expiresAt = NOW + 60_000) {
-  return { capability: `capability-${part}`, queryFingerprint: `fingerprint-${part}`, expiresAt };
-}
-
-const SEALED: AccountInboxLiveAnswer = {
-  url: "wss://realtime.example/v1",
-  queries: {
-    items: sealed("items"),
-    planless: sealed("planless"),
-    plans: sealed("plans"),
-    automations: sealed("automations"),
-    failedRuns: sealed("failedRuns"),
-    chatAsks: sealed("chatAsks"),
-    chatNotices: sealed("chatNotices"),
-  },
-};
-
-/**
- * Realtime as a script: the address each client was opened at, each part's
- * subscription by its capability, the seals each was renewed with, and a
- * way to deliver rows to one or stop it for good.
- */
-function fakeRealtime() {
-  const opened: string[] = [];
-  const closed: string[] = [];
-  const listeners = new Map<
-    string,
-    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
-  >();
-  const renewed: string[] = [];
-  const open = (url: string): LiveClient => {
-    opened.push(url);
-    return {
-      subscribe: (query) => ({
-        onChange: (listener) => {
-          listeners.set(query.capability, listener);
-          return () => listeners.delete(query.capability);
-        },
-        renew: (next) => {
-          renewed.push(next.capability);
-          return Promise.resolve();
-        },
-        unsubscribe: () => void listeners.delete(query.capability),
-      }),
-      close: () => void closed.push(url),
-    };
-  };
-  return {
-    open,
-    opened,
-    closed,
-    renewed,
-    /** Rows delivered to the part's subscription, as Realtime's snapshot carries them. */
-    deliver: (part: string, data: readonly unknown[]) => {
-      const listener = listeners.get(`capability-${part}`);
-      assert.ok(listener, `no subscription to ${part}`);
-      listener({ status: "live", data });
-    },
-    fail: (part: string) => listeners.get(`capability-${part}`)?.({ status: "error", data: [] }),
-    subscribed: () => [...listeners.keys()].toSorted(),
-  };
 }
 
 it.effect("each method asks the service once and answers what it said, whole", () =>
@@ -762,6 +678,24 @@ it.effect("each method asks the service once and answers what it said, whole", (
       CHANGES,
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS, { agentId: AGENT_ID }),
+      CHAPTERS,
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAPTERS_GENERATE, {
+        agentId: AGENT_ID,
+        number: 11,
+      }),
+      CHAPTERS,
+    );
+    assert.deepEqual(yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_READ), {
+      model: CHAPTERS_MODEL.HAIKU,
+    });
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CHAPTERS_MODEL_WRITE, { model: CHAPTERS_MODEL.OPUS }),
+      { model: CHAPTERS_MODEL.OPUS },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_OVERVIEW_PULL_REQUEST, { agentId: AGENT_ID }),
       OVERVIEW.pullRequest,
     );
@@ -868,6 +802,12 @@ it.effect("each method asks the service once and answers what it said, whole", (
         },
       },
     );
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+      itemId: ITEM.id,
+      text: "Ship it.",
+      clientKey: "message-2",
+      answers: { ask: MESSAGE_ID, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] },
+    });
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
       { id: ITEM.id, unread: true },
@@ -884,6 +824,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { marked: 2 },
     );
 
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
+      { items: [WAITING], plans: [], cursor: "9", readAt: ITEM.updatedAt },
+    );
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT, {
         workspaceId: WORKSPACE_ID,
@@ -929,6 +873,10 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pull-request:${AGENT_ID}`,
       `changes:${AGENT_ID}`,
       `changes:${AGENT_ID}#11`,
+      `chapters:${AGENT_ID}`,
+      `chapters-generate:${AGENT_ID}#11`,
+      "chapters-model",
+      `chapters-model-write:${CHAPTERS_MODEL.OPUS}`,
       `overview-pull-request:${AGENT_ID}`,
       `review-options:${AGENT_ID}`,
       `overview-checks:${AGENT_ID}`,
@@ -942,9 +890,11 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `close:${ITEM.id}:2:close-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
+      `inbox-message:${ITEM.id}:Ship it.::message-2:answers ${MESSAGE_ID} chose Ship it`,
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
       `inbox-read-all:${WORKSPACE_ID}`,
+      `account-inbox:${INBOX_CURSOR_START}`,
       `chat:${WORKSPACE_ID}:${CHAT_CURSOR_START}`,
       `chat-post:${WORKSPACE_ID}:{"readTo":4}`,
       `chat-attachment:${WORKSPACE_ID}:message-1:${ATTACHMENT_ID}`,
@@ -1000,223 +950,5 @@ it.effect(
         `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
         `remove:${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       ]);
-    }),
-);
-
-/** Every step the follower has to take, taken: it runs on a fiber of its own. */
-const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
-
-/** A second item, changed after `WAITING`, which the answer lists first. */
-const NEWER: AccountInboxEntry = {
-  ...WAITING,
-  id: "6f3e8d4b-2c5a-4f7b-9d0e-1a2b3c4d5e6f",
-  title: "Expire invites after a week?",
-  updatedAt: WAITING.updatedAt + 1_000,
-};
-
-const AUTOMATION_ID = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
-
-/** A run that failed to start, `daysAgo` before the host's clock. */
-function failedRun(id: string, daysAgo: number) {
-  return {
-    id,
-    automationId: AUTOMATION_ID,
-    automationName: "Nightly flake sweep",
-    workspaceId: "workspace-1",
-    reason: null,
-    failedAt: NOW - daysAgo * 24 * 60 * 60 * 1_000,
-  };
-}
-
-/** One message waiting in chat, as a chat part's row delivers it. */
-function chatEntry(
-  messageId: string,
-  reason: AccountChatEntry["reason"],
-  updatedAt: number,
-): AccountChatEntry {
-  return {
-    messageId,
-    seq: 7,
-    workspaceId: "workspace-1",
-    reason,
-    from: "agent-1",
-    planId: null,
-    touchedSeq: 7,
-    updatedAt,
-  };
-}
-
-it.effect(
-  "the account inbox is followed over Realtime: every part subscribed at the address it names, and once each part has its rows the answer published whole, in the held read's order, with the last week's failed runs, and never a sealed statement",
-  () =>
-    Effect.gen(function* () {
-      const { call, asked, seal, realtime, inboxes } = yield* subject();
-      seal(SEALED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
-      yield* settled;
-      assert.deepEqual(realtime.opened, [SEALED.url]);
-      assert.deepEqual(realtime.subscribed(), [
-        "capability-automations",
-        "capability-chatAsks",
-        "capability-chatNotices",
-        "capability-failedRuns",
-        "capability-items",
-        "capability-planless",
-        "capability-plans",
-      ]);
-
-      const recent = "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d";
-      realtime.deliver("items", [WAITING, NEWER]);
-      realtime.deliver("planless", []);
-      realtime.deliver("plans", [{ planId: TASK_ID, items: 2, updatedAt: NEWER.updatedAt }]);
-      realtime.deliver("automations", []);
-      // A notice of an ask is the ask already, so only the other notice joins it.
-      const ask = chatEntry(
-        "4c5d6e7f-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
-        ACCOUNT_CHAT_REASON.ASK,
-        NOW - 2,
-      );
-      const direct = chatEntry(
-        "5d6e7f8a-9b0c-4d1e-8f2a-3b4c5d6e7f8a",
-        ACCOUNT_CHAT_REASON.DIRECT,
-        NOW - 1,
-      );
-      realtime.deliver("chatAsks", [ask]);
-      realtime.deliver("chatNotices", [{ ...ask, reason: ACCOUNT_CHAT_REASON.MENTION }, direct]);
-      yield* settled;
-      // Nothing is published before every part has its first rows.
-      assert.deepEqual(inboxes(), []);
-      realtime.deliver("failedRuns", [
-        failedRun("3b4c5d6e-7f8a-4b9c-8d1e-2f3a4b5c6d7e", 8),
-        failedRun(recent, 1),
-      ]);
-      yield* settled;
-
-      // The cursor is a digest of what the answer holds, opaque to a reader but for comparing.
-      const published = inboxes().map((inbox) => {
-        const { cursor: _cursor, ...rest } =
-          Schema.decodeUnknownSync(accountInboxAnswerSchema)(inbox);
-        return rest;
-      });
-      assert.deepEqual(published, [
-        {
-          items: [NEWER, WAITING],
-          plans: [{ planId: TASK_ID, items: 2, updatedAt: NEWER.updatedAt }],
-          planless: [],
-          automations: [],
-          failedRuns: [failedRun(recent, 1)],
-          chat: [direct, ask],
-          readAt: NOW,
-        },
-      ]);
-      assert.deepEqual(asked, ["account-inbox-live"]);
-      assert.ok(!JSON.stringify(inboxes()).includes("capability"));
-    }),
-);
-
-it.effect(
-  "a failed run that ages out of the last week with no row moving is let go: the answer is published again as it does",
-  () =>
-    Effect.gen(function* () {
-      const { call, seal, realtime, inboxes, advance } = yield* subject();
-      seal({
-        ...SEALED,
-        // Sealed for a month, so no renewal falls in the week the test spans.
-        queries: {
-          items: sealed("items", NOW + 30 * DAY),
-          planless: sealed("planless", NOW + 30 * DAY),
-          plans: sealed("plans", NOW + 30 * DAY),
-          automations: sealed("automations", NOW + 30 * DAY),
-          failedRuns: sealed("failedRuns", NOW + 30 * DAY),
-          chatAsks: sealed("chatAsks", NOW + 30 * DAY),
-          chatNotices: sealed("chatNotices", NOW + 30 * DAY),
-        },
-      });
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
-      yield* settled;
-      const ageing = failedRun("3b4c5d6e-7f8a-4b9c-8d1e-2f3a4b5c6d7e", 6);
-      for (const part of ["items", "planless", "plans", "automations", "chatAsks", "chatNotices"]) {
-        realtime.deliver(part, []);
-      }
-      realtime.deliver("failedRuns", [ageing]);
-      yield* settled;
-      const failedRunsOf = () =>
-        inboxes().map(
-          (inbox) => Schema.decodeUnknownSync(accountInboxAnswerSchema)(inbox).failedRuns,
-        );
-      assert.deepEqual(failedRunsOf(), [[ageing]]);
-
-      yield* advance(DAY - 1_000);
-      yield* settled;
-      assert.deepEqual(failedRunsOf(), [[ageing]], "a day short of a week, it still stands");
-      yield* advance(2_000);
-      yield* settled;
-      assert.deepEqual(failedRunsOf(), [[ageing], []]);
-    }),
-);
-
-it.effect(
-  "every seal is renewed ten seconds before the earliest expires, with what the service seals then, and a row that does not decode stops the subscription, which is started again",
-  () =>
-    Effect.gen(function* () {
-      const { call, asked, seal, realtime } = yield* subject();
-      seal(SEALED);
-      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
-      yield* settled;
-
-      yield* TestClock.adjust("49 seconds");
-      yield* settled;
-      assert.deepEqual(realtime.renewed, []);
-      yield* TestClock.adjust("1 second");
-      yield* settled;
-      assert.deepEqual(realtime.renewed.toSorted(), [
-        "capability-automations",
-        "capability-chatAsks",
-        "capability-chatNotices",
-        "capability-failedRuns",
-        "capability-items",
-        "capability-planless",
-        "capability-plans",
-      ]);
-      assert.deepEqual(asked, ["account-inbox-live", "account-inbox-live"]);
-
-      realtime.deliver("items", [{ id: "not an item" }]);
-      yield* settled;
-      assert.deepEqual(realtime.closed, [SEALED.url]);
-      yield* TestClock.adjust("5 seconds");
-      yield* settled;
-      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
-    }),
-);
-
-it.effect(
-  "a seal the service did not answer is asked for again after a pause, and letting go, or a sign-out, ends the follow",
-  () =>
-    Effect.gen(function* () {
-      const unsealed = yield* subject();
-      yield* unsealed.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
-      yield* settled;
-      assert.deepEqual(unsealed.asked, ["account-inbox-live"]);
-      unsealed.seal(SEALED);
-      yield* TestClock.adjust("5 seconds");
-      yield* settled;
-      assert.deepEqual(unsealed.asked, ["account-inbox-live", "account-inbox-live"]);
-      assert.deepEqual(unsealed.realtime.opened, [SEALED.url]);
-      assert.deepEqual(unsealed.inboxes(), []);
-
-      const live = yield* subject();
-      live.seal(SEALED);
-      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
-      yield* settled;
-      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW);
-      yield* settled;
-      assert.deepEqual(live.realtime.closed, [SEALED.url]);
-      assert.deepEqual(live.realtime.subscribed(), []);
-
-      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
-      yield* settled;
-      yield* live.reset;
-      yield* settled;
-      assert.deepEqual(live.realtime.closed, [SEALED.url, SEALED.url]);
     }),
 );

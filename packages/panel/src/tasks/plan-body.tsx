@@ -7,12 +7,17 @@ import {
   sectionAnchors,
 } from "@luke/features/mention-link";
 import { type PlanSection, planSections } from "@luke/features/plan-document";
-import { PLAN_ACTOR, type PlanLastEdit, type Task } from "@luke/features/task-wire";
+import {
+  PLAN_ACTOR,
+  type PlanLastEdit,
+  type PlanSectionEdit,
+  type Task,
+} from "@luke/features/task-wire";
 import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui";
 import { actorName } from "@luke/ui/actor-model";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { LinkIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
@@ -67,7 +72,7 @@ import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-st
 import { agoText, momentText, sinceText, useMinute } from "./task-time.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
-import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
+import { EDITOR_PLACE, type PlanEditDoor, TAP_ROOM, usePlanEditing } from "./use-plan-editing.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
 
 /**
@@ -84,7 +89,7 @@ import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
  * anyone has written, who last did: a member, Luke (the notetaker), or a
  * coding agent, each on their own face hanging their card (`edit-ref.tsx`),
  * whose call it was on where Luke wrote it on one, and how long ago, moved
- * on once a minute, as an issue's page says it under its title. The edit's
+ * on once a minute, as a GitHub issue's page says it under its title. The edit's
  * time opens the plan's version history, where each earlier version is. Each section says the
  * same of the save that last changed it in fewer letters, quietly, while the
  * pointer or the keyboard is on it: the writer's face, whose card names them,
@@ -571,6 +576,31 @@ function toggledTask(text: string, at: number): string | undefined {
   return `${text.slice(0, box)}${ticked ? " " : "x"}${text.slice(box + 1)}`;
 }
 
+/** A list item with a box, as anywhere in a unit's words it may stand: under a quote's marker, say. */
+const TASK_ITEM_ANYWHERE = /(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ \txX]\]/u;
+
+/** No section's save named, as a plan from a service before sections were named has. */
+const NO_SECTION_EDITS: readonly PlanSectionEdit[] = [];
+
+/**
+ * A door that stands while the one handed over is made afresh on every
+ * draw, as a page drawn again on each delivery of the window's state makes
+ * its callbacks, and calls the newest; none while none is handed over. Note
+ * that it stands so that what is drawn from it is not drawn again for
+ * nothing.
+ */
+function useSteadyDoor<Args extends readonly unknown[]>(
+  door: ((...args: Args) => void) | undefined,
+): ((...args: Args) => void) | undefined {
+  const latest = useRef(door);
+  latest.current = door;
+  const present = door !== undefined;
+  return useMemo(
+    () => (present ? (...args: Args) => latest.current?.(...args) : undefined),
+    [present],
+  );
+}
+
 /** A unit drawn with its section's byline, where a save has changed the section, and its ⋯, where it has a link. */
 function attributed(
   drawn: React.JSX.Element,
@@ -687,44 +717,75 @@ function TitleMenu({
   return <UnitMenu label={TITLE_MENU_LABEL} items={items} tabbable={tabbable} />;
 }
 
-/** A unit's edit with the plan's open comments on its words marked, the open one and the one being started among them. */
+/**
+ * A unit's edit with the plan's open comments on its words marked, the open
+ * one and the one being started among them, the same edit while none of
+ * them changes, so the unit's words are not parsed again for nothing.
+ */
 function useCommentedEdit(
   edit: MarkdownEdit | undefined,
   section: PlanSection | undefined,
-  planText: string,
+  planText: string | undefined,
 ): MarkdownEdit | undefined {
-  const control = usePlanCommentsControl();
+  const threads = usePlanCommentsControl()?.threads;
   const { active, pending } = useCommentFocus();
-  if (control === undefined || section === undefined) return edit;
-  const spans = commentSpansIn(control.threads, section, active, pending, planText);
-  if (spans.length === 0) return edit;
-  const comments = spans.map((span) => ({
-    from: span.from,
-    to: span.to,
-    kind: MARKDOWN_MARK.COMMENT,
-    thread: span.thread,
-    active: span.active,
-    block: span.block,
-  }));
-  return { ...edit, marks: [...(edit?.marks ?? []), ...comments] };
+  return useMemo(() => {
+    if (threads === undefined || section === undefined) return edit;
+    const spans = commentSpansIn(threads, section, active, pending, planText);
+    if (spans.length === 0) return edit;
+    const comments = spans.map((span) => ({
+      from: span.from,
+      to: span.to,
+      kind: MARKDOWN_MARK.COMMENT,
+      thread: span.thread,
+      active: span.active,
+      block: span.block,
+    }));
+    return { ...edit, marks: [...(edit?.marks ?? []), ...comments] };
+  }, [edit, section, threads, active, pending, planText]);
 }
 
-/**
- * One section of the text, drawn as the chase has it, tinted where it
- * changed since the last look, and carrying the byline of the save that
- * last changed it, each by its heading.
- */
-function DocumentUnit({
-  view,
-  section,
-  marks,
-  link,
-  linked,
-  anchor,
-  entry,
-  onTask,
-  planText,
-}: {
+/** Whether two edits draw the same: the same stretches hidden and selected, the caret in the same place, and the same marks. */
+function sameEdit(left: MarkdownEdit | undefined, right: MarkdownEdit | undefined): boolean {
+  if (left === right) return true;
+  if (left === undefined || right === undefined) return false;
+  const sameSpan = (one: typeof left.hidden, other: typeof left.hidden) =>
+    one === other || (one?.from === other?.from && one?.to === other?.to);
+  return (
+    left.caret === right.caret &&
+    sameSpan(left.hidden, right.hidden) &&
+    sameSpan(left.selection, right.selection) &&
+    left.marks === right.marks
+  );
+}
+
+/** Whether two views of a unit draw the same, as the chase makes each afresh on every frame. */
+function sameView(left: UnitView, right: UnitView): boolean {
+  return (
+    left.id === right.id &&
+    left.heading === right.heading &&
+    left.words === right.words &&
+    left.writing === right.writing &&
+    left.resting === right.resting &&
+    left.fresh === right.fresh &&
+    sameEdit(left.edit, right.edit)
+  );
+}
+
+/** Whether two places of a unit's words in the plan's text are one, as the text cut again on each save makes each afresh. */
+function sameSection(left: PlanSection | undefined, right: PlanSection | undefined): boolean {
+  if (left === right) return true;
+  if (left === undefined || right === undefined) return false;
+  return (
+    left.heading === right.heading &&
+    left.text === right.text &&
+    left.from === right.from &&
+    left.to === right.to
+  );
+}
+
+/** What one section of the text is drawn from. */
+interface DocumentUnitProps {
   view: UnitView;
   /** Where the unit's words stand in the plan's text, where they stand as drawn, which marks the comments on them; none mid-chase. */
   section: PlanSection | undefined;
@@ -739,9 +800,47 @@ function DocumentUnit({
   entry: boolean;
   /** Ticks or clears a task item pressed, offsets in the unit's words; every checkbox is read-only without it. */
   onTask?: TaskToggler | undefined;
-  /** The plan's text as saved, which `section` stands in and a thread being started is laid over. */
-  planText: string;
-}): React.JSX.Element {
+  /** The plan's text as saved, which a thread being started is laid over; none while no thread is being started. */
+  planText: string | undefined;
+}
+
+/**
+ * Whether a section is drawn as it was: its view and its place in the text
+ * by what they say, since each is made afresh on every frame of the typing
+ * and every save, and the rest by identity, which the document holds steady.
+ */
+function sameUnit(left: DocumentUnitProps, right: DocumentUnitProps): boolean {
+  return (
+    sameView(left.view, right.view) &&
+    sameSection(left.section, right.section) &&
+    left.marks === right.marks &&
+    left.link === right.link &&
+    left.linked === right.linked &&
+    left.anchor === right.anchor &&
+    left.entry === right.entry &&
+    left.onTask === right.onTask &&
+    left.planText === right.planText
+  );
+}
+
+/**
+ * One section of the text, drawn as the chase has it, tinted where it
+ * changed since the last look, and carrying the byline of the save that
+ * last changed it, each by its heading. Note that it is drawn again only
+ * when its own words or marks change (`sameUnit`), because drawing it parses
+ * its Markdown, and the chase draws the document on every frame it types.
+ */
+const DocumentUnit = memo(function DocumentUnit({
+  view,
+  section,
+  marks,
+  link,
+  linked,
+  anchor,
+  entry,
+  onTask,
+  planText,
+}: DocumentUnitProps): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const openLink = useOpenLink();
   const picture = usePlanPictureDrawer();
@@ -763,7 +862,7 @@ function DocumentUnit({
       <SectionMenu linked={linked} anchor={anchor} tabbable={entry} />
     );
   return attributed(drawn, bylineOf(marks, view.heading), menu);
-}
+}, sameUnit);
 
 /**
  * The task's document: its name as the title over its text. `live` is the
@@ -797,6 +896,7 @@ export function PlanBody({
   reader = NO_READER,
   agents,
   standing: taskStanding,
+  underTitle,
 }: {
   task: Task;
   live: boolean;
@@ -819,6 +919,8 @@ export function PlanBody({
   agents?: EditAgents;
   /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
   standing?: TaskStandingDoor;
+  /** What the task's own page draws under its name and byline, ahead of its text, as its linked issues; nothing elsewhere. */
+  underTitle?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
@@ -826,13 +928,30 @@ export function PlanBody({
   const editing = usePlanEditing(task.id, text, onEdit ?? NO_EDIT);
   const editReader = useEditReader(reader);
   const now = useMinute();
-  const place: EditPlace = { reader: editReader, sections: task.sectionEdits ?? [], agents, now };
-  const marks: SectionMarks = {
-    edits: new Map(place.sections.map(({ section, ...edit }) => [section, edit])),
-    changed: looks.changed,
-    place,
-    onShowHistory,
-  };
+  // Note that what each section is drawn from is held steady across draws,
+  // because a section drawn again parses its Markdown again
+  // (`DocumentUnit`), and the page hands its props over afresh on each draw.
+  const sectionEdits = task.sectionEdits ?? NO_SECTION_EDITS;
+  const agentsControl = agents?.control;
+  const openAgent = useSteadyDoor(agents?.onOpen);
+  const steadyAgents = useMemo<EditAgents | undefined>(
+    () => (agentsControl === undefined ? undefined : { control: agentsControl, onOpen: openAgent }),
+    [agentsControl, openAgent],
+  );
+  const place = useMemo<EditPlace>(
+    () => ({ reader: editReader, sections: sectionEdits, agents: steadyAgents, now }),
+    [editReader, sectionEdits, steadyAgents, now],
+  );
+  const showHistory = useSteadyDoor(onShowHistory);
+  const marks = useMemo<SectionMarks>(
+    () => ({
+      edits: new Map(place.sections.map(({ section, ...edit }) => [section, edit])),
+      changed: looks.changed,
+      place,
+      onShowHistory: showHistory,
+    }),
+    [place, looks.changed, showHistory],
+  );
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   // The open editor's handle, which a comment started on its words is measured through.
@@ -840,24 +959,33 @@ export function PlanBody({
   // A press on the document's empty room opens its text there, at its end
   // where it lands under the last line, or anywhere on a plan with no text
   // yet, which has no section to click into; the open editor's own room
-  // moves its caret (`PlanDocumentEditor`).
+  // moves its caret (`PlanDocumentEditor`). A finger opens it at a second
+  // tap on the room, as it does a block.
   useTextRoom({
     text: body,
     box: () => textBoxOf(body.current),
     room: scroller,
     open: false,
-    onPlace: editable && editing.editor === undefined ? editing.open : undefined,
+    onPlace:
+      editable && editing.editor === undefined
+        ? (placement, at) => {
+            // Note that a plan with no text yet opens at a finger's first tap, since it has nothing to read.
+            const empty = textBoxOf(body.current) === undefined;
+            if (empty || editing.tapped(TAP_ROOM, at)) editing.open(placement);
+          }
+        : undefined,
   });
   // How many times Rename was chosen from the title's ⋯, each putting the caret in the title.
   const [renaming, setRenaming] = useState(0);
   const anchors = sectionAnchors(views.map((view) => view.heading));
-  const linked: LinkedTask | undefined =
-    sectionLinks === undefined
-      ? undefined
-      : {
-          taskId: task.id,
-          place: { workspace: sectionLinks.workspace, repository: task.repository },
-        };
+  const linkedWorkspace = sectionLinks?.workspace;
+  const linked = useMemo<LinkedTask | undefined>(
+    () =>
+      linkedWorkspace === undefined
+        ? undefined
+        : { taskId: task.id, place: { workspace: linkedWorkspace, repository: task.repository } },
+    [linkedWorkspace, task.id, task.repository],
+  );
   const { link, doors: mentionDoors } = useMentionChips(linked, anchors, sectionLinks);
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
@@ -876,6 +1004,17 @@ export function PlanBody({
     return () => {
       for (const kind of SCROLL_INTENT_EVENTS) element.removeEventListener(kind, intent);
     };
+  }, []);
+
+  // A scroll lets go of a finger's first tap, so a tap after it reads rather than edits.
+  const disarm = useRef(editing.disarm);
+  disarm.current = editing.disarm;
+  useEffect(() => {
+    const element = scroller.current;
+    if (element === null) return;
+    const scrolled = () => disarm.current();
+    element.addEventListener("scroll", scrolled, { passive: true });
+    return () => element.removeEventListener("scroll", scrolled);
   }, []);
 
   // With nothing focused, the arrows select a block of a document, the first
@@ -960,29 +1099,49 @@ export function PlanBody({
   // A task item is ticked from the drawn plan while its words stand whole and
   // no editor is open, and saved through the editor's own door.
   const cut = editable && editing.editor === undefined && !behind ? planSections(text ?? "") : [];
-  const taskToggler = (section: number): TaskToggler | undefined => {
+  const tickable = (section: number): boolean => {
+    const words = views[section]?.words;
+    return onEdit !== undefined && words !== undefined && cut[section]?.text === words;
+  };
+  // Note that one tick is out at a time, from the plan as drawn, so a door
+  // that keeps one text (the plan template's) is never asked from another;
+  // a press while one is out, or before the saved plan comes back, does nothing.
+  const tick = (section: number, at: number): Promise<boolean> => {
     const unit = cut[section];
-    if (onEdit === undefined || unit === undefined || unit.text !== views[section]?.words) {
+    const base = task.document.body;
+    const value =
+      ticking.current || unit === undefined || !tickable(section)
+        ? undefined
+        : toggledTask(base, unit.from + at);
+    if (onEdit === undefined || value === undefined) return Promise.resolve(false);
+    ticking.current = true;
+    return onEdit({ document: { base, value } })
+      .then(
+        (answer) => "saved" in answer,
+        () => false,
+      )
+      .finally(() => {
+        ticking.current = false;
+      });
+  };
+  const latestTick = useRef(tick);
+  latestTick.current = tick;
+  // Each section's toggler stands across draws and ticks from the plan as drawn last, so a section is not drawn again for a new one.
+  const togglers = useRef(new Map<number, TaskToggler>());
+  const taskToggler = (section: number): TaskToggler | undefined => {
+    // Note that a unit with no box has none, so the chase starting and stopping leaves it as drawn.
+    if (!tickable(section) || !TASK_ITEM_ANYWHERE.test(views[section]?.words ?? "")) {
       return undefined;
     }
-    // Note that one tick is out at a time, from the plan as drawn, so a door
-    // that keeps one text (the plan template's) is never asked from another;
-    // a press while one is out, or before the saved plan comes back, does nothing.
-    return (at) => {
-      const base = task.document.body;
-      const value = ticking.current ? undefined : toggledTask(base, unit.from + at);
-      if (value === undefined) return Promise.resolve(false);
-      ticking.current = true;
-      return onEdit({ document: { base, value } })
-        .then(
-          (answer) => "saved" in answer,
-          () => false,
-        )
-        .finally(() => {
-          ticking.current = false;
-        });
-    };
+    const held = togglers.current.get(section);
+    if (held !== undefined) return held;
+    const toggler: TaskToggler = (at) => latestTick.current(section, at);
+    togglers.current.set(section, toggler);
+    return toggler;
   };
+  // The text a thread being started is laid over, handed to the units only while one is, since every unit is drawn again when it changes.
+  const { pending } = useCommentFocus();
+  const pendingText = pending === undefined ? undefined : task.document.body;
   // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.
   const standing =
     editing.cursor === EDITOR_PLACE.TITLE
@@ -1012,7 +1171,7 @@ export function PlanBody({
           anchor={anchors[section] ?? ""}
           entry={entry === view.id}
           onTask={taskToggler(section)}
-          planText={task.document.body}
+          planText={pendingText}
         />
       </DocumentBlock>
     ) : (
@@ -1024,7 +1183,7 @@ export function PlanBody({
         link={link}
         linked={linked}
         anchor={anchors[section] ?? ""}
-        planText={task.document.body}
+        planText={pendingText}
         // Note that a document that cannot be edited has no block Tab stop, so each ⋯ is one.
         entry
       />
@@ -1091,6 +1250,7 @@ export function PlanBody({
                 <TaskStandingChips task={task} onSet={taskStanding.onSet} />
               )}
               <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
+              {underTitle}
               <ChangedLine looks={looks} marks={marks} />
             </>
           ) : null}

@@ -80,8 +80,8 @@ import { setInstallationStatus } from "./github-installations.js";
  * review, a comment on a pull request, or a check that failed on an
  * agent's branch is told to the agents on that pull request as a message
  * from GitHub (`agent-wakes.ts`), through eve as the deployment acting for
- * each agent's owner, under the cron secret an automation's run reaches eve
- * by; a deployment without it tells nobody.
+ * each agent's owner, under the deployment's own eve secret an automation's
+ * run reaches eve by; a deployment without it tells nobody.
  */
 
 /** The path GitHub delivers to, as the App's settings name it under the deployment's origin. */
@@ -320,8 +320,8 @@ const readAgainOnBranches = /* @__PURE__ */ Effect.fn("web/githubWebhookReadAgai
 /**
  * eve's coding-agent service as the deployment acting for an account, as an
  * automation's run reaches it (`maintenance-app.ts`): under the deployment's
- * own cron secret, which the coder channel admits a deployment's message
- * by; a deployment without it, or without an origin for eve, tells nobody.
+ * own eve secret, which the coder channel admits a deployment's message by;
+ * a deployment without it, or without an origin for eve, tells nobody.
  */
 function eveForAccount(secret: Redacted.Redacted | undefined): EveForAccount {
   const origin = deploymentEveOrigin();
@@ -346,7 +346,7 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     if (request.method !== HTTP_METHOD.POST) {
       return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
     }
-    const { githubWebhookSecret, cronSecret } = yield* HostedEnvironment;
+    const { githubWebhookSecret, eveDeploymentSecret } = yield* HostedEnvironment;
     if (githubWebhookSecret === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     const body = yield* readBodyBytesEffect(MAXIMUM_DELIVERY_BYTES);
     const signature = request.headers[DELIVERY_HEADER.SIGNATURE] ?? null;
@@ -382,7 +382,7 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
       wake === undefined
         ? 0
         : yield* wakeAgents(
-            eveForAccount(cronSecret),
+            eveForAccount(eveDeploymentSecret),
             wake,
             request.headers[DELIVERY_HEADER.DELIVERY] ?? "",
             agentLogin,

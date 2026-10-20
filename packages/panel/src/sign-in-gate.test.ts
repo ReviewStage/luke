@@ -7,7 +7,6 @@ import {
   type AccountProvider,
   type AccountSnapshot,
 } from "@luke/credentials/snapshot";
-import type { Act, ActOutcome } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -17,26 +16,12 @@ import { fakeAppBridge } from "./testing/app-bridge.js";
 const ignore = () => undefined;
 const SIGNED_OUT: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 
-/** One act the bridge is holding, answered when the test chooses. */
-interface Held {
-  request: Act;
-  answer: (outcome: ActOutcome) => void;
-}
-
-let held: Held[] = [];
-
 /** Every root a test mounted, unmounted after it so nothing it started outlives it. */
 const mounted: Root[] = [];
 
 beforeEach(() => {
-  held = [];
   window.localStorage.clear();
-  fakeAppBridge({
-    act: (request: Act) =>
-      new Promise<ActOutcome>((answer) => {
-        held.push({ request, answer });
-      }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

@@ -165,25 +165,13 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Chat", "direct messages"]) {
     assert.deepEqual(experimentalFound(query, true), ["Chat"], query);
   }
-  for (const query of ["personal access token", "without the Luke GitHub App"]) {
-    assert.deepEqual(experimentalFound(query, true), ["GitHub personal access token"], query);
-  }
   for (const query of ["Video calls", "Keyframe"]) {
     assert.deepEqual(experimentalFound(query, true), ["Video calls"], query);
   }
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      [
-        "GitHub personal access token",
-        "Code review",
-        "Browser tab",
-        "Sections",
-        "Issues",
-        "Chat",
-        "Video calls",
-        "Factory",
-      ],
+      ["Code review", "Browser tab", "Sections", "Chat", "Video calls", "Factory"],
       query,
     );
   }

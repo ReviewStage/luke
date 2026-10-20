@@ -379,13 +379,14 @@ const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived. Unarchive it first.",
+  [CODING_AGENT_CALL_FAILURE.NOT_PERMITTED]: "Only the member who started this agent can do this.",
 } as const;
 
 /** What a Start from an agent whose session has ended says. */
 const START_RETIRED = "This agent has ended. Start a new one.";
 
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
-export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one to carry on.";
+export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
 
 /** What the agent's own box says once a message closed it on an ended agent, beside the press that continues it in a new one (`ContinueAgent`), which says the rest. */
 const BOX_RETIRED = "This agent has ended.";
@@ -484,6 +485,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -601,6 +603,14 @@ function unreachedFailure(
         taskId: taskId,
         workspace: unreached.workspace,
       };
+    case REPOSITORY_UNREACHED.NO_TOKEN:
+      return callFailure("No GitHub token saved.");
+    case REPOSITORY_UNREACHED.TOKEN_INVALID:
+      return callFailure("Your GitHub token was refused.");
+    case REPOSITORY_UNREACHED.TOKEN_NO_ACCESS:
+      return callFailure(`Your GitHub token can't access ${repository}.`);
+    case REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH:
+      return callFailure(`Your GitHub token can't push to ${repository}.`);
   }
 }
 
@@ -622,6 +632,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -655,6 +666,7 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }

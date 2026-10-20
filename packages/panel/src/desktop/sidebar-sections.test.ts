@@ -8,12 +8,11 @@ import {
   type TaskSections,
   type TaskSectionWrite,
 } from "@luke/features/task-section-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
-import { applySectionWrite, sectionOrder } from "@luke/ui/task-sections-model";
+import { applySectionWrite, sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
 import { type PinMove, TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -35,7 +34,9 @@ import { DesktopSidebar } from "./desktop-sidebar.js";
  * the dialog's icon picker, every Lucide glyph in a color and every emoji,
  * found by one search; and a task dragged between Pinned, Tasks, and a
  * section, pinned, unpinned, and moved where it is let go while the
- * experiment is on. Synthetic throughout.
+ * experiment is on; and, under a finger, which drags nothing, a pin, a
+ * section, and a section's task moved a place by its long press's menu,
+ * which a mouse's menu leaves to its drag. Synthetic throughout.
  */
 
 const WORKSPACE: Workspace = {
@@ -59,9 +60,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -283,6 +282,23 @@ test("with the experiment on a section stands over its tasks, which Tasks leaves
   assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
   const header = sidebar.querySelector('nav[aria-label="Sections"] button[aria-expanded]');
   assert.equal(header === null ? undefined : heardName(header), "Launch");
+});
+
+test("the status filter leaves a section's backlog task out as it does the list's, and counts it among those it hides", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  const sidebar = await mountSidebar([], SECTIONS, {
+    tasks: [
+      { ...INVITES, status: TASK_STATUS.BACKLOG },
+      { ...RETRIES, status: TASK_STATUS.TODO },
+    ],
+  });
+
+  assert.deepEqual(namesIn(sidebar, "Sections"), []);
+  assert.deepEqual(namesIn(sidebar, "Tasks"), ["Retry audit"]);
+  assert.equal(
+    sidebar.querySelector(".sidebar-hidden-statuses button")?.textContent,
+    "1 more in Backlog",
+  );
 });
 
 test("a task's Move to section puts it on top of the section chosen", async () => {
@@ -1048,4 +1064,153 @@ test("editing a section in an emoji the grid leaves out names it in the emoji fi
   await settleLoaded();
 
   assert.equal(dialogField("Any emoji").value, "🫩");
+});
+
+/** Answers the window's media queries as a phone does, its pointer a finger. */
+function underAFinger(): void {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: query === "(pointer: coarse)",
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+}
+
+/** A finger's touch of `type` at the row's corner, as the browser sends it. */
+const touch = (type: string) =>
+  new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 7,
+    pointerType: "touch",
+    isPrimary: true,
+    clientX: 10,
+    clientY: 10,
+  });
+
+/** A finger held still on `target` well past a long press, then lifted. */
+function longPress(target: HTMLElement): void {
+  vi.useFakeTimers();
+  try {
+    act(() => {
+      target.dispatchEvent(touch("pointerdown"));
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+  act(() => {
+    target.dispatchEvent(touch("pointerup"));
+    target.dispatchEvent(new TouchEvent("touchend", { bubbles: true, cancelable: true }));
+  });
+}
+
+/** The words of every item of the menus standing. */
+function menuWords(): string[] {
+  return [...document.querySelectorAll(".luke-menu-item-label")].map(
+    (each) => each.textContent ?? "",
+  );
+}
+
+/** The press of the sidebar row named `name`. */
+function rowPress(sidebar: HTMLElement, name: string): HTMLElement {
+  const row = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li > button")].find(
+    (each) => each.textContent?.includes(name),
+  );
+  return row ?? assert.fail(`no ${name} row`);
+}
+
+/** A second pin, after Pin audit. */
+const SECOND_PIN = {
+  ...task("0a1b2c3d-0000-4000-8000-100000000004", "Pin review"),
+  pinnedAt: 4,
+  pinPosition: "a1",
+};
+
+test("under a finger, a pin held offers Move down, which moves it below the next pin, and no Move up from the top", async () => {
+  handState({});
+  underAFinger();
+  const asked = noneAsked();
+  const sidebar = await mountDraggable([PINNED, SECOND_PIN, INVITES], SECTIONS, asked);
+
+  longPress(rowPress(sidebar, "Pin audit"));
+
+  assert.ok(menuWords().includes("Move down"), "the menu offers Move down");
+  assert.ok(!menuWords().includes("Move up"), "the top pin has no Move up");
+  act(() => item("Move down").click());
+  assert.deepEqual(
+    asked.moves.map((move) => move.id),
+    [PINNED.id],
+  );
+  assert.ok((asked.moves[0]?.position ?? "") > SECOND_PIN.pinPosition, "it sorts after Pin review");
+});
+
+test("with a mouse, a pin's menu offers no move, which its drag makes", async () => {
+  handState({});
+  const sidebar = await mountDraggable([PINNED, SECOND_PIN, INVITES], SECTIONS, noneAsked());
+
+  act(() => {
+    rowPress(sidebar, "Pin review").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }),
+    );
+  });
+
+  assert.ok(menuWords().includes("Unpin"), "the pin's menu stands");
+  assert.deepEqual(
+    menuWords().filter((words) => words.startsWith("Move ") && words !== "Move to workspace"),
+    [],
+  );
+});
+
+test("under a finger, a section's menu moves it up among the sections", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  underAFinger();
+  const writes: TaskSectionWrite[] = [];
+  const sidebar = await mountSidebar(writes, ICONLESS);
+  const drawn = workspaceSections(ICONLESS, WORKSPACE.id).map((section) => section.title);
+  const last = drawn.at(-1) ?? assert.fail("two sections stand");
+  const actions = sidebar.querySelector<HTMLButtonElement>(`[aria-label="Actions for ${last}"]`);
+  assert.ok(actions);
+
+  act(() => actions.click());
+  assert.ok(!menuWords().includes("Move down"), "the last section has no Move down");
+  act(() => item("Move up").click());
+
+  const after = writes.reduce(
+    (state, write) => applySectionWrite(state, write, AFTER_FIXTURES),
+    ICONLESS,
+  );
+  assert.deepEqual(
+    workspaceSections(after, WORKSPACE.id).map((section) => section.title),
+    [...drawn].reverse(),
+  );
+});
+
+test("under a finger, a task held in a section moves down within it by its menu", async () => {
+  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  underAFinger();
+  const asked = noneAsked();
+  const both: TaskSections = {
+    ...SECTIONS,
+    entries: [...SECTIONS.entries, { taskId: RETRIES.id, sectionId: LAUNCH, addedAt: 3 }],
+  };
+  const sidebar = await mountDraggable([INVITES, RETRIES], both, asked);
+  const first = sectionOrder(both, LAUNCH)[0]?.taskId === INVITES.id ? INVITES : RETRIES;
+  const second = first === INVITES ? RETRIES : INVITES;
+
+  longPress(rowPress(sidebar, first.name));
+  act(() => item("Move down").click());
+
+  const after = asked.writes.reduce(
+    (state, write) => applySectionWrite(state, write, AFTER_FIXTURES),
+    both,
+  );
+  assert.deepEqual(
+    sectionOrder(after, LAUNCH).map((entry) => entry.taskId),
+    [second.id, first.id],
+  );
 });

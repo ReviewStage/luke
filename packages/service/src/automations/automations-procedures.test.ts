@@ -15,13 +15,7 @@ import {
   openWorkspace,
   startTask,
 } from "@luke/database/testing";
-import {
-  automationPath,
-  automationRunPath,
-  automationRunsPath,
-  HOSTED_API_ERROR,
-  HOSTED_SERVICE_PATH,
-} from "@luke/features";
+import { automationPath, HOSTED_API_ERROR, HOSTED_SERVICE_PATH } from "@luke/features";
 import { SCHEDULE_PRESET } from "@luke/features/automation-schedule";
 import {
   AUTOMATION_ACTION,
@@ -82,6 +76,12 @@ import {
   openGithubUser,
 } from "../testing/github-app-fake.js";
 import { automationsProcedures } from "./automations-procedures.js";
+
+/** An automation's "Run now" (POST). */
+const automationRunPath = (automationId: string): string => `${automationPath(automationId)}/run`;
+
+/** An automation's runs, newest first (GET). */
+const automationRunsPath = (automationId: string): string => `${automationPath(automationId)}/runs`;
 
 /**
  * The automation routes, answered by the hosted oRPC router the way the web
@@ -344,7 +344,7 @@ it.layer(getTestDB())("the automation routes", (it) => {
   );
 
   it.effect(
-    "an automation on a workspace is refused for an account outside it, with a plan beside it, with no repositories, or on a repository its installation does not reach, is made on a GitHub event, and one on a plan takes no other repository",
+    "an automation on a workspace is refused for an account outside it, one on a plan for an account outside the plan's workspace or on a plan that is none, one on a workspace with a plan beside it, with no repositories, or on a repository its installation does not reach, is made on a GitHub event, and one on a plan takes no other repository",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask } = yield* openAccounts;
@@ -353,6 +353,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
           ask(HOSTED_SERVICE_PATH.AUTOMATIONS, by, { method: "POST", body });
 
         const outside = yield* post(other, onWorkspace(task.workspaceId, [relay]));
+        const othersTask = yield* post(other, weekdays(task.id));
+        const noTask = yield* post(owner, weekdays(randomUUID()));
         const both = yield* post(owner, {
           ...onWorkspace(task.workspaceId, [relay]),
           planId: task.id,
@@ -378,6 +380,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.deepEqual(
           [
             outside.status,
+            othersTask.status,
+            noTask.status,
             both.status,
             noRepositories.status,
             unreached.status,
@@ -385,6 +389,8 @@ it.layer(getTestDB())("the automation routes", (it) => {
             elsewhere.status,
           ],
           [
+            HOSTED_HTTP_STATUS.NOT_FOUND,
+            HOSTED_HTTP_STATUS.NOT_FOUND,
             HOSTED_HTTP_STATUS.NOT_FOUND,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
             HOSTED_HTTP_STATUS.BAD_REQUEST,
@@ -1220,6 +1226,26 @@ it.layer(getTestDB())("the automation routes", (it) => {
         assert.deepEqual(twice.body, { error: HOSTED_API_ERROR.INVALID_REQUEST });
         assert.equal(oversized.status, HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE);
         assert.deepEqual(oversized.body, { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE });
+      }),
+  );
+
+  it.effect(
+    "a body past its cap is refused as too large before the caller is resolved, where a body that is not JSON is refused, so an unsigned one is too large rather than unauthenticated",
+    () =>
+      Effect.gen(function* () {
+        const { task, ask } = yield* openAccounts;
+        const unsignedOversized = yield* ask(HOSTED_SERVICE_PATH.AUTOMATIONS, undefined, {
+          method: "POST",
+          body: {
+            ...weekdays(task.id),
+            action: {
+              kind: AUTOMATION_ACTION.CODING_AGENT,
+              prompt: "\u0001".repeat(AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 2),
+            },
+          },
+        });
+        assert.equal(unsignedOversized.status, HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE);
+        assert.deepEqual(unsignedOversized.body, { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE });
       }),
   );
 });

@@ -15,14 +15,19 @@ import {
   workspaceGithubConnectAnswerSchema,
   workspaceGithubRequestSchema,
 } from "../workspace-wire.js";
-import { exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+
+/** A workspace's id is a few dozen characters, so a body past this is not one. */
+const BODY_BYTES = 1_024;
 
 export const workspaceGithubContract = {
   connect: hostedProcedure
+    .meta(bodyCap(BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_CONNECT }))
     .input(exactInput(workspaceGithubRequestSchema))
     .output(EffectSchema.flip(workspaceGithubConnectAnswerSchema)),
   disconnect: hostedProcedure
+    .meta(bodyCap(BODY_BYTES))
     .meta(
       openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.WORKSPACE_GITHUB_DISCONNECT }),
     )

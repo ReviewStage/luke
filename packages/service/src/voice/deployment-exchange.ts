@@ -5,6 +5,7 @@ import { FetchHttpClient } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import {
+  EVE_MOUNT,
   type EveSessions,
   type EveSessionsComposer,
   eveSessionsComposer,
@@ -36,7 +37,7 @@ import type { ExchangeAttachment } from "./live-exchange.js";
 type SpokenTurn = typeof BRAIN_HOST_TURN.SPOKEN;
 
 interface DeploymentExchangeSeams {
-  /** The secret the deployment acts for an account under at eve's door, the cron's own; nothing refuses every session. */
+  /** The secret the deployment acts for an account under at eve's door, its own (`EVE_DEPLOYMENT_SECRET`) and never the cron's; nothing refuses every session. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** The origin eve answers on; nothing refuses every session. */
   readonly eveOrigin: () => string | undefined;
@@ -95,6 +96,7 @@ function deploymentEve(
     compose<SpokenTurn>({
       origin,
       caller: { secret: deploymentSecret, account: accountId },
+      mount: EVE_MOUNT.TASKS,
     });
 }
 

@@ -22,9 +22,7 @@ import {
 } from "@luke/panel/build-table";
 import { build } from "esbuild";
 import type { Plugin } from "vite";
-
-/** Where the web serves the panel's static files from, which the web platform's `assetBase` answers. */
-export const PANEL_ASSET_BASE = "/app/";
+import { PANEL_ASSET_BASE } from "../src/app/web-address";
 
 // Rollup's names for the modules this answers itself, `\0`-led so no other plugin loads them.
 const EXCALIDRAW_UNUSED_ID = "\0excalidraw-unused";

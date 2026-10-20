@@ -1,17 +1,9 @@
 import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
-import { noDatabase } from "@luke/database/testing/no-database";
 import { AUTOMATION_RUN_REASON } from "@luke/features/automation-wire";
 import { CODING_AGENT_FAILURE } from "@luke/features/coding-agent-wire";
-import { Effect } from "effect";
 import { test } from "vitest";
-import {
-  type AdminReliability,
-  type AdminReliabilitySource,
-  buildAdminReliability,
-  handleAdminReliability,
-} from "./admin-reliability.js";
-import { ADMIN_ERROR, ADMIN_METRICS_WINDOW } from "./http.js";
+import { type AdminReliabilitySource, buildAdminReliability } from "./admin-reliability.js";
+import { ADMIN_METRICS_WINDOW } from "./http.js";
 
 /**
  * The Reliability answer's shaping and its address: each day of the window
@@ -108,36 +100,3 @@ test("the breakdowns come most first, a class with nothing counted left out", ()
     { reason: AUTOMATION_RUN_REASON.CONCURRENCY, skipped: 1, failed: 0 },
   ]);
 });
-
-/** The handler over a seam that records the window each read asked for. */
-function answer(address: string, asked: number[]) {
-  return handleAdminReliability({
-    request: new Request(address),
-    readReliability: (now, _scope, windowDays) =>
-      Effect.sync(() => {
-        asked.push(windowDays);
-        return buildAdminReliability(source(), now, windowDays);
-      }),
-  }).pipe(Effect.provide(noDatabase));
-}
-
-it.effect("reads a week or a month, the month by default, and refuses a quarter unread", () =>
-  Effect.gen(function* () {
-    const asked: number[] = [];
-    const base = "https://luke.test/api/admin/reliability";
-
-    const month = yield* answer(base, asked);
-    const week = yield* answer(`${base}?window=7`, asked);
-    const quarter = yield* answer(`${base}?window=90`, asked);
-
-    assert.equal(month.status, 200);
-    // SAFETY: a 200 from the handler is an AdminReliability body by its contract.
-    const weekBody = (yield* Effect.promise(() => week.json())) as AdminReliability;
-    assert.equal(weekBody.windowDays, 7);
-    assert.equal(quarter.status, 400);
-    // SAFETY: a refusal from the handler is an error body by its contract.
-    const refusal = (yield* Effect.promise(() => quarter.json())) as { error: string };
-    assert.equal(refusal.error, ADMIN_ERROR.INVALID_WINDOW);
-    assert.deepEqual(asked, [30, 7]);
-  }),
-);

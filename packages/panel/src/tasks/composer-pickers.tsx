@@ -150,9 +150,13 @@ export function useComposerPickers({
           : {
               onTrigger: mentionPicker.onTrigger,
               // A server's chip in the box says what a send now does with it.
-              chip: (mention) => (
+              chip: (mention, node) => (
                 <MentionedServers value={servers.place}>
-                  <MentionNodeChip mention={mention} doors={taskMentions.doors} />
+                  <MentionNodeChip
+                    mention={mention}
+                    doors={taskMentions.doors}
+                    edit={{ node, pickDate: mentionPicker.pickDate }}
+                  />
                 </MentionedServers>
               ),
               pasted: (words) =>

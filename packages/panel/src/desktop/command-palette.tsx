@@ -1,5 +1,5 @@
 /**
- * command-palette.tsx -- ⌘K: the tasks, the listed workspace's issues, the open task's agents and files, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
+ * command-palette.tsx -- ⌘K: the tasks, the open task's agents and files, every command the window can run now, and the Settings pages and settings, found by typing, in a dialog over the window.
  *
  * The palette is cmdk's own dialog, list, and keys, drawn in the window's
  * menu rows, under a row of filters as Cursor's palette has them: All, then
@@ -17,13 +17,7 @@
  * task through the same select the sidebar does, which takes its ask back
  * when the host does not open the task. Each task names its repository
  * beside it, so two tasks of one name can be told apart, and an archived
- * task says so. An issue, listed while Issues is on (`EXPERIMENT.ISSUES`)
- * and found by its title or identifier, wears its status's glyph and
- * names its identifier and status as the Issues page's row does, and opens
- * on its own page as the Issues page's ⌘Return opens it; its filter
- * stands only while the experiment is on, and the issues are read as the
- * palette opens (`use-issues.ts`), the archived ones not among them. An
- * agent opens its tab as the column's "+" would, hanging
+ * task says so. An agent opens its tab as the column's "+" would, hanging
  * its tab's card beside its row while the pointer rests on it, as every
  * place naming an agent does (`agent-ref.tsx`), and an archived agent, which
  * says so, its own page, a subagent
@@ -50,11 +44,10 @@
  * each row's words instead.
  */
 
-import { ISSUE_STATUS_WORDS, issueIdentifier } from "@luke/features/issue-list-model";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
-import { EXPERIMENT, type HostCapability } from "@luke/settings";
+import type { HostCapability } from "@luke/settings";
 import { SETTINGS_PAGE_LIST, type SettingsView } from "@luke/settings/settings-views";
 import {
   APP_COMMAND,
@@ -104,7 +97,8 @@ import {
 import { type CopyLink, inSidePanel, type LinkAtHand } from "../links-at-hand.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { Highlighted } from "../search-field.js";
-import { settingsPageOf, settingsPageShown } from "../settings/pages.js";
+import { settingsPageOf } from "../settings/pages.js";
+import { settingsPageShown } from "../settings/settings-rows.js";
 import {
   landOnSettingsRow,
   resultPageWord,
@@ -121,26 +115,22 @@ import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import { markReadItem } from "../tasks/task-menu-items.js";
 import { SIDE_PANEL_TABS } from "../tasks/use-side-panel.js";
 import { type ReadMarks, useReadMarks } from "../tasks/use-task-looks.js";
-import { ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
+import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   useWorkspaceMembersRead,
   type WorkspaceMembersRead,
 } from "../tasks/use-workspace-members.js";
 import { workRowsOf } from "../tasks/work-model.js";
 import { Tooltip } from "../tooltip.js";
-import { useExperiment } from "../use-app-state.js";
-import { StatusGlyph } from "./issue-pickers.js";
 import { agentEntries, chatEntries, inboxEntries } from "./main-tabs.js";
 import { changesOffers, panelEntries, taskWorkers } from "./side-panel.js";
 import { taskOf } from "./task-actions.js";
-import { type IssuesRead, useIssues } from "./use-issues.js";
 import { WorkspaceRef } from "./workspace-ref.js";
 
 /** The kinds of row the palette lists, each a filter of its own after All, in the order the filters stand. */
 const PALETTE_FILTER = {
   ALL: "all",
   TASKS: "plans",
-  ISSUES: "issues",
   AGENTS: "agents",
   PEOPLE: "people",
   FILES: "files",
@@ -159,7 +149,6 @@ const PALETTE_FILTERS: readonly PaletteFilter[] = Object.values(PALETTE_FILTER);
 const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
   [PALETTE_FILTER.TASKS]: "Tasks",
-  [PALETTE_FILTER.ISSUES]: "Issues",
   [PALETTE_FILTER.AGENTS]: "Agents",
   [PALETTE_FILTER.PEOPLE]: "People",
   [PALETTE_FILTER.FILES]: "Files",
@@ -167,20 +156,16 @@ const FILTER_LABEL = {
   [PALETTE_FILTER.SETTINGS]: "Settings",
 } as const satisfies Record<PaletteFilter, string>;
 
-/** What the search field asks for under each filter, All's while Issues is off; `ALL_WITH_ISSUES_PLACEHOLDER` while it is on. */
+/** What the search field asks for under each filter. */
 const FILTER_PLACEHOLDER = {
   [PALETTE_FILTER.ALL]: "Search tasks, agents, people, files, actions, and settings…",
   [PALETTE_FILTER.TASKS]: "Search tasks…",
-  [PALETTE_FILTER.ISSUES]: "Search issues…",
   [PALETTE_FILTER.AGENTS]: "Search agents…",
   [PALETTE_FILTER.PEOPLE]: "Search people…",
   [PALETTE_FILTER.FILES]: "Search files…",
   [PALETTE_FILTER.ACTIONS]: "Search actions…",
   [PALETTE_FILTER.SETTINGS]: "Search settings…",
 } as const satisfies Record<PaletteFilter, string>;
-
-const ALL_WITH_ISSUES_PLACEHOLDER =
-  "Search tasks, issues, agents, people, files, actions, and settings…";
 
 /** How many rows a kind lists: its best few under All, and as many as are worth reading under its own filter. */
 const KIND_ROWS = {
@@ -226,10 +211,6 @@ const TASKS_FAILED_LINE = "Your tasks could not be read.";
 /** What the People filter says while the listed workspace's members are read, and where that read did not land. */
 const PEOPLE_READING_LINE = "Reading the workspace's members…";
 const PEOPLE_FAILED_LINE = "The workspace's members could not be read.";
-
-/** What the Issues filter says while the listed workspace's issues are read, and where that read did not land. */
-const ISSUES_READING_LINE = "Reading the workspace's issues…";
-const ISSUES_FAILED_LINE = "The workspace's issues could not be read.";
 
 /** What the list says in place of "Nothing matches.": a line of its own, a source still reading, or one refused. */
 const PALETTE_NOTICE = {
@@ -461,19 +442,6 @@ function peopleNotice(
     : { kind: PALETTE_NOTICE.READING, line: PEOPLE_READING_LINE };
 }
 
-/** What the Issues filter says while the listed workspace's issues are asked for and not yet read, or their read did not land. */
-function issuesNotice(
-  asked: boolean,
-  read: IssuesRead,
-  retry: () => void,
-): PaletteNotice | undefined {
-  if (!asked) return undefined;
-  if (read === undefined) return { kind: PALETTE_NOTICE.READING, line: ISSUES_READING_LINE };
-  return "failure" in read
-    ? { kind: PALETTE_NOTICE.FAILED, line: ISSUES_FAILED_LINE, onRetry: retry }
-    : undefined;
-}
-
 /**
  * What an empty list says for the filter shown: its kind's own notice, or,
  * under All, the first kind still reading, else the first refused, since
@@ -538,15 +506,11 @@ function arrowStep(event: React.KeyboardEvent, query: string): number {
   return 0;
 }
 
-/** The filter `step` places from the one given among those drawn, wrapping at either end. */
-function steppedFilter(
-  filters: readonly PaletteFilter[],
-  filter: PaletteFilter,
-  step: number,
-): PaletteFilter {
-  const at = filters.indexOf(filter);
-  const count = filters.length;
-  return filters[(at + step + count) % count] ?? PALETTE_FILTER.ALL;
+/** The filter `step` places from the one given, wrapping at either end. */
+function steppedFilter(filter: PaletteFilter, step: number): PaletteFilter {
+  const at = PALETTE_FILTERS.indexOf(filter);
+  const count = PALETTE_FILTERS.length;
+  return PALETTE_FILTERS[(at + step + count) % count] ?? PALETTE_FILTER.ALL;
 }
 
 /** A task's muted words: its repository, and whether it is archived. */
@@ -620,30 +584,6 @@ function taskRows(
   ];
 }
 
-/**
- * The listed workspace's issues in the order the list answers them, the
- * last changed first, each as the Issues page's row draws it: its status's
- * glyph, its title, and its identifier and status after it, found by its
- * title and identifier; none until they are read.
- */
-function issueRows(
-  read: IssuesRead,
-  workspaceName: string,
-  open: (issueId: string) => void,
-): readonly PaletteRow[] {
-  if (read === undefined || "failure" in read) return [];
-  return read.issues.map((issue) => {
-    const identifier = issueIdentifier(workspaceName, issue.number);
-    return {
-      icon: <StatusGlyph status={issue.status} />,
-      label: issue.title,
-      detail: `${identifier} · ${ISSUE_STATUS_WORDS[issue.status]}`,
-      terms: [issue.title, identifier],
-      onChoose: () => open(issue.id),
-    };
-  });
-}
-
 /** Shows one of the side panel's tabs, the version history put away first so the tab is not shown behind it. */
 function shownOverHistory(tasks: TasksControl, show: () => void): void {
   if (tasks.history.open) tasks.history.onClose();
@@ -675,12 +615,13 @@ function agentRows(
     ...entry,
     onPick: () => tasks.onShowAgent(taskId, entry.row.id),
   }));
-  // Note that the plan's workers and Changes open in its panel, which an agent's page holds while it stands.
-  const subagents = holdsTaskPanel(tasks)
+  // Note that the plan's workers open in its own panel alone, and its Changes
+  // too in the Inbox's beside an item of the plan, which draws its pull requests.
+  const subagents = opensTaskItems(tasks)
     ? panelEntries({
         panel: tasks.sidePanel,
         kinds: [],
-        workers,
+        workers: holdsTaskPanel(tasks) ? workers : [],
         files: [],
         changes: changesOffers(tasks.agents, tasks.sidePanel.changes),
       }).map((entry) => ({ ...entry, onPick: () => shownOverHistory(tasks, entry.onPick) }))
@@ -775,9 +716,26 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
   }));
 }
 
-/** Whether the side panel is the open plan's, as it is but while an agent's page holds it (`use-plans-tab.ts`). */
+/**
+ * Whether the side panel draws the open plan's own tabs, its fixed kinds and
+ * its workers: not while an agent's page holds it, nor while the Inbox does,
+ * whose panel is bare and draws neither (`use-tasks-tab.ts`).
+ */
 function holdsTaskPanel(tasks: TasksControl): boolean {
-  return tasks.agentView.agentId === undefined;
+  return tasks.agentView.agentId === undefined && !tasks.inboxView.open;
+}
+
+/**
+ * Whether a file or a pull request of the open plan opens in the side panel:
+ * wherever it holds the plan's tabs, and over an Inbox item of the open plan,
+ * whose panel opens that task's files and draws its pull requests. Over an
+ * Inbox with nothing chosen the panel has no task, so neither could be shown.
+ */
+function opensTaskItems(tasks: TasksControl): boolean {
+  if (holdsTaskPanel(tasks)) return true;
+  if (tasks.agentView.agentId !== undefined || !tasks.inboxView.open) return false;
+  const { chosen } = tasks.inboxView;
+  return chosen !== undefined && "taskId" in chosen && chosen.taskId === tasks.activeTaskId;
 }
 
 /**
@@ -1037,11 +995,9 @@ function revealChecked(band: HTMLElement): void {
  * moving there would bring it.
  */
 function PaletteFilters({
-  filters,
   filter,
   onFilter,
 }: {
-  filters: readonly PaletteFilter[];
   filter: PaletteFilter;
   onFilter: (filter: PaletteFilter) => void;
 }): React.JSX.Element {
@@ -1053,7 +1009,7 @@ function PaletteFilters({
     <div ref={band} className="command-palette-filters">
       <ChoiceBar
         label="Filter"
-        items={filters.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}
+        items={PALETTE_FILTERS.map((each) => ({ value: each, label: FILTER_LABEL[each] }))}
         value={filter}
         onChange={onFilter}
         look={CHOICE_BAR_LOOK.FILL}
@@ -1114,15 +1070,8 @@ export function CommandPalette({
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const chatOn = useChatOn();
-  // Issues stand nowhere while their experiment is off: no filter, no row, and no read.
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES) && tasks.signedIn;
-  const filters = issuesOn
-    ? PALETTE_FILTERS
-    : PALETTE_FILTERS.filter((each) => each !== PALETTE_FILTER.ISSUES);
   if (open && !available) setOpen(false);
-  const [chosenFilter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
-  // The filter shown: the one chosen, or All where its filter is gone, as Issues' is once their experiment turns off.
-  const filter = filters.includes(chosenFilter) ? chosenFilter : PALETTE_FILTER.ALL;
+  const [filter, setFilter] = useState<PaletteFilter>(PALETTE_FILTER.ALL);
   const [query, setQuery] = useState("");
   // The row chosen, by its place in the list, which a new filter puts back on the first.
   const [selected, setSelected] = useState(FIRST_ROW);
@@ -1223,7 +1172,7 @@ export function CommandPalette({
     const step = arrowStep(event, query);
     if (step !== 0) {
       event.preventDefault();
-      changeFilter(steppedFilter(filters, filter, step));
+      changeFilter(steppedFilter(filter, step));
       return;
     }
     const pressed = commandForKey(
@@ -1235,7 +1184,7 @@ export function CommandPalette({
     // claims their chords for its filters while it stands.
     event.preventDefault();
     if (pressed === APP_COMMAND.COMMAND_PALETTE) setOpen(false);
-    else changeFilter(steppedFilter(filters, filter, pressed === APP_COMMAND.BACK ? -1 : 1));
+    else changeFilter(steppedFilter(filter, pressed === APP_COMMAND.BACK ? -1 : 1));
   };
 
   const tokens = searchTokens(query);
@@ -1243,9 +1192,6 @@ export function CommandPalette({
   const membersRead = useWorkspaceMembersRead(tasks.workspace);
   const { members } = membersRead;
   const reads = useReadMarks();
-  // Note that the issues are read only while the palette stands, each opening drawing the last read until the new one answers.
-  const issuesAsked = open && issuesOn && tasks.workspace !== undefined;
-  const issues = useIssues(issuesAsked ? tasks.workspace?.id : undefined);
   const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   const taskId = tasks.activeTaskId;
   const repository =
@@ -1256,7 +1202,7 @@ export function CommandPalette({
       ? files
       : undefined;
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
-  const filesOpen = holdsTaskPanel(tasks) && taskId !== undefined && repository !== null;
+  const filesOpen = opensTaskItems(tasks) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
 
   // Note that the repository is read the first time its files are searched
@@ -1297,9 +1243,6 @@ export function CommandPalette({
     [PALETTE_FILTER.TASKS]: () => [
       tasks.signedIn ? taskRows(tasks, members, (id) => onTasks(() => tasks.onSelect(id))) : [],
     ],
-    [PALETTE_FILTER.ISSUES]: () => [
-      issuesAsked ? issueRows(issues.read, tasks.workspace?.name ?? "", openIssue) : [],
-    ],
     [PALETTE_FILTER.AGENTS]: () => [agentRows(tasks, chatOn, onTasks)],
     [PALETTE_FILTER.PEOPLE]: () => [
       peopleRows(members, tasks.me, (userId) => onTasks(() => tasks.personView.onOpen(userId))),
@@ -1320,16 +1263,6 @@ export function CommandPalette({
       settingRows(settings.rows, land),
     ],
   } as const satisfies Record<PaletteKind, () => readonly (readonly PaletteRow[])[]>;
-  // Note that an issue opens as the Issues page's openPage opens it, the list's peek put away, so going back shows the list.
-  const openIssue = (issueId: string) =>
-    onTasks(() => {
-      const { issuesView, sidePanel } = tasks;
-      if (issuesView.open) {
-        if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-        issuesView.onPeek(undefined);
-      }
-      issuesView.onOpen({ kind: ISSUES_PAGE.ISSUE, issueId });
-    });
   // Note that a file found opens through the panel's one door for a file
   // named in place: the tab it has, as it stands, or a new one at the strip's end.
   const openFile = (path: string) =>
@@ -1342,7 +1275,7 @@ export function CommandPalette({
       : tiersOf[kind]()
           .flatMap((tier) => ranked(tier, query, limit, byRow))
           .slice(0, limit);
-  const kinds = filters.filter((each): each is PaletteKind =>
+  const kinds = PALETTE_FILTERS.filter((each): each is PaletteKind =>
     filter === PALETTE_FILTER.ALL ? each !== PALETTE_FILTER.ALL : each === filter,
   );
   const sections: readonly PaletteSection[] = open
@@ -1353,7 +1286,6 @@ export function CommandPalette({
   // Each kind's word for its rows' absence: still reading, refused, or a line of its own.
   const noticeOf = {
     [PALETTE_FILTER.TASKS]: () => tasksNotice(tasks),
-    [PALETTE_FILTER.ISSUES]: () => issuesNotice(issuesAsked, issues.read, issues.reload),
     [PALETTE_FILTER.AGENTS]: () => undefined,
     [PALETTE_FILTER.PEOPLE]: () => peopleNotice(tasks, membersRead),
     [PALETTE_FILTER.FILES]: () =>
@@ -1393,16 +1325,12 @@ export function CommandPalette({
         <SearchIcon />
         <Command.Input
           ref={field}
-          placeholder={
-            issuesOn && filter === PALETTE_FILTER.ALL
-              ? ALL_WITH_ISSUES_PLACEHOLDER
-              : FILTER_PLACEHOLDER[filter]
-          }
+          placeholder={FILTER_PLACEHOLDER[filter]}
           value={query}
           onValueChange={setQuery}
         />
       </div>
-      <PaletteFilters filters={filters} filter={filter} onFilter={changeFilter} />
+      <PaletteFilters filter={filter} onFilter={changeFilter} />
       <Command.List asChild label="Results">
         <ComboboxListBox height={COMBOBOX_LIST_HEIGHT.FILL}>
           {notice === undefined ? (

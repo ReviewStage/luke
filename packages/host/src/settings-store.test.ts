@@ -20,6 +20,7 @@ import {
   accountPreferencesParts,
   EXPERIMENT,
   type ExperimentChoices,
+  SETTINGS_RESET_SCOPE,
   snapshotAccountPreferences,
   THEME,
 } from "@luke/settings";
@@ -41,6 +42,7 @@ import { temporaryDirectory } from "@luke/wire/testing";
 import { ConfigProvider, Context, Effect, Layer } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { systemError } from "effect/PlatformError";
 import { test } from "vitest";
 import { Environment } from "./effect/seams.js";
 import {
@@ -294,6 +296,33 @@ test("every setting starts at its default, survives a reopen, and can be cleared
   }
 });
 
+it.effect(
+  "a reset returns its group to the defaults but for the fields it keeps, which stand as the file holds them",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const opened = () =>
+        new SettingsStore({
+          directory: () => directory,
+          cipher: testCipher(),
+          overrides: overridesFor({}),
+          fileSystem: FILE_SYSTEM,
+          path: PATH,
+        });
+      const store = opened();
+      yield* store.set("theme", THEME.DARK);
+      yield* store.set("zoom", 125);
+
+      const reset = yield* store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE, ["zoom"]);
+
+      assert.equal(reset.reason, undefined);
+      const reopened = opened();
+      // The theme's choice is forgotten, so it reads as no choice at all.
+      assert.equal(yield* reopened.get("theme"), undefined);
+      assert.equal(yield* reopened.get("zoom"), 125);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
 // A call reads no choice as Atlas, which compose-live's "a call opens with the avatar asked for" holds.
 test("the Default avatar an earlier build stored reads as no choice", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
@@ -456,17 +485,26 @@ test("a stored account that signed in with Google still loads", async (t) => {
   });
 });
 
-test("refuses to store an account when encrypted storage is unavailable", async (t) => {
-  const directory = await temporaryDirectory(t, "luke-settings-");
-  const store = storeIn(directory, { cipher: testCipher(false) });
+it.effect(
+  "refuses to store an account when encrypted storage is unavailable, as a typed failure",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const store = new SettingsStore({
+        directory: () => directory,
+        cipher: testCipher(false),
+        overrides: overridesFor({}),
+        fileSystem: FILE_SYSTEM,
+        path: PATH,
+      });
 
-  await assert.rejects(
-    store.setAccount(TEST_ACCOUNT),
-    /Encrypted credential storage is unavailable/,
-  );
-  assert.deepEqual(await store.accountSnapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
-  await assert.rejects(() => readSettingsFile(directory), /ENOENT/);
-});
+      const refused = yield* Effect.flip(store.setAccount(TEST_ACCOUNT));
+
+      assert.equal(refused._tag, "EncryptedStorageUnavailable");
+      assert.deepEqual(yield* store.accountSnapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+      assert.equal(yield* FILE_SYSTEM.exists(path.join(directory, SETTINGS_FILE_NAME)), false);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
 /** Preferences as they cross the wire: split into the snapshot's parts, through JSON, and joined again. */
 function throughSnapshot(preferences: AccountPreferences): AccountPreferences | undefined {
@@ -627,4 +665,55 @@ it.effect("two stores on one file, as two browser tabs are, each keep the other'
     assert.equal(reopened.theme, THEME.DARK);
     assert.equal(reopened.zoom, 150);
   }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+/** The suite's file system, but with every read of a file failing while `failing.reads` is set, as a disk's transient error does. */
+function flakyReads(failing: { reads: boolean }): FileSystem.FileSystem {
+  return {
+    ...FILE_SYSTEM,
+    readFileString: (filePath, encoding) =>
+      failing.reads
+        ? Effect.fail(
+            systemError({
+              _tag: "Unknown",
+              module: "FileSystem",
+              method: "readFileString",
+              pathOrDescriptor: filePath,
+              cause: Object.assign(new Error("EIO: i/o error"), { code: "EIO" }),
+            }),
+          )
+        : FILE_SYSTEM.readFileString(filePath, encoding),
+  };
+}
+
+it.effect(
+  "the file's one writer, as the desktop is, writes over its held copy when the read before a write fails, and one of several writers does not",
+  () =>
+    Effect.gen(function* () {
+      const directory = yield* temporaryDirectoryScoped("luke-settings-");
+      const failing = { reads: false };
+      const storeOf = (writer?: string) =>
+        new SettingsStore({
+          directory: () => directory,
+          cipher: undefined,
+          overrides: overridesFor({}),
+          fileSystem: flakyReads(failing),
+          path: PATH,
+          ...(writer === undefined ? undefined : { writer }),
+        });
+      const desktop = storeOf();
+      const tab = storeOf("tab-1");
+      yield* desktop.snapshot();
+      yield* tab.snapshot();
+
+      failing.reads = true;
+      yield* desktop.set("theme", THEME.DARK);
+      const refused = yield* Effect.flip(tab.set("zoom", 150));
+      failing.reads = false;
+
+      assert.equal(refused._tag, "PlatformError");
+      const reopened = (yield* storeOf().snapshot()).stored;
+      assert.equal(reopened.theme, THEME.DARK);
+      assert.notEqual(reopened.zoom, 150);
+    }).pipe(Effect.provide(NodeFileSystem.layer)),
 );

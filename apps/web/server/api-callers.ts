@@ -1,11 +1,14 @@
 import { readdir, readFile } from "node:fs/promises";
 import { extname, join, posix, relative, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { hostedContract } from "@luke/features/contract";
+import { getOpenAPIMeta } from "@orpc/openapi";
+import { walkProcedureContractsSync } from "@orpc/server";
 import { Predicate, Schema } from "effect";
 import ts from "typescript";
 import { functionAliasPath, HAND_WRITTEN_FUNCTIONS } from "./build-output.js";
 import { functionPublicPath, webFunctions } from "./function-layout.js";
-import { type Rewrite, readApiRewritesTable } from "./function-rewrites.js";
+import { ORPC_FALLBACK_SRC, type Rewrite, readApiRewritesTable } from "./function-rewrites.js";
 
 /**
  * The caller side of the `/api/` routes. The route table is generated and
@@ -15,8 +18,12 @@ import { type Rewrite, readApiRewritesTable } from "./function-rewrites.js";
  * client in the repository spells — the string and template literals of the
  * TypeScript, the paths in the shell scripts, and the exports of the hosted
  * paths module, evaluated — and
- * resolves each against the committed rewrites table and the extensionless
- * aliases the Build Output emits. A literal that resolves nowhere, a template
+ * resolves each against what answers it: the extensionless aliases the Build
+ * Output emits, then the committed rewrites of the routes that stay off the
+ * hosted oRPC router, then the router's own procedure paths, read from the
+ * contract it implements. The fallback rewrite, which lands every other
+ * `/api/` path on the router, is not a resolution: a path no procedure
+ * matches is the router's 404. A literal that resolves nowhere, a template
  * whose interpolation is not a whole path segment, and a paths-module export
  * that is not a path are each refused by name rather than passed over: a
  * check that silently skipped what it could not read would read as coverage.
@@ -72,15 +79,17 @@ type CallerKind = (typeof CALLER_KIND)[keyof typeof CALLER_KIND];
 export const RESOLUTION = {
   /** An extensionless alias of a standalone or hand-written function. */
   ALIAS: "alias",
-  /** A rewrite of the committed table, the first whose pattern matches. */
+  /** A rewrite of the committed table ahead of the fallback, the first whose pattern matches. */
   REWRITE: "rewrite",
+  /** A procedure of the hosted oRPC router, whose public path the router matches itself. */
+  PROCEDURE: "procedure",
   /** A base other segments are appended to: one more segment lands on a rewrite. */
   PREFIX: "prefix",
 } as const;
 type Resolution = (typeof RESOLUTION)[keyof typeof RESOLUTION];
 
 const REFUSAL = {
-  /** Neither the table nor an alias serves the path. */
+  /** No alias, rewrite, or procedure serves the path. */
   NO_ROUTE: "no-route",
   /** A template interpolates something that is not a whole path segment, so the path it builds cannot be read. */
   UNREADABLE_BUILDER: "unreadable-builder",
@@ -107,7 +116,7 @@ interface CallerPath {
 interface ResolvedCaller {
   readonly caller: CallerPath;
   readonly resolution: Resolution;
-  /** The alias path, or the rewrite's `src`. */
+  /** The alias path, the rewrite's `src`, or the procedure's path. */
   readonly route: string;
 }
 
@@ -149,6 +158,24 @@ interface ScannedSite {
   readonly site: CallerSite;
 }
 
+/** What opens an absolute address's origin, which its host follows. */
+const SCHEME_END = "://";
+
+/**
+ * Whether the `/api/` at `start` is deeper than an absolute address's first
+ * path segment, as GitHub's `https://github.com/acme/api/issues/5` names a
+ * repository called `api`: another site's page, which no route of ours
+ * answers. A path with no origin before it, or one right after its origin's
+ * host, is ours to resolve.
+ */
+function insideForeignPath(text: string, start: number): boolean {
+  const scheme = text.lastIndexOf(SCHEME_END, start);
+  // Note that an address ends where a path would, so one earlier in the words names nothing here.
+  if (scheme === -1 || text.slice(scheme, start).search(PATH_END) !== -1) return false;
+  const hostEnd = text.indexOf("/", scheme + SCHEME_END.length);
+  return hostEnd !== -1 && hostEnd < start;
+}
+
 /** A relative `api/…` at the start of a literal, or right after an interpolated origin, is the same path. */
 function rooted(text: string): string {
   const fromStart = text.startsWith(RELATIVE_PATH_START) ? `/${text}` : text;
@@ -166,7 +193,7 @@ function pathTokens(text: string): readonly string[] {
     const afterStart = start + PATH_START.length;
     const endOffset = rootedText.slice(afterStart).search(PATH_END);
     const end = endOffset === -1 ? rootedText.length : afterStart + endOffset;
-    tokens.push(rootedText.slice(start, end));
+    if (!insideForeignPath(rootedText, start)) tokens.push(rootedText.slice(start, end));
     from = end;
   }
   return tokens;
@@ -443,20 +470,83 @@ async function evaluatePathsModule(
   return { sites, refused, builders };
 }
 
+/** A hosted procedure's public path and method, as its contract declares them. */
+export interface ProcedureRoute {
+  /** The procedure's key path in the contract, its resource first. */
+  readonly key: readonly string[];
+  readonly method: string;
+  /** The public path, a parameter written `{name}`, or `{+name}` where it may span segments. */
+  readonly path: string;
+}
+
+/** What the OpenAPI matcher takes for a procedure that names no method. */
+const DEFAULT_PROCEDURE_METHOD = "POST";
+
+/**
+ * Every procedure of the hosted oRPC router, by the public path its contract
+ * names: the router is `implement(hostedContract)`, so these are its routes,
+ * read without the deployment's seams the router is built over. Every hosted
+ * procedure names its path, so one that does not, or that names a prefix the
+ * path would be read under, is refused here rather than matched wrongly.
+ */
+export function hostedProcedureRoutes(): readonly ProcedureRoute[] {
+  const routes: ProcedureRoute[] = [];
+  walkProcedureContractsSync(hostedContract, (contract, key) => {
+    const meta = getOpenAPIMeta(contract);
+    if (meta?.path === undefined || meta.prefix !== undefined) {
+      throw new Error(`the hosted procedure ${key.join(".")} names no public path of its own`);
+    }
+    routes.push({ key, method: meta.method ?? DEFAULT_PROCEDURE_METHOD, path: meta.path });
+  });
+  return routes;
+}
+
+const PATH_PARAMETER = /^\{(\+?)[^{}]+\}$/u;
+
+/** A procedure's path as the pattern the router matches it by: a parameter one segment, or the rest of the path where it spans. */
+function procedurePattern(path: string): RegExp {
+  const segments = path.split("/").map((segment) => {
+    const parameter = PATH_PARAMETER.exec(segment);
+    if (parameter === null) return segment.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    return parameter[1] === "+" ? ".+" : "[^/]+";
+  });
+  return new RegExp(`^${segments.join("/")}$`, "u");
+}
+
 interface RouteTable {
   readonly rewrites: readonly { readonly rewrite: Rewrite; readonly pattern: RegExp }[];
+  readonly procedures: readonly { readonly path: string; readonly pattern: RegExp }[];
   readonly aliases: ReadonlySet<string>;
 }
 
-/** A rewrite's `src` matches the whole pathname, as Vercel anchors it. */
-function routeTable(rewrites: readonly Rewrite[], aliases: readonly string[]): RouteTable {
+/** A rewrite's `src` matches the whole pathname, as Vercel anchors it; the fallback is left out. */
+function routeTable(
+  rewrites: readonly Rewrite[],
+  procedures: readonly ProcedureRoute[],
+  aliases: readonly string[],
+): RouteTable {
   return {
-    rewrites: rewrites.map((rewrite) => ({
-      rewrite,
-      pattern: new RegExp(`^${rewrite.src}$`, "u"),
+    rewrites: rewrites
+      .filter((rewrite) => rewrite.src !== ORPC_FALLBACK_SRC)
+      .map((rewrite) => ({ rewrite, pattern: new RegExp(`^${rewrite.src}$`, "u") })),
+    procedures: procedures.map((procedure) => ({
+      path: procedure.path,
+      pattern: procedurePattern(procedure.path),
     })),
     aliases: new Set(aliases),
   };
+}
+
+/** What answers a whole path: an exception's rewrite first, as the platform tries it ahead of the fallback, then a procedure. */
+function servedBy(
+  probe: string,
+  table: RouteTable,
+): { readonly resolution: Resolution; readonly route: string } | undefined {
+  const rewrite = table.rewrites.find((entry) => entry.pattern.test(probe));
+  if (rewrite !== undefined) return { resolution: RESOLUTION.REWRITE, route: rewrite.rewrite.src };
+  const procedure = table.procedures.find((entry) => entry.pattern.test(probe));
+  if (procedure !== undefined) return { resolution: RESOLUTION.PROCEDURE, route: procedure.path };
+  return undefined;
 }
 
 function resolveProbe(
@@ -464,11 +554,11 @@ function resolveProbe(
   table: RouteTable,
 ): { readonly resolution: Resolution; readonly route: string } | undefined {
   if (table.aliases.has(probe)) return { resolution: RESOLUTION.ALIAS, route: probe };
-  const rewrite = table.rewrites.find((entry) => entry.pattern.test(probe));
-  if (rewrite !== undefined) return { resolution: RESOLUTION.REWRITE, route: rewrite.rewrite.src };
+  const served = servedBy(probe, table);
+  if (served !== undefined) return served;
   const base = probe.endsWith("/") ? probe.slice(0, -1) : probe;
-  const under = table.rewrites.find((entry) => entry.pattern.test(`${base}/${PROBE_SEGMENT}`));
-  if (under !== undefined) return { resolution: RESOLUTION.PREFIX, route: under.rewrite.src };
+  const under = servedBy(`${base}/${PROBE_SEGMENT}`, table);
+  if (under !== undefined) return { resolution: RESOLUTION.PREFIX, route: under.route };
   return undefined;
 }
 
@@ -476,16 +566,17 @@ const byToken = (a: readonly [string, unknown], b: readonly [string, unknown]) =
   a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;
 
 /**
- * Every scanned site resolved against the table and the aliases, the sites
+ * Every scanned site resolved against the aliases, the table, and the procedures, the sites
  * of one path gathered under it. An unreadable builder is refused before any
  * matching, since the path it builds is not known.
  */
 function resolveCallers(
   sites: readonly ScannedSite[],
   rewrites: readonly Rewrite[],
+  procedures: readonly ProcedureRoute[],
   aliases: readonly string[],
 ): ResolvedCallers {
-  const table = routeTable(rewrites, aliases);
+  const table = routeTable(rewrites, procedures, aliases);
   const gathered = new Map<string, CallerSite[]>();
   for (const { token, site } of sites) {
     const tokenSites = gathered.get(token);
@@ -525,7 +616,7 @@ async function buildOutputAliases(web: string): Promise<readonly string[]> {
   ].sort();
 }
 
-/** The whole check: every caller in the repository against the committed table and the emitted aliases. */
+/** The whole check: every caller in the repository against the emitted aliases, the committed table, and the hosted procedures. */
 export async function checkApiCallers(input: {
   readonly repoRoot: string;
   readonly web: string;
@@ -541,6 +632,7 @@ export async function checkApiCallers(input: {
   const { resolved, refused } = resolveCallers(
     [...scan.sites, ...evaluated.sites],
     rewrites,
+    hostedProcedureRoutes(),
     aliases,
   );
   return {

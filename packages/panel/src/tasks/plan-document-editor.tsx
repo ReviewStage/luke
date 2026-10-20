@@ -13,12 +13,14 @@ import { AsyncResult } from "effect/reactivity";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePrefetchEditorBundle, useSideBundles } from "../bundle-loader.js";
+import { useCoarsePointer } from "../coarse-pointer.js";
 import { markdownClass } from "../markdown-message.js";
 import { DiagramPreview } from "../plan-diagram.js";
 import {
   type EditorAnchors,
   type EditorDiagram,
   type MentionNode,
+  type MentionNodeDoors,
   PLACEMENT_END,
   type PlanEditorHandle,
   type PlanEditorModule,
@@ -45,8 +47,9 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * The text is drawn as its sections, and nothing on them marks them
  * editable. A click into a section's words opens the whole text in place,
  * the caret where the click landed, and so does a press on the empty room
- * around the text (`useTextRoom`), which an issue's description shares; the
- * editor is TipTap, from the editor
+ * around the text (`useTextRoom`); a finger's tap only reads, and its second
+ * tap on the same block opens the text (`PlanEditing.tapped`), so reading
+ * on a phone raises no keyboard. The editor is TipTap, from the editor
  * bundle the panel starts loading as it first paints, and again the first
  * time a section is hovered or selected (`../bundle-loader.ts`), and draws the words exactly as the
  * sections drew them, so nothing moves. Until the bundle has loaded the
@@ -57,7 +60,8 @@ import { EDITOR_PLACE, type EditorHost, type PlanEditing } from "./use-plan-edit
  * the caret at its end; and Esc in the editor saves and selects the section
  * the caret stood in. The title is edited where it stands (Return or ↓ goes
  * into the text, ↑ on the text's first line comes back to it, Esc saves and
- * selects it) and saved by renaming the task as the typing pauses and as it
+ * selects it), and on a finger's device it stands as plain words until a
+ * second tap on it, and again once it is left. It is saved by renaming the task as the typing pauses and as it
  * is left, so the name never enters the text; meanwhile its words are drawn
  * as the task's name wherever the window names it. The words save as the
  * developer pauses (`use-plan-editing.ts`), and the service merges them with
@@ -76,7 +80,7 @@ export const DOCUMENT_BLOCK_CLASS = "plan-document-block";
 export const EDITOR_ROOM_CLASS = "plan-document-editor";
 
 /** What the text says while the editor's bundle could not be loaded. */
-export const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
+const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
 
 /** How long the typing pauses before the document hears the text. */
 const DRAFT_PAUSE = Duration.millis(150);
@@ -105,14 +109,14 @@ function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
   return true;
 }
 
-/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button, a task's checkbox, or the section's byline. */
-export function editsOnClick(target: EventTarget): boolean {
+/** Whether a click lands on words to edit: no selection made by the press, and not on a link, a button, a task's checkbox or the label around it, or the section's byline. */
+function editsOnClick(target: EventTarget): boolean {
   const selection = window.getSelection();
   if (selection !== null && !selection.isCollapsed) return false;
-  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item; a comment's marked words open its thread and the editor at them alike.
+  // Note that a mention's chip is its own, a link's or a folder's that opens nothing alike, and so is the byline's row, whose writer and ⋯ are presses of their own, a button in the words, a diagram's Show code say, and a task's checkbox, which ticks its item, and the label around it, whose press a finger takes beside the box and hands to it; a comment's marked words open its thread and the editor at them alike.
   return !(
     target instanceof Element &&
-    target.closest("a, button, input, [data-mention-ref], .plan-unit-row") !== null
+    target.closest("a, button, input, label, [data-mention-ref], .plan-unit-row") !== null
   );
 }
 
@@ -149,7 +153,7 @@ function scrollRoomOf(element: HTMLElement): HTMLElement | undefined {
  * Where a press on a text's room puts the caret: at the end where it lands
  * under the text's last line, or no text is drawn; on the nearest line where
  * it lands beside the text; and nowhere where it lands above it, among the
- * lines over the text (a title, a byline, an issue's properties).
+ * lines over the text (a title, a byline).
  */
 function roomPlacement(
   event: MouseEvent,
@@ -198,8 +202,8 @@ export function useTextRoom({
   /** Whether the editor stands open, whose focus a press on the room keeps. */
   open: boolean;
   room?: React.RefObject<HTMLElement | null> | undefined;
-  /** Puts the caret where a press on the room asks; none where the text takes no caret. */
-  onPlace: ((placement: PlanEditorPlacement) => void) | undefined;
+  /** Puts the caret where a press on the room asks, at the click's `timeStamp`; none where the text takes no caret. */
+  onPlace: ((placement: PlanEditorPlacement, at: number) => void) | undefined;
 }): void {
   const latest = useRef({ box, onPlace, open });
   latest.current = { box, onPlace, open };
@@ -228,7 +232,7 @@ export function useTextRoom({
     const click = (event: MouseEvent) => {
       if (clearing || selecting()) return;
       const at = placement(event);
-      if (at !== undefined) latest.current.onPlace?.(at);
+      if (at !== undefined) latest.current.onPlace?.(at, event.timeStamp);
     };
     column.addEventListener("mousedown", press);
     column.addEventListener("click", click);
@@ -294,11 +298,16 @@ export function DocumentBlock({
         prefetchEditorBundle();
         editing.select(host);
       }}
+      // Note that a press on a control is a tap of its own, which lets go of the block's first tap; it is heard on the way down, since a control may keep its click from bubbling.
+      onClickCapture={(event) => {
+        if (event.target instanceof Element && !editsOnClick(event.target)) editing.disarm();
+      }}
       onClick={(event) => {
         // Note that a click on a menu or a card portaled out of the block still
         // bubbles here through React's tree, and opens no editor.
         if (!(event.target instanceof Node && event.currentTarget.contains(event.target))) return;
-        if (editsOnClick(event.target)) editing.open({ x: event.clientX, y: event.clientY });
+        if (!editsOnClick(event.target) || !editing.tapped(host, event.timeStamp)) return;
+        editing.open({ x: event.clientX, y: event.clientY });
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -321,6 +330,40 @@ function caretAtEnd(element: HTMLElement): void {
   range.collapse(false);
   window.getSelection()?.removeAllRanges();
   window.getSelection()?.addRange(range);
+}
+
+/** Where in the page's words a point stands, by whichever of the two ways the browser offers: WebKit's and Blink's, or Firefox's. */
+function rangeAt(x: number, y: number): Range | null {
+  // Note that each is read as possibly missing, since a browser offers one of the two and the DOM's types claim both.
+  const page: Partial<Pick<Document, "caretRangeFromPoint" | "caretPositionFromPoint">> = document;
+  if (page.caretRangeFromPoint !== undefined) return page.caretRangeFromPoint(x, y);
+  const position = page.caretPositionFromPoint?.(x, y) ?? null;
+  if (position === null) return null;
+  const range = document.createRange();
+  range.setStart(position.offsetNode, position.offset);
+  return range;
+}
+
+/** The caret where a tap landed in an element's words, or at their end where the browser cannot say. */
+function caretAt(element: HTMLElement, x: number, y: number): void {
+  const range = rangeAt(x, y);
+  if (range === null || !element.contains(range.startContainer)) {
+    caretAtEnd(element);
+    return;
+  }
+  element.focus();
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+}
+
+/**
+ * The title's words made editable at once, ahead of the render that keeps
+ * them so. Note that this is done on the element itself, because a phone
+ * raises its keyboard only for a focus made within the tap that asked for it.
+ */
+function editableNow(element: HTMLElement): void {
+  element.setAttribute("contenteditable", "plaintext-only");
+  element.tabIndex = -1;
 }
 
 /** The title's words as a name: trimmed, and cut to the bound as the name field's own `maxLength` cuts a paste. */
@@ -348,7 +391,10 @@ function boundTitle(element: HTMLElement): void {
  * refused rename puts the saved name back here and everywhere, unless words
  * were typed since it was asked for, which are the newest and are kept for
  * the next pause to ask for again. Each Rename chosen from the title's ⋯
- * puts the caret at its end, as ↑ from the text's first line does.
+ * puts the caret at its end, as ↑ from the text's first line does. On a
+ * device worked by a finger its words are plain words until a second tap on
+ * them (`PlanEditing.tapped`) or the keyboard goes into them, and again once
+ * they are left, so a tap while reading raises no keyboard.
  */
 export function EditableTitle({
   name,
@@ -373,9 +419,21 @@ export function EditableTitle({
   const text = useRef<HTMLDivElement>(null);
   const [pause, restartPause] = useAtom(titlePauseAtom);
   const stamp = useRef(0);
+  // Whether the words were gone into to be typed, which a finger's device reads them as plain words until.
+  const coarse = useCoarsePointer();
+  const [armed, setArmed] = useState(false);
+  const reading = coarse && !armed;
+  const enter = (element: HTMLElement) => {
+    editableNow(element);
+    setArmed(true);
+  };
+  const enterAtEnd = (element: HTMLElement) => {
+    enter(element);
+    caretAtEnd(element);
+  };
   // ↑ on the text's first line comes back into the title, its caret at the end.
   useSelectedOnClose(editing, EDITOR_PLACE.TITLE, () => {
-    if (text.current !== null) caretAtEnd(text.current);
+    if (text.current !== null) enterAtEnd(text.current);
   });
   // Whether the words as they stand were saved as the title was left, so a blur that follows renames nothing again.
   const saved = useRef(true);
@@ -392,7 +450,7 @@ export function EditableTitle({
   useEffect(() => {
     if (renaming === renamed.current || text.current === null) return;
     renamed.current = renaming;
-    caretAtEnd(text.current);
+    enterAtEnd(text.current);
   }, [renaming]);
   useLayoutEffect(() => {
     const element = text.current;
@@ -464,7 +522,7 @@ export function EditableTitle({
         if (steppedByArrow(event)) return;
         if (event.key !== "Enter" || text.current === null) return;
         event.preventDefault();
-        caretAtEnd(text.current);
+        enterAtEnd(text.current);
       }}
     >
       <div className="markdown task-title ph-no-capture">
@@ -473,14 +531,21 @@ export function EditableTitle({
           ref={text}
           className="markdown-heading task-title-text"
           data-level="1"
-          contentEditable="plaintext-only"
+          contentEditable={reading ? false : "plaintext-only"}
           suppressContentEditableWarning
           role="textbox"
           aria-label="Task name"
-          tabIndex={-1}
+          aria-readonly={reading ? true : undefined}
+          // Note that the words read take no focus, so a tap on them focuses the block rather than words no keyboard can type in.
+          tabIndex={reading ? undefined : -1}
           spellCheck
           onFocus={() => {
             saved.current = false;
+          }}
+          onClick={(event) => {
+            if (!reading || !editing.tapped(EDITOR_PLACE.TITLE, event.timeStamp)) return;
+            enter(event.currentTarget);
+            caretAt(event.currentTarget, event.clientX, event.clientY);
           }}
           onInput={(event) => {
             saved.current = false;
@@ -492,7 +557,10 @@ export function EditableTitle({
             stamp.current += 1;
             restartPause(stamp.current);
           }}
-          onBlur={(event) => save(event.currentTarget)}
+          onBlur={(event) => {
+            save(event.currentTarget);
+            setArmed(false);
+          }}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
@@ -576,7 +644,7 @@ function useDraftHandOver(
 }
 
 /** The bundle's editor mounted in place, built once, on the text it opened with; its handle kept for the merged answers. */
-export function MountedPlanEditor({
+function MountedPlanEditor({
   module,
   props,
   handle,
@@ -603,8 +671,8 @@ export function MountedPlanEditor({
           : {
               onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
               onKey: (event) => latest.current.mentions?.onKey(event) ?? false,
-              drawMention: (element, mention) =>
-                latest.current.mentions?.drawMention(element, mention) ?? (() => undefined),
+              drawMention: (element, mention, node) =>
+                latest.current.mentions?.drawMention(element, mention, node) ?? (() => undefined),
               retarget: (target, renamed) => latest.current.mentions?.retarget(target, renamed),
               pasted: (words) => latest.current.mentions?.pasted(words),
               namesMention: (target) => latest.current.mentions?.namesMention(target) ?? false,
@@ -728,7 +796,7 @@ export function PlanDocumentEditor({
   useMergedAnswers(editor, editing, task, handle);
   const module = useAtomValue(useSideBundles().planEditor);
   const room = useRef<HTMLElement>(null);
-  const chips = useEditorDrawings<MentionNode>();
+  const chips = useEditorDrawings<DrawnMention>();
   const diagrams = useEditorDrawings<EditorDiagram>();
   const pictures = useEditorPictures(task.id, mentions?.place.workspace, handle);
   // A press on the document's empty room puts the caret there, at the text's end where it lands under it; one before the editor has loaded is where it opens.
@@ -757,7 +825,7 @@ export function PlanDocumentEditor({
   });
   // Note that the editor's own text is read, since the draft is handed over only once typing pauses.
   const text = () => handle.current?.markdown() ?? editor.draft;
-  // The plan's pages, agents, pull requests, and workspace's issues are offered as the page's agents' boxes offer them.
+  // The plan's pages, agents, and pull requests are offered as the page's agents' boxes offer them.
   const page = useTaskMentions();
   // A Luke address pasted whole is called by the name the window holds for what it names.
   const known = useKnownNames();
@@ -772,7 +840,6 @@ export function PlanDocumentEditor({
       agents: page?.agents,
       readAgents: page?.readAgents,
       pullRequests: page?.pullRequests,
-      readIssues: page?.readIssues,
     },
     room,
     side: MENTION_MENU_SIDE.BELOW,
@@ -807,7 +874,7 @@ export function PlanDocumentEditor({
         : {
             onTrigger: picker.onTrigger,
             onKey: picker.onKey,
-            drawMention: chips.draw,
+            drawMention: (element, mention, node) => chips.draw(element, { mention, node }),
             retarget: (target, change) =>
               retargetedMention(task.id, mentions.place, target, change),
             pasted: (words) =>
@@ -835,7 +902,11 @@ export function PlanDocumentEditor({
         ? null
         : chips.drawn.map((each) =>
             createPortal(
-              <MentionNodeChip mention={each.what} doors={mentions} />,
+              <MentionNodeChip
+                mention={each.what.mention}
+                doors={mentions}
+                edit={{ node: each.what.node, pickDate: picker.pickDate }}
+              />,
               each.element,
               each.key,
             ),
@@ -849,6 +920,12 @@ export function PlanDocumentEditor({
       )}
     </section>
   );
+}
+
+/** A mention the editor asked to be drawn: what it holds, and the doors to its node. */
+interface DrawnMention {
+  readonly mention: MentionNode;
+  readonly node: MentionNodeDoors;
 }
 
 /** Something the editor asked to be drawn: the element it stands as, what it is, and the key its drawing goes under. */
@@ -868,7 +945,7 @@ interface EditorDrawings<A> {
  * What the editor asks the panel to draw, a mention or a diagram, each drawn
  * into its own element while it stands, as the composer draws its chips.
  */
-export function useEditorDrawings<A>(): EditorDrawings<A> {
+function useEditorDrawings<A>(): EditorDrawings<A> {
   const [drawn, setDrawn] = useState<readonly DrawnInEditor<A>[]>([]);
   const counted = useRef(0);
   const draw = (element: HTMLElement, what: A) => {

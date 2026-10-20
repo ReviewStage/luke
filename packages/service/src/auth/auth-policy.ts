@@ -7,6 +7,7 @@
  */
 
 import { DESKTOP_SESSION_CLIENT_ID } from "@luke/features/desktop-session-wire";
+import { USER_ROLE } from "../admin/admin-access.js";
 
 /**
  * What a GitHub sign-in asks for. It is the Luke GitHub App's user
@@ -112,6 +113,37 @@ export const DISABLED_AUTH_PATHS = [
  * worth nothing without this deployment's secret having signed it.
  */
 export const SESSION_BEARER = { requireSignature: true } as const;
+
+/**
+ * How long a browser's session is read from a cookie of its own rather than
+ * the account store: Better Auth's cookie cache
+ * (https://www.better-auth.com/docs/concepts/session-management#cookie-cache),
+ * a `session_data` cookie beside the session's own, encrypted under the
+ * deployment's secret (`jwe`: neither readable nor alterable by whoever holds
+ * it) and honoured only beside the signed session cookie it was minted for.
+ * Note that a session revoked elsewhere, or a role changed in the store,
+ * still reads as it was on a browser holding that cookie for up to
+ * `maxAge`, which Better Auth's docs name as the cost, so `maxAge` is the
+ * shortest they suggest. The Mac's session bearer carries no such cookie, so
+ * it is read from the store every time.
+ */
+export const SESSION_COOKIE_CACHE = {
+  cookieCache: { enabled: true, maxAge: 60, strategy: "jwe" },
+} as const;
+
+/**
+ * The user's fields beyond Better Auth's own. Admin access is a plain-text
+ * `role` on the user, managed by Better Auth: the migrations declared it on
+ * the `user` table, and it is returned on the session so the dashboard reads
+ * it without a query of its own. `input: false` keeps a sign-up from
+ * asserting its own role — the role is set only by a maintainer's own write
+ * to the database, never by anything Luke runs.
+ */
+export const USER_FIELDS = {
+  additionalFields: {
+    role: { type: "string", required: false, defaultValue: USER_ROLE.USER, input: false },
+  },
+} as const;
 
 /**
  * Better Auth's Electron plugin

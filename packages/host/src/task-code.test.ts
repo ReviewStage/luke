@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { TaskFileWindow } from "@luke/features/task-wire";
-import { Effect } from "effect";
-import { highlightFile } from "./task-code.js";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
+import { highlightFile, taskCodeColouring } from "./task-code.js";
 
 const LINE = "const answer = 42;";
 
@@ -31,5 +32,37 @@ it.effect(
       assert.deepEqual((yield* highlightFile(windowAt("config.ts/Makefile"))).lines, plain);
       assert.deepEqual((yield* highlightFile(windowAt("src/.ts"))).lines, plain);
       assert.deepEqual((yield* highlightFile(windowAt("notes.txt"))).lines, plain);
+    }),
+);
+
+it.effect(
+  "after a highlighter that could not be loaded, code is drawn plain without loading again for a minute, and coloured once a later load succeeds",
+  () =>
+    Effect.gen(function* () {
+      // A chunk that fails to download once, then arrives, as a flaky network serves it.
+      let downloads = 0;
+      const { highlightFile: colour } = taskCodeColouring(
+        Effect.suspend(() => {
+          downloads += 1;
+          return downloads === 1
+            ? Effect.fail(new Error("the chunk did not download"))
+            : Effect.map(
+                Effect.promise(() => import("./task-code-highlighter.js")),
+                (module) => module.createTaskCodeHighlighter(),
+              );
+        }),
+      );
+      const plain = [[{ text: LINE }]];
+
+      assert.deepEqual((yield* colour(windowAt("src/main.ts"))).lines, plain);
+      yield* TestClock.adjust(Duration.seconds(59));
+      assert.deepEqual((yield* colour(windowAt("src/main.ts"))).lines, plain);
+      yield* TestClock.adjust(Duration.seconds(1));
+      const coloured = (yield* colour(windowAt("src/main.ts"))).lines[0] ?? [];
+
+      assert.ok(
+        coloured.length > 1,
+        "a TypeScript file is coloured in runs once the load succeeds",
+      );
     }),
 );

@@ -3,13 +3,13 @@
 import assert from "node:assert/strict";
 import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind } from "@luke/host/contract";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures.js";
@@ -38,22 +38,18 @@ const PAGE_TEXT = "## Approach\n\nThe invite email follows the mock.\n";
 /** The plan's text as the service holds it. */
 let held = PAGE_TEXT;
 /** The kind of every act the plan was sent, whichever side carried it, in order. */
-let sent: (Act["kind"] | PortActKind)[] = [];
+let sent: (AnyAct["kind"] | PortActKind)[] = [];
 const roots: Root[] = [];
 
 beforeEach(() => {
   held = PAGE_TEXT;
   sent = [];
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request.kind);
-      if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: KEPT_ID } });
-      }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-    },
-  });
+  fakeAppBridge({});
   fakeActPort({
+    [ACT_KIND.TASKS_PICTURE_KEEP]: () => {
+      sent.push(ACT_KIND.TASKS_PICTURE_KEEP);
+      return Promise.resolve({ id: KEPT_ID });
+    },
     [ACT_KIND.TASKS_EDIT]: ({ edit }) => {
       sent.push(ACT_KIND.TASKS_EDIT);
       // The one edit this page sends is the document's whole text.

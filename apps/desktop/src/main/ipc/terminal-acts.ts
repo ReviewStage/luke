@@ -21,8 +21,8 @@ import {
   type TerminalPortTicket,
   terminalPortInboundSchema,
 } from "@luke/features/terminal-acts";
+import type { ActSender } from "@luke/host/act-port";
 import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import type { ActSender } from "@luke/host/act-router";
 import { TERMINAL_ACT_KIND } from "@luke/host/contract";
 import type { HostOperator } from "@luke/host/host-operator";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";

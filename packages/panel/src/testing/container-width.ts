@@ -1,9 +1,11 @@
+import motionTokens from "@luke/brand/motion-tokens.css?raw";
 import base from "@luke/panel/styles/base.css?raw";
 import call from "@luke/panel/styles/call.css?raw";
 import desktop from "@luke/panel/styles/desktop.css?raw";
-import issues from "@luke/panel/styles/issues.css?raw";
+import entry from "@luke/panel/styles/index.css?raw";
 import markdown from "@luke/panel/styles/markdown.css?raw";
 import settings from "@luke/panel/styles/settings.css?raw";
+import shell from "@luke/panel/styles/shell.css?raw";
 import shortcut from "@luke/panel/styles/shortcut.css?raw";
 import signIn from "@luke/panel/styles/sign-in.css?raw";
 import tasks from "@luke/panel/styles/tasks.css?raw";
@@ -24,17 +26,17 @@ import tokens from "@luke/ui/tokens.css?inline";
  * a container the test names no width for is dropped, as jsdom would.
  *
  * A control shown only under the pointer answers the device through an
- * input-type media query, `(hover: …)` or `(pointer: …)`, which jsdom
- * drops too: each is resolved for a touch screen (no hover, a coarse
- * pointer) where the layout says `touch`, and for a mouse (hover, a fine
- * pointer) where it does not. Every other media query is left for jsdom to
+ * input-type media query, `(hover: …)`, `(pointer: …)`, or both joined by
+ * `and`, which jsdom drops too: each is resolved for a touch screen (no
+ * hover, a coarse pointer) where the layout says `touch`, and for a mouse
+ * (hover, a fine pointer) where it does not. Every other media query is left for jsdom to
  * drop.
  *
  * The shared tokens (`@luke/ui/tokens.css`) are laid first, so a root
  * wearing a profile and a density reads its roles, and a query that rules
  * a coarse pointer out (`not all and (pointer: coarse)`) is resolved as its
  * opposite. The shared components' sheet (`@luke/ui/styles.css`) is laid
- * where the desktop's `index.css` imports it, and each `@layer` block's rules, which
+ * where the panel's `index.css` imports it, and each `@layer` block's rules, which
  * jsdom would drop, are laid ahead of every unlayered rule, layer by layer
  * in the order the layers first appear, as the cascade orders them. Note
  * that jsdom still weighs a selector's specificity across layers, which the
@@ -43,21 +45,29 @@ import tokens from "@luke/ui/tokens.css?inline";
  * `shown` reads up the element's ancestors.
  */
 
-/** The shared tokens, the panel's stylesheets, and the shared components' beneath them, in the order the desktop's `index.css` imports them. */
-const SHEETS = [
-  tokens,
-  settings,
-  base,
-  ui,
-  markdown,
-  shortcut,
-  tooltip,
-  signIn,
-  tasks,
-  desktop,
-  issues,
-  call,
-] as const;
+/** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
+const SHEET_BY_IMPORT = {
+  "@luke/ui/tokens.css": tokens,
+  "@luke/brand/motion-tokens.css": motionTokens,
+  "./settings.css": settings,
+  "./base.css": base,
+  "@luke/ui/styles.css": ui,
+  "./markdown.css": markdown,
+  "./shortcut.css": shortcut,
+  "./tooltip.css": tooltip,
+  "./sign-in.css": signIn,
+  "./tasks.css": tasks,
+  "./shell.css": shell,
+  "./desktop.css": desktop,
+  "./call.css": call,
+} as const;
+
+/** The stylesheets in the order the panel's `index.css` imports them, which is the order every app lays them in. */
+const SHEETS = [...entry.matchAll(/^@import "([^"]+)";$/gm)].map(([, specifier]) => {
+  const sheet = Object.entries(SHEET_BY_IMPORT).find(([named]) => named === specifier)?.[1];
+  if (sheet === undefined) throw new Error(`container-width.ts lays no sheet for ${specifier}`);
+  return sheet;
+});
 
 /**
  * An at-rule resolved here, through the brace that opens its block: a
@@ -65,7 +75,7 @@ const SHEETS = [
  * an input-type media query, or a named layer.
  */
 const AT_RULE =
-  /@container (?:([a-z-]+) )?\((?:(max-width|min-width): (\d+)px|width (<|<=|>|>=) (\d+)px)\) \{|@media (not all and )?\((hover|pointer): ([a-z]+)\) \{|@layer ([a-z-]+) \{/g;
+  /@container (?:([a-z-]+) )?\((?:(max-width|min-width): (\d+)px|width (<|<=|>|>=) (\d+)px)\) \{|@media ((?:not all and )?\((?:hover|pointer): [a-z]+\)(?: and \((?:hover|pointer): [a-z]+\))*) \{|@layer ([a-z-]+) \{/g;
 
 /** What each device answers the input-type features: on a touch screen nothing hovers and the pointer is a finger; a mouse hovers, finely. */
 const DEVICE = {
@@ -109,15 +119,23 @@ function widthHolds(width: number, comparison: string, length: number): boolean 
   return width > length;
 }
 
+/** Whether an input-type media query, its features joined by `and` and the whole perhaps negated, holds for the device the layout says. */
+function mediaHolds(media: string, layout: ContainerLayout): boolean {
+  const negated = media.startsWith("not all and ");
+  const device: Readonly<Record<string, string>> =
+    layout.touch === true ? DEVICE.TOUCH : DEVICE.MOUSE;
+  const features = [...media.matchAll(/\((hover|pointer): ([a-z]+)\)/g)];
+  const answered = features.every(
+    ([, feature, value]) => feature !== undefined && device[feature] === value,
+  );
+  return negated ? !answered : answered;
+}
+
 /** Whether a container or media query matched by `AT_RULE` holds for the layout given. */
 function holds(query: RegExpExecArray, resolution: Resolution): boolean {
-  const [, name, word, wordLength, sign, signLength, negated, feature, value] = query;
+  const [, name, word, wordLength, sign, signLength, media] = query;
   const { widths, layout } = resolution;
-  if (feature !== undefined) {
-    const answers = Object.entries(layout.touch === true ? DEVICE.TOUCH : DEVICE.MOUSE);
-    const answered = answers.some(([asked, answer]) => asked === feature && answer === value);
-    return negated === undefined ? answered : !answered;
-  }
+  if (media !== undefined) return mediaHolds(media, layout);
   const width = name === undefined ? layout.unnamed : widths[name];
   return (
     width !== undefined && widthHolds(width, word ?? sign ?? "", Number(wordLength ?? signLength))
@@ -132,7 +150,7 @@ function resolvedAt(css: string, resolution: Resolution): string {
   for (let rule = rules.exec(css); rule !== null; rule = rules.exec(css)) {
     const open = rule.index + rule[0].length;
     const end = blockEnd(css, open);
-    const layer = rule[9];
+    const layer = rule[7];
     resolved += css.slice(from, rule.index);
     if (layer !== undefined) {
       const gathered = resolution.layers.get(layer) ?? [];

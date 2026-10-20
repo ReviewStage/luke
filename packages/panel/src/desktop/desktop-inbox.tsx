@@ -21,6 +21,7 @@ import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
+import { useInboxCloser } from "../tasks/inbox-close.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list.js";
 import {
@@ -52,7 +53,6 @@ import {
   type TasklessPlace,
   tasklessMentions,
   useMentionAgentsReader,
-  useMentionIssuesReader,
 } from "../tasks/task-mentions.js";
 import { useMinute } from "../tasks/task-time.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
@@ -450,10 +450,11 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   }, [standIn, choose]);
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
-  const { listed, onListed } = view;
+  const { listed, onListed, onSingle } = view;
   const columns = useInboxColumns(chosen?.item.id ?? (missing ? asked?.itemId : undefined), true, {
     asked: listed,
     onAsk: onListed,
+    onSingle,
   });
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
@@ -461,6 +462,8 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     columns.onOpen(listed.item.id);
   };
   const { onMark: markItem } = marks;
+  // Note that a close the agent hears may open its turn, so its agents are read again once it is taken.
+  const closeItem = useInboxCloser({ act, onHeard: agents.onRetryList });
   const pager = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown: tasks.shown,
     folded: folds.folded,
@@ -486,19 +489,27 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   }, [opensItem, asked, openColumn]);
   // Where the chosen item's words are read: its plan's workspace and repository, or, with no plan, its agent's own.
   const place = chosen === undefined ? undefined : answerPlace(chosen, agents, tasks);
+  // Where the chosen item's links are written: under its own workspace, by slug once the workspaces are read.
+  const chosenWorkspaceId =
+    chosen === undefined
+      ? undefined
+      : chosen.holder.kind === INBOX_HOLDER.TASK
+        ? chosen.holder.task.workspaceId
+        : (agents.workspaceId ?? itemWorkspaceId(chosen.holder, chosen.item.agentId));
+  const chosenLinkWorkspace =
+    chosenWorkspaceId === undefined
+      ? (tasks.workspace?.slug ?? tasks.workspace?.id)
+      : (tasks.workspaces.find((each) => each.id === chosenWorkspaceId)?.slug ?? chosenWorkspaceId);
   // What the chosen item's box offers an `@`, read under that workspace and repository.
   const mentionTasks = useMemo(
     () => [...tasks.tasks, ...tasks.archived],
     [tasks.tasks, tasks.archived],
   );
   const readMentionAgents = useMentionAgentsReader(place?.workspaceId, mentionTasks, named.models);
-  const readMentionIssues = useMentionIssuesReader(
-    tasks.workspaces.find((each) => each.id === place?.workspaceId),
-  );
   const mentions =
     place === undefined
       ? undefined
-      : tasklessMentions(place, tasks.onShowMention, readMentionAgents, readMentionIssues);
+      : tasklessMentions(place, tasks.onShowMention, readMentionAgents);
   const onRetry = () => {
     read.onRetry();
     archivedRead.onRetry();
@@ -623,6 +634,7 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                   }
                   onChoose={open}
                   onMark={(listed, unread) => markItem(listed.item, unread)}
+                  onClose={closeItem}
                 />
                 {chosen === undefined ? (
                   <section
@@ -663,23 +675,30 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
                         appPlatform().openGitHub(url);
                       }}
                     >
-                      <InboxPane
-                        holder={chosen.holder}
-                        item={chosen.item}
-                        control={live}
-                        agents={named}
-                        hidden={columns.shown === INBOX_COLUMNS.LIST}
-                        onBack={columns.onBack}
-                        pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
-                        next={next}
-                        mentions={mentions}
-                        doors={paneDoors(tasks, chosen.holder, {
-                          act,
-                          openLink: openItemLink,
-                          now,
-                          panelFor,
-                        })}
-                      />
+                      {/* The item's links are written under its own workspace, which a link may open outside the one listed. */}
+                      <LinkWorkspaceProvider value={chosenLinkWorkspace}>
+                        <InboxPane
+                          holder={chosen.holder}
+                          item={chosen.item}
+                          control={live}
+                          agents={named}
+                          hidden={columns.shown === INBOX_COLUMNS.LIST}
+                          onBack={columns.onBack}
+                          pager={columns.shown === INBOX_COLUMNS.ITEM ? pager : undefined}
+                          next={next}
+                          mentions={mentions}
+                          doors={{
+                            ...paneDoors(tasks, chosen.holder, {
+                              act,
+                              openLink: openItemLink,
+                              now,
+                              panelFor,
+                            }),
+                            onMark: markItem,
+                            onClose: closeItem,
+                          }}
+                        />
+                      </LinkWorkspaceProvider>
                     </SkillFiles>
                   </OpenHereProvider>
                 )}
