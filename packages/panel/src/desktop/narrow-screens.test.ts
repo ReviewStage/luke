@@ -252,8 +252,19 @@ function HistoryWindow({ returnTo }: { returnTo: HistorySpot | undefined }): Rea
   return createElement(Shell, { tab: PANEL_TAB.TASKS, tasks });
 }
 
-/** The window's Chat over the fixture's chat, its place and its rail held as the plans tab holds them. */
-function ChatWindow({ opensOn }: { opensOn: ChatPlace | undefined }): React.JSX.Element {
+/** Lands the chat read the last Chat window drawn with `readLate` is waiting on. */
+let landChatRead: (() => void) | undefined;
+
+/** The window's Chat over the fixture's chat, its place and its rail held as the plans tab holds them; with `readLate`, the read is still out until `landChatRead`. */
+function ChatWindow({
+  opensOn,
+  readLate = false,
+}: {
+  opensOn: ChatPlace | undefined;
+  readLate?: boolean;
+}): React.JSX.Element {
+  const [read, setRead] = useState(!readLate);
+  landChatRead = () => setRead(true);
   const [standing, setStanding] = useState({
     place: opensOn ?? FOR_YOU,
     listed: opensOn === undefined,
@@ -264,7 +275,7 @@ function ChatWindow({ opensOn }: { opensOn: ChatPlace | undefined }): React.JSX.
       ...base.chatView,
       open: true,
       available: true,
-      chat: fixtureChat({ fixtureMode: true }, 1_000_000),
+      chat: read ? fixtureChat({ fixtureMode: true }, 1_000_000) : undefined,
       place: standing.place,
       listed: standing.listed,
       onList: () => setStanding((held) => ({ ...held, listed: true })),
@@ -590,4 +601,20 @@ test("a link to a version on a narrow stage opens with the focus on its way back
   );
   assert.equal(focusIn(page, HISTORY_COLUMNS), "version");
   assert.equal(document.activeElement?.textContent?.trim(), "Versions", "the way back to the list");
+});
+
+test("a link to a chat place on a narrow stage opened while the read is out hands the focus to its way back once the read lands", async () => {
+  const chat = fixtureChat({ fixtureMode: true }, 1_000_000);
+  const channel = chat?.answer.channels[0] ?? assert.fail("the fixture has a channel");
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const page = await mount(
+    PHONE,
+    createElement(ChatWindow, {
+      opensOn: { kind: CHAT_PLACE.CHANNEL, channelId: channel.id },
+      readLate: true,
+    }),
+  );
+  act(() => landChatRead?.());
+  assert.equal(focusIn(page, CHAT_COLUMNS), "place");
+  assert.equal(document.activeElement?.textContent?.trim(), "Chat", "the way back to the rail");
 });

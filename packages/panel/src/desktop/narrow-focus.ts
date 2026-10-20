@@ -38,6 +38,7 @@ function firstIn(column: HTMLElement, selector: string): HTMLElement | undefined
 /** The column's heading, made able to take the focus it is handed, where the column has no control. */
 function headingOf(column: HTMLElement): HTMLElement | undefined {
   const heading = firstIn(column, "h1, h2");
+  // Note that the heading is drawn by whichever page the column holds, not by this screen, so it is made focusable here, where the focus is handed to it.
   if (heading !== undefined && !heading.hasAttribute("tabindex")) heading.tabIndex = -1;
   return heading;
 }
@@ -85,18 +86,26 @@ export function useNarrowFocus(room: ShellRoom, listed: boolean): RefObject<HTML
   // handed on again rather than left on the body.
   useLayoutEffect(() => {
     const before = was.current;
-    was.current = { room, listed };
+    const now = { room, listed };
     const dropped = handed.current?.isConnected === false;
     if (room !== SHELL_ROOM.NARROW) {
+      was.current = now;
       handed.current = undefined;
       return;
     }
-    if (!swapped(before, listed) && !dropped) return;
-    handed.current = undefined;
+    if (!swapped(before, listed) && !dropped) {
+      was.current = now;
+      return;
+    }
     const root = screen.current;
     const list = root?.querySelector<HTMLElement>(":scope > nav");
     const item = root?.querySelector<HTMLElement>(":scope > section");
+    // Note that a screen still standing in for its columns, as Chat does
+    // while its read is out, keeps the swap pending, so it is handed on once
+    // the columns are drawn.
     if (list === null || list === undefined || item === null || item === undefined) return;
+    was.current = now;
+    handed.current = undefined;
     if (!focusLost(listed ? item : list)) return;
     const target = listed
       ? (firstIn(list, CHOSEN) ?? firstIn(list, FOCUSABLE))
