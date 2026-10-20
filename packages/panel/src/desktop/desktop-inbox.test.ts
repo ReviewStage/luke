@@ -1941,6 +1941,16 @@ test("an archived task's items stand on the Archived tab alone, counted there an
   assert.equal(window.localStorage.getItem(SHOW_KEY), JSON.stringify("all"));
 });
 
+test("Everything holding only an archived task's items, Whose naming nobody, says nothing is here and offers Show archived, blaming no one", async () => {
+  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
+  const { page } = mount([], { standing: [], archived: [archivedInvites] });
+  await settle();
+  act(() => showTab(page, "Everything").click());
+  await settle();
+  assert.deepEqual(listed(page), []);
+  assert.deepEqual(needsYouEmpty(page), [undefined, "Nothing here", "Show archived"]);
+});
+
 test("a link to an archived task's item opens it on the Archived tab, which lists it, rather than saying it is not found", async () => {
   const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
   const { page } = mount([], { standing: [BILLING], archived: [archivedInvites] });

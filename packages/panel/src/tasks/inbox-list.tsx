@@ -242,13 +242,13 @@ const SHOW_TAB_WORDS = [
 
 /**
  * What the list says where its tab leaves out every item it holds.
- * Everything leaves out only what Whose does.
+ * Everything leaves out only what Whose does, or an archived task's items.
  */
 const SHOW_EMPTY = {
   [INBOX_SHOW.NEEDS_YOU]: NEEDS_YOU.NONE,
   [INBOX_SHOW.UNREAD]: "Nothing unread",
   [INBOX_SHOW.OPEN]: "Nothing open",
-  [INBOX_SHOW.ALL]: "Nothing in the Inbox is theirs",
+  [INBOX_SHOW.ALL]: "Nothing here",
   [INBOX_SHOW.ARCHIVED]: "Nothing archived",
 } as const satisfies Record<InboxShow, string>;
 
@@ -272,6 +272,9 @@ function insteadOf(show: InboxShow, counts: InboxCounts): keyof typeof SHOW_INST
   if (show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) return INBOX_SHOW.ALL;
   return (counts[INBOX_SHOW.ARCHIVED] ?? 0) > 0 ? INBOX_SHOW.ARCHIVED : undefined;
 }
+
+/** What Everything says where Whose, naming someone, leaves out every item. */
+const NOTHING_THEIRS = "Nothing in the Inbox is theirs";
 
 /** What the empty state's press says where it lists everyone's items again, Whose having left out every item. */
 const SHOW_EVERYONES = "Show everyone's";
@@ -977,12 +980,14 @@ export function ShowEmpty({
   /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
   onList: () => void;
 }): React.JSX.Element {
-  const line = SHOW_EMPTY[show.show];
+  const whoseNames =
+    whose !== undefined && whose.whose.kind !== INBOX_WHOSE.EVERYONE ? whose : undefined;
+  const line =
+    show.show === INBOX_SHOW.ALL && whoseNames !== undefined
+      ? NOTHING_THEIRS
+      : SHOW_EMPTY[show.show];
   const instead = insteadOf(show.show, counts);
-  const everyone =
-    instead === undefined && whose !== undefined && whose.whose.kind !== INBOX_WHOSE.EVERYONE
-      ? whose
-      : undefined;
+  const everyone = instead === undefined ? whoseNames : undefined;
   return (
     <EmptyState
       icon={<InboxIcon />}
