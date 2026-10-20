@@ -46,7 +46,7 @@ export const DRIZZLE_MIGRATIONS = {
  * stalling the live traffic. A second run started while one is under way
  * fails the same way once it waits this long on the first.
  */
-export const MIGRATION_LOCK_TIMEOUT = "5s";
+const MIGRATION_LOCK_TIMEOUT = "5s";
 
 /** The old runner's history table, read once by the transfer and otherwise left alone. */
 export const EFFECT_MIGRATIONS_TABLE = "effect_sql_migrations";
