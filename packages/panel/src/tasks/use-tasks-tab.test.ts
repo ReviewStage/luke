@@ -840,6 +840,46 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD]);
 });
 
+test("in a narrow room a task opened from a list lands on its plan, the side panel standing on the plan's tab whichever tab it last showed or shut, and on the desktop's width it opens as it was left", () => {
+  for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
+    window.localStorage.clear();
+    const tab = mount(
+      { shown: true, tasks: OPEN, room },
+      { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+    );
+    act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
+    tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+    act(() => tab.control().sidePanel.onSetOpen(false));
+
+    act(() => tab.control().onSelect(TASK.id));
+    tab.stand({ tasks: OPEN });
+    if (room === SHELL_ROOM.NARROW) {
+      assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN }, "narrow");
+    } else {
+      assert.equal(tab.control().sidePanel.open, false, "wide leaves the panel shut");
+    }
+  }
+});
+
+test("in a narrow room a Luke link to another task's panel item opens that item, not the plan a task opened from a list lands on", async () => {
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID }, room: SHELL_ROOM.NARROW },
+    {
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+    },
+  );
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.CHANGES, planId: TASK.id, agentId: AGENT_ID },
+    }),
+  );
+  tab.stand({ tasks: OPEN });
+  await settle();
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
+});
+
 test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, and a plan's own tab stands from a first launch, the panel shown on it", () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;

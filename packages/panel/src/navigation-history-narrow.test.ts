@@ -24,7 +24,7 @@ import {
 } from "./navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
-import type { SidePanelTab } from "./tasks/use-side-panel.js";
+import { SIDE_PANEL_TAB, type SidePanelTab } from "./tasks/use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
@@ -439,6 +439,33 @@ test("on a narrow stage a side panel the window opened with, as a link loaded on
   assert.deepEqual(window.addresses(), [TASK_PATH], "the plan takes the panel's step in place");
   assert.equal(window.history().canGoBack, false);
   assert.equal(window.history().canGoForward, false);
+});
+
+test("on a narrow stage a task opened from a list on its plan is one step, whose Close shows the task's column in that step, so Back returns to the list at once", () => {
+  const window = mount(SHELL_ROOM.NARROW, {
+    ...ON_TASK,
+    inbox: { open: true, chosen: undefined, listed: true },
+  });
+  // A task opened from a list lands on its plan, the side panel over it, in one move (`use-tasks-tab.ts`'s `onSelect`).
+  window.move((held) => ({
+    ...held,
+    inbox: { ...held.inbox, open: false },
+    panel: { open: true, tab: SIDE_PANEL_TAB.PLAN },
+  }));
+  assert.equal(window.addresses().length, 2, "landing on the plan is one step after the list");
+
+  window.press(() => window.shown().sidePanel.onToggle());
+  assert.deepEqual(
+    window.at().panel,
+    { open: false, tab: SIDE_PANEL_TAB.PLAN },
+    "Close shuts the panel",
+  );
+  assert.equal(window.at().inbox.open, false, "and leaves the task standing");
+  assert.equal(window.addresses().length, 2, "in the plan's own step");
+  assert.equal(window.standingAddress(), TASK_PATH);
+
+  act(() => window.history().onBack());
+  assert.equal(window.at().inbox.open, true, "Back returns to the list in one step");
 });
 
 test("on a narrow stage a side panel shut over a page other than its plan's is no step: it neither steps back to the plan behind nor takes the step of the plan opened after it", () => {

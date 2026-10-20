@@ -3122,10 +3122,15 @@ export function useTasksTab(input: {
     },
     // Note that the pin's own task opened by its row is the task the
     // sidebar marks again rather than the pin; another task's lets the pin
-    // go only once it opens.
+    // go only once it opens. A narrow room shows one pane, so a task opened
+    // there from a list lands on its plan, the side panel standing full
+    // screen on the plan's tab, rather than on whatever tab it last showed;
+    // a link names its own place (`openLink`), and the history stands the
+    // pane its step held after this (`navigation-history.ts`).
     onSelect: guard((taskId: string) => {
       setChosen((held) => (held?.pin.task === taskId ? undefined : held));
       select(taskId);
+      if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
     }),
     onShowAgent: guard((taskId: string, agentId: string) =>
       showColumnTab(taskId, { agent: agentId }),
