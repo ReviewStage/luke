@@ -82,9 +82,14 @@ it.effect("a row is handed the sender's standing, which no payload can claim", (
 const UNREACHED = {
   account: {},
   settings: {},
-  tasks: {},
   codingAgents: {},
 } as unknown as HostActDependencies;
+
+/** One ask of a kind the host's rows answer, with a payload its schema admits. */
+const INBOX = {
+  kind: ACT_KIND.CODING_AGENTS_INBOX,
+  payload: { taskId: "task-1", after: "0" },
+} as const;
 
 /** A platform table of every kind the host's rows leave, each recording that it ran. */
 function platformRecording(ran: ActKind[]): PlatformActRows<unknown> {
@@ -104,11 +109,11 @@ it.effect(
       const ran: ActKind[] = [];
       const router = createHostActRouter(UNREACHED, platformRecording(ran));
       const voice: ActSender = { ...PANEL, panel: false, voice: true };
-      const earlier = yield* perform(router, { kind: ACT_KIND.TASKS_WORK_EARLIER }, voice);
+      const earlier = yield* perform(router, INBOX, voice);
       yield* perform(router, { kind: ACT_KIND.UPDATE_CHECK }, PANEL);
       assert.deepEqual(earlier, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.TASKS_WORK_EARLIER].refusal,
+        reason: ACT[ACT_KIND.CODING_AGENTS_INBOX].refusal,
       });
       assert.deepEqual(ran, [ACT_KIND.UPDATE_CHECK]);
     }),
@@ -121,18 +126,18 @@ it.effect(
       const ran: ActKind[] = [];
       const overlapping = {
         ...platformRecording(ran),
-        [ACT_KIND.TASKS_WORK_EARLIER]: () => {
-          ran.push(ACT_KIND.TASKS_WORK_EARLIER);
+        [ACT_KIND.CODING_AGENTS_INBOX]: () => {
+          ran.push(ACT_KIND.CODING_AGENTS_INBOX);
         },
       };
-      // @ts-expect-error -- tasks.workEarlier is the host's to answer, so a platform row for it is refused.
+      // @ts-expect-error -- codingAgents.inbox is the host's to answer, so a platform row for it is refused.
       const platform: PlatformActRows<unknown> = overlapping;
       const router = createHostActRouter(UNREACHED, platform);
       const voice: ActSender = { ...PANEL, panel: false, voice: true };
-      const earlier = yield* perform(router, { kind: ACT_KIND.TASKS_WORK_EARLIER }, voice);
+      const earlier = yield* perform(router, INBOX, voice);
       assert.deepEqual(earlier, {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.TASKS_WORK_EARLIER].refusal,
+        reason: ACT[ACT_KIND.CODING_AGENTS_INBOX].refusal,
       });
       assert.deepEqual(ran, []);
     }),

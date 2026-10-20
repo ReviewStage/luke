@@ -173,10 +173,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
   };
 
   const router = createHostActRouter<WebContents>(
-    {
-      tasks: { host: operator.host, colourCode: highlightSnippet },
-      codingAgents: { host: operator.host },
-    },
+    { codingAgents: { host: operator.host } },
     platformRows,
   );
 
@@ -255,6 +252,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         },
         tasks: {
           host: operator.host,
+          colourCode: highlightSnippet,
           openExternal: config.openExternal,
           serviceBaseUrl: config.hostedServiceBaseUrl,
           activeTaskId: () => state.snapshot().tasks.activeTaskId,

@@ -15,7 +15,6 @@ import {
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateView,
-  type CodingAgentMessagesAnswerView,
   codingAgentAgentInboxParamsSchema,
   codingAgentChatAnswerViewSchema,
   codingAgentChatAttachmentParamsSchema,
@@ -34,7 +33,6 @@ import {
   codingAgentInboxReadAllViewSchema,
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxReadStateViewSchema,
-  codingAgentMessagesAnswerViewSchema,
   codingAgentPictureParamsSchema,
 } from "@luke/features/coding-agent-view";
 import {
@@ -45,52 +43,6 @@ import {
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
-import {
-  type CodeLines,
-  codeLinesSchema,
-  type TasksCommentAnswer,
-  type TasksCommentsAnswer,
-  type TasksFileAnswer,
-  type TasksIssue,
-  type TasksPageSourceAnswer,
-  type TasksPagesAnswer,
-  type TasksPictureAnswer,
-  type TasksPictureKeepAnswer,
-  type TasksPullRequest,
-  type TasksRevisionAnswer,
-  type TasksRevisionsAnswer,
-  type TasksSkillsAnswer,
-  type TasksTreeAnswer,
-  tasksCommentActParamsSchema,
-  tasksCommentAnswerSchema,
-  tasksCommentStartParamsSchema,
-  tasksCommentsAnswerSchema,
-  tasksCommentsParamsSchema,
-  tasksFileAnswerSchema,
-  tasksFileParamsSchema,
-  tasksIssueParamsSchema,
-  tasksIssueSchema,
-  tasksMessagesParamsSchema,
-  tasksPageParamsSchema,
-  tasksPageSourceAnswerSchema,
-  tasksPagesAnswerSchema,
-  tasksPagesParamsSchema,
-  tasksPictureAnswerSchema,
-  tasksPictureKeepAnswerSchema,
-  tasksPictureKeepParamsSchema,
-  tasksPictureParamsSchema,
-  tasksPullRequestParamsSchema,
-  tasksPullRequestSchema,
-  tasksRevisionAnswerSchema,
-  tasksRevisionParamsSchema,
-  tasksRevisionsAnswerSchema,
-  tasksRevisionsParamsSchema,
-  tasksSetStandingParamsSchema,
-  tasksSkillsAnswerSchema,
-  tasksSkillsParamsSchema,
-  tasksTreeAnswerSchema,
-  tasksTreeParamsSchema,
-} from "@luke/features/tasks-view";
 import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
 import { formerMemberSchema, workspaceMemberSchema } from "@luke/features/workspace-wire";
 import type { UpdateSnapshot } from "@luke/settings/update";
@@ -133,52 +85,6 @@ export const ACT_KIND = {
   UPDATE_INSTALL: "update.install",
   UPDATE_OPEN_RELEASE: "update.openRelease",
   UPDATE_OPEN_CHANGELOG: "update.openChangelog",
-  /**
-   * The panel's Tasks tab giving a task its status and priority on the
-   * service; answers whether it saved. The task list and lifecycle acts ride
-   * the act port (`contract/kinds.ts`'s `TASKS_ACT_KIND`).
-   */
-  TASKS_SET_STANDING: "tasks.setStanding",
-  /** The Work tab scrolled back to its oldest turn: the open task's page of work before it, read from the service; the view arrives on the document. */
-  TASKS_WORK_EARLIER: "tasks.workEarlier",
-  /** The Call tab scrolled back to its oldest turn: the open task's page of conversation before it, read from the service; the view arrives on the document. */
-  TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
-  /** One page of a task's conversation, or a brain worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
-  TASKS_MESSAGES: "tasks.messages",
-  /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
-  TASKS_FILE: "tasks.file",
-  /** A File tab's tree listing one folder of the open task's repository, read from GitHub through the service; answered to the tree, never on the document. */
-  TASKS_TREE: "tasks.tree",
-  /** The skills a developer may choose of a task's repository, read from GitHub through the service; answered to the asker, never on the document. */
-  TASKS_SKILLS: "tasks.skills",
-  /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
-  TASKS_PULL_REQUEST: "tasks.pullRequest",
-  /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
-  TASKS_ISSUE: "tasks.issue",
-  /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
-  TASKS_COLOUR_CODE: "tasks.colourCode",
-  /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
-  TASKS_REVISIONS: "tasks.revisions",
-  /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
-  TASKS_REVISION: "tasks.revision",
-  /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
-  TASKS_RESTORE: "tasks.restore",
-  /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
-  TASKS_PAGE_SOURCE: "tasks.pageSource",
-  /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
-  TASKS_PAGES: "tasks.pages",
-  /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
-  TASKS_PICTURE_READ: "tasks.pictureRead",
-  /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
-  TASKS_PICTURE_KEEP: "tasks.pictureKeep",
-  /**
-   * The open plan's comment threads: read past a cursor (held open by the
-   * service while nothing changed), one started on words of the plan, and
-   * one thing done to one thread. The window holds what it draws.
-   */
-  TASKS_COMMENTS: "tasks.comments",
-  TASKS_COMMENT_START: "tasks.commentStart",
-  TASKS_COMMENT_ACT: "tasks.commentAct",
   /**
    * The task's inbox of what its coding agents need of the developer: read
    * past a cursor (held open by the service while nothing changed), and one
@@ -480,105 +386,6 @@ export const ACT = {
   [ACT_KIND.UPDATE_INSTALL]: press("Could not install that update on this system."),
   [ACT_KIND.UPDATE_OPEN_RELEASE]: press("Could not open the releases page."),
   [ACT_KIND.UPDATE_OPEN_CHANGELOG]: press("Could not open the changelog."),
-  [ACT_KIND.TASKS_SET_STANDING]: {
-    payload: actSchema(tasksSetStandingParamsSchema),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not change where that task stands on this system.",
-  },
-  [ACT_KIND.TASKS_FILE]: {
-    payload: actSchema(tasksFileParamsSchema),
-    result: wireResult<TasksFileAnswer>(isReadable(tasksFileAnswerSchema)),
-    refusal: "Could not read that file on this system.",
-  },
-  [ACT_KIND.TASKS_TREE]: {
-    payload: actSchema(tasksTreeParamsSchema),
-    result: wireResult<TasksTreeAnswer>(isReadable(tasksTreeAnswerSchema)),
-    refusal: "Could not list that folder on this system.",
-  },
-  [ACT_KIND.TASKS_SKILLS]: {
-    payload: actSchema(tasksSkillsParamsSchema),
-    result: wireResult<TasksSkillsAnswer>(isReadable(tasksSkillsAnswerSchema)),
-    refusal: "Could not read this repository's skills on this system.",
-  },
-  [ACT_KIND.TASKS_PULL_REQUEST]: {
-    payload: actSchema(tasksPullRequestParamsSchema),
-    result: wireResult<TasksPullRequest>(isReadable(tasksPullRequestSchema)),
-    refusal: "Could not read that pull request on this system.",
-  },
-  [ACT_KIND.TASKS_ISSUE]: {
-    payload: actSchema(tasksIssueParamsSchema),
-    result: wireResult<TasksIssue>(isReadable(tasksIssueSchema)),
-    refusal: "Could not read that issue on this system.",
-  },
-  [ACT_KIND.TASKS_COLOUR_CODE]: {
-    payload: record({
-      language: exactText(FENCE_LANGUAGE_MAX_CHARS),
-      code: exactText(COLOURED_CODE_MAX_CHARS),
-    }),
-    result: wireResult<CodeLines>(isReadable(codeLinesSchema)),
-    refusal: "Could not colour that code on this system.",
-  },
-  [ACT_KIND.TASKS_REVISIONS]: {
-    payload: actSchema(tasksRevisionsParamsSchema),
-    result: wireResult<TasksRevisionsAnswer>(isReadable(tasksRevisionsAnswerSchema)),
-    refusal: "Could not read that plan's history on this system.",
-  },
-  [ACT_KIND.TASKS_REVISION]: {
-    payload: actSchema(tasksRevisionParamsSchema),
-    result: wireResult<TasksRevisionAnswer>(isReadable(tasksRevisionAnswerSchema)),
-    refusal: "Could not read that version on this system.",
-  },
-  [ACT_KIND.TASKS_RESTORE]: {
-    payload: actSchema(tasksRevisionParamsSchema),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not restore that version on this system.",
-  },
-  [ACT_KIND.TASKS_PICTURE_READ]: {
-    payload: actSchema(tasksPictureParamsSchema),
-    result: wireResult<TasksPictureAnswer>(isReadable(tasksPictureAnswerSchema)),
-    refusal: "Could not read that picture on this system.",
-  },
-  [ACT_KIND.TASKS_COMMENTS]: {
-    payload: actSchema(tasksCommentsParamsSchema),
-    result: wireResult<TasksCommentsAnswer>(isReadable(tasksCommentsAnswerSchema)),
-    refusal: "Could not read the task's comments on this system.",
-  },
-  [ACT_KIND.TASKS_COMMENT_START]: {
-    payload: actSchema(tasksCommentStartParamsSchema),
-    result: wireResult<TasksCommentAnswer>(isReadable(tasksCommentAnswerSchema)),
-    refusal: "Could not comment on the task on this system.",
-  },
-  [ACT_KIND.TASKS_COMMENT_ACT]: {
-    payload: actSchema(tasksCommentActParamsSchema),
-    result: wireResult<TasksCommentAnswer>(isReadable(tasksCommentAnswerSchema)),
-    refusal: "Could not change the task's comment on this system.",
-  },
-  [ACT_KIND.TASKS_PICTURE_KEEP]: {
-    payload: actSchema(tasksPictureKeepParamsSchema),
-    result: wireResult<TasksPictureKeepAnswer>(isReadable(tasksPictureKeepAnswerSchema)),
-    refusal: "Could not keep that picture on this system.",
-  },
-  [ACT_KIND.TASKS_PAGE_SOURCE]: {
-    payload: actSchema(tasksPageParamsSchema),
-    result: wireResult<TasksPageSourceAnswer>(isReadable(tasksPageSourceAnswerSchema)),
-    refusal: "Could not read that page's source on this system.",
-  },
-  [ACT_KIND.TASKS_PAGES]: {
-    payload: actSchema(tasksPagesParamsSchema),
-    result: wireResult<TasksPagesAnswer>(isReadable(tasksPagesAnswerSchema)),
-    refusal: "Could not read that plan's pages on this system.",
-  },
-  [ACT_KIND.TASKS_WORK_EARLIER]: press("Could not read that task's earlier work on this system."),
-  [ACT_KIND.TASKS_CONVERSATION_EARLIER]: press(
-    "Could not read that task's earlier conversation on this system.",
-  ),
-  [ACT_KIND.TASKS_MESSAGES]: {
-    payload: actSchema(tasksMessagesParamsSchema),
-    result: wireResult<CodingAgentMessagesAnswerView>(
-      isReadable(codingAgentMessagesAnswerViewSchema),
-    ),
-    refusal: "Could not read that task's conversation on this system.",
-  },
   [ACT_KIND.CODING_AGENTS_INBOX]: {
     payload: actSchema(codingAgentInboxParamsSchema),
     result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),

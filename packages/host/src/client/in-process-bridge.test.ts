@@ -38,7 +38,6 @@ const AGENT_PLACE = { taskId: "task-1", agentId: "agent-1" };
 // SAFETY: the acts these tests send reach a row of the platform's alone, and
 // building the host's rows reads none of these.
 const UNREACHED = {
-  tasks: {},
   codingAgents: {},
 } as unknown as HostActDependencies;
 

@@ -22,7 +22,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { ACT_ERROR, SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import {
@@ -44,8 +44,11 @@ import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import {
+  type AnyAct,
+  type AnyActOutcome,
   fakeActPort,
   fakeActPortCalls,
+  fakeActs,
   fakeAppBridge,
   refusedOnPort,
 } from "../testing/app-bridge.js";
@@ -1834,12 +1837,12 @@ const BASE_TEXT = HEAD_TEXT.replace("five", "5");
 const HEAD_PATCH = "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8";
 
 /** Answers each read of a file whole as given, keeping every read asked. */
-function answerFileReads(answer: (path: string) => TasksFileAnswer): Act[] {
-  const asked: Act[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+function answerFileReads(answer: (path: string) => TasksFileAnswer): AnyAct[] {
+  const asked: AnyAct[] = [];
+  fakeActs({
+    act: (request: AnyAct) => {
       asked.push(request);
-      const outcome: ActOutcome = {
+      const outcome: AnyActOutcome = {
         status: ACT_OUTCOME_STATUS.DONE,
         value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,
       };
@@ -2083,8 +2086,8 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
     changed("src/plan.ts", { patch: HEAD_PATCH }),
   ];
   const held: Array<() => void> = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+  fakeActs({
+    act: (request: AnyAct) => {
       const value =
         request.kind === ACT_KIND.TASKS_FILE
           ? {
@@ -2096,7 +2099,7 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
               },
             }
           : undefined;
-      const outcome: ActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
+      const outcome: AnyActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
       // The first file's read is held until the test lets it land.
       if (request.kind === ACT_KIND.TASKS_FILE && request.payload.path === "src/seats.ts") {
         return new Promise((resolve) => held.push(() => resolve(outcome)));
