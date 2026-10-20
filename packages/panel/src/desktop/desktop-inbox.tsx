@@ -7,7 +7,7 @@ import type { StripTab } from "@luke/ui/tab-strip-model";
 import { TASK_MARK } from "@luke/ui/tasks-model";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { InboxIcon } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -202,8 +202,12 @@ function InboxShown({
   const pageColumns = useInboxColumns(
     chosen?.item.id ?? (missing ? asked?.itemId : undefined),
     !paneOnly,
-    { asked: listed, onAsk: onListed, onSingle },
+    { asked: listed, onAsk: onListed, onSingle: paneOnly ? undefined : onSingle },
   );
+  // Note that the item standing alone is told as one column is, so the window's history and its link step to the item shown rather than the Inbox, whatever the room's width.
+  useLayoutEffect(() => {
+    if (paneOnly) onSingle?.(true);
+  }, [paneOnly, onSingle]);
   // Note that with the list in the sidebar the place shows the item alone, measured by nothing, with no way back to a list that stays in sight.
   const columns = paneOnly
     ? { ...pageColumns, ref: undefined, shown: INBOX_COLUMNS.ITEM, onBack: undefined }
@@ -387,10 +391,13 @@ function InboxShown({
                   <section
                     className="inbox-view-items"
                     aria-label="Inbox"
+                    // Note that with the list in the sidebar this is the whole place, so its empty state and its missing item's notice always stand.
                     hidden={
-                      missing
-                        ? columns.shown === INBOX_COLUMNS.LIST
-                        : columns.shown !== INBOX_COLUMNS.BOTH
+                      paneOnly
+                        ? false
+                        : missing
+                          ? columns.shown === INBOX_COLUMNS.LIST
+                          : columns.shown !== INBOX_COLUMNS.BOTH
                     }
                   >
                     <header className="desktop-toolbar" />

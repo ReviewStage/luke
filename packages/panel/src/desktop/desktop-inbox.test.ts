@@ -480,6 +480,9 @@ function mount(
         onOpenItem: setChosen,
         listed: listAsked,
         onListed: setListAsked,
+        onSingle: (single: boolean) => {
+          toldSingle = single;
+        },
         pages: undefined,
         onRereadPages: () => undefined,
         onTaskAgents: () => undefined,
@@ -520,6 +523,9 @@ function mount(
   act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
 }
+
+/** What the Inbox last told the window of whether it shows one column. */
+let toldSingle: boolean | undefined;
 
 /** The Inbox as the inbox-first shell draws it: read once, listed in the sidebar, and its chosen item alone in the plan's place. */
 function SharedListing({ tasks }: { tasks: TasksControl }) {
@@ -6732,4 +6738,23 @@ test("with the inbox-first sidebar the sidebar lists the Inbox's items, read onc
     null,
     "the item offers no way back to a list that stays in sight",
   );
+});
+
+test("with the inbox-first sidebar the item shown stands alone for the window's history and links, and an item a link names that no read holds is not found in the place, the sidebar's list choosing nothing", async () => {
+  toldSingle = undefined;
+  const { page } = mount([], { sidebar: true });
+  await settle();
+  assert.equal(toldSingle, true, "the item stands alone, whatever the room's width");
+  act(() =>
+    chooseFromOutside({
+      taskId: "0f0e0d0c-0000-4000-8000-00000000dead",
+      itemId: "0f0e0d0c-0000-4000-8000-00000000beef",
+      opened: true,
+    }),
+  );
+  await settle();
+  const place = page.querySelector<HTMLElement>("main .inbox-view-items");
+  assert.ok(place !== null && !place.hidden, "the place stands in sight");
+  assert.match(place.textContent ?? "", /Not found/u);
+  assert.equal(page.querySelector('.inbox-tasks [aria-current="page"]'), null);
 });
