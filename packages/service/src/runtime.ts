@@ -13,6 +13,7 @@ import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./environment.js";
 import { productAnalyticsFromEnvironment } from "./events/server-events.js";
 import { githubAppFromEnvironment } from "./github/github-app.js";
+import { pullRequestLinksLayer } from "./github/pull-request-links.js";
 import {
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
@@ -69,6 +70,8 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
  * once an hour for every route that offers or checks a model.
+ * `PullRequestLinks` is here on the same terms: one instance reads a pull
+ * request a link draws once a minute, however many links ask for it.
  *
  * `@effect/platform-node` has no entry: a Vercel function's platform is the
  * Web `fetch` its runtime already carries, and a Node-reaching companion
@@ -87,6 +90,7 @@ export const webServices = Layer.mergeAll(
   webLogger,
   liveSealingFromEnvironment,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
+  pullRequestLinksLayer,
   productAnalyticsFromEnvironment.pipe(
     Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment)),
   ),
