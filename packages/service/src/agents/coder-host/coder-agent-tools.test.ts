@@ -3,7 +3,10 @@ import { randomUUID } from "node:crypto";
 import { Database } from "@luke/database/core/query";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
 import { sweepAbandonedTurns, TURN_ABANDON } from "@luke/database/models/abandoned-turns";
-import { readAccountPreferences } from "@luke/database/models/account-store";
+import {
+  readAccountPreferences,
+  writeAccountPreferences,
+} from "@luke/database/models/account-store";
 import {
   archiveCodingAgent,
   createCodingAgent,
@@ -53,6 +56,7 @@ import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
@@ -871,6 +875,40 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(isRecord(again.agent));
   assert.equal(again.agent.id, startedId);
   assert.equal(eve.sent.length, 1, "the same call run again starts no second agent");
+});
+
+test("an agent started on its starter's own task with Chat on reports back in the task's chat to the starter's mention link, while one started elsewhere or with Chat off reports by message", async () => {
+  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const prompt = "Write the migration that adds the invitation's expiry.";
+  const byMessage = `To report back to it, call ${CODER_TOOL.MESSAGE_AGENT} with that id.`;
+  const opened = (): string => JSON.stringify(JSON.parse(eve.sent.at(-1)?.body ?? "").message);
+
+  await call(CODER_TOOL.START_AGENT, { prompt }, "call-off");
+  assert.ok(opened().includes(byMessage), opened());
+
+  await database.run(
+    writeAccountPreferences(caller.userId, { experiments: { [EXPERIMENT.CHAT]: true } }),
+  );
+  await call(CODER_TOOL.START_AGENT, { prompt }, "call-on");
+  const inChat = opened();
+  assert.match(
+    inChat,
+    new RegExp(
+      `It is \\[@[^\\]]+\\]\\(https://tryluke\\.dev/[^)]+/agent/${caller.id}\\) in your task's chat: report back to it there`,
+      "u",
+    ),
+    inChat,
+  );
+  assert.ok(!inChat.includes(byMessage), inChat);
+
+  await call(CODER_TOOL.START_AGENT, { prompt, taskId: tasks.billing }, "call-elsewhere");
+  assert.ok(
+    opened().includes(byMessage),
+    "an agent on another task shares no chat with its starter",
+  );
 });
 
 test("start_agent hands over a prompt and a note each as long as a start allows, whole in the agent's first message, and refuses either past it, starting nothing", async () => {

@@ -84,7 +84,7 @@ test("a coding agent with Chat on is shown its task's Luke as the link Luke draw
       undefined,
       true,
     );
-    const from = words.indexOf("## Chat with other agents");
+    const from = words.indexOf("## Your team's chat");
     return words.slice(from, words.indexOf("\n## ", from + 1));
   };
   const onTask = chatOf(TASK_ADDRESS);

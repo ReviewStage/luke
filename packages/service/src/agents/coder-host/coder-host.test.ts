@@ -9,6 +9,7 @@ import {
   agentWorkspace,
   ensureGeneral,
   ensureMember,
+  ensureTaskChannel,
   postMessage,
   roster,
 } from "@luke/database/models/chat-store";
@@ -1899,12 +1900,17 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         const person = Option.getOrThrow(
           yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.HUMAN, userId }),
         );
-        const general = Option.getOrThrow(yield* ensureGeneral(userId, workspace));
+        // The agent's own channel, the one its chat is scoped to.
+        const home = Option.getOrThrow(
+          agent.taskId === null
+            ? yield* ensureGeneral(userId, workspace)
+            : yield* ensureTaskChannel(userId, agent.taskId),
+        );
         // The agent joins before the post, as a member joins the chat at its head.
         yield* ensureMember(userId, workspace, { kind: MEMBER_KIND.AGENT, agentId: agent.id });
         yield* postMessage(userId, workspace, {
           authorMemberId: person.id,
-          to: { channelId: general.id },
+          to: { channelId: home.id },
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
           clientKey: "post-1",
         });

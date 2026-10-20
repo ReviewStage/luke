@@ -156,8 +156,8 @@ export const CHAT_BOUNDS = {
   MAX_STEERS_PER_POST: 3,
   /** The most topic channels a workspace keeps open beside its general and plan channels. */
   MAX_TOPIC_CHANNELS: 12,
-  /** The most posts one agent's turn may make. */
-  MAX_POSTS_PER_TURN: 20,
+  /** The most posts one agent's turn may make: a coding agent's whole run is one turn, and it is told to keep its team posted throughout. */
+  MAX_POSTS_PER_TURN: 50,
   /** The most characters a handle may spell. */
   MAX_HANDLE_CHARS: 40,
   /** The most characters a `to` may spell: a channel's `#name`, or a member's mention link, whose label is a name and whose address an agent's task and id make long. */

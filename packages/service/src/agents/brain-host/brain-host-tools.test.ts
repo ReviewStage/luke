@@ -886,7 +886,7 @@ test("Luke reads a page of the call's task by its id, as the member on the call,
   );
 });
 
-test("Luke's direct message to the plan's agent is told by a notice steered into its session as the deployment acting for the account, and a deployment that reaches no eve holds it for the agent's next read", async () => {
+test("Luke's mention of the plan's agent in its channel is told by a notice steered into its session as the deployment acting for the account, and a deployment that reaches no eve holds it for the agent's next read", async () => {
   const userId = await database.createUser();
   await chatOn(userId);
   const task = await taskConversation(userId, RELAY_FULL_NAME);
@@ -899,10 +899,12 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
   });
   const call = await callerOn(acting, task, eve.services);
 
-  // The agent is addressed by its mention link, and named back by its link under the workspace as Luke's account reads it.
+  // The agent is addressed by its mention link in the task's channel, and named back by its link under the workspace as Luke's account reads it.
   const agentLink = (step: string) =>
     `[@anthropic/claude-opus-5.5](https://tryluke.dev/${step}/plan/${task.taskId}/agent/${agent.id})`;
-  const told = await call(CHAT_TOOL.POST, { text: INSTRUCTION, to: agentLink("acme") });
+  const refused = await call(CHAT_TOOL.POST, { text: INSTRUCTION, to: agentLink("acme") });
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED, "Luke sends no direct message");
+  const told = await call(CHAT_TOOL.POST, { text: `${agentLink("acme")} ${INSTRUCTION}` });
   assert.equal(told.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(told));
   assert.ok(Array.isArray(told.told));
   const named = String(told.told[0]);
@@ -913,16 +915,16 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
       "u",
     ),
   );
-  assert.deepEqual([told.in, told.told, told.held], [named, [named], []]);
+  assert.deepEqual([told.told, told.held], [[named], []]);
   assert.deepEqual(
     eve.sent.map((request) => request.path),
     [`/eve/coder/v1/session/${agent.sessionId}`],
   );
   assert.equal(eve.sent[0]?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), userId);
-  // The notice names Luke by his task's link.
+  // The notice names Luke by his task's link, and the task's channel it was said in.
   assert.match(
     JSON.parse(eve.sent[0]?.body ?? "").message,
-    new RegExp(`\\[@Luke\\]\\(https://tryluke\\.dev/[^/]+/plan/${task.taskId}/luke\\) to you`, "u"),
+    new RegExp(`\\[@Luke\\]\\(https://tryluke\\.dev/[^/]+/plan/${task.taskId}/luke\\) in #`, "u"),
   );
 
   // Another account's plan, on a deployment that reaches no eve: its agent reads Luke's word when it next reads.
@@ -931,8 +933,7 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
   const otherAgent = await agentOn(other.userId, other.taskId);
   const unsecured = await callerOn(brainHost(seams), other, eve.services);
   const held = await unsecured(CHAT_TOOL.POST, {
-    text: INSTRUCTION,
-    to: `https://tryluke.dev/acme/plan/${other.taskId}/agent/${otherAgent.id}`,
+    text: `[@Agent](https://tryluke.dev/acme/plan/${other.taskId}/agent/${otherAgent.id}) ${INSTRUCTION}`,
   });
   assert.equal(held.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(held));
   assert.equal(Array.isArray(held.told) && held.told.length, 0);
