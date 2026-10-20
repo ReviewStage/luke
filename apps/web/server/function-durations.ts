@@ -1,5 +1,6 @@
 import { VOICE_SERVICE_PATH } from "@luke/features";
 import { TERMINAL_RELAY } from "@luke/features/terminal-wire";
+import { LUKE_MCP_FUNCTION, LUKE_MCP_PATH } from "@luke/service/agents/luke-mcp/app";
 import {
   PULL_REQUEST_CHAPTERS_FUNCTION,
   PULL_REQUEST_CHAPTERS_ROUTE_PATH,
@@ -35,6 +36,7 @@ function routeKeyOf(path: string): string {
  */
 const FUNCTION_GROUP = {
   DEFAULT: "default",
+  LUKE_MCP: "luke-mcp",
   MAINTENANCE_SWEEP: "maintenance-sweep",
   PULL_REQUEST_CHAPTERS: "pull-request-chapters",
 } as const;
@@ -73,6 +75,12 @@ const GROUPS: readonly GroupDefinition[] = [
     file: FUNCTION_GROUP.PULL_REQUEST_CHAPTERS,
     maxDuration: PULL_REQUEST_CHAPTERS_FUNCTION.MAX_DURATION_SECONDS,
     routes: [routeKeyOf(PULL_REQUEST_CHAPTERS_ROUTE_PATH)],
+  },
+  // A native agent's `run_on_mac` waits on the developer's Mac for up to eight minutes, past the platform's default duration.
+  {
+    file: FUNCTION_GROUP.LUKE_MCP,
+    maxDuration: LUKE_MCP_FUNCTION.MAX_DURATION_SECONDS,
+    routes: [routeKeyOf(LUKE_MCP_PATH)],
   },
 ];
 

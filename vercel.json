@@ -55,10 +55,6 @@
           "dest": "/api/default.js?route=account/integrations/connected"
         },
         {
-          "src": "/api/agents/mcp",
-          "dest": "/api/default.js?route=agents/mcp"
-        },
-        {
           "src": "/api/github/install",
           "dest": "/api/default.js?route=github/install"
         },
@@ -85,6 +81,10 @@
         {
           "src": "/api/workspaces/linear/connected",
           "dest": "/api/default.js?route=workspaces/linear/connected"
+        },
+        {
+          "src": "/api/agents/mcp",
+          "dest": "/api/luke-mcp.js?route=agents/mcp"
         },
         {
           "src": "/api/maintenance/sweep",

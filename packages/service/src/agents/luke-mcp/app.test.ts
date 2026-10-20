@@ -19,9 +19,13 @@ import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
+import { modelCatalogOf } from "../../providers/model-catalog.js";
+import { NO_GITHUB } from "../../testing/github-app-fake.js";
+import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { postToInbox } from "../coder-host/inbox.js";
 import { LUKE_MCP_PATH, LUKE_MCP_PROTOCOL_VERSIONS, lukeMcpApp } from "./app.js";
 import { runnerTokenDigest } from "./bearer.js";
+import { LUKE_MCP_TOOLS } from "./tools.js";
 
 /**
  * Luke's MCP server, answered by its group the way a function answers it,
@@ -45,6 +49,9 @@ const standing = Effect.gen(function* () {
     Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
     Layer.succeed(Database, yield* Database),
     Layer.succeed(Clock.Clock, yield* Clock.Clock),
+    NO_GITHUB,
+    modelCatalogOf([]),
+    NO_WORKSPACE_LINEAR,
   );
   const web = HttpRouter.toWebHandler(lukeMcpApp().pipe(HttpRouter.provideRequest(services)), {
     disableLogger: true,
@@ -113,6 +120,34 @@ function post(
   });
 }
 
+/** The tools a native agent is served: every Luke tool of the eve agent's that its harness has no equal of. */
+const SERVED_TOOLS = ["read_inbox", "withdraw_ask", "run_on_mac"] as const;
+
+/** The eve tools a harness has its own of, which the server never serves. */
+const HARNESS_TOOLS = [
+  "bash",
+  "read_file",
+  "write_file",
+  "glob",
+  "grep",
+  "apply_patch",
+  "write_todos",
+  "sleep",
+  "delegate",
+  "task_wait",
+  "task_cancel",
+  "load_skill",
+  "search_web",
+  "read_web_page",
+] as const;
+
+/** A tool's result as the server answers it, its first block's JSON. */
+function firstJson(called: object) {
+  // SAFETY: every result but a picture's is one text block (`app.ts`'s `toolResult`).
+  const [content] = (called as { content: readonly { type: string; text: string }[] }).content;
+  return JSON.parse(content?.text ?? "null");
+}
+
 const initialize = (protocolVersion: string) => ({
   jsonrpc: "2.0",
   id: 1,
@@ -144,10 +179,7 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         );
         yield* Effect.promise(() => client.close());
 
-        assert.deepEqual(
-          listed.tools.map((tool) => tool.name),
-          [INBOX_TOOL.READ],
-        );
+        assert.ok(listed.tools.some((tool) => tool.name === INBOX_TOOL.READ));
         assert.equal(called.isError, false);
         // SAFETY: the server answers every tool call with text blocks alone (`app.ts`'s `toolResult`).
         const [content] = called.content as readonly { type: string; text: string }[];
@@ -256,5 +288,47 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         );
         assert.equal(unspokenHeader.status, HOSTED_HTTP_STATUS.BAD_REQUEST);
       }),
+  );
+
+  it.effect(
+    "tools/list names every Luke tool the agent's harness has no equal of, each with its eve tool's schema, and none the harness has",
+    () =>
+      Effect.gen(function* () {
+        const fetch = yield* standing;
+        const agent = yield* agentWithBearer;
+        const client = yield* connected(fetch, agent.bearer);
+
+        const listed = yield* Effect.promise(() => client.listTools());
+        yield* Effect.promise(() => client.close());
+
+        const names = listed.tools.map((tool) => tool.name);
+        assert.deepEqual([...names].sort(), [...SERVED_TOOLS].sort());
+        for (const native of HARNESS_TOOLS) assert.ok(!names.includes(native), native);
+        for (const tool of listed.tools) {
+          const served = LUKE_MCP_TOOLS.get(tool.name);
+          assert.ok(served !== undefined);
+          assert.equal(tool.description, served.description);
+          assert.deepEqual(tool.inputSchema, served.inputSchema);
+        }
+      }),
+  );
+
+  it.effect("a door's refusal, whatever its status, is a tool error the agent reads", () =>
+    Effect.gen(function* () {
+      const fetch = yield* standing;
+      const agent = yield* agentWithBearer;
+      const client = yield* connected(fetch, agent.bearer);
+
+      const noMac = yield* Effect.promise(() =>
+        client.callTool({ name: "run_on_mac", arguments: { command: "ls ~/code" } }),
+      );
+      const unreadable = yield* Effect.promise(() =>
+        client.callTool({ name: "withdraw_ask", arguments: {} }),
+      );
+      yield* Effect.promise(() => client.close());
+
+      assert.deepEqual([noMac.isError, firstJson(noMac).status], [true, "not-run"]);
+      assert.deepEqual([unreadable.isError, firstJson(unreadable).status], [true, "rejected"]);
+    }),
   );
 });
