@@ -83,7 +83,7 @@ patchedDependencies:
     hash: 7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b
     path: patches/drizzle-orm@1.0.0-rc.4.patch
   eve@0.74.0:
-    hash: 9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e
+    hash: 5fb68368b209949b4ccdd38711ac5fe7f418ea5d2f67016f4fd3d5c3ac11c4ee
     path: patches/eve@0.74.0.patch
 
 importers:
@@ -340,7 +340,7 @@ importers:
         version: 4.0.4
       eve:
         specifier: 0.74.0
-        version: 0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135)
+        version: 0.74.0(patch_hash=5fb68368b209949b4ccdd38711ac5fe7f418ea5d2f67016f4fd3d5c3ac11c4ee)(@opentelemetry/api@1.9.1)(ai@7.0.135)
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -422,7 +422,7 @@ importers:
         version: 4.0.4
       eve:
         specifier: 0.74.0
-        version: 0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135)
+        version: 0.74.0(patch_hash=5fb68368b209949b4ccdd38711ac5fe7f418ea5d2f67016f4fd3d5c3ac11c4ee)(@opentelemetry/api@1.9.1)(ai@7.0.135)
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -1149,7 +1149,7 @@ importers:
         version: 4.0.4
       eve:
         specifier: 0.74.0
-        version: 0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135)
+        version: 0.74.0(patch_hash=5fb68368b209949b4ccdd38711ac5fe7f418ea5d2f67016f4fd3d5c3ac11c4ee)(@opentelemetry/api@1.9.1)(ai@7.0.135)
       pg:
         specifier: 8.23.0
         version: 8.23.0
@@ -11058,7 +11058,7 @@ snapshots:
     optionalDependencies:
       ai: 7.0.135(zod@4.5.4)
       better-auth: 1.7.7(@opentelemetry/api@1.9.1)(drizzle-kit@1.0.0-rc.4)(drizzle-orm@1.0.0-rc.4)(next@16.3.1)(pg@8.23.0)(react-dom@19.2.8)(react@19.2.8)(vitest@5.0.0)
-      eve: 0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135)
+      eve: 0.74.0(patch_hash=5fb68368b209949b4ccdd38711ac5fe7f418ea5d2f67016f4fd3d5c3ac11c4ee)(@opentelemetry/api@1.9.1)(ai@7.0.135)
 
   '@vercel/functions@3.10.1(ws@8.22.0)':
     dependencies:
@@ -12143,7 +12143,7 @@ snapshots:
     dependencies:
       '@types/estree': 1.0.9
 
-  eve@0.74.0(patch_hash=9e248cf4265354c5f6d0fa6a02822efc0d5373776342a5fde1841ef12c419f8e)(@opentelemetry/api@1.9.1)(ai@7.0.135):
+  eve@0.74.0(patch_hash=5fb68368b209949b4ccdd38711ac5fe7f418ea5d2f67016f4fd3d5c3ac11c4ee)(@opentelemetry/api@1.9.1)(ai@7.0.135):
     dependencies:
       ai: 7.0.135(zod@4.5.4)
       nitro: 3.0.260903-beta
