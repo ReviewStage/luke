@@ -520,6 +520,57 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
   );
 
   it.effect(
+    "a form filled in part is taken and recorded with the values given, a required field left empty absent from them, while a form given nothing at all is refused",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const asked = posted(
+          yield* postInboxThread(agent, {
+            key: "preview-limits",
+            title: "What may the preview use?",
+            body: "",
+            ask: {
+              type: INBOX_ASK.ANSWER,
+              fields: [
+                { type: INBOX_FIELD.NUMBER, label: "Monthly budget", required: true },
+                { type: INBOX_FIELD.TEXT, label: "Owner", required: true },
+              ],
+            },
+          }),
+        );
+        const ask = asked.thread?.[0]?.id ?? "";
+        const submit = (values: readonly { label: string; value: number | string }[]) =>
+          Effect.map(
+            answerInboxAsk(agent.userId, asked.id, {
+              answers: { ask, reply: INBOX_REPLY.SUBMITTED, values },
+              text: "",
+              clientKey: randomUUID(),
+            }),
+            Option.getOrThrow,
+          );
+
+        yield* later;
+        const empty = yield* submit([{ label: "Owner", value: "  " }]);
+        assert.equal(empty.outcome, INBOX_ASK_ANSWER.REFUSED);
+        assert.equal(empty.item.status, INBOX_STATUS.OPEN);
+
+        const partial = yield* submit([{ label: "Monthly budget", value: 40 }]);
+        assert.deepEqual(
+          [partial.outcome, partial.item.status, partial.item.answer],
+          [
+            INBOX_ASK_ANSWER.TAKEN,
+            INBOX_STATUS.ANSWERED,
+            { reply: INBOX_REPLY.SUBMITTED, values: [{ label: "Monthly budget", value: 40 }] },
+          ],
+        );
+        assert.deepEqual(asksOf(partial.item), [
+          [INBOX_MESSAGE_AUTHOR.AGENT, INBOX_ASK.ANSWER, INBOX_ASK_STATUS.ANSWERED],
+          [INBOX_MESSAGE_AUTHOR.MEMBER, undefined, undefined],
+        ]);
+      }),
+  );
+
+  it.effect(
     "a post from version 5 shows a desktop before it its words as blocks and the response nearest its ask, a to-do's steps listed under the words",
     () =>
       Effect.gen(function* () {
