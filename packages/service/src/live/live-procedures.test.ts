@@ -18,6 +18,7 @@ import {
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
 } from "@luke/features/live-wire";
+import { taskListLiveAnswerSchema } from "@luke/features/task-list-live";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -69,6 +70,7 @@ const ask = (options: {
   /** The account the read names; the bearer's own where left out. */
   readonly forUser?: string;
   readonly method?: string;
+  readonly path?: string;
   readonly sealing: Option.Option<LiveSealer>;
 }) =>
   Effect.gen(function* () {
@@ -83,7 +85,7 @@ const ask = (options: {
     const response = yield* hostedAnswer(
       { live: procedures },
       Layer.succeed(LiveSealing, options.sealing),
-      new Request(readOf(LIVE_INBOX, options.forUser ?? options.bearer), {
+      new Request(readOf(options.path ?? LIVE_INBOX, options.forUser ?? options.bearer), {
         method: options.method ?? "GET",
         headers: options.bearer === undefined ? {} : { authorization: `Bearer ${options.bearer}` },
       }),
@@ -139,6 +141,24 @@ it.effect(
         Object.values(theirs.queries).every((sealed) => sealed.capability.includes('"user-eli"')),
       );
     }),
+);
+
+it.effect("the task list is sealed as its tasks and its agents for the bearer's own account", () =>
+  Effect.gen(function* () {
+    const dana = yield* ask({
+      bearer: "user-dana",
+      path: "/api/live/tasks",
+      sealing: Option.some(SCRIPTED),
+    });
+
+    assert.equal(dana.status, HOSTED_HTTP_STATUS.OK);
+    const answer = Schema.decodeUnknownSync(taskListLiveAnswerSchema)(dana.body);
+    assert.equal(answer.url, REALTIME_URL);
+    assert.deepEqual(Object.keys(answer.queries).toSorted(), ["agents", "plans"]);
+    for (const sealed of Object.values(answer.queries)) {
+      assert.ok(sealed.capability.includes('"user-dana"'), "read for the bearer");
+    }
+  }),
 );
 
 /** One box Luke drew, so the board has a row to read. */

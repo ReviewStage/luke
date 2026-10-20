@@ -37,6 +37,7 @@ import * as pullRequestWriteWire from "./pull-request-write-wire.js";
 import * as repositoryReachWire from "./repository-reach-wire.js";
 import * as serviceWire from "./service-wire.js";
 import * as taskIssueWire from "./task-issue-wire.js";
+import * as taskListLive from "./task-list-live.js";
 import * as taskSectionWire from "./task-section-wire.js";
 import * as taskWire from "./task-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
@@ -73,6 +74,10 @@ const EFFECT_MODULE_SCHEMAS = {
     agentTranscriptLiveRowsSchema: liveWire.agentTranscriptLiveRowsSchema,
     transcriptNowAnswerSchema: liveWire.transcriptNowAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
+  "task-list-live": {
+    taskListLiveAnswerSchema: taskListLive.taskListLiveAnswerSchema,
+    taskListLiveRowsSchema: taskListLive.taskListLiveRowsSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof taskListLive>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,
     boardElementsSchema: boardWire.boardElementsSchema,

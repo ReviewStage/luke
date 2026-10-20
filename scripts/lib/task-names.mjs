@@ -199,6 +199,8 @@ const WIRE_NAME = {
   // The tasks list's agents with no task (`task-wire.ts`).
   planlessAgents: [
     "packages/features/src/task-wire.ts",
+    "packages/features/src/task-list-live.ts",
+    "packages/service/src/tasks/task-list-live.test.ts",
     "packages/host/src/compose-tasks.ts",
     "packages/host/src/compose-tasks.test.ts",
     "packages/service/src/tasks/tasks-procedures.ts",

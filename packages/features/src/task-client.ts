@@ -57,6 +57,7 @@ import {
   readServiceAnswer,
 } from "./service-wire.js";
 import type { TaskIssueChoice, TaskIssueRelation } from "./task-issue-wire.js";
+import type { TaskListLiveAnswer } from "./task-list-live.js";
 import {
   type TaskSections,
   type TaskSectionWrite,
@@ -317,6 +318,29 @@ export class HostedTaskClient {
     return hostedResult(
       askHosted(this.#hosted.plans.list, { archived: TASK_LIST_ARCHIVED.INCLUDE }),
       {},
+    );
+  }
+
+  /**
+   * The task list sealed for following over Neon Realtime, answered at
+   * once; unanswered for anything that went wrong, which the caller answers
+   * by asking again.
+   */
+  listLive(
+    userId: string,
+    poll = false,
+  ): Effect.Effect<
+    TaskCallResult<TaskListLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { [LIVE_USER_QUERY]: userId };
+    return hostedResult(
+      askHosted(
+        this.#hosted.live.tasks,
+        poll ? { ...read, [LIVE_POLL.QUERY]: LIVE_POLL.ON } : read,
+      ),
+      LIVE_REFUSALS,
     );
   }
 

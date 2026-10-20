@@ -32,6 +32,8 @@ import {
   max,
   notExists,
   or,
+  type SQL,
+  type SQLWrapper,
   sql,
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
@@ -924,6 +926,32 @@ export function noReceiptOfLine() {
         ),
       ),
   );
+}
+
+/**
+ * When the newest of the developer's lines standing with no turn yet was
+ * written in the coding-agent conversation `conversationId` names, by the
+ * same rule `awaitingLinesOfReached` reads, or null where none stands: what
+ * a live statement selects so its reader judges the line's grace
+ * (`@luke/features/coding-agent-status`) without the statement reading the
+ * clock.
+ */
+export function newestAwaitingLineAt(conversationId: SQLWrapper): SQL<Date | null> {
+  // Note that the newest instant is selected bare, because Drizzle's `max` casts it to text
+  // and a cast through text is no immutable function, which a live statement must hold to.
+  return sql<Date | null>`(${queryBuilder
+    .select({ newestAt: sql<Date | null>`max(${messages.createdAt})` })
+    .from(messages)
+    .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+        eq(messages.role, MESSAGE_ROLE.USER),
+        isNull(messages.turnId),
+        noReceiptOfLine(),
+      ),
+    )})`;
 }
 
 /**
