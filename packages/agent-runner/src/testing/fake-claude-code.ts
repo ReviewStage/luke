@@ -11,7 +11,7 @@
 import type { Options, SDKMessage, SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { Deferred, Effect, Exit, Layer, Queue, Stream } from "effect";
 import { ClaudeCode, type ClaudeCodeSession } from "../claude-code.js";
-import type { Step } from "./recorded-stream.js";
+import type { Step, StopReport } from "./recorded-stream.js";
 
 /** An effort the CLI was set to, as `applyFlagSettings` takes it. */
 type EffortSetting = Parameters<ClaudeCodeSession["applyFlagSettings"]>[0]["effortLevel"];
@@ -36,11 +36,15 @@ function stopHookOf(options: Options) {
 /**
  * A fake CLI that plays `steps` once, from Luke's first message. `prompted`
  * holds each prompt as the CLI reads it, for a test that must wait on one.
+ * Each `result` names the prompts its turn took, as the CLI's does.
  */
 export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function* (
   steps: readonly Step[],
 ) {
   const prompted = yield* Queue.unbounded<SDKUserMessage>();
+  const unread = yield* Queue.unbounded<string>();
+  const released = yield* Deferred.make<void>();
+  const interrupted = yield* Deferred.make<void>();
   const record: CliRecord = {
     options: undefined,
     prompts: [],
@@ -55,8 +59,8 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
     readonly options: Options;
   }): ClaudeCodeSession => {
     record.options = params.options;
-    const started = Deferred.makeUnsafe<void>();
-    const interrupted = Deferred.makeUnsafe<void>();
+    // The prompts the running turn has taken, which its `result` names.
+    const taken: string[] = [];
 
     // Note that the prompts are read for as long as Luke sends them, as the
     // CLI reads its stdin, while the script plays beside them.
@@ -64,22 +68,14 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
       Stream.tap((prompt) =>
         Effect.sync(() => record.prompts.push(prompt)).pipe(
           Effect.andThen(Queue.offer(prompted, prompt)),
-          Effect.andThen(Deferred.succeed(started, undefined)),
+          Effect.andThen(Queue.offer(unread, prompt.uuid ?? "")),
         ),
       ),
       Stream.drain,
     );
-    const play = (step: Step): Stream.Stream<SDKMessage> => {
-      if ("emit" in step) {
-        // Note that the message crosses as a line of JSON, which the SDK takes
-        // as an `SDKMessage` unchecked, just as it reads the CLI's stdout.
-        const message: SDKMessage = JSON.parse(JSON.stringify(step.emit));
-        return Stream.make(message);
-      }
-      if ("untilInterrupted" in step)
-        return Stream.drain(Stream.fromEffect(Deferred.await(interrupted)));
+    const runHook = (report: StopReport) => {
       const hook = stopHookOf(params.options);
-      const run = Effect.promise((signal) =>
+      return Effect.promise((signal) =>
         hook(
           {
             hook_event_name: "Stop",
@@ -87,16 +83,33 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
             transcript_path: "/home/agent/.claude/projects/fake.jsonl",
             cwd: params.options.cwd ?? "",
             stop_hook_active: false,
-            ...step.stopHook,
+            ...report,
           },
           undefined,
           { signal },
         ),
       );
-      return Stream.drain(Stream.fromEffect(run));
     };
-    const script = Stream.fromEffect(Deferred.await(started)).pipe(
-      Stream.flatMap(() => Stream.fromIterable(steps)),
+    const play = (step: Step): Stream.Stream<SDKMessage> => {
+      if ("emit" in step) {
+        // Note that the message crosses as a line of JSON, which the SDK takes
+        // as an `SDKMessage` unchecked, just as it reads the CLI's stdout.
+        const message: SDKMessage = JSON.parse(JSON.stringify(step.emit));
+        if (message.type === "result") message.user_message_uuids = taken.splice(0);
+        return Stream.make(message);
+      }
+      if ("awaitPrompt" in step) {
+        return Stream.drain(
+          Stream.fromEffect(Effect.map(Queue.take(unread), (uuid) => taken.push(uuid))),
+        );
+      }
+      if ("untilInterrupted" in step)
+        return Stream.drain(Stream.fromEffect(Deferred.await(interrupted)));
+      if ("untilReleased" in step) return Stream.drain(Stream.fromEffect(Deferred.await(released)));
+      return Stream.drain(Stream.fromEffect(runHook(step.stopHook)));
+    };
+    // The CLI starts its first turn on Luke's first message.
+    const script = Stream.fromIterable<Step>([{ awaitPrompt: true }, ...steps]).pipe(
       Stream.flatMap(play),
     );
     const messages = Stream.toAsyncIterable(Stream.merge(script, prompts));
@@ -119,5 +132,7 @@ export const fakeClaudeCode = Effect.fn("agent-runner/fakeClaudeCode")(function*
     };
   };
 
-  return { layer: Layer.succeed(ClaudeCode, { query }), record, prompted };
+  /** Lets a script held at `untilReleased` go on. */
+  const release = Deferred.succeed(released, undefined);
+  return { layer: Layer.succeed(ClaudeCode, { query }), record, prompted, release };
 });

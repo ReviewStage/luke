@@ -22,11 +22,13 @@ import {
 import { RunnerFailed, runAgent } from "./runner.js";
 import { fakeClaudeCode } from "./testing/fake-claude-code.js";
 import {
+  FOLLOW_UP_TURNS,
   SHORT_TURN,
   STOPPED_COMMAND,
   STOPPED_TURN,
   type Step,
   TURN_DONE,
+  WAKEUP_STOPPED_TURN,
   WORKFLOW_TURN,
 } from "./testing/recorded-stream.js";
 
@@ -139,7 +141,7 @@ function launch(
       Effect.provide(Layer.mergeAll(cli.layer, luke.layer)),
       Effect.forkScoped,
     );
-    return { cli: cli.record, prompted: cli.prompted, write, writeText, run };
+    return { cli: cli.record, prompted: cli.prompted, release: cli.release, write, writeText, run };
   });
 }
 
@@ -243,6 +245,76 @@ it.effect(
     }),
 );
 
+it.effect("keeps the CLI up for a message sent during a turn until a turn answers it", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke([], "Working on the first message.");
+    const { cli, prompted, release, write, run } = yield* launch(FOLLOW_UP_TURNS, luke);
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* luke.seen;
+    yield* write({ type: INPUT_LINE.MESSAGE, content: [{ type: "text", text: "Also this." }] });
+    yield* Queue.take(prompted);
+    yield* Queue.take(prompted);
+    yield* release;
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+    assert.deepEqual(
+      cli.prompts.map((prompt) => prompt.priority),
+      [undefined, "next"],
+    );
+    assert.deepEqual(kinds(luke.applied), [
+      "system/init",
+      "assistant",
+      "result/success",
+      "assistant",
+      "result/success",
+      RUNNER_EVENT.END,
+    ]);
+  }),
+);
+
+it.effect("interrupts a turn a wakeup started when Luke stops it", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke([], STOPPED_COMMAND);
+    const { cli, write, run } = yield* launch(WAKEUP_STOPPED_TURN, luke);
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* luke.seen;
+    yield* write({ type: INPUT_LINE.STOP });
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
+    assert.equal(cli.interrupts, 1);
+    assert.deepEqual(kinds(luke.applied).slice(-4), [
+      RUNNER_EVENT.WAITING,
+      "assistant",
+      "result/error_during_execution",
+      RUNNER_EVENT.END,
+    ]);
+  }),
+);
+
+it.effect("takes the launch's secrets out of every event it posts", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const leak: Step = {
+      emit: {
+        type: "assistant",
+        message: { content: [{ type: "text", text: `${CLAUDE_TOKEN} ${BEARER}` }] },
+        parent_tool_use_id: null,
+      },
+    };
+    const { write, run } = yield* launch([leak, ...SHORT_TURN], luke);
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* Fiber.join(run);
+
+    const posted = JSON.stringify(luke.applied);
+    assert.ok(posted.includes("[redacted] [redacted]"));
+    assert.ok(!posted.includes(CLAUDE_TOKEN));
+    assert.ok(!posted.includes(BEARER));
+  }),
+);
+
 it.effect("ends a waiting launch at once on a stop, with no turn to interrupt", () =>
   Effect.gen(function* () {
     const luke = fakeLuke();
@@ -339,23 +411,30 @@ it.effect(
     }),
 );
 
-it.effect("never starts the CLI without its bearer or a config line it can read", () =>
-  Effect.gen(function* () {
-    const unsigned = yield* launch(SHORT_TURN, fakeLuke(), { PATH: "/usr/bin" });
-    yield* unsigned.write(CONFIG);
-    const withoutBearer = yield* Fiber.await(unsigned.run);
+it.effect(
+  "never starts the CLI without its bearer or a config line it can read, sequence numbers safe",
+  () =>
+    Effect.gen(function* () {
+      const unsigned = yield* launch(SHORT_TURN, fakeLuke(), { PATH: "/usr/bin" });
+      yield* unsigned.write(CONFIG);
+      const withoutBearer = yield* Fiber.await(unsigned.run);
 
-    const unreadable = yield* launch(SHORT_TURN, fakeLuke());
-    yield* unreadable.writeText(JSON.stringify({ ...CONFIG, eventsUrl: undefined }));
-    const withoutConfig = yield* Fiber.await(unreadable.run);
+      const unreadable = yield* launch(SHORT_TURN, fakeLuke());
+      yield* unreadable.writeText(JSON.stringify({ ...CONFIG, eventsUrl: undefined }));
+      const withoutConfig = yield* Fiber.await(unreadable.run);
 
-    for (const [exit, cli] of [
-      [withoutBearer, unsigned.cli],
-      [withoutConfig, unreadable.cli],
-    ] as const) {
-      assert.ok(Exit.isFailure(exit));
-      assert.ok(Cause.squash(exit.cause) instanceof RunnerFailed);
-      assert.equal(cli.options, undefined);
-    }
-  }),
+      const unsafe = yield* launch(SHORT_TURN, fakeLuke());
+      yield* unsafe.write({ ...CONFIG, firstSequence: 2 ** 53 });
+      const unsafeSequence = yield* Fiber.await(unsafe.run);
+
+      for (const [exit, cli] of [
+        [withoutBearer, unsigned.cli],
+        [withoutConfig, unreadable.cli],
+        [unsafeSequence, unsafe.cli],
+      ] as const) {
+        assert.ok(Exit.isFailure(exit));
+        assert.ok(Cause.squash(exit.cause) instanceof RunnerFailed);
+        assert.equal(cli.options, undefined);
+      }
+    }),
 );

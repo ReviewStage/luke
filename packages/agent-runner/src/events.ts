@@ -15,7 +15,7 @@ import {
   Effect,
   Fiber,
   Queue,
-  type Redacted,
+  Redacted,
   Schedule,
   type Scope,
 } from "effect";
@@ -53,6 +53,14 @@ export class EventsUndelivered extends Data.TaggedError("EventsUndelivered")<{
   readonly detail: string;
 }> {}
 
+/** Where a launch's events go, as whom, from which number, and the secrets no event may carry. */
+interface SinkOptions {
+  readonly url: string;
+  readonly bearer: Redacted.Redacted;
+  readonly firstSequence: number;
+  readonly secrets: readonly Redacted.Redacted[];
+}
+
 export interface EventSink {
   /** Numbers a message and queues it for Luke. */
   readonly emit: (message: RunnerMessage) => Effect.Effect<void>;
@@ -62,16 +70,31 @@ export interface EventSink {
   readonly undelivered: Effect.Effect<EventsUndelivered>;
 }
 
+/** What a secret is replaced with wherever an event carried it. */
+const REDACTED = "[redacted]";
+
+/**
+ * A batch as the text Luke is sent, with every secret the launch holds taken
+ * out. Note that we scrub every event, the SDK's included, because a tool's
+ * output or a CLI's error is text the runner never wrote; the command sandbox
+ * keeps both secrets from the agent's commands, and this is the second fence.
+ */
+function batchText(batch: RunnerEventBatch, secrets: readonly Redacted.Redacted[]): string {
+  return secrets.reduce<string>((text, secret) => {
+    const value = Redacted.value(secret);
+    return value === "" ? text : text.replaceAll(value, REDACTED);
+  }, JSON.stringify(batch));
+}
+
 /** One batch, posted until Luke takes it or answers that it never will. */
 const postBatch = Effect.fn("agent-runner/postBatch")(function* (
   client: HttpClient.HttpClient,
-  url: string,
-  bearer: Redacted.Redacted,
+  options: SinkOptions,
   batch: RunnerEventBatch,
 ) {
-  const request = HttpClientRequest.post(url).pipe(
-    HttpClientRequest.bearerToken(bearer),
-    HttpClientRequest.bodyJsonUnsafe(batch),
+  const request = HttpClientRequest.post(options.url).pipe(
+    HttpClientRequest.bearerToken(options.bearer),
+    HttpClientRequest.bodyText(batchText(batch, options.secrets), "application/json"),
   );
   const once = client.execute(request).pipe(
     // Note that the error is not kept as the cause, because the request it
@@ -99,11 +122,9 @@ const postBatch = Effect.fn("agent-runner/postBatch")(function* (
  * the caller's scope; a post that fails for good stops it, and `drain`
  * reports that failure.
  */
-export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (options: {
-  readonly url: string;
-  readonly bearer: Redacted.Redacted;
-  readonly firstSequence: number;
-}): Effect.fn.Return<EventSink, never, HttpClient.HttpClient | Scope.Scope> {
+export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
+  options: SinkOptions,
+): Effect.fn.Return<EventSink, never, HttpClient.HttpClient | Scope.Scope> {
   const client = yield* HttpClient.HttpClient;
   const queue = yield* Queue.unbounded<RunnerEvent, Cause.Done>();
   let next = options.firstSequence;
@@ -111,7 +132,7 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
   const sendAll = Effect.gen(function* () {
     for (;;) {
       const events = yield* Queue.takeBetween(queue, 1, BATCH_MAX);
-      yield* postBatch(client, options.url, options.bearer, { events });
+      yield* postBatch(client, options, { events });
     }
   }).pipe(Effect.catchIf(Cause.isDone, () => Effect.void));
   const sender = yield* Effect.forkScoped(sendAll);

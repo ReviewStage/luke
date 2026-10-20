@@ -53,7 +53,17 @@ export const IMAGE_MEDIA_TYPE = {
   WEBP: "image/webp",
 } as const;
 
-const NonNegativeInt = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
+/**
+ * The largest first number a launch takes: a safe integer with room above it
+ * for every event a launch could post, so each next number is exact.
+ */
+const SEQUENCE_MAX = 2 ** 52;
+
+const SequenceSchema = Schema.Number.check(
+  Schema.isInt(),
+  Schema.isGreaterThanOrEqualTo(0),
+  Schema.isLessThanOrEqualTo(SEQUENCE_MAX),
+);
 
 /**
  * The first stdin line: everything one launch of the CLI is started with.
@@ -71,7 +81,7 @@ export const RunnerConfigSchema = Schema.Struct({
   append: Schema.String,
   /** The CLI's session id to resume, where this launch continues one. */
   resume: Schema.optionalKey(Schema.String),
-  firstSequence: NonNegativeInt,
+  firstSequence: SequenceSchema,
   /** Where the runner posts its events. */
   eventsUrl: Schema.String,
   /** The Luke MCP server's streamable-HTTP endpoint. */

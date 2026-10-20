@@ -16,11 +16,14 @@
  * runs before each `result`, reports that work (`background_tasks`,
  * `session_crons`), so the runner ends the launch at a `result` only when
  * the last Stop hook reported none, and otherwise posts a WAITING event and
- * keeps the CLI up. A `result` after a stop ends the launch whatever is
- * pending, and so does one no Stop hook came before, such as an error's.
+ * keeps the CLI up. Nor does a launch end while a message Luke sent during
+ * a turn is still unanswered: the CLI runs it as its next turn. A `result`
+ * after a stop ends the launch whatever is pending, and so does one no Stop
+ * hook came before, such as an error's. A stop interrupts whichever turn is
+ * running, a wakeup's included, and ends a launch with none at once.
  */
 
-import { randomUUID } from "node:crypto";
+import { randomUUID, type UUID } from "node:crypto";
 import type {
   HookCallback,
   Options,
@@ -89,14 +92,6 @@ export interface RunnerInput {
 const decodeConfig = Schema.decodeUnknownEffect(Schema.fromJsonString(RunnerConfigSchema));
 const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSchema));
 
-/** Every secret the launch holds, replaced wherever a text it reports might carry one. */
-function scrubbed(text: string, secrets: readonly string[]): string {
-  return secrets.reduce(
-    (scrubbing, secret) => (secret === "" ? scrubbing : scrubbing.replaceAll(secret, "[redacted]")),
-    text,
-  );
-}
-
 /** The documented options a launch runs `query()` with (the plan's P05). */
 function queryOptions(
   config: RunnerConfig,
@@ -140,6 +135,7 @@ function queryOptions(
 
 /** A message line as the SDK takes it: from the human, and queued behind the running turn where one runs. */
 function userMessage(
+  uuid: UUID,
   content: Extract<InputLine, { type: "message" }>["content"],
   turnRunning: boolean,
 ): SDKUserMessage {
@@ -148,7 +144,7 @@ function userMessage(
     message: { role: "user", content: [...content] },
     parent_tool_use_id: null,
     origin: { kind: "human" },
-    uuid: randomUUID(),
+    uuid,
     // Note that the CLI keeps its own session id, so a prompt names none.
     session_id: "",
   };
@@ -162,7 +158,10 @@ interface Launch {
   readonly prompts: Queue.Queue<SDKUserMessage, Cause.Done>;
   readonly sink: EventSink;
   readonly inFlight: MutableRef.MutableRef<InFlight | undefined>;
+  /** Whether the CLI is in a turn: from a message Luke sent, or from the CLI's own output, a wakeup's turn included. */
   readonly turnRunning: Ref.Ref<boolean>;
+  /** The messages Luke sent that no `result` has answered yet, by their uuid. */
+  readonly unanswered: Ref.Ref<ReadonlySet<string>>;
   readonly stopping: Ref.Ref<boolean>;
   readonly ended: Deferred.Deferred<RunnerEnd>;
 }
@@ -186,7 +185,9 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
   switch (value.type) {
     case INPUT_LINE.MESSAGE: {
       const running = yield* Ref.getAndSet(launch.turnRunning, true);
-      yield* Queue.offer(launch.prompts, userMessage(value.content, running));
+      const uuid = randomUUID();
+      yield* Ref.update(launch.unanswered, (sent) => new Set(sent).add(uuid));
+      yield* Queue.offer(launch.prompts, userMessage(uuid, value.content, running));
       return;
     }
     case INPUT_LINE.STOP: {
@@ -215,17 +216,45 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
   }
 });
 
+/** The message types that say the CLI is in a turn, whoever started it. */
+const TURN_OUTPUT: ReadonlySet<SDKMessage["type"]> = new Set(["assistant", "stream_event", "user"]);
+
+/**
+ * The messages Luke sent that a `result` leaves unanswered. A result names
+ * every prompt its turn consumed, folded ones included; one that names none
+ * (a delivery failure, or an older CLI) is taken to answer them all, so a
+ * launch never outwaits a prompt the CLI will not answer.
+ */
+function stillUnanswered(
+  sent: ReadonlySet<string>,
+  result: Extract<SDKMessage, { type: "result" }>,
+): ReadonlySet<string> {
+  const answered =
+    result.user_message_uuids ??
+    (result.user_message_uuid === undefined ? undefined : [result.user_message_uuid]);
+  if (answered === undefined) return new Set();
+  const left = new Set(sent);
+  for (const uuid of answered) left.delete(uuid);
+  return left;
+}
+
 /** One SDK message, posted, and whether it ends the launch. */
 const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
   launch: Launch,
   message: SDKMessage,
 ) {
   yield* launch.sink.emit(message);
+  if (TURN_OUTPUT.has(message.type)) yield* Ref.set(launch.turnRunning, true);
   if (message.type !== "result") return;
   const inFlight = MutableRef.getAndSet(launch.inFlight, undefined);
   if (yield* Ref.get(launch.stopping)) {
     return yield* Deferred.succeed(launch.ended, RUNNER_END.STOPPED);
   }
+  // A message Luke sent during the turn that the turn did not take runs as
+  // the CLI's next turn, so the launch goes on until it is answered.
+  const left = stillUnanswered(yield* Ref.get(launch.unanswered), message);
+  yield* Ref.set(launch.unanswered, left);
+  if (left.size > 0) return;
   const waiting =
     inFlight !== undefined &&
     (inFlight.background_tasks.length > 0 || inFlight.session_crons.length > 0);
@@ -245,7 +274,8 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     return yield* new RunnerFailed({ detail: `${RUNNER_ENV.BEARER} is not set` });
   }
   const bearer = Redacted.make(bearerValue);
-  const secrets = [bearerValue, input.env[RUNNER_ENV.CLAUDE_TOKEN] ?? ""];
+  const claudeToken = input.env[RUNNER_ENV.CLAUDE_TOKEN];
+  const secrets = claudeToken === undefined ? [bearer] : [bearer, Redacted.make(claudeToken)];
 
   // Stdin is read in a loop of its own from the first line on, so nothing
   // the session does can hold up a line Luke wrote.
@@ -262,6 +292,7 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     url: config.eventsUrl,
     bearer,
     firstSequence: config.firstSequence,
+    secrets,
   });
   const inFlight = MutableRef.make<InFlight | undefined>(undefined);
   const onStop: HookCallback = async (hook) => {
@@ -284,6 +315,7 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     sink,
     inFlight,
     turnRunning: yield* Ref.make(false),
+    unanswered: yield* Ref.make<ReadonlySet<string>>(new Set()),
     stopping: yield* Ref.make(false),
     ended: yield* Deferred.make<RunnerEnd>(),
   };
@@ -302,7 +334,7 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     Effect.matchEffect({
       onSuccess: () => Deferred.succeed(launch.ended, RUNNER_END.INPUT_CLOSED),
       onFailure: (cause) => {
-        failure = scrubbed(cause instanceof Error ? cause.message : String(cause), secrets);
+        failure = cause instanceof Error ? cause.message : String(cause);
         return Deferred.succeed(launch.ended, RUNNER_END.FAILED);
       },
     }),

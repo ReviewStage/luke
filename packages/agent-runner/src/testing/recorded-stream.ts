@@ -105,7 +105,7 @@ function result(subtype: string): Recorded {
 }
 
 /** What a Stop hook reports in flight. Built from the SDK's `StopHookInput`. */
-interface StopReport {
+export interface StopReport {
   readonly background_tasks: BackgroundTaskSummary[];
   readonly session_crons: SessionCronSummary[];
 }
@@ -126,11 +126,17 @@ const WAKEUP: SessionCronSummary = {
   prompt: "Continue Luke's probe from step 4.",
 };
 
-/** What the fake CLI does next: emit a message, run the Stop hook, or hold until it is interrupted. */
+/**
+ * What the fake CLI does next: emit a message, run the Stop hook, take Luke's
+ * next message into the turn, or hold until it is interrupted or the test
+ * releases it.
+ */
 export type Step =
   | { readonly emit: Recorded }
   | { readonly stopHook: StopReport }
-  | { readonly untilInterrupted: true };
+  | { readonly awaitPrompt: true }
+  | { readonly untilInterrupted: true }
+  | { readonly untilReleased: true };
 
 /**
  * P00's workflow turn, from its prompt: an edit, the leak check, a background
@@ -170,6 +176,44 @@ export const WORKFLOW_TURN: readonly Step[] = [
 /** P00's stopped turn: a long foreground command, held until Luke's stop interrupts it. */
 export const STOPPED_TURN: readonly Step[] = [
   { emit: INIT },
+  { emit: toolUse("Bash", { command: STOPPED_COMMAND }) },
+  { untilInterrupted: true },
+  { emit: result("error_during_execution") },
+];
+
+/**
+ * A turn held at work until the test releases it, so Luke's second message
+ * arrives while it runs and is left for the next turn, which the CLI starts
+ * on that message as soon as the first ends.
+ */
+export const FOLLOW_UP_TURNS: readonly Step[] = [
+  { emit: INIT },
+  { emit: said("Working on the first message.") },
+  { untilReleased: true },
+  { stopHook: NOTHING_IN_FLIGHT },
+  { emit: result("success") },
+  { awaitPrompt: true },
+  { emit: said("Done with the second.") },
+  { stopHook: NOTHING_IN_FLIGHT },
+  { emit: result("success") },
+];
+
+/**
+ * P00's workflow turn up to its wakeup, then a wakeup's turn that starts a
+ * long foreground command, held until Luke's stop interrupts it.
+ */
+export const WAKEUP_STOPPED_TURN: readonly Step[] = [
+  { emit: INIT },
+  {
+    emit: toolUse("ScheduleWakeup", {
+      delaySeconds: 60,
+      reason: "wait",
+      prompt: "go",
+      noop: false,
+    }),
+  },
+  { stopHook: { background_tasks: [], session_crons: [WAKEUP] } },
+  { emit: result("success") },
   { emit: toolUse("Bash", { command: STOPPED_COMMAND }) },
   { untilInterrupted: true },
   { emit: result("error_during_execution") },
