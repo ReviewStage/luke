@@ -101,7 +101,9 @@ past its bound (`packages/database/src/models/abandoned-turns.ts`'s
 `TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
 agent's turn, whose one turn is its whole run), and ends on Luke's key every
 voice session whose device detached and did not come back within the grace. It
-reads no account's words and runs no model.
+also starts due automation runs, and for coding agents on a member's GitHub
+token it reads their open pull requests' reviews, comments, and checks on that
+token and wakes the agent with them, as the webhook does for the App.
 
 ## Testing
 
