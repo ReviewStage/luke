@@ -981,7 +981,8 @@ test("a settled choice's answer is the developer's comment, under a line saying 
   assert.equal(reply.querySelector("p")?.textContent, "And page on-call if all three fail.");
   assert.match(answerHead(page) ?? "", /^You.+ · Sent to Alerts$/u);
   assert.equal(
-    reply.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    reply.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
+      .kind,
     "person",
     "the answerer's face leads their comment",
   );
@@ -1726,7 +1727,8 @@ test("a teammate's answer names them by their disc and name, their pick checked 
     assert.fail("their answer");
   assert.match(answerHead(page) ?? "", /^Charles Pan.+ · /u);
   assert.equal(
-    reply.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    reply.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
+      .kind,
     "person",
   );
 
@@ -1765,7 +1767,7 @@ test("a form stacks its fields, each its name over its control, \"Optional\" aft
     pane.querySelector<HTMLInputElement>('[data-inbox-field="boolean"] input[type="checkbox"]') ??
     assert.fail("no Page on-call checkbox");
   const unpicked = readSegmented(channel());
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.equal(askMarker(pane), null);
 
   act(() => segment(channel(), "Slack").click());
@@ -2227,7 +2229,7 @@ test("the thread names its agent as one button wherever it does, its question's 
   const asking =
     page.querySelector('[data-inbox-comment="asked"]') ?? assert.fail("the question is a comment");
   assert.ok(
-    asking.querySelector('.inbox-comment-face .actor-mark[data-kind="agent"]'),
+    asking.querySelector('.inbox-comment-head [data-actor-ref] .actor-mark[data-kind="agent"]'),
     "the agent's tile leads its comment",
   );
   reach(comment);
@@ -4643,7 +4645,8 @@ function threadOf(page: HTMLElement): (string | null | undefined)[][] {
     ),
   ].map((entry) => [
     entry.dataset.inboxComment ?? (entry.dataset.inboxEarlier === undefined ? "?" : "earlier"),
-    entry.querySelector<HTMLElement>(".inbox-comment-face .actor-mark")?.dataset.kind,
+    entry.querySelector<HTMLElement>(".inbox-comment-head [data-actor-ref] .actor-mark")?.dataset
+      .kind,
     wordsOf(entry.querySelector(".inbox-comment-name")),
     wordsOf(entry.querySelector("[data-inbox-message-text]")),
   ]);
@@ -6288,6 +6291,50 @@ function repliedOn(item: InboxItem, id: string) {
   };
 }
 
+/** Each comment of the shown thread as its head draws its writer: its kind, then the kind of each face its head draws, each as the chip naming them holds it, and the faces drawn anywhere but in its head or its body. */
+function commentHeads(pane: HTMLElement): (string | undefined | (string | undefined)[])[][] {
+  return [...pane.querySelectorAll<HTMLElement>(".inbox-thread > .inbox-comment")].map(
+    (comment) => [
+      comment.dataset.inboxComment,
+      [
+        ...comment.querySelectorAll<HTMLElement>(
+          ".inbox-comment-head > .inbox-comment-name > [data-actor-ref] .actor-mark",
+        ),
+      ].map((mark) => mark.dataset.kind),
+      [...comment.querySelectorAll<HTMLElement>(".actor-mark")]
+        .filter((mark) => mark.closest(".inbox-comment-head, .inbox-comment-body") === null)
+        .map((mark) => mark.dataset.kind),
+    ],
+  );
+}
+
+test("each comment of a thread is headed by its writer's chip, their face and name as one target, its face the thread's gutter with no face drawn apart from it; the draft reply's head is the reader's chip, \"You\", with nothing after it", async () => {
+  const shown = threadItem([
+    askingMessage(EXPIRY_ASK),
+    threadMessage(
+      "e1b2c3d4-0000-4000-8000-000000000002",
+      { member: TEAMMATE },
+      "7 days, surely?",
+      2_000,
+    ),
+  ]);
+  const pane = await mountThread(shown);
+
+  assert.deepEqual(commentHeads(pane), [
+    ["message", ["agent"], []],
+    ["message", ["person"], []],
+    ["draft", ["person"], []],
+  ]);
+  const draft =
+    pane.querySelector<HTMLElement>('[data-inbox-comment="draft"] .inbox-comment-head') ??
+    assert.fail("the draft reply has a head");
+  assert.equal(wordsOf(draft), "You", "the reader's chip alone, no draft and no time after it");
+  assert.ok(
+    draft.querySelector('.inbox-comment-name > [data-actor-ref][data-kind="person"] .actor-mark'),
+    "the reader is named by their chip, its face and name",
+  );
+});
+
 test("a thread draws every message, the agent's by its tile and name alone, no tag after its chip, and a member's by their face and name, under its title alone; its open ask is a marker ending the agent's message, its options standing in the reader's draft reply at the thread's end, over the note", async () => {
   const shown = threadItem([
     askingMessage(EXPIRY_ASK),
@@ -6333,9 +6380,9 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
       ["inbox-comment-name", "inbox-comment-when"],
       ["inbox-comment-name", "inbox-comment-when"],
       ["inbox-comment-name", "inbox-comment-when"],
-      ["inbox-comment-name", "inbox-comment-when"],
+      ["inbox-comment-name"],
     ],
-    "an agent's message, as a member's and the draft, is headed by its name and when alone, with no tag after its chip",
+    "an agent's message, as a member's, is headed by its chip and when alone, with no tag after its chip, and the draft by the reader's chip alone",
   );
   assert.deepEqual(askBoxes(pane), [], "the open ask is no card in the agent's message");
   const [asked] = pane.querySelectorAll(".inbox-thread > li");
@@ -6345,7 +6392,7 @@ test("a thread draws every message, the agent's by its tile and name alone, no t
     "the agent's message ends with its words, no marker saying the ask waits on the reader",
   );
   assert.equal(asked?.querySelector('[role="radio"]'), null, "and holds none of its options");
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.deepEqual(checkedOptions(pane), [], "nothing is picked for the reader");
   assert.deepEqual(
     openOptions(pane).map((option) => wordsOf(option)),
@@ -6383,7 +6430,7 @@ test("a plain reply sends no answer and leaves the ask open, the box's one butto
   );
   assert.deepEqual(answers, [], "the old answer path is never taken");
   assert.equal(askMarker(pane), null);
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.deepEqual(threadOf(pane.ownerDocument.body).at(-1), [
     "message",
     "person",
@@ -6799,7 +6846,7 @@ test("picking an option in the draft reply stands it picked, the foot no longer 
   assert.equal(askMarker(pane), null, "and its marker");
   assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
-  assert.deepEqual(draftReply(pane), ["Youdraft"], "the draft stands at the end, plain");
+  assert.deepEqual(draftReply(pane), ["You"], "the draft stands at the end, plain");
   assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply…");
   assert.equal(quietWords(pane), null);
 });
@@ -6815,7 +6862,7 @@ test("an approve-or-request-changes ask is two small buttons in the draft reply:
   const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000012"));
   assert.deepEqual(openOptions(pane), [], "no radio list stands for a yes or no");
 
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Approve").click());
   act(() => askPress(pane, "Approve").click());
   assert.equal(askPress(pane, "Approve").getAttribute("aria-pressed"), "false", "let go");
@@ -6866,7 +6913,7 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
     ["Low", "High"],
     "the draft's box holds the ask's fields and no Submit",
   );
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.equal(sendWords(pane), "Reply");
 
   const reason =
@@ -6875,7 +6922,7 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
     ) ?? assert.fail("no Reason field");
   typeInComposer(reason, "Spiked twice");
   await settle();
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.equal(quietWords(pane), null, "the picked answer says what is sent");
   assert.equal(sendWords(pane), "Reply");
   act(() =>
@@ -6932,18 +6979,18 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   const steps = () => [...pane.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")];
   assert.equal(askPress(pane, "Mark done").disabled, false, "Mark done waits for no tick");
   assert.equal(askMarker(pane), null);
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   assert.equal(quietWords(pane), "Replying keeps the ask open");
 
   act(() => steps()[0]?.click());
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Mark done").click());
   assert.deepEqual(
     steps().map((step) => step.checked),
     [true, true],
     "Mark done ticks the step left unticked",
   );
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
   act(() => askPress(pane, "Couldn't do it").click());
   assert.deepEqual(
     steps().map((step) => step.checked),
@@ -7416,7 +7463,7 @@ test("an item from before version 5, its question in its blocks and its thread a
   ]);
   assert.equal(pane.querySelector(".inbox-ask"), null);
   assert.equal(askMarker(pane), null);
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
 
   act(() => openOptions(pane)[1]?.click());
   act(() => answerSend(pane).click());
@@ -7462,7 +7509,7 @@ test("the reader's own open ask draws no waiting marker anywhere in the thread, 
     pane.querySelector(".inbox-thread")?.textContent ?? assert.fail("the thread"),
     /Waiting on/u,
   );
-  assert.deepEqual(draftReply(pane), ["Youdraft", "controls"]);
+  assert.deepEqual(draftReply(pane), ["You", "controls"]);
 });
 
 test("a teammate's open ask says on its marker that it waits on them, rather than on you, and still takes your answer in your draft reply", async () => {
