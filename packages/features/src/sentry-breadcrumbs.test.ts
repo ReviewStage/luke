@@ -96,17 +96,20 @@ test("an event carrying no token is sent as it was", () => {
   assert.equal(eventWithoutAccessTokens(event), event);
 });
 
+/** A sent attribute's value, as Sentry's span protocol types it. */
+type AttributeValue = string | number | boolean;
+
 /** A span as it would have been sent: its name and its attributes' values. */
 interface SentSpan {
   readonly name: string;
-  readonly attributes: Readonly<Record<string, unknown>>;
+  readonly attributes: Readonly<Record<string, AttributeValue>>;
 }
 
 /** What a streamed span item's payload is read for. */
 interface SpanContainer {
   readonly items?: readonly {
     readonly name: string;
-    readonly attributes?: Readonly<Record<string, { readonly value: unknown }>>;
+    readonly attributes?: Readonly<Record<string, { readonly value: AttributeValue }>>;
   }[];
 }
 
