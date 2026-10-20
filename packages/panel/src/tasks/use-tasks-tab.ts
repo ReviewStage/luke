@@ -2780,8 +2780,8 @@ export function useTasksTab(input: {
       case LINK_PLACE.FACTORY:
         standInFor({ kind: STAND_IN.FACTORY });
         return;
-      // A link to Chat opens it as its sidebar row does, and one to a channel on that channel, in the workspace the link names,
-      // which is the chat's own at once, so listing it first does not put Chat back on For you.
+      // Note that a link to Chat opens it as its sidebar row does, and one to a channel on that channel, in the workspace
+      // the link names, which is the chat's own at once, so listing it first does not put Chat back on For you.
       case LINK_PLACE.CHAT:
         setChatWorkspace(listLinked(workspace));
         standInFor(
