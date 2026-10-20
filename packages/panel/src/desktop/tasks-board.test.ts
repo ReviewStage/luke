@@ -12,11 +12,18 @@ import {
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import {
+  DEFAULT_BOARD_DISPLAY,
+  NO_TASKS_FILTER,
+  TASKS_GROUPING,
+  type TasksDisplay,
+} from "@luke/ui/tasks-page-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { MemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -30,8 +37,9 @@ import { TasksBoard } from "./tasks-board.js";
  * tasks-board.test.ts -- the Board lays the listed workspace's tasks out
  * on a column for each status, each card its key, priority, name, and
  * creator's face, the most pressing first; a press opens the task, a card
- * dragged onto another column is sent that column's status, and Canceled
- * is a filter kept on this Mac. A card is changed where it stands: its
+ * dragged onto another column is sent that column's status, or its
+ * priority where the view stands columns by priority, and Canceled stands
+ * once the view asks for it. A card is changed where it stands: its
  * Priority and Status chips send what is picked, and its ⋯ and a
  * right-click drop the task's own menu, whose Rename makes its name a
  * field. In a narrow room, a phone's, one column stands at a time, chosen
@@ -125,10 +133,14 @@ const TASKS = [
   task(33, "Old onboarding copy", TASK_STATUS.CANCELED, TASK_PRIORITY.LOW),
 ];
 
-/** The Board over `tasks`, read by Dean, once the workspace's members have answered. */
+/** Draws the Board last mounted again under another display, as its View options would. */
+let redrawBoard: (display: TasksDisplay) => void = () => undefined;
+
+/** The Board over `tasks`, under `display`, read by Dean, once the workspace's members have answered. */
 async function mountBoard(
   tasks: readonly TaskSummary[] = TASKS,
   room: ShellRoom = SHELL_ROOM.WIDE,
+  display: TasksDisplay = DEFAULT_BOARD_DISPLAY,
 ): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
@@ -151,19 +163,30 @@ async function mountBoard(
       return Promise.resolve(true);
     },
   });
-  act(() =>
+  const registry = AtomRegistry.make();
+  const draw = (shown: TasksDisplay) =>
     root.render(
       onRegistry(
-        AtomRegistry.make(),
+        registry,
         createElement(
           Fragment,
           null,
-          createElement(TasksBoard, { tasks: control, room, title: "Tasks", switcher: null }),
+          createElement(MemberDirectory, {
+            workspace: ACME,
+            readerId: DEAN,
+            children: createElement(TasksBoard, {
+              tasks: control,
+              room,
+              title: "Tasks",
+              frame: { toolbar: null, chips: null, filter: NO_TASKS_FILTER, display: shown },
+            }),
+          }),
           createElement(ToastHost),
         ),
       ),
-    ),
-  );
+    );
+  redrawBoard = (shown) => act(() => draw(shown));
+  act(() => draw(display));
   await act(async () => undefined);
   return container;
 }
@@ -245,17 +268,16 @@ test("a press on a card opens its task", async () => {
   assert.deepEqual(opened, ["t-42"]);
 });
 
-test("Canceled shows its column once asked for, kept on this Mac", async () => {
+test("Canceled shows its column once the view asks for it, and by priority the columns run from the most pressing, empty ones left out where asked", async () => {
   const board = await mountBoard();
-  const canceled = board.querySelector<HTMLButtonElement>("button[aria-pressed]");
-  assert.ok(canceled, "the toolbar offers Canceled");
-  act(() => canceled.click());
+  redrawBoard({ ...DEFAULT_BOARD_DISPLAY, canceled: true });
   assert.deepEqual(columns(board).at(-1), ["Canceled", ["ACME-33"]]);
 
-  act(() => {
-    for (const root of roots.splice(0)) root.unmount();
-  });
-  assert.deepEqual((await mountBoard()).querySelectorAll("[data-task-column]").length, 5);
+  redrawBoard({ ...DEFAULT_BOARD_DISPLAY, grouping: TASKS_GROUPING.PRIORITY, emptyGroups: false });
+  assert.deepEqual(
+    columns(board).map(([name]) => name),
+    ["Urgent", "High", "Medium", "No priority"],
+  );
 });
 
 test("a workspace with no task yet says so", async () => {
@@ -316,6 +338,18 @@ test("a Todo card dragged onto In progress is sent in progress, and one let go i
   assert.deepEqual(opened, [], "a drag opens no task");
 });
 
+test("by priority, a card dragged onto Urgent's column is sent urgent", async () => {
+  const board = await mountBoard(TASKS, SHELL_ROOM.WIDE, {
+    ...DEFAULT_BOARD_DISPLAY,
+    grouping: TASKS_GROUPING.PRIORITY,
+  });
+  layCardsOut(board);
+
+  dragCard(board, "t-39", { x: 150, y: 120 });
+
+  assert.deepEqual(sent, [["t-39", { priority: TASK_PRIORITY.URGENT }]]);
+});
+
 test("a card dragged onto Done whose change the service refused says so", async () => {
   keeps = false;
   const board = await mountBoard();
@@ -367,17 +401,16 @@ test("in a narrow room the board shows one column at a time, Todo first, and a t
 
 test("in a narrow room Canceled adds its tab, and hiding it again while shown goes back to Todo, which showing it again keeps", async () => {
   const board = await mountBoard(TASKS, SHELL_ROOM.NARROW);
-  const canceled = board.querySelector<HTMLButtonElement>("button[aria-pressed]");
-  assert.ok(canceled, "the toolbar offers Canceled");
+  const withCanceled = { ...DEFAULT_BOARD_DISPLAY, canceled: true };
 
-  act(() => canceled.click());
+  redrawBoard(withCanceled);
   pressTab(board, "Canceled");
   assert.deepEqual(columns(board), [["Canceled", ["ACME-33"]]]);
 
-  act(() => canceled.click());
+  redrawBoard(DEFAULT_BOARD_DISPLAY);
   assert.equal(columnTabs(board).chosen, "Todo");
   assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);
-  act(() => canceled.click());
+  redrawBoard(withCanceled);
   assert.equal(columnTabs(board).chosen, "Todo");
   assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);
 });

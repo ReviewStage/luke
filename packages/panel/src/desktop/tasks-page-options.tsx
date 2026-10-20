@@ -1,0 +1,542 @@
+import { TASK_PRIORITY_ORDER, TASK_STATUS_ORDER, type TaskSummary } from "@luke/features/task-wire";
+import {
+  CHIP_LOOK,
+  Chip,
+  ChipName,
+  IconButton,
+  MENU_ITEM_MARK,
+  TaskPriorityMark,
+  TaskStatusMark,
+  TextButton,
+  useMenu,
+} from "@luke/ui";
+import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
+import {
+  BOARD_GROUPINGS,
+  BOARD_PROPERTIES,
+  boardGrouping,
+  clearedField,
+  filteredFields,
+  filterValues,
+  TASK_PROPERTY,
+  TASK_PROPERTY_ORDER,
+  TASKS_FILTER_FIELD,
+  TASKS_GROUPING,
+  TASKS_ORDER,
+  type TaskProperty,
+  type TasksDisplay,
+  type TasksFilter,
+  type TasksFilterField,
+  type TasksGrouping,
+  type TasksOrder,
+  toggledFilter,
+  valueCounts,
+} from "@luke/ui/tasks-page-model";
+import {
+  ArrowDownAZIcon,
+  ArrowDownNarrowWideIcon,
+  CalendarPlusIcon,
+  CircleDotIcon,
+  ClockIcon,
+  EyeIcon,
+  FolderGitIcon,
+  FolderXIcon,
+  ListFilterIcon,
+  ListIcon,
+  RotateCcwIcon,
+  Rows3Icon,
+  SignalHighIcon,
+  SlidersHorizontalIcon,
+  UserIcon,
+  UserXIcon,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useMemberDirectory } from "../member-directory.js";
+import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { Tooltip } from "../tooltip.js";
+import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+
+/**
+ * tasks-page-options.tsx -- the Tasks page's Filter and View options, the two buttons at its toolbar's end, and the chips under it saying what the filter keeps.
+ *
+ * Filter drops a submenu for each field a task can be narrowed by, Status,
+ * Priority, Creator in a shared workspace, and Repository, each value led by
+ * its mark and checked while the filter keeps it; a value toggles where it
+ * stands and leaves the menu open, so several are chosen in one visit, as
+ * Linear's and Stage's filters are. While the filter keeps anything the
+ * button wears the sidebar's dot, and a chip under the toolbar says each
+ * field's values, its × lifting the field, beside a Clear that lifts them
+ * all, so a filtered page never passes for the whole of it.
+ *
+ * View options is the Inbox's and the sidebar's sliders: Group by and Order
+ * by, each a submenu with its choice checked, the Board offered only the
+ * groupings a dragged card can be sent; then the switches, the pins and
+ * sections leading the List, empty groups, and the Done and the Canceled
+ * tasks; then the properties a row or a card draws; and Reset view while the
+ * view is not the one it started as.
+ */
+
+/** What both views are handed: the page's toolbar, its filter line's chips, and the filter and the view's display. */
+export interface TasksViewFrame {
+  readonly toolbar: ReactNode;
+  /** The filter's chips, for the page's filter line; null while it keeps nothing. */
+  readonly chips: ReactNode;
+  readonly filter: TasksFilter;
+  readonly display: TasksDisplay;
+}
+
+/** What the buttons are called, on their tooltips and their menus alike. */
+const FILTER = "Filter";
+const VIEW_OPTIONS = "View options";
+
+/** What each field is called, on its submenu and its chip. */
+const FIELD_WORDS = {
+  [TASKS_FILTER_FIELD.STATUS]: "Status",
+  [TASKS_FILTER_FIELD.PRIORITY]: "Priority",
+  [TASKS_FILTER_FIELD.CREATOR]: "Creator",
+  [TASKS_FILTER_FIELD.REPOSITORY]: "Repository",
+} as const satisfies Record<TasksFilterField, string>;
+
+/** Each field's glyph, on its submenu and its chip. */
+const FIELD_ICON = {
+  [TASKS_FILTER_FIELD.STATUS]: <CircleDotIcon />,
+  [TASKS_FILTER_FIELD.PRIORITY]: <SignalHighIcon />,
+  [TASKS_FILTER_FIELD.CREATOR]: <UserIcon />,
+  [TASKS_FILTER_FIELD.REPOSITORY]: <FolderGitIcon />,
+} as const satisfies Record<TasksFilterField, React.JSX.Element>;
+
+/** What a grouping is called. */
+const GROUPING_WORDS = {
+  [TASKS_GROUPING.STATUS]: "Status",
+  [TASKS_GROUPING.PRIORITY]: "Priority",
+  [TASKS_GROUPING.REPOSITORY]: "Repository",
+  [TASKS_GROUPING.CREATOR]: "Creator",
+  [TASKS_GROUPING.NONE]: "None",
+} as const satisfies Record<TasksGrouping, string>;
+
+const GROUPING_ICON = {
+  [TASKS_GROUPING.STATUS]: <CircleDotIcon />,
+  [TASKS_GROUPING.PRIORITY]: <SignalHighIcon />,
+  [TASKS_GROUPING.REPOSITORY]: <FolderGitIcon />,
+  [TASKS_GROUPING.CREATOR]: <UserIcon />,
+  [TASKS_GROUPING.NONE]: <ListIcon />,
+} as const satisfies Record<TasksGrouping, React.JSX.Element>;
+
+/** What an order is called. */
+const ORDER_WORDS = {
+  [TASKS_ORDER.PRIORITY]: "Priority",
+  [TASKS_ORDER.UPDATED]: "Last updated",
+  [TASKS_ORDER.CREATED]: "Created",
+  [TASKS_ORDER.NAME]: "Name",
+} as const satisfies Record<TasksOrder, string>;
+
+const ORDER_ICON = {
+  [TASKS_ORDER.PRIORITY]: <SignalHighIcon />,
+  [TASKS_ORDER.UPDATED]: <ClockIcon />,
+  [TASKS_ORDER.CREATED]: <CalendarPlusIcon />,
+  [TASKS_ORDER.NAME]: <ArrowDownAZIcon />,
+} as const satisfies Record<TasksOrder, React.JSX.Element>;
+
+/** What a property is called in the menu. */
+const PROPERTY_WORDS = {
+  [TASK_PROPERTY.PRIORITY]: "Priority",
+  [TASK_PROPERTY.KEY]: "ID",
+  [TASK_PROPERTY.STATUS]: "Status",
+  [TASK_PROPERTY.WAITING]: "Needs you",
+  [TASK_PROPERTY.REPOSITORY]: "Repository",
+  [TASK_PROPERTY.CREATOR]: "Creator",
+  [TASK_PROPERTY.AGENTS]: "Agents",
+  [TASK_PROPERTY.UPDATED]: "Last updated",
+} as const satisfies Record<TaskProperty, string>;
+
+/** What the List calls a task with no repository, and a task nobody is named for. */
+export const NO_REPOSITORY = "No repository";
+export const NO_CREATOR = "No one";
+
+/** How many values a chip names before it counts the rest. */
+const CHIP_VALUES = 2;
+
+/** One value a field may keep: its words, its mark, and the value itself. */
+interface FieldValue {
+  readonly value: string | null;
+  readonly words: string;
+  readonly icon: React.JSX.Element;
+}
+
+/** A repository's own name, without its owner, as a menu and a chip have room for. */
+function repositoryName(repository: string): string {
+  return repository.slice(repository.indexOf("/") + 1);
+}
+
+/** Who a creator is, as the directory draws them, else as a listed task names them. */
+function creatorFor(
+  creatorId: string,
+  reader: ReturnType<typeof useMemberDirectory>,
+  tasks: readonly TaskSummary[],
+): Actor {
+  const member = reader.members?.find((each) => each.userId === creatorId);
+  if (member !== undefined) return memberActor(member, reader.readerId);
+  const named = tasks.find((task) => task.createdBy?.userId === creatorId);
+  return creatorActor(named ?? { ownerId: creatorId }, reader, undefined);
+}
+
+/** A creator's name as the page says it: the directory's, else the one a task carries; the reader's own as You. */
+export function creatorWords(
+  creatorId: string | null,
+  reader: ReturnType<typeof useMemberDirectory>,
+  tasks: readonly TaskSummary[],
+): string {
+  return creatorId === null ? NO_CREATOR : actorName(creatorFor(creatorId, reader, tasks));
+}
+
+/**
+ * The values a field offers: every status and priority, in their order; the
+ * reader, then each member, then anyone else a task names, and nobody where
+ * a task names no one; and each repository a task is on, by name, then none.
+ * A value the filter keeps is offered though no task holds it now.
+ */
+function fieldValues(
+  field: TasksFilterField,
+  tasks: readonly TaskSummary[],
+  filter: TasksFilter,
+  reader: ReturnType<typeof useMemberDirectory>,
+): readonly FieldValue[] {
+  const held = new Set<string | null>([
+    ...valueCounts(tasks, field).keys(),
+    ...filterValues(filter, field),
+  ]);
+  switch (field) {
+    case TASKS_FILTER_FIELD.STATUS:
+      return TASK_STATUS_ORDER.map((status) => ({
+        value: status,
+        words: TASK_STATUS_WORDS[status],
+        icon: <TaskStatusMark status={status} />,
+      }));
+    case TASKS_FILTER_FIELD.PRIORITY:
+      return TASK_PRIORITY_ORDER.map((priority) => ({
+        value: priority,
+        words: TASK_PRIORITY_WORDS[priority],
+        icon: <TaskPriorityMark priority={priority} />,
+      }));
+    case TASKS_FILTER_FIELD.CREATOR: {
+      const members = (reader.members ?? []).map((member) => member.userId);
+      const ids = [
+        ...new Set([
+          ...(reader.readerId === undefined ? [] : [reader.readerId]),
+          ...members,
+          ...[...held].filter((id): id is string => id !== null),
+        ]),
+      ];
+      return [
+        ...ids.map((id) => ({
+          value: id,
+          words: creatorWords(id, reader, tasks),
+          icon: <ActorMark actor={creatorFor(id, reader, tasks)} size={ACTOR_SIZE.INLINE} />,
+        })),
+        ...(held.has(null) ? [{ value: null, words: NO_CREATOR, icon: <UserXIcon /> }] : []),
+      ];
+    }
+    case TASKS_FILTER_FIELD.REPOSITORY:
+      return [
+        ...[...held]
+          .filter((repository): repository is string => repository !== null)
+          .sort((a, b) => repositoryName(a).localeCompare(repositoryName(b)) || a.localeCompare(b))
+          .map((repository) => ({
+            value: repository,
+            words: repositoryName(repository),
+            icon: <FolderGitIcon />,
+          })),
+        ...(held.has(null) ? [{ value: null, words: NO_REPOSITORY, icon: <FolderXIcon /> }] : []),
+      ];
+  }
+}
+
+/** The fields the Filter offers: Creator only where the workspace is shared. */
+function offeredFields(shared: boolean): readonly TasksFilterField[] {
+  return Object.values(TASKS_FILTER_FIELD).filter(
+    (field) => shared || field !== TASKS_FILTER_FIELD.CREATOR,
+  );
+}
+
+/** The filter's menu: a submenu for each field, its values toggled where they stand, and Clear filters at its foot. */
+function filterEntries(
+  tasks: readonly TaskSummary[],
+  filter: TasksFilter,
+  onFilter: (filter: TasksFilter) => void,
+  shared: boolean,
+  reader: ReturnType<typeof useMemberDirectory>,
+): MenuEntry[][] {
+  const fields: MenuEntry[] = offeredFields(shared).map((field) => {
+    const kept = filterValues(filter, field);
+    return {
+      label: FIELD_WORDS[field],
+      icon: FIELD_ICON[field],
+      items: fieldValues(field, tasks, filter, reader).map(
+        ({ value, words, icon }): MenuAction => ({
+          label: words,
+          icon,
+          checked: kept.includes(value),
+          stays: true,
+          onSelect: () => onFilter(toggledFilter(filter, field, value)),
+        }),
+      ),
+    };
+  });
+  return [
+    fields,
+    [
+      {
+        label: "Clear filters",
+        icon: <RotateCcwIcon />,
+        disabled: filteredFields(filter).length === 0,
+        onSelect: () => onFilter({}),
+      },
+    ],
+  ];
+}
+
+/** The toolbar's Filter: its button, which wears a dot while the filter keeps anything, and the menu it drops. */
+export function TasksFilterButton({
+  shown,
+  tasks,
+  filter,
+  onFilter,
+  shared,
+}: {
+  /** Whether the page is on screen, for the menu not to outlive it. */
+  shown: boolean;
+  /** The workspace's tasks, whose creators and repositories the menu offers. */
+  tasks: readonly TaskSummary[];
+  filter: TasksFilter;
+  onFilter: (filter: TasksFilter) => void;
+  /** Whether the workspace is shared, which alone filters by creator. */
+  shared: boolean;
+}): React.JSX.Element {
+  const menu = useMenu(shown);
+  const reader = useMemberDirectory();
+  const filtered = filteredFields(filter).length > 0;
+  return (
+    <>
+      <span className="tasks-page-option" data-filtered={filtered ? "true" : undefined}>
+        <Tooltip label={FILTER}>
+          <IconButton
+            icon={<ListFilterIcon />}
+            label={FILTER}
+            aria-description={filtered ? "Filtered" : undefined}
+            {...menu.trigger()}
+          />
+        </Tooltip>
+      </span>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={FILTER}
+          menu={menu.drawn}
+          groups={filterEntries(tasks, filter, onFilter, shared, reader)}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
+
+/** What a field's chip says of its values: up to two by name, the rest counted. */
+function chipWords(words: readonly string[]): string {
+  const named = words.slice(0, CHIP_VALUES).join(", ");
+  const more = words.length - CHIP_VALUES;
+  return more > 0 ? `${named} +${more}` : named;
+}
+
+/** The chips on the page's filter line while the filter keeps anything: a field a chip, its values named, its × lifting it, and Clear lifting them all. */
+export function TasksFilterChips({
+  tasks,
+  filter,
+  onFilter,
+}: {
+  tasks: readonly TaskSummary[];
+  filter: TasksFilter;
+  onFilter: (filter: TasksFilter) => void;
+}): React.JSX.Element | null {
+  const reader = useMemberDirectory();
+  const fields = filteredFields(filter);
+  if (fields.length === 0) return null;
+  return (
+    <>
+      {fields.map((field) => {
+        // Note that a chip names its values in the menu's order, whatever order they were chosen in.
+        const kept = filterValues(filter, field);
+        const words = fieldValues(field, tasks, filter, reader)
+          .filter((each) => kept.includes(each.value))
+          .map((each) => each.words);
+        return (
+          <Chip
+            key={field}
+            look={CHIP_LOOK.FILTER}
+            removeLabel={`Clear the ${FIELD_WORDS[field].toLowerCase()} filter`}
+            onRemove={() => onFilter(clearedField(filter, field))}
+          >
+            {FIELD_ICON[field]}
+            <ChipName>{`${FIELD_WORDS[field]}: ${chipWords(words)}`}</ChipName>
+          </Chip>
+        );
+      })}
+      <TextButton onClick={() => onFilter({})}>Clear</TextButton>
+    </>
+  );
+}
+
+/** Whether a grouping draws a group for each of a fixed set of values, which alone may stand empty. */
+function groupsFixed(grouping: TasksGrouping): boolean {
+  return grouping === TASKS_GROUPING.STATUS || grouping === TASKS_GROUPING.PRIORITY;
+}
+
+/** Whether two displays lay the tasks out alike. */
+function sameDisplay(a: TasksDisplay, b: TasksDisplay): boolean {
+  return (
+    a.grouping === b.grouping &&
+    a.order === b.order &&
+    a.emptyGroups === b.emptyGroups &&
+    a.done === b.done &&
+    a.canceled === b.canceled &&
+    a.pinnedFirst === b.pinnedFirst &&
+    a.properties.length === b.properties.length &&
+    a.properties.every((property) => b.properties.includes(property))
+  );
+}
+
+/** The view's menu for the List or the Board: Group by and Order by, the switches, the properties, and Reset view. */
+function displayEntries({
+  board,
+  display,
+  initial,
+  onDisplay,
+  shared,
+}: {
+  board: boolean;
+  display: TasksDisplay;
+  initial: TasksDisplay;
+  onDisplay: (display: TasksDisplay) => void;
+  shared: boolean;
+}): MenuEntry[][] {
+  const set = (change: Partial<TasksDisplay>) => onDisplay({ ...display, ...change });
+  const grouping = board ? boardGrouping(display.grouping) : display.grouping;
+  const groupings = board
+    ? BOARD_GROUPINGS
+    : Object.values(TASKS_GROUPING).filter(
+        (each) => shared || each !== TASKS_GROUPING.CREATOR || grouping === each,
+      );
+  const toggle = (label: string, checked: boolean, change: Partial<TasksDisplay>): MenuAction => ({
+    label,
+    checked,
+    mark: MENU_ITEM_MARK.SWITCH,
+    stays: true,
+    onSelect: () => set(change),
+  });
+  const offeredProperties = board ? BOARD_PROPERTIES : TASK_PROPERTY_ORDER;
+  return [
+    [
+      {
+        label: board ? "Columns" : "Group by",
+        icon: <Rows3Icon />,
+        items: groupings.map((each) => ({
+          label: GROUPING_WORDS[each],
+          icon: GROUPING_ICON[each],
+          checked: grouping === each,
+          onSelect: () => set({ grouping: each }),
+        })),
+      },
+      {
+        label: "Order by",
+        icon: <ArrowDownNarrowWideIcon />,
+        items: Object.values(TASKS_ORDER).map((each) => ({
+          label: ORDER_WORDS[each],
+          icon: ORDER_ICON[each],
+          checked: display.order === each,
+          onSelect: () => set({ order: each }),
+        })),
+      },
+    ],
+    [
+      ...(board
+        ? []
+        : [
+            toggle("Pinned and sections first", display.pinnedFirst, {
+              pinnedFirst: !display.pinnedFirst,
+            }),
+          ]),
+      ...(groupsFixed(grouping)
+        ? [
+            toggle(board ? "Empty columns" : "Empty groups", display.emptyGroups, {
+              emptyGroups: !display.emptyGroups,
+            }),
+          ]
+        : []),
+      toggle("Done tasks", display.done, { done: !display.done }),
+      toggle("Canceled tasks", display.canceled, { canceled: !display.canceled }),
+    ],
+    [
+      {
+        label: "Properties",
+        icon: <EyeIcon />,
+        items: offeredProperties.map((property) => ({
+          label: PROPERTY_WORDS[property],
+          checked: display.properties.includes(property),
+          stays: true,
+          onSelect: () =>
+            set({
+              properties: TASK_PROPERTY_ORDER.filter((each) =>
+                each === property
+                  ? !display.properties.includes(property)
+                  : display.properties.includes(each),
+              ),
+            }),
+        })),
+      },
+      {
+        label: "Reset view",
+        icon: <RotateCcwIcon />,
+        disabled: sameDisplay(display, initial),
+        onSelect: () => onDisplay(initial),
+      },
+    ],
+  ];
+}
+
+/** The toolbar's View options: its button and the menu it drops, for the view shown. */
+export function TasksViewOptions({
+  shown,
+  board,
+  display,
+  initial,
+  onDisplay,
+  shared,
+}: {
+  shown: boolean;
+  /** Whether the view is the Board, which offers only what its columns and cards can draw. */
+  board: boolean;
+  display: TasksDisplay;
+  /** The view as it started, which Reset view goes back to. */
+  initial: TasksDisplay;
+  onDisplay: (display: TasksDisplay) => void;
+  /** Whether the workspace is shared, which alone groups by creator. */
+  shared: boolean;
+}): React.JSX.Element {
+  const menu = useMenu(shown);
+  return (
+    <>
+      <span className="tasks-page-option">
+        <Tooltip label={VIEW_OPTIONS}>
+          <IconButton icon={<SlidersHorizontalIcon />} label={VIEW_OPTIONS} {...menu.trigger()} />
+        </Tooltip>
+      </span>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={VIEW_OPTIONS}
+          menu={menu.drawn}
+          groups={displayEntries({ board, display, initial, onDisplay, shared })}
+          onClose={menu.close}
+        />
+      )}
+    </>
+  );
+}
