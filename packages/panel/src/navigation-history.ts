@@ -238,10 +238,13 @@ function sameSubStep(one: Place, other: Place): boolean {
   return mine === undefined || theirs === undefined || mine === theirs;
 }
 
-/** Whether two Chat places are the same: For you, or the same channel. */
+/** Whether two Chat places are the same: For you, the same channel, or the same pair of agents. */
 function sameChatPlace(one: ChatPlace | undefined, other: ChatPlace | undefined): boolean {
   if (one?.kind === CHAT_PLACE.CHANNEL && other?.kind === CHAT_PLACE.CHANNEL) {
     return one.channelId === other.channelId;
+  }
+  if (one?.kind === CHAT_PLACE.AGENT_PAIR && other?.kind === CHAT_PLACE.AGENT_PAIR) {
+    return one.agentIds[0] === other.agentIds[0] && one.agentIds[1] === other.agentIds[1];
   }
   return one?.kind === other?.kind;
 }

@@ -600,6 +600,50 @@ test("a direct message between two others reads as theirs, named by both, with n
   assert.equal(ask?.querySelector("button"), null);
 });
 
+test("two agents' direct lines read under Direct messages as one conversation named by both, never unread, and open read only in the order sent with no box, no Reply, and nothing to answer", () => {
+  const INVITES = "7d8e9f0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a";
+  const BILLING = "8e9f0a1b-2c3d-4e4f-9a5b-6c7d8e9f0a1b";
+  const agent = (agentId: string, name: string) => ({
+    agentId,
+    name,
+    model: "anthropic/claude-opus-5.5",
+  });
+  const page = mount((chat) => ({
+    ...chat,
+    answer: {
+      ...chat.answer,
+      agentMessages: [
+        {
+          id: "9f0a1b2c-3d4e-4f5a-8b6c-7d8e9f0a1b2c",
+          from: agent(BILLING, "Billing"),
+          to: agent(INVITES, "Invites"),
+          text: "Is the invite schema settled?",
+          sentAt: AT - 120_000,
+        },
+        {
+          id: "0a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+          from: agent(INVITES, "Invites"),
+          to: agent(BILLING, "Billing"),
+          text: "Yes, **merged** an hour ago.",
+          sentAt: AT - 60_000,
+        },
+      ],
+    },
+  }));
+  const heard = rail(page);
+  // Nothing the agents said waits on the developer, so For you holds what it held, and the pair's row ends the direct messages with no dot.
+  assert.equal(heard[0], "▸ For you (4)");
+  assert.equal(heard.at(-1), "Billing ↔ Invites");
+  act(() => railRow(page, "Billing ↔ Invites").click());
+  assert.equal(rail(page).at(-1), "▸ Billing ↔ Invites");
+  assert.equal(page.querySelector(".chat-head h2")?.textContent, "Billing ↔ Invites");
+  assert.deepEqual(stream(page), ["Billing", "Invites"]);
+  assert.match(page.querySelector(".chat-stream")?.textContent ?? "", /Yes, merged an hour ago\./u);
+  assert.equal(page.querySelector(".chat-composer"), null);
+  assert.equal(page.querySelector(".chat-stream button[aria-expanded]"), null);
+  assert.match(page.textContent ?? "", /Only Billing and Invites post in this conversation\./u);
+});
+
 test("a # at the start of a word offers the channels, and the one chosen is written as its name, the box holding a microphone beside its send", () => {
   const page = mount();
   act(() => railRow(page, "teammate-invitations").click());

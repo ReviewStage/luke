@@ -12,7 +12,10 @@ import {
 } from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
+import { createTask } from "@luke/database/models/task-store";
+import { type AwaitingLineMetadata, storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
+import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import {
@@ -24,7 +27,7 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { EXPERIMENT } from "@luke/settings";
-import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
   Clock,
@@ -53,6 +56,7 @@ import {
   type InstallationFixture,
   openGithubUser,
 } from "../testing/github-app-fake.js";
+import { agentLineOf } from "./agent-line.js";
 import { BRAIN_HOST_HEADER } from "./brain-host/bounds.js";
 import { CODER } from "./coder-host/bounds.js";
 import { messagesProcedures } from "./messages-procedures.js";
@@ -243,6 +247,88 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
       const answered = yield* driven({ fiber: held, asleep: room.asleep }, CODER.MESSAGES_HOLD);
       assert.deepEqual([answered.messages, answered.cursor], [[], cursor]);
     }),
+  );
+
+  it.effect(
+    "a line one agent sent another reads beside the chat as the sender's words alone, both ways of the pair in the order sent, and a chat notice steered into an agent reads as none of them",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const agentOn = (userId: string, title: string) =>
+          Effect.gen(function* () {
+            const { id: taskId } = yield* createTask(userId, {
+              organizationId: room.workspace,
+              name: title,
+              repository: "acme/api",
+            });
+            const started = yield* createCodingAgent(userId, {
+              taskId,
+              idempotencyKey: randomUUID(),
+              model: "anthropic/claude-opus-5.5",
+              effort: "high",
+              planSnapshot: `# ${title}\n`,
+              prompt: null,
+              repository: "acme/api",
+              title,
+            });
+            return Option.getOrThrow(started).agent;
+          });
+        const invites = yield* agentOn(room.owner, "Invites");
+        const billing = yield* agentOn(room.teammate, "Billing");
+        const writer = yield* storeWriter({ tools: {} });
+        type Agent = typeof invites;
+        const send = (from: Agent, to: Agent, text: string, metadata?: AwaitingLineMetadata) =>
+          Effect.gen(function* () {
+            yield* TestClock.adjust("1 second");
+            yield* writer.writeAwaitingLine(
+              { userId: to.userId, conversationId: to.conversationId },
+              {
+                text,
+                clientKey: randomUUID(),
+                sender: {
+                  kind: MESSAGE_SENDER.AGENT,
+                  agentId: from.id,
+                  name: from.title ?? from.model,
+                  model: from.model,
+                },
+                metadata,
+              },
+              Effect.succeed(true),
+            );
+          });
+        yield* send(
+          invites,
+          billing,
+          agentLineOf(`"Invites" (agent id ${invites.id}), working in acme/api`, "Schema settled?"),
+        );
+        yield* send(
+          billing,
+          invites,
+          agentLineOf(`"Billing" (agent id ${billing.id}), working in acme/api`, "Yes, merged."),
+        );
+        yield* send(invites, billing, "Chat notice · Invites in #general (m 4):\n\nHi", {
+          author: MESSAGE_AUTHOR.AGENT,
+          channel: MESSAGE_CHANNEL.CHAT,
+          chat_seq: 4,
+          from: "Invites",
+        });
+
+        const read = yield* room.read(CHAT_CURSOR_START, room.teammate);
+        assert.deepEqual(
+          (read.agentMessages ?? []).map((message) => [
+            message.from.name,
+            message.from.agentId,
+            message.to.name,
+            message.to.planId,
+            message.text,
+          ]),
+          [
+            ["Invites", invites.id, "Billing", billing.taskId, "Schema settled?"],
+            ["Billing", billing.id, "Invites", invites.taskId, "Yes, merged."],
+          ],
+        );
+        assert.deepEqual(read.messages, []);
+      }),
   );
 
   it.effect(

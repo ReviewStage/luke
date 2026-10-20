@@ -25,6 +25,8 @@ import {
 import { ACTOR_KIND, type Actor, distinctActors } from "@luke/ui/actor-model";
 import type { ChatTarget } from "@luke/ui/chat-mention";
 import {
+  type AgentPair,
+  agentPairLabel,
   CHAT_PLACE,
   type ChatAskAnswer,
   type ChatNames,
@@ -38,6 +40,7 @@ import {
   chatWho,
   type ForYouEntry,
   forYou,
+  placeAgentPair,
   placeChannel,
   postsIn,
 } from "@luke/ui/chat-model";
@@ -50,7 +53,7 @@ import { FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
 import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
-import { useChatActor } from "./chat-actors.js";
+import { messagingAgentActor, useChatActor } from "./chat-actors.js";
 import { AskCard } from "./chat-ask.js";
 import { ChatComposer } from "./chat-composer.js";
 import { FileRef } from "./file-ref.js";
@@ -82,6 +85,11 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * (`EmptyState`). Every word an agent, Luke, or a person wrote draws through the
  * panel, so the masking keeps all of it out of a session recording, and
  * the stream is out of it whole besides (`ph-no-capture`).
+ *
+ * A pair of agents' direct messages reads as a direct message between two
+ * others does, each line led by the agent that sent it, in the order sent,
+ * with no box to write in, no Reply, and nothing to answer: the reader
+ * watches what the two said to each other, and nothing here reaches either.
  */
 
 /** What For you says with nothing waiting. */
@@ -93,6 +101,9 @@ const NOTHING_POSTED = "Nothing posted here yet.";
 /** What a channel no box is offered in says at its foot: an archived one, or a direct message between two others. */
 const ARCHIVED_CHANNEL = "This channel is archived.";
 const OTHERS_DM = (pair: string) => `Only ${pair} post in this conversation.`;
+
+/** What a pair of agents' head says beside their names. */
+const AGENT_PAIR_META = "Agent to agent";
 
 /** What a row says of a block this build does not know. */
 const NEWER_LUKE = "Open this in a newer Luke to see the rest.";
@@ -466,6 +477,55 @@ function composerLabel(chat: ChatAnswer, names: ChatNames, channel: ChatChannel)
   return channel.kind === CHANNEL_KIND.DM ? `Message ${label}` : `Message #${label}`;
 }
 
+/**
+ * One pair of agents' direct messages, read only: each line led by its
+ * sender's mark and name, its words as the transcript draws them, and a
+ * foot naming the two who post here.
+ */
+function AgentPairPane({
+  pair,
+  now,
+  lead,
+  hidden,
+}: {
+  pair: AgentPair;
+  now: number;
+  lead: React.ReactNode;
+  hidden: boolean | undefined;
+}): React.JSX.Element {
+  const title = agentPairLabel(pair);
+  return (
+    <section className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
+      <PlaceHead title={title} meta={AGENT_PAIR_META} lead={lead} />
+      <ScrollArea>
+        <div className="chat-stream-body">
+          <ol className="chat-messages">
+            {pair.messages.map((line) => {
+              const actor = messagingAgentActor(line.from);
+              return (
+                <li key={line.id} className="chat-message">
+                  <Face actor={actor} />
+                  <div className="chat-message-body">
+                    <Byline actor={actor} at={line.sentAt} where={undefined} now={now} />
+                    <div className="chat-words">
+                      <TranscriptWords text={line.text} />
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      </ScrollArea>
+      <div className="chat-closed-foot">
+        <Text tone={TEXT_TONE.MUTED}>
+          {OTHERS_DM(pair.agents.map((agent) => agent.name).join(" and "))}
+        </Text>
+      </div>
+    </section>
+  );
+}
+
 /** The pane: the place's head, then its messages, or a line saying there are none, and a channel's composer. */
 export function ChatPane({
   chat,
@@ -516,6 +576,10 @@ export function ChatPane({
     onAnswer,
     readPicture,
   };
+  const pair = placeAgentPair(chat, place);
+  if (pair !== undefined) {
+    return <AgentPairPane pair={pair} now={now} lead={lead} hidden={hidden} />;
+  }
   const channel = placeChannel(chat, place);
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {
     const entries = forYou(chat);

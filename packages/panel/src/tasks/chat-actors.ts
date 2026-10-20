@@ -1,4 +1,4 @@
-import { type ChatAnswer, MEMBER_KIND } from "@luke/features/chat-wire";
+import { type ChatAnswer, type ChatMessagingAgent, MEMBER_KIND } from "@luke/features/chat-wire";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, LUKE_ACTOR, personActor } from "@luke/ui/actor-model";
 import { type ChatNames, chatWho } from "@luke/ui/chat-model";
 import { useMemberDirectory } from "../member-directory.js";
@@ -58,5 +58,17 @@ export function useChatActor(
       default:
         return personActor(undefined, members, readerId, former);
     }
+  };
+}
+
+/** An agent of a line one agent sent another, drawn as a chat member who is an agent is: by its name, under its task, with its harness at rest. */
+export function messagingAgentActor(agent: ChatMessagingAgent): Actor {
+  return {
+    kind: ACTOR_KIND.AGENT,
+    name: agent.name,
+    agentId: agent.agentId,
+    ...(agent.planId === undefined ? undefined : { taskId: agent.planId }),
+    provider: providerOf(agent.model),
+    state: ACTOR_STATE.REST,
   };
 }

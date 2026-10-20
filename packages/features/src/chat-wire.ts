@@ -671,12 +671,43 @@ export const chatChannelReadSchema = EffectSchema.Struct({
   readSeq: countedNumber,
 });
 
+/** One coding agent of a line one agent sent another: its id, the name its tab shows now, the model it runs on, and the plan it works on, absent for one on none. */
+const chatMessagingAgentSchema = EffectSchema.Struct({
+  agentId: wireUuidSchema,
+  name: EffectSchema.String,
+  model: EffectSchema.String,
+  planId: EffectSchema.optionalKey(wireUuidSchema),
+});
+
+export type ChatMessagingAgent = typeof chatMessagingAgentSchema.Type;
+
+/**
+ * A line one coding agent sent another through its `message_agent` tool,
+ * as the recipient's transcript records it: the words the sender wrote,
+ * when, by whom, and to whom. It is no chat message: it carries no place
+ * in the chat's sequence, no channel, and nothing to answer, and a window
+ * only reads it.
+ */
+const chatAgentMessageSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  from: chatMessagingAgentSchema,
+  to: chatMessagingAgentSchema,
+  text: EffectSchema.String,
+  sentAt: countedNumber,
+});
+
+export type ChatAgentMessage = typeof chatAgentMessageSchema.Type;
+
 /**
  * A workspace's chat as the window reads it past a cursor: the reader's own
  * member and how far it has read everywhere, each channel it has read
  * further on that channel's own cursor, every member and channel it sees,
  * the messages posted or changed past the cursor, and the cursor to read on
  * from. A service that predates per-channel cursors sends no `reads`.
+ * `agentMessages` is the newest lines the workspace's coding agents sent
+ * one another directly, oldest first and whole on every answer rather than
+ * past the cursor, since they stand outside the chat's sequence; a service
+ * that predates them sends none.
  */
 export const chatAnswerSchema = EffectSchema.Struct({
   self: wireUuidSchema,
@@ -686,6 +717,7 @@ export const chatAnswerSchema = EffectSchema.Struct({
   channels: EffectSchema.Array(chatChannelSchema),
   messages: EffectSchema.Array(chatMessageSchema),
   cursor: EffectSchema.String,
+  agentMessages: EffectSchema.optionalKey(EffectSchema.Array(chatAgentMessageSchema)),
 });
 
 /** @public */

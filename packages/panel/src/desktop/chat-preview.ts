@@ -107,6 +107,11 @@ function markdownWords(text: string): string {
   );
 }
 
+/** Markdown as a row previews it, one line of plain words: a line one agent sent another, which is words alone. */
+export function previewText(text: string): string {
+  return markdownWords(text).replace(/\s+/gu, " ").trim();
+}
+
 /** A message's words as a row previews them, one line: its Markdown read as plain words, a chip as its label; a picture alone by its words. */
 export function previewWords(message: ChatMessage): string {
   const words = message.blocks.map((block) =>

@@ -1387,11 +1387,11 @@ export function useTasksTab(input: {
   const signedIn = fixture !== undefined || input.signedIn;
   // Outside a fixture run, Chat reads the listed workspace's chat from the service, while the account has it on.
   const chatOn = useChatOn();
-  // A channel chosen in Chat is the listed workspace's, so another workspace listed puts Chat back on For you.
+  // A channel or a pair of agents chosen in Chat is the listed workspace's, so another workspace listed puts Chat back on For you.
   const [chatWorkspace, setChatWorkspace] = useState(listedWorkspace?.id);
   if (chatWorkspace !== listedWorkspace?.id) {
     setChatWorkspace(listedWorkspace?.id);
-    if (standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL) {
+    if (standIn?.kind === STAND_IN.CHAT && standIn.place.kind !== CHAT_PLACE.FOR_YOU) {
       setStandIn({ ...standIn, place: FOR_YOU });
     }
   }

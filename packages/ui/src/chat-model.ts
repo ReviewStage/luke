@@ -5,11 +5,13 @@ import {
   CHAT_BOUNDS,
   CHAT_MEMBER_LABEL,
   CHAT_TARGET_SIGIL,
+  type ChatAgentMessage,
   type ChatAnswer,
   type ChatChannel,
   type ChatEditRequest,
   type ChatMember,
   type ChatMessage,
+  type ChatMessagingAgent,
   type ChatOpenRequest,
   type ChatPostRequest,
   type ChatReply,
@@ -49,17 +51,37 @@ import type { ChatTarget } from "./chat-mention.js";
  * standing by `#name`. Every member is named by who they are, never by a
  * handle: a person by their account's name, an agent by its title, and a
  * task's Luke as Luke.
+ *
+ * Beside the chat, an answer carries the lines the workspace's coding
+ * agents sent one another directly through `message_agent`, which never
+ * pass through the chat. The rail lists them among the direct messages, one
+ * conversation for each pair of agents whichever of the two sent each line,
+ * the latest spoken in first, and a place shows one pair's lines in the
+ * order sent. The reader only watches them: nothing there is posted,
+ * answered, or counted unread.
  */
 
-/** The places the window's Chat shows: For you, or one channel. */
+/** The places the window's Chat shows: For you, one channel, or one pair of agents' direct messages. */
 export const CHAT_PLACE = {
   FOR_YOU: "for-you",
   CHANNEL: "channel",
+  AGENT_PAIR: "agent-pair",
 } as const;
 
 export type ChatPlace =
   | { readonly kind: typeof CHAT_PLACE.FOR_YOU }
-  | { readonly kind: typeof CHAT_PLACE.CHANNEL; readonly channelId: string };
+  | { readonly kind: typeof CHAT_PLACE.CHANNEL; readonly channelId: string }
+  | { readonly kind: typeof CHAT_PLACE.AGENT_PAIR; readonly agentIds: AgentPairIds };
+
+/** The two agents of a pair by id, the lesser first, so a pair is named one way whichever of the two spoke. */
+export type AgentPairIds = readonly [string, string];
+
+/** One pair of agents' direct messages: the two by id, the two as the newest line names them, the one who spoke first first, and their lines in the order sent. */
+export interface AgentPair {
+  readonly agentIds: AgentPairIds;
+  readonly agents: readonly [ChatMessagingAgent, ChatMessagingAgent];
+  readonly messages: readonly ChatAgentMessage[];
+}
 
 /** Where the window's Chat opens: For you. */
 export const FOR_YOU: ChatPlace = { kind: CHAT_PLACE.FOR_YOU };
@@ -154,6 +176,8 @@ export interface ChatRail {
   /** The channels archived: a task's that was archived with it, and a topic archived. */
   readonly archived: readonly ChatRailRow[];
   readonly direct: readonly ChatRailRow[];
+  /** The pairs of agents that sent one another direct messages, the latest spoken in first. */
+  readonly agentPairs: readonly AgentPair[];
 }
 
 /** A group of task channels in the rail: under the reader's pinned tasks, one of their sections, or none, and its rows in order. */
@@ -357,7 +381,63 @@ export function chatRail(
     tasks: taskGroups(tasks.map(row), grouping),
     archived: archived.map(row),
     direct: direct.map(row),
+    agentPairs: agentPairs(chat),
   };
+}
+
+/** The pair a line is between, the lesser id first. */
+function pairIdsOf(message: ChatAgentMessage): AgentPairIds {
+  const { from, to } = message;
+  return from.agentId < to.agentId ? [from.agentId, to.agentId] : [to.agentId, from.agentId];
+}
+
+/**
+ * The pairs of agents the answer's direct lines are between, the latest
+ * spoken in first, each with its lines in the order sent and its two named
+ * as its newest line names them, the one who spoke first first. Note that a line from either of the two
+ * to the other is the pair's, so a send and the reply to it read as one
+ * conversation.
+ */
+export function agentPairs(chat: ChatAnswer): readonly AgentPair[] {
+  const byPair = new Map<string, Map<string, ChatAgentMessage[]>>();
+  for (const message of chat.agentMessages ?? []) {
+    const [first, second] = pairIdsOf(message);
+    const withFirst = byPair.get(first) ?? new Map<string, ChatAgentMessage[]>();
+    byPair.set(first, withFirst);
+    withFirst.set(second, [...(withFirst.get(second) ?? []), message]);
+  }
+  const pairs = [...byPair.values()].flatMap((withFirst) =>
+    [...withFirst.values()].flatMap((lines): AgentPair[] => {
+      const messages = lines.toSorted((one, other) => one.sentAt - other.sentAt);
+      const newest = messages.at(-1);
+      if (newest === undefined) return [];
+      const opener = messages[0]?.from.agentId ?? newest.from.agentId;
+      const named = (first: boolean) =>
+        (newest.from.agentId === opener) === first ? newest.from : newest.to;
+      return [{ agentIds: pairIdsOf(newest), agents: [named(true), named(false)], messages }];
+    }),
+  );
+  const latest = (pair: AgentPair) => pair.messages.at(-1)?.sentAt ?? 0;
+  return pairs.toSorted((one, other) => latest(other) - latest(one));
+}
+
+/** Whether a place shows the pair. */
+export function showsAgentPair(place: ChatPlace, pair: AgentPair): boolean {
+  return (
+    place.kind === CHAT_PLACE.AGENT_PAIR &&
+    place.agentIds[0] === pair.agentIds[0] &&
+    place.agentIds[1] === pair.agentIds[1]
+  );
+}
+
+/** The pair a place shows, or none for another place or a pair the answer no longer holds. */
+export function placeAgentPair(chat: ChatAnswer, place: ChatPlace): AgentPair | undefined {
+  return agentPairs(chat).find((pair) => showsAgentPair(place, pair));
+}
+
+/** What a pair is called: both of its two's names, as a direct message between two others is. */
+export function agentPairLabel(pair: AgentPair): string {
+  return pair.agents.map((agent) => agent.name).join(" ↔ ");
 }
 
 /**

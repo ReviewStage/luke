@@ -23,6 +23,8 @@ import {
 } from "@luke/ui";
 import { type Actor, actorName } from "@luke/ui/actor-model";
 import {
+  type AgentPair,
+  agentPairLabel,
   CHAT_PLACE,
   type ChatPlace,
   type ChatRailRow,
@@ -30,6 +32,7 @@ import {
   chatNames,
   chatRail,
   FOR_YOU,
+  showsAgentPair,
 } from "@luke/ui/chat-model";
 import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
@@ -40,7 +43,7 @@ import { FoldingButton } from "../folding-button.js";
 import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { SpinnerRegion } from "../spinner.js";
-import { useChatActor } from "../tasks/chat-actors.js";
+import { messagingAgentActor, useChatActor } from "../tasks/chat-actors.js";
 import { ChatPane } from "../tasks/chat-pane.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { useMinute } from "../tasks/task-time.js";
@@ -50,7 +53,7 @@ import { Tooltip } from "../tooltip.js";
 import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
-import { previewWords } from "./chat-preview.js";
+import { previewText, previewWords } from "./chat-preview.js";
 import { SidebarResizeEdge } from "./desktop-sidebar.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
 import { useNarrowFocus } from "./narrow-focus.js";
@@ -68,7 +71,10 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
  * (`.section-heading`), each row counting what in it the developer has not read and
  * in the unread weight while anything is (`chat-model.ts`). A direct
  * message's row leads with the other member's mark and is named by who it
- * is with. A press on a row shows its place in
+ * is with. The pairs of agents that messaged one another directly follow
+ * the direct messages there, each named by both of its two and led by the
+ * mark of the one who spoke last, never counted unread, since the
+ * developer only watches them. A press on a row shows its place in
  * the pane beside the rail (`chat-pane.tsx`). The agents are named from
  * the plans' summaries, the way the sidebar names them, and from the lines
  * the chat read carries where those name more. With nothing read, it says
@@ -152,6 +158,8 @@ interface RailGroupShown {
   readonly name: string;
   readonly glyph: React.ReactNode;
   readonly rows: readonly ChatRailRow[];
+  /** The pairs of agents the group lists after its rows; none but the direct messages' lists any. */
+  readonly pairs: readonly AgentPair[];
   readonly foldedAtFirst: boolean;
 }
 
@@ -164,7 +172,7 @@ interface RailGroupsShown {
 
 /** The rail's groups in order, as the sidebar's stand: the channels, the tasks' as the sidebar groups the tasks, then the archived folded and the direct messages, each run drawn as its own list so a key is only ever its own group's. */
 function railGroups(rail: ReturnType<typeof chatRail>): RailGroupsShown {
-  const held = (group: RailGroupShown) => group.rows.length > 0;
+  const held = (group: RailGroupShown) => group.rows.length + group.pairs.length > 0;
   return {
     lead: [
       {
@@ -173,6 +181,7 @@ function railGroups(rail: ReturnType<typeof chatRail>): RailGroupsShown {
         name: "Channels",
         glyph: <HashIcon />,
         rows: rail.channels,
+        pairs: [],
         foldedAtFirst: false,
       } satisfies RailGroupShown,
     ].filter(held),
@@ -184,6 +193,7 @@ function railGroups(rail: ReturnType<typeof chatRail>): RailGroupsShown {
           name: group.title ?? "Tasks",
           glyph: <DocumentIcon />,
           rows: group.rows,
+          pairs: [],
           foldedAtFirst: false,
         }),
       )
@@ -195,6 +205,7 @@ function railGroups(rail: ReturnType<typeof chatRail>): RailGroupsShown {
         name: "Archived",
         glyph: <ArchiveIcon />,
         rows: rail.archived,
+        pairs: [],
         foldedAtFirst: true,
       } satisfies RailGroupShown,
       {
@@ -203,6 +214,7 @@ function railGroups(rail: ReturnType<typeof chatRail>): RailGroupsShown {
         name: "Direct messages",
         glyph: <AtSignIcon />,
         rows: rail.direct,
+        pairs: rail.agentPairs,
         foldedAtFirst: false,
       } satisfies RailGroupShown,
     ].filter(held),
@@ -285,6 +297,36 @@ function RailRow({
   );
 }
 
+/** One pair of agents' row: the mark of the one who spoke last, both names, and who said what last. */
+function PairRow({
+  pair,
+  current,
+  now,
+  onChoose,
+}: {
+  pair: AgentPair;
+  current: boolean;
+  now: number;
+  onChoose: () => void;
+}): React.JSX.Element {
+  const latest = pair.messages.at(-1);
+  const speaker = latest === undefined ? pair.agents[0] : latest.from;
+  return (
+    <PlaceRow
+      mark={<ActorMark actor={messagingAgentActor(speaker)} size={ACTOR_SIZE.INLINE} />}
+      title={agentPairLabel(pair)}
+      preview={
+        latest === undefined ? undefined : `${latest.from.name}: ${previewText(latest.text)}`
+      }
+      at={latest?.sentAt}
+      now={now}
+      unread={false}
+      current={current}
+      onChoose={onChoose}
+    />
+  );
+}
+
 /**
  * One place of the rail as a row of the Inbox's own list (`ListRow`): the
  * blue dot in a gutter where something waits unread, its mark, its name in
@@ -343,20 +385,27 @@ function RailGroup({
   name,
   glyph,
   rows,
+  pairs,
   folded,
   onToggle,
   row,
+  pairRow,
   current,
+  currentPair,
 }: {
   name: string;
   glyph: React.ReactNode;
   rows: readonly ChatRailRow[];
+  pairs: readonly AgentPair[];
   folded: boolean;
   onToggle: () => void;
   row: (each: ChatRailRow) => React.JSX.Element;
+  pairRow: (each: AgentPair) => React.JSX.Element;
   current: (each: ChatRailRow) => boolean;
+  currentPair: (each: AgentPair) => boolean;
 }): React.JSX.Element {
   const drawn = folded ? rows.filter(current) : rows;
+  const drawnPairs = folded ? pairs.filter(currentPair) : pairs;
   return (
     <div className="sidebar-repository">
       <SidebarGroupHeader
@@ -368,7 +417,12 @@ function RailGroup({
         steady
         onToggle={onToggle}
       />
-      {drawn.length === 0 ? null : <ul className="sidebar-tasks">{drawn.map(row)}</ul>}
+      {drawn.length + drawnPairs.length === 0 ? null : (
+        <ul className="sidebar-tasks">
+          {drawn.map(row)}
+          {drawnPairs.map(pairRow)}
+        </ul>
+      )}
     </div>
   );
 }
@@ -461,16 +515,29 @@ function ChatView({
       onChoose={() => view.onChoose({ kind: CHAT_PLACE.CHANNEL, channelId: each.channel.id })}
     />
   );
+  const pairRow = (pair: AgentPair) => (
+    <PairRow
+      // Note that a pair has no id of its own, so its row is keyed by the first of its lines read, which only a pair has.
+      key={pair.messages[0]?.id}
+      pair={pair}
+      current={showsAgentPair(view.place, pair)}
+      now={now}
+      onChoose={() => view.onChoose({ kind: CHAT_PLACE.AGENT_PAIR, agentIds: pair.agentIds })}
+    />
+  );
   const group = (shown: RailGroupShown) => (
     <RailGroup
       key={shown.key}
       name={shown.name}
       glyph={shown.glyph}
       rows={shown.rows}
+      pairs={shown.pairs}
       folded={folds.folded(shown)}
       onToggle={() => folds.toggle(shown)}
       row={row}
+      pairRow={pairRow}
       current={(each) => shows(view.place, each)}
+      currentPair={(each) => showsAgentPair(view.place, each)}
     />
   );
   return (

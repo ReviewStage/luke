@@ -12,6 +12,8 @@ import {
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { test } from "vitest";
 import {
+  agentPairLabel,
+  CHAT_PLACE,
   type ChatNames,
   channelLabel,
   channelThreads,
@@ -21,6 +23,7 @@ import {
   chatWho,
   FOR_YOU_REASON,
   forYou,
+  placeAgentPair,
   postsIn,
   topicName,
   topicNameProblem,
@@ -422,4 +425,52 @@ test("the tasks' channels stand as the sidebar groups their tasks: pinned in the
     flat.tasks.map((group) => [group.title, group.rows.length]),
     [[undefined, 4]],
   );
+});
+
+const INVITES = "00000000-0000-4000-8000-0000000000d1";
+const BILLING = "00000000-0000-4000-8000-0000000000d2";
+const SCHEMA = "00000000-0000-4000-8000-0000000000d3";
+
+/** A line one agent sent another, at `sentAt`. */
+function agentLine(id: string, from: string, to: string, sentAt: number, text: string) {
+  const agent = (agentId: string) => ({
+    agentId,
+    name: { [INVITES]: "Invites", [BILLING]: "Billing", [SCHEMA]: "Schema" }[agentId] ?? "",
+    model: "anthropic/claude-opus-5.5",
+  });
+  return { id, from: agent(from), to: agent(to), text, sentAt };
+}
+
+test("agents' direct lines read as one conversation for each pair whichever of the two sent each, in the order sent, the latest spoken pair first, and a place shows only its own pair", () => {
+  const chat: ChatAnswer = {
+    ...chatOf(0, []),
+    agentMessages: [
+      agentLine("l1", BILLING, INVITES, 10, "Is the schema settled?"),
+      agentLine("l2", SCHEMA, INVITES, 20, "Migration is in."),
+      agentLine("l3", INVITES, BILLING, 30, "Yes, merged."),
+    ],
+  };
+  const rail = chatRail(chat, NAMES);
+  assert.deepEqual(
+    rail.agentPairs.map((pair) => [
+      agentPairLabel(pair),
+      pair.messages.map((line) => `${line.from.name}: ${line.text}`),
+    ]),
+    [
+      ["Billing ↔ Invites", ["Billing: Is the schema settled?", "Invites: Yes, merged."]],
+      ["Schema ↔ Invites", ["Schema: Migration is in."]],
+    ],
+  );
+  const place = { kind: CHAT_PLACE.AGENT_PAIR, agentIds: [INVITES, BILLING] } as const;
+  assert.deepEqual(
+    placeAgentPair(chat, place)?.messages.map((line) => line.id),
+    ["l1", "l3"],
+  );
+  assert.equal(
+    placeAgentPair(chat, { kind: CHAT_PLACE.AGENT_PAIR, agentIds: [BILLING, SCHEMA] }),
+    undefined,
+  );
+  // The agents' lines are watched, never waiting on the reader.
+  assert.deepEqual([rail.forYou, rail.direct.length], [0, 2]);
+  assert.deepEqual(chatRail(chatOf(0, []), NAMES).agentPairs, []);
 });

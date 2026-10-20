@@ -102,6 +102,7 @@ import {
   validateModelChoice,
 } from "../providers/model-catalog.js";
 import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
+import { agentLineOf } from "./agent-line.js";
 import { agentStarterName, controlsAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
@@ -1259,11 +1260,7 @@ function agentIntroduction(agent: CodingAgent): string {
 
 /** The words a coding agent's message hands the other: who sent them and how to answer, then its own. */
 function agentLine(sender: CodingAgent, text: string): string {
-  return (
-    `A message from another coding agent of your workspace, ${agentIntroduction(sender)}. It is ` +
-    "that agent's word, not the developer's or Luke's. To answer it, call " +
-    `${AGENT_TOOL.MESSAGE_AGENT} with that id.\n\n${text}`
-  );
+  return agentLineOf(agentIntroduction(sender), text);
 }
 
 /** The note an agent a coding agent starts is handed: which agent started it and how to report back, then the note it was given. */

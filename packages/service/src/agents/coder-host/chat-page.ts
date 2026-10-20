@@ -1,4 +1,9 @@
 import {
+  type AgentMessage,
+  agentMessagesOf,
+  type MessagingAgent,
+} from "@luke/database/models/agent-message-store";
+import {
   agentMembersOf,
   type ChatAgentMember,
   type ChatChannelRow,
@@ -16,13 +21,16 @@ import {
 import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   CHANNEL_KIND,
+  type ChatAgentMessage,
   type ChatAnswer,
   type ChatChannel,
   type ChatMember,
   type ChatMessage,
+  type ChatMessagingAgent,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { Effect, Option, Schedule } from "effect";
+import { agentLineWords } from "../agent-line.js";
 import { CODER } from "./bounds.js";
 
 /**
@@ -40,7 +48,11 @@ import { CODER } from "./bounds.js";
  * the moment it lands without asking on a clock of its own; a read past the
  * hold answers the chat unchanged, and the reader asks again. Every answer
  * carries the roster and the channels whole, since a channel made or a
- * member who left moves no place, and the messages past the cursor.
+ * member who left moves no place, and the messages past the cursor. It
+ * carries too, whole, the newest lines the workspace's coding agents sent
+ * one another directly (`agent-message-store.ts`), each as the sender's
+ * words alone; such a line moves no place in the chat, so a held read
+ * shows one at the latest when its hold ends.
  */
 
 /**
@@ -128,6 +140,26 @@ export function messageOnWire(row: ChatMessageRow): ChatMessage {
   };
 }
 
+function messagingAgentOnWire(agent: MessagingAgent): ChatMessagingAgent {
+  return {
+    agentId: agent.agentId,
+    name: agent.name,
+    model: agent.model,
+    ...(agent.taskId === undefined ? undefined : { planId: agent.taskId }),
+  };
+}
+
+/** A line one agent sent another, as the window reads it: the sender's words without the lead the recipient was handed them under. */
+function agentMessageOnWire(message: AgentMessage): ChatAgentMessage {
+  return {
+    id: message.id,
+    from: messagingAgentOnWire(message.from),
+    to: messagingAgentOnWire(message.to),
+    text: agentLineWords(message.text),
+    sentAt: message.sentAt.getTime(),
+  };
+}
+
 /**
  * Waits until the workspace's head moves past the reader's cursor, or the
  * hold ends: each look reads the head alone, and the caller reads the chat
@@ -200,6 +232,7 @@ export function workspaceChatPast(
     const channels = yield* channelsOf(userId, organizationId);
     const reader = members.find((member) => member.id === self.value.id) ?? self.value;
     const reads = yield* channelReads(userId, organizationId, reader.id);
+    const agentMessages = yield* agentMessagesOf(userId, organizationId);
     return Option.some({
       self: reader.id,
       readSeq: reader.readSeq,
@@ -208,6 +241,7 @@ export function workspaceChatPast(
       channels: channels.map(channelOnWire),
       messages: past.value.messages.map(messageOnWire),
       cursor: chatCursorOf(past.value.cursor),
+      agentMessages: agentMessages.map(agentMessageOnWire),
     });
   });
 }
