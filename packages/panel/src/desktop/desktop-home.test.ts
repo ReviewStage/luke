@@ -8,7 +8,7 @@ import {
   AUTOMATION_TRIGGER,
   type AutomationSummary,
 } from "@luke/features/automation-wire";
-import type { CodingAgentInboxAnswerView } from "@luke/features/coding-agent-view";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import {
   INBOX_RESPONSE,
@@ -40,6 +40,7 @@ import {
 } from "../testing/composer.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
+import { followedInboxes } from "../testing/followed-inboxes.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
 import { commandKeyshortcuts } from "../tooltip.js";
@@ -133,7 +134,7 @@ const SWEEP: AutomationSummary = {
   scope: AUTOMATION_SCOPE.WORKSPACE,
 };
 
-/** Each agent with no task's inbox as the service answers a read of it. */
+/** Each agent with no task's inbox as main pushes it. */
 const AGENT_INBOXES = new Map<string, readonly InboxItem[]>([[SWEEP_AGENT, [QUARANTINE]]]);
 
 /** The tasks holding items, and those of them with an item waiting, as main reads the account. */
@@ -184,18 +185,12 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({});
+  // The host pushes each task's inbox, and each agent's with no task, as it is followed.
+  const host = followedInboxes(({ kind, id }) => ({
+    items: (kind === INBOX_SCOPE_KIND.PLAN ? INBOXES : AGENT_INBOXES).get(id) ?? [],
+  }));
   fakeActPort({
-    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: ({ agentId }) => {
-      const value: CodingAgentInboxAnswerView = {
-        items: AGENT_INBOXES.get(agentId) ?? [],
-        cursor: "1",
-      };
-      return Promise.resolve(value);
-    },
-    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
-      const value: CodingAgentInboxAnswerView = { items: INBOXES.get(taskId) ?? [], cursor: "1" };
-      return Promise.resolve(value);
-    },
+    ...host.procedures,
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       automationReads.push(payload.workspaceId ?? "");

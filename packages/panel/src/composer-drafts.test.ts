@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { INBOX_SCOPE_KIND } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_CURSOR_START,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
@@ -43,6 +43,7 @@ import {
 } from "./testing/composer.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { sidebarProps } from "./testing/desktop-sidebar.js";
+import { followedInboxes } from "./testing/followed-inboxes.js";
 import { installScrollIntoView } from "./testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "./testing/tasks-control.js";
 
@@ -589,10 +590,7 @@ async function columnOn(
       ...codingAgentsControl({
         agents: [agent],
         agentIds: [agent.id],
-        readInbox: ({ after }) =>
-          after === INBOX_CURSOR_START
-            ? Promise.resolve({ items: [approval(1)], cursor: "1" })
-            : new Promise(() => undefined),
+        inboxFollower: followedInboxes(() => ({ items: [approval(1)] })).follower,
       }),
       draft: {
         id: DRAFT_KEY,
@@ -753,6 +751,7 @@ function approval(revision: number): InboxItem {
  */
 async function inboxOn(item: InboxItem) {
   answerMotion();
+  const main = followedInboxes(() => ({ items: [item] }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -765,10 +764,7 @@ async function inboxOn(item: InboxItem) {
     agents: codingAgentsControl({
       agents: [INVITES.agent],
       agentIds: [INVITES.agent.id],
-      readInbox: ({ after }) =>
-        after === INBOX_CURSOR_START
-          ? Promise.resolve({ items: [item], cursor: "1" })
-          : new Promise(() => undefined),
+      inboxFollower: main.follower,
     }),
   });
   await act(async () =>
@@ -835,21 +831,19 @@ function tasklessItem(agentId: string, id: string, revision: number): InboxItem 
   return { ...approval(revision), id, agentId };
 }
 
-/** An agent's own inbox with no plan, read through its reader as the Inbox page reads it, answering `items`. */
+/** An agent's own inbox with no task, followed as the Inbox page follows it, pushed as `items`. */
 async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
+  const main = followedInboxes(() => ({ items }));
   let control: TaskInboxControl | undefined;
   function Probe(): null {
     control = useTaskInbox({
       taskId: agentId,
-      reader: (after) =>
-        after === INBOX_CURSOR_START
-          ? Promise.resolve({ items, cursor: "1" })
-          : new Promise(() => undefined),
+      kind: INBOX_SCOPE_KIND.AGENT,
       shown: true,
       waiting: true,
       agents: {
         heldIds: [agentId],
-        readInbox: () => new Promise(() => undefined),
+        inboxFollower: main.follower,
         answerInbox: () => new Promise(() => undefined),
         messageInbox: () => new Promise(() => undefined),
         readInboxImage: () => new Promise(() => undefined),

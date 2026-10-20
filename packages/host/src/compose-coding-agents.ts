@@ -10,7 +10,6 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentView,
   type CodingAgentInboxChanged,
   type CodingAgentInboxMessagedView,
@@ -28,7 +27,6 @@ import {
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentReviewOptionsAnswerView,
   codingAgentAccountInboxParamsSchema,
-  codingAgentAgentInboxParamsSchema,
   codingAgentArchiveParamsSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatFollowParamsSchema,
@@ -40,7 +38,6 @@ import {
   codingAgentInboxAttachmentParamsSchema,
   codingAgentInboxCloseParamsSchema,
   codingAgentInboxMessageParamsSchema,
-  codingAgentInboxParamsSchema,
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxScopeSchema,
   codingAgentListParamsSchema,
@@ -104,7 +101,6 @@ import type { RunMode } from "./run-mode.js";
 import {
   followInbox,
   InboxScopeKey,
-  inboxPast,
   type ScopeInboxes,
   scopeInboxes,
 } from "./scope-inbox-follow.js";
@@ -119,21 +115,17 @@ import {
 /**
  * compose-coding-agents.ts -- a task's coding agents, asked of the service on the window's behalf: the models, the account's default, its own provider keys, and its plan template, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, a clip dictated into an agent's box heard as words, the task's inbox, one item of it answered, what waits across the account, and the workspace's chat, read and written.
  *
- * Nothing is held here but the transcripts' subscriptions and each followed
- * workspace chat's (`chat-follow.ts`), whose changes are heard as
- * `CHAT_CHANGED` events. The window holds
- * the agents it draws and the cursor it reads from, asks when a task opens,
- * when it starts or stops an agent, and while an agent's tab shows its
- * running transcript, and every ask is one call of the service answered
- * whole. The transcript read is held open here while the agent runs and
- * nothing new stands, on a Neon Realtime subscription to what its pages are
- * read from (`transcript-follow.ts`), which a sign-out lets go; the inbox
- * read is one the service holds open, held while nothing in it changed, and the
- * chat read a third, held while nothing in the workspace's chat moved, so each of
- * the window's loops is one held read after another rather than a clock of
- * its own, and a loop ends when the window stops asking. What waits across
- * the account is held the same way, and asked by main's own loop rather
- * than a window's (`agent-notices.ts`). Behind a
+ * Nothing is held here but the transcripts' subscriptions, the followed
+ * inboxes' (`scope-inbox-follow.ts`), heard as `INBOX_CHANGED` events, and
+ * each followed workspace chat's (`chat-follow.ts`), heard as `CHAT_CHANGED`
+ * events. The window holds the agents it draws and the cursor it reads
+ * from, asks when a task opens, when it starts or stops an agent, and while
+ * an agent's tab shows its running transcript, and every ask is one call of
+ * the service answered whole. The transcript read is held open here while
+ * the agent runs and nothing new stands, on a Neon Realtime subscription to
+ * what its pages are read from (`transcript-follow.ts`), which a sign-out
+ * lets go. What waits across the account is held the same way, and asked by
+ * main's own loop rather than a window's (`agent-notices.ts`). Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
  * unanswered. A provider key passes through on its way to the service and
  * is held nowhere here; no answer carries one back.
@@ -770,38 +762,6 @@ function composed(
         );
         const answer = yield* asked(client.githubImage(agentId, src));
         return carried<CodingAgentGitHubImageView>(answer);
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_INBOX]: (params) =>
-      Effect.gen(function* () {
-        const { taskId, after } = yield* read(
-          codingAgentInboxParamsSchema,
-          params,
-          "reading a task's inbox names the task and a cursor",
-        );
-        const answer = gate()
-          ? yield* inboxPast(
-              inboxes,
-              new InboxScopeKey({ kind: INBOX_SCOPE_KIND.PLAN, id: taskId }),
-              after,
-            )
-          : UNANSWERED;
-        return carried<CodingAgentInboxAnswerView>(answer);
-      }),
-    [GATEWAY_METHOD.CODING_AGENTS_AGENT_INBOX]: (params) =>
-      Effect.gen(function* () {
-        const { agentId, after } = yield* read(
-          codingAgentAgentInboxParamsSchema,
-          params,
-          "reading an agent's inbox names the agent and a cursor",
-        );
-        const answer = gate()
-          ? yield* inboxPast(
-              inboxes,
-              new InboxScopeKey({ kind: INBOX_SCOPE_KIND.AGENT, id: agentId }),
-              after,
-            )
-          : UNANSWERED;
-        return carried<CodingAgentInboxAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW]: (params) =>
       Effect.gen(function* () {
