@@ -49,6 +49,7 @@ import { useCopyToast } from "../copy-feedback.js";
 import {
   DIFF_SELECTION_SIDE,
   type DiffFileTexts,
+  type DiffLineSpan,
   type DiffListSelection,
   type DiffSelection,
   FILE_NOTE_LINE,
@@ -104,6 +105,7 @@ import {
 } from "./comment-drafts.js";
 import {
   type DiffListEntry,
+  type DiffListFlash,
   type DiffListReveal,
   type DiffNote,
   PierreDiffList,
@@ -1445,6 +1447,7 @@ function FilesList({
   roomy,
   boxRef,
   reveal,
+  flash,
 }: {
   list: ChangesList;
   threads: ChangesThreads | undefined;
@@ -1460,6 +1463,8 @@ function FilesList({
   boxRef: (element: HTMLDivElement | null) => void;
   /** The review thread to bring into view, once, and its file; none brings none. */
   reveal: ListReveal | undefined;
+  /** The lines to bring into view and light a moment, once; none lights none. */
+  flash: DiffListFlash | undefined;
 }): React.JSX.Element {
   const look = useDiffLook(roomy);
   const box = useRef<HTMLDivElement | null>(null);
@@ -1514,6 +1519,7 @@ function FilesList({
             readTexts={texts.read}
             reveal={landing.reveal}
             onDrawn={opened.onDrawn}
+            flash={flash}
           />
         </ThreadLandingProvider>
       )}
@@ -1656,6 +1662,8 @@ export function useChangesReads(
 export interface FileReveal {
   readonly path: string;
   readonly ask: number;
+  /** Its lines to scroll to and light a moment, each one the list draws (`drawnLines`); none scrolls to its header. */
+  readonly lines?: DiffLineSpan | undefined;
 }
 
 export function AgentChangesTab({
@@ -1735,15 +1743,20 @@ export function AgentChangesTab({
     },
     [closeOver, go],
   );
-  // A file asked for is opened and scrolled to, each ask once.
-  const latestFileReveal = useRef({ fileReveal, expand, go });
-  latestFileReveal.current = { fileReveal, expand, go };
+  // A file asked for is opened and scrolled to, each ask once; one asked for at its lines is stood on, and the list scrolls to them once it draws the file open.
+  const latestFileReveal = useRef({ fileReveal, expand, go, stand: list.stand });
+  latestFileReveal.current = { fileReveal, expand, go, stand: list.stand };
   useEffect(() => {
-    const { fileReveal, expand, go } = latestFileReveal.current;
+    const { fileReveal, expand, go, stand } = latestFileReveal.current;
     if (fileReveal === undefined) return;
     expand(fileReveal.path);
-    go(fileReveal.path);
+    if (fileReveal.lines === undefined) go(fileReveal.path);
+    else stand(fileReveal.path);
   }, [fileReveal?.ask]);
+  const flash =
+    fileReveal?.lines === undefined
+      ? undefined
+      : { ask: fileReveal.ask, range: { path: fileReveal.path, ...fileReveal.lines } };
   const shownFile = changed.files.find((file) => file.path === list.current) ?? changed.files[0];
   const refresh = () => {
     ask();
@@ -1853,6 +1866,7 @@ export function AgentChangesTab({
               ? undefined
               : { ...reveal, file: revealFile }
           }
+          flash={flash}
         />
         {room.drawn ? (
           <FileTreePane
