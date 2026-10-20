@@ -62,7 +62,10 @@ function sentrySourceMaps(authToken: string | undefined): PluginOption[] {
       project: "luke-web",
       authToken,
       // The tab names its release itself, from the same commit, so nothing is written into the chunks for it.
-      release: { name: process.env.VERCEL_GIT_COMMIT_SHA, inject: false },
+      release: {
+        ...(process.env.VERCEL_GIT_COMMIT_SHA ? { name: process.env.VERCEL_GIT_COMMIT_SHA } : {}),
+        inject: false,
+      },
       sourcemaps: { filesToDeleteAfterUpload: [join(SITE_DIRECTORY, "**", "*.map")] },
     }),
   ];
