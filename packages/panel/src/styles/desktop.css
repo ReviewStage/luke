@@ -3765,8 +3765,9 @@ ul.actor-stack {
 
 /* A settled item's foot, over its box: the next item that needs the
    developer as a card of one row (`inbox-pager.tsx`), led by its agent's
-   tile, then Next in the meta voice and its title in the unread weight, cut
-   short at the row's end, and J where J reaches it. */
+   tile, then Next in the meta voice, an arrow up where it lies above, and
+   its title in the unread weight, cut short at the row's end, and K or J
+   where that key reaches it. */
 .inbox-next-dock {
   padding-bottom: var(--luke-space-12);
 }

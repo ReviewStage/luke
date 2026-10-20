@@ -1874,17 +1874,35 @@ export function inboxSteps(
   return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
 }
 
-/** The first row after the chosen one whose item needs the reader, in the list's order, wrapping round to its top, a folded group's left out; none where nothing else does. */
+/** Which way the reader last stepped through the list, K up and J down, which Next follows. */
+export const INBOX_DIRECTION = {
+  UP: "up",
+  DOWN: "down",
+} as const;
+
+export type InboxDirection = (typeof INBOX_DIRECTION)[keyof typeof INBOX_DIRECTION];
+
+/**
+ * The nearest row past the chosen one, the way the reader is moving, whose
+ * item needs the reader, a folded group's left out; none where nothing else
+ * does. Down it reads the rows below and wraps round to the list's top; up,
+ * the rows above, nearest first, and wraps round from the list's foot.
+ */
 export function nextNeedingYou(
   view: InboxListView,
   chosen: string | undefined,
   folded: (key: string) => boolean,
+  direction: InboxDirection = INBOX_DIRECTION.DOWN,
 ): InboxListed | undefined {
   const listed = rowedItems(view, folded, chosen);
   const at = listed.findIndex(({ item }) => item.id === chosen);
-  return [...listed.slice(at + 1), ...listed.slice(0, Math.max(at, 0))].find(
-    (listed) => needsYou(listed, view.readerId) && listed.item.id !== chosen,
-  );
+  const below = listed.slice(at + 1);
+  const above = listed.slice(0, Math.max(at, 0));
+  const ahead =
+    direction === INBOX_DIRECTION.UP
+      ? [...above.reverse(), ...below.reverse()]
+      : [...below, ...above];
+  return ahead.find((listed) => needsYou(listed, view.readerId) && listed.item.id !== chosen);
 }
 
 /** The item that stands chosen where none is: the first listed that needs the reader, else the first listed. */

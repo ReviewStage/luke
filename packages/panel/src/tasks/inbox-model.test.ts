@@ -30,6 +30,7 @@ import {
   EVERYONES,
   firstChoice,
   holderName,
+  INBOX_DIRECTION,
   INBOX_GROUPING,
   INBOX_MEDIA,
   INBOX_MISSING,
@@ -763,6 +764,24 @@ test("a teammate's open item is never the one chosen first nor the next that nee
       (id) => nextNeedingYou(list, id, () => false)?.item.id,
     ),
     ["mine-invites", "mine", "mine-invites"],
+  );
+});
+
+test("going up, the next item that needs you is the nearest above the chosen one, wrapping round from the list's foot, where going down it is the nearest below", () => {
+  const list = inboxList(SHARED, {
+    grouping: INBOX_GROUPING.NONE,
+    show: INBOX_SHOW.ALL,
+    readerId: ME.userId,
+    chosen: undefined,
+  });
+  const ids = ["danas-answered", "kais", "mine-invites", "mine", "unnamed"];
+  assert.deepEqual(
+    ids.map((id) => nextNeedingYou(list, id, () => false, INBOX_DIRECTION.UP)?.item.id),
+    ["unnamed", "unnamed", "unnamed", "mine-invites", "mine"],
+  );
+  assert.deepEqual(
+    ids.map((id) => nextNeedingYou(list, id, () => false, INBOX_DIRECTION.DOWN)?.item.id),
+    ["mine-invites", "mine-invites", "mine", "unnamed", "mine-invites"],
   );
 });
 
