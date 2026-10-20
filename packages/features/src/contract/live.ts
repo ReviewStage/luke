@@ -5,7 +5,9 @@
  * subscribe at and one sealed statement per part of the account inbox's
  * answer; and one task's whiteboard, named by `?id=`, as the statement that
  * marks where it stands; and one coding agent's transcript, or one of its
- * workers' under `&call=`, as the statements its pages are read from. Each
+ * workers' under `&call=`, as the statements its pages are read from; and
+ * one workspace's chat, named by `?workspaceId=`, as the statements the
+ * window's chat read is built from, once the account has joined it. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails it. Each names the account it was
  * started for under `?userId=`, and a session of any other is answered as
@@ -22,6 +24,7 @@ import {
   LIVE_POLL,
   LIVE_USER_QUERY,
   taskBoardLiveAnswerSchema,
+  workspaceChatLiveAnswerSchema,
 } from "../live-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { hostedProcedure } from "./base.js";
@@ -53,6 +56,13 @@ const liveTranscriptSchema = EffectSchema.Struct({
   [LIVE_USER_QUERY]: userField,
 });
 
+/** The workspace whose chat is followed, read as text, a workspace of no shape answered as invalid. */
+const liveChatSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.String,
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_USER_QUERY]: userField,
+});
+
 export const liveContract = {
   inbox: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
@@ -66,4 +76,8 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT }))
     .input(liveTranscriptSchema)
     .output(EffectSchema.flip(agentTranscriptLiveAnswerSchema)),
+  workspaceChat: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_CHAT }))
+    .input(liveChatSchema)
+    .output(EffectSchema.flip(workspaceChatLiveAnswerSchema)),
 };

@@ -13,7 +13,18 @@ import {
   accountInboxTaskSchema,
   accountTasklessEntrySchema,
 } from "./account-inbox-wire.js";
+import {
+  type ChatAnswer,
+  type ChatChannel,
+  type ChatMember,
+  type ChatMessage,
+  chatChannelSchema,
+  chatMemberSchema,
+  chatMessageAskSchema,
+  chatMessageSchema,
+} from "./chat-wire.js";
 import { codingAgentMessagesAnswerSchema } from "./coding-agent-wire.js";
+import { inboxReplySchema } from "./inbox-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -335,3 +346,195 @@ export const transcriptNowAnswerSchema = EffectSchema.Struct({
 });
 
 export type TranscriptNowAnswer = typeof transcriptNowAnswerSchema.Type;
+
+/**
+ * A workspace's chat sealed for following, as its reader reads it: the
+ * address, and one statement per part of the window's read: the reader's
+ * own member and how far it has read, every member, every channel, the
+ * newest messages it sees of each channel, and each channel it has read on that channel's own
+ * cursor. The service answers `not-found` for a workspace the account is
+ * not in or whose chat it has not joined, and `unavailable` where its
+ * deployment's Realtime is misconfigured, which the desktop answers by
+ * asking again.
+ */
+export const workspaceChatLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({
+    self: sealedLiveQuerySchema,
+    members: sealedLiveQuerySchema,
+    channels: sealedLiveQuerySchema,
+    messages: sealedLiveQuerySchema,
+    reads: sealedLiveQuerySchema,
+  }),
+});
+
+/** A member as its row delivers it: what it stands for and what it is called null where it has none, and the keys the roster is ordered by. */
+const chatMemberLiveRowSchema = EffectSchema.Struct({
+  id: chatMemberSchema.fields.id,
+  kind: chatMemberSchema.fields.kind,
+  handle: EffectSchema.String,
+  name: EffectSchema.NullOr(EffectSchema.String),
+  left: chatMemberSchema.fields.left,
+  userId: EffectSchema.NullOr(EffectSchema.String),
+  agentId: EffectSchema.NullOr(chatMemberSchema.fields.id),
+  planId: EffectSchema.NullOr(chatMemberSchema.fields.id),
+  ordinal: countedNumber,
+  joinedAt: countedNumber,
+});
+
+/** A channel as its row delivers it: its name, plan, and a DM's two members null where it has none, and when it was made. */
+const chatChannelLiveRowSchema = EffectSchema.Struct({
+  id: chatChannelSchema.fields.id,
+  kind: chatChannelSchema.fields.kind,
+  name: EffectSchema.NullOr(EffectSchema.String),
+  planId: EffectSchema.NullOr(chatChannelSchema.fields.id),
+  archived: chatChannelSchema.fields.archived,
+  purpose: EffectSchema.NullOr(EffectSchema.String),
+  dmAMemberId: EffectSchema.NullOr(chatChannelSchema.fields.id),
+  dmBMemberId: EffectSchema.NullOr(chatChannelSchema.fields.id),
+  createdAt: countedNumber,
+});
+
+/** An ask as its poster stated it, as the message's row holds it. */
+const chatAskLiveSchema = EffectSchema.Struct({
+  title: EffectSchema.optionalKey(EffectSchema.String),
+  response: chatMessageAskSchema.fields.response,
+  needsReply: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+/** A message as its row delivers it: its thread root and ask null where it has none, and the ask's parts as the row holds them. */
+const chatMessageLiveRowSchema = EffectSchema.Struct({
+  ...chatMessageSchema.fields,
+  parentId: EffectSchema.NullOr(chatMessageSchema.fields.id),
+  ask: EffectSchema.NullOr(chatAskLiveSchema),
+  askKey: EffectSchema.NullOr(EffectSchema.String),
+  askRevision: EffectSchema.NullOr(countedNumber),
+  askStatus: EffectSchema.NullOr(chatMessageAskSchema.fields.status),
+  answer: EffectSchema.NullOr(inboxReplySchema),
+  answeredBy: EffectSchema.NullOr(chatMessageSchema.fields.id),
+  closedReason: EffectSchema.NullOr(EffectSchema.String),
+});
+
+/** A workspace's chat as Realtime delivers its rows, decoded at the boundary before anything reads them. */
+export const workspaceChatLiveRowsSchema = EffectSchema.Struct({
+  self: EffectSchema.Array(
+    EffectSchema.Struct({ self: chatMemberSchema.fields.id, readSeq: countedNumber }),
+  ),
+  members: EffectSchema.Array(chatMemberLiveRowSchema),
+  channels: EffectSchema.Array(chatChannelLiveRowSchema),
+  messages: EffectSchema.Array(chatMessageLiveRowSchema),
+  reads: EffectSchema.Array(
+    EffectSchema.Struct({ channelId: chatChannelSchema.fields.id, readSeq: countedNumber }),
+  ),
+});
+
+type WorkspaceChatLiveRows = typeof workspaceChatLiveRowsSchema.Type;
+
+/** Two keys compared in order: the first that differs decides. */
+function byKeys(...keys: readonly (readonly [number | string, number | string])[]): number {
+  for (const [a, b] of keys) if (a !== b) return a < b ? -1 : 1;
+  return 0;
+}
+
+/** A member as the window reads one, each absent part left out rather than null, as the held read writes it. */
+function chatMemberOfLiveRow(row: typeof chatMemberLiveRowSchema.Type): ChatMember {
+  return {
+    id: row.id,
+    kind: row.kind,
+    handle: row.handle,
+    ...(row.name === null ? undefined : { name: row.name }),
+    ...(row.userId === null ? undefined : { userId: row.userId }),
+    ...(row.agentId === null ? undefined : { agentId: row.agentId }),
+    ...(row.planId === null ? undefined : { planId: row.planId }),
+    left: row.left,
+  };
+}
+
+/** A channel as the window reads one, a DM's two members named, as the held read writes it. */
+function chatChannelOfLiveRow(row: typeof chatChannelLiveRowSchema.Type): ChatChannel {
+  const { dmAMemberId, dmBMemberId } = row;
+  return {
+    id: row.id,
+    kind: row.kind,
+    ...(row.name === null ? undefined : { name: row.name }),
+    ...(row.planId === null ? undefined : { planId: row.planId }),
+    ...(dmAMemberId === null || dmBMemberId === null
+      ? undefined
+      : { members: [dmAMemberId, dmBMemberId] }),
+    archived: row.archived,
+    ...(row.purpose === null ? undefined : { purpose: row.purpose }),
+  };
+}
+
+/** The ask a message's row carries, as the window reads it; nothing where it carries none. */
+function chatAskOfLiveRow(
+  row: typeof chatMessageLiveRowSchema.Type,
+): Pick<ChatMessage, "ask"> | undefined {
+  const { ask, askKey, askRevision, askStatus } = row;
+  if (ask === null || askKey === null || askRevision === null || askStatus === null) {
+    return undefined;
+  }
+  return {
+    ask: {
+      key: askKey,
+      revision: askRevision,
+      status: askStatus,
+      ...(ask.title === undefined ? undefined : { title: ask.title }),
+      response: ask.response,
+      needsReply: ask.needsReply ?? true,
+      ...(row.answer === null ? undefined : { answer: row.answer }),
+      ...(row.answeredBy === null ? undefined : { answeredBy: row.answeredBy }),
+      ...(row.closedReason === null ? undefined : { closedReason: row.closedReason }),
+    },
+  };
+}
+
+/** A message as the window reads one, as the held read writes it. */
+function chatMessageOfLiveRow(row: typeof chatMessageLiveRowSchema.Type): ChatMessage {
+  return {
+    id: row.id,
+    seq: row.seq,
+    touchedSeq: row.touchedSeq,
+    channelId: row.channelId,
+    ...(row.parentId === null ? undefined : { parentId: row.parentId }),
+    authorId: row.authorId,
+    blocks: row.blocks,
+    mentions: row.mentions,
+    postedAt: row.postedAt,
+    ...chatAskOfLiveRow(row),
+  };
+}
+
+/**
+ * The workspace's chat as the held read answers it from the start, built
+ * from the live rows: the roster in the order its members joined, the
+ * channels in the order they were made, the messages the rows hold (each
+ * channel's newest) in the order they last changed, and each channel read past the reader's floor.
+ * The cursor is the held read's alone, so a live answer carries none.
+ * Nothing where the reader's own member is not among the rows: the account
+ * left the workspace or turned Chat off.
+ */
+export function workspaceChatOfLiveRows(rows: WorkspaceChatLiveRows): ChatAnswer | undefined {
+  const [self] = rows.self;
+  if (self === undefined) return undefined;
+  const reads = rows.reads
+    .filter((read) => read.readSeq > self.readSeq)
+    .toSorted((a, b) => byKeys([a.channelId, b.channelId]));
+  return {
+    self: self.self,
+    readSeq: self.readSeq,
+    ...(reads.length === 0 ? undefined : { reads }),
+    members: rows.members
+      .toSorted((a, b) =>
+        byKeys([a.joinedAt, b.joinedAt], [a.kind, b.kind], [a.ordinal, b.ordinal]),
+      )
+      .map(chatMemberOfLiveRow),
+    channels: rows.channels
+      .toSorted((a, b) => byKeys([a.createdAt, b.createdAt], [a.id, b.id]))
+      .map(chatChannelOfLiveRow),
+    messages: rows.messages
+      .toSorted((a, b) => a.touchedSeq - b.touchedSeq)
+      .map(chatMessageOfLiveRow),
+    cursor: "",
+  };
+}

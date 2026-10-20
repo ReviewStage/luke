@@ -80,6 +80,8 @@ export const HOSTED_SERVICE_PATH = {
   LIVE_TASK_BOARD: "/api/live/task-board",
   /** One agent's transcript under `?id=`, or one of its workers' under `&call=`, sealed for following over Neon Realtime (GET): what its pages are read from, or `not-found` or `unavailable`. */
   LIVE_AGENT_TRANSCRIPT: "/api/live/agent-transcript",
+  /** A workspace's chat under `?workspaceId=`, sealed for following over Neon Realtime (GET) as the account's person reads it, once they have joined it; or `not-found` or `unavailable`. */
+  LIVE_WORKSPACE_CHAT: "/api/live/workspace-chat",
   /**
    * A workspace's agents, on a task or with none, newest started first and
    * the archived ones left out unless the query asks for them, narrowed to

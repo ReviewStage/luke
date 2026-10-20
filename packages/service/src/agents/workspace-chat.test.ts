@@ -4,11 +4,17 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
+  answerAsk,
   ensureGeneral,
   ensureMember,
   findOrMakeDm,
+  LIVE_CHANNEL_MESSAGES,
+  openTopicChannel,
   postAsk,
   postMessage,
+  readTo,
+  type WorkspaceChatLiveStatements,
+  workspaceChatLiveStatements,
 } from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
@@ -24,6 +30,8 @@ import {
   chatJoinAnswerSchema,
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
+import { INBOX_REPLY } from "@luke/features/inbox-wire";
+import { workspaceChatLiveRowsSchema, workspaceChatOfLiveRows } from "@luke/features/live-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
@@ -39,6 +47,7 @@ import {
   Queue,
   Redacted,
   Result,
+  Schema,
 } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -64,7 +73,8 @@ import { writeWorkspaceChat } from "./workspace-chat.js";
  * router the way the web route answers it, over a real dialect: held while nothing moved past
  * the reader's cursor and answered once a post lands, answered at once
  * where something already has, a changed ask read again, a read past the
- * start writing nothing until the person joins, and a workspace
+ * start writing nothing until the person joins, the live statements
+ * delivering what the held read answers from the start, and a workspace
  * the account is not in answered as nothing. The clock is the test's, each
  * wait the route makes announced so the test moves it one step at a time.
  * And a teammate's post to an agent, with no eve handed in, tells the agent
@@ -206,6 +216,38 @@ function chatOf(answered: Answer) {
   const read = readEither(chatAnswerSchema)(unparsedWire(answered.body));
   if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
   return read.success;
+}
+
+/** Every part of a workspace's chat live statements run as Realtime runs them, their SQL and values as they are, read back under the schema the desktop decodes them with. */
+const liveRowsOf = (statements: Option.Option<WorkspaceChatLiveStatements>) =>
+  Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    const parts = Option.getOrThrow(statements);
+    const rows = yield* Effect.all({
+      self: sql.unsafe(parts.self.sql, [...parts.self.params]),
+      members: sql.unsafe(parts.members.sql, [...parts.members.params]),
+      channels: sql.unsafe(parts.channels.sql, [...parts.channels.params]),
+      messages: sql.unsafe(parts.messages.sql, [...parts.messages.params]),
+      reads: sql.unsafe(parts.reads.sql, [...parts.reads.params]),
+    });
+    return yield* Schema.decodeUnknownEffect(workspaceChatLiveRowsSchema)(rows);
+  });
+
+/** The newest `LIVE_CHANNEL_MESSAGES` of each channel by place, in the order given. */
+function newestOfEachChannel<
+  Message extends { readonly id: string; readonly seq: number; readonly channelId: string },
+>(messages: readonly Message[]): readonly Message[] {
+  const channels = new Set(messages.map((message) => message.channelId));
+  const kept = new Set(
+    [...channels].flatMap((channelId) =>
+      messages
+        .filter((message) => message.channelId === channelId)
+        .toSorted((one, other) => other.seq - one.seq)
+        .slice(0, LIVE_CHANNEL_MESSAGES)
+        .map((message) => message.id),
+    ),
+  );
+  return messages.filter((message) => kept.has(message.id));
 }
 
 /** The words of each message, in order. */
@@ -412,6 +454,104 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
         ]);
         yield* chooseChat(room.quiet, false);
         assert.equal((yield* room.ask(room.quiet, asQuiet)).status, HOSTED_HTTP_STATUS.NOT_FOUND);
+      }),
+  );
+
+  it.effect(
+    "the live statements deliver the chat the held read answers from the start, each channel's newest messages alone, to a member, and nothing to an outsider or a member with Chat off",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const { grace, general, message } = yield* room.post("Who owns the invite table?");
+        const first = yield* room.read(CHAT_CURSOR_START);
+        const ada = Option.getOrThrow(
+          yield* ensureMember(room.owner, room.workspace, {
+            kind: MEMBER_KIND.HUMAN,
+            userId: room.owner,
+          }),
+        );
+        assert.equal(ada.id, first.self);
+        // A reply in a thread, a DM, a topic with a purpose, an ask answered, and a channel read past the reader's floor.
+        Result.getOrThrow(
+          yield* openTopicChannel(room.owner, room.workspace, "launch", ada.id, "Ship notes."),
+        );
+        Result.getOrThrow(
+          yield* postMessage(room.teammate, room.workspace, {
+            authorMemberId: grace.id,
+            to: { replyTo: message.seq },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "I do." }],
+            clientKey: randomUUID(),
+          }),
+        );
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(room.owner, room.workspace, ada.id, grace.id),
+        );
+        Result.getOrThrow(
+          yield* postMessage(room.owner, room.workspace, {
+            authorMemberId: ada.id,
+            to: { channelId: dm.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Lunch?" }],
+            clientKey: randomUUID(),
+          }),
+        );
+        const asked = Result.getOrThrow(
+          yield* postAsk(room.teammate, room.workspace, {
+            authorMemberId: grace.id,
+            to: { channelId: general.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Seven days?" }],
+            clientKey: randomUUID(),
+            key: "invite-expiry",
+            ask: { title: "Invite expiry", response: { type: CHAT_ASK.APPROVAL } },
+          }),
+        );
+        assert.ok(
+          Result.isSuccess(
+            yield* answerAsk(room.owner, room.workspace, {
+              answererMemberId: ada.id,
+              seq: asked.message.seq,
+              revision: 1,
+              reply: { reply: INBOX_REPLY.APPROVED },
+              clientKey: randomUUID(),
+            }),
+          ),
+        );
+        assert.ok(yield* readTo(room.owner, room.workspace, ada.id, dm.id, asked.message.seq));
+        // More in #general than a live read holds of one channel, so its oldest fall out of it.
+        for (const count of Array.from({ length: LIVE_CHANNEL_MESSAGES }, (_, index) => index)) {
+          Result.getOrThrow(
+            yield* postMessage(room.teammate, room.workspace, {
+              authorMemberId: grace.id,
+              to: { channelId: general.id },
+              blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: `Note ${count}.` }],
+              clientKey: randomUUID(),
+            }),
+          );
+        }
+
+        // The held read from the start, page by page, as the window's loop reads it.
+        let held = yield* room.read(CHAT_CURSOR_START);
+        let messages = held.messages;
+        // Note that 200 is the held read's page, so a full page means more wait past it.
+        while (held.messages.length === 200) {
+          held = yield* room.read(held.cursor);
+          messages = [...messages, ...held.messages];
+        }
+        const statements = workspaceChatLiveStatements(room.owner, ada);
+        const live = workspaceChatOfLiveRows(yield* liveRowsOf(statements));
+        assert.deepEqual(live, { ...held, messages: newestOfEachChannel(messages), cursor: "" });
+        assert.equal(
+          live?.messages.filter((each) => each.channelId === general.id).length,
+          LIVE_CHANNEL_MESSAGES,
+        );
+        assert.ok(live?.messages.some((each) => each.channelId === dm.id));
+        assert.ok(live?.channels.some((each) => each.purpose === "Ship notes."));
+        assert.ok(held.reads !== undefined && messages.some((each) => each.ask?.answer));
+
+        for (const outside of [room.stranger, room.quiet]) {
+          const rows = yield* liveRowsOf(workspaceChatLiveStatements(outside, ada));
+          assert.deepEqual(rows, { self: [], members: [], channels: [], messages: [], reads: [] });
+          assert.equal(workspaceChatOfLiveRows(rows), undefined);
+        }
       }),
   );
 });

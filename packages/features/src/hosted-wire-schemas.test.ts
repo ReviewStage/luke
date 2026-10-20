@@ -72,6 +72,8 @@ const EFFECT_MODULE_SCHEMAS = {
     agentTranscriptLiveAnswerSchema: liveWire.agentTranscriptLiveAnswerSchema,
     agentTranscriptLiveRowsSchema: liveWire.agentTranscriptLiveRowsSchema,
     transcriptNowAnswerSchema: liveWire.transcriptNowAnswerSchema,
+    workspaceChatLiveAnswerSchema: liveWire.workspaceChatLiveAnswerSchema,
+    workspaceChatLiveRowsSchema: liveWire.workspaceChatLiveRowsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,

@@ -1,0 +1,146 @@
+{
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string"
+    },
+    "queries": {
+      "type": "object",
+      "properties": {
+        "self": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "rows": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        },
+        "members": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "rows": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        },
+        "channels": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "rows": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        },
+        "messages": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "rows": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        },
+        "reads": {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "queryFingerprint": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "rows": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "capability",
+            "queryFingerprint",
+            "expiresAt"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "self",
+        "members",
+        "channels",
+        "messages",
+        "reads"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "url",
+    "queries"
+  ],
+  "additionalProperties": false
+}
