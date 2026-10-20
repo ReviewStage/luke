@@ -193,10 +193,10 @@ async function assertModuleEntry(document, entry) {
 }
 
 // The source-map upload, for a build that uploads (`uploadsSourceMaps`). A
-// failed upload fails the build.
-// Note that the plugin only logs a refused release or upload unless an
-// `errorHandler` throws, whatever its documentation says, so a release
-// could otherwise ship with no maps behind it and a green build.
+// refused release or upload warns and the build goes on, so Sentry being
+// down never holds a release back; its traces stay unreadable until maps are
+// uploaded for it by hand. The maps ship in no package either way, since
+// electron-builder's `files` (`electron-builder-config.mjs`) leaves them out.
 function sentryPlugins() {
   if (!uploadsSourceMaps) return [];
   return [
@@ -206,7 +206,9 @@ function sentryPlugins() {
       project: "luke-desktop",
       release: { name: sentryRelease },
       errorHandler: (error) => {
-        throw error;
+        console.warn(
+          `warning: Sentry source-map upload failed, so the build goes on without it: ${error.message}`,
+        );
       },
     }),
   ];

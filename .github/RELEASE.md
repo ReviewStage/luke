@@ -38,7 +38,7 @@ environment of the Luke it is: `production` for a Developer ID package, `test`
 for an ad-hoc `Luke Test` package, and `development` for `electron .`. When
 `SENTRY_AUTH_TOKEN` is present, the final esbuild plugin on the main, preload,
 and renderer JavaScript builds uploads their source maps to that release before
-electron-builder packages the app, and a refused upload fails the build. The
+electron-builder packages the app; a refused upload warns and the build goes on. The
 maps are written beside the bundles, named by no `sourceMappingURL` comment,
 and excluded from the app bundle; ordinary local builds need neither Sentry
 value and upload nothing, and neither does a rehearsal (below).

@@ -54,7 +54,10 @@ const SITE_DIRECTORY = "dist";
  * `SENTRY_AUTH_TOKEN` uploads; any other, a Preview's included, bundles as
  * before, since a Preview's traces are rarely read and the maps cost its build. The plugin names
  * the release from the deployment's commit and writes it into each bundle,
- * which is the release the SDK then reports under.
+ * which is the release the SDK then reports under. A refused release or
+ * upload is only logged, the plugin's default with no `errorHandler`, so
+ * Sentry being down never fails the build; the maps are deleted after it
+ * either way. A failed deletion still throws, so no map can ship.
  */
 function withSentrySourceMaps(options: BuildOptions): BuildOptions {
   const authToken = sourceMapUploadToken(process.env);
