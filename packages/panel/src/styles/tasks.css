@@ -3012,6 +3012,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A pressed filter is drawn in the ink, so its count steps back from the
+   ground's colour its words are in, rather than the subtle ink it would
+   vanish into. */
+.luke-chip[aria-pressed="true"] .pull-request-filter-count {
+  color: color-mix(in srgb, var(--luke-color-ink-inverse) 65%, var(--luke-color-ink));
+}
+
 /* What a section holds opens a step under its band. */
 .pull-request-section-body {
   padding-top: var(--luke-space-4);
@@ -3879,8 +3886,9 @@
   align-items: center;
   gap: var(--luke-space-4);
   padding: var(--luke-space-2) var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
+  border: 1px solid var(--luke-color-chip-edge);
   border-radius: var(--luke-radius-full);
+  background: var(--luke-color-chip);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -3909,10 +3917,12 @@
   line-height: 1;
 }
 
+/* The reader's own reaction, where it cannot be pressed, stands as a
+   pressed compact filter does, in the ink. */
 .pull-request-reaction[data-mine="true"] {
-  border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
-  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
-  color: var(--luke-color-text);
+  border-color: var(--luke-color-ink);
+  background: var(--luke-color-ink);
+  color: var(--luke-color-ink-inverse);
 }
 
 /* The comment box at the foot of the Conversation

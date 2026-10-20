@@ -13,18 +13,20 @@ import { useClipped } from "../../use-clipped.js";
  *   on (a plan toolbar's repository, an agent's model), is quiet until the
  *   pointer is on it or its menu is open, as the toolbar's own buttons are;
  * - a pill, a thing named rather than a setting (what an agent published, the
- *   repository a new plan is for), is a filled, hairlined capsule;
+ *   repository a new plan is for), is a capsule on the chip's own opaque
+ *   face inside a hairline;
  * - a field, a settings row's value, wears an outlined button's hairline,
  *   its words leading, so a picker and the buttons beside it read as one
  *   column.
  * - a filter, a pill that turns a mode or a kind on (New task's Planning,
- *   a pull request's reactions), is a quiet capsule until it stands pressed
- *   (`aria-pressed`), when it fills inside the selection's hairline; its
- *   caller holds which one is pressed.
+ *   a pull request's reactions), is a capsule on the chip's face until it
+ *   stands pressed (`aria-pressed`), when it is drawn in the ink, as the
+ *   Ink button is; its caller holds which one is pressed.
  *
  * Beside its look a chip may say where a thing stands in the state palette
- * (`tone`), tinted and hairlined in that state's ink, as a pull request's
- * state is; stand at a width its place shares (`width`); and draw its mark
+ * (`tone`), in its leading glyph's colour, or a dot of it before its words
+ * where it leads with none, its face staying the chip's own, as a pull
+ * request's state is; stand at a width its place shares (`width`); and draw its mark
  * alone where its place has no room for its words (`iconOnly`), its words
  * still read as its name. A removable chip (`onRemove`) is no button of its
  * own: it names what stands, a filter applied, and ends in a × named for
@@ -32,8 +34,8 @@ import { useClipped } from "../../use-clipped.js";
  *
  * A chip comes at the control's size, or compact (`size`), a caption
  * line's pill, where it is one of a row of small counts (a pull request's
- * reactions); a compact filter stands inside a hairline at rest, so the row
- * reads as pills before one is pressed, and pressed is lit in the accent;
+ * reactions), a compact filter on the chip's face at rest and in the ink
+ * pressed, as any filter;
  * a compact pill, where it says where a thing stands among a header's words
  * (a pull request's state), is drawn in a `Badge`'s box, so it stands at
  * the size of the badges beside it, its chevron saying it opens. A busy chip
