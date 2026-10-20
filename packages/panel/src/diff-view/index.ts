@@ -2,6 +2,7 @@ import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import {
   CodeView,
   type CodeViewDiffItem,
+  type CodeViewItem,
   type CodeViewOptions,
   type DiffLineAnnotation,
   type FileContents,
@@ -10,6 +11,7 @@ import {
   getFiletypeFromFileName,
   getSharedHighlighter,
   getSingularPatch,
+  type LineAnnotation,
   type File as PierreFile,
   FileDiff as PierreFileDiff,
   type PostRenderPhase,
@@ -41,10 +43,16 @@ import {
   type DiffViewHandle,
   type DiffViewModule,
   type DiffViewProps,
+  type FileAnnotation,
+  type FileLineRange,
+  type FileViewHandle,
+  type FileViewProps,
   GAP_CONTROL,
   GAP_CONTROL_ATTRIBUTE,
   GAP_LINES,
   LINE_FLASH_HOLD_MS,
+  sameFileLines,
+  sameFileNotes,
   sameLines,
   sameListSelection,
   sameLook,
@@ -140,6 +148,15 @@ import { wholeOf } from "./whole-diff.js";
  * (`./annotation-bands.ts`), so a comment inside an added block reads as
  * standing in it.
  *
+ * A whole file with no diff, a File tab's, a page's source, or a text file
+ * opened over the window, is drawn through the same \`CodeView\` holding the
+ * one file (\`mountFile\`): only the lines near the view drawn at all, however
+ * long the file, coloured in the same pool, its lines lit as a thread's are,
+ * and each note under its line drawn in the element the view keeps for it,
+ * as a list's are. Pierre numbers a file from its first line, so the file
+ * is handed whole. One patch alone takes notes under its lines the same way
+ * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries Luke's.
+ *
  * Where the view comments on lines, code selected as text is read once the
  * drag that began in a file lets go (`watchTextSelection`): the lines it
  * runs over in that file's shadow root (`./text-selection.ts`) and where its
@@ -149,6 +166,9 @@ import { wholeOf } from "./whole-diff.js";
 
 /** The longest line, in characters, whose changed words are marked; a longer one is tinted whole. */
 const MAX_LINE_DIFF_LENGTH = 1000;
+
+/** No notes. */
+const NO_NOTES: readonly DiffAnnotation[] = [];
 
 /**
  * The text of the worker a list's files are highlighted in, set by the
@@ -535,10 +555,14 @@ function readPatch(patch: string): FileDiffMetadata {
 
 /** Pierre's options for one patch: a whole file's, or an excerpt with nothing said of the lines around it. */
 function optionsOf(props: DiffViewProps): FileDiffOptions<string, undefined> {
+  const { renderAnnotation } = props;
   return {
     ...sharedOptions(props.look),
     hunkSeparators: props.excerpt === true ? "simple" : "line-info-basic",
     disableFileHeader: true,
+    ...(renderAnnotation === undefined
+      ? {}
+      : { renderAnnotation: (note: { metadata: string }) => renderAnnotation(note.metadata) }),
   };
 }
 
@@ -562,7 +586,11 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   const view = new PierreFileDiff<string, undefined>(optionsOf(props));
   let patch = props.patch;
   let fileDiff = getSingularPatch(patch);
-  view.render({ fileDiff, fileContainer: container });
+  view.render({
+    fileDiff,
+    fileContainer: container,
+    lineAnnotations: annotationsOf(props.annotations ?? NO_NOTES),
+  });
   view.setSelectedLines(props.selected ?? null);
   return {
     update: (next) => {
@@ -572,7 +600,12 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
       }
       typeset(container, next.look);
       view.setOptions(optionsOf(next));
-      view.render({ fileDiff, fileContainer: container, forceRender: true });
+      view.render({
+        fileDiff,
+        fileContainer: container,
+        lineAnnotations: annotationsOf(next.annotations ?? NO_NOTES),
+        forceRender: true,
+      });
       view.setSelectedLines(next.selected ?? null);
     },
     unmount: () => {
@@ -1070,6 +1103,241 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   };
 }
 
+/** The id a whole file's one item stands under in its view. */
+const WHOLE_FILE_ITEM = "file";
+
+/** How much room stands above a whole file's first line and below its last, in pixels: the File tab's rows' own (`styles/tasks.css`'s `.code-lines`). */
+const WHOLE_FILE_EDGE = 6;
+
+/**
+ * How many files' keys `wholeFileKey` keeps, each a name at a revision with
+ * the text it was handed: as many as the pool keeps results for
+ * (\`HIGHLIGHT_CACHE_ENTRIES\`), since a key past those names colours the pool
+ * no longer holds, the oldest let go first.
+ */
+const WHOLE_FILE_KEYS_KEPT = 16;
+
+/** A whole file's key, kept with the text it was handed under its name at its revision. */
+interface WholeFileKey {
+  readonly name: string;
+  readonly revision: string;
+  readonly text: string;
+  readonly key: string;
+}
+
+/** The keys kept, oldest first, each a file's name at a revision. */
+let wholeFileKeys: readonly WholeFileKey[] = [];
+
+/** How many whole files were read under a key of their own, which names each in the pool's cache. */
+let wholeFilesRead = 0;
+
+/**
+ * The key a whole file's colours are kept under in the pool's cache: the one
+ * it was last read under, where the same name at the same revision holds the
+ * same text, so a file opened again takes its colours at once; and one
+ * counted afresh for any other, so a text that changed never takes another's
+ * colours. Note that a count names it, not the name and revision, because a
+ * key is never built from identifiers (\`AGENTS.md\`'s TypeScript rules); and
+ * that only the newest \`WHOLE_FILE_KEYS_KEPT\` are kept, whatever their names,
+ * so no file's texts pile up across its revisions.
+ */
+function wholeFileKey(name: string, revision: string, text: string): string {
+  const same = (each: WholeFileKey) => each.name === name && each.revision === revision;
+  const held = wholeFileKeys.find(same);
+  if (held?.text !== text) wholeFilesRead += 1;
+  const key = held?.text === text ? held.key : `whole-${wholeFilesRead}`;
+  // Note that the key read moves to the end, so the oldest is the one let go.
+  wholeFileKeys = [
+    ...wholeFileKeys.filter((each) => !same(each)),
+    { name, revision, text, key },
+  ].slice(-WHOLE_FILE_KEYS_KEPT);
+  return key;
+}
+
+/**
+ * A file's text as Pierre draws it: without the newline that ends its last
+ * line, which Pierre would draw as an empty line of its own, where GitHub
+ * and an editor count the file as ending on the line before it.
+ */
+function withoutFinalNewline(text: string): string {
+  return text.endsWith("\n") ? text.slice(0, -1) : text;
+}
+
+/** A whole file's notes as Pierre takes them, each key carried as the note's own. */
+function fileAnnotationsOf(notes: readonly FileAnnotation[]): LineAnnotation<string>[] {
+  return notes.map((note) => ({ lineNumber: note.line, metadata: note.key }));
+}
+
+/** A run of lines as Pierre lights it. */
+function litRange(range: FileLineRange): SelectedLineRange {
+  return { start: range.startLine, end: range.endLine };
+}
+
+/** A range Pierre picked, as a run of lines from its first to its last, whichever way it was dragged. */
+function fileLinesOf(range: SelectedLineRange): FileLineRange {
+  return { startLine: Math.min(range.start, range.end), endLine: Math.max(range.start, range.end) };
+}
+
+/**
+ * Leaves a drawn file's numbers out of what a screen reader reads: Pierre
+ * stands them in a column of their own beside the code, which would be read
+ * as every number and then every line, and they are left out of a copy and
+ * of the find already.
+ */
+function quietGutter(element: HTMLElement): void {
+  for (const gutter of element.shadowRoot?.querySelectorAll("[data-gutter]") ?? []) {
+    gutter.setAttribute("aria-hidden", "true");
+  }
+}
+
+/**
+ * Pierre's options for a whole file: the diff's theme, wrap, and numbers;
+ * no header, since the view's bar names the file; lines picked by pressing
+ * their numbers; and each note drawn in the element the view keeps for it,
+ * read off the latest props.
+ */
+function wholeFileOptions(
+  drawn: DiffLook,
+  latest: () => FileViewProps,
+  dress: (element: HTMLElement, phase: PostRenderPhase) => void,
+  pick: (range: SelectedLineRange | null) => void,
+): CodeViewOptions<string, undefined> {
+  return {
+    theme: drawn.themes,
+    themeType: "system",
+    preferredHighlighter: "shiki-js",
+    tokenizeMaxLineLength: MAX_LINE_DIFF_LENGTH,
+    disableLineNumbers: !drawn.lineNumbers,
+    overflow: drawn.wrap ? "wrap" : "scroll",
+    disableFileHeader: true,
+    enableLineSelection: true,
+    lineHoverHighlight: "number",
+    // Note that only the end of a press or a drag on the numbers is heard, since Pierre tells of the lines the view lights as picked too.
+    onLineSelectionEnd: pick,
+    itemMetrics: { lineHeight: lineHeightOf(drawn) },
+    layout: { paddingTop: WHOLE_FILE_EDGE, paddingBottom: WHOLE_FILE_EDGE, gap: 0 },
+    renderAnnotation: (note: { metadata: string }) => latest().renderAnnotation(note.metadata),
+    onPostRender: (node: HTMLElement, _instance: unknown, phase: PostRenderPhase) =>
+      dress(node, phase),
+  };
+}
+
+/**
+ * Draws a whole file, as a File tab, a page's source, or a text file opened
+ * over the window shows one, through Pierre's own \`CodeView\` holding the one
+ * file: only the lines near the view drawn at all, however long the file,
+ * in a shadow root the find reads and the look's sheet dresses, and
+ * coloured in the kept pool's workers, plain until the colours land. The
+ * lines lit are Pierre's own lit lines, as a review thread's are; a press of
+ * the numbers picks lines in their place until the view lights others.
+ * Note that the item is handed anew, its version counted up, only when what
+ * it draws changes, because Pierre draws again whatever it is handed anew.
+ */
+function mountFile(host: HTMLElement, props: FileViewProps): FileViewHandle {
+  let latest = props;
+  const releases: Array<() => void> = [];
+  const dressed = new WeakSet<HTMLElement>();
+  // The lines the reader picked by their numbers, none until they pick or once the view lights others.
+  let picked: FileLineRange | undefined;
+  // The file's element, the one the selection is read in, once Pierre has drawn it.
+  let drawnElement: HTMLElement | undefined;
+  const dress = (element: HTMLElement, phase: PostRenderPhase) => {
+    if (phase === "unmount") {
+      if (drawnElement === element) drawnElement = undefined;
+      return;
+    }
+    drawnElement = element;
+    quietGutter(element);
+    if (!dressed.has(element) && element.shadowRoot !== null) {
+      dressed.add(element);
+      element.setAttribute(FIND_SHADOW_ATTRIBUTE, FIND_SKIPPED);
+      releases.push(adoptShadowStyles(element.shadowRoot, lookSheets().look));
+    }
+    latest.onDrawn?.();
+  };
+  const pick = (range: SelectedLineRange | null) => {
+    picked = range === null ? undefined : fileLinesOf(range);
+  };
+  const optionsFor = (next: FileViewProps) =>
+    wholeFileOptions(next.look, () => latest, dress, pick);
+  let version = 0;
+  const itemOf = (next: FileViewProps): CodeViewItem<string> => {
+    version += 1;
+    return {
+      id: WHOLE_FILE_ITEM,
+      type: "file",
+      file: {
+        name: next.name,
+        contents: withoutFinalNewline(next.text),
+        cacheKey: wholeFileKey(next.name, next.revision, next.text),
+      },
+      annotations: fileAnnotationsOf(next.annotations),
+      version,
+    };
+  };
+  const light = (lit: FileLineRange | undefined) => {
+    picked = undefined;
+    if (lit === undefined) view.clearSelectedLines({ notify: false });
+    // Note that Pierre is told not to tell of the lines it is handed, which are no pick of the reader's.
+    else view.setSelectedLines({ id: WHOLE_FILE_ITEM, range: litRange(lit) }, { notify: false });
+  };
+  typeset(host, props.look);
+  const highlighting = listHighlighting(props.look);
+  const view = new CodeView<string, undefined>(optionsFor(props), highlighting.pool);
+  view.setup(host);
+  view.setItems([itemOf(props)]);
+  view.render(true);
+  if (props.lit !== undefined) light(props.lit);
+  return {
+    update: (next) => {
+      const was = latest;
+      latest = next;
+      typeset(host, next.look);
+      if (!sameLook(next.look, was.look)) {
+        // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the file's own.
+        void highlighting.follow(next.look);
+        view.setOptions(optionsFor(next));
+      }
+      const another =
+        next.name !== was.name || next.text !== was.text || next.revision !== was.revision;
+      // Note that lines picked in a file are no pick in another.
+      if (another) picked = undefined;
+      if (
+        another ||
+        !sameLook(next.look, was.look) ||
+        !sameFileNotes(next.annotations, was.annotations)
+      ) {
+        view.setItems([itemOf(next)]);
+        view.render();
+      }
+      if (!sameFileLines(next.lit, was.lit)) light(next.lit);
+    },
+    revealLines: (range) =>
+      view.scrollTo({
+        type: "range",
+        id: WHOLE_FILE_ITEM,
+        range: litRange(range),
+        align: "center",
+        behavior: "instant",
+      }),
+    pickedLines: () => {
+      if (picked !== undefined) return picked;
+      if (document.getSelection()?.isCollapsed !== false) return undefined;
+      const root = drawnElement?.shadowRoot;
+      const range = root === null || root === undefined ? undefined : rangeIn(root);
+      const selection = range === undefined ? undefined : selectedLines(range);
+      return selection === undefined
+        ? undefined
+        : fileLinesOf({ start: selection.start, end: selection.end });
+    },
+    unmount: () => {
+      view.cleanUp();
+      for (const release of releases) release();
+      host.replaceChildren();
+    },
+  };
+}
+
 /**
  * A run of a file's lines coloured in the look's syntax themes, as a list's
  * files are: in the kept pool's workers once they hold the look, or on the
@@ -1118,4 +1386,4 @@ let colouringsAsked = 0;
 /** The name Pierre gives a file whose name names no grammar. */
 const PLAIN_TEXT = "text";
 
-export const diffView: DiffViewModule = { mount, mountList, colourLines };
+export const diffView: DiffViewModule = { mount, mountList, mountFile, colourLines };
