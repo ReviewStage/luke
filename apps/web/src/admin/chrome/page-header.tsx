@@ -89,6 +89,8 @@ function AdminToolbar({
   // rather than cut the heading down to a letter or two; the heading then
   // asks for its words' width, which the shared sheet's `flex: 1` gives up,
   // and stands a control's height, so its words stay level with the toggle.
+  // The controls narrow to the row they are given and wrap among
+  // themselves, so a phone narrower than all of them still reaches each.
   return (
     <header className="desktop-toolbar in-data-[room=narrow]:flex-wrap">
       <div className="desktop-toolbar-heading in-data-[room=narrow]:flex in-data-[room=narrow]:min-h-(--luke-control-height) in-data-[room=narrow]:basis-auto! in-data-[room=narrow]:items-center">
@@ -99,7 +101,9 @@ function AdminToolbar({
         )}
       </div>
       {controls === null || controls === undefined ? null : (
-        <div className="desktop-toolbar-actions">{controls}</div>
+        <div className="desktop-toolbar-actions in-data-[room=narrow]:min-w-0 in-data-[room=narrow]:flex-wrap in-data-[room=narrow]:shrink!">
+          {controls}
+        </div>
       )}
     </header>
   );
