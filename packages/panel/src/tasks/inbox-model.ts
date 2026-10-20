@@ -41,6 +41,7 @@ import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
+import { askHeadWords } from "./inbox-ask-words.js";
 import { plainWords } from "./tool-call-model.js";
 
 /**
@@ -486,7 +487,7 @@ export function decideButtons(ask: Pick<InboxDecideAsk, "options" | "multiple">)
 }
 
 /** How many steps a `do` ask shows: its own, or one, the item's title, for a to-do from before version 5 that named none. */
-export function shownSteps(ask: Pick<InboxDoAsk, "steps">): number {
+function shownSteps(ask: Pick<InboxDoAsk, "steps">): number {
   return Math.max(ask.steps.length, 1);
 }
 
@@ -742,28 +743,6 @@ export function answerOf(
   messageId: string,
 ): InboxMessage | undefined {
   return thread.find((message) => message.answers?.ask === messageId);
-}
-
-/**
- * What an ask says it asks, as its box leads with it and its row's line
- * under the title does while it waits: a pick of one or several, steps with
- * how many the steps given tick, fields, or the reply's own words. Steps
- * name no count where none are given, as on a settled ask, or where the ask
- * shows one alone.
- */
-export function askHeadWords(ask: InboxKnownAsk, ticked: readonly number[] | undefined): string {
-  switch (ask.type) {
-    case INBOX_ASK.DECIDE:
-      return ask.multiple === true ? "Pick any" : "Pick one";
-    case INBOX_ASK.DO: {
-      const shown = shownSteps(ask);
-      if (ticked === undefined || shown === 1) return "Steps";
-      const count = new Set(ticked.filter((at) => at < shown)).size;
-      return `Steps${PREVIEW_PART}${count} of ${shown}`;
-    }
-    case INBOX_ASK.ANSWER:
-      return ask.fields === undefined ? "Your answer" : "Fill in";
-  }
 }
 
 /** How many messages a thread's line counts, "1 message", "6 messages". */

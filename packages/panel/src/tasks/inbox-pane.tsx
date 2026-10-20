@@ -79,6 +79,7 @@ import {
 import { ArchivedComposerNote } from "./archived-task.js";
 import { AttachedFileChips } from "./attached-file-chips.js";
 import { InboxAnswerBox } from "./inbox-answer-box.js";
+import { askHeadWords } from "./inbox-ask-words.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
@@ -86,7 +87,6 @@ import {
   answeredWords,
   answerOf,
   archivedHolder,
-  askHeadWords,
   askNumberedPick,
   CLOSED_WORDS,
   decideButtons,

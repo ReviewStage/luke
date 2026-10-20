@@ -6,12 +6,15 @@ import {
   codingAgentTodosInputSchema,
 } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_ASK,
   INBOX_BLOCK,
   INBOX_FIELD,
   INBOX_RESPONSE,
   type InboxPost,
   type InboxPostBlock,
+  type InboxThreadPostInput,
   inboxPostInputSchema,
+  inboxThreadPostInputSchema,
 } from "@luke/features/inbox-wire";
 import {
   type IntegrationProvider,
@@ -36,6 +39,7 @@ import {
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool.js";
 import { shortCommit } from "./file-tab-model.js";
+import { askHeadWords } from "./inbox-ask-words.js";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.
@@ -344,13 +348,46 @@ function postLines(post: InboxPost): string {
   return [...blocks, ...askLines(post.response)].filter((line) => line.trim() !== "").join("\n");
 }
 
+const readThreadPost = Schema.decodeUnknownOption(inboxThreadPostInputSchema);
+
+/** The message a post carries from version 5, or nothing where its input does not read as one: a post from before it, or one still streaming. */
+function threadPostView(input: WireValue | undefined): InboxThreadPostInput | undefined {
+  return Option.getOrUndefined(readThreadPost(input));
+}
+
 /**
- * The tool an agent writes its message on one of its items' threads with,
- * by the name its tool part carries. Note that it is named here rather than
- * read off `INBOX_TOOL`, because the tool lands in its own change, and a
- * transcript holding it must draw its row either way.
+ * What a post's ask offers, as the row's body lists it under the ask's
+ * kind: a `decide`'s options, the recommended one saying so, a `do`'s
+ * steps, or an `answer`'s fields with their types; none where the reply's
+ * own words answer it.
  */
-const REPLY_INBOX_TOOL = "reply_inbox";
+function threadAskLines(ask: NonNullable<InboxThreadPostInput["ask"]>): readonly string[] {
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+      return ask.options.map((option) => {
+        const recommended = ask.recommended === option.label ? " (recommended)" : "";
+        const detail = option.detail === undefined ? "" : ` -- ${option.detail}`;
+        return `- ${option.label}${recommended}${detail}`;
+      });
+    case INBOX_ASK.DO:
+      return ask.steps.map((step) => `- ${step}`);
+    case INBOX_ASK.ANSWER:
+      return (ask.fields ?? []).map((field) => {
+        const options =
+          field.type === INBOX_FIELD.SELECT ? `: ${(field.options ?? []).join(", ")}` : "";
+        const required = field.required === true ? ", required" : "";
+        return `- ${field.label} (${field.type}${required})${options}`;
+      });
+  }
+}
+
+/** A version 5 post as the row's body lists it: its message's first line, then what its ask asks, by its kind, and what it offers. */
+function threadPostLines(post: InboxThreadPostInput): string {
+  const first = post.body.split("\n").find((line) => line.trim() !== "") ?? "";
+  const ask =
+    post.ask === undefined ? [] : [askHeadWords(post.ask, undefined), ...threadAskLines(post.ask)];
+  return [first, ...ask].join("\n");
+}
 
 /** A reply's words, then each picture it showed by the path of its file, as the row's body lists them. */
 function replyLines(input: WireValue | undefined): string {
@@ -366,7 +403,11 @@ function replyLines(input: WireValue | undefined): string {
  * An inbox call's row: a post names its item's title and lists what it
  * asks, a close names the item's key and says why, a reply names the
  * item's key and shows its words and pictures, and a read names
- * nothing. An answer that did what was asked is the agent's whole inbox,
+ * nothing. A post from version 5 names its thread's title, or its key
+ * where it names none, and shows its message's first line and its ask's
+ * kind; a withdrawal names the thread's key and says why. A transcript
+ * from before it still holds the retired `reply_inbox` and
+ * `close_inbox_item` and the post's earlier input, drawn as they were. An answer that did what was asked is the agent's whole inbox,
  * which the Inbox tab draws as it stands, so none is shown here; one that
  * did nothing shows why, so a refused post never reads as posted.
  */
@@ -377,6 +418,15 @@ function inboxToolView(
 ): ToolCallView {
   const refused = inboxRefusal(output);
   if (tool === AGENT_TOOL.POST_TO_INBOX) {
+    const message = threadPostView(input);
+    if (message !== undefined) {
+      return {
+        kind: CALL_KIND.INBOX_POST,
+        subject: message.title === undefined ? message.key : cardTitle(message.title),
+        input: textBlock(threadPostLines(message)),
+        output: refused,
+      };
+    }
     const post = inboxPostView(input);
     return {
       kind: CALL_KIND.INBOX_POST,
@@ -390,7 +440,15 @@ function inboxToolView(
       output: refused,
     };
   }
-  if (tool === REPLY_INBOX_TOOL) {
+  if (tool === AGENT_TOOL.WITHDRAW_ASK) {
+    return {
+      kind: CALL_KIND.INBOX_WITHDRAW,
+      subject: stringAt(input, "key") ?? "",
+      input: textBlock(stringAt(input, "reason") ?? ""),
+      output: refused,
+    };
+  }
+  if (tool === RETIRED_TOOL.REPLY_INBOX) {
     return {
       kind: CALL_KIND.INBOX_REPLY,
       subject: stringAt(input, "key") ?? "",
@@ -569,9 +627,10 @@ function knownToolView(
         output: output === undefined ? undefined : jsonBlock(output),
       };
     case AGENT_TOOL.POST_TO_INBOX:
+    case AGENT_TOOL.WITHDRAW_ASK:
     case RETIRED_TOOL.CLOSE_INBOX_ITEM:
     case AGENT_TOOL.READ_INBOX:
-    case REPLY_INBOX_TOOL:
+    case RETIRED_TOOL.REPLY_INBOX:
       return inboxToolView(tool, input, output);
     case AGENT_TOOL.SLEEP: {
       const seconds = isRecord(input) && isWireNumber(input.seconds) ? input.seconds : undefined;
@@ -1025,7 +1084,7 @@ function shownCode(call: TargetedCall): ToolTarget | undefined {
  * agent read or wrote and has not pushed would open on nothing.
  */
 const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | undefined> = new Map<
-  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL] | ChatTool | typeof REPLY_INBOX_TOOL,
+  AgentTool | (typeof RETIRED_TOOL)[keyof typeof RETIRED_TOOL] | ChatTool,
   (call: TargetedCall) => ToolTarget | undefined
 >([
   [AGENT_TOOL.SHOW_PAGE, shownPage],
@@ -1048,9 +1107,10 @@ const TOOL_TARGETS: ReadonlyMap<string, (call: TargetedCall) => ToolTarget | und
   [AGENT_TOOL.LOOK_AT_PICTURE, () => TASK_TARGET],
   [AGENT_TOOL.SHOW_CODE, shownCode],
   [AGENT_TOOL.POST_TO_INBOX, () => INBOX_TARGET],
+  [AGENT_TOOL.WITHDRAW_ASK, () => INBOX_TARGET],
   [RETIRED_TOOL.CLOSE_INBOX_ITEM, () => INBOX_TARGET],
   [AGENT_TOOL.READ_INBOX, () => INBOX_TARGET],
-  [REPLY_INBOX_TOOL, () => INBOX_TARGET],
+  [RETIRED_TOOL.REPLY_INBOX, () => INBOX_TARGET],
   [CHAT_TOOL.POST, tasksOwnPost],
 ]);
 

@@ -1413,7 +1413,7 @@ test("a thread's row previews its latest message, an answer led by its stamp, an
     member: YOU,
     answers: { ask: asked.id, reply: INBOX_REPLY.CHOSE, choices: ["7 days"] },
   });
-  const settled = { ...asked, ask: { ...asked.ask, status: INBOX_ASK_STATUS.ANSWERED } };
+  const settled = standing(asked, INBOX_ASK_STATUS.ANSWERED);
   const answered = item({ id: "t1", status: INBOX_STATUS.ANSWERED, thread: [settled, answer] });
   assert.equal(inboxPreview(answered, previewName), "You: Chose 7 days · and say it in the docs");
   const wordless = { ...answer, text: "" };
@@ -1468,7 +1468,7 @@ test("a thread's row leads with what its open ask asks, as the ask's box says it
       item({
         id: "t5",
         status: INBOX_STATUS.CLOSED,
-        thread: [{ ...withdrawn, ask: { ...withdrawn.ask, status: INBOX_ASK_STATUS.WITHDRAWN } }],
+        thread: [standing(withdrawn, INBOX_ASK_STATUS.WITHDRAWN)],
       }),
       previewName,
     ),
@@ -1507,7 +1507,7 @@ test("a thread's row media are the pictures its messages' words draw by address 
     id: itemId,
     status: INBOX_STATUS.ANSWERED,
     blocks: [],
-    thread: [{ ...asked, ask: { ...asked.ask, status: INBOX_ASK_STATUS.ANSWERED } }, answer],
+    thread: [standing(asked, INBOX_ASK_STATUS.ANSWERED), answer],
   });
   assert.deepEqual(inboxMedia(threaded), [
     { kind: INBOX_MEDIA.PAGE, taskId: task, pageId: funnel },
@@ -1523,3 +1523,12 @@ test("a thread's row media are the pictures its messages' words draw by address 
     "another item's picture is none of this row's",
   );
 });
+
+/** The message with its ask standing as `status` says; the very message where it asks nothing. */
+function standing(
+  message: InboxMessage,
+  status: (typeof INBOX_ASK_STATUS)[keyof typeof INBOX_ASK_STATUS],
+): InboxMessage {
+  const { ask } = message;
+  return ask === undefined ? message : { ...message, ask: { ...ask, status } };
+}

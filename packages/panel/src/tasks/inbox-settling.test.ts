@@ -351,7 +351,7 @@ test("a reply that answers a thread's ask stands over every read as the thread w
   const held: InboxItem = {
     ...THREAD,
     status: INBOX_STATUS.ANSWERED,
-    thread: [{ ...ASKING, ask: { ...ASKING.ask, status: INBOX_ASK_STATUS.ANSWERED } }, reply],
+    thread: [standing(ASKING, INBOX_ASK_STATUS.ANSWERED), reply],
     updatedAt: 2_000,
   };
   act(() => {
@@ -406,7 +406,7 @@ test("a close on a thread stands over every read as its ask withdrawn, until a r
   const closed = {
     ...THREAD,
     status: INBOX_STATUS.CLOSED,
-    thread: [{ ...ASKING, ask: { ...ASKING.ask, status: INBOX_ASK_STATUS.WITHDRAWN } }],
+    thread: [standing(ASKING, INBOX_ASK_STATUS.WITHDRAWN)],
     unread: true,
   };
   render([], [closed]);
@@ -416,3 +416,12 @@ test("a close on a thread stands over every read as its ask withdrawn, until a r
     "a read holding the ask withdrawn is drawn as it holds it",
   );
 });
+
+/** The message with its ask standing as `status` says; the very message where it asks nothing. */
+function standing(
+  message: InboxMessage,
+  status: (typeof INBOX_ASK_STATUS)[keyof typeof INBOX_ASK_STATUS],
+): InboxMessage {
+  const { ask } = message;
+  return ask === undefined ? message : { ...message, ask: { ...ask, status } };
+}
