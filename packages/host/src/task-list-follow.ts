@@ -7,7 +7,7 @@ import {
 } from "@luke/features/task-list-live";
 import type { TaskListAnswer } from "@luke/features/task-wire";
 import { Clock, Duration, Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { LiveBroken, type LiveClient, liveRows, type TxWait } from "./live-follow.js";
 
 /**
  * task-list-follow.ts -- the task list followed over Neon Realtime as Neon's guide says to, built again whenever its rows move and whenever the clock alone moves an agent's status.
@@ -41,6 +41,8 @@ export interface TaskListFollowDependencies {
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
+  /** Hears the list's wait for a write's transaction once it is subscribed, and none once it is let go. */
+  readonly onTxWait?: (wait: TxWait | undefined) => void;
   /** The list, each time its rows or the clock move it. */
   readonly publish: (list: TaskListAnswer) => void;
 }
@@ -73,6 +75,7 @@ function liveLists(
       reseal: () => dependencies.live(false),
       poll: () => dependencies.live(true),
       now: dependencies.now,
+      ...(dependencies.onTxWait === undefined ? undefined : { onTxWait: dependencies.onTxWait }),
     },
     first,
   ).pipe(

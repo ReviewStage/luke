@@ -141,6 +141,8 @@ interface FakeService extends TasksClient {
   tasklessAgents: TasklessAgent[];
   /** What the service answers when the list is asked for sealed, to follow over Neon Realtime; sealed by default. */
   liveList: TaskCallResult<TaskListLiveAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
+  /** The transaction a rename commits in, where the test says it changed a row. */
+  renameTxid: string | undefined;
   /** Whether a delete is refused, as a service that did not answer refuses it. */
   deleteFails: boolean;
   createAnswer: TaskCallResult<TaskStarted, RepositoryCallFailure>;
@@ -333,6 +335,7 @@ function fakeService(tasks: Task[]): FakeService {
     agents: {},
     tasklessAgents: [],
     liveList: { ok: true, answer: SEALED_LIST },
+    renameTxid: undefined,
     deleteFails: false,
     createAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     repositoriesAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
@@ -824,7 +827,9 @@ function fakeService(tasks: Task[]): FakeService {
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? renamed : candidate,
         );
-        return { task: renamed };
+        return service.renameTxid === undefined
+          ? { task: renamed }
+          : { task: renamed, txid: service.renameTxid };
       }),
     // The service sets the status and the priority named, and leaves the other standing.
     setStanding: (taskId, standing) =>
@@ -3419,18 +3424,29 @@ function fakeRealtime() {
     string,
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
   >();
+  // The transactions the list has seen, and the waits for one it has not seen yet.
+  const seen = new Set<string>();
+  const waiting: { txid: string; settle: () => void }[] = [];
   const open = (): LiveClient => ({
     subscribe: (query) => ({
       onChange: (listener) => {
         listeners.set(query.capability, listener);
         return () => listeners.delete(query.capability);
       },
-      awaitTxId: () => Promise.resolve(),
+      awaitTxId: (txid) =>
+        seen.has(txid)
+          ? Promise.resolve()
+          : new Promise<void>((resolve) => waiting.push({ txid, settle: resolve })),
       renew: () => Promise.resolve(),
       unsubscribe: () => void listeners.delete(query.capability),
     }),
     close: () => undefined,
   });
+  /** A transaction arriving on the list, settling every wait for it. */
+  const arrive = (txid: string) => {
+    seen.add(txid);
+    for (const wait of waiting.filter((each) => each.txid === txid)) wait.settle();
+  };
   /** Waits for both parts to be subscribed, as the follow forked from a refresh subscribes them. */
   const subscribed = Effect.gen(function* () {
     for (let turn = 0; turn < 100 && listeners.size < 2; turn += 1) yield* Effect.yieldNow;
@@ -3446,7 +3462,7 @@ function fakeRealtime() {
   const settled = Effect.gen(function* () {
     for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
   });
-  return { open, subscribed, deliver, fail, settled };
+  return { open, subscribed, deliver, fail, settled, arrive };
 }
 
 /** One plan as the plans statement delivers its row. */
@@ -3625,5 +3641,41 @@ it.effect(
       realtime.deliver("agents", []);
       yield* realtime.settled;
       assert.equal(last()?.tasks[0]?.name, "Teammate invitations, again");
+    }),
+);
+
+it.effect(
+  "a rename that changed a row is answered once its transaction arrives on the list followed live, and one that changed nothing at once",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const realtime = fakeRealtime();
+      const { call } = yield* subject(service, { openLive: realtime.open });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.subscribed;
+      realtime.deliver("plans", [taskRow(INVITES, "Teammate invitations")]);
+      realtime.deliver("agents", []);
+      yield* realtime.settled;
+      service.renameTxid = "4242";
+      let answered = false;
+
+      yield* Effect.forkChild(
+        Effect.tap(call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invites" }), () =>
+          Effect.sync(() => {
+            answered = true;
+          }),
+        ),
+      );
+      yield* realtime.settled;
+      assert.equal(answered, false, "the rename waits for its transaction");
+      realtime.arrive("4242");
+      yield* realtime.settled;
+      assert.equal(answered, true);
+
+      service.renameTxid = undefined;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.TASKS_RENAME, { taskId: INVITES, name: "Invitations" }),
+        { renamed: true },
+      );
     }),
 );
