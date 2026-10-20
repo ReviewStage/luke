@@ -835,6 +835,7 @@ it("a content act's payload carrying a key its schema does not name, or past its
   for (const act of ACTS.slice(
     ACTS.findIndex((each) => each.kind === TASKS_ACT_KIND.TASKS_SET_STANDING),
   )) {
+    // SAFETY: every content kind but the two earlier-page presses takes an object payload, which ACTS gives it.
     const payload =
       act.payload === undefined ? { extra: true } : { ...(act.payload as object), extra: true };
     assert.deepEqual(
