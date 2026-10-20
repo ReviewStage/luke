@@ -209,6 +209,7 @@ export function PullRequestLine({
           </>
         }
         onPress={url === undefined ? undefined : () => openLink(url)}
+        linkHref={url}
       />
     </li>
   );

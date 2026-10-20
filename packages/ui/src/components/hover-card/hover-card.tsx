@@ -126,6 +126,7 @@ export function HoverCardRow({
   label,
   end,
   onPress,
+  linkHref,
 }: {
   look?: HoverCardRowLook;
   glyph: ReactNode;
@@ -134,6 +135,8 @@ export function HoverCardRow({
   end?: ReactNode;
   /** Opens what the row names; a row without it is text. */
   onPress?: (() => void) | undefined;
+  /** The address its press opens, where it opens one, which a right-click offers as a link's (`LINK_HREF_ATTRIBUTE`). */
+  linkHref?: string | undefined;
 }): React.JSX.Element {
   const row = (
     <>
@@ -153,7 +156,13 @@ export function HoverCardRow({
       {row}
     </span>
   ) : (
-    <button type="button" className="luke-hover-card-row" data-look={look} onClick={onPress}>
+    <button
+      type="button"
+      className="luke-hover-card-row"
+      data-look={look}
+      data-link-href={linkHref}
+      onClick={onPress}
+    >
       {row}
     </button>
   );

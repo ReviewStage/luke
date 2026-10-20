@@ -675,6 +675,7 @@ function MentionChip({
             }
       }
       card={card}
+      data-link-href={press === undefined ? undefined : target}
       data-mention-ref=""
       data-kind={mention.kind}
       data-state={state}
@@ -833,6 +834,7 @@ function PlaceChip({
         openLink(href);
       }}
       card={card}
+      data-link-href={href}
       data-mention-ref=""
       data-kind={MENTION_KIND_PLACE}
     />

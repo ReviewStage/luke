@@ -274,6 +274,7 @@ export function ListRow({
   actions,
   actionsAt = LIST_ROW_ACTIONS.ALWAYS,
   onPress,
+  linkHref,
   current,
   unread,
   hint,
@@ -310,6 +311,8 @@ export function ListRow({
   actionsAt?: ListRowActions;
   /** What pressing the row does, handed the press, whose modifiers it may read; a row without one is not a control. */
   onPress?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  /** The address its press opens, where it opens one, which a right-click offers as a link's (`LINK_HREF_ATTRIBUTE`). */
+  linkHref?: string | undefined;
   /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
   current?: ListRowCurrent | undefined;
   /** Whether what the row stands for has not been seen, its title in the heavier weight. */
@@ -438,6 +441,7 @@ export function ListRow({
       type="button"
       className="luke-list-row-main"
       aria-current={current}
+      data-link-href={linkHref}
       disabled={disabled}
       tabIndex={tabbable ? undefined : -1}
       // Note that the focus moves as a mousedown's default, so refusing it there is what keeps it.

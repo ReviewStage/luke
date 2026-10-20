@@ -66,6 +66,7 @@ export function TextButton({
   onClick,
   keepFocus,
   id,
+  linkHref,
   children,
   ...props
 }: HintProps & {
@@ -75,6 +76,8 @@ export function TextButton({
   /** Whether a pointer's press leaves the focus where it is. */
   keepFocus?: boolean | undefined;
   id?: string | undefined;
+  /** The address its press opens, where it opens one, which a right-click offers as a link's (`LINK_HREF_ATTRIBUTE`). */
+  linkHref?: string | undefined;
   /** Its accessible name, where the words on screen say less than the act. */
   "aria-label"?: string | undefined;
   /** The region it shows and hides, and whether that stands open. */
@@ -88,6 +91,7 @@ export function TextButton({
       className="luke-text-button"
       data-tone={tone}
       data-lines={lines}
+      data-link-href={linkHref}
       id={id}
       aria-label={props["aria-label"]}
       aria-expanded={props["aria-expanded"]}
