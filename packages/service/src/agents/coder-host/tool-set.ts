@@ -167,14 +167,6 @@ const readPostedBlocks = Schema.decodeUnknownOption(
 /** What an inbox post's input is read for here: its body, whose pictures name files in the sandbox. */
 const readPostedBody = Schema.decodeUnknownOption(Schema.Struct({ body: Schema.String }));
 
-/** Whether an inbox post's body draws a picture from a file in the sandbox. */
-function bodyNamesSandboxPicture(input: unknown): boolean {
-  return Option.exists(
-    readPostedBody(input),
-    ({ body }) => inboxSandboxPicturePaths(body).length > 0,
-  );
-}
-
 /**
  * Whether an event of the agent's session opened its sandbox: a request for
  * a sandbox tool, for a page read from a file in the sandbox, for an
@@ -200,7 +192,10 @@ export function opensSandbox(event: MessageStreamEvent): boolean {
                 blocks.some((block) => block.type === CHAT_BLOCK.IMAGE),
               )) ||
             (action.toolName === CODER_TOOL.POST_TO_INBOX &&
-              bodyNamesSandboxPicture(action.input))),
+              Option.exists(
+                readPostedBody(action.input),
+                ({ body }) => inboxSandboxPicturePaths(body).length > 0,
+              ))),
       );
     case "message.received":
       return event.data.parts?.some((part) => part.type === "file") ?? false;

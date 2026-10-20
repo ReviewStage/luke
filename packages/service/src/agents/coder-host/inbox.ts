@@ -272,7 +272,9 @@ function legacyOf(item: InboxItem, messages: readonly InboxMessage[]): Partial<A
     return {};
   }
   return {
-    ...(item.status === INBOX_STATUS.OPEN ? { blocks: item.blocks, response: item.response } : {}),
+    ...(item.status === INBOX_STATUS.OPEN
+      ? { blocks: item.blocks, response: item.response }
+      : undefined),
     ...(item.answer === undefined ? undefined : { answer: item.answer }),
     ...(item.answerFiles === undefined
       ? undefined
