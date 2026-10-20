@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import type { VoiceLiveSessionChanged } from "@luke/gateway";
 import { LIVE_STATUS, type LiveStatus } from "@luke/live";
-import { Context, Effect, Fiber } from "effect";
+import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@luke/wire/conversation";
+import { Context, Duration, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
+import type { VoiceCallTranscriptChange } from "../voice-view.js";
 import type {
+  LiveCaptionRow,
   LiveVoiceCall,
   LiveVoiceCallEvents,
   LiveVoiceCallOpening,
@@ -122,9 +126,14 @@ const SURROUNDINGS: LiveVoiceSurroundings = {
   microphoneGranted: true,
 };
 
-function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
+function fixture(
+  surroundings: Partial<LiveVoiceSurroundings> = {},
+  services: Context.Context<never> = Context.empty(),
+) {
   const calls: FakeCall[] = [];
   const views: LiveVoiceView[] = [];
+  /** What moved in the transcript with each report, none where nothing did. */
+  const transcripts: (VoiceCallTranscriptChange | undefined)[] = [];
   /** Whether each report was the one an exchange opened on. */
   const openings: boolean[] = [];
   let microphoneGranted = true;
@@ -133,11 +142,12 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   const stops: number[] = [];
   const silencedAtStops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
-    services: Context.empty(),
+    services,
     bridge: {
-      reportView: (view, exchange) => {
+      reportView: (view, exchange, transcript) => {
         views.push(view);
         openings.push(exchange);
+        transcripts.push(transcript);
       },
       requestMicrophone: () =>
         Effect.suspend(() => {
@@ -175,6 +185,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
     calls,
     views,
     openings,
+    transcripts,
     setMicrophone: (granted: boolean) => {
       microphoneGranted = granted;
     },
@@ -285,5 +296,112 @@ it.effect(
       assert.deepEqual(f.silencedAtStops, [1]);
       assert.equal(f.stops.length, 1);
       assert.equal(call.closes, 0);
+    }),
+);
+
+/** One caption row as the call's ledger hands it over: unsettled, so it is still being said. */
+function captionRow(rowId: string, kind: ConversationEntryKind, words: string): LiveCaptionRow {
+  return {
+    rowId,
+    entry: { kind, words },
+    startMs: 0,
+    endMs: words.length * 10,
+    voiceSessionId: "voice-session-1",
+    settled: false,
+  };
+}
+
+it.effect(
+  "caption rows landing within 100 ms are one report with the latest words, and a line said is carried once rather than with every later caption",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture({}, yield* Effect.context<never>());
+      const pressed = yield* Effect.forkChild(f.talkAboutTask(INVITES_TASK), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      call.settle(LIVE_STATUS.SPEAKING);
+      yield* Effect.yieldNow;
+      const before = f.views.length;
+      assert.equal(f.views[before - 1]?.voiceStatus, LIVE_STATUS.SPEAKING);
+
+      // Ten transcription deltas growing Luke's first line, 9 ms apart.
+      const words = [
+        "Seven",
+        "days",
+        "then",
+        "and",
+        "the",
+        "link",
+        "dies",
+        "with",
+        "the",
+        "invite.",
+      ];
+      const first = (count: number) =>
+        captionRow("row-1", CONVERSATION_ENTRY_KIND.REPLY, words.slice(0, count).join(" "));
+      for (let count = 1; count <= words.length; count += 1) {
+        call.events.onCaptions([first(count)]);
+        yield* TestClock.adjust(Duration.millis(9));
+        yield* Effect.yieldNow;
+      }
+      assert.equal(f.views.length, before);
+      yield* TestClock.adjust(Duration.millis(10));
+      yield* Effect.yieldNow;
+      assert.equal(f.views.length, before + 1);
+      assert.deepEqual(f.views[before]?.lukeCaptions, [words.join(" ")]);
+      assert.deepEqual(f.transcripts[before], {
+        voiceSessionId: "voice-session-1",
+        from: 0,
+        lines: [
+          {
+            rowId: "row-1",
+            speaker: "assistant",
+            words: words.join(" "),
+            startMs: 0,
+            endMs: words.join(" ").length * 10,
+          },
+        ],
+      });
+
+      // A second line growing over the next stretch carries only itself.
+      const second = (text: string) => captionRow("row-2", CONVERSATION_ENTRY_KIND.REPLY, text);
+      for (const text of ["Anything", "Anything else", "Anything else on invites?"]) {
+        call.events.onCaptions([first(words.length), second(text)]);
+        yield* TestClock.adjust(Duration.millis(100));
+        yield* Effect.yieldNow;
+      }
+      assert.equal(f.views.length, before + 4);
+      const later = f.transcripts.slice(before + 1);
+      assert.deepEqual(
+        later.map((change) => [change?.from, change?.lines.map((line) => line.words)]),
+        [
+          [1, ["Anything"]],
+          [1, ["Anything else"]],
+          [1, ["Anything else on invites?"]],
+        ],
+      );
+      assert.deepEqual(f.views.at(-1)?.lukeCaptions, [
+        words.join(" "),
+        "Anything else on invites?",
+      ]);
+
+      // Rows that moved nothing are not reported at all.
+      call.events.onCaptions([first(words.length), second("Anything else on invites?")]);
+      yield* TestClock.adjust(Duration.millis(100));
+      yield* Effect.yieldNow;
+      assert.equal(f.views.length, before + 4);
+
+      // The call gone takes its transcript with it, from the first line.
+      yield* f.stopCall();
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.transcripts.at(-1), {
+        voiceSessionId: undefined,
+        from: 0,
+        lines: [],
+      });
     }),
 );

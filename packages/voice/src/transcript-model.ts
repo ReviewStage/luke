@@ -2,7 +2,7 @@ import type { PlanEditor } from "@luke/features/task-wire";
 import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE, type TranscriptCall } from "@luke/features/transcript-wire";
 import type { UIMessage } from "ai";
-import type { VoiceView } from "./voice-view.js";
+import type { VoiceCallTranscript, VoiceView } from "./voice-view.js";
 
 /**
  * transcript-model.ts -- what the open task's Call tab draws, decided from the stored transcript and the call standing now.
@@ -83,7 +83,7 @@ export type TranscriptRegion =
  */
 export interface HeardCall {
   readonly taskId: string;
-  readonly transcript: NonNullable<VoiceView["callTranscript"]>;
+  readonly transcript: VoiceCallTranscript;
   /** When this window first heard the call, which its header shows. */
   readonly heardAt: number;
   /** Whether the call still stands. */
@@ -128,7 +128,8 @@ function wordCount(messages: readonly UIMessage[]): number {
  */
 export function heardCalls(input: {
   held: readonly HeardCall[];
-  voice: Pick<VoiceView, "callTaskId" | "callTranscript">;
+  /** The call standing, and its transcript as the document holds it (`voice.callTranscript`). */
+  voice: Pick<VoiceView, "callTaskId"> & { callTranscript: VoiceCallTranscript | undefined };
   taskId: string | undefined;
   now: number;
 }): readonly HeardCall[] {

@@ -51,8 +51,11 @@ import {
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
+  type VoiceCallTranscript,
+  type VoiceCallTranscriptChange,
   type VoiceCommand,
   type VoiceView,
+  withCallTranscriptChange,
 } from "@luke/voice/voice-view";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
@@ -133,6 +136,8 @@ interface Standing {
   profile: string;
   fixtureMode: boolean;
   voice: VoiceView;
+  /** The document's `voice.callTranscript`, held whole beside the view. */
+  callTranscript: VoiceCallTranscript | undefined;
   unseenAgents: readonly string[];
   inboxWaiting: readonly AppInboxTask[];
   inboxTasks: readonly AppInboxTaskHolding[];
@@ -178,6 +183,7 @@ function mount(
     profile: RUN_PROFILE.IDLE,
     fixtureMode: false,
     voice: IDLE_VOICE_VIEW,
+    callTranscript: undefined,
     unseenAgents: [],
     inboxWaiting: [],
     inboxTasks: [],
@@ -254,7 +260,12 @@ function mount(
       inboxTasks: held.inboxTasks,
       inboxTaskless: [],
       failedRuns: [],
-      voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
+      voice: {
+        view: held.voice,
+        callTranscript: held.callTranscript,
+        listening: false,
+        requestMicrophoneAccess: () => undefined,
+      },
       onOpenIntegrations: () => undefined,
       onOpenApiKeys: () => undefined,
       onOpenSettings: (link) => links.push(link),
@@ -582,7 +593,7 @@ test("a planning worker's tab reads its session as an agent's worker's tab reads
 });
 
 /** The words of every call the transcript draws, in order, with whether each call stands now. */
-function _callsDrawn(region: TranscriptRegion): (readonly [boolean, string[]])[] {
+function callsDrawn(region: TranscriptRegion): (readonly [boolean, string[]])[] {
   if (region.kind !== TRANSCRIPT_REGION.READY) return [];
   return region.calls.map((call) => [call.live, call.messages.map(messageText)] as const);
 }
@@ -619,7 +630,7 @@ const _SHOWN_AGAIN: readonly TaskCodeShowing[] = [
 ];
 
 /** A call in progress about the open task, which is what puts code on screen. */
-const _ON_CALL: VoiceView = {
+const ON_CALL: VoiceView = {
   ...IDLE_VOICE_VIEW,
   callTaskId: TASK.id,
   voiceStatus: LIVE_STATUS.LISTENING,
@@ -3131,4 +3142,55 @@ test("an agent's title first landing on a task still Untitled reads the tasks ag
 
   assert.equal(landed, 1);
   assert.equal(refreshes(named) - namedBefore, 0);
+});
+
+test("the live transcript draws the call's lines from the changes main splices into the document, and a panel opened mid-call draws the same", () => {
+  const session = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
+  const line = (rowId: string, speaker: "user" | "assistant", words: string) => ({
+    rowId,
+    speaker,
+    words,
+    startMs: 0,
+    endMs: 1_000,
+  });
+  // As the voice window reports them: a line once, then only the line still growing.
+  const changes: readonly VoiceCallTranscriptChange[] = [
+    { voiceSessionId: session, from: 0, lines: [line("row-1", "user", "Invites should expire.")] },
+    { voiceSessionId: session, from: 1, lines: [line("row-2", "assistant", "After how")] },
+    {
+      voiceSessionId: session,
+      from: 1,
+      lines: [line("row-2", "assistant", "After how many days?")],
+    },
+  ];
+  const tasks: TasksView = { ...OPEN, transcript: NO_CALLS };
+  const tab = mount({ shown: true, tasks, voice: ON_CALL });
+  let held: VoiceCallTranscript | undefined;
+  for (const change of changes) {
+    held = withCallTranscriptChange(held, change);
+    tab.stand({ callTranscript: held });
+  }
+  const live = [[true, ["Invites should expire.", "After how many days?"]]];
+  assert.deepEqual(callsDrawn(tab.control().transcript.region), live);
+  // The last report heard again changes nothing.
+  const last = changes.at(-1);
+  assert.ok(last);
+  tab.stand({ callTranscript: withCallTranscriptChange(held, last) });
+  assert.deepEqual(callsDrawn(tab.control().transcript.region), live);
+
+  const opened = mount({ shown: true, tasks, voice: ON_CALL, callTranscript: held });
+  assert.deepEqual(callsDrawn(opened.control().transcript.region), live);
+
+  // The call gone clears the slice, and its words stay drawn until the record has them.
+  tab.stand({
+    voice: IDLE_VOICE_VIEW,
+    callTranscript: withCallTranscriptChange(held, {
+      voiceSessionId: undefined,
+      from: 0,
+      lines: [],
+    }),
+  });
+  assert.deepEqual(callsDrawn(tab.control().transcript.region), [
+    [false, ["Invites should expire.", "After how many days?"]],
+  ]);
 });

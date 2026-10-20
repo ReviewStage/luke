@@ -8,6 +8,7 @@ import {
 } from "@luke/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@luke/wire/conversation";
 import { type Context, Deferred, Duration, Effect, Exit, Fiber, Option, type Scope } from "effect";
+import type { VoiceCallTranscriptChange } from "../voice-view.js";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
@@ -43,17 +44,20 @@ interface LiveCallLine {
  * the captions preference says: the store's id for the call's session, where
  * an account holds it, and its lines in the order they opened. It is what the
  * Tasks tab's transcript draws until the call ends and the record is read.
+ * It grows for the whole call, so it is never reported whole: each report
+ * carries only what moved in it (`VoiceCallTranscriptChange`).
  */
-export interface LiveCallTranscript {
+interface LiveCallTranscript {
   readonly voiceSessionId: string | undefined;
   readonly lines: readonly LiveCallLine[];
 }
 
 /**
  * What a panel needs to draw the live conversation, reported whole on every
- * edge. Both speakers are carried beside the status, which names one of them
- * at a time: the status is what the media duck and the exchange count read,
- * and the two flags are what a full-duplex panel draws.
+ * edge and bounded whatever the call's length. Both speakers are carried
+ * beside the status, which names one of them at a time: the status is what
+ * the media duck and the exchange count read, and the two flags are what a
+ * full-duplex panel draws.
  */
 export interface LiveVoiceView extends LiveVoiceSpeakers {
   voiceStatus: LiveStatus;
@@ -67,8 +71,6 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   developerCaptions: readonly string[] | undefined;
   /** The task the standing call is about; none while no call stands. */
   callTaskId: string | undefined;
-  /** What was said on the standing call so far; none while no call stands or before its first line. */
-  callTranscript: LiveCallTranscript | undefined;
   /** The store's id for the session of the last call Luke ended himself, so the transcript can say so; none before he has. */
   lukeEndedCall: string | undefined;
   /** Whether Luke's voice is silenced on this device for the standing call; never while none stands. */
@@ -77,8 +79,16 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
 
 /** Everything the policy asks of the process that hosts it. */
 export interface LiveVoiceBridge {
-  /** The view as it moved, and whether this report is the one an exchange opened on, which is what is counted. */
-  reportView(view: LiveVoiceView, exchangeOpened: boolean): void;
+  /**
+   * The view as it moved, whether this report is the one an exchange opened
+   * on, which is what is counted, and what moved in the standing call's
+   * transcript since the last report, none where nothing did.
+   */
+  reportView(
+    view: LiveVoiceView,
+    exchangeOpened: boolean,
+    transcript: VoiceCallTranscriptChange | undefined,
+  ): void;
   /** Asks the system for the microphone, answering whether it is granted. */
   requestMicrophone(): Effect.Effect<boolean>;
   /** The neutral note said when the hosted service's ceiling refuses a session. */
@@ -98,6 +108,15 @@ const SPEAKER_OF_KIND = {
   [CONVERSATION_ENTRY_KIND.ASK]: TRANSCRIPT_SPEAKER.USER,
   [CONVERSATION_ENTRY_KIND.REPLY]: TRANSCRIPT_SPEAKER.ASSISTANT,
 } as const satisfies Record<ConversationEntryKind, TranscriptSpeaker>;
+
+/**
+ * How long caption rows are folded before they are reported. A transcription
+ * delta lands every few words while anyone speaks, and each report is a new
+ * version of the document every window is sent, so the captions are read
+ * about ten times a second rather than at the delta's rate; any other edge
+ * reports at once and carries the captions as they stand.
+ */
+const CAPTION_REPORT_MS = 100;
 
 /** Nobody heard on either side, which is what a call that is gone carries. */
 const SILENT: LiveVoiceSpeakers = { listening: false, lukeSpeaking: false };
@@ -155,7 +174,6 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.lukeCaptions === right.lukeCaptions &&
     left.developerCaptions === right.developerCaptions &&
     left.callTaskId === right.callTaskId &&
-    left.callTranscript === right.callTranscript &&
     left.lukeEndedCall === right.lukeEndedCall &&
     left.speakerMuted === right.speakerMuted &&
     left.listening === right.listening &&
@@ -243,6 +261,10 @@ export class LiveVoiceOrchestrator {
    */
   #keyDown = false;
   #reported: LiveVoiceView | undefined;
+  /** The transcript as last reported, which the next report's change is taken against. */
+  #reportedTranscript: LiveCallTranscript | undefined;
+  /** The clock folding caption rows into one report, while one stands. */
+  #captionReport: Fiber.Fiber<void> | undefined;
   /** The call whose exchange has been counted, so a session pausing between Luke's sentences is not a second exchange. */
   #countedCall: LiveVoiceCall | undefined;
   #counted = false;
@@ -586,6 +608,8 @@ export class LiveVoiceOrchestrator {
   stop(): Effect.Effect<void> {
     return Effect.suspend(() => {
       this.#stopped = true;
+      this.#captionReport?.interruptUnsafe();
+      this.#captionReport = undefined;
       const fiber = this.#lifecycle;
       this.#lifecycle = undefined;
       this.#letGo();
@@ -758,7 +782,7 @@ export class LiveVoiceOrchestrator {
     this.#rows = rows;
     this.#heardDuringEnding(call);
     this.#recomposeCaptions();
-    this.#touch();
+    this.#touchCaptions();
   }
 
   /**
@@ -809,7 +833,6 @@ export class LiveVoiceOrchestrator {
       lukeCaptions: this.#lukeCaptions,
       developerCaptions: this.#developerCaptions,
       callTaskId: this.#call === undefined ? undefined : this.#callTask,
-      callTranscript: this.#call === undefined ? undefined : this.#callTranscript,
       lukeEndedCall: this.#lukeEndedCall,
       speakerMuted: this.#speakerMuted,
     };
@@ -818,24 +841,56 @@ export class LiveVoiceOrchestrator {
   /**
    * Two facts moving together are one report, folded until the microtask
    * drains; a view that did not move is not reported at all, since the report
-   * becomes a version of the document this same window reads. The count of
-   * exchanges rides the report on the opening edge alone.
+   * becomes a version of the document this same window reads.
    */
   #touch(): void {
     if (this.#stopped || this.#queued) return;
     this.#queued = true;
     queueMicrotask(() => {
       this.#queued = false;
-      if (this.#stopped) return;
-      const view = this.#compose();
-      if (this.#reported !== undefined && sameView(this.#reported, view)) return;
-      this.#reported = view;
-      const active = liveExchangeActive(view);
-      const rising = active && !this.#counted && this.#call !== this.#countedCall;
-      this.#counted = active;
-      if (rising) this.#countedCall = this.#call;
-      this.#bridge.reportView(view, rising);
+      this.#report();
     });
+  }
+
+  /**
+   * Caption rows moving: reported once `CAPTION_REPORT_MS` has passed since
+   * the first of them, with whatever the rows say by then, on a clock run
+   * under the orchestrator's services because a row arrives on a callback
+   * that belongs to no fiber. A report sooner, for any other edge, carries
+   * them too, and the clock then finds nothing left to report.
+   */
+  #touchCaptions(): void {
+    if (this.#stopped || this.#captionReport !== undefined) return;
+    this.#captionReport = Effect.runForkWith(this.#services)(
+      Effect.andThen(
+        Effect.sleep(Duration.millis(CAPTION_REPORT_MS)),
+        Effect.sync(() => {
+          this.#captionReport = undefined;
+          this.#report();
+        }),
+      ),
+    );
+  }
+
+  /**
+   * The view and what moved in the transcript, where either did. The count
+   * of exchanges rides the report on the opening edge alone.
+   */
+  #report(): void {
+    if (this.#stopped) return;
+    const view = this.#compose();
+    const transcript = this.#call === undefined ? undefined : this.#callTranscript;
+    const change = transcriptChange(this.#reportedTranscript, transcript);
+    if (this.#reported !== undefined && sameView(this.#reported, view) && change === undefined) {
+      return;
+    }
+    this.#reported = view;
+    this.#reportedTranscript = transcript;
+    const active = liveExchangeActive(view);
+    const rising = active && !this.#counted && this.#call !== this.#countedCall;
+    this.#counted = active;
+    if (rising) this.#countedCall = this.#call;
+    this.#bridge.reportView(view, rising, change);
   }
 }
 
@@ -864,23 +919,51 @@ function callTranscriptOf(rows: readonly LiveCaptionRow[]): LiveCallTranscript |
   };
 }
 
+function sameLine(left: LiveCallLine, right: LiveCallLine | undefined): boolean {
+  return (
+    right !== undefined &&
+    left.rowId === right.rowId &&
+    left.speaker === right.speaker &&
+    left.words === right.words &&
+    left.startMs === right.startMs &&
+    left.endMs === right.endMs
+  );
+}
+
+/** How many lines from the start the two transcripts share, none across two sessions. */
+function sharedLines(
+  left: LiveCallTranscript | undefined,
+  right: LiveCallTranscript | undefined,
+): number {
+  if (!left || !right || left.voiceSessionId !== right.voiceSessionId) return 0;
+  const shared = left.lines.findIndex((line, index) => !sameLine(line, right.lines[index]));
+  return Math.min(shared === -1 ? left.lines.length : shared, right.lines.length);
+}
+
 /** Note that a row settling moves no line, so it is not reported as a change. */
 function sameTranscript(
   left: LiveCallTranscript | undefined,
   right: LiveCallTranscript | undefined,
 ): boolean {
   if (left === right) return true;
-  if (!left || !right || left.voiceSessionId !== right.voiceSessionId) return false;
-  if (left.lines.length !== right.lines.length) return false;
-  return left.lines.every((line, index) => {
-    const other = right.lines[index];
-    return (
-      other !== undefined &&
-      line.rowId === other.rowId &&
-      line.speaker === other.speaker &&
-      line.words === other.words &&
-      line.startMs === other.startMs &&
-      line.endMs === other.endMs
-    );
-  });
+  if (!left || !right || left.lines.length !== right.lines.length) return false;
+  return sharedLines(left, right) === left.lines.length;
+}
+
+/**
+ * What moved from the transcript reported to the one standing: the lines
+ * from the first that differs on, so a line said is reported once and then
+ * only while it still grows; none where nothing moved.
+ */
+function transcriptChange(
+  reported: LiveCallTranscript | undefined,
+  standing: LiveCallTranscript | undefined,
+): VoiceCallTranscriptChange | undefined {
+  if (sameTranscript(reported, standing)) return undefined;
+  const from = sharedLines(reported, standing);
+  return {
+    voiceSessionId: standing?.voiceSessionId,
+    from,
+    lines: standing?.lines.slice(from) ?? [],
+  };
 }

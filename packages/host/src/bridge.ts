@@ -10,7 +10,12 @@ import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
 import { liveExchangeActive } from "@luke/live";
 import { type AvatarFeed, avatarFeedFromWire } from "@luke/voice/avatar";
 import { type AvatarViewSignal, avatarViewSignalFromWire } from "@luke/voice/avatar-view";
-import { isVoiceView, type VoiceView } from "@luke/voice/voice-view";
+import {
+  isVoiceCallTranscriptChange,
+  isVoiceView,
+  type VoiceCallTranscriptChange,
+  type VoiceView,
+} from "@luke/voice/voice-view";
 import { isWireBoolean, type UnparsedWireValue } from "@luke/wire";
 import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
@@ -91,16 +96,20 @@ export const BRIDGE = {
    * and the exchange level the media duck follows is derived from it. The
    * count of exchanges rides beside it: a kind travels only on the edge that
    * opened an exchange, named by the one window that knows who opened it, so
-   * a turn walking from connecting to responding is counted once.
+   * a turn walking from connecting to responding is counted once. What
+   * moved in the standing call's transcript rides beside them too, never the
+   * whole of it, which grows for the call's length: main splices it into the
+   * document's `voice.callTranscript`.
    */
   reportVoiceView: entry({
     kind: "send",
     channel: "app:report-voice-view",
-    args: args<[VoiceView, ProductExchangeKind | undefined]>(
+    args: args<[VoiceView, ProductExchangeKind | undefined, VoiceCallTranscriptChange | undefined]>(
       (v) =>
-        v.length === 2 &&
+        v.length === 3 &&
         isVoiceView(v[0]) &&
-        (v[1] === undefined || (liveExchangeActive(v[0]) && isProductExchangeKind(v[1]))),
+        (v[1] === undefined || (liveExchangeActive(v[0]) && isProductExchangeKind(v[1]))) &&
+        (v[2] === undefined || isVoiceCallTranscriptChange(v[2])),
     ),
   }),
   /**

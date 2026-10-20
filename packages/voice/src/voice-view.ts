@@ -28,7 +28,7 @@ export interface VoiceSpeakers {
 }
 
 /** One line said on the standing call, as the voice window's captions group it, with its span in milliseconds into the call. */
-interface VoiceCallLine {
+export interface VoiceCallLine {
   readonly rowId: string;
   readonly speaker: TranscriptSpeaker;
   readonly words: string;
@@ -40,9 +40,31 @@ interface VoiceCallLine {
  * Everything said on the standing call so far: the store's id for its
  * session, which the task's stored transcript names the call by once it
  * ends, and its lines in the order they opened.
+ *
+ * It is not part of {@link VoiceView}, because it grows for the whole call
+ * and the view is reported at caption rate. It is the app-state slice
+ * `voice.callTranscript`, beside `voice.view`: the voice window reports only
+ * a {@link VoiceCallTranscriptChange} with each view, main splices it in
+ * with {@link withCallTranscriptChange}, and a panel opened mid-call reads
+ * the whole of it from the document. Its one reader is the Tasks tab's live
+ * transcript (`transcript-model.ts`'s `heardCalls`), which matches it to
+ * `view.callTaskId`; it is none while no call stands or before its first line.
  */
-interface VoiceCallTranscript {
+export interface VoiceCallTranscript {
   readonly voiceSessionId: string | undefined;
+  readonly lines: readonly VoiceCallLine[];
+}
+
+/**
+ * What moved in the standing call's transcript since the voice window last
+ * reported it: every line from index `from` on, as they stand now, and the
+ * lines before it unchanged. A line said is carried once, and then only
+ * while its words still grow; a call gone is the change from 0 to no lines.
+ * Applied twice it is applied once, so a report heard again changes nothing.
+ */
+export interface VoiceCallTranscriptChange {
+  readonly voiceSessionId: string | undefined;
+  readonly from: number;
   readonly lines: readonly VoiceCallLine[];
 }
 
@@ -61,8 +83,6 @@ export interface VoiceView extends VoiceSpeakers {
   developerCaptions: readonly string[] | undefined;
   /** The task the standing call is about, where the panel's open task opened it; none for no call. */
   callTaskId: string | undefined;
-  /** What was said on the standing call so far, whatever the captions preference; none for no call or before its first line. */
-  callTranscript: VoiceCallTranscript | undefined;
   /** The store's id for the session of the last call Luke ended himself; none before he has. */
   lukeEndedCall: string | undefined;
   /** Whether Luke's voice is silenced on this Mac for the standing call, his words still captioned; never while none stands. */
@@ -102,7 +122,6 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   lukeCaptions: undefined,
   developerCaptions: undefined,
   callTaskId: undefined,
-  callTranscript: undefined,
   lukeEndedCall: undefined,
   speakerMuted: false,
 };
@@ -155,14 +174,36 @@ function isVoiceCallLine(value: UnparsedWireValue): boolean {
   );
 }
 
-function isOptionalCallTranscript(value: UnparsedWireValue): boolean {
-  if (value === undefined) return true;
+export function isVoiceCallTranscriptChange(
+  value: UnparsedWireValue,
+): value is VoiceCallTranscriptChange & WireRecord {
   return (
     isRecord(value) &&
     isOptionalWireString(value.voiceSessionId) &&
+    isWireNumber(value.from) &&
+    Number.isInteger(value.from) &&
+    value.from >= 0 &&
     Array.isArray(value.lines) &&
     value.lines.every(isVoiceCallLine)
   );
+}
+
+/**
+ * The transcript held with a change applied: the lines before `from` kept
+ * and the change's lines after them. A change about another session than
+ * the one held starts over from its own lines, and no lines is no
+ * transcript.
+ */
+export function withCallTranscriptChange(
+  held: VoiceCallTranscript | undefined,
+  change: VoiceCallTranscriptChange,
+): VoiceCallTranscript | undefined {
+  const kept =
+    held === undefined || held.voiceSessionId !== change.voiceSessionId
+      ? []
+      : held.lines.slice(0, change.from);
+  const lines = [...kept, ...change.lines];
+  return lines.length === 0 ? undefined : { voiceSessionId: change.voiceSessionId, lines };
 }
 
 export function isVoiceView(value: UnparsedWireValue): value is VoiceView & WireRecord {
@@ -172,7 +213,6 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
     return false;
   if (!isWireBoolean(value.talkOpening)) return false;
   if (!isOptionalWireString(value.callTaskId)) return false;
-  if (!isOptionalCallTranscript(value.callTranscript)) return false;
   if (!isOptionalWireString(value.lukeEndedCall)) return false;
   if (!isWireBoolean(value.speakerMuted)) return false;
   if (!isWireBoolean(value.listening) || !isWireBoolean(value.lukeSpeaking)) return false;

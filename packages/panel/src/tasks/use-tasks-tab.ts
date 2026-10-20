@@ -134,7 +134,12 @@ import {
   type TranscriptRegion,
   transcriptRegion,
 } from "@luke/voice/transcript-model";
-import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
+import {
+  callInProgress,
+  VOICE_COMMAND,
+  type VoiceCallTranscript,
+  type VoiceView,
+} from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
@@ -1147,6 +1152,8 @@ export function useTasksTab(input: {
   failedRuns: readonly AccountFailedRun[];
   voice: {
     view: VoiceView;
+    /** What was said on the standing call so far (`voice.callTranscript`), which the live transcript draws. */
+    callTranscript: VoiceCallTranscript | undefined;
     listening: boolean;
     requestMicrophoneAccess: () => void;
   };
@@ -1488,7 +1495,11 @@ export function useTasksTab(input: {
   // call's words.
   const reported =
     tasksFixture === undefined || fixture === undefined
-      ? voice.view
+      ? {
+          voiceStatus: voice.view.voiceStatus,
+          callTaskId: voice.view.callTaskId,
+          callTranscript: voice.callTranscript,
+        }
       : tasksFixture.FIXTURE_TASKS_CALL;
   const [heard, setHeard] = useState<readonly HeardCall[]>([]);
   useEffect(() => {
