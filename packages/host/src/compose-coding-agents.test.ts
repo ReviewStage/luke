@@ -31,6 +31,7 @@ import type {
   AgentTranscriptLiveAnswer,
   ScopeInboxLiveAnswer,
   TranscriptNowAnswer,
+  WorkspaceChatLiveAnswer,
 } from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
@@ -249,6 +250,7 @@ function fakeService() {
   let scope: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined;
   let cursor = CODING_AGENT_CURSOR_START;
   let transcript: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined;
+  let chatLive: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined;
   // Each page read at once, in turn; the last stands once the others are read.
   let pagesNow: readonly TranscriptNowAnswer[] = [];
   const client: CodingAgentClient = {
@@ -584,6 +586,16 @@ function fakeService() {
         asked.push(`chat-post:${workspaceId}:${JSON.stringify(write)}`);
         return { readSeq: 4 };
       }),
+    chatJoin: (workspaceId) =>
+      Effect.sync(() => {
+        asked.push(`chat-join:${workspaceId}`);
+        return chatLive !== undefined && "failure" in chatLive ? chatLive : { self: MEMBER_ID };
+      }),
+    workspaceChatLive: (workspaceId, userId, poll) =>
+      Effect.sync(() => {
+        asked.push(`chat-live:${workspaceId}:${userId}${poll ? ":poll" : ""}`);
+        return chatLive ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+      }),
     chatAttachment: (workspaceId, messageId, attachmentId) =>
       Effect.sync(() => {
         asked.push(`chat-attachment:${workspaceId}:${messageId}:${attachmentId}`);
@@ -598,6 +610,10 @@ function fakeService() {
       next: AgentTranscriptLiveAnswer | { readonly failure: "not-found" } | undefined,
     ) => {
       transcript = next;
+    },
+    /** What the service seals for following a workspace's chat, or that the account is not in it; none answers unanswered. */
+    sealChat: (next: WorkspaceChatLiveAnswer | { readonly failure: "not-found" } | undefined) => {
+      chatLive = next;
     },
     /** The pages the service answers read at once, in turn. */
     pageNow: (...pages: readonly TranscriptNowAnswer[]) => {
@@ -654,6 +670,8 @@ function fakeRealtime() {
       assert.ok(listener, `no subscription to ${part}`);
       listener({ status: "live", data });
     },
+    /** The parts subscribed to now, by capability. */
+    subscribed: () => [...listeners.keys()].toSorted(),
   };
 }
 
@@ -698,6 +716,12 @@ function subject(
       pages,
       asked: service.asked,
       sealTranscript: service.sealTranscript,
+      sealChat: service.sealChat,
+      /** Every workspace chat the host said changed, in order. */
+      chats: () =>
+        events.flatMap((event) =>
+          event.kind === GATEWAY_EVENT.CHAT_CHANGED ? [event.payload] : [],
+        ),
       pageNow: service.pageNow,
       sealScope: service.sealScope,
       realtime,
@@ -1543,5 +1567,164 @@ it.effect(
       yield* reset;
       yield* settled;
       assert.deepEqual(realtime.closed, [SEALED_SCOPE.url]);
+    }),
+);
+
+const SEALED_CHAT: WorkspaceChatLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    self: sealed("self"),
+    members: sealed("members"),
+    channels: sealed("channels"),
+    messages: sealed("messages"),
+    reads: sealed("reads"),
+  },
+};
+
+const CHANNEL_ID = "6bd39277-e38a-4415-9dc7-9cadbecdf0a7";
+
+/** A message as the messages part's row delivers it, at its place. */
+function messageRow(id: string, seq: number) {
+  return {
+    id,
+    seq,
+    touchedSeq: seq,
+    channelId: CHANNEL_ID,
+    parentId: null,
+    authorId: MEMBER_ID,
+    blocks: [{ type: "markdown", text: `Message ${seq}.` }],
+    mentions: [],
+    postedAt: NOW - 10 + seq,
+    ask: null,
+    askKey: null,
+    askRevision: null,
+    askStatus: null,
+    answer: null,
+    answeredBy: null,
+    closedReason: null,
+  };
+}
+
+/** Every part of the chat delivered, the messages given among them. */
+function deliverChat(
+  realtime: ReturnType<typeof fakeRealtime>,
+  messages: readonly ReturnType<typeof messageRow>[],
+) {
+  realtime.deliver("self", [{ self: MEMBER_ID, readSeq: 0 }]);
+  realtime.deliver("members", [
+    {
+      id: MEMBER_ID,
+      kind: MEMBER_KIND.HUMAN,
+      handle: "ada",
+      name: "Ada Lovelace",
+      userId: "user-ada",
+      agentId: null,
+      planId: null,
+      left: false,
+      ordinal: 1,
+      joinedAt: NOW - 100,
+    },
+  ]);
+  realtime.deliver("channels", [
+    {
+      id: CHANNEL_ID,
+      kind: "general",
+      name: "general",
+      planId: null,
+      dmAMemberId: null,
+      dmBMemberId: null,
+      archived: false,
+      purpose: null,
+      createdAt: NOW - 100,
+    },
+  ]);
+  realtime.deliver("reads", []);
+  realtime.deliver("messages", messages);
+}
+
+it.effect(
+  "a workspace's chat is followed over Realtime: joined once, every part subscribed, and each change told whole in the held read's order and never a sealed statement",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, sealChat, realtime, chats } = yield* subject();
+      sealChat(SEALED_CHAT);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      // Sealed for the account signed in, which every renewal names too.
+      assert.deepEqual(asked, [`chat-join:${WORKSPACE_ID}`, `chat-live:${WORKSPACE_ID}:user-dana`]);
+      assert.deepEqual(realtime.subscribed(), [
+        "capability-channels",
+        "capability-members",
+        "capability-messages",
+        "capability-reads",
+        "capability-self",
+      ]);
+
+      const first = "7ce4a388-f49b-4526-8ed8-adbecdf0a1b8";
+      const second = "8df5b499-a5ac-4637-9fe9-becdf0a1b2c9";
+      deliverChat(realtime, [messageRow(second, 2), messageRow(first, 1)]);
+      yield* settled;
+      const told = chats();
+      assert.equal(told.length, 1);
+      const [only] = told;
+      assert.ok(isRecord(only) && only.workspaceId === WORKSPACE_ID && isRecord(only.chat));
+      assert.equal(only.chat.self, MEMBER_ID);
+      const messages = only.chat.messages;
+      assert.ok(Array.isArray(messages));
+      assert.deepEqual(
+        messages.map((message) => (isRecord(message) ? message.id : undefined)),
+        [first, second],
+      );
+      assert.ok(!JSON.stringify(told).includes("capability"));
+    }),
+);
+
+it.effect(
+  "a workspace's chat the service seals nothing for is told unanswered and followed again after a pause, one the account is not in is told not found and let go, and letting go, a sign-out, or a closed gate ends the follow",
+  () =>
+    Effect.gen(function* () {
+      const unsealed = yield* subject();
+      yield* unsealed.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      assert.deepEqual(unsealed.chats(), [
+        { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
+      unsealed.sealChat(SEALED_CHAT);
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
+      assert.deepEqual(unsealed.realtime.opened, [SEALED_CHAT.url]);
+
+      const outside = yield* subject();
+      outside.sealChat({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      yield* outside.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      yield* TestClock.adjust("1 minute");
+      yield* settled;
+      assert.deepEqual(outside.asked, [`chat-join:${WORKSPACE_ID}`]);
+      assert.deepEqual(outside.chats(), [
+        { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND } },
+      ]);
+
+      const live = yield* subject();
+      live.sealChat(SEALED_CHAT);
+      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_UNFOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      assert.deepEqual(live.realtime.closed, [SEALED_CHAT.url]);
+      assert.deepEqual(live.realtime.subscribed(), []);
+      yield* live.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      yield* live.reset;
+      yield* settled;
+      assert.deepEqual(live.realtime.closed, [SEALED_CHAT.url, SEALED_CHAT.url]);
+
+      const closed = yield* subject({ signedIn: false });
+      yield* closed.call(GATEWAY_METHOD.CODING_AGENTS_CHAT_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      assert.deepEqual(closed.asked, []);
+      assert.deepEqual(closed.chats(), [
+        { workspaceId: WORKSPACE_ID, chat: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+      ]);
     }),
 );

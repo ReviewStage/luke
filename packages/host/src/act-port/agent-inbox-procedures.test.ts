@@ -6,14 +6,19 @@
  * build's own renderer asks; the voice and call windows, and a frame this
  * build does not trust, are refused in each kind's own words before the host
  * is asked; a panel's ask reaches the host with its payload as the panel
- * sent it, and what the host answers is the panel's; and a host that fails
- * answers the kind's own sentence.
+ * sent it, and what the host answers is the panel's; a host that fails
+ * answers the kind's own sentence; and a panel's chat stream follows the
+ * chat at the host while any stream of it stands.
  */
 
 import assert from "node:assert/strict";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { afterEach, it } from "@effect/vitest";
 import { CHAT_CURSOR_START, MEMBER_KIND } from "@luke/features/chat-wire";
-import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentChatChanged,
+} from "@luke/features/coding-agent-view";
 import {
   INBOX_IMAGE_TYPE,
   INBOX_REPLY,
@@ -478,4 +483,157 @@ it("an item carrying a block and a response type this build does not know reache
     await call(AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: "0" }),
     { answer: { items: [newer], cursor: "7" } },
   );
+});
+
+/** Turns the event loop until `ready` holds, as a page waits on its port. */
+async function until(ready: () => boolean): Promise<void> {
+  for (let turn = 0; turn < 200 && !ready(); turn += 1) await nextTurn();
+}
+
+it("a panel's chat stream follows the chat at the host, hears each change told of it alone, and lets it go once its last stream closes; the voice window is refused it", async () => {
+  const asked: string[] = [];
+  const listeners = new Set<(changed: CodingAgentChatChanged) => void>();
+  const chats: Pick<
+    HostAsk,
+    "codingAgentChatFollow" | "codingAgentChatUnfollow" | "onChatChanged"
+  > = {
+    codingAgentChatFollow: (workspaceId) =>
+      Effect.sync(() => void asked.push(`follow:${workspaceId}`)),
+    codingAgentChatUnfollow: (workspaceId) =>
+      Effect.sync(() => void asked.push(`unfollow:${workspaceId}`)),
+    onChatChanged: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  // SAFETY: the stream reaches the chat's follow asks alone.
+  const host = chats as HostAsk;
+  const port = testActPort(agentInboxProcedures({ host }));
+  ports.push(port);
+  const client = port.as(PANEL);
+  const chat = { ...CHAT, cursor: "" };
+
+  const one = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
+    workspaceId: WORKSPACE_ID,
+  });
+  const two = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
+    workspaceId: WORKSPACE_ID,
+  });
+  const first = one.next();
+  const second = two.next();
+  await until(() => asked.length === 2);
+  for (const listener of [...listeners]) {
+    listener({ workspaceId: "another-workspace", chat: UNANSWERED });
+    listener({ workspaceId: WORKSPACE_ID, chat });
+  }
+  assert.deepEqual((await first).value, chat);
+  assert.deepEqual((await second).value, chat);
+
+  await one.return(undefined);
+  await until(() => listeners.size === 1);
+  assert.deepEqual(asked, [`follow:${WORKSPACE_ID}`, `follow:${WORKSPACE_ID}`]);
+  await two.return(undefined);
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked.at(-1), `unfollow:${WORKSPACE_ID}`);
+
+  assert.deepEqual(
+    await port.call(VOICE, AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW, {
+      workspaceId: WORKSPACE_ID,
+    }),
+    { refused: "Could not follow the workspace's chat on this system." },
+  );
+  assert.equal(asked.length, 3);
+});
+
+it("a stream opened while the last one's unfollow is on its way asks the host to follow only once that unfollow is done, so the new follow stands", async () => {
+  const asked: string[] = [];
+  const unfollowed = Promise.withResolvers<void>();
+  const chats: Pick<
+    HostAsk,
+    "codingAgentChatFollow" | "codingAgentChatUnfollow" | "onChatChanged"
+  > = {
+    codingAgentChatFollow: (workspaceId) =>
+      Effect.sync(() => void asked.push(`follow:${workspaceId}`)),
+    codingAgentChatUnfollow: (workspaceId) =>
+      Effect.andThen(
+        Effect.sync(() => void asked.push(`unfollow:${workspaceId}`)),
+        Effect.promise(() => unfollowed.promise),
+      ),
+    onChatChanged: () => () => undefined,
+  };
+  // SAFETY: the stream reaches the chat's follow asks alone.
+  const host = chats as HostAsk;
+  const port = testActPort(agentInboxProcedures({ host }));
+  ports.push(port);
+  const client = port.as(PANEL);
+
+  const first = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
+    workspaceId: WORKSPACE_ID,
+  });
+  void first.next();
+  await until(() => asked.length === 1);
+  const closed = first.return(undefined);
+  await until(() => asked.length === 2);
+  const second = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
+    workspaceId: WORKSPACE_ID,
+  });
+  void second.next();
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked, [`follow:${WORKSPACE_ID}`, `unfollow:${WORKSPACE_ID}`]);
+
+  unfollowed.resolve();
+  await closed;
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked, [
+    `follow:${WORKSPACE_ID}`,
+    `unfollow:${WORKSPACE_ID}`,
+    `follow:${WORKSPACE_ID}`,
+  ]);
+  await second.return(undefined);
+});
+
+it("one workspace's unfollow on its way holds no other workspace's follow", async () => {
+  const asked: string[] = [];
+  const unfollowed = Promise.withResolvers<void>();
+  const chats: Pick<
+    HostAsk,
+    "codingAgentChatFollow" | "codingAgentChatUnfollow" | "onChatChanged"
+  > = {
+    codingAgentChatFollow: (workspaceId) =>
+      Effect.sync(() => void asked.push(`follow:${workspaceId}`)),
+    codingAgentChatUnfollow: (workspaceId) =>
+      Effect.andThen(
+        Effect.sync(() => void asked.push(`unfollow:${workspaceId}`)),
+        Effect.promise(() => unfollowed.promise),
+      ),
+    onChatChanged: () => () => undefined,
+  };
+  // SAFETY: the stream reaches the chat's follow asks alone.
+  const host = chats as HostAsk;
+  const port = testActPort(agentInboxProcedures({ host }));
+  ports.push(port);
+  const client = port.as(PANEL);
+  const other = "6f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f";
+
+  const first = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
+    workspaceId: WORKSPACE_ID,
+  });
+  void first.next();
+  await until(() => asked.length === 1);
+  const closed = first.return(undefined);
+  await until(() => asked.length === 2);
+  const elsewhere = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_CHAT_FOLLOW]({
+    workspaceId: other,
+  });
+  void elsewhere.next();
+  await until(() => asked.length === 3);
+  assert.deepEqual(asked, [
+    `follow:${WORKSPACE_ID}`,
+    `unfollow:${WORKSPACE_ID}`,
+    `follow:${other}`,
+  ]);
+
+  unfollowed.resolve();
+  await closed;
+  await elsewhere.return(undefined);
 });
