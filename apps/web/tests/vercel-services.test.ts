@@ -251,6 +251,29 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
   }
 });
 
+/**
+ * Neon Realtime's socket for production's branch and for a Preview's, as
+ * Neon names them: `<branch>-neonrealtimesocket` in the project's cell.
+ */
+const REALTIME_SOCKETS = [
+  "wss://br-lucky-block-au052vsp-neonrealtimesocket.compute.c-10.us-east-1.aws.neon.tech/",
+  "wss://br-steep-boat-au63hal6-neonrealtimesocket.compute.c-10.us-east-1.aws.neon.tech/",
+] as const;
+
+/**
+ * Whether a policy's host source admits an address, as a browser matches one
+ * (CSP3's host-source): the scheme, then the host, where a leading `*.`
+ * stands for one label or more. A keyword such as `'self'` admits nothing here.
+ */
+function hostSourceAllows(source: string, address: string): boolean {
+  const matched = /^([a-z][a-z0-9+.-]*):\/\/(\*\.)?([^/:]+)/u.exec(source);
+  if (!matched) return false;
+  const [, scheme, wildcard, host = ""] = matched;
+  const url = new URL(address);
+  if (url.protocol !== `${scheme}:`) return false;
+  return wildcard ? url.hostname.endsWith(`.${host}`) : url.hostname === host;
+}
+
 test("every path the web app is served at sends its Content Security Policy, refuses to be framed, and is never sniffed; no other page is held to them", () => {
   const routes = vercel.services[SERVICE.WEB].routes ?? [];
   const app = routes.filter(
@@ -284,6 +307,18 @@ test("every path the web app is served at sends its Content Security Policy, ref
     ]) {
       assert.ok(connect.includes(host), `${route.src} connects to ${host}`);
     }
+    // The account inbox is followed over Neon Realtime's socket, one per branch
+    // of the deployment's database, production's and each Preview's.
+    for (const socket of REALTIME_SOCKETS) {
+      assert.ok(
+        connect.some((source) => hostSourceAllows(source, socket)),
+        `${route.src} connects to ${socket}`,
+      );
+    }
+    assert.ok(
+      !connect.some((source) => hostSourceAllows(source, "wss://elsewhere.example/")),
+      `${route.src} connects to no other socket`,
+    );
     assert.equal(route.headers?.["X-Content-Type-Options"], "nosniff", route.src);
     assert.equal(route.headers?.["Referrer-Policy"], "strict-origin-when-cross-origin", route.src);
   }
