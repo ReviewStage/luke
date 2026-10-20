@@ -107,6 +107,8 @@ import {
 import {
   type AgentTranscriptLiveAnswer,
   LIVE_POLL,
+  LIVE_SIGNED_OUT,
+  LIVE_USER_QUERY,
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
 } from "./live-wire.js";
@@ -645,16 +647,29 @@ export class HostedCodingAgentClient {
    * named, sealed for following over Neon Realtime, answered at once: not
    * found where the account reaches no such agent, unanswered for anything
    * else, which the caller answers by sealing it again; with `poll`, its
-   * rows inline, for a reader polling while Realtime fails it.
+   * rows inline, for a reader polling while Realtime fails it. Sealed for
+   * the account `userId` names, and signed out where the session is no
+   * longer that account's.
    */
   agentTranscriptLive(
     agentId: string,
+    userId: string,
     callId?: string,
     poll = false,
-  ): Effect.Effect<AgentTranscriptLiveAnswer | Failed, never, HttpClient.HttpClient> {
-    const named = callId === undefined ? { id: agentId } : { id: agentId, call: callId };
+  ): Effect.Effect<
+    AgentTranscriptLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const read = { id: agentId, [LIVE_USER_QUERY]: userId };
+    const named = callId === undefined ? read : { ...read, call: callId };
     const asked = poll ? { ...named, [LIVE_POLL.QUERY]: LIVE_POLL.ON } : named;
-    return hostedAnswer(askHosted(this.#hosted.live.agentTranscript, asked), ROW_REFUSALS);
+    return Effect.catchIf(
+      askHosted(this.#hosted.live.agentTranscript, asked),
+      (failed) =>
+        failed._tag === "HostedRefused" && failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN,
+      () => Effect.succeed(LIVE_SIGNED_OUT),
+    ).pipe((signed) => hostedAnswer(signed, ROW_REFUSALS));
   }
 
   /**

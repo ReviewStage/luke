@@ -1055,6 +1055,7 @@ function subject(
       client: service,
       conversations,
       ...(options.openLive === undefined ? undefined : { openLive: options.openLive }),
+      accountId: () => "user-dana",
       endTaskCall: (taskId) =>
         Effect.gen(function* () {
           const about = standing.about?.taskId;

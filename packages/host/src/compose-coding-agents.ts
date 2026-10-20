@@ -178,6 +178,8 @@ export interface CodingAgentsDependencies {
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: CodingAgentClient;
   /** Realtime's client at an address, which a transcript is followed over; Realtime's own outside a test. */
+  /** The account signed in now, by its id, which every live read names; none where nobody is. */
+  accountId: () => string | undefined;
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
 
@@ -195,8 +197,9 @@ export function composeCodingAgents(
     const http = yield* HttpClient.HttpClient;
     const asked = askedOf(dependencies, http);
     const transcripts = yield* transcriptFollows({
-      seal: (key, poll) =>
-        asked(dependencies.client.agentTranscriptLive(key.agentId, key.callId, poll)),
+      seal: (key, poll, userId) =>
+        asked(dependencies.client.agentTranscriptLive(key.agentId, userId, key.callId, poll)),
+      accountId: dependencies.accountId,
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
     });
