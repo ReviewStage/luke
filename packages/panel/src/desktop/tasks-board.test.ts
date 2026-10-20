@@ -298,8 +298,14 @@ test("a card dragged onto Done whose change the service refused says so", async 
   assert.match(newestToastSays() ?? "", /Couldn't change the task\. Try again\./);
 });
 
+/** What a reader hears of a narrow board's tabs: their names, and the one chosen. */
+interface ColumnTabs {
+  readonly names: readonly string[];
+  readonly chosen: string | undefined;
+}
+
 /** The tabs choosing a narrow board's column, by their names, and the one chosen. */
-function columnTabs(board: HTMLElement): { names: string[]; chosen: string | undefined } {
+function columnTabs(board: HTMLElement): ColumnTabs {
   const tabs = [...board.querySelectorAll<HTMLElement>('[role="tablist"] [role="tab"]')];
   const name = (tab: HTMLElement) => tab.querySelector(".luke-choice-bar-label")?.textContent ?? "";
   const chosen = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
