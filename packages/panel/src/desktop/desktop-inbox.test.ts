@@ -5716,6 +5716,108 @@ test("a plain reply sends no answer and leaves the ask open, the box's one butto
   ]);
 });
 
+test("a reply leaves its box the moment it is sent, the box and the ask standing empty and open while it is out, so a second Enter sends nothing; refused, its words and files come back into the box, which says why", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  const sent: CodingAgentInboxMessageParams[] = [];
+  const answers: ((answer: CodingAgentInboxMessagedView) => void)[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      sent.push(request.payload);
+      // The service answers once the test says so.
+      return new Promise((resolve) =>
+        answers.push((value) => resolve({ status: FAKE_ANSWER.DONE, value })),
+      );
+    },
+  });
+
+  await handFiles(pane.ownerDocument.body, [new File(["# Notes"], "notes.md")], "pick");
+  typeInComposer(pane, "Does it matter for SSO teams?");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.equal(composerEditor(pane).textContent, "", "the box lets its words go at once");
+  assert.deepEqual(attachedNames(pane), [], "and its files");
+  assert.equal(composerEditor(pane).getAttribute("aria-disabled"), null, "and stands open");
+  assert.ok(
+    openOptions(pane).every((option) => !option.disabled),
+    "the ask still takes a pick",
+  );
+  pressInComposer(pane, "Enter");
+  await settle();
+  assert.deepEqual(
+    sent.map(({ text }) => text),
+    ["Does it matter for SSO teams?"],
+    "a second Enter sends nothing again",
+  );
+
+  await act(async () => answers[0]?.({ failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED }));
+  await settle();
+
+  assert.equal(composerEditor(pane).textContent, "Does it matter for SSO teams?");
+  assert.deepEqual(attachedNames(pane), ["notes.md"]);
+  assert.equal(
+    pane.querySelector('.agent-composer [role="alert"]')?.textContent,
+    "This task is archived. Unarchive it first.",
+  );
+});
+
+test("words written in a reply's box while the reply is out stay there, whether it lands or is refused", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  // Each send waits on the test's word: the reply landing on the thread, or refused.
+  const lands: ((refused: boolean) => void)[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      const { payload } = request;
+      const landed = repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000020")(payload);
+      return new Promise((resolve) =>
+        lands.push((refused) =>
+          resolve({
+            status: FAKE_ANSWER.DONE,
+            value: refused ? { failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED } : landed,
+          }),
+        ),
+      );
+    },
+  });
+
+  typeInComposer(pane, "Does it matter for SSO teams?");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+  typeInComposer(pane, "And for guests?");
+  await act(async () => lands[0]?.(false));
+  await settle();
+  assert.deepEqual(threadOf(pane.ownerDocument.body).at(-1), [
+    "message",
+    "person",
+    "You",
+    "Does it matter for SSO teams?",
+  ]);
+  assert.equal(composerEditor(pane).textContent, "And for guests?", "a reply landing keeps them");
+
+  pressInComposer(pane, "Enter");
+  await settle();
+  typeInComposer(pane, "Never mind.");
+  await act(async () => lands[1]?.(true));
+  await settle();
+  assert.equal(
+    composerEditor(pane).textContent,
+    "Never mind.",
+    "a refusal puts nothing back over them",
+  );
+});
+
 test("picking an option attaches it over the box as a stamp, renaming the send, and × takes it off; sent, the reply carries the answer, leads with its stamp, and the ask says who chose what", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);

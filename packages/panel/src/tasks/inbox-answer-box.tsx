@@ -398,7 +398,7 @@ function AnswerCard({
     control.onMessage(item, draft);
   };
   const attach = (files: readonly File[]) => {
-    if (files.length === 0 || sending) return;
+    if (files.length === 0) return;
     const { revision } = item;
     setReading((count) => count + 1);
     readFiles(files)
@@ -431,8 +431,7 @@ function AnswerCard({
       ? inboxMessageOf(draft) !== undefined
       : inboxThreadSend(thread, draft) !== undefined;
   const takes = !answering || knownResponse(item.response);
-  const takesFiles = takes && !sending;
-  // Note that Reply stands only while the editor stands and takes a quote, since a press lets the selection go.
+  // Note that Reply stands only while the editor stands and takes a quote, and no send is out, since a press lets the selection go.
   const quotes = takes && !sending && !dictating && module !== undefined;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the card is a drop target alone; the keys it hears come from its own field and buttons.
@@ -440,7 +439,7 @@ function AnswerCard({
       className="agent-composer"
       data-dropping={dropping ? "" : undefined}
       onDragOver={(event) => {
-        if (!carriesFiles(event) || !takesFiles) return;
+        if (!carriesFiles(event) || !takes) return;
         event.preventDefault();
         setDropping(true);
       }}
@@ -450,7 +449,7 @@ function AnswerCard({
         if (!(into instanceof Node && event.currentTarget.contains(into))) setDropping(false);
       }}
       onDrop={(event) => {
-        if (!carriesFiles(event) || !takesFiles) return;
+        if (!carriesFiles(event) || !takes) return;
         event.preventDefault();
         setDropping(false);
         attach(Array.from(event.dataTransfer.files));
@@ -471,21 +470,17 @@ function AnswerCard({
             <div className="inbox-reply-stamp" data-inbox-attached="">
               <InboxStamp
                 stamp={stamp}
-                onRemove={sending ? undefined : () => control.onDraft(item, withoutAnswer(draft))}
+                onRemove={() => control.onDraft(item, withoutAnswer(draft))}
               />
               <span className="inbox-reply-stamp-line">{ASK_LINE.ANSWERS}</span>
             </div>
           )}
           <AttachedFileChips
             files={attachmentChips(draft.attachments)}
-            onRemove={
-              sending
-                ? undefined
-                : (index) => {
-                    setRefusal(undefined);
-                    control.onAttachments(item, (was) => was.filter((_, at) => at !== index));
-                  }
-            }
+            onRemove={(index) => {
+              setRefusal(undefined);
+              control.onAttachments(item, (was) => was.filter((_, at) => at !== index));
+            }}
           />
           <ComposerField
             module={module}
@@ -495,13 +490,7 @@ function AnswerCard({
             setDraft={(text) => control.onDraft(item, { ...draft, note: text })}
             placeholder={placeholder}
             label={placeholder}
-            input={
-              sending
-                ? COMPOSER_INPUT.DISABLED
-                : dictating
-                  ? COMPOSER_INPUT.READ_ONLY
-                  : COMPOSER_INPUT.EDITABLE
-            }
+            input={dictating ? COMPOSER_INPUT.READ_ONLY : COMPOSER_INPUT.EDITABLE}
             maxLength={answering ? INBOX_BOUNDS.MAX_NOTE_CHARS : INBOX_BOUNDS.MAX_MESSAGE_CHARS}
             takesFocus={false}
             {...pickers.field}
@@ -518,7 +507,7 @@ function AnswerCard({
               attach(pasted);
               return true;
             }}
-            quote={(quote) => <ComposerQuoteView quote={quote} held={sending} />}
+            quote={(quote) => <ComposerQuoteView quote={quote} held={false} />}
           />
           <PromptInputFooter className="inbox-answer-foot">
             {dictating ? (
@@ -530,7 +519,6 @@ function AnswerCard({
                     <IconButton
                       icon={<PlusIcon />}
                       label={ATTACH}
-                      disabled={sending}
                       onClick={() => picker.current?.click()}
                     />
                   </Tooltip>
@@ -559,7 +547,7 @@ function AnswerCard({
                   </span>
                 </PromptInputTools>
                 <div className="inbox-answer-actions">
-                  <DictateButton dictation={dictation} disabled={sending || module === undefined} />
+                  <DictateButton dictation={dictation} disabled={module === undefined} />
                   {answering ? (
                     <AnswerSend item={item} draft={draft} sending={sending} reading={reading > 0} />
                   ) : thread !== undefined ? (

@@ -860,7 +860,7 @@ function useOptionNumbers(
         return;
       const number = Number(event.key);
       const picked = pick?.(draft, number);
-      if (picked === undefined || control.sending.has(item.id)) return;
+      if (picked === undefined) return;
       event.preventDefault();
       control.onDraft(item, picked);
       optionRows(shown)[number - 1]?.focus();
@@ -2306,7 +2306,7 @@ export function InboxPane({
                                 <ResponseControls
                                   item={item}
                                   draft={draft}
-                                  disabled={!answerable || control.sending.has(item.id)}
+                                  disabled={!answerable}
                                   text={formText}
                                   onDraft={(next) => control.onDraft(item, next)}
                                 />
@@ -2336,7 +2336,7 @@ export function InboxPane({
                                 control={control}
                                 doors={{
                                   draft,
-                                  disabled: !answerable || control.sending.has(item.id),
+                                  disabled: !answerable,
                                   text: formText,
                                   onDraft: (next) => control.onDraft(item, next),
                                 }}
