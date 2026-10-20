@@ -63,6 +63,7 @@
     "@orpc/openapi": "catalog:",
     "@orpc/server": "catalog:",
     "@sentry/esbuild-plugin": "5.4.0",
+    "@sentry/vite-plugin": "5.4.0",
     "@types/node": "catalog:",
     "@types/pg": "8.21.0",
     "@types/react": "19.2.18",

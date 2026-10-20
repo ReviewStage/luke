@@ -1,11 +1,17 @@
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { sourceMapUploadToken } from "@luke/service/observability/source-maps";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type PluginOption } from "vite";
 import { bundleBudget } from "./scripts/bundle-budget";
 import { panelBuild } from "./scripts/panel-build";
 
 const resolveEntry = (path: string) => fileURLToPath(new URL(path, import.meta.url));
+
+/** Where the client build leaves the site, which the Build Output copies under its `static/`. */
+const SITE_DIRECTORY = resolveEntry("./dist");
 
 // The panel's side bundles the app entry splits off, each by the module its
 // chunk starts at (`@luke/panel`'s bundle loader), held to the budget beside
@@ -36,38 +42,70 @@ const WEB_DEPLOYMENT_DEFINES = {
   WEB_SENTRY_RELEASE: JSON.stringify(process.env.VERCEL_GIT_COMMIT_SHA ?? ""),
 };
 
-export default defineConfig({
-  define: WEB_DEPLOYMENT_DEFINES,
-  plugins: [
-    react(),
-    tailwindcss(),
-    ...panelBuild(),
-    bundleBudget({
-      budgetFile: resolveEntry("./bundle-budget.json"),
-      entry: resolveEntry("./app.html"),
-      sideBundles: PANEL_SIDE_BUNDLES,
+/**
+ * The client build's source maps, uploaded to Sentry's `luke-web` project
+ * on the web functions' terms (`scripts/bundle-functions.ts`), so a stack
+ * the tab reports reads as the source. Only a production client build that
+ * holds `SENTRY_AUTH_TOKEN` writes maps at all, hidden (named by no comment
+ * in a chunk); Sentry's plugin uploads them under the deployment's commit,
+ * the release the tab reports under (`src/app/web-sentry.ts`), and deletes
+ * them from `dist`, so none is served (and the Build Output copies none,
+ * `server/build-output.ts`). An upload Sentry refuses is logged and the
+ * build goes on, as the functions' does. The SSR build only prerenders, and
+ * uploads nothing.
+ */
+function sentrySourceMaps(authToken: string | undefined): PluginOption[] {
+  if (!authToken) return [];
+  return [
+    sentryVitePlugin({
+      org: "stage-review",
+      project: "luke-web",
+      authToken,
+      // The tab names its release itself, from the same commit, so nothing is written into the chunks for it.
+      release: { name: process.env.VERCEL_GIT_COMMIT_SHA, inject: false },
+      sourcemaps: { filesToDeleteAfterUpload: [join(SITE_DIRECTORY, "**", "*.map")] },
     }),
-  ],
-  build: {
-    // The bundle budget measures what it needs itself, so vite's own gzip
-    // report is only a cost to every build.
-    reportCompressedSize: false,
-    rollupOptions: {
-      input: {
-        main: resolveEntry("./index.html"),
-        about: resolveEntry("./about.html"),
-        privacy: resolveEntry("./privacy.html"),
-        changelog: resolveEntry("./changelog.html"),
-        "sign-in": resolveEntry("./sign-in.html"),
-        consent: resolveEntry("./consent.html"),
-        "github-installed": resolveEntry("./github-installed.html"),
-        "integration-connected": resolveEntry("./integration-connected.html"),
-        admin: resolveEntry("./admin.html"),
-        "connect-github": resolveEntry("./connect-github.html"),
-        "accept-invitation": resolveEntry("./accept-invitation.html"),
-        "desktop-session": resolveEntry("./desktop-session.html"),
-        app: resolveEntry("./app.html"),
+  ];
+}
+
+export default defineConfig(({ isSsrBuild }) => {
+  const sourceMapToken = isSsrBuild ? undefined : sourceMapUploadToken(process.env);
+  return {
+    define: WEB_DEPLOYMENT_DEFINES,
+    plugins: [
+      react(),
+      tailwindcss(),
+      ...panelBuild(),
+      bundleBudget({
+        budgetFile: resolveEntry("./bundle-budget.json"),
+        entry: resolveEntry("./app.html"),
+        sideBundles: PANEL_SIDE_BUNDLES,
+      }),
+      // Sentry's plugin goes after all others.
+      ...sentrySourceMaps(sourceMapToken),
+    ],
+    build: {
+      // The bundle budget measures what it needs itself, so vite's own gzip
+      // report is only a cost to every build.
+      reportCompressedSize: false,
+      sourcemap: sourceMapToken ? "hidden" : false,
+      rollupOptions: {
+        input: {
+          main: resolveEntry("./index.html"),
+          about: resolveEntry("./about.html"),
+          privacy: resolveEntry("./privacy.html"),
+          changelog: resolveEntry("./changelog.html"),
+          "sign-in": resolveEntry("./sign-in.html"),
+          consent: resolveEntry("./consent.html"),
+          "github-installed": resolveEntry("./github-installed.html"),
+          "integration-connected": resolveEntry("./integration-connected.html"),
+          admin: resolveEntry("./admin.html"),
+          "connect-github": resolveEntry("./connect-github.html"),
+          "accept-invitation": resolveEntry("./accept-invitation.html"),
+          "desktop-session": resolveEntry("./desktop-session.html"),
+          app: resolveEntry("./app.html"),
+        },
       },
     },
-  },
+  };
 });
