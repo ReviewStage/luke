@@ -4,9 +4,10 @@
  * What waits on the developer across the account, as the address to
  * subscribe at and one sealed statement per part of the account inbox's
  * answer; and one task's whiteboard, named by `?id=`, as the statement that
- * marks where it stands. Either asked with `?poll=true` answers each
- * statement's rows inline instead, for a reader polling while Realtime
- * fails it. Each output is the wire schema flipped
+ * marks where it stands; and one coding agent's transcript, or one of its
+ * workers' under `&call=`, as the statements its pages are read from. Each
+ * asked with `?poll=true` answers each statement's rows inline instead, for
+ * a reader polling while Realtime fails it. Each output is the wire schema flipped
  * (`packages/service/src/orpc/base.ts`).
  */
 
@@ -15,6 +16,7 @@ import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
   accountInboxLiveAnswerSchema,
+  agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   taskBoardLiveAnswerSchema,
 } from "../live-wire.js";
@@ -33,6 +35,13 @@ const liveTaskSchema = EffectSchema.Struct({
   [LIVE_POLL.QUERY]: pollField,
 });
 
+/** The agent a transcript is followed for, and the delegation call of the worker where it is a worker's; each read as text, an id or call of no shape answered as not found. */
+const liveTranscriptSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  call: EffectSchema.optionalKey(EffectSchema.String),
+  [LIVE_POLL.QUERY]: pollField,
+});
+
 export const liveContract = {
   inbox: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }))
@@ -42,4 +51,8 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_TASK_BOARD }))
     .input(liveTaskSchema)
     .output(EffectSchema.flip(taskBoardLiveAnswerSchema)),
+  agentTranscript: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_AGENT_TRANSCRIPT }))
+    .input(liveTranscriptSchema)
+    .output(EffectSchema.flip(agentTranscriptLiveAnswerSchema)),
 };
