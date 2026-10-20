@@ -311,6 +311,16 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
 /**
  * Neon Realtime's socket for production's branch and for a Preview's, as
  * Neon names them: `<branch>-neonrealtimesocket` in the project's cell.
+ *
+ * The app's policy admits them as `wss://*.compute.c-10.us-east-1.aws.neon.tech`:
+ * every branch's socket in the project's cell, `c-10`, which Neon keeps every
+ * branch of a project in. Note that this names the cell, because each
+ * Preview's branch has a host of its own that only its deployment's
+ * `NEON_REALTIME_URL` knows, which a static `vercel.json` cannot. Were Neon
+ * ever to move the project to another cell, the web app's inbox would stop
+ * following (the tab reports the refused socket to Sentry): the source then
+ * moves to the new cell, or widens back to `wss://*.us-east-1.aws.neon.tech`,
+ * in one line of each app route's policy.
  */
 const REALTIME_SOCKETS = [
   "wss://br-lucky-block-au052vsp-neonrealtimesocket.compute.c-10.us-east-1.aws.neon.tech/",

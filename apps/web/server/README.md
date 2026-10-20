@@ -638,9 +638,12 @@ naming an account, and take no cookie. Every route
 that answers bytes rather than JSON (a task's picture, an inbox attachment,
 a picture a tool answered, a workspace's photo, and an image an agent's pull
 request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
-`nosniff`, `private, no-store`, and `default-src 'none'; style-src
+`nosniff`, `private, no-store`, `default-src 'none'; style-src
 'unsafe-inline'; sandbox`, so a tab opened on one runs no script as this
-origin.
+origin, and `Cross-Origin-Resource-Policy: same-origin`, so no other site's
+page embeds one under the cookie of whoever is looking. Every reader of them
+is same-origin: the web app's tab, and the Mac's host, which fetches them
+with its bearer and hands its renderer the bytes.
 
 ## The hosted oRPC route
 
@@ -658,6 +661,30 @@ and a path no procedure matches is the router's own JSON 404. Vercel runs the
 web service's routes before the filesystem, so the functions that answer by
 their own name (the two WebSocket functions and the feedback courier) each
 stand on a pass-through rule ahead of the fallback.
+Every answer the route gives, a refusal and an unmatched path's 404 among
+them, carries `nosniff` and `Cross-Origin-Resource-Policy: same-origin`
+(`handler.ts`), since each reader is a same-origin `fetch` or the Mac's host.
+
+## The pages' security headers
+
+Every page the site serves answers with a Content Security Policy, a refusal
+to be framed, `nosniff`, a referrer policy, an opener policy, and a
+permissions policy, from the web service's routes in `vercel.json`. A route
+whose headers differ from the site's comes first with its whole set and ends
+routing: the app's two (its own policy, and an opener policy that keeps the
+connect tab it opens), the page the app frames (framed by this origin alone,
+its one inline style admitted by digest), the pages a connect lands on (no
+opener policy, so their tab can close itself), and the admin pages (their
+charts' inline styles and accounts' pictures). Then one route lays the site's
+headers on every other path and lets routing go on to the page rewrites and
+the built files, so no page is ever sent two policies to be enforced
+together. It stands after the generated `/api/` table, so an API answer's
+headers are only its handler's, and it leaves `/assets/` alone, since a
+worker runs under the policy its own script is sent with. The site's policy
+admits PostHog's assets as a script source, because the analytics client
+(`src/analytics.ts`) loads its configuration and its recorder from there.
+`tests/vercel-services.test.ts` holds every page the build emits to these
+headers at every address it answers at.
 
 ## Signing in on a Preview deployment
 
