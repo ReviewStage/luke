@@ -1,8 +1,8 @@
 {
-  "id": "c65f3628-0326-4694-b740-adf0b59c329c",
-  "prevIds": ["3491badb-4d86-4cd4-bb39-68866eab4a59"],
   "version": "8",
   "dialect": "postgres",
+  "id": "2c67ce47-35b1-46b7-b885-7754676f4141",
+  "prevIds": ["c629749c-44b3-46ea-9a8a-ba9c795c975e"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -198,6 +198,12 @@
     },
     {
       "isRlsEnabled": false,
+      "name": "github_repository_read",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
       "name": "inbox_item",
       "entityType": "tables",
       "schema": "public"
@@ -378,6 +384,12 @@
     },
     {
       "isRlsEnabled": false,
+      "name": "token_pull_request_poll",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
       "name": "hosted_usage",
       "entityType": "tables",
       "schema": "public"
@@ -413,6 +425,12 @@
       "schema": "public"
     },
     {
+      "isRlsEnabled": false,
+      "name": "workspace_token_repository",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -434,6 +452,19 @@
       "generated": null,
       "identity": null,
       "name": "provider",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_provider_key"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'api_key'",
+      "generated": null,
+      "identity": null,
+      "name": "kind",
       "entityType": "columns",
       "schema": "public",
       "table": "account_provider_key"
@@ -4211,7 +4242,7 @@
     {
       "type": "text",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
@@ -4386,6 +4417,19 @@
       "generated": null,
       "identity": null,
       "name": "github_access",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "coding_agent"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "payer",
       "entityType": "columns",
       "schema": "public",
       "table": "coding_agent"
@@ -4883,6 +4927,58 @@
       "entityType": "columns",
       "schema": "public",
       "table": "github_personal_token"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_repository_read"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "repository",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_repository_read"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "readable",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_repository_read"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "checked_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "github_repository_read"
     },
     {
       "type": "uuid",
@@ -7368,6 +7464,45 @@
       "table": "conversations"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "runtime",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "native_session",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "runner_token_hash",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "conversations"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -8629,6 +8764,110 @@
       "table": "task_section_entry"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "pull_request",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "etags",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_review_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_comment_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "head_sha",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "check_conclusion",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "next_poll_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -8884,6 +9123,19 @@
       "generated": null,
       "identity": null,
       "name": "task_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "voice_sessions"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
       "entityType": "columns",
       "schema": "public",
       "table": "voice_sessions"
@@ -9199,6 +9451,71 @@
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_integration_connection"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "organization_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "repository",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "added_by_user_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "added_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "workspace_token_repository"
     },
     {
       "nameExplicit": true,
@@ -12004,6 +12321,27 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "agent_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "voice_sessions_agent",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "voice_sessions"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "detached_at",
           "isExpression": false,
           "asc": true,
@@ -12041,6 +12379,34 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "workspace_integration_connection"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "lower(\"repository\")",
+          "isExpression": true,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": true,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "workspace_token_repository_organization_repository",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "workspace_token_repository"
     },
     {
       "nameExplicit": false,
@@ -12921,6 +13287,19 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
+      "name": "github_repository_read_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "github_repository_read"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
       "name": "inbox_item_user_id_user_id_fk",
       "entityType": "fks",
       "schema": "public",
@@ -13695,6 +14074,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "token_pull_request_poll_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -13760,6 +14152,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "voice_sessions_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "voice_sessions"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["voice_session_id"],
       "schemaTo": "public",
       "tableTo": "voice_sessions",
@@ -13798,9 +14203,35 @@
       "table": "workspace_integration_connection"
     },
     {
-      "columns": ["user_id", "provider"],
       "nameExplicit": false,
-      "name": "account_provider_key_user_id_provider_pk",
+      "columns": ["organization_id"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "workspace_token_repository_organization_id_organization_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["added_by_user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "workspace_token_repository_added_by_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "workspace_token_repository"
+    },
+    {
+      "columns": ["user_id", "provider", "kind"],
+      "nameExplicit": true,
+      "name": "account_provider_key_pkey",
       "entityType": "pks",
       "schema": "public",
       "table": "account_provider_key"
@@ -13828,6 +14259,14 @@
       "entityType": "pks",
       "schema": "public",
       "table": "admin_favorite"
+    },
+    {
+      "columns": ["user_id", "repository"],
+      "nameExplicit": false,
+      "name": "github_repository_read_pkey",
+      "entityType": "pks",
+      "schema": "public",
+      "table": "github_repository_read"
     },
     {
       "columns": ["task_id", "seq"],
@@ -14318,6 +14757,14 @@
       "entityType": "pks"
     },
     {
+      "columns": ["agent_id"],
+      "nameExplicit": false,
+      "name": "token_pull_request_poll_pkey",
+      "schema": "public",
+      "table": "token_pull_request_poll",
+      "entityType": "pks"
+    },
+    {
       "columns": ["session_id"],
       "nameExplicit": false,
       "name": "voice_session_usage_pkey",
@@ -14339,6 +14786,14 @@
       "name": "voice_sessions_pkey",
       "schema": "public",
       "table": "voice_sessions",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["id"],
+      "nameExplicit": false,
+      "name": "workspace_token_repository_pkey",
+      "schema": "public",
+      "table": "workspace_token_repository",
       "entityType": "pks"
     },
     {
