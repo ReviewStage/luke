@@ -705,8 +705,8 @@ more than one sees exactly what it saw before:
   refused) never sends the browser back here at all, and the statuses read
   is what learns how it ended, from Connect's result.
 
-The rewrite moves a provider's path segment into the `provider` query
-(`apps/web/server/function-rewrites.ts`), as a task's id is moved into `id`.
+The hosted oRPC router reads the provider from its own path segment, as it
+reads a task's id.
 
 **The agents** (`src/integrations/integration-connection.ts`,
 `src/agents/agent-runtime/connections.ts`). eve hands a declared subagent
@@ -1752,9 +1752,7 @@ whose installation reaches the task's repository, refused as a repository
 change would be otherwise, and its coding agents go with it, and
 `DELETE /api/plans/{id}` deletes it, its coding agents' rows going with it
 and their conversations stamped deleted beside the task's own (`deleteTask`),
-the id moved into
-the query by the rewrite `apps/web/server/function-rewrites.ts` makes of every
-segment-captured id.
+the id read from the path by the hosted oRPC router.
 Each row of the list carries `agents` where the task has a coding agent
 (`src/agents/task-agents.ts`): how many it has and how many are starting
 or running, the three it names (those at work first, then the newest), each
@@ -1780,8 +1778,8 @@ unpins one and answers them all as they then stand. A pin is a row of
 (`packages/database/src/models/repository-pin-store.ts`), stamped the first time it is made,
 deleted when it is undone, bounded at fifty an account, and gone with the
 account. It names the repository and nothing of it, so it asks GitHub
-nothing. It is a path of its own rather than one under `/api/plans/`, whose
-rewrite reads the next segment as a task's id.
+nothing. It is a path of its own rather than one under `/api/plans/`, where the
+next segment is a task's id.
 
 `src/accounts/workspaces-app.ts` answers the account's workspaces
 (`packages/features/src/workspace-wire.ts`). Membership has nothing to do with

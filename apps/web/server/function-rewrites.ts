@@ -2,7 +2,8 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isRecord, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { Schema } from "effect";
-import { DISPATCH_QUERY } from "./function-dispatch.js";
+import { functionAliasPath, HAND_WRITTEN_FUNCTIONS } from "./build-output.js";
+import { DISPATCH_QUERY, ORPC_ROUTE_KEY } from "./function-dispatch.js";
 import type { FunctionDefinition } from "./function-durations.js";
 import { functionPublicPath, webFunctions } from "./function-layout.js";
 
@@ -24,137 +25,26 @@ export interface Rewrite {
 }
 
 /**
- * Rewrites that read a path segment into the route's query, so a route sees
- * `?id=` as it was written to, and the few exact paths that must stand ahead
- * of a segment rewrite whose pattern would otherwise take them, which carry
- * no query of their own.
- *
- * A row marked `orpc` is a route the hosted oRPC router answers
- * (`orpc-route.ts`), which matches the public path itself (`/api/x/{id}`)
- * rather than the flattened route key: its rewrite also carries that whole
- * path in `route-path`, which the dispatcher restores, as the auth
- * catch-all's does. Its query parameters are still written, and the router
- * reads a path parameter over a query parameter of the same name. Note that
- * the path travels as a query value, so a segment the client escaped (`%2F`,
- * `+`) reaches the router as the platform's query decoding leaves it, which
- * is why an oRPC row's segments are ids and slugs, until one oRPC route
- * matches the public paths itself and the rows go.
+ * The routes that stay off the hosted oRPC router whose public paths carry a
+ * segment: each rewrite reads the segment into the route's query, so a route
+ * sees `?id=` as it was written to, and the auth catch-all's carries its
+ * whole path in `route-path`, which the dispatcher restores. Every other
+ * route file is reached by an exact rule of its key; every path that is no
+ * route file's goes to the oRPC route through the fallback, and the router
+ * matches its own public paths.
  */
 export interface SegmentRewrite {
   readonly src: string;
   readonly route: string;
-  readonly query?: string;
-  readonly orpc?: true;
+  readonly query: string;
 }
 
 const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/auth/(.*)", route: "auth/[...all]", query: `${DISPATCH_QUERY.PATH}=auth/$1` },
   {
-    src: "/api/account/integrations/([^/]+)/connect",
-    route: "account/integrations/connect",
-    query: "provider=$1",
-    orpc: true,
-  },
-  {
-    src: "/api/account/integrations/([^/]+)/tools",
-    route: "account/integrations/tools",
-    query: "provider=$1",
-    orpc: true,
-  },
-  {
-    src: "/api/account/integrations/([^/]+)/cancel",
-    route: "account/integrations/cancel",
-    query: "provider=$1",
-    orpc: true,
-  },
-  {
-    src: "/api/account/integrations/([^/]+)/disconnect",
-    route: "account/integrations/disconnect",
-    query: "provider=$1",
-    orpc: true,
-  },
-  {
-    src: "/api/account/integrations/([^/]+)/rename",
-    route: "account/integrations/rename",
-    query: "provider=$1",
-    orpc: true,
-  },
-  { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/work", route: "plans/work", query: "id=$1", orpc: true },
-  {
-    src: "/api/plans/([^/]+)/subagents/([^/]+)/messages",
-    route: "plans/subagent-messages",
-    query: "id=$1&call=$2",
-    orpc: true,
-  },
-  { src: "/api/plans/([^/]+)/messages", route: "plans/messages", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/code", route: "plans/code", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/file", route: "plans/file", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/tree", route: "plans/tree", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/skills", route: "plans/skills", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/stop", route: "plans/stop", query: "id=$1", orpc: true },
-  {
-    src: "/api/plans/([^/]+)/comments/([^/]+)",
-    route: "plans/comment-thread",
-    query: "id=$1&thread=$2",
-    orpc: true,
-  },
-  { src: "/api/plans/([^/]+)/comments", route: "plans/comments", query: "id=$1", orpc: true },
-  {
     src: "/api/plans/([^/]+)/attachments/([^/]+)",
     route: "plans/attachment",
     query: "id=$1&attachment=$2",
-  },
-  { src: "/api/plans/([^/]+)/attachments", route: "plans/attachments", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1", orpc: true },
-  {
-    src: "/api/plans/([^/]+)/issues/([^/]+)",
-    route: "plans/issue",
-    query: "id=$1&link=$2",
-    orpc: true,
-  },
-  { src: "/api/plans/([^/]+)/issues", route: "plans/issues", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1", orpc: true },
-  {
-    src: "/api/plans/([^/]+)/revisions/([^/]+)/restore",
-    route: "plans/restore",
-    query: "id=$1&seq=$2",
-    orpc: true,
-  },
-  {
-    src: "/api/plans/([^/]+)/revisions/([^/]+)",
-    route: "plans/revision",
-    query: "id=$1&seq=$2",
-    orpc: true,
-  },
-  { src: "/api/plans/([^/]+)/revisions", route: "plans/revisions", query: "id=$1", orpc: true },
-  {
-    src: "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
-    route: "plans/page",
-    query: "id=$1&page=$2&version=$3",
-    orpc: true,
-  },
-  { src: "/api/plans/([^/]+)/pages", route: "plans/pages", query: "id=$1", orpc: true },
-  { src: "/api/plans/([^/]+)", route: "plans/plan", query: "id=$1", orpc: true },
-  {
-    src: "/api/account/plan-template/revisions/([^/]+)/restore",
-    route: "account/plan-template/restore",
-    query: "seq=$1",
-    orpc: true,
-  },
-  {
-    src: "/api/account/plan-template/revisions/([^/]+)",
-    route: "account/plan-template/revision",
-    query: "seq=$1",
-    orpc: true,
-  },
-  {
-    src: "/api/agents/([^/]+)/subagents/([^/]+)/messages",
-    route: "agents/subagent-messages",
-    query: "id=$1&call=$2",
-    orpc: true,
   },
   {
     src: "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
@@ -166,83 +56,14 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "agents/picture",
     query: "id=$1&picture=$2",
   },
-  { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1", orpc: true },
-  { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1", orpc: true },
-  {
-    src: "/api/agents/([^/]+)/pull-request",
-    route: "agents/pull-request",
-    query: "id=$1",
-    orpc: true,
-  },
-  {
-    src: "/api/agents/([^/]+)/pull-request/action",
-    route: "agents/pull-request-action",
-    query: "id=$1",
-    orpc: true,
-  },
-  {
-    src: "/api/agents/([^/]+)/pull-request/viewed",
-    route: "agents/pull-request-viewed",
-    query: "id=$1",
-    orpc: true,
-  },
-  { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1", orpc: true },
-  {
-    src: "/api/agents/([^/]+)/overview/pull-request",
-    route: "agents/overview-pull-request",
-    query: "id=$1",
-    orpc: true,
-  },
-  {
-    src: "/api/agents/([^/]+)/overview/checks",
-    route: "agents/overview-checks",
-    query: "id=$1",
-    orpc: true,
-  },
-  {
-    src: "/api/agents/([^/]+)/overview/conversation",
-    route: "agents/overview-conversation",
-    query: "id=$1",
-    orpc: true,
-  },
   { src: "/api/agents/([^/]+)/github-image", route: "agents/github-image", query: "id=$1" },
-  {
-    src: "/api/agents/([^/]+)/review-options",
-    route: "agents/review-options",
-    query: "id=$1",
-    orpc: true,
-  },
-  { src: "/api/agents/([^/]+)/inbox", route: "agents/inbox", query: "id=$1", orpc: true },
-  {
-    src: "/api/agents/([^/]+)/terminals/([^/]+)",
-    route: "agents/terminal",
-    query: "id=$1&terminal=$2",
-    orpc: true,
-  },
-  { src: "/api/agents/([^/]+)/terminals", route: "agents/terminals", query: "id=$1", orpc: true },
-  {
-    src: "/api/agents/([^/]+)/sandbox/resume",
-    route: "agents/sandbox-resume",
-    query: "id=$1",
-    orpc: true,
-  },
-  { src: "/api/agents/([^/]+)", route: "agents/agent", query: "id=$1", orpc: true },
   {
     src: "/api/inbox/([^/]+)/attachments/([^/]+)",
     route: "inbox/attachment",
     query: "id=$1&attachment=$2",
   },
-  { src: "/api/inbox/([^/]+)/close", route: "inbox/close", query: "id=$1", orpc: true },
-  { src: "/api/inbox/([^/]+)/messages", route: "inbox/messages", query: "id=$1", orpc: true },
-  { src: "/api/inbox/([^/]+)/read", route: "inbox/read", query: "id=$1", orpc: true },
-  // Every item of the Inbox marked read, ahead of the one item's rewrite that would read `read` as an id.
-  { src: "/api/inbox/read", route: "inbox/read", orpc: true },
-  { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1", orpc: true },
   { src: "/api/workspaces/([^/]+)/photo", route: "workspaces/photo", query: "id=$1" },
   { src: "/api/automations/([^/]+)/webhook", route: "automations/webhook", query: "id=$1" },
-  { src: "/api/automations/([^/]+)/runs", route: "automations/runs", query: "id=$1", orpc: true },
-  { src: "/api/automations/([^/]+)/run", route: "automations/run", query: "id=$1", orpc: true },
-  { src: "/api/automations/([^/]+)", route: "automations/automation", query: "id=$1", orpc: true },
 ];
 
 /** The characters a route key may spell for its exact rewrite to be its own regular expression. */
@@ -250,21 +71,12 @@ const LITERAL_ROUTE_KEY = /^[a-z0-9/-]+$/;
 
 const API_ROUTE_PREFIX = "/api/";
 
-/** A path segment a rewrite's pattern captures. */
-const CAPTURED_SEGMENT = "([^/]+)";
+/** The fallback's pattern: every `/api/` path no rule above it took, its path after `/api/` captured. */
+export const ORPC_FALLBACK_SRC = `${API_ROUTE_PREFIX}(.*)`;
 
-/** The public path an oRPC row's pattern matches, each captured segment written back as the rewrite's own `$n`. */
-function capturedPath(src: string): string {
-  if (!src.startsWith(API_ROUTE_PREFIX)) throw new Error(`the rewrite ${src} is not under /api/`);
-  const segments = src.slice(API_ROUTE_PREFIX.length).split(CAPTURED_SEGMENT);
-  return segments.reduce((path, literal, index) => `${path}$${index}${literal}`);
-}
-
-/** A segment row's query: an oRPC row's whole public path first, then its own parameters. */
-function segmentQuery(segment: SegmentRewrite): string | undefined {
-  if (segment.orpc !== true) return segment.query;
-  const path = `${DISPATCH_QUERY.PATH}=${capturedPath(segment.src)}`;
-  return segment.query === undefined ? path : `${path}&${segment.query}`;
+/** A public path as a pattern that matches it alone: its dots and other specials escaped. */
+function exactPattern(path: string): string {
+  return path.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 function dest(definition: FunctionDefinition, route: string, query?: string): string {
@@ -272,7 +84,33 @@ function dest(definition: FunctionDefinition, route: string, query?: string): st
   return `/${functionPublicPath(definition)}?${parameters}`;
 }
 
-/** The `/api/` rewrites, in the order they must stand: segment rewrites first, then one exact rule per remaining dispatched route. */
+/**
+ * Every public path a function answers by its own name rather than through
+ * a dispatcher: each standalone function and each hand-written one, at its
+ * file's name and at the extensionless alias the Build Output serves it at.
+ * Vercel runs the web service's `routes` before it looks at the filesystem
+ * and stops at the first that matches, so without a rule of its own each
+ * would be taken by the fallback; this rule rewrites it onto itself, which
+ * the filesystem then serves as it did before the fallback stood.
+ */
+function passThroughPaths(definitions: readonly FunctionDefinition[]): readonly string[] {
+  const own = [
+    ...definitions
+      .filter((definition) => !definition.dispatches)
+      .map((definition) => functionPublicPath(definition)),
+    ...HAND_WRITTEN_FUNCTIONS.map((fn) => fn.path),
+  ];
+  return own.flatMap((path) => [`/${functionAliasPath(path)}`, `/${path}`]).sort();
+}
+
+/**
+ * The `/api/` rewrites, in the order they must stand: the segment rewrites,
+ * one exact rule per route file a dispatcher holds, the pass-through rules of
+ * the functions that answer by their own name, and last the fallback, which
+ * lands every other `/api/` path on the hosted oRPC route with its path in
+ * `route-path`. Vercel stops at the first rule that matches, so nothing ahead
+ * of the fallback is shadowed by it.
+ */
 export function apiRewrites(
   definitions: readonly FunctionDefinition[],
   segments: readonly SegmentRewrite[] = SEGMENT_REWRITES,
@@ -282,15 +120,14 @@ export function apiRewrites(
       definition.routes.map((route): [string, FunctionDefinition] => [route, definition]),
     ),
   );
+  const orpc = functionOf.get(ORPC_ROUTE_KEY);
+  if (orpc === undefined) throw new Error("no function holds the hosted oRPC route");
   const rewrites: Rewrite[] = [];
-  const rewritten = new Set<string>();
+  const rewritten = new Set<string>([ORPC_ROUTE_KEY]);
   for (const segment of segments) {
     const definition = functionOf.get(segment.route);
     if (definition === undefined) throw new Error(`no route behind the rewrite ${segment.src}`);
-    rewrites.push({
-      src: segment.src,
-      dest: dest(definition, segment.route, segmentQuery(segment)),
-    });
+    rewrites.push({ src: segment.src, dest: dest(definition, segment.route, segment.query) });
     rewritten.add(segment.route);
   }
   for (const definition of definitions) {
@@ -303,6 +140,13 @@ export function apiRewrites(
       rewrites.push({ src: `${API_ROUTE_PREFIX}${route}`, dest: dest(definition, route) });
     }
   }
+  for (const path of passThroughPaths(definitions)) {
+    rewrites.push({ src: exactPattern(path), dest: path });
+  }
+  rewrites.push({
+    src: ORPC_FALLBACK_SRC,
+    dest: dest(orpc, ORPC_ROUTE_KEY, `${DISPATCH_QUERY.PATH}=$1`),
+  });
   return rewrites;
 }
 

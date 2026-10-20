@@ -285,16 +285,18 @@ same script reads the other side of the table through `scripts/api-callers.ts`
 (`server/api-callers.ts`): every `/api/` literal and path builder a client in
 the repository spells — the desktop's, the packages', the
 scripts' — and the exports of `@luke/features`'s paths module, evaluated, must
-resolve to a rewrite of the table or to an extensionless alias the Build Output
-emits, and a builder the check cannot read is refused by name rather than
+resolve to an extensionless alias the Build Output emits, a rewrite of the
+table ahead of its fallback, or a procedure of the hosted oRPC contract, and a
+builder the check cannot read is refused by name rather than
 skipped, because a path constant that outlives its route otherwise fails
 nothing until production answers 404 (LUKE-186). The same derived list is
 what `scripts/preview-probe.ts` (`server/preview-probe.ts`) sends to a
 deployment: every caller path, the cron's, the page, and eve's health, failing
 on any answer that is Vercel's own rather than a handler's — the
 `x-vercel-error` header the platform puts on its `NOT_FOUND`, which a
-function's own 404 never carries — with seven of those requests held to
-their exact codes besides, because on 2026-09-11 five production deploys
+function's own 404 never carries — with the requests `EXPECTED_STATUS` names
+held to their exact codes besides, an unknown `/api/` path to the router's
+JSON 404 body among them, because on 2026-09-11 five production deploys
 failed in a row while nothing in CI could see the deployed shape (LUKE-164).
 Behind Deployment Protection it needs one of two doors, the bypass secret
 sent as a header or the OPTIONS allowlist, and names which it relies on.
@@ -649,9 +651,13 @@ the cookie origin guard, reads the web runtime's services through `runWeb`
 once per instance as `routeFromHttpRouter` does, and hands each request to
 `OpenAPIHandler` with them as its `effect/context`, so it is a runtime edge
 of its own (`tools/anti-slop/effect-edges.json`). The router matches the
-public path, so a migrated path with segments is a `SEGMENT_REWRITES` row
-marked `orpc` in `server/function-rewrites.ts`, whose rewrite carries the
-whole path in `route-path` for the dispatcher to restore.
+public path itself: every `/api/` path no rule ahead of it takes reaches the
+route through the one fallback rewrite of `server/function-rewrites.ts`,
+which carries the whole path in `route-path` for the dispatcher to restore,
+and a path no procedure matches is the router's own JSON 404. Vercel runs the
+web service's routes before the filesystem, so the functions that answer by
+their own name (the two WebSocket functions and the feedback courier) each
+stand on a pass-through rule ahead of the fallback.
 
 ## Signing in on a Preview deployment
 

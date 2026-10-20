@@ -122,7 +122,7 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
-import { DISPATCH_QUERY } from "../server/function-dispatch.js";
+import { DISPATCH_QUERY, ORPC_ROUTE_KEY } from "../server/function-dispatch.js";
 import { dispatched } from "./support/platform-landing";
 
 /**
@@ -284,29 +284,6 @@ function sessionOf(sessions: ReadonlyMap<string, string>): SessionEndpoint {
 /** The flattened paths the old group still serves, which a request names as the rewrite hands them to it. */
 const GROUP_PATHS: ReadonlySet<string> = new Set([MESSAGES, SUBAGENT_MESSAGES]);
 
-/** The route keys the hosted oRPC router answers, as `tasks-procedures.ts` and `task-files-procedures.ts` serve them. */
-const TASK_ROUTES = [
-  "plans",
-  "plans/plan",
-  "plans/board",
-  "plans/edit",
-  "plans/revisions",
-  "plans/revision",
-  "plans/restore",
-  "plans/transcript",
-  "plans/work",
-  "plans/stop",
-  "plans/code",
-  "plans/file",
-  "plans/tree",
-  "plans/skills",
-  "plans/attachments",
-  "plans/pages",
-  "plans/page",
-  "plans/issues",
-  "plans/issue",
-] as const;
-
 /**
  * The routes over the test's own database and the GitHub given, answering
  * one request: a plan's own routes as a client sends them, landed by the
@@ -375,7 +352,7 @@ const answer = (
         return dispatched(request, new Map([[landedAs, { fetch: (each) => flattened(each) }]]));
       }
       if (GROUP_PATHS.has(new URL(request.url).pathname)) return flattened(request);
-      return dispatched(request, new Map(TASK_ROUTES.map((route) => [route, tasksRoute])));
+      return dispatched(request, new Map([[ORPC_ROUTE_KEY, tasksRoute]]));
     });
     // SAFETY: the group answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;

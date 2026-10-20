@@ -24,7 +24,8 @@ import {
 } from "../server/function-layout.js";
 
 /**
- * Bundles the functions the routes under `server/routes/` are grouped into,
+ * Bundles the functions the routes under `server/routes/` and the hosted
+ * oRPC route are grouped into,
  * each a plain ESM file under `dist-functions/`, so Vercel's builder finds JavaScript
  * and only traces dependencies. Handed TypeScript, the builder runs its own
  * compiler over each function's whole import graph separately — thirty-odd

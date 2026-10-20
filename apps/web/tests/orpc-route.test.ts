@@ -3,9 +3,10 @@
  *
  * The oRPC route as the platform reaches it: a client's URL rewritten by a
  * table the generator wrote, dispatched by the grouped function, and
- * answered by the hosted router behind it. A parameterized path reaches its
- * procedure only through a row marked oRPC, whose rewrite carries the whole
- * public path; `/api/models` answers its refusals through the committed
+ * answered by the hosted router behind it. Every path that is no route
+ * file's reaches the router through the one fallback rewrite, which carries
+ * the whole public path, segments and all, and the router matches it;
+ * `/api/models` answers its refusals through the committed
  * table exactly as its old group did (`packages/service/src/accounts/models-procedures.test.ts`
  * holds the signed-in read, which needs a catalog and a database), and a plan's routes refuse the
  * same way, an unsigned caller before its body is read (`tasks-app.test.ts` holds the signed-in
@@ -16,7 +17,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { HOSTED_ERRORS } from "@luke/features/contract";
-import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
+import { HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { HostedContext } from "@luke/service/orpc/base";
 import { hostedFetch } from "@luke/service/orpc/handler";
 import { recordingSentry } from "@luke/service/testing/sentry-transport";
@@ -26,7 +27,9 @@ import { openapi } from "@orpc/openapi";
 import { implement } from "@orpc/server";
 import { Effect, Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { apiRewrites, type SegmentRewrite } from "../server/function-rewrites.js";
+import { hostedProcedureRoutes, type ProcedureRoute } from "../server/api-callers.js";
+import { ORPC_ROUTE_KEY } from "../server/function-dispatch.js";
+import { apiRewrites } from "../server/function-rewrites.js";
 import { orpcRoute, routeFromHostedFetch } from "../server/orpc-route.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import { dispatched, dispatchedBy } from "./support/platform-landing.js";
@@ -44,9 +47,10 @@ afterEach(async () => {
 });
 
 const ORIGIN = "https://luke.test";
-const PART_ROUTE = "widgets/part";
-const PART_SRC = "/api/widgets/([^/]+)/parts/([^/]+)";
-const GROUPED = { file: "default", routes: [PART_ROUTE], dispatches: true } as const;
+/** The grouped function as it is deployed: the oRPC route under its key, which the fallback lands every other path on. */
+const ORPC_ROUTES = new Map([[ORPC_ROUTE_KEY, orpcRoute]]);
+
+const GROUPED = { file: "default", routes: [ORPC_ROUTE_KEY], dispatches: true } as const;
 
 const partContract = {
   part: oc
@@ -67,35 +71,32 @@ const partRoute = routeFromHostedFetch(
   ),
 );
 
-/** The generated rewrite of one segment row, landed and dispatched to the test procedure. */
-async function partAnswer(row: SegmentRewrite): Promise<Response> {
-  const path = "/api/widgets/W1/parts/p2?view=full";
+/** A client's path landed by the generated fallback alone and dispatched to the test procedure. */
+function partAnswer(path: string): Promise<Response> {
   return dispatchedBy(
-    apiRewrites([GROUPED], [row]),
+    apiRewrites([GROUPED], []),
     new Request(`${ORIGIN}${path}`),
-    new Map([[PART_ROUTE, partRoute]]),
+    new Map([[ORPC_ROUTE_KEY, partRoute]]),
   );
 }
 
-test("a parameterized oRPC procedure is reached through its rewrite and the dispatcher at its own public path", async () => {
-  const answer = await partAnswer({
-    src: PART_SRC,
-    route: PART_ROUTE,
-    query: "id=$1&part=$2",
-    orpc: true,
-  });
+test("a parameterized oRPC procedure is reached through the fallback rewrite and the dispatcher at its own public path", async () => {
+  const answer = await partAnswer("/api/widgets/W1/parts/p2?view=full");
   assert.equal(answer.status, HOSTED_HTTP_STATUS.OK);
   assert.deepEqual(await answer.json(), { id: "W1", part: "p2" });
 });
 
-test("a segment row not marked oRPC lands on the flattened route key, which the router does not serve", async () => {
-  const answer = await partAnswer({ src: PART_SRC, route: PART_ROUTE, query: "id=$1&part=$2" });
-  assert.equal(answer.status, HOSTED_HTTP_STATUS.NOT_FOUND);
-  assert.deepEqual(await answer.json(), { error: HOSTED_API_ERROR.NOT_FOUND });
+test("a path no procedure matches is the router's own JSON 404 through the fallback, not the platform's", async () => {
+  for (const path of ["/api/nope", "/api/widgets/W1/parts", "/api/widgets/W1/parts/p2/more"]) {
+    const answer = await partAnswer(path);
+    assert.equal(answer.status, HOSTED_HTTP_STATUS.NOT_FOUND, path);
+    assert.equal(answer.headers.get("content-type"), "application/json", path);
+    assert.equal(await answer.text(), '{"error":"not-found"}', path);
+  }
 });
 
 test("/api/models refuses through the committed table, the dispatcher and the deployed route as its old group did", async () => {
-  const routes = new Map([["models", orpcRoute]]);
+  const routes = ORPC_ROUTES;
   const unsigned = await dispatched(new Request(`${ORIGIN}/api/models`), routes);
   assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
   assert.equal(unsigned.headers.get("content-type"), "application/json");
@@ -116,10 +117,7 @@ test("/api/models refuses through the committed table, the dispatcher and the de
 
 test("an automation's own paths reach the automation procedures through the committed table and the dispatcher, refusing an unsigned caller as the old group did, its malformed body unread", async () => {
   const id = "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
-  const routes = new Map([
-    ["automations/automation", orpcRoute],
-    ["automations/runs", orpcRoute],
-  ]);
+  const routes = ORPC_ROUTES;
   const runs = await dispatched(new Request(`${ORIGIN}/api/automations/${id}/runs`), routes);
   assert.equal(runs.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
   assert.equal(runs.headers.get("content-type"), "application/json");
@@ -140,13 +138,7 @@ test("an automation's own paths reach the automation procedures through the comm
 
 test("the held message reads are reached at their public paths through the committed table, their segments in the path the router matches", async () => {
   const agent = "4b0d6b5e-0a8f-4a8e-9a43-1c5f7f8b2a10";
-  const routes = new Map([
-    ["agents/messages", orpcRoute],
-    ["agents/subagent-messages", orpcRoute],
-    ["plans/messages", orpcRoute],
-    ["plans/subagent-messages", orpcRoute],
-    ["workspaces/chat", orpcRoute],
-  ]);
+  const routes = ORPC_ROUTES;
   for (const path of [
     `/api/agents/${agent}/messages?after=0:0`,
     `/api/agents/${agent}/subagents/call-1/messages?after=0:0`,
@@ -171,10 +163,7 @@ test("the held message reads are reached at their public paths through the commi
 });
 
 test("an integration's parameterized path reaches its procedure through the committed table, the dispatcher and the deployed route, which refuses as its old group did", async () => {
-  const routes = new Map([
-    ["account/integrations/connect", orpcRoute],
-    ["account/integrations/rename", orpcRoute],
-  ]);
+  const routes = ORPC_ROUTES;
   const unsigned = await dispatched(
     new Request(`${ORIGIN}/api/account/integrations/slack/connect?add=true`, {
       method: HTTP_METHOD.POST,
@@ -195,10 +184,7 @@ test("an integration's parameterized path reaches its procedure through the comm
 
 test("a plan's routes refuse through the committed table, the dispatcher and the deployed route as their old group did, an unsigned caller before its body is read", async () => {
   const plan = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-  const routes = new Map([
-    ["plans/plan", orpcRoute],
-    ["plans/board", orpcRoute],
-  ]);
+  const routes = ORPC_ROUTES;
   const bytes = async (response: Response) => ({
     status: response.status,
     contentType: response.headers.get("content-type"),
@@ -249,10 +235,7 @@ test("a plan's routes refuse through the committed table, the dispatcher and the
 });
 
 test("the GitHub routes refuse through the committed table, the dispatcher and the deployed route as their old groups did", async () => {
-  const routes = new Map([
-    ["github/repositories/tree", orpcRoute],
-    ["github/connect", orpcRoute],
-  ]);
+  const routes = ORPC_ROUTES;
   const unsigned = await dispatched(
     new Request(`${ORIGIN}/api/github/repositories/tree?workspaceId=a&workspaceId=b`),
     routes,
@@ -269,7 +252,7 @@ test("the GitHub routes refuse through the committed table, the dispatcher and t
 test("a plan's comment thread path reaches its procedure through the committed table, the dispatcher and the deployed route", async () => {
   const plan = "0f8e2b7a-4c1d-4e5f-9a6b-7c8d9e0f1a2b";
   const thread = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d";
-  const routes = new Map([["plans/comment-thread", orpcRoute]]);
+  const routes = ORPC_ROUTES;
   const unsigned = await dispatched(
     new Request(`${ORIGIN}/api/plans/${plan}/comments/${thread}`, {
       method: HTTP_METHOD.POST,
@@ -292,10 +275,7 @@ test("a plan's comment thread path reaches its procedure through the committed t
 
 test("an agent's Pull request tab is reached at its public paths through the committed table, the dispatcher and the deployed route, and refuses an unsigned caller as its old group did", async () => {
   const agentId = "8a7c2a1e-3b9f-4c62-9d1e-0f4b5a6c7d8e";
-  const routes = new Map([
-    ["agents/overview-checks", orpcRoute],
-    ["agents/pull-request-action", orpcRoute],
-  ]);
+  const routes = ORPC_ROUTES;
   for (const sent of [
     new Request(`${ORIGIN}/api/agents/${agentId}/overview/checks?number=12`),
     new Request(`${ORIGIN}/api/agents/${agentId}/pull-request/action?number=12`, {
@@ -313,10 +293,7 @@ test("an agent's Pull request tab is reached at its public paths through the com
 });
 
 test("an agent's shells refuse an unsigned caller through the committed table, the dispatcher and the deployed route at their public path", async () => {
-  const routes = new Map([
-    ["agents/terminals", orpcRoute],
-    ["agents/terminal", orpcRoute],
-  ]);
+  const routes = ORPC_ROUTES;
   const agent = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
   const shell = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
   for (const path of [
@@ -335,17 +312,7 @@ test("an agent's shells refuse an unsigned caller through the committed table, t
 });
 
 test("the inbox's parameterized paths reach their procedures through the committed table, the dispatcher and the deployed route", async () => {
-  const routes = new Map(
-    [
-      "inbox",
-      "inbox/item",
-      "inbox/close",
-      "inbox/messages",
-      "inbox/read",
-      "plans/inbox",
-      "agents/inbox",
-    ].map((route) => [route, orpcRoute] as const),
-  );
+  const routes = ORPC_ROUTES;
   const id = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
   const answer = async (method: string, path: string) => {
     const response = await dispatched(new Request(`${ORIGIN}${path}`, { method }), routes);
@@ -398,3 +365,23 @@ it.effect(
       );
     }),
 );
+
+test("a path of every hosted resource reaches its own procedure through the committed fallback and the deployed router, which answers it rather than not finding it", async () => {
+  const firstOfResource = new Map<string, ProcedureRoute>();
+  for (const procedure of hostedProcedureRoutes()) {
+    const [resource = ""] = procedure.key;
+    if (!firstOfResource.has(resource)) firstOfResource.set(resource, procedure);
+  }
+  for (const procedure of firstOfResource.values()) {
+    const path = procedure.path.replaceAll(
+      /\{\+?[^{}]+\}/gu,
+      "3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60",
+    );
+    const answer = await dispatched(
+      new Request(`${ORIGIN}${path}`, { method: procedure.method }),
+      ORPC_ROUTES,
+    );
+    const text = await answer.text();
+    assert.notEqual(text, '{"error":"not-found"}', procedure.key.join("."));
+  }
+});

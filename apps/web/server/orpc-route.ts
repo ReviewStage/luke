@@ -24,12 +24,13 @@ import { type Context, Effect } from "effect";
 import { runWeb } from "./runtime.js";
 
 /**
- * The route every migrated hosted path answers through: the hosted oRPC
- * router behind `OpenAPIHandler` (`packages/service/src/orpc/`), over the
- * deployment's own resolvers. A migrated route file exports `orpcRoute`
- * itself; the dispatcher has already restored the public path the router
- * matches (`function-dispatch.ts`, and `function-rewrites.ts`'s oRPC rows for
- * a path with segments).
+ * The route every hosted path on the oRPC router answers through: the hosted
+ * oRPC router behind `OpenAPIHandler` (`packages/service/src/orpc/`), over
+ * the deployment's own resolvers. The default function holds it under its
+ * own key (`function-bundles.ts`), the fallback rewrite of
+ * `function-rewrites.ts` lands every `/api/` path no route file takes on it,
+ * and the dispatcher has already restored the public path the router
+ * matches (`function-dispatch.ts`).
  *
  * The services each procedure runs on are read from the one web runtime
  * through `runWeb`, once per instance, and handed to every request as its

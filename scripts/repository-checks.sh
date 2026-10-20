@@ -130,14 +130,17 @@ node --input-type=module -e '
 pnpm --dir "$LUKE_REPO_ROOT" --filter @luke/brand --silent check
 
 # The vercel.json rewrites are what land a route on its grouped function, and
-# they are generated from server/routes/; --check fails if a rewrite went stale.
+# they are generated from server/routes/ and the functions, ending in the one
+# fallback onto the hosted oRPC route; --check fails if a rewrite went stale.
 pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
 
 # The constants clients build /api/ URLs from are the other half of that
 # table: a path constant can outlive its route and nothing fails until
 # production answers 404 (LUKE-186). Every /api/ literal and path builder under
-# apps/desktop/src, packages/*/src, scripts, and tools must resolve
-# to a rewrite of the table or an extensionless alias the Build Output emits.
+# apps/desktop/src, packages/*/src, scripts, and tools must resolve to an
+# extensionless alias the Build Output emits, a rewrite of the table ahead of
+# its fallback, or a procedure of the hosted oRPC contract; the fallback alone
+# resolves nothing, since a path no procedure matches is the router's 404.
 pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 
 # Every relative import the Vercel builder compiles must carry its .js
@@ -165,7 +168,8 @@ if [[ -n "$extensionless_imports" ]]; then
     exit 1
 fi
 
-# The web functions are bundled from server/routes/ into dist-functions/ and
+# The web functions are bundled from server/routes/ and server/orpc-route.ts
+# into dist-functions/ and
 # the Build Output tree with every workspace package inlined, so a bare
 # `@luke/…` specifier is resolved by
 # esbuild at build time from apps/web's own node_modules. pnpm links there only

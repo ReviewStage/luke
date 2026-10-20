@@ -3,8 +3,14 @@ import { builtinModules } from "node:module";
 import { join, posix, relative, sep } from "node:path";
 import { Schema } from "effect";
 import type { BuildOptions, Metafile, Plugin } from "esbuild";
+import { ORPC_ROUTE_KEY } from "./function-dispatch.js";
 import type { FunctionDefinition } from "./function-durations.js";
-import { FUNCTION_BUNDLE_DIRECTORY, routeSourcePath, webFunctions } from "./function-layout.js";
+import {
+  FUNCTION_BUNDLE_DIRECTORY,
+  ORPC_ROUTE_MODULE,
+  routeSourcePath,
+  webFunctions,
+} from "./function-layout.js";
 
 /**
  * How the functions become bundles, declared once so the build script and the
@@ -83,12 +89,17 @@ function packageNameOf(specifier: string): string {
     : (specifier.split("/")[0] ?? specifier);
 }
 
+/** One member's import: a route file's default export, or the hosted oRPC route by its name. */
+function routeImport(web: string, route: string, index: number): string {
+  if (route === ORPC_ROUTE_KEY) {
+    return `import { orpcRoute as route${index} } from ${JSON.stringify(join(web, ORPC_ROUTE_MODULE))};`;
+  }
+  return `import route${index} from ${JSON.stringify(join(web, routeSourcePath(route)))};`;
+}
+
 /** The generated entry of a grouped function: every member route, keyed for the dispatcher. */
 function dispatcherSource(web: string, definition: FunctionDefinition): string {
-  const imports = definition.routes.map(
-    (route, index) =>
-      `import route${index} from ${JSON.stringify(join(web, routeSourcePath(route)))};`,
-  );
+  const imports = definition.routes.map((route, index) => routeImport(web, route, index));
   const entries = definition.routes.map(
     (route, index) => `[${JSON.stringify(route)}, route${index}]`,
   );

@@ -46,6 +46,13 @@ const decodeFunctionConfig = Schema.decodeUnknownSync(Schema.fromJsonString(Func
 
 const LOAD_MODULE = "await import(process.argv[1]);";
 
+/** Loads a function and answers one request through its default export, printing the status and the body. */
+const ANSWER_REQUEST =
+  "const fn = await import(process.argv[1]); const answer = await fn.default.fetch(new Request(process.argv[2])); console.log(answer.status, await answer.text()); process.exit(0);";
+
+/** A database URL that connects to nothing, which the web runtime's layer names and no answer here dials. */
+const PLACEHOLDER_DATABASE_URL = "postgresql://isolation:load@127.0.0.1:5432/luke";
+
 /**
  * What a load is given: a PATH to find node, and nothing else. Every bundle
  * reaches the auth module statically, and that module once built its pool as
@@ -132,4 +139,34 @@ test("each .func loads with nothing above it available", { timeout: 180_000 }, a
     );
     assert.equal(loaded.status, 0, `${path}: ${loaded.stderr}`);
   }
+});
+
+test("the default .func, loaded alone, lands the fallback's requests on the hosted oRPC router", {
+  timeout: 180_000,
+}, async () => {
+  const { outputDirectory } = await emitFromTask();
+  const grouped = (await webFunctions(WEB)).find((definition) => definition.file === "default");
+  assert.ok(grouped);
+  const path = functionPublicPath(grouped);
+  const answered = (query: string) => {
+    const run = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        ANSWER_REQUEST,
+        functionEntryPath(outputDirectory, path),
+        `https://luke.test/${path}?${query}`,
+      ],
+      {
+        cwd: functionDirectory(outputDirectory, path),
+        encoding: "utf8",
+        env: { ...LOAD_ENVIRONMENT, DATABASE_URL: PLACEHOLDER_DATABASE_URL },
+      },
+    );
+    assert.equal(run.status, 0, run.stderr);
+    return run.stdout.trim().split("\n").at(-1);
+  };
+  assert.equal(answered("route=orpc&route-path=models"), '401 {"error":"invalid-token"}');
+  assert.equal(answered("route=orpc&route-path=nope"), '404 {"error":"not-found"}');
 });
