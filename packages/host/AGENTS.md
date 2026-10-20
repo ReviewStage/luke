@@ -73,13 +73,18 @@ its next answer.
 `@luke/features`, but the snapshot it carries is `@luke/settings` vocabulary
 and `settings` already reaches `features`. This is the lowest package holding both.
 
-## Four doors the renderer reads
+## The doors a browser loads
 
 `@luke/host/acts` and `@luke/host/app-state` are the desktop's
 renderer-and-main vocabulary, kept here because this is the lowest package that
 reaches every package they name (`@luke/gateway` cannot, since `@luke/voice`
 already depends on it), and `@luke/host/bridge` is the window's bridge contract
-built from the app state, which the preload builds its bridge from and a web
-bridge will too; `@luke/host/contract` is the act port's oRPC contract that the
-window's client is typed by. The renderer may import only these four doors from this
-package, so they and everything they import stay free of Node.
+built from the app state, which the preload builds its bridge from and the web
+bridge does too; `@luke/host/contract` is the act port's oRPC contract that the
+window's client is typed by. The panel reads these four, and `@luke/host/act-port`
+beside them.
+
+The web app (`apps/web/src/app/web-host.ts`) runs the host itself in the tab,
+so it also loads the barrel, `@luke/host/effect`, `@luke/host/client`,
+`@luke/host/service-layer`, and `@luke/host/agent-notices`. Every door named
+here, and everything it imports, stays free of Node.
