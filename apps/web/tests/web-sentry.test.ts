@@ -146,6 +146,22 @@ test("a refusal of a browser extension's address, or of what its own script did,
   ]);
 });
 
+test("a refusal dropped because the early reports were full is sent when it comes again", async () => {
+  const sentry = startWebSentry(PRODUCTION);
+  // A tab failing in a loop while the chunk loads fills what is kept for it.
+  for (let index = 0; index < 20; index += 1) sentry.reportBlankTab(new Error(`blank ${index}`));
+  document.dispatchEvent(refusal("connect-src", "wss://crowded.example/socket"));
+  await sentry.settled;
+  document.dispatchEvent(refusal("connect-src", "wss://crowded.example/socket"));
+  await Sentry.flush(1_000);
+
+  assert.ok(
+    sentBodies.some((body) =>
+      body.includes("Content-Security-Policy refused connect-src to wss://crowded.example"),
+    ),
+  );
+});
+
 test("a refusal said before the SDK's chunk lands is sent once it does", async () => {
   const sentry = startWebSentry(PRODUCTION);
   // Said in the same turn the tab started in, long before the chunk could land.

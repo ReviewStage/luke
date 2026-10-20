@@ -8,8 +8,12 @@
  * `LUKE_UPDATE_BUNDLE_BUDGET=1` by a pull request that says why it grew. The
  * measuring is the web's own rather than shared, because it reads Rollup's
  * bundle where the desktop reads esbuild's metafile, and the ceiling is the
- * desktop's without its Sentry floor, which no web client build carries.
- * The marketing pages are not budgeted.
+ * desktop's without its Sentry floor: the web's Sentry SDK is a side bundle
+ * of its own (`sentry`), measured as the others are. Note that a production
+ * build holding `SENTRY_AUTH_TOKEN` writes Sentry's debug IDs into every
+ * chunk (`vite.config.ts`), about 1.7 KB gzipped on the entry, which a
+ * Preview's and CI's builds do not carry, so the slack is what holds it.
+ * Source maps are never measured. The marketing pages are not budgeted.
  */
 
 import { readFile, writeFile } from "node:fs/promises";

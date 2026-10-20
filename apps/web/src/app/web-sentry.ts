@@ -58,7 +58,8 @@ type Report = (sentry: WebSentry) => void;
 
 /** Where reports are said before the SDK may stand, and when it has, or never will. */
 interface EarlyReports {
-  readonly say: (report: Report) => void;
+  /** Whether the report was sent or kept to be sent; false where it was dropped. */
+  readonly say: (report: Report) => boolean;
   readonly settled: Promise<void>;
 }
 
@@ -70,22 +71,24 @@ interface EarlyReports {
 const EARLY_REPORTS_KEPT = 20;
 
 /** The schemes a browser extension's own addresses are on: what one refused is the extension's, not the page's. */
-const EXTENSION_SCHEMES: ReadonlySet<string> = new Set([
-  "chrome-extension",
-  "moz-extension",
-  "safari-web-extension",
-]);
+const EXTENSION_SCHEME = {
+  CHROME: "chrome-extension",
+  FIREFOX: "moz-extension",
+  SAFARI: "safari-web-extension",
+} as const;
+const EXTENSION_SCHEMES: ReadonlySet<string> = new Set(Object.values(EXTENSION_SCHEME));
 
 /** The browser's own words for what it refused that names no address, said as they are. */
-const REFUSAL_KEYWORDS: ReadonlySet<string> = new Set([
-  "inline",
-  "eval",
-  "wasm-eval",
-  "data",
-  "blob",
-  "trusted-types-policy",
-  "trusted-types-sink",
-]);
+const REFUSAL_KEYWORD = {
+  INLINE: "inline",
+  EVAL: "eval",
+  WASM_EVAL: "wasm-eval",
+  DATA: "data",
+  BLOB: "blob",
+  TRUSTED_TYPES_POLICY: "trusted-types-policy",
+  TRUSTED_TYPES_SINK: "trusted-types-sink",
+} as const;
+const REFUSAL_KEYWORDS: ReadonlySet<string> = new Set(Object.values(REFUSAL_KEYWORD));
 
 /** What a refusal says of an address it could not read, in place of the address. */
 const UNREADABLE_ADDRESS = "an unreadable address";
@@ -139,9 +142,11 @@ function reportsOnceStarted(started: Promise<WebSentry | undefined>): EarlyRepor
     early = undefined;
     if (sentry !== undefined) for (const report of kept) report(sentry);
   });
-  const say = (report: Report): void => {
+  const say = (report: Report): boolean => {
     if (standing !== undefined) report(standing);
     else if (early !== undefined && early.length < EARLY_REPORTS_KEPT) early.push(report);
+    else return false;
+    return true;
   };
   return { say, settled };
 }
@@ -171,7 +176,7 @@ function refusedOrigin(blockedURI: string): string {
 const refusalsSaid = new Map<string, Set<string>>();
 
 /** Where this document's refusals are said: the latest start's reports, or nothing before the first. */
-let refusalsSaidTo: ((report: Report) => void) | undefined;
+let refusalsSaidTo: EarlyReports["say"] | undefined;
 
 /**
  * Each kind of request the page's `Content-Security-Policy` refused, said
@@ -181,9 +186,11 @@ let refusalsSaidTo: ((report: Report) => void) | undefined;
  * connection the policy forgot (the account inbox's Realtime socket was
  * one) would otherwise fail in silence. A refusal of an extension's address,
  * or of what an extension's own script did, is the extension's and is
- * dropped.
+ * dropped. A kind is counted as said only once it was sent or kept to be
+ * sent, so one dropped while the early reports were full is said when it
+ * comes again.
  */
-function listenForRefusals(say: (report: Report) => void): void {
+function listenForRefusals(say: EarlyReports["say"]): void {
   const listening = refusalsSaidTo !== undefined;
   refusalsSaidTo = say;
   if (listening) return;
@@ -193,8 +200,9 @@ function listenForRefusals(say: (report: Report) => void): void {
     const origin = refusedOrigin(event.blockedURI);
     const origins = refusalsSaid.get(directive) ?? new Set<string>();
     if (origins.has(origin)) return;
-    refusalsSaid.set(directive, origins.add(origin));
-    refusalsSaidTo?.((sentry) => sentry.reportRefusal(directive, origin));
+    if (refusalsSaidTo?.((sentry) => sentry.reportRefusal(directive, origin))) {
+      refusalsSaid.set(directive, origins.add(origin));
+    }
   });
 }
 
