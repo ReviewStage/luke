@@ -136,3 +136,14 @@ test("an editor opened on words it found measures their line until the caret is 
   handle.focusAt(PLACEMENT_END);
   assert.equal(handle.wordsTop(), undefined);
 });
+
+test("an editor opened on words stops measuring them once a merged answer replaces their paragraph", () => {
+  const text = "## Goal\n\nShip it.\n";
+  const words = { section: 0, text: "Ship it.", occurrence: 0, offset: 2, code: false, top: 0 };
+  const { handle } = mount(text, { x: 0, y: 0, words });
+  assert.notEqual(handle.wordsTop(), undefined, "the words found are measured");
+
+  handle.take(text, "## Goal\n\nLuke rewrote this.\n\nAnd added a line.\n");
+
+  assert.equal(handle.wordsTop(), undefined);
+});

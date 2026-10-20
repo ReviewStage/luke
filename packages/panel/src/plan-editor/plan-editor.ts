@@ -380,10 +380,12 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   laying = false;
   if (picking !== undefined) editor.registerPlugin(picking.plugin);
   held = sourcesOf(editor.state.doc, opened);
-  // Whether the caret stands on the words a click opened the editor on, until it is put elsewhere.
   const onWords = placedOnWords(editor, placement);
-  let keepsWords = onWords !== undefined;
   editor.view.dispatch(editor.state.tr.setSelection(onWords ?? placed(editor, placement)));
+  // The text and caret as the editor opened on the words a click landed on,
+  // which stand for those words only until either changes: a merged answer
+  // laid in, a word typed, or the caret moved.
+  let onWordsAs = onWords === undefined ? undefined : editor.state;
   if (focus) editor.view.focus();
   return {
     take: (sent, merged) => {
@@ -394,13 +396,16 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     chooseMention: (mention) => picking?.choose(editor, mention),
     markdown: () => documentMarkdown(manager, editor.state.doc, held),
     focusAt: (placement) => {
-      keepsWords = false;
+      onWordsAs = undefined;
       const selection = placedOnWords(editor, placement) ?? placed(editor, placement);
       editor.view.dispatch(editor.state.tr.setSelection(selection));
       editor.view.focus();
     },
     wordsTop: () => {
-      if (!keepsWords) return undefined;
+      const { doc, selection } = editor.state;
+      if (onWordsAs === undefined || doc !== onWordsAs.doc || !selection.eq(onWordsAs.selection)) {
+        return undefined;
+      }
       try {
         return editor.view.coordsAtPos(editor.state.selection.head).top;
       } catch {
