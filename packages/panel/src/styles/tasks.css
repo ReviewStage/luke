@@ -2883,12 +2883,20 @@
    and the Checks read alike, opening a section's gap under the tabs and
    ending a page's inset short of the foot. */
 .pull-request-page {
+  --pull-request-page-measure: var(--luke-page-measure);
   padding: var(--luke-section-gap)
-    max(var(--luke-space-12), (100cqi - var(--luke-page-measure)) / 2) var(--luke-page-inset);
+    max(var(--luke-space-12), (100cqi - var(--pull-request-page-measure)) / 2)
+    var(--luke-page-inset);
   color: var(--luke-color-text);
   font-size: var(--luke-type-body-size);
   line-height: var(--luke-type-body-leading);
   overflow-wrap: anywhere;
+}
+
+/* On the web, the wider column a web `DetailPage` stands at, so the
+   Conversation and the Checks wrap alike there too. */
+[data-luke-profile="web"] .pull-request-page {
+  --pull-request-page-measure: 1040px; /* off-scale: detail-page.css's web measure */
 }
 
 /* A section's heading that folds it, and the comment box's, stuck to the
