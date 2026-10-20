@@ -190,16 +190,21 @@ const NITRO_CONFIGS = ["luke", "dev"].map((root) =>
   fileURLToPath(new URL(`../../${root}/nitro.config.ts`, import.meta.url)),
 );
 
+/** What a Nitro config's production overrides say about source maps. */
+interface NitroProductionConfig {
+  readonly sourcemap?: string;
+}
+
 /** The production overrides one Nitro config answers under `environment`. */
 async function nitroProductionConfig(
   path: string,
-  environment: Record<string, string>,
-): Promise<Record<string, unknown>> {
+  environment: Readonly<Record<string, string>>,
+): Promise<NitroProductionConfig> {
   vi.resetModules();
   vi.stubEnv("SENTRY_AUTH_TOKEN", environment.SENTRY_AUTH_TOKEN ?? "");
   vi.stubEnv("VERCEL_ENV", environment.VERCEL_ENV ?? "");
   try {
-    const loaded: { default: { $production: Record<string, unknown> } } = await import(
+    const loaded: { default: { $production: NitroProductionConfig } } = await import(
       /* @vite-ignore */ path
     );
     return loaded.default.$production;
