@@ -2046,7 +2046,7 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
   assert.deepEqual(viewer(), ["Before.png", "1 of 4"]);
 });
 
-/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
+/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, nothing for an agent at work whose start is not known. */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 function openings(card: string): string[] {
   const standing = document.querySelector(`.luke-tooltip-card ${card}`);
@@ -2099,7 +2099,7 @@ test("the thread names its agent as one button wherever it does, its question's 
     "the agent's tile leads its comment",
   );
   reach(comment);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), [], "the name is the way to the tab");
   act(() => comment.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
@@ -2113,7 +2113,7 @@ test("the thread names its agent as one button wherever it does, its question's 
   assert.equal(sent.textContent, "Alerts");
   assert.ok(wearsAgentTile(sent), "the line names the agent by its tile too");
   reach(sent);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), []);
   act(() => sent.click());
   assert.deepEqual(asked.shownAgents, [
@@ -2991,6 +2991,41 @@ test("a settled item offers, over its box, the next item that needs you, by its 
   act(() => next.click());
   assert.equal(readTitle(page), "Alert at 80%?");
   assert.equal(offered(), null);
+});
+
+test("Next follows the way the keys last went: after K it offers the nearest item above that needs you, by an arrow up and K, a press opening it; after J the one below, by J", async () => {
+  inboxes.set(BILLING.id, [
+    { ...THRESHOLD, updatedAt: 4_500 },
+    { ...RETRY, updatedAt: 2_000, settledAt: 2_000 },
+  ]);
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  const offered = () =>
+    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "▸ *Alert at 80%?",
+    "How is a failed email retried?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+
+  pressKey("j");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  assert.equal(wordsOf(offered()), "NextExpire after 7 days?J");
+  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
+
+  pressKey("j");
+  pressKey("k");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  const next = offered();
+  assert.ok(next, "the settled item offers the next");
+  assert.equal(wordsOf(next), "Next ↑Alert at 80%?K");
+  assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
+  act(() => next.click());
+  assert.equal(readTitle(page), "Alert at 80%?");
+  act(() => keys.unmount());
 });
 
 test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's top", async () => {

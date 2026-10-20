@@ -287,6 +287,7 @@ async function cardOf(chip: Element | undefined) {
     name: card.querySelector(".luke-hover-card-name")?.textContent,
     model: card.querySelector("[data-model-label]")?.textContent,
     corner: card.querySelector(".luke-hover-card-corner")?.textContent,
+    working: card.querySelector('.actor-card-head .state-glyph[data-state="working"]') !== null,
     foot: card.querySelector(".luke-hover-card-rule + .luke-hover-card-note")?.textContent,
     words: card.textContent,
   };
@@ -403,7 +404,8 @@ test("an agent on another task hangs its tab's card, its task's agents read once
   assert.equal(card.tab, true, "the card is the agent's tab's own");
   assert.equal(card.name, "Prorate seat changes");
   assert.equal(card.model, "Opus 5.5 High");
-  assert.match(card.corner ?? "", /^Working…/u);
+  assert.doesNotMatch(card.corner ?? "", /Working/u, "the corner says no word of its work");
+  assert.equal(card.working, true, "the tile wears the working mark in its harness's place");
   assert.match(card.words ?? "", /Started by.*Sam Okafor/u);
   assert.equal(card.foot, "On Billing by seat");
   assert.deepEqual(agentReads(), [

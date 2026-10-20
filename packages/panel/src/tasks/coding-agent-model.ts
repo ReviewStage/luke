@@ -216,6 +216,20 @@ export function archivedByReading(
   };
 }
 
+/**
+ * A subagent or a brain's worker as its card's tile draws it: the harness
+ * its model runs in, or the empty box where the model is not known, giving
+ * way to the working mark while it works, as an agent's tile does.
+ */
+export function subagentActor(model: string | undefined, state: GlyphState, name: string): Actor {
+  return {
+    kind: ACTOR_KIND.AGENT,
+    name,
+    provider: model === undefined ? undefined : providerOf(model),
+    state: ACTOR_STATE_OF_GLYPH[state],
+  };
+}
+
 /** An agent as its tile draws it: its harness, read off its model, wearing where it stands, under the name it goes by. */
 export function agentActor(
   agent: { readonly model: string; readonly status: CodingAgentStatus },

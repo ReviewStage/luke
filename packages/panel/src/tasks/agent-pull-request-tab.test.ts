@@ -221,6 +221,12 @@ const DIFF_STAND_IN: DiffViewModule = {
     previews.push(props);
     return { update: () => undefined, unmount: () => undefined };
   },
+  mountFile: () => ({
+    update: () => undefined,
+    revealLines: () => undefined,
+    pickedLines: () => undefined,
+    unmount: () => undefined,
+  }),
   mountList: (_host, props) => {
     lists.push(props);
     return {

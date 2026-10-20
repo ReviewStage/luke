@@ -102,8 +102,9 @@ export const INBOX_TOOLS = {
       "It waits in their inbox until they acknowledge it, which never reaches you unless they write something; " +
       `you may have at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} such posts waiting to be acknowledged, apart from your open asks. ` +
       "A thread holds one open ask, and a newer ask replaces it. " +
-      "waits is whether you need to hear the answer as a message: decide and answer wait unless you set it false, and do waits only where you set it true. " +
-      "An answer you do not wait for is kept for you to read, though one carrying their words or a file still reaches you as a message. " +
+      "An answer to decide or answer always reaches you as a message. " +
+      "waits is for a do alone: whether you need to hear it is done as a message, only where you set it true; " +
+      "a do you do not wait on is kept for you to read, though an answer carrying their words or a file still reaches you as a message. " +
       `An answer reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
       `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your whole inbox as it stands.`,
     inputSchema: inboxThreadPostInputSchema,
@@ -429,12 +430,14 @@ function storeRefusal(refusal: InboxPostRefusal): string {
 }
 
 /**
- * Whether the agent hears the answer to an ask as a message where it does
- * not say: a decision or an answer it asked for, yes; a to-do, which it
- * mostly needs only done, no.
+ * Whether the agent hears the answer to an ask as a message: a decision or
+ * an answer it asked for always, whatever the post says, since an agent
+ * whose turn has ended reads nothing kept for it until something wakes it,
+ * and the developer who answered would wait on it for ever; a to-do, which
+ * it mostly needs only done, only where the post says it waits.
  */
-function waitsByDefault(ask: InboxAsk): boolean {
-  return ask.type !== INBOX_ASK.DO;
+function heardAnswer(ask: InboxAsk, waits: boolean | undefined): boolean {
+  return ask.type !== INBOX_ASK.DO || waits === true;
 }
 
 /**
@@ -463,11 +466,11 @@ function bodyPictures(
   });
 }
 
-/** The post as the store writes it: its key, title, words, and ask, and whether the agent waits on the answer, by the ask's default where it did not say. */
+/** The post as the store writes it: its key, title, words, and ask, and whether the agent hears the answer (`heardAnswer`). */
 function threadPost(post: InboxThreadPostInput) {
   const { waits, ...written } = post;
   if (post.ask === undefined) return written;
-  return { ...written, needsReply: waits ?? waitsByDefault(post.ask) };
+  return { ...written, needsReply: heardAnswer(post.ask, waits) };
 }
 
 /** Runs one post: its pictures read from the sandbox, the message written on the thread under its key, and the agent's inbox answered, or why not. */

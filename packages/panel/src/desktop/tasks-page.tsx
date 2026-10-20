@@ -1,7 +1,6 @@
 import { inPinOrder } from "@luke/features/pin-order";
 import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
 import { taskKey } from "@luke/features/workspace-key";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BADGE_TONE,
@@ -57,7 +56,6 @@ import { RelativeTime } from "../tasks/relative-time.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { useMinute } from "../tasks/task-time.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { useExperiment } from "../use-app-state.js";
 import { readKept, writeKept } from "./folded-groups.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { TaskStatusMark as TaskWorkMark } from "./task-card.js";
@@ -167,9 +165,9 @@ export function TasksPage({
 }
 
 /** The account's sections in the listed workspace, each with its tasks' ids in its own order; none while it keeps no sections. */
-function listSections(tasks: TasksControl, shown: boolean): readonly TasksListSection[] {
+function listSections(tasks: TasksControl): readonly TasksListSection[] {
   const workspaceId = tasks.workspace?.id;
-  if (!shown || workspaceId === undefined) return [];
+  if (workspaceId === undefined) return [];
   return workspaceSections(tasks.taskSections, workspaceId).map((section) => ({
     sectionId: section.id,
     taskIds: sectionOrder(tasks.taskSections, section.id).map((entry) => entry.taskId),
@@ -274,7 +272,6 @@ function TasksList({
   const [statuses, setStatuses] = useState<readonly TaskStatus[]>(() =>
     readKept(STATUSES_KEY, storedStatuses, TASKS_LIST_SHOWN_STATUSES),
   );
-  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const now = useMinute();
   const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
@@ -285,7 +282,7 @@ function TasksList({
   ).map((task) => task.id);
   const groups = tasksListGroups(listed, {
     pinned,
-    sections: listSections(tasks, sectionsOn),
+    sections: listSections(tasks),
     statuses,
   });
   const workspaceName = tasks.workspace?.name ?? "";

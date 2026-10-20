@@ -18,8 +18,6 @@ export const EXPERIMENT = {
   CODE_REVIEW: "code-review",
   /** Calls that open with Luke on video, a Keyframe avatar at the top of the Call tab. */
   VIDEO_CALLS: "video-calls",
-  /** Sections of your own in the sidebar, each a title and an icon, that tasks are dragged into. */
-  SECTIONS: "sections",
   /** The sidebar as the Inbox: its threads under their tasks where the task list stood, the tasks left to the Tasks page. */
   INBOX_FIRST: "inbox-first",
 } as const;
@@ -70,13 +68,6 @@ export const EXPERIMENTS = [
       "Open a web page in a tab beside your plan, your own localhost included. Pages keep " +
       "their own cookies, apart from Luke's.",
     owner: "Dean",
-    since: "2026-10-16",
-  },
-  {
-    key: EXPERIMENT.SECTIONS,
-    name: "Sections",
-    detail: "Keep tasks in sections of your own in the sidebar, each with a title and an icon.",
-    owner: "Charles",
     since: "2026-10-16",
   },
   {
