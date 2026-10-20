@@ -125,7 +125,7 @@ function entryOf(waiting: Waiting, nameOf: (member: ChatMemberRow) => string): A
   };
 }
 
-/** The message a member's notice stands at, waiting: a direct message where its channel is one, else a mention; none where the account no longer sees it. */
+/** The message a member's notice stands at, waiting, as a mention; none where the account no longer sees it, or where it stands in a DM made before the chat kept none. */
 function noticeWaiting(userId: string, rosters: Rosters) {
   return Effect.gen(function* () {
     const { own } = rosters;
@@ -134,8 +134,9 @@ function noticeWaiting(userId: string, rosters: Rosters) {
     if (Option.isNone(message)) return [];
     const channels = yield* channelsOf(userId, rosters.workspaceId);
     const channel = channels.find((each) => each.id === message.value.channelId);
-    const reason =
-      channel?.kind === CHANNEL_KIND.DM ? ACCOUNT_CHAT_REASON.DIRECT : ACCOUNT_CHAT_REASON.MENTION;
+    // A notice standing in a DM made before the chat kept none waits on no one.
+    if (channel?.kind === CHANNEL_KIND.DM) return [];
+    const reason = ACCOUNT_CHAT_REASON.MENTION;
     return [{ message: message.value, reason, taskId: channel?.taskId ?? null, rosters }];
   });
 }

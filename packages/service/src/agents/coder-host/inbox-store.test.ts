@@ -390,13 +390,10 @@ it.layer(getTestDB())("the inbox store", (it) => {
           answer.items.find((item) => item.id === first.success.id)?.unread;
         assert.equal(unreadOf(read), true, "the teammate has not read it");
         assert.equal(unreadOf(yield* accountInboxPast(owner, INBOX_CURSOR_START)), false);
-        // Every change in a test lands at one instant, so the asks stand before the notices.
+        // A notice standing in a DM made before the chat kept none waits on no one, held or live.
         assert.deepEqual(
           read.chat?.map((entry) => [entry.messageId, entry.reason, entry.from]),
-          [
-            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, "anthropic/claude-opus-5.5"],
-            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, "anthropic/claude-opus-5.5"],
-          ],
+          [[asked.message.id, ACCOUNT_CHAT_REASON.ASK, "anthropic/claude-opus-5.5"]],
         );
         assert.deepEqual(
           (yield* accountInboxPast(owner, INBOX_CURSOR_START)).chat?.map((entry) => entry.reason),

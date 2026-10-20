@@ -39,7 +39,8 @@ import { CODER } from "./bounds.js";
  * The reader is the account's own member of the workspace, minted on its
  * first read, which makes the workspace's `#general` too, so a window
  * opening an empty chat has a place to post. A person sees every channel,
- * DMs included, so where the chat stands for them is the workspace's head:
+ * and the chat keeps no direct messages for now, so where the chat stands
+ * for them is the workspace's head:
  * the last place its sequence handed out, which every post and every
  * change to a message takes. A read whose cursor is past the head is held,
  * looked at again every `MESSAGES_POLL`, each look reading the one number
@@ -229,7 +230,11 @@ export function workspaceChatPast(
     const people = yield* readAccountNames(
       members.flatMap((member) => (member.userId === null ? [] : [member.userId])),
     );
-    const channels = yield* channelsOf(userId, organizationId);
+    // Note that the chat holds no direct messages for now, so a DM made before, and what was said in it, is read by no one.
+    const shown = (yield* channelsOf(userId, organizationId)).filter(
+      (channel) => channel.kind !== CHANNEL_KIND.DM,
+    );
+    const shownIds = new Set(shown.map((channel) => channel.id));
     const reader = members.find((member) => member.id === self.value.id) ?? self.value;
     const reads = yield* channelReads(userId, organizationId, reader.id);
     const agentMessages = yield* agentMessagesOf(userId, organizationId);
@@ -238,8 +243,10 @@ export function workspaceChatPast(
       readSeq: reader.readSeq,
       ...readsPast(reader.readSeq, reads),
       members: members.map((member) => memberOnWire(member, agents, people)),
-      channels: channels.map(channelOnWire),
-      messages: past.value.messages.map(messageOnWire),
+      channels: shown.map(channelOnWire),
+      messages: past.value.messages
+        .filter((message) => shownIds.has(message.channelId))
+        .map(messageOnWire),
       cursor: chatCursorOf(past.value.cursor),
       agentMessages: agentMessages.map(agentMessageOnWire),
     });

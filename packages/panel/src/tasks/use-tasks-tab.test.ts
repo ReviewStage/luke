@@ -2676,7 +2676,7 @@ test("a fixture run on the chat profile opens Chat at once and its staged chat l
     await settle();
     assert.ok(fixture.control().chatView.chat, "the staged chat landed");
   });
-  assert.equal(fixture.control().chatView.chat?.answer.channels.length, 8);
+  assert.equal(fixture.control().chatView.chat?.answer.channels.length, 4);
   const live = mount({ shown: true });
   await settle();
   assert.equal(live.control().chatView.open, false);

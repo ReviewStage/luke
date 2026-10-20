@@ -250,7 +250,7 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
   );
 
   it.effect(
-    "a line one agent sent another reads beside the chat as the sender's words alone, both ways of the pair in the order sent, and a chat notice steered into an agent reads as none of them",
+    "a line one agent sent another reads beside the chat as the sender's words alone, both ways of the pair in the order sent, a chat notice steered into an agent reads as none of them, and a DM made before the chat kept none is read by no one",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
@@ -313,7 +313,32 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
           from: "Invites",
         });
 
+        // A DM made before the chat kept none, and what was said in it, is read by no one.
+        const teammateMember = Option.getOrThrow(
+          yield* ensureMember(room.teammate, room.workspace, {
+            kind: MEMBER_KIND.HUMAN,
+            userId: room.teammate,
+          }),
+        );
+        const ownerMember = Option.getOrThrow(
+          yield* ensureMember(room.owner, room.workspace, {
+            kind: MEMBER_KIND.HUMAN,
+            userId: room.owner,
+          }),
+        );
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(room.owner, room.workspace, ownerMember.id, teammateMember.id),
+        );
+        yield* postMessage(room.owner, room.workspace, {
+          authorMemberId: ownerMember.id,
+          to: { channelId: dm.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Just between us." }],
+          clientKey: randomUUID(),
+        });
+
         const read = yield* room.read(CHAT_CURSOR_START, room.teammate);
+        assert.ok(read.channels.every((channel) => channel.kind !== CHANNEL_KIND.DM));
+        assert.ok(read.messages.every((message) => message.channelId !== dm.id));
         assert.deepEqual(
           (read.agentMessages ?? []).map((message) => [
             message.from.name,
@@ -327,7 +352,6 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
             ["Billing", billing.id, "Invites", invites.taskId, "Yes, merged."],
           ],
         );
-        assert.deepEqual(read.messages, []);
       }),
   );
 

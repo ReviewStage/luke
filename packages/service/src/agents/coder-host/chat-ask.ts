@@ -181,7 +181,7 @@ export interface ChatNamed {
 }
 
 /** The member a mention link names, as the store finds one: a person by their account, an agent by its id, a Luke by his task. */
-export function subjectOf(mention: ChatMemberMention): ChatMemberSubject {
+function subjectOf(mention: ChatMemberMention): ChatMemberSubject {
   switch (mention.kind) {
     case MENTION_KIND.PERSON:
       return { kind: MEMBER_KIND.HUMAN, userId: mention.userId };

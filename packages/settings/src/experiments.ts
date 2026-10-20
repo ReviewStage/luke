@@ -10,7 +10,7 @@ import { Option, Schema } from "effect";
 export const EXPERIMENT = {
   /** A Browser tab in the side panel: a web page beside the plan, the Mac's own `localhost` among them. */
   BROWSER: "browser",
-  /** A workspace's chat: its people, coding agents, and Luke talking in channels and DMs. */
+  /** A workspace's chat: its people, coding agents, and Luke talking in channels, beside the agents' own direct messages. */
   CHAT: "chat",
   /** The read-only Talk → Build → Ship board beside the Inbox. */
   FACTORY: "factory",
@@ -72,7 +72,7 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.CHAT,
     name: "Chat",
     detail:
-      "Talk with your workspace's people, coding agents, and Luke in channels and direct messages.",
+      "Talk with your workspace's people, coding agents, and Luke in channels, and read the direct messages agents send each other.",
     owner: "Charles",
     since: "2026-10-16",
   },

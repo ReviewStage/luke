@@ -89,10 +89,6 @@ const CHANNEL = {
   INVITES: "8c9d0e1f-2a3b-4c4d-8e5f-6a7b8c9d0e1f",
   BILLING: "9d0e1f2a-3b4c-4d5e-9f6a-7b8c9d0e1f2a",
   SCHEMA: "0e1f2a3b-4c5d-4e6f-8a7b-8c9d0e1f2a3b",
-  WITH_AGENT_TWO: "1f2a3b4c-5d6e-4f7a-9b8c-9d0e1f2a3b4c",
-  WITH_LUKE: "2a3b4c5d-6e7f-4a8b-8c9d-0e1f2a3b4c5d",
-  WITH_AGENT_ONE: "3b4c5d6e-7f8a-4b9c-9d0e-1f2a3b4c5d6e",
-  WITH_MARIA: "4c5d6e7f-8a9b-4c0d-8e1f-2a3b4c5d6e7f",
 } as const;
 
 /** The fixture task's other task, whose channel stands quiet. */
@@ -149,24 +145,6 @@ function messages(at: number): readonly ChatMessage[] {
         "On `luke/teammate-invitations`. An invite is a `memberships` row with `state = pending`; " +
           "`POST /invites` creates it and mails a one-time link. I'm adding `invite_token` to the " +
           "table, so anyone touching `memberships` should know.",
-      ),
-    }),
-    said(at, 38, {
-      id: "a0000000-0000-4000-8000-000000000041",
-      seq: 41,
-      channelId: CHANNEL.WITH_LUKE,
-      authorId: MEMBER.DEAN,
-      blocks: words("Which agent is touching the members table right now?"),
-    }),
-    said(at, 37, {
-      id: "a0000000-0000-4000-8000-000000000042",
-      seq: 42,
-      channelId: CHANNEL.WITH_LUKE,
-      authorId: MEMBER.LUKE,
-      mentions: [MEMBER.AGENT_ONE, MEMBER.AGENT_TWO],
-      blocks: words(
-        `${CHIP.AGENT_ONE} is adding \`invite_token\` to \`memberships\` on \`luke/teammate-invitations\`, ` +
-          `migration pushed. ${CHIP.AGENT_TWO} only reads it and based its branch on that migration.`,
       ),
     }),
     said(at, 31, {
@@ -243,17 +221,6 @@ function messages(at: number): readonly ChatMessage[] {
         },
       },
     }),
-    said(at, 16, {
-      id: "a0000000-0000-4000-8000-000000000047",
-      seq: 47,
-      channelId: CHANNEL.WITH_AGENT_TWO,
-      authorId: MEMBER.AGENT_TWO,
-      mentions: [MEMBER.AGENT_ONE],
-      blocks: words(
-        "Can I take `src/members/invite.ts` too? The email template needs the token format, and " +
-          `${CHIP.AGENT_ONE} is still on it. If you'd rather, I'll wait for #214 and base on it.`,
-      ),
-    }),
     said(at, 9, {
       id: "a0000000-0000-4000-8000-000000000048",
       seq: 48,
@@ -313,6 +280,57 @@ function messages(at: number): readonly ChatMessage[] {
   ];
 }
 
+/** One of the fixture's agents as a line one sent the other names it. */
+function messagingAgent(agent: TaskAgentLine) {
+  return {
+    agentId: agent.id,
+    name: agent.title ?? agent.model,
+    model: agent.model,
+    planId: FIXTURE_TASK_ID,
+  };
+}
+
+/** One line one of the fixture's agents sent the other through `message_agent`, sent some minutes before `at`. */
+function agentLine(
+  at: number,
+  minutesAgo: number,
+  id: string,
+  from: TaskAgentLine,
+  to: TaskAgentLine,
+  text: string,
+) {
+  return {
+    id,
+    from: messagingAgent(from),
+    to: messagingAgent(to),
+    text,
+    sentAt: at - minutesAgo * 60_000,
+  };
+}
+
+/** What the fixture's two agents said to each other directly: Agent two asking for a file Agent one holds, and the answer. */
+function agentMessages(at: number) {
+  return [
+    agentLine(
+      at,
+      16,
+      "b0000000-0000-4000-8000-000000000001",
+      AGENT_TWO,
+      AGENT_ONE,
+      "Can I take `src/members/invite.ts` too? The email template needs the token format. " +
+        "If you'd rather, I'll wait for #214 and base on it.",
+    ),
+    agentLine(
+      at,
+      14,
+      "b0000000-0000-4000-8000-000000000002",
+      AGENT_ONE,
+      AGENT_TWO,
+      "Wait for #214: the token format is still moving. I'll tell you the moment it merges.",
+    ),
+  ];
+}
+
 /** The chat a fixture run reads: its answer as the service would give it, and the agent lines that name its agents. */
 export interface FixtureChat {
   readonly answer: ChatAnswer;
@@ -325,12 +343,6 @@ export function fixtureChat(
   at: number,
 ): FixtureChat | undefined {
   if (!run.fixtureMode) return undefined;
-  const dm = (id: string, other: string) => ({
-    id,
-    kind: CHANNEL_KIND.DM,
-    members: [MEMBER.DEAN, other],
-    archived: false,
-  });
   const answer: ChatAnswer = {
     self: MEMBER.DEAN,
     readSeq: READ_SEQ,
@@ -384,13 +396,10 @@ export function fixtureChat(
         archived: false,
       },
       { id: CHANNEL.SCHEMA, kind: CHANNEL_KIND.TOPIC, name: "members-schema", archived: false },
-      dm(CHANNEL.WITH_AGENT_TWO, MEMBER.AGENT_TWO),
-      dm(CHANNEL.WITH_LUKE, MEMBER.LUKE),
-      dm(CHANNEL.WITH_AGENT_ONE, MEMBER.AGENT_ONE),
-      dm(CHANNEL.WITH_MARIA, MEMBER.MARIA),
     ],
     messages: messages(at),
     cursor: "52",
+    agentMessages: agentMessages(at),
   };
   return { answer, agents: [AGENT_ONE, AGENT_TWO] };
 }

@@ -1339,7 +1339,7 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
   );
 
   it.effect(
-    "what waits on a person is the open asks of others they may answer: not their own, not an agents' DM, not on an archived plan, and a DM to them included",
+    "what waits on a person is the open asks of others they may answer: not their own, not on an archived plan, and never one in a DM, which the chat holds none of for now, theirs included",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
@@ -1348,7 +1348,7 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
         const toAda = Option.getOrThrow(
           yield* findOrMakeDm(room.owner, room.workspace, room.second.id, room.ada.id),
         );
-        const dmAsk = yield* ask(room, room.second, "to-ada", "Ada, which?", toAda.id);
+        yield* ask(room, room.second, "to-ada", "Ada, which?", toAda.id);
         const between = Option.getOrThrow(
           yield* findOrMakeDm(room.owner, room.workspace, room.first.id, room.second.id),
         );
@@ -1360,10 +1360,7 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
         const waiting = yield* waitingOn(room.owner);
         assert.deepEqual(
           waiting.map((each) => [each.message.id, each.taskId]),
-          [
-            [dmAsk.message.id, null],
-            [inChannel.message.id, room.plan],
-          ],
+          [[inChannel.message.id, room.plan]],
         );
         assert.deepEqual(
           (yield* waitingStamps(room.owner)).map((stamp) => stamp.id),
@@ -1371,10 +1368,7 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
         );
 
         yield* updateTask(room.owner, room.plan, { archived: true });
-        assert.deepEqual(
-          (yield* waitingOn(room.owner)).map((each) => each.message.id),
-          [dmAsk.message.id],
-        );
+        assert.deepEqual(yield* waitingOn(room.owner), []);
         const stranger = yield* openAccount();
         assert.deepEqual(yield* waitingOn(stranger), []);
         assert.deepEqual(

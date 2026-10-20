@@ -1,14 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import {
-  ASK_STATUS,
-  CHANNEL_KIND,
-  CHAT_ASK,
-  CHAT_BOUNDS,
-  CHAT_IMAGE_TYPE,
-  MEMBER_KIND,
-} from "@luke/features/chat-wire";
+import { CHANNEL_KIND, CHAT_ASK, CHAT_BOUNDS, CHAT_IMAGE_TYPE } from "@luke/features/chat-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
@@ -184,10 +177,10 @@ function railRow(page: HTMLElement, name: string): HTMLButtonElement {
   return row;
 }
 
-test("Chat opens on For you, whose open asks come first, the oldest first, then the direct message and the mention waiting on the developer, beside a rail counting what each place holds unread", () => {
+test("Chat opens on For you, whose open asks come first, the oldest first, then the mention waiting on the developer, beside a rail counting what each place holds unread, its direct messages the agents' own", () => {
   const page = mount();
   assert.deepEqual(rail(page), [
-    "▸ For you (4)",
+    "▸ For you (3)",
     "# Channels",
     "general",
     "members-schema",
@@ -195,15 +188,11 @@ test("Chat opens on For you, whose open asks come first, the oldest first, then 
     "billing-export",
     "teammate-invitations •",
     "# Direct messages",
-    "Invite emails •",
-    "Luke",
-    "Add teammate invitations",
-    "Maria Chen",
+    "Invite emails ↔ Add teammate invitations",
   ]);
   assert.deepEqual(stream(page), [
     "Add teammate invitations in #teammate-invitations",
     "Invite emails in #teammate-invitations",
-    "Invite emails direct message",
     "Luke in #teammate-invitations",
   ]);
 });
@@ -233,34 +222,6 @@ test("a press on a channel shows its messages in the order posted, a thread fold
     "Invite emails",
     "  ↳ Add teammate invitations",
     "  ↳ Invite emails",
-  ]);
-});
-
-test("an ask posted in a direct message is listed among For you's asks as a direct message, never as a channel", () => {
-  const page = mount((chat) => ({
-    ...chat,
-    answer: {
-      ...chat.answer,
-      messages: chat.answer.messages.map((message) =>
-        message.seq === 47
-          ? {
-              ...message,
-              ask: {
-                key: "take-invite-file",
-                revision: 1,
-                status: ASK_STATUS.OPEN,
-                needsReply: true,
-                response: { type: CHAT_ASK.APPROVAL },
-              },
-            }
-          : message,
-      ),
-    },
-  }));
-  assert.deepEqual(stream(page).slice(0, 3), [
-    "Add teammate invitations in #teammate-invitations",
-    "Invite emails direct message",
-    "Invite emails in #teammate-invitations",
   ]);
 });
 
@@ -346,7 +307,7 @@ test("an open choice in For you is answered by a pick and its send, which marks 
   assert.equal(send?.disabled, false);
   act(() => send?.click());
   await settle();
-  assert.equal(rail(page)[0], "▸ For you (3)");
+  assert.equal(rail(page)[0], "▸ For you (2)");
   // The answered ask leaves For you, so the channel shows it settled.
   act(() => railRow(page, "teammate-invitations").click());
   const settled = page.querySelector('.chat-ask[data-status="answered"]');
@@ -374,7 +335,7 @@ test("an approval is answered by its press, and a reply typed under an opened th
   );
   act(() => approve?.click());
   await settle();
-  assert.equal(rail(page)[0], "▸ For you (3)");
+  assert.equal(rail(page)[0], "▸ For you (2)");
 
   act(() => railRow(page, "teammate-invitations").click());
   const toggle = page.querySelector<HTMLButtonElement>(
@@ -533,73 +494,6 @@ test("a post still out names the composer's send Sending and busy, and the box e
   assert.equal(boxWords(box), "");
 });
 
-test("a direct message between two others reads as theirs, named by both, with no box to post in it and no Reply under its messages", () => {
-  const BETWEEN = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e";
-  const page = mount((chat) => {
-    const agents = chat.answer.members.filter((each) => each.kind === MEMBER_KIND.AGENT);
-    const [one, two] = agents.map((each) => each.id);
-    const first = chat.answer.messages[0];
-    if (one === undefined || two === undefined || first === undefined) return undefined;
-    const { parentId: _root, ask: _ask, ...sample } = first;
-    const top = Math.max(...chat.answer.messages.map((each) => each.seq)) + 1;
-    return {
-      ...chat,
-      answer: {
-        ...chat.answer,
-        channels: [
-          ...chat.answer.channels,
-          { id: BETWEEN, kind: CHANNEL_KIND.DM, members: [one, two], archived: false },
-        ],
-        messages: [
-          ...chat.answer.messages,
-          {
-            ...sample,
-            id: BETWEEN,
-            seq: top,
-            touchedSeq: top,
-            channelId: BETWEEN,
-            authorId: one,
-            mentions: [],
-          },
-          {
-            ...sample,
-            id: "6c7d8e9f-0a1b-4c2d-9e3f-4a5b6c7d8e9f",
-            seq: top + 1,
-            touchedSeq: top + 1,
-            channelId: BETWEEN,
-            authorId: two,
-            mentions: [],
-            ask: {
-              key: "between",
-              revision: 1,
-              status: ASK_STATUS.OPEN,
-              response: { type: CHAT_ASK.APPROVAL },
-              needsReply: true,
-            },
-          },
-        ],
-      },
-    };
-  });
-  // Nothing in it waits on the developer, so For you holds what it held.
-  assert.equal(rail(page)[0], "▸ For you (4)");
-  act(() => railRow(page, "Add teammate invitations ↔ Invite emails").click());
-  assert.equal(
-    page.querySelector(".chat-head h2")?.textContent,
-    "Add teammate invitations ↔ Invite emails",
-  );
-  assert.equal(page.querySelector(".chat-composer"), null);
-  assert.match(
-    page.textContent ?? "",
-    /Only Add teammate invitations and Invite emails post in this conversation\./u,
-  );
-  assert.equal(page.querySelector(".chat-message button[aria-expanded]"), null);
-  // Its open ask reads as waiting, with nothing to answer it by.
-  const ask = page.querySelector('.chat-ask[data-status="open"]');
-  assert.match(ask?.textContent ?? "", /Waiting on an answer/u);
-  assert.equal(ask?.querySelector("button"), null);
-});
-
 test("two agents' direct lines read under Direct messages as one conversation named by both, never unread, and open read only in the order sent with no box, no Reply, and nothing to answer", () => {
   const INVITES = "7d8e9f0a-1b2c-4d3e-8f4a-5b6c7d8e9f0a";
   const BILLING = "8e9f0a1b-2c3d-4e4f-9a5b-6c7d8e9f0a1b";
@@ -638,7 +532,7 @@ test("two agents' direct lines read under Direct messages as one conversation na
   );
   const heard = rail(page);
   // Nothing the agents said waits on the developer, so For you holds what it held, and the pair's row ends the direct messages with no dot.
-  assert.equal(heard[0], "▸ For you (4)");
+  assert.equal(heard[0], "▸ For you (3)");
   assert.equal(heard.at(-1), "Billing ↔ Invites");
   act(() => railRow(page, "Billing ↔ Invites").click());
   assert.equal(rail(page).at(-1), "▸ Billing ↔ Invites");
@@ -1057,12 +951,6 @@ test("in a listed workspace, a person is drawn with their photo from the members
   };
   const page = mount((chat) => chat, acme);
   await settle();
-  // Her direct message is named as the members read names her, and wears her photo.
-  const maria = railRow(page, "Maria Chen");
-  assert.ok(
-    maria.querySelector("img[src^='https://example.com/maria.png']"),
-    "her row wears her photo",
-  );
   act(() => railRow(page, "general").click());
   const named = [...page.querySelectorAll(".chat-byline-name")].map((each) => each.textContent);
   assert.ok(named.includes("Maria Chen"), "her messages name her as the members read does");

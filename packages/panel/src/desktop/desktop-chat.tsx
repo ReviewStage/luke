@@ -70,12 +70,12 @@ import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
  * counting what waits on the developer, then the channels, then the direct
  * messages, each group under its heading as Settings' page list's are
  * (`.section-heading`), each row counting what in it the developer has not read and
- * in the unread weight while anything is (`chat-model.ts`). A direct
- * message's row leads with the other member's mark and is named by who it
- * is with. The pairs of agents that messaged one another directly follow
- * the direct messages there, each named by both of its two and led by the
- * mark of the one who spoke last, never counted unread, since the
- * developer only watches them. A press on a row shows its place in
+ * in the unread weight while anything is (`chat-model.ts`). The direct
+ * messages are the agents' own, sent one another through `message_agent`,
+ * since the chat holds none of its own for now: each pair of agents is a
+ * row named by both of its two and led by the mark of the one who spoke
+ * last, never counted unread, since the developer only watches them. A
+ * press on a row shows its place in
  * the pane beside the rail (`chat-pane.tsx`). The agents are named from
  * the plans' summaries, the way the sidebar names them, and from the lines
  * the chat read carries where those name more. With nothing read, it says
@@ -214,7 +214,7 @@ function railGroups(rail: ReturnType<typeof chatRail>): RailGroupsShown {
         key: RAIL_GROUP.DIRECT,
         name: "Direct messages",
         glyph: <AtSignIcon />,
-        rows: rail.direct,
+        rows: [],
         pairs: rail.agentPairs,
         foldedAtFirst: false,
       } satisfies RailGroupShown,

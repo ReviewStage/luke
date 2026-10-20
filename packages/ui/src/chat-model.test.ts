@@ -24,6 +24,7 @@ import {
   FOR_YOU_REASON,
   forYou,
   placeAgentPair,
+  placeChannel,
   postsIn,
   topicName,
   topicNameProblem,
@@ -137,13 +138,15 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
   };
 }
 
-test("For you lists every open ask someone else posted, the oldest first, then each unread direct message and mention of the reader, the oldest first", () => {
+test("For you lists every open ask someone else posted, the oldest first, then each unread mention of the reader, the oldest first, and nothing in a DM, which the chat holds none of", () => {
   const chat = chatOf(5, [
     message(9, AGENT, TASK_CHANNEL.id, asking(ASK_STATUS.OPEN)),
     message(8, LUKE, TASK_CHANNEL.id, { mentions: [ME] }),
+    // A DM an older service still names waits nowhere, read or not, an ask in it included.
     message(7, AGENT, WITH_AGENT.id),
+    message(13, AGENT, WITH_AGENT.id, asking(ASK_STATUS.OPEN)),
     message(6, AGENT, TASK_CHANNEL.id),
-    // Read already, so neither the direct message nor the mention waits.
+    // Read already, so the mention does not wait.
     message(4, AGENT, WITH_AGENT.id),
     message(3, LUKE, TASK_CHANNEL.id, { mentions: [ME] }),
     // An ask waits until it is answered, read or not, and the reader's own never does.
@@ -158,7 +161,6 @@ test("For you lists every open ask someone else posted, the oldest first, then e
     [
       [2, FOR_YOU_REASON.ASK],
       [9, FOR_YOU_REASON.ASK],
-      [7, FOR_YOU_REASON.DIRECT],
       [8, FOR_YOU_REASON.MENTION],
     ],
   );
@@ -169,7 +171,7 @@ function placed(rail: ReturnType<typeof chatRail>) {
   return [...rail.channels, ...rail.tasks.flatMap((group) => group.rows)];
 }
 
-test("the rail counts For you, lists #general and the topics, then the tasks' channels, and the direct messages the latest spoken in first, each counting what others posted past the reader's cursor", () => {
+test("the rail counts For you, lists #general and the topics, then the tasks' channels, each counting what others posted past the reader's cursor, and no DM an older service still names", () => {
   const chat = chatOf(3, [
     message(2, MARIA, WITH_MARIA.id),
     message(4, AGENT, WITH_AGENT.id),
@@ -179,7 +181,7 @@ test("the rail counts For you, lists #general and the topics, then the tasks' ch
     message(1, MARIA, GENERAL.id),
   ]);
   const rail = chatRail(chat, NAMES);
-  assert.equal(rail.forYou, 1);
+  assert.equal(rail.forYou, 0);
   assert.deepEqual(
     placed(rail).map((row) => [row.label, row.unread]),
     [
@@ -188,12 +190,9 @@ test("the rail counts For you, lists #general and the topics, then the tasks' ch
       ["invites", 2],
     ],
   );
-  assert.deepEqual(
-    rail.direct.map((row) => [row.label, row.unread]),
-    [
-      ["Invite emails", 1],
-      ["Maria Chen", 0],
-    ],
+  assert.equal(
+    placeChannel(chat, { kind: CHAT_PLACE.CHANNEL, channelId: WITH_AGENT.id }),
+    undefined,
   );
 });
 
@@ -214,13 +213,6 @@ test("a channel read further on its own cursor counts only what came past that, 
       ["general", 0],
       ["alpha", 0],
       ["invites", 1],
-    ],
-  );
-  assert.deepEqual(
-    rail.direct.map((row) => [row.label, row.unread]),
-    [
-      ["Invite emails", 1],
-      ["Maria Chen", 0],
     ],
   );
 });
@@ -299,27 +291,6 @@ test("the reader posts in a standing channel and in a direct message of their ow
   assert.deepEqual(
     [WITH_MARIA, between].map((channel) => channelLabel(chat, NAMES, channel)),
     ["Maria Chen", "Invite emails ↔ Maria Chen"],
-  );
-});
-
-test("nothing in a direct message between two others waits on the reader, neither an open ask nor an unread line", () => {
-  const between: ChatChannel = {
-    id: "dm-others",
-    kind: CHANNEL_KIND.DM,
-    members: [AGENT, MARIA],
-    archived: false,
-  };
-  const chat = {
-    ...chatOf(0, [
-      message(1, AGENT, between.id, asking(ASK_STATUS.OPEN)),
-      message(2, MARIA, between.id),
-      message(3, MARIA, WITH_MARIA.id),
-    ]),
-    channels: [WITH_MARIA, between],
-  };
-  assert.deepEqual(
-    forYou(chat).map((entry) => entry.message.seq),
-    [3],
   );
 });
 
@@ -471,6 +442,6 @@ test("agents' direct lines read as one conversation for each pair whichever of t
     undefined,
   );
   // The agents' lines are watched, never waiting on the reader.
-  assert.deepEqual([rail.forYou, rail.direct.length], [0, 2]);
+  assert.equal(rail.forYou, 0);
   assert.deepEqual(chatRail(chatOf(0, []), NAMES).agentPairs, []);
 });

@@ -1082,7 +1082,7 @@ test("the sidebar's Chat row stands only while the account has Chat on and a cha
   const page = mount(false, false, { chatView: view });
   await settle();
   const row = chatRow(page);
-  assert.equal(row?.textContent, "Chat4 waiting on you");
+  assert.equal(row?.textContent, "Chat3 waiting on you");
   assert.equal(row?.getAttribute("aria-current"), null);
   act(() => row?.click());
   assert.equal(opened, 1);

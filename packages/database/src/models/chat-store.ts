@@ -2522,7 +2522,7 @@ const findAsks = SqlSchema.findAll({
 /**
  * The open asks that wait on the account across its workspaces: asked by
  * someone else, in a channel neither archived nor of an archived plan, and
- * in a DM only where the account is one of its two.
+ * never in a DM, which the chat keeps none of for now.
  */
 function waitingOnAccount(userId: string): SQL | undefined {
   const own = (memberId: MemberColumn) =>
@@ -2543,11 +2543,7 @@ function waitingOnAccount(userId: string): SQL | undefined {
     notExists(own(chatMessage.authorMemberId)),
     isNull(chatChannel.archivedAt),
     isNull(task.archivedAt),
-    or(
-      ne(chatChannel.kind, CHANNEL_KIND.DM),
-      exists(own(chatChannel.dmAMemberId)),
-      exists(own(chatChannel.dmBMemberId)),
-    ),
+    ne(chatChannel.kind, CHANNEL_KIND.DM),
   );
 }
 
@@ -2727,6 +2723,8 @@ export function chatWaitingLiveStatements(
         eq(own.kind, MEMBER_KIND.HUMAN),
         eq(own.userId, userId),
         gt(own.noticeSeq, own.readSeq),
+        // A notice standing in a DM made before the chat kept none waits on no one.
+        ne(chatChannel.kind, CHANNEL_KIND.DM),
         workspaceReachableBy(userId, own.organizationId),
         chatOnFor(userId),
       ),

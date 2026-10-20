@@ -35,8 +35,10 @@ import type { ChatTarget } from "./chat-mention.js";
  * (`chat-wire.ts`'s `chatAnswerSchema`): the reader's own member, how far
  * it has read, every member and channel it sees, and the messages. The
  * rail leads with For you, then the channels, `#general` first, each
- * plan's own channel, then the topics, and then the direct messages, the
- * latest spoken in first. A channel counts what was posted in it past the
+ * plan's own channel, then the topics, and then the direct messages agents
+ * sent each other, the latest spoken in first. The chat itself holds no
+ * direct messages for now, so a DM channel an older service still names is
+ * drawn nowhere. A channel counts what was posted in it past the
  * reader's cursor by anyone but the reader. A channel's messages read as
  * roots in the order they were posted, each with the replies of its
  * thread in theirs. For you is what waits on the reader: every open ask
@@ -175,7 +177,6 @@ export interface ChatRail {
   readonly tasks: readonly ChatRailGroup[];
   /** The channels archived: a task's that was archived with it, and a topic archived. */
   readonly archived: readonly ChatRailRow[];
-  readonly direct: readonly ChatRailRow[];
   /** The pairs of agents that sent one another direct messages, the latest spoken in first. */
   readonly agentPairs: readonly AgentPair[];
 }
@@ -358,7 +359,6 @@ export function chatRail(
     };
   };
   const shown = chat.channels.filter((channel) => !channel.archived);
-  const latest = (channel: ChatChannel) => messagesIn(chat, channel.id).at(-1)?.seq ?? 0;
   const byName = (one: ChatChannel, other: ChatChannel) =>
     CHANNEL_ORDER[one.kind] - CHANNEL_ORDER[other.kind] ||
     channelLabel(chat, names, one).localeCompare(channelLabel(chat, names, other));
@@ -372,15 +372,11 @@ export function chatRail(
   const archived = chat.channels
     .filter((channel) => channel.archived && channel.kind !== CHANNEL_KIND.DM)
     .toSorted(byName);
-  const direct = shown
-    .filter((channel) => channel.kind === CHANNEL_KIND.DM)
-    .toSorted((one, other) => latest(other) - latest(one));
   return {
     forYou: forYou(chat).length,
     channels: channels.map(row),
     tasks: taskGroups(tasks.map(row), grouping),
     archived: archived.map(row),
-    direct: direct.map(row),
     agentPairs: agentPairs(chat),
   };
 }
@@ -472,8 +468,10 @@ export function forYou(chat: ChatAnswer): readonly ForYouEntry[] {
   const channels = new Map(chat.channels.map((channel) => [channel.id, channel]));
   const entries = chat.messages.toSorted(bySeq).flatMap((message): ForYouEntry[] => {
     const channel = channels.get(message.channelId);
-    // Note that nothing waits on the reader where they cannot answer it: an archived channel, or a direct message between two others.
-    if (channel === undefined || !postsIn(chat, channel)) return [];
+    // Note that nothing waits on the reader where they cannot answer it: an archived channel, or a DM, which the chat holds none of for now.
+    if (channel === undefined || channel.kind === CHANNEL_KIND.DM || !postsIn(chat, channel)) {
+      return [];
+    }
     const reason = waitingReason(chat, message, channel);
     if (reason === undefined) return [];
     const replies = chat.messages.filter((reply) => reply.parentId === message.id).toSorted(bySeq);
@@ -485,10 +483,12 @@ export function forYou(chat: ChatAnswer): readonly ForYouEntry[] {
   ];
 }
 
-/** The channel a place shows, or none for For you or a channel the chat no longer holds. */
+/** The channel a place shows, or none for For you, a channel the chat no longer holds, or a DM, which it holds none of for now. */
 export function placeChannel(chat: ChatAnswer, place: ChatPlace): ChatChannel | undefined {
   if (place.kind !== CHAT_PLACE.CHANNEL) return undefined;
-  return chat.channels.find((channel) => channel.id === place.channelId);
+  return chat.channels.find(
+    (channel) => channel.id === place.channelId && channel.kind !== CHANNEL_KIND.DM,
+  );
 }
 
 /** The mention a chip writes a member as: a person by their account, an agent by its id, and a Luke by his task; none for a member whose account, agent, or task is gone. */
