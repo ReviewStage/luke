@@ -659,13 +659,23 @@ it.effect("sends no day one person marked under the cookie another tab signed in
 
     // Another tab signs in as someone else before the minute's flush.
     state.user = { ...USER, id: "user-2", email: "other@example.com" };
-    yield* TestClock.adjust("1 minute");
-    yield* until(() => Effect.sync(() => batches.length > 0));
+    while (batches.length < 1) {
+      yield* Effect.promise(() => nextTurn());
+      yield* TestClock.adjust("1 minute");
+    }
 
     const [batch] = batches;
     assert.equal(batch?.user, "user-2");
     assert.ok(batch?.names.includes(PRODUCT_EVENT.APP_LAUNCH));
     assert.ok(!batch?.names.includes(PRODUCT_EVENT.APP_DAY_ACTIVE));
+
+    // Day marks do travel here: the next minute marks and sends the one now signed in's own.
+    while (batches.length < 2) {
+      yield* Effect.promise(() => nextTurn());
+      yield* TestClock.adjust("1 minute");
+    }
+    assert.equal(batches[1]?.user, "user-2");
+    assert.ok(batches[1]?.names.includes(PRODUCT_EVENT.APP_DAY_ACTIVE));
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, service),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),
