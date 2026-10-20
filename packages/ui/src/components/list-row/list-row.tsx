@@ -1,5 +1,6 @@
 import {
   type ComponentType,
+  createContext,
   type FocusEventHandler,
   type KeyboardEvent,
   type MouseEvent,
@@ -7,6 +8,7 @@ import {
   type ReactElement,
   type ReactNode,
   type RefCallback,
+  useContext,
   useEffect,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
@@ -91,10 +93,15 @@ import { useRowSwipe } from "./use-row-swipe.js";
  * keyboard, the metadata stepping aside as a sidebar row's time does for
  * Pin and Archive. Where its metadata stands at its middle, the acts take
  * their own room as they come in, so the title is cut where they begin
- * rather than running under them, and a title cut short there or at rest
- * fades out over its last few pixels instead of ending in an ellipsis, as a
- * browser's tab does, so the cut moving as the acts come and go reads as
- * the fade sliding rather than the words cut again.
+ * rather than running under them.
+ *
+ * A title cut short, there or anywhere, fades out over its last few pixels
+ * instead of ending in an ellipsis, as a browser's tab does, so the cut
+ * moving as a row's acts come and go reads as the fade sliding rather than
+ * the words cut again; one drawn whole ends on its last letter. A dense
+ * row's description, a label beside its title, fades the same way, and so
+ * does the name of what a row belongs to (`lead`), while a fuller row's
+ * description, a preview's prose, and its metadata end in an ellipsis.
  *
  * A row may lead its description with what it belongs to (`lead`), a
  * thread's task, say, in a list grouped by something else: a small chip
@@ -194,22 +201,19 @@ function preventFocusMove(event: MouseEvent<HTMLElement>): void {
   event.preventDefault();
 }
 
-/** A row's title as measured: the ref to hand it, none where nothing measures it, and whether it is cut short. */
-interface TitleClip {
-  readonly ref: RefCallback<HTMLElement> | undefined;
-  readonly clipped: boolean;
-}
+/** The density the `List` around a row sets, which a row standing in no `List` takes from its own `density`. */
+const ListDensityContext = createContext<ListDensity>(LIST_DENSITY.REGULAR);
 
-/** Whether the title is cut short, told to `onTitleClipped`, measured only where someone asks or the title fades. */
-function useTitleClipped(
-  onTitleClipped: ((clipped: boolean) => void) | undefined,
-  fades: boolean,
-): TitleClip {
-  const [measured, clipped] = useClipped();
-  useEffect(() => {
-    onTitleClipped?.(clipped);
-  }, [onTitleClipped, clipped]);
-  return { ref: onTitleClipped === undefined && !fades ? undefined : measured, clipped };
+/**
+ * The words a slot is measured by, where they are a plain string: a box whose
+ * words are a tree is watched for any change under it instead, which a long
+ * list of rows would pay for once a row.
+ */
+function plainWords(words: ReactNode): string | undefined {
+  // A slot is handed over as a loose ReactNode, and a string is the one form
+  // whose words can be compared from render to render; this check is the boundary.
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof
+  return typeof words === "string" ? words : undefined;
 }
 
 /** The act of a row that offers no swipe. */
@@ -233,9 +237,11 @@ export function List({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
-      {children}
-    </ul>
+    <ListDensityContext.Provider value={density}>
+      <ul className="luke-list" data-variant={variant} data-density={density} aria-label={label}>
+        {children}
+      </ul>
+    </ListDensityContext.Provider>
   );
 }
 
@@ -321,18 +327,19 @@ export function ListRow({
   swipe?: ListRowSwipe | undefined;
 }): React.JSX.Element {
   const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
-  // Note that the acts coming in cut the title back to where they begin, so
-  // it fades there rather than having its ellipsis jump as they come and go.
-  const fades =
-    actionsAt === LIST_ROW_ACTIONS.HOVER && metaAt === LIST_ROW_META.MIDDLE && said(actions);
-  const titleClip = useTitleClipped(onTitleClipped, fades);
+  const listDensity = useContext(ListDensityContext);
+  const dense = (density ?? listDensity) === LIST_DENSITY.DENSE;
+  const [titleMeasured, titleClipped] = useClipped(plainWords(title));
+  useEffect(() => {
+    onTitleClipped?.(titleClipped);
+  }, [onTitleClipped, titleClipped]);
+  // Note that only a dense row's description fades, so a fuller row's prose
+  // is never measured.
+  const describedDense = dense && said(description);
+  const [descriptionMeasured, descriptionClipped] = useClipped(plainWords(description));
+  const [leadMeasured, leadClipped] = useClipped(lead?.label);
   const heading = (
-    <span
-      ref={titleClip.ref}
-      className="luke-list-row-title"
-      data-end={fades ? "fade" : undefined}
-      data-overflow={fades ? String(titleClip.clipped) : undefined}
-    >
+    <span ref={titleMeasured} className="luke-list-row-title" data-overflow={String(titleClipped)}>
       {title}
     </span>
   );
@@ -354,13 +361,23 @@ export function ListRow({
           heading
         )}
         {said(description) || lead !== undefined ? (
-          <span className="luke-list-row-description">
+          <span
+            ref={describedDense ? descriptionMeasured : undefined}
+            className="luke-list-row-description"
+            data-overflow={describedDense ? String(descriptionClipped) : undefined}
+          >
             {lead === undefined ? null : (
               <span className="luke-list-row-lead">
                 <span className="luke-list-row-lead-icon" aria-hidden="true">
                   {lead.icon}
                 </span>
-                <span className="luke-list-row-lead-label">{lead.label}</span>
+                <span
+                  ref={leadMeasured}
+                  className="luke-list-row-lead-label"
+                  data-overflow={String(leadClipped)}
+                >
+                  {lead.label}
+                </span>
               </span>
             )}
             {description}
