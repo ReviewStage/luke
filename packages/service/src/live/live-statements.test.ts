@@ -9,6 +9,7 @@ import { MAC_COMMAND_KIND } from "@luke/features/mac-command-wire";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
+import { taskConversationLiveStatements } from "../tasks/brain-transcript.js";
 import { taskRecordLiveStatements } from "../tasks/task-record-live.js";
 import { LiveSealing, liveSealingFromEnvironment, REALTIME_ENVIRONMENT } from "./realtime.js";
 
@@ -39,6 +40,7 @@ function liveStatements() {
     ),
   );
   const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID));
+  const conversation = Option.getOrThrow(taskConversationLiveStatements(USER_ID, randomUUID()));
   return {
     ...Object.fromEntries(
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
@@ -55,6 +57,9 @@ function liveStatements() {
     ),
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(conversation).map(([part, query]) => [`conversation.${part}`, query]),
     ),
   };
 }

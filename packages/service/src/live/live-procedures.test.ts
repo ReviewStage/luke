@@ -19,6 +19,7 @@ import {
   macCommandsLiveAnswerSchema,
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
+  taskConversationLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
 } from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
@@ -355,6 +356,8 @@ const askTranscript = (options: {
   readonly agentId: string;
   readonly call?: string;
   readonly sealing: Option.Option<LiveSealer>;
+  /** The read asked, an agent's transcript where none is named. */
+  readonly path?: string;
 }) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -365,7 +368,7 @@ const askTranscript = (options: {
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
     });
-    const url = readOf("/api/live/agent-transcript", options.bearer);
+    const url = readOf(options.path ?? "/api/live/agent-transcript", options.bearer);
     url.searchParams.set("id", options.agentId);
     if (options.call !== undefined) url.searchParams.set("call", options.call);
     const response = yield* hostedAnswer(
@@ -555,6 +558,42 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
             signedOut,
           );
         }
+      }),
+  );
+
+  it.effect(
+    "a task's planning conversation is sealed as its mark and its running workers for an account that reaches the task, not found for one that does not, and polled without Realtime",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const stranger = yield* openUser;
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        const askConversation = (bearer: string, sealing = Option.some(SCRIPTED)) =>
+          askTranscript({
+            bearer,
+            agentId: task.id,
+            sealing,
+            path: "/api/live/task-conversation",
+          });
+
+        const sealed = yield* askConversation(owner);
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(taskConversationLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL);
+        assert.deepEqual(Object.keys(answer.queries).toSorted(), ["mark", "workers"]);
+        for (const query of Object.values(answer.queries)) {
+          assert.ok(query.capability.includes(`"${owner}"`), "read for the bearer");
+          assert.ok(query.capability.includes(`"${task.id}"`), "read of the task");
+        }
+        assert.deepEqual(yield* askConversation(stranger), {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        });
+        const polled = yield* askConversation(owner, Option.none());
+        assert.equal(
+          Schema.decodeUnknownSync(taskConversationLiveAnswerSchema)(polled.body).url,
+          LIVE_POLL_URL,
+        );
       }),
   );
 });
