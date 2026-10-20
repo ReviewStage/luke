@@ -179,6 +179,17 @@ test("drawn as a document, a link alone in its paragraph is its card, a pull req
   assert.deepEqual(told.at(-1), { kind: ACT_KIND.GITHUB_OPEN, payload: { url: PULL_REQUEST } });
 });
 
+test("a page's link the window reads with a trailing slash still stands as the page's row", () => {
+  const container = drawn(
+    inPane(createElement(TranscriptWords, { text: `${PAGE}/`, asDocument: true })),
+  );
+
+  assert.deepEqual(
+    cards(container).map(([kind]) => kind),
+    ["page"],
+  );
+});
+
 test("a typed message drawn as a document draws its lone links as cards too", () => {
   const container = drawn(inPane(createElement(SentWords, { text: LINKS, asDocument: true })));
 

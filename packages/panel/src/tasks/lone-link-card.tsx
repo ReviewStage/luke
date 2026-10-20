@@ -3,7 +3,13 @@ import { INBOX_BLOCK } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LONE_LINK, type LoneLink, loneLinkOf } from "@luke/features/lone-link";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { decodeMention, isBareLink, type Mention, mentionName } from "@luke/features/mention-link";
+import {
+  decodeMention,
+  isBareLink,
+  MENTION_KIND,
+  type Mention,
+  mentionName,
+} from "@luke/features/mention-link";
 import { placeChipLook } from "@luke/features/place-chip-model";
 import { LIST_VARIANT, List, ListRow, ProviderMark } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
@@ -180,12 +186,10 @@ function PullRequestRowCard({
 /** A page's row: its tab's glyph and its name, hanging the page's own card where the window holds the page; a press opens its tab. */
 function PageRowCard({
   page,
-  mention,
   target,
   words,
 }: {
   page: Extract<LoneLink, { kind: typeof LONE_LINK.PAGE }>;
-  mention: Mention;
   target: string;
   words: string;
 }): React.JSX.Element {
@@ -195,6 +199,8 @@ function PageRowCard({
   const place = { kind: LINK_PLACE.PAGE, planId: page.taskId, pageId: page.pageId } as const;
   const { name } = placeChipLook(place, writtenWords(target, words), known);
   const glyph = <AppWindowIcon aria-hidden="true" />;
+  // Note that the page is named from the link as the bar read it, because a page's link the window reads, one ending in a slash or a fragment, may be no mention's.
+  const mention = { kind: MENTION_KIND.PAGE, taskId: page.taskId, pageId: page.pageId } as const;
   return (
     <OneRowCard label={CARD_LABEL.PAGE} kind={LONE_LINK.PAGE}>
       <RowHintOptions
@@ -254,11 +260,8 @@ export function LoneLinkCard({
         />
       );
     }
-    case LONE_LINK.PAGE: {
-      const mention = decodeMention(target, doors?.code.repository ?? null);
-      if (mention === undefined) return fallback;
-      return <PageRowCard page={lone} mention={mention} target={target} words={words} />;
-    }
+    case LONE_LINK.PAGE:
+      return <PageRowCard page={lone} target={target} words={words} />;
     case LONE_LINK.CODE: {
       if (doors === undefined) return fallback;
       const { repo, path, sha, startLine, endLine } = lone;
