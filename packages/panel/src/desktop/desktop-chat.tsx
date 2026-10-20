@@ -53,6 +53,7 @@ import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.j
 import { previewWords } from "./chat-preview.js";
 import { SidebarResizeEdge } from "./desktop-sidebar.js";
 import { INBOX_LIST_WIDTH, useChatListWidth } from "./folded-groups.js";
+import { useNarrowFocus } from "./narrow-focus.js";
 import { SidebarGroupHeader } from "./sidebar-group-header.js";
 import { EDGE_SIDE, useResizableEdge } from "./use-resizable-edge.js";
 
@@ -425,6 +426,7 @@ function ChatView({
     label: "Resize chat list",
     onResize,
   });
+  const screen = useNarrowFocus(room, view.listed);
   if (read === undefined || view.failed) {
     // Nothing read yet: a read that did not answer, one still out, or no chat to read at all.
     const standIn = view.failed ? (
@@ -472,7 +474,7 @@ function ChatView({
     />
   );
   return (
-    <div className="chat-view">
+    <div ref={screen} className="chat-view">
       <nav
         className="chat-rail"
         aria-label="Chat"
