@@ -94,6 +94,14 @@ test("a live avatar plays its video track", () => {
   assert.doesNotMatch(container.textContent ?? "", new RegExp(CALL_VIDEO_LABEL.CONNECTING));
 });
 
+test("a live avatar's picture is filled out by a blurred copy of the same track, hidden from a reader", () => {
+  const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
+  const fill = container.querySelector<HTMLVideoElement>(".call-video-fill");
+  assert.deepEqual(playing(fill), [VIDEO]);
+  assert.equal(fill?.getAttribute("aria-hidden"), "true");
+  assert.deepEqual(playing(container.querySelector(".call-video-frame")), [VIDEO]);
+});
+
 test("a live avatar with no video track draws Luke's face as a still frame", () => {
   const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE }));
   assert.equal(container.querySelector("video"), null);
