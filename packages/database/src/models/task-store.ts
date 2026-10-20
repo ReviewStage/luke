@@ -1513,30 +1513,6 @@ export function assignUnassignedTask(userId: string, taskId: string): TaskStoreE
   return Effect.map(assignUnassigned({ userId, taskId }), Option.isSome);
 }
 
-const unassignMember = SqlSchema.void({
-  Request: Schema.Struct({ userId: Schema.String, organizationId: Schema.String }),
-  execute: ({ userId, organizationId }) =>
-    Database.use((db) =>
-      db
-        .update(task)
-        .set({ assigneeId: null })
-        .where(and(eq(task.organizationId, organizationId), eq(task.assigneeId, userId))),
-    ),
-});
-
-/**
- * Lets every task of the workspace assigned to the account go unassigned,
- * as the account leaving the workspace, or being removed from it, does, so
- * no task stays assigned to someone who can no longer read it. Asking again
- * changes nothing, and the tasks of every other workspace stand.
- */
-export function unassignFormerMember(
-  userId: string,
-  organizationId: string,
-): TaskStoreEffect<void> {
-  return unassignMember({ userId, organizationId });
-}
-
 /** The statuses work on a task has not yet begun in, which an agent started on it moves it out of. */
 const NOT_BEGUN: readonly TaskStatus[] = [TASK_STATUS.BACKLOG, TASK_STATUS.TODO];
 

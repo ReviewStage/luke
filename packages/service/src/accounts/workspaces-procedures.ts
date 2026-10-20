@@ -19,7 +19,8 @@
  * themselves, whose way out is leaving, or the owner.
  * `POST /api/workspaces/leave` lets anyone but an owner leave. A member
  * removed, or one who leaves, lets go of every task of the workspace assigned
- * to them (`unassignFormerMember`).
+ * to them, in the plugin's own delete (the `task_assignee_leaves_with_member`
+ * trigger).
  * `POST /api/workspaces/rename` lets an owner or admin rename a workspace,
  * answering it under its new name and its old slug; an account's first
  * workspace is refused, since it is named by its owner's account name.
@@ -44,7 +45,6 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { unassignFormerMember } from "@luke/database/models/task-store";
 import type { MemberSeams, WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import {
   createWorkspace,
@@ -66,7 +66,7 @@ import {
   type SessionUserIdResolver,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
+import type { StoreFailure } from "../http/store-failure.js";
 import { accountMiddleware, hosted, sessionMiddleware } from "../orpc/base.js";
 import { answeredWorkspace, managedWorkspace, pluginCallOrRefused } from "./workspace-access.js";
 import { listFormerMembers, listMembers, memberIdOf } from "./workspace-members.js";
@@ -109,19 +109,6 @@ function pluginWriteOrUnavailable<A, R>(
         )
       : hostedStoreOrUnavailable(Effect.fail(failure)),
   );
-}
-
-/**
- * The workspace's tasks assigned to an account that is no longer a member
- * let go, so none stays assigned to someone who can no longer read it; a
- * store failure is logged rather than answered, since the member is gone
- * either way and the plugin's write cannot be taken back.
- */
-function tasksLetGo(
-  userId: string,
-  workspaceId: string,
-): Effect.Effect<void, never, DatabaseServices> {
-  return unassignFormerMember(userId, workspaceId).pipe(Effect.catch(logStoreFailure));
 }
 
 /**
@@ -202,7 +189,6 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       yield* pluginCallOrRefused(
         seams.members.removeMember({ headers, organizationId: workspaceId, memberId }),
       );
-      yield* tasksLetGo(removed, workspaceId);
       return yield* membersNow(workspaceId);
     }),
     changeRole: session.changeRole.effect(function* ({ context, input }) {
@@ -264,7 +250,6 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       yield* pluginCallOrRefused(
         seams.members.leaveOrganization({ headers, organizationId: workspaceId }),
       );
-      yield* tasksLetGo(userId, workspaceId);
       return { workspaceId };
     }),
     /**

@@ -95,7 +95,7 @@ const NO_ASSIGNEE_WORDS = "No assignee";
  * detail, which a search matches too; only No assignee while the members are
  * unread.
  */
-export function assigneeRows(
+function assigneeRows(
   members: readonly WorkspaceMember[] | undefined,
   readerId: string | undefined,
 ): readonly MenuRow[] {

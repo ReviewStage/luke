@@ -2,11 +2,15 @@
 
 import assert from "node:assert/strict";
 import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskStanding } from "@luke/features/task-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { MemberDirectory } from "../member-directory.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { assigneeRows, TaskKeyLine, TaskStandingChips } from "./task-standing.js";
+import { TaskKeyLine, TaskStandingChips } from "./task-standing.js";
 
 /**
  * task-standing.test.ts -- a task's head names it by its key and says where
@@ -121,33 +125,53 @@ test("the assignee chip names who the task is assigned to, or no one, and No ass
   assert.deepEqual(sent, [{ assigneeId: null }]);
 });
 
-test("the assignee's menu lists No assignee, then the reader, then every other member by name, each searchable by email", () => {
+test("the assignee's menu lists No assignee, then the reader, then every other member by name, and a member picked is handed to the page by id", async () => {
   const member = (userId: string, name: string) => ({
     userId,
     name,
     email: `${userId}@acme.test`,
-    role: "member" as const,
+    role: WORKSPACE_ROLE.MEMBER,
   });
-  const rows = assigneeRows(
-    [
-      member("user-grace", "Grace Hopper"),
-      member("user-dean", "Dean"),
-      member("user-ada", "Ada Lovelace"),
-    ],
-    "user-dean",
-  );
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      Promise.resolve([
+        member("user-grace", "Grace Hopper"),
+        member("user-dean", "Dean"),
+        member("user-ada", "Ada Lovelace"),
+      ]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+  });
+  const sent: TaskStanding[] = [];
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push(root);
+  await act(async () => {
+    root.render(
+      createElement(MemberDirectory, {
+        workspace: { id: "workspace-acme", memberCount: 3 },
+        readerId: "user-dean",
+        children: createElement(TaskStandingChips, {
+          task: TASK,
+          onSet: (standing: TaskStanding) => sent.push(standing),
+        }),
+      }),
+    );
+  });
 
+  act(() => chip(host, "Assignee").click());
+  const rows = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
   assert.deepEqual(
-    rows.map((row) => [row.id, row.label, row.detail, row.terms]),
+    rows.map((row) => row.textContent),
     [
-      ["no-assignee", "No assignee", undefined, undefined],
-      ["user-dean", "Dean", "You", ["user-dean@acme.test"]],
-      ["user-ada", "Ada Lovelace", "user-ada@acme.test", ["user-ada@acme.test"]],
-      ["user-grace", "Grace Hopper", "user-grace@acme.test", ["user-grace@acme.test"]],
+      "No assignee",
+      "DDeanYou",
+      "AAda Lovelaceuser-ada@acme.test",
+      "GGrace Hopperuser-grace@acme.test",
     ],
   );
-  assert.deepEqual(
-    assigneeRows(undefined, "user-dean").map((row) => row.id),
-    ["no-assignee"],
-  );
+  act(() => (rows[2] ?? assert.fail("no Ada row")).click());
+
+  assert.deepEqual(sent, [{ assigneeId: "user-ada" }]);
 });

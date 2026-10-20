@@ -32,7 +32,6 @@ import {
   readTaskWorkspace,
   TaskArchived,
   TaskAssigneeNotMember,
-  unassignFormerMember,
   updateTask,
 } from "../task-store.js";
 import { voiceSessionRecord } from "../voice-session-record.js";
@@ -818,8 +817,8 @@ it.layer(getTestDB())("a task's assignee", (it) => {
       const other = yield* createTask(dean, { organizationId: elsewhere, assigneeId: charles });
       yield* updateTask(dean, taskId, { assigneeId: charles });
 
+      // The member's row is deleted as the plugin deletes it, whichever write takes them out.
       yield* leaveWorkspace(workspace, charles);
-      yield* unassignFormerMember(charles, workspace);
 
       assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
       assert.equal(yield* assigneeReadBy(dean, other.id), charles);

@@ -59,8 +59,9 @@ export const task = pgTable(
      * The member the task is assigned to, who is on it now, apart from the
      * account that started it (`user_id`, its creator); a member of the
      * task's workspace as it was written, and null for a task no one is on.
-     * Deleting that account, or that member leaving the workspace, lets the
-     * task go unassigned rather than taking it with them.
+     * Deleting that account, or that member leaving the workspace (the
+     * `task_assignee_leaves_with_member` trigger on `member`), lets the task
+     * go unassigned rather than taking it with them.
      */
     assigneeId: text("assignee_id").references(() => user.id, { onDelete: "set null" }),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */

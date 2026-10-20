@@ -549,6 +549,15 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
               (yield* reachedTask(userId, taskId)).ownerId === userId ? userId : undefined,
             )
           : undefined;
+      // An assignee is confirmed a member before anything is stopped, since a Stop is not taken
+      // back by a write refused after it; the store confirms it again under the row's lock.
+      const { assigneeId } = changes;
+      if (assigneeId !== undefined && assigneeId !== null) {
+        const member = yield* hostedStoreOrUnavailable(
+          isWorkspaceMember(assigneeId, yield* workspace),
+        );
+        if (!member) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      }
       const archiving = changes.archived === true;
       if (archiving) {
         const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, taskId));
