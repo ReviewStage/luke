@@ -294,7 +294,11 @@ test("a finger that scrolls from a link, which the browser takes over, opens no 
     createElement(Tooltip, {
       label: "Fix the refresh",
       card: createElement("p", null, "acme/relay#42"),
-      children: createElement("a", { href: "https://example.com/pull/42" }, "#42"),
+      children: createElement(
+        "a",
+        { href: "https://example.com/pull/42", "aria-describedby": undefined },
+        "#42",
+      ),
     }),
   );
   const link = page.querySelector("a") ?? assert.fail("the link");
