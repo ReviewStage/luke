@@ -2,9 +2,13 @@
 
 import assert from "node:assert/strict";
 import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskStanding } from "@luke/features/task-wire";
+import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { MemberDirectory } from "../member-directory.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { TaskKeyLine, TaskStandingChips } from "./task-standing.js";
 
@@ -91,8 +95,83 @@ test("the chips take no pick without a door to send it, and a task from a servic
   const archived = drawn(TASK, undefined);
   assert.equal(chip(archived, "Status").disabled, true);
   assert.equal(chip(archived, "Priority").disabled, true);
+  assert.equal(chip(archived, "Assignee").disabled, true);
 
   const { status: _status, priority: _priority, number: _number, ...older } = TASK;
   const before = drawn(older, () => undefined);
   assert.equal(before.textContent, "");
+});
+
+test("the assignee chip names who the task is assigned to, or no one, and No assignee picked is handed to the page as null", () => {
+  const sent: TaskStanding[] = [];
+  const unassigned = drawn(TASK, (standing) => sent.push(standing));
+  assert.ok(chip(unassigned, "Assignee").textContent?.includes("No assignee"));
+
+  const assigned = drawn(
+    { ...TASK, assignee: { userId: "user-ada", name: "Ada Lovelace" } },
+    (standing) => sent.push(standing),
+  );
+  assert.ok(chip(assigned, "Assignee").textContent?.includes("Ada Lovelace"));
+  const pickNoAssignee = (host: HTMLElement) => {
+    act(() => chip(host, "Assignee").click());
+    const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
+      each.textContent?.includes("No assignee"),
+    );
+    act(() => (row ?? assert.fail("no No assignee row")).click());
+  };
+  pickNoAssignee(unassigned);
+  pickNoAssignee(assigned);
+
+  assert.deepEqual(sent, [{ assigneeId: null }]);
+});
+
+test("the assignee's menu lists No assignee, then the reader, then every other member by name, and a member picked is handed to the page by id", async () => {
+  const member = (userId: string, name: string) => ({
+    userId,
+    name,
+    email: `${userId}@acme.test`,
+    role: WORKSPACE_ROLE.MEMBER,
+  });
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      Promise.resolve([
+        member("user-grace", "Grace Hopper"),
+        member("user-dean", "Dean"),
+        member("user-ada", "Ada Lovelace"),
+      ]),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve([]),
+  });
+  const sent: TaskStanding[] = [];
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  roots.push(root);
+  await act(async () => {
+    root.render(
+      createElement(MemberDirectory, {
+        workspace: { id: "workspace-acme", memberCount: 3 },
+        readerId: "user-dean",
+        children: createElement(TaskStandingChips, {
+          task: TASK,
+          onSet: (standing: TaskStanding) => sent.push(standing),
+        }),
+      }),
+    );
+  });
+
+  act(() => chip(host, "Assignee").click());
+  const rows = [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  assert.deepEqual(
+    rows.map((row) => row.textContent),
+    [
+      "No assignee",
+      "DDeanYou",
+      "AAda Lovelaceuser-ada@acme.test",
+      "GGrace Hopperuser-grace@acme.test",
+    ],
+  );
+  act(() => (rows[2] ?? assert.fail("no Ada row")).click());
+
+  assert.deepEqual(sent, [{ assigneeId: "user-ada" }]);
 });

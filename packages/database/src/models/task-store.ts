@@ -46,7 +46,12 @@ import {
   type NewTaskIssueLink,
   type TaskIssueLink,
 } from "./task-issue-store.js";
-import { reachableTask, readAccountNames, taskReachableBy } from "./workspace-store.js";
+import {
+  isWorkspaceMember,
+  reachableTask,
+  readAccountNames,
+  taskReachableBy,
+} from "./workspace-store.js";
 
 /**
  * task-store.ts -- the named tasks of an account's workspaces, and the one document each holds.
@@ -80,6 +85,9 @@ export type TaskStoreEffect<A> = Effect.Effect<A, TaskStoreFailure, DatabaseServ
 
 /** The task is archived, so it takes the write asked of it only once it is brought back; nothing was written. */
 export class TaskArchived extends Data.TaggedError("TaskArchived") {}
+
+/** The member a task was to be assigned to is no member of its workspace, or of the one it moves to; nothing was written. */
+export class TaskAssigneeNotMember extends Data.TaggedError("TaskAssigneeNotMember") {}
 
 /** A coding agent stands on the task that its delete or its archive was not told was stopped: one started, or handed a message, while the others were stopped. */
 export class TaskAgentUnstopped extends Data.TaggedError("TaskAgentUnstopped") {}
@@ -171,6 +179,8 @@ export interface NewTask {
   readonly status?: TaskStatus;
   /** How much the task matters as it starts; unweighed where none is named. */
   readonly priority?: TaskPriority;
+  /** The member the task is assigned to as it starts, who must be a member of its workspace; no one where none is named. */
+  readonly assigneeId?: string;
 }
 
 /**
@@ -191,6 +201,8 @@ export interface TaskChanges {
   readonly archived?: boolean;
   readonly status?: TaskStatus;
   readonly priority?: TaskPriority;
+  /** The member the task is assigned to, who must be a member of its workspace, or of the one it moves to; null for no one. */
+  readonly assigneeId?: string | null;
 }
 
 /** How a task's repository was reached, as a write takes it. */
@@ -211,6 +223,7 @@ const TASK_SUMMARY_COLUMNS = {
   number: task.number,
   status: task.status,
   priority: task.priority,
+  assigneeId: task.assigneeId,
   repository: task.repository,
   githubAccess: task.githubAccess,
   archivedAt: task.archivedAt,
@@ -235,6 +248,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   number: Schema.Number,
   status: taskStatusSchema,
   priority: taskPrioritySchema,
+  assigneeId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
@@ -422,7 +436,7 @@ function startedText(row: TaskRow): TaskStoreEffect<string> {
 function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask> {
   return Effect.gen(function* () {
     const pin = Option.getOrNull(yield* findPin({ userId, taskId: row.id }));
-    const summary = summaryOf(row, pin, yield* readAccountNames([row.userId]));
+    const summary = summaryOf(row, pin, yield* readAccountNames(namedAccountsOf([row])));
     const sectionWriters = yield* readSectionWriters(row.id, startedText(row));
     const labels = yield* agentLabelsOf(row, sectionWriters);
     const agentEdits = row.agentEdits.map((edit) => ({
@@ -458,8 +472,15 @@ function taskOf(userId: string, row: TaskRow): TaskStoreEffect<Task> {
   return Effect.map(storedTaskOf(userId, row), (stored) => stored.task);
 }
 
+/** The accounts a line of the list names: each row's owner, and its assignee where it has one. */
+function namedAccountsOf(rows: readonly TaskSummaryRow[]): readonly string[] {
+  return rows.flatMap((row) =>
+    row.assigneeId === null ? [row.userId] : [row.userId, row.assigneeId],
+  );
+}
+
 /**
- * The row as one line of the list, its owner named by `names`. Note that
+ * The row as one line of the list, its owner and its assignee named by `names`. Note that
  * `openedAt` is still answered, as the start, because a desktop through
  * v0.7.1 refuses a summary without it. It goes once a release whose decoder
  * treats it as optional has shipped and v0.7.1 is no longer supported. A pin,
@@ -475,6 +496,7 @@ function summaryOf(
 ): TaskSummary {
   const createdAt = row.createdAt.getTime();
   const owner = names.get(row.userId);
+  const assignee = row.assigneeId === null ? undefined : names.get(row.assigneeId);
   return {
     id: row.id,
     workspaceId: row.organizationId,
@@ -491,6 +513,9 @@ function summaryOf(
     status: row.status,
     priority: row.priority,
     number: row.number,
+    ...(row.assigneeId === null || assignee === undefined
+      ? undefined
+      : { assignee: { userId: row.assigneeId, name: assignee } }),
   };
 }
 
@@ -502,6 +527,7 @@ const TaskInsertSchema = Schema.Struct({
   number: Schema.Number,
   status: taskStatusSchema,
   priority: taskPrioritySchema,
+  assigneeId: Schema.NullOr(Schema.String),
   repository: Schema.NullOr(Schema.String),
   githubAccess: GitHubAccessSchema,
   document: Schema.String,
@@ -519,6 +545,7 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     number: write.number,
     status: write.status,
     priority: write.priority,
+    assigneeId: write.assigneeId,
     repository: write.repository,
     githubAccess: write.githubAccess,
     document: write.document,
@@ -690,12 +717,13 @@ const TaskColumnChangesSchema = Schema.Struct({
   number: Schema.optionalKey(Schema.Number),
   status: Schema.optionalKey(taskStatusSchema),
   priority: Schema.optionalKey(taskPrioritySchema),
+  assigneeId: Schema.optionalKey(Schema.NullOr(Schema.String)),
   archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
 });
 
 type TaskColumnChanges = typeof TaskColumnChangesSchema.Type;
 
-/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, and the archive the change names, in one statement. */
+/** The row changed: whichever of the name, the workspace and its number there, the repository, the status, the priority, the assignee, and the archive the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -927,15 +955,36 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       brief: brief.length > 0 ? brief : null,
       status: started.status ?? TASK_STATUS.TODO,
       priority: started.priority ?? TASK_PRIORITY.NONE,
+      assigneeId: started.assigneeId ?? null,
       number: yield* nextTaskNumber(started.organizationId),
       now,
     };
   });
 
-export function createTask(userId: string, started: NewTask): TaskStoreEffect<Task> {
+/** Refuses an assignee who is no member of the workspace with `TaskAssigneeNotMember`; no one assigned passes. */
+function assigneeAdmitted(
+  assigneeId: string | null | undefined,
+  organizationId: string,
+): Effect.Effect<void, TaskStoreFailure | TaskAssigneeNotMember, DatabaseServices> {
+  if (assigneeId === undefined || assigneeId === null) return Effect.void;
+  return Effect.flatMap(isWorkspaceMember(assigneeId, organizationId), (member) =>
+    member ? Effect.void : Effect.fail(new TaskAssigneeNotMember()),
+  );
+}
+
+/**
+ * Starts a task as `insertOf` writes it, with the issues it was handed
+ * linked in the same transaction; an assignee who is no member of its
+ * workspace refuses it with `TaskAssigneeNotMember`, nothing written.
+ */
+export function createTask(
+  userId: string,
+  started: NewTask,
+): Effect.Effect<Task, TaskStoreFailure | TaskAssigneeNotMember, DatabaseServices> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        yield* assigneeAdmitted(started.assigneeId, started.organizationId);
         const row = yield* insertTask(yield* insertOf(userId, started)).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
@@ -965,8 +1014,9 @@ export function createTask(userId: string, started: NewTask): TaskStoreEffect<Ta
 export function createTaskOnce(
   userId: string,
   started: Omit<NewTask, "issueLinks"> & { readonly id: string; readonly text: string },
-): TaskStoreEffect<Option.Option<Task>> {
+): Effect.Effect<Option.Option<Task>, TaskStoreFailure | TaskAssigneeNotMember, DatabaseServices> {
   return Effect.gen(function* () {
+    yield* assigneeAdmitted(started.assigneeId, started.organizationId);
     const values = yield* insertOf(userId, { ...started, planning: false });
     const row = yield* insertTaskOnce({ ...values, document: started.text });
     return yield* Effect.transposeOption(Option.map(row, (made) => taskOf(userId, made)));
@@ -986,7 +1036,7 @@ export function listTasks(
 ): TaskStoreEffect<readonly TaskSummary[]> {
   return Effect.gen(function* () {
     const rows = yield* findTasks({ userId, includeArchived: options.includeArchived === true });
-    const names = yield* readAccountNames(rows.map((row) => row.userId));
+    const names = yield* readAccountNames(namedAccountsOf(rows));
     return rows.map((row) =>
       summaryOf(
         row,
@@ -1135,6 +1185,7 @@ function columnChangesOf(
         }),
     ...(changes.status === undefined ? undefined : { status: changes.status }),
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
+    ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
     ...(changes.archived === undefined
       ? undefined
       : { archivedAt: stampOf(changes.archived, standing.archivedAt, now) }),
@@ -1338,7 +1389,7 @@ export function updateTask<E = never, R = never, RA = never>(
   archiveGuard?: TaskArchiveGuard<RA>,
 ): Effect.Effect<
   Option.Option<Task>,
-  TaskStoreFailure | TaskArchived | TaskAgentUnstopped | E,
+  TaskStoreFailure | TaskArchived | TaskAgentUnstopped | TaskAssigneeNotMember | E,
   DatabaseServices | R | RA
 > {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -1352,7 +1403,8 @@ export function updateTask<E = never, R = never, RA = never>(
           changes.repository !== undefined ||
           changes.organizationId !== undefined ||
           changes.status !== undefined ||
-          changes.priority !== undefined;
+          changes.priority !== undefined ||
+          changes.assigneeId !== undefined;
         if (stillArchived && reworded) return yield* new TaskArchived();
         if (changes.organizationId !== undefined && moveGuard !== undefined) {
           yield* moveGuard(
@@ -1376,7 +1428,20 @@ export function updateTask<E = never, R = never, RA = never>(
           changes.organizationId !== locked.value.organizationId;
         // A task moved to another workspace takes the next number there; its old one is never handed out again.
         const movedNumber = moved ? yield* nextTaskNumber(changes.organizationId) : undefined;
-        const columns = columnChangesOf(changes, locked.value, now, movedNumber);
+        const landsIn = moved ? changes.organizationId : locked.value.organizationId;
+        yield* assigneeAdmitted(changes.assigneeId, landsIn);
+        // A task moved where its assignee is no member goes unassigned rather than assigned to someone who cannot read it.
+        const unassigned =
+          moved &&
+          changes.assigneeId === undefined &&
+          locked.value.assigneeId !== null &&
+          !(yield* isWorkspaceMember(locked.value.assigneeId, landsIn));
+        const columns = columnChangesOf(
+          unassigned ? { ...changes, assigneeId: null } : changes,
+          locked.value,
+          now,
+          movedNumber,
+        );
         // A change that names only a pin writes nothing of the row, and an update with nothing to set is no statement.
         const row =
           Object.keys(columns).length === 0
@@ -1422,6 +1487,30 @@ export function nameUntitledTask(
   const named = name.trim();
   if (named.length === 0) return Effect.succeed(false);
   return Effect.map(nameUntitled({ userId, taskId, name: named }), Option.isSome);
+}
+
+const assignUnassigned = SqlSchema.findOneOption({
+  Request: TaskKeySchema,
+  Result: TaskIdRowSchema,
+  execute: ({ userId, taskId }) =>
+    Database.use((db) =>
+      db
+        .update(task)
+        .set({ assigneeId: userId })
+        .where(and(reachableTask(userId, taskId), isNull(task.assigneeId)))
+        .returning({ id: task.id }),
+    ),
+});
+
+/**
+ * Assigns a task no one is assigned to the account, as a coding agent it
+ * started on the task by hand does, and answers whether it did. A task
+ * already assigned, to the account or anyone else, stands as it was, and so
+ * does one the account does not reach, which a member alone does; the check
+ * and the write are one statement, and like any change it is not a save.
+ */
+export function assignUnassignedTask(userId: string, taskId: string): TaskStoreEffect<boolean> {
+  return Effect.map(assignUnassigned({ userId, taskId }), Option.isSome);
 }
 
 /** The statuses work on a task has not yet begun in, which an agent started on it moves it out of. */

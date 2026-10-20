@@ -405,6 +405,26 @@ test("every agent is told that what happens on its pull request after its turn r
   }
 });
 
+test("every agent is told to reply to a message on an inbox thread on that thread, never in its own message alone", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const onTask of [true, false]) {
+      const instructions = coderInstructions(
+        "Acme/Relay",
+        brief,
+        true,
+        onTask ? TASK_ADDRESS : null,
+      );
+      assert.ok(
+        instructions.includes(
+          `reply on that thread with \`${INBOX_TOOLS.POST.name}\` under its key`,
+        ),
+        brief,
+      );
+      assert.ok(instructions.includes("never answer them in your message alone"), brief);
+    }
+  }
+});
+
 test("every agent is told to look at a UI it built in the image's Chromium and show the developer what it saw", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     for (const onTask of [true, false]) {

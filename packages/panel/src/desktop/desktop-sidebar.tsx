@@ -79,7 +79,6 @@ import {
   ListTodoIcon,
   MessagesSquareIcon,
   ShieldUserIcon,
-  SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
 import { memo, useRef } from "react";
@@ -311,6 +310,7 @@ function TaskRows({
           <SidebarAgent
             key={row.agent.id}
             agent={row.agent}
+            agents={context.tasks.agents}
             current={context.currentRow(row)}
             unread={context.unseenAgent(row.agent.id)}
             now={context.now}
@@ -504,6 +504,7 @@ function PinnedRows({
             <RowPlaced key={agent.id} place={placeOf(at)}>
               <SidebarAgent
                 agent={agent}
+                agents={context.tasks.agents}
                 current={context.currentRow(agentRow(agent))}
                 unread={context.unseenAgent(agent.id)}
                 now={context.now}
@@ -1131,33 +1132,27 @@ function SidebarFactoryRow({
 }
 
 /**
- * The Board's row, under the Inbox's: the board's columns, and its name. A
- * press opens the listed workspace's tasks by status (`tasks-board.tsx`),
- * and the row is the place shown while it stands. It is always offered.
- * While the account has the inbox-first sidebar on, the same place is the
- * Tasks page (`tasks-page.tsx`), which holds the Board as one of its views,
- * and the row is named and drawn for it.
+ * The Tasks page's row, under the Inbox's. A press opens the listed
+ * workspace's tasks as a List or a Board (`tasks-page.tsx`), and the row is
+ * the place shown while it stands. It is always offered.
  */
-function SidebarBoardRow({
+function SidebarTasksRow({
   current,
   disabled,
-  tasksPage,
   onOpen,
 }: {
   current: boolean;
   disabled: boolean;
-  /** Whether the place is the Tasks page rather than the Board alone. */
-  tasksPage: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   return (
     <NavItem
-      icon={tasksPage ? <ListTodoIcon /> : <SquareKanbanIcon />}
+      icon={<ListTodoIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
       disabled={disabled}
       onClick={onOpen}
     >
-      {tasksPage ? "Tasks" : "Board"}
+      Tasks
     </NavItem>
   );
 }
@@ -1723,12 +1718,7 @@ function SidebarColumn({
             onOpen={chosen(openInbox)}
           />
         )}
-        <SidebarBoardRow
-          current={inBoard}
-          disabled={!tasks.signedIn}
-          tasksPage={inboxFirst}
-          onOpen={chosen(openBoard)}
-        />
+        <SidebarTasksRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
         {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
         {chatOn && tasks.signedIn && tasks.chatView.available ? (
           <SidebarChatRow

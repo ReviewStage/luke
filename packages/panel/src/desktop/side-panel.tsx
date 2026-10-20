@@ -1,5 +1,6 @@
 import type { Board } from "@luke/features/board-wire";
 import type { BrowserPage } from "@luke/features/browser-acts";
+import { TRANSCRIPT_KIND } from "@luke/features/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -1366,7 +1367,6 @@ function TabContent({
   files,
   pages,
   transcript,
-  work,
   workRows,
   agents,
   standings,
@@ -1403,7 +1403,6 @@ function TabContent({
   /** The plan's pages, which a page's tab draws its newest version of. */
   pages: readonly PageLine[];
   transcript: SidePanelTranscript;
-  work: SidePanelWork;
   /** The task's work as rows, which a subagent's tab reads its session from. */
   workRows: readonly WorkTurnRow[];
   agents: CodingAgentsControl;
@@ -1551,8 +1550,6 @@ function TabContent({
     );
   }
   if (isSubagentTab(tab)) {
-    // A brain's worker's tab is an agent's worker's own, reading its session under the task.
-    const tasksWorkers = { ...agents, readTranscript: work.readWorker };
     if (tab.delegation !== undefined) {
       const parent: ToolTarget = { kind: TOOL_TARGET.AGENT, agent: tab.delegation.agent };
       const { subagent } = tab;
@@ -1592,7 +1589,9 @@ function TabContent({
         callId={tab.subagent}
         task={worker.task}
         status={workerStatus(worker)}
-        control={tasksWorkers}
+        control={agents}
+        // A brain's worker's tab is an agent's worker's own, following its session under the task.
+        transcriptKey={{ kind: TRANSCRIPT_KIND.TASK_WORKER, taskId, callId: tab.subagent }}
         shown={shown}
         // Where a brain's worker stands is the plan's pages' to say, beside its call.
         onStatus={() => undefined}
@@ -2137,7 +2136,6 @@ export function SidePanel({
             files={files}
             pages={taskPages}
             transcript={transcript}
-            work={work}
             workRows={workRows}
             agents={agents}
             standings={standings}

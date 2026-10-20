@@ -837,6 +837,63 @@ it.layer(getTestDB())("the plan routes", (it) => {
       }),
   );
 
+  it.effect(
+    "a plan starts assigned to the member its start names, a PATCH assigns it to another member or to no one, and an assignee who is no member is refused as an invalid request",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const shared = yield* openWorkspace(owner);
+        yield* joinWorkspace(shared, other);
+        const stranger = `user-${randomUUID()}`;
+        const db = yield* Database;
+        yield* db
+          .insert(user)
+          .values({ id: stranger, name: "Stranger", email: `${stranger}@luke.test` });
+        const start = (body: WireBoundaryInput) =>
+          ask(request(TASKS, owner, { method: "POST", body }));
+
+        const assigned = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* start({ ...RELAY, workspaceId: shared, assigneeId: other }),
+        ).plan;
+        assert.deepEqual(assigned.assignee, { userId: other, name: "Test User" });
+        assert.deepEqual(
+          yield* start({ ...RELAY, workspaceId: shared, assigneeId: stranger }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+
+        const patch = (body: WireBoundaryInput) =>
+          ask(request(ONE_TASK(assigned.id), other, { method: "PATCH", body }));
+        const reassigned = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* patch({ assigneeId: owner }),
+        ).plan;
+        assert.equal(reassigned.assignee?.userId, owner);
+        assert.deepEqual(
+          yield* patch({ assigneeId: stranger }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const unassigned = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* patch({ assigneeId: null }),
+        ).plan;
+        assert.equal(unassigned.assignee, undefined);
+        const listed = readAnswer(
+          taskListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(TASKS, owner)),
+        ).plans;
+        assert.deepEqual(
+          listed.map((task) => task.assignee),
+          [undefined],
+          "nothing was started for the stranger",
+        );
+      }),
+  );
+
   it.effect("another account's plan answers as none on every route", () =>
     Effect.gen(function* () {
       const { owner, other, ask } = yield* openAccounts();

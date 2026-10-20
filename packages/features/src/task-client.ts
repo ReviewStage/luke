@@ -788,7 +788,7 @@ export class HostedTaskClient {
   }
 
   /**
-   * Sets where one task stands, how much it matters, or both, answering it as
+   * Sets where one task stands, how much it matters, who it is assigned to, or any of them, answering it as
    * changed with its document, or nothing where the service did not change
    * it; a change that names neither never travels.
    */

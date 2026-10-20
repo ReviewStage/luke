@@ -816,7 +816,7 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
 
   float(SIDEBAR_OVERLAY.CLOSED);
 
-  assert.equal(opened, 2);
+  assert.equal(opened, 3);
   assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });
 
@@ -852,7 +852,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   assert.ok(taskRows(sidebar).some((row) => row.name === "Sweep flaky tests"));
 });
 
-test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and an archived one offers no pin", async () => {
+test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and Archive agent last, and an archived one offers no pin but Unarchive", async () => {
   const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [
     TRIAGE,
@@ -860,14 +860,22 @@ test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and a
     shelved,
   ]);
 
-  assert.deepEqual(agentMenu(sidebar, "Triage overnight issues"), ["Copy link", "Pin"]);
+  assert.deepEqual(agentMenu(sidebar, "Triage overnight issues"), [
+    "Copy link",
+    "Pin",
+    "Archive agent",
+  ]);
   await act(async () => menuItem("Pin").click());
-  assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), ["Copy link", "Unpin"]);
+  assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
+    "Copy link",
+    "Unpin",
+    "Archive agent",
+  ]);
   await act(async () => menuItem("Unpin").click());
   assert.deepEqual(pinsAsked, ["a-1:true", "a-2:false"]);
 
   toggleArchived(sidebar);
-  assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), ["Copy link"]);
+  assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), ["Copy link", "Unarchive"]);
 });
 
 /** A task of the workspace's standing in `status`. */

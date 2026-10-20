@@ -116,6 +116,8 @@ function rejectionWords(provider: ProviderKeyProvider, rejection: ProviderKeyRej
       return `Couldn't reach ${name} to check this key. Try again.`;
     case PROVIDER_KEY_REJECTION.TOO_MANY_TRIES:
       return "Too many keys tried in the last hour. Try again later.";
+    case PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN:
+      return `${name} couldn't confirm this sign-in. Sign in again.`;
   }
 }
 

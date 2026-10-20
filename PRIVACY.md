@@ -1022,6 +1022,30 @@ counted event, and no voice call, and the screen recording still leaves them
 out. Turn the switch off, in Settings, and an agent can no longer reach a
 Browser tab; the tab then reaches only its panel, as before.
 
+A Browser tab can also be a cloud browser, which an agent drives and you
+watch. It is a Chromium that runs in the agent's own Vercel Sandbox, never on
+your Mac, so it reaches that sandbox's own `localhost` and holds none of your
+Mac's cookies or signed-in sites. What the agent does with it reaches the model:
+each page's address and title, a screenshot, and a text snapshot of the page. A
+screenshot goes to the model alone and is left out of the agent's stored
+transcript, as a picture Luke looks at is; the rest is kept in the transcript,
+under its terms. Our service keeps the task's list of cloud tabs, each one's
+address and title, with the agent whose browser holds it, until the task's
+conversation is removed. The page, its live-view frames, and a tab's
+screenshots and text are not kept by us: the frames pass through our service
+to the panel of each member who opens the task, and every such member can
+watch the tab and take it over by clicking and typing in it, and the agent's
+actions on it wait while you do. Nothing of it reaches a trace, a counted event,
+a fixture, or the voice window, and the screen recording masks the live view.
+The browser's profile, with the cookies and logins you type into it, lives on
+the sandbox's disk, so it stays in that sandbox while it runs and in the
+snapshot Vercel keeps when the sandbox stops, until thirty days after the
+snapshot's last use, as the checkout does under "How Luke reads your
+repository"; the pages open at a stop are not kept, and the browser reopens
+each tab at its last address on resume. No other agent reaches that profile;
+an agent's workers share its sandbox, so they share it. Deleting the task, or
+your account, deletes the sandbox and its snapshot as described there.
+
 Recording starts just after the panel first draws when Luke opens, before
 you sign in, so it covers the signed-out panel and the sign-in. A recording
 that begins before you sign in is attached to your account if you sign in
