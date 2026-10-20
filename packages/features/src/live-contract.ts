@@ -341,6 +341,12 @@ export const sessionCreateFrameSchema = Schema.Struct({
   voice: Schema.Literals(LIVE_VOICE_LIST),
   input: Schema.Array(liveInitialItemSchema).check(Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES)),
   planId: wireUuidSchema,
+  /**
+   * The agent of the task the call speaks into: its asks run in that agent's
+   * conversation and its transcript is that agent's. None is a call about the
+   * task alone, which lands in the task's own conversation.
+   */
+  agentId: Schema.optionalKey(wireUuidSchema),
   timeZone: callTimeZone,
 });
 

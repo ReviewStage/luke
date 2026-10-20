@@ -41,6 +41,7 @@ import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { delegated, heard, sessionStarted } from "../testing/live-events.js";
 import { settled } from "../testing/settle.js";
+import { CALL_BACKEND } from "./call-backend.js";
 import { hostedLiveExchange } from "./live-exchange.js";
 
 /**
@@ -240,6 +241,7 @@ async function stand(
         accountId: target.userId,
         liveSessionId,
         conversation: { userId: target.userId, conversationId: target.conversationId },
+        backend: CALL_BACKEND.TASK,
         writer,
         eve,
         createId: () => randomUUID(),

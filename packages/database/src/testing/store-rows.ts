@@ -326,6 +326,7 @@ const VoiceSessionRowSchema = Schema.Struct({
   userId: Schema.String,
   deviceId: Schema.NullOr(Schema.String),
   liveSessionId: Schema.String,
+  agentId: Schema.NullOr(Schema.String),
   delegationMode: Schema.String,
   startedAt: InstantColumnSchema,
   closedAt: Schema.NullOr(InstantColumnSchema),

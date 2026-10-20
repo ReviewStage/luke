@@ -300,6 +300,7 @@ export function fakeSessionRecord(): FakeSessionRecord {
           ? { voiceSessionId, taskId: owner.taskId }
           : undefined;
       }),
+    heldAgent: () => Effect.succeed(undefined),
     earlierCalls: () => Effect.succeed([]),
     noteUsage: (input) =>
       Effect.sync(() => {

@@ -5,14 +5,17 @@ import { hostTurnId } from "@luke/database/models/ids";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { insertConversation, openHostedStoreTestDatabase } from "@luke/database/testing";
 import { TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP, type TurnEvent } from "@luke/features";
+import type { ToolSet } from "ai";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { BRAIN_RUN_EVENT, SLOW_STEP_KIND } from "../core.js";
 import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import { stampedEveEvent } from "../testing/eve-events.js";
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import { memoryRelayState, type RelayStanding, StreamRelay } from "./brain-host/relay.js";
+import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 import { projectTurnEvents } from "./turn-events.js";
 
@@ -50,8 +53,11 @@ const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =
 
 const EVE_TURN = "turn_0";
 
-/** One spoken ask's turn as eve emits it: a repository command, then a two-sentence answer. */
-function spokenTurn(turnId: string): readonly MessageStreamEvent[] {
+/** One spoken ask's turn as eve emits it: a shell command (the brain's repository read, unless another tool is named), then a two-sentence answer. */
+function spokenTurn(
+  turnId: string,
+  shell: string = RUN_IN_REPOSITORY_TOOL.name,
+): readonly MessageStreamEvent[] {
   const sequence = 0;
   return [
     stamped({ type: "turn.started", data: { turnId, sequence } }),
@@ -67,7 +73,7 @@ function spokenTurn(turnId: string): readonly MessageStreamEvent[] {
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: RUN_IN_REPOSITORY_TOOL.name,
+            toolName: shell,
             input: { command: "ls" },
           },
         ],
@@ -83,7 +89,7 @@ function spokenTurn(turnId: string): readonly MessageStreamEvent[] {
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: RUN_IN_REPOSITORY_TOOL.name,
+          toolName: shell,
           output: {
             status: REPOSITORY_SHELL_STATUS.RAN,
             exitCode: 0,
@@ -126,8 +132,12 @@ function standingFor(target: ConversationTarget): RelayStanding {
   };
 }
 
-async function play(events: readonly MessageStreamEvent[], standing: RelayStanding) {
-  for (const event of events) await database.run(relay.handle(event, standing));
+async function play(
+  events: readonly MessageStreamEvent[],
+  standing: RelayStanding,
+  over: StreamRelay = relay,
+) {
+  for (const event of events) await database.run(over.handle(event, standing));
 }
 
 /** The eve events up to and including the repository command's request: the turn is running with one slow call on its journal. */
@@ -135,12 +145,16 @@ function untilRequested(events: readonly MessageStreamEvent[]): number {
   return events.findIndex((event) => event.type === "actions.requested") + 1;
 }
 
-/** The turn's events as its record and journal now stand, read the way the voice session reads them. */
-async function projected(userId: string, turnId: string): Promise<readonly TurnEvent[]> {
+/** The turn's events as its record and journal now stand, read the way the voice session reads them, under the tools the backend that ran it may call. */
+async function projected(
+  userId: string,
+  turnId: string,
+  tools: ToolSet = HOSTED_TOOL_SET,
+): Promise<readonly TurnEvent[]> {
   const [turn] = await database.run(database.store.turns.named(userId, [turnId]));
   assert.ok(turn);
   const journal = await database.run(
-    database.store.messages.byClientId(userId, turn.conversationId, HOSTED_TOOL_SET, turn.id),
+    database.store.messages.byClientId(userId, turn.conversationId, tools, turn.id),
   );
   assert.ok(journal.ok);
   return projectTurnEvents(turn, journal.value[0]?.message);
@@ -187,6 +201,33 @@ test("mid-turn the slow step is told at once, then the settled mark, the sentenc
     "Another is waiting on you.",
   );
   assert.deepEqual(end, { turnId, seq: 5, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.COMPLETED });
+});
+
+test("an agent's turn a call follows is projected under the agent's tools, its shell command the slow step as the brain's repository read is", async () => {
+  const agentRelay = new StreamRelay({
+    writer: await database.run(storeWriter({ tools: CODER_TOOL_SET })),
+    asks: { binding: askRecord(), stopTurn: () => Effect.void },
+    now: () => NOW,
+    report: () => undefined,
+  });
+  const target = await conversation();
+  const standing = standingFor(target);
+  const events = spokenTurn(EVE_TURN, AGENT_TOOL.BASH);
+  const turnId = hostTurnId(standing.sessionId, EVE_TURN);
+  await play(events.slice(0, untilRequested(events)), standing, agentRelay);
+
+  assert.deepEqual(await projected(target.userId, turnId, CODER_TOOL_SET), [
+    { turnId, seq: 1, kind: TURN_EVENT_KIND.SLOW_STEP, step: TURN_SLOW_STEP.REPOSITORY_READ },
+  ]);
+
+  await play(events.slice(untilRequested(events)), standing, agentRelay);
+  assert.deepEqual(kinds(await projected(target.userId, turnId, CODER_TOOL_SET)), [
+    TURN_EVENT_KIND.SLOW_STEP,
+    TURN_EVENT_KIND.ACTIONS_SETTLED,
+    TURN_EVENT_KIND.REPLY_SENTENCE,
+    TURN_EVENT_KIND.REPLY_SENTENCE,
+    TURN_EVENT_KIND.ENDED,
+  ]);
 });
 
 test("a plan save Luke started holds back no sentence of his: the turn goes on being said while the save runs as a task", async () => {

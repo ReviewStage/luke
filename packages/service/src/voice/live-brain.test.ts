@@ -68,6 +68,7 @@ import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../tasks/queue-ques
 import { stampedEveEvent } from "../testing/eve-events.js";
 import { FIRST_EVE_TURN, spokenTurn } from "../testing/eve-turns.js";
 import { type RecordingSentry, recordingSentry, sentOfType } from "../testing/sentry-transport.js";
+import { CALL_BACKEND } from "./call-backend.js";
 import {
   type HostedLiveBrain,
   type HostedLiveBrainOptions,
@@ -281,6 +282,7 @@ async function stand(
       hostedLiveBrain({
         accountId,
         conversation: { userId: target.userId, conversationId },
+        backend: CALL_BACKEND.TASK,
         asks: { asks: record, eve: over ?? eve },
         store,
         writer,
