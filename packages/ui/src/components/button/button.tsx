@@ -10,7 +10,10 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * for one that destroys, `danger-outline` for a destructive act that is
  * not the place's own, and `ink` for one that ends what the place holds, a
  * solid fill in the text's own colour apart from the quiet ones beside it,
- * as a call's End call is. Two tinted looks carry news on a wash of their
+ * as a call's End call is. `subtle` is a quiet one in the muted ink, for a
+ * press that stands among quiet words rather than controls, and must not
+ * outweigh them (a pull request header's “+ Label”), lighting as a
+ * quiet one does. Two tinted looks carry news on a wash of their
  * colour rather than a fill: `working-tint` for an act something under way
  * offers (Restart, once a release is downloaded), and `danger-tint` for the
  * one a failure offers (Download, once installing it failed). Each is one control's height, corner, and glyph
@@ -83,6 +86,7 @@ import { SpinnerRing } from "../spinner/spinner.js";
 /** What a press does, which is what a button looks like. */
 export const BUTTON_VARIANT = {
   QUIET: "quiet",
+  SUBTLE: "subtle",
   OUTLINE: "outline",
   PRIMARY: "primary",
   DANGER: "danger",

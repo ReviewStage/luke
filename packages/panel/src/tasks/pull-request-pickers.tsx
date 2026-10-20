@@ -9,15 +9,22 @@ import type {
   PullRequestReviewTeam,
 } from "@luke/features/coding-agent-wire";
 import { PULL_REQUEST_ACTION, REVIEWER_KIND } from "@luke/features/pull-request-write-wire";
-import { BUTTON_SIZE, cssCustomProperties, dropBelowStart, IconButton, useMenu } from "@luke/ui";
-import { TagIcon, UserPlusIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react";
+import {
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
+  cssCustomProperties,
+  dropBelowStart,
+  useMenu,
+} from "@luke/ui";
+import { PlusIcon, UserRoundIcon, UsersRoundIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { Tooltip } from "../tooltip.js";
 import type { PullRequestWrites } from "./pull-request-writes.js";
 
 /**
- * pull-request-pickers.tsx -- the header's reviewer and label pickers, as stage-cli's are: two presses side by side after the reviewers, each a menu of what may be asked for or put on, what stands now checked.
+ * pull-request-pickers.tsx -- the header's reviewer and label pickers, as stage-cli's are: two presses side by side after the reviewers, “+ Reviewer” and “+ Label”, each a menu of what may be asked for or put on, what stands now checked.
  *
  * What the pickers offer is the agent's repository's (`review-options`):
  * its collaborators and the teams that reach it, who may be asked for a
@@ -39,6 +46,8 @@ import type { PullRequestWrites } from "./pull-request-writes.js";
 const PICKER_WORDS = {
   REVIEWERS: "Edit reviewers",
   LABELS: "Edit labels",
+  REVIEWER: "Reviewer",
+  LABEL: "Label",
   REVIEWERS_MENU: "Request a review",
   LABELS_MENU: "Labels",
   READING: "Reading the repository…",
@@ -117,15 +126,20 @@ function LabelDot({ color }: { color: string }): React.JSX.Element {
   );
 }
 
-/** A picker's press: its glyph, named for a reader who cannot see it, opening its menu under it. */
+/**
+ * A picker's press, the same for both so they read as a pair: a plus and
+ * the word for what it adds, quiet beside the faces and the labels, named
+ * in full for a reader, opening its menu under it.
+ */
 function PickerButton({
   label,
-  icon,
+  word,
   disabled,
   trigger,
 }: {
   label: string;
-  icon: React.JSX.Element;
+  /** What it adds, in a word: “Reviewer”, “Label”. */
+  word: string;
   disabled: boolean;
   trigger: {
     readonly "aria-haspopup": "menu";
@@ -135,13 +149,16 @@ function PickerButton({
 }): React.JSX.Element {
   return (
     <Tooltip label={label}>
-      <IconButton
-        icon={icon}
+      <Button
+        icon={<PlusIcon aria-hidden="true" />}
         label={label}
+        variant={BUTTON_VARIANT.SUBTLE}
         size={BUTTON_SIZE.COMPACT}
         disabled={disabled}
         {...trigger}
-      />
+      >
+        {word}
+      </Button>
     </Tooltip>
   );
 }
@@ -177,7 +194,7 @@ export function ReviewerPicker({
     <>
       <PickerButton
         label={PICKER_WORDS.REVIEWERS}
-        icon={<UserPlusIcon />}
+        word={PICKER_WORDS.REVIEWER}
         disabled={writes.pending !== undefined || refreshing}
         trigger={{
           ...menu.trigger(dropBelowStart),
@@ -275,7 +292,7 @@ export function LabelPicker({
     <>
       <PickerButton
         label={PICKER_WORDS.LABELS}
-        icon={<TagIcon />}
+        word={PICKER_WORDS.LABEL}
         disabled={writes.pending !== undefined || refreshing}
         trigger={{
           ...menu.trigger(dropBelowStart),

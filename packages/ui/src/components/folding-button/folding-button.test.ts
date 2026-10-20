@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { act, cloneElement, createElement } from "react";
+import { act, cloneElement, createElement, createRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { PlusIcon } from "../../face/glyphs.js";
@@ -16,7 +16,8 @@ import {
  * folding-button.test.ts -- a folding button with its words drawn is named
  * by them, takes its press, and raises nothing in its hint; busy, it is
  * named by what it is doing and refuses its press; what its hint hands it
- * lands on the button a reader focuses. Its words folded and
+ * lands on the button a reader focuses; one that opens a popup says so, is
+ * named in full, and hands its owner the button. Its words folded and
  * raised in the pill are the automation editor's toolbar test, through the
  * desktop's own hint.
  */
@@ -138,4 +139,36 @@ test("a round one in a tinted look is named by its words, takes its press, and w
   assert.equal(button.getAttribute("aria-keyshortcuts"), "Meta+[");
   act(() => button.click());
   assert.equal(presses, 1);
+});
+
+test("one that opens a popup says so and whether it stands open, is named in full where it says more than its words, and hands its owner the button", () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  const held = createRef<HTMLButtonElement>();
+  act(() =>
+    root?.render(
+      createElement(FoldingButton, {
+        label: "Review",
+        name: "Review, 2 pending comments",
+        icon: createElement(PlusIcon),
+        "aria-haspopup": "dialog",
+        "aria-expanded": true,
+        "aria-controls": "review-panel",
+        ref: held,
+        hint: Hint,
+      }),
+    ),
+  );
+  const button = container.querySelector("button") ?? assert.fail("no button");
+  assert.deepEqual(
+    [
+      button.getAttribute("aria-label"),
+      button.getAttribute("aria-haspopup"),
+      button.getAttribute("aria-expanded"),
+      button.getAttribute("aria-controls"),
+      button.textContent,
+      held.current === button,
+    ],
+    ["Review, 2 pending comments", "dialog", "true", "review-panel", "Review", true],
+  );
 });
