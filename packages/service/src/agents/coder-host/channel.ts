@@ -156,12 +156,15 @@ export const CODER_DEPLOYMENT_STREAMS = true;
  * hands a message's `context`: that it was said on a call and its answer is
  * heard. A spoken turn of its own opens with the call's whole words
  * (`turn-context.ts`'s `spokenTurnWords`), but a line that joins a typed turn
- * under way keeps that turn's tools and words, so this is what it has. Note
+ * under way keeps that turn's tools and words, so this is what it has, and
+ * it says that the first words after the line are its whole answer, since
+ * the voice follows such a line to the first step that says something
+ * (`turn-events.ts`). Note
  * that it rides on every spoken line, because whether eve steers a line into
  * the turn under way or opens a turn on it is decided after the door, at
  * eve's next step boundary.
  */
-const SPOKEN_LINE_NOTE = `This line was said on a voice call, and Luke says your reply to it aloud. Answer it in a sentence or two of plain speech, with no Markdown, and never wait to answer it: never call \`${CODER_TOOL.SLEEP}\` or \`task_wait\` for it. Then carry on with any work you were doing.`;
+const SPOKEN_LINE_NOTE = `This line was said on a voice call, and Luke says your reply to it aloud. Answer it in a sentence or two of plain speech, with no Markdown, and never wait to answer it: never call \`${CODER_TOOL.SLEEP}\` or \`task_wait\` for it. Where it reaches you in the middle of other work, the first words you write after it are taken as your whole answer, so look up what the answer needs first, saying nothing meanwhile, and then answer in one go. Then carry on with any work you were doing.`;
 
 /** The session auth a message runs under, and a spoken line's note ahead of it (`SPOKEN_LINE_NOTE`). */
 function messageResult(context: EveMessageContext): EveMessageResult {

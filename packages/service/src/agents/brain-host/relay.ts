@@ -1080,8 +1080,10 @@ export class StreamRelay {
    * `receivedLine`): a spoken turn's is the transcript's row. Any other is
    * first taken as the developer's typed lines awaiting a turn
    * (`takeAwaitingLine`), then bound as an ask that joined the turn under
-   * way; a spoken ask's line is the transcript's row, and every other line,
-   * a typed ask's among them, is written here as the turn's user row. Note
+   * way; a spoken ask's line is the transcript's row, beside any typed line
+   * eve coalesced with it, which is taken as its awaiting row, and every
+   * other line, a typed ask's among them, is written here as the turn's user
+   * row. Note
    * the order: the awaiting row is taken under the conversation's lock,
    * which waits out an ask's dispatch still writing its delivery under that
    * lock (`asks.ts`'s `dispatchOnce`), so the binding that follows reads a
@@ -1126,6 +1128,13 @@ export class StreamRelay {
       const joined = yield* this.#joined(eveTurnId, deliveryIds, standing, !typed);
       if (typed) return;
       if (joined.some((ask) => ask.origin === ASK_ORIGIN.SPOKEN)) {
+        // A typed line eve coalesced beside the ask into this one message is still the
+        // developer's awaiting row, taken where its words stand among those received.
+        yield* this.#seams.writer.takeAwaitingLine(standing.target, {
+          text: received.text,
+          turnId,
+          beside: true,
+        });
         return yield* this.#attachedLine(eveTurnId, standing);
       }
       // A message written here keeps its words as its first part and the files it carried after them.

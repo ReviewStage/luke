@@ -2367,4 +2367,80 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         );
       }),
   );
+  it.effect(
+    "a line typed to the agent that eve coalesced beside a call's spoken ask into one message is taken as its awaiting row where it arrived, and the ask's line stays the transcript's, so neither is written again nor left awaiting",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, userId, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const relayed = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, {}),
+          );
+        const opening = codingTurn("turn_0", "turn.completed");
+        yield* relayed(opening.slice(0, opening.findIndex((e) => e.type === "step.completed") + 1));
+
+        const typed = "Use the mailer we already have.";
+        const written = yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: typed,
+            clientKey: "typed-beside-call",
+            sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+          },
+          Effect.succeed(true),
+        );
+        assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+        const asks = askRecord();
+        const delegationId = `dl_${randomUUID()}`;
+        const ask = yield* asks.record({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          clientId: delegationId,
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW),
+        });
+        yield* asks.dispatchOnce(target, ask.id, () =>
+          Effect.succeed({ sessionId, deliveryId: "delivery-call" }),
+        );
+        const lineId = `line-${delegationId}`;
+        const line = yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.USER,
+          clientId: lineId,
+          text: "Where are you with the invites?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        });
+        assert.ok(Result.isSuccess(line));
+        yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
+        yield* relayed(
+          steeredTail("turn_0", `${typed}\n\nThe developer asked where the invites are.`, [
+            "delivery-typed",
+            "delivery-call",
+          ]),
+        );
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        const journal = page.messages.find((message) => message.role === MESSAGE_ROLE.ASSISTANT);
+        assert.ok(journal !== undefined);
+        const [opened] = page.messages;
+        assert.ok(opened !== undefined);
+        const place = { journalId: journal.id, afterStep: 1 };
+        assert.deepEqual(
+          page.messages.flatMap((message) =>
+            message.role === MESSAGE_ROLE.USER ? [[message.id, message.arrivedIn]] : [],
+          ),
+          [
+            [opened.id, undefined],
+            [written.success.value.id, place],
+            [line.success.id, place],
+          ],
+        );
+      }),
+  );
 });

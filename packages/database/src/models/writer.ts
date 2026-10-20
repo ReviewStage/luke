@@ -379,6 +379,8 @@ type AwaitingLineWritten = Result.Result<
 interface AwaitingLineTake {
   readonly text: string;
   readonly turnId: string;
+  /** Whether the words received hold a spoken ask's beside the lines, which eve coalesced into one message: the lines are then matched among them (`coalescedRunWithin`). */
+  readonly beside?: boolean;
 }
 
 /**
@@ -488,7 +490,9 @@ export interface StoreWriter {
    * reading from its revision sees the line again where it stands, now the
    * turn's, and keeps how many of the turn's steps had begun before it, so
    * a line that steered a turn under way is drawn among its work where it
-   * arrived rather than ahead of the turn. Answers the rows taken, or none where no such run awaits, which
+   * arrived rather than ahead of the turn. Where the receipt also carried a
+   * spoken ask (`beside`), the run is the one whose words stand whole among
+   * those received. Answers the rows taken, or none where no such run awaits, which
    * is every line of a conversation that is no coding agent's.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
@@ -2248,6 +2252,37 @@ function coalescedRun<Row extends { readonly parts: Parts }>(
 }
 
 /**
+ * The oldest run of consecutive awaiting lines whose parts, joined as eve
+ * coalesces them, stand whole among the parts received, each segment as eve
+ * joined it, the longest such run from its first line; none where no run
+ * does. This is the run eve coalesced beside a spoken ask into one message,
+ * whose words the transcript holds and the store has no copy of, so the
+ * received words are matched a whole segment at a time and never a fragment
+ * of one.
+ */
+function coalescedRunWithin<Row extends { readonly parts: Parts }>(
+  awaiting: readonly Row[],
+  received: string,
+): readonly Row[] {
+  const fenced = `${COALESCED_LINE_SEPARATOR}${received}${COALESCED_LINE_SEPARATOR}`;
+  for (let start = 0; start < awaiting.length; start += 1) {
+    let run: readonly Row[] = [];
+    const pieces: string[] = [];
+    for (const [offset, row] of awaiting.slice(start).entries()) {
+      const parts = receivedPartsOf(row.parts);
+      if (parts === undefined) break;
+      pieces.push(...parts);
+      const joined = pieces.join(COALESCED_LINE_SEPARATOR);
+      if (!fenced.includes(`${COALESCED_LINE_SEPARATOR}${joined}${COALESCED_LINE_SEPARATOR}`))
+        break;
+      run = awaiting.slice(start, start + offset + 1);
+    }
+    if (run.length > 0) return run;
+  }
+  return [];
+}
+
+/**
  * The dispatch run to its answer or its deadline, from inside the
  * uninterruptible write: the dispatch is forked as a root fiber of its own,
  * which is interruptible as the write is not, and a second fiber interrupts
@@ -2305,7 +2340,9 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<AwaitingLineTaken, WriteFailure, DatabaseServices> {
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
-  const run = coalescedRun(awaiting, take.text);
+  const run = take.beside
+    ? coalescedRunWithin(awaiting, take.text)
+    : coalescedRun(awaiting, take.text);
   const takenAfterStep = run.length === 0 ? null : yield* stepsBegun(context, take.turnId);
   for (const line of run) {
     yield* giveLineToTurn({
