@@ -129,16 +129,9 @@ const OPENING_CALLS: readonly {
     target: { kind: TOOL_TARGET.AGENT, agent: "agent-7" },
   },
   {
-    name: "a message to an agent opens its tab",
-    tool: "message_coding_agent",
-    input: { agentId: "agent-7", text: "Rebase on main" },
-    output: ACCEPTED,
-    target: { kind: TOOL_TARGET.AGENT, agent: "agent-7" },
-  },
-  {
-    name: "a start opens the agent it began",
+    name: "a start on the plan, which sent no words of its own, opens the agent it began",
     tool: "start_coding_agent",
-    input: { task: "Ship the invoice export" },
+    input: {},
     output: { status: "accepted", agent: { id: "agent-9" } },
     target: { kind: TOOL_TARGET.AGENT, agent: "agent-9" },
   },
@@ -193,6 +186,46 @@ for (const call of OPENING_CALLS) {
     assert.equal(container.querySelector("details"), null, "the row folds nothing open in place");
     act(() => row.click());
     assert.deepEqual(opened, [call.target]);
+  });
+}
+
+const SENT_CALLS: readonly {
+  readonly name: string;
+  readonly tool: string;
+  readonly input: WireRecord;
+  readonly output: WireRecord;
+  readonly target: ToolTarget;
+}[] = [
+  {
+    name: "a message to an agent",
+    tool: "message_coding_agent",
+    input: { agentId: "agent-7", text: "Rebase on main" },
+    output: ACCEPTED,
+    target: { kind: TOOL_TARGET.AGENT, agent: "agent-7" },
+  },
+  {
+    name: "a start of an agent",
+    tool: "start_coding_agent",
+    input: { task: "Ship the invoice export" },
+    output: { status: "accepted", agent: { id: "agent-9" } },
+    target: { kind: TOOL_TARGET.AGENT, agent: "agent-9" },
+  },
+];
+
+for (const call of SENT_CALLS) {
+  test(`${call.name}: its row folds what was sent open, and its chip, named as a coding agent where the place knows no name, opens the agent`, () => {
+    const { container, opened } = drawn(assistant([toolPart(call.tool, call.input, call.output)]));
+    const row = container.querySelector<HTMLElement>(`[data-call-id="call-${call.tool}"] summary`);
+    assert.ok(row, "the row is a fold's line");
+    const chip = row.querySelector<HTMLButtonElement>("button[data-tool-agent-ref]");
+    assert.equal(chip?.textContent, "Coding agent");
+    assert.equal(container.querySelector("[data-opens]"), null, "no row is a button that opens");
+    act(() => chip?.click());
+    assert.deepEqual(opened, [call.target], "the chip opens the agent");
+    assert.equal(container.querySelector(".tool-sent-words"), null, "and folds nothing open");
+    act(() => row.click());
+    assert.ok(container.querySelector(".tool-sent-words"), "the row folds the words open");
+    assert.deepEqual(opened, [call.target], "and opens no agent");
   });
 }
 
@@ -469,18 +502,21 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   );
   const row = (callId: string) =>
     container.querySelector<HTMLElement>(`button[data-call-id="call-${callId}"]`);
+  // A call that sent words hangs the card from its chip, the row's way to the agent.
+  const chip = (callId: string) =>
+    container.querySelector<HTMLElement>(`[data-call-id="call-${callId}"] [data-tool-agent-ref]`);
   // The calls run together fold under one line, which a press opens.
   const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
   act(() => fold?.click());
-  assert.deepEqual(cardOn(row("message_coding_agent")), ["Invoice export", "Working…"]);
+  assert.deepEqual(cardOn(chip("message_coding_agent")), ["Invoice export", "Working…"]);
   const [archived, corner] = cardOn(row("read_coding_agent"));
   assert.equal(archived, "Retry audit");
   assert.match(corner ?? "", /^Archived · /u);
-  assert.deepEqual(cardOn(row("start_coding_agent")), ["Coding agent", "Not found"]);
+  assert.deepEqual(cardOn(chip("start_coding_agent")), ["Coding agent", "Not found"]);
   assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", "Working…"]);
 });
 
-test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, wearing the harness its answer's model runs in, a chip that is no target of its own inside the row", () => {
+test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, wearing the harness its answer's model runs in, a chip that opens the agent on a row that folds what was sent and is no target of its own on a row that opens it", () => {
   const agents = codingAgentsControl({ agents: [listedAgent("agent-7", "Invoice export")] });
   const cards = taskCards({
     agents,
@@ -545,12 +581,21 @@ test("a call about an agent names it by its chip in the place of the words, as i
   assert.equal(said("start_agent"), "Started a coding agent Ship the invoice export");
   const row = line("message_agent");
   assert.ok(row, "the message's row is drawn");
-  assert.equal(row.querySelector("button, a"), null, "the chip is no target inside the row");
-  act(() => row.querySelector<HTMLElement>("[data-tool-agent-ref]")?.click());
-  assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }], "it opens the row's");
+  act(() => row.querySelector<HTMLElement>("button[data-tool-agent-ref]")?.click());
+  assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }], "its chip opens it");
+  assert.equal(container.querySelector(".tool-sent-words"), null, "and folds nothing open");
+  const archive = line("archive_agent");
+  assert.ok(archive, "the archive's row is drawn");
+  assert.equal(archive.querySelector("button, a"), null, "the chip is no target inside the row");
+  act(() => archive.querySelector<HTMLElement>("[data-tool-agent-ref]")?.click());
+  assert.deepEqual(
+    opened,
+    [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }],
+    "a press on it is the row's, which folds an agent off the task open rather than opening it",
+  );
 });
 
-test("a message or a start another agent was sent shows its words whole under its row at the toggle beside it, a start's note under them, the row still opening the agent; a start on the plan has no toggle", () => {
+test("a message or a start another agent was sent shows its words whole under its row once the row is pressed, a start's note under them, with no toggle at the row's end; a start on the plan folds nothing", () => {
   const long = "Rebase on main.\n\nThe invoice table moved to billing.ts, so take the new path.";
   const message = assistant([
     toolPart("message_agent", { agentId: "agent-7", text: long }, ACCEPTED),
@@ -562,30 +607,32 @@ test("a message or a start another agent was sent shows its words whole under it
   ]);
   // Note that a turn still moving draws its calls in the open, rather than folded under how many there were.
   const { container, opened } = drawn(message, true);
-  const toggle = (callId: string) =>
-    container
-      .querySelector(`button[data-call-id="call-${callId}"]`)
-      ?.closest(".tool-opening-row")
-      ?.querySelector<HTMLButtonElement>("button[aria-pressed]");
-  const words = () => container.querySelector(".tool-sent-words")?.textContent ?? null;
+  const row = (callId: string) =>
+    container.querySelector<HTMLElement>(`[data-call-id="call-${callId}"] summary`);
+  const words = (callId: string) =>
+    container.querySelector(`[data-call-id="call-${callId}"] .tool-sent-words`)?.textContent ??
+    null;
 
-  assert.equal(words(), null, "the words wait behind the toggle");
-  act(() => toggle("message_agent")?.click());
+  assert.equal(words("message_agent"), null, "the words wait behind the row");
+  assert.equal(
+    row("message_agent")?.parentElement?.querySelector("button[aria-pressed]"),
+    null,
+    "the row wears no toggle",
+  );
+  act(() => row("message_agent")?.click());
   assert.ok(
-    words()?.includes("take the new path"),
+    words("message_agent")?.includes("take the new path"),
     "the message is read whole, past its first line",
   );
-  assert.deepEqual(opened, [], "the toggle opens no agent");
-  act(() => toggle("start_agent")?.click());
-  const start = container
-    .querySelector('button[data-call-id="call-start_agent"]')
-    ?.closest(".tool-opening-sent")
-    ?.querySelector(".tool-sent-words")?.textContent;
-  assert.ok(start?.includes("Ship the invoice export") && start.includes("Keep the CSV columns."));
-  act(() =>
-    container.querySelector<HTMLElement>('button[data-call-id="call-message_agent"]')?.click(),
+  assert.equal(
+    row("message_agent")?.textContent?.includes("Rebase on main"),
+    false,
+    "the line's preview gives way to the words",
   );
-  assert.deepEqual(opened, [{ kind: TOOL_TARGET.AGENT, agent: "agent-7" }]);
+  act(() => row("start_agent")?.click());
+  const start = words("start_agent");
+  assert.ok(start?.includes("Ship the invoice export") && start.includes("Keep the CSV columns."));
+  assert.deepEqual(opened, [], "the row opens no agent");
 
   const sentNothing = drawn(
     assistant([
@@ -596,11 +643,7 @@ test("a message or a start another agent was sent shows its words whole under it
       ),
     ]),
   );
-  assert.equal(
-    sentNothing.container.querySelector(".tool-opening-row"),
-    null,
-    "nothing was sent to show",
-  );
+  assert.equal(sentNothing.container.querySelector("details"), null, "nothing was sent to show");
 });
 
 /** Main's document holding one agent on no task, running on Codex, as the plan list carries it. */

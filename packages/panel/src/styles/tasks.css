@@ -4193,9 +4193,32 @@ ol.transcript-list {
   flex-shrink: 0;
 }
 
+/* Note that the chip's box is held to the pill's own widest, because its
+   width otherwise comes from the whole name while the pill inside is cut,
+   which left a gap after the pill and pushed the preview to the line's end;
+   and that with a preview after it, it keeps to half the line, so a long
+   name never takes the preview's room. */
 .tool-chip {
+  display: flex;
   min-width: 0;
+  max-width: var(--luke-inline-ref-pill-width);
+  flex: 0 1 auto;
   white-space: nowrap;
+}
+
+.tool-chip:has(+ .tool-subject) {
+  max-width: min(50%, var(--luke-inline-ref-pill-width));
+}
+
+/* A chip that opens its agent from a line that folds open: lifted with the
+   line's hover as an inert one is, and pressed on its own hover, so it reads
+   as the one target inside the line. */
+summary:is(:hover, :focus-visible) button[data-tool-agent-ref] {
+  background: var(--luke-color-fill-selected);
+}
+
+.tool-line button[data-tool-agent-ref]:is(:hover, :focus-visible) {
+  background: var(--luke-color-fill-pressed);
 }
 
 /* The subject takes what is left of the line and fades where the line cuts
@@ -7585,20 +7608,9 @@ button.picture-frame {
   color: var(--luke-color-text);
 }
 
-/* A call that sent another agent words (`TranscriptOpeningCall`'s `sent`):
-   the line that opens the agent, a toggle at its end, and the words whole
-   under it, set in to the line's words as a call's body is. */
-.tool-opening-row {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-2);
-}
-
-.tool-opening-row > :first-child {
-  min-width: 0;
-  flex: 1;
-}
-
+/* A call that sent another agent words (`SentCall`): the words whole in
+   the body its line folds open, set in to the line's words as a call's
+   body is. */
 .tool-sent-block {
   padding: var(--luke-space-8) var(--luke-space-12);
 }

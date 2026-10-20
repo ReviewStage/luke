@@ -334,7 +334,8 @@ test("on the Call tab, a subagent's row hangs its tab's card, its title and how 
     "Styling setup",
     "Failed",
   ]);
-  assert.deepEqual(cardOn(page.querySelector('button[data-call-id="s"]')), [
+  // The start sent the agent its words, so its row folds them open and its chip is the way to the agent.
+  assert.deepEqual(cardOn(page.querySelector('[data-call-id="s"] button[data-tool-agent-ref]')), [
     "Invoice export",
     "Working…",
   ]);
