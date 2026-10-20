@@ -35,6 +35,8 @@ function openActPort(actor: ActSender): void {
         providerKeysRead: noKeys,
         providerKeySave: noKeys,
         providerKeyRemove: noKeys,
+        chatGptSignIn: noKeys,
+        chatGptSignInCancel: () => Effect.void,
         githubTokenRead: noToken,
         githubTokenSave: noToken,
         githubTokenRemove: noToken,

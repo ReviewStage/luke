@@ -56,7 +56,7 @@ import {
   stopAsk,
 } from "../agents/brain-host/brain-ask.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../agents/repository-shell.js";
-import { projectTurnEvents } from "../agents/turn-events.js";
+import { journalAfterStep, projectTurnEvents } from "../agents/turn-events.js";
 import {
   ASK_ORIGIN,
   isSettledToolPartState,
@@ -109,7 +109,11 @@ import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
  * cancel of it or a stamp its start honours. What the projection carries
  * mid-turn is the slow step, each queued question, and each sentence of the
  * reply once it has finished forming and every call ahead of it has settled,
- * which is what the voice speaks meanwhile.
+ * which is what the voice speaks meanwhile. A spoken ask that joined an
+ * agent's typed turn under way is told only the steps after it joined
+ * (`projectTurnEvents`'s `joinedAfterStep`), and its run ends at its answer,
+ * or at its own Stop, which stamps the ask and leaves the turn running
+ * (`stopAsk`), rather than at the end of a turn that may run on for an hour.
  *
  * How far each turn was told is written on the ask's row beside the telling,
  * never ahead of it: the events reach the voice first and the write follows
@@ -345,6 +349,42 @@ interface TurnTold {
   settled: boolean;
 }
 
+/**
+ * Which part of a turn a run tells: the turn, and how many of its steps had
+ * begun before the ask joined it, none for an ask that is its whole turn's.
+ * Two asks that joined one typed turn at different steps tell different
+ * parts of it, each numbered from its own join, so what was told is kept
+ * per part.
+ */
+interface TurnPart {
+  readonly turnId: string;
+  readonly afterStep: number | undefined;
+}
+
+/** The part of its turn an ask bound to that turn tells (`AskRow.joinedAfterStep`). */
+function partOf(turnId: string, joinedAfterStep: number | undefined): TurnPart {
+  return { turnId, afterStep: joinedAfterStep };
+}
+
+function samePart(left: TurnPart | undefined, right: TurnPart): boolean {
+  return left?.turnId === right.turnId && left.afterStep === right.afterStep;
+}
+
+/** A value kept per part of a turn: by the turn's id, then by the step its part follows. */
+class ByTurnPart<Value> {
+  readonly #byTurn = new Map<string, Map<number | undefined, Value>>();
+
+  get(part: TurnPart): Value | undefined {
+    return this.#byTurn.get(part.turnId)?.get(part.afterStep);
+  }
+
+  set(part: TurnPart, value: Value): void {
+    const parts = this.#byTurn.get(part.turnId) ?? new Map<number | undefined, Value>();
+    parts.set(part.afterStep, value);
+    this.#byTurn.set(part.turnId, parts);
+  }
+}
+
 /** The calls that run a shell command in a checkout: the brain's read of the task's repository, and an agent's own shell. */
 const SHELL_TOOL_NAMES: ReadonlySet<string> = new Set([
   RUN_IN_REPOSITORY_TOOL.name,
@@ -474,15 +514,15 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   const workListeners = new Set<(work: TaskWorkTurn) => void>();
   /** Each followed ask by its ask revision, so the newest of several is known. */
   const followed = new Map<string, number>();
-  /** How far each turn a recovered run is on was told by the connection before, as the record holds it. */
-  const recoveredSeq = new Map<string, number>();
-  /** The turn each followed ask was last seen bound to. */
-  const boundTurn = new Map<string, string>();
+  /** How far each part of a turn a recovered run is on was told by the connection before, as the record holds it. */
+  const recoveredSeq = new ByTurnPart<number>();
+  /** The part of a turn each followed ask was last seen bound to. */
+  const boundTurn = new Map<string, TurnPart>();
   // Note that eve folds asks that waited together into one turn, so several
   // follows can project one turn. The newest ask tells it, because the
   // service speaks the newest request's reply alone; the rest tell only its
   // end, because each sentence told per ask was said per ask.
-  const toldOfTurn = new Map<string, TurnTold>();
+  const toldOfTurn = new ByTurnPart<TurnTold>();
   const reads: AskStandingReads = { store: options.store, asks: options.asks.asks };
   /**
    * The told positions still to be written, oldest first, run one at a time
@@ -525,16 +565,21 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * because eve binds the asks it folded into one turn in a single write and
    * the follow that reaches the turn first may be any of theirs.
    */
-  const newestOn = Effect.fnUntraced(function* (askId: string, turnId: string) {
+  const newestOn = Effect.fnUntraced(function* (askId: string, part: TurnPart) {
     const order = followed.get(askId) ?? 0;
     for (const [later, laterOrder] of followed) {
       if (laterOrder <= order || boundTurn.has(later)) continue;
       const standing = yield* askStanding(reads, options.conversation.userId, later);
-      if (standing?.turn !== undefined) boundTurn.set(later, standing.turn.id);
+      if (standing?.turn !== undefined) {
+        boundTurn.set(later, partOf(standing.turn.id, standing.ask?.joinedAfterStep));
+      }
     }
     let newest = askId;
     for (const [candidate, candidateOrder] of followed) {
-      if (boundTurn.get(candidate) === turnId && candidateOrder > (followed.get(newest) ?? 0)) {
+      if (
+        samePart(boundTurn.get(candidate), part) &&
+        candidateOrder > (followed.get(newest) ?? 0)
+      ) {
         newest = candidate;
       }
     }
@@ -553,20 +598,20 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    */
   const tellerOf = Effect.fnUntraced(function* (
     askId: string,
-    turnId: string,
+    part: TurnPart,
     events: readonly TurnEvent[],
   ) {
-    const standing = toldOfTurn.get(turnId);
+    const standing = toldOfTurn.get(part);
     if (standing === undefined) {
-      const seq = recoveredSeq.get(turnId) ?? 0;
+      const seq = recoveredSeq.get(part) ?? 0;
       const told: TurnTold = {
-        teller: yield* newestOn(askId, turnId),
+        teller: yield* newestOn(askId, part),
         seq,
         settled: events.some(
           (event) => event.seq <= seq && event.kind === TURN_EVENT_KIND.ACTIONS_SETTLED,
         ),
       };
-      toldOfTurn.set(turnId, told);
+      toldOfTurn.set(part, told);
       if (told.settled) emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: told.teller });
       return told;
     }
@@ -747,7 +792,17 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     }
     const { turn } = standing;
     if (turn === undefined) return yield* standingLook(told, since);
-    boundTurn.set(askId, turn.id);
+    const joined = standing.ask?.joinedAfterStep;
+    const part = partOf(turn.id, joined);
+    boundTurn.set(askId, part);
+    // A Stop of an ask that joined a typed turn stamped the ask alone, and the turn runs on: the
+    // ask's run ends there, stopped, whatever the turn does next.
+    if (joined !== undefined && standing.ask?.cancelRequestedAt !== undefined) {
+      yield* tell(askId, { seq: 0, ended: true }, [
+        { kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: askId, end: LIVE_BRAIN_RUN_END.CANCELLED },
+      ]);
+      return FOLLOW_LOOK.ENDED;
+    }
     // Note that the subagents' sessions are read for the calls the last look found, ahead of
     // the journal, so the journal stays each look's last read and a subagent's work shows one
     // poll behind the call that started it.
@@ -780,14 +835,16 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     }
     const record = journal.value[0];
     const message = record?.message;
+    // What the voice hears of the turn: the steps after the ask joined it, or the whole turn.
+    const heard = journalAfterStep(message, joined);
     // Note that the time a call's code is told under is its journal's, which is what the task's work reads back.
     const shownAt = (record?.createdAt ?? turn.startedAt ?? turn.queuedAt).getTime();
-    told.delegated ||= delegatedOf(message);
-    const events = projectTurnEvents(turn, message);
-    const turnTold = yield* tellerOf(askId, turn.id, events);
+    told.delegated ||= delegatedOf(heard);
+    const events = projectTurnEvents(turn, message, joined);
+    const turnTold = yield* tellerOf(askId, part, events);
     const telling = turnTold.teller === askId;
     // The activity goes ahead of the events, so a call answered in the turn's last step is told before its end.
-    const action = telling ? pendingActionOf(message) : undefined;
+    const action = telling ? pendingActionOf(heard) : undefined;
     if (action !== told.action) {
       told.action = action;
       emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: askId, action });
@@ -807,7 +864,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     const last = events.at(-1);
     const ended = last?.kind === TURN_EVENT_KIND.ENDED;
     // Calls settled since the last look are told as one step event, while the turn runs and only by its teller.
-    const steps = telling && !ended ? settledStepsOf(message) : [];
+    const steps = telling && !ended ? settledStepsOf(heard) : [];
     if (steps.length > told.settled) {
       told.settled = steps.length;
       emit({
@@ -922,7 +979,11 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * follow says nothing of it again, a goodbye's end of the call included.
    * None where the turn's journal cannot be read.
    */
-  const unheardOf = Effect.fnUntraced(function* (turn: StoredTurnRecord, heard: number) {
+  const unheardOf = Effect.fnUntraced(function* (
+    turn: StoredTurnRecord,
+    heard: number,
+    joinedAfterStep: number | undefined,
+  ) {
     const journal = yield* options.store.messages.byClientId(
       options.conversation.userId,
       turn.conversationId,
@@ -930,7 +991,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       turn.id,
     );
     if (!journal.ok) return undefined;
-    const events = projectTurnEvents(turn, journal.value[0]?.message);
+    const events = projectTurnEvents(turn, journal.value[0]?.message, joinedAfterStep);
     const held = events.filter((event) => event.kind !== TURN_EVENT_KIND.ENDED);
     return {
       seq: Math.max(heard, ...held.map((event) => event.seq)),
@@ -968,7 +1029,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     const missed: string[] = [];
     const questions: LiveBrainQuestion[] = [];
     const heardAll: ReturnType<typeof options.asks.asks.told>[] = [];
-    const turns = new Map<string, { readonly seq: number; readonly ended: boolean }>();
+    const turns = new ByTurnPart<{ readonly seq: number; readonly ended: boolean }>();
     for (const ask of unended) {
       const standing = yield* askStanding(reads, options.conversation.userId, ask.id);
       if (standing === undefined) continue;
@@ -978,22 +1039,29 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         continue;
       }
       if (turn.cancelRequestedAt !== null) continue;
-      let read = turns.get(turn.id);
+      const part = partOf(turn.id, ask.joinedAfterStep);
+      let read = turns.get(part);
       if (read === undefined) {
         const heard = Math.max(
           0,
-          ...unended.filter((other) => other.turnId === turn.id).map((other) => other.toldSeq),
+          ...unended
+            .filter(
+              (other) =>
+                other.turnId !== undefined &&
+                samePart(partOf(other.turnId, other.joinedAfterStep), part),
+            )
+            .map((other) => other.toldSeq),
         );
-        const unheard = yield* unheardOf(turn, heard);
+        const unheard = yield* unheardOf(turn, heard, ask.joinedAfterStep);
         if (unheard === undefined) {
           options.report("An earlier call's turn could not be read; the call back leaves it");
           continue;
         }
         missed.push(...unheard.sentences);
         questions.push(...unheard.questions);
-        recoveredSeq.set(turn.id, Math.max(recoveredSeq.get(turn.id) ?? 0, unheard.seq));
+        recoveredSeq.set(part, Math.max(recoveredSeq.get(part) ?? 0, unheard.seq));
         read = unheard;
-        turns.set(turn.id, read);
+        turns.set(part, read);
       }
       heardAll.push(
         options.asks.asks.told(
@@ -1150,7 +1218,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         const now = yield* Clock.currentTimeMillis;
         for (const ask of asked) {
           if (ask.turnId === undefined) continue;
-          recoveredSeq.set(ask.turnId, Math.max(recoveredSeq.get(ask.turnId) ?? 0, ask.toldSeq));
+          const part = partOf(ask.turnId, ask.joinedAfterStep);
+          recoveredSeq.set(part, Math.max(recoveredSeq.get(part) ?? 0, ask.toldSeq));
         }
         const runs: LiveBrainRecoveredRun[] = [];
         for (const ask of asked) {

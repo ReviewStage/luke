@@ -107,7 +107,12 @@ import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
-import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
+import {
+  CODER_DEPLOYMENT_PRESENCE,
+  CODER_DEPLOYMENT_STREAMS,
+  CODER_DEPLOYMENT_TURNS,
+  coderChannelInput,
+} from "./channel.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import type { CoderHostSeams } from "./production.js";
 import type { SummaryModelOf } from "./replay-summary.js";
@@ -825,7 +830,7 @@ test("message_agent sends nothing to an archived agent, an agent of another work
   assert.equal(eve.sent.length, 0);
 });
 
-test("start_agent starts an agent on the caller's own task as the deployment acting for its starter, answering the mention it is named by, telling it which agent started it and how to report back, leaves the starter's default as it stood, and starts once under the call's key", async () => {
+test("start_agent starts an agent on the caller's own task as the deployment acting for its starter, answering the mention it is named by, telling it which agent started it, how to report back, and that the developer's inbox is that agent's, leaves the starter's default as it stood, and starts once under the call's key", async () => {
   const { workspaceId, plans: tasks, agents } = await openWorkspaces();
   const { caller } = agents;
   const eve = await fakeCoderEve(workspaceId);
@@ -857,6 +862,8 @@ test("start_agent starts an agent on the caller's own task as the deployment act
   assert.ok(message.startsWith(prompt), message);
   assert.ok(message.includes(START_NOTE_HEADING.AGENT), message);
   assert.ok(message.includes(`"${CALLER_TITLE}"`) && message.includes(caller.id), message);
+  // The developer's inbox is the starter's: what the agent would post there goes to it instead.
+  assert.ok(message.includes("The developer's inbox is that agent's to keep"), message);
   // An agent's own pick of a model is no member's new default.
   assert.equal((await database.run(readAccountPreferences(caller.userId)))?.codingAgent, undefined);
 
@@ -1689,6 +1696,7 @@ test("create_task makes a task in the caller's workspace for the member the agen
     key: `TW-${stored.task.number}`,
     status: TASK_STATUS.TODO,
     priority: TASK_PRIORITY.NONE,
+    assignee: null,
     name,
     repository: RELAY_FULL_NAME,
     mention: `[@${name}](https://tryluke.dev/workspace-${workspaceId}/plan/${taskId})`,
@@ -1923,6 +1931,7 @@ test("update_task refuses to archive a task while an agent on it still works, th
       key: `TW-${billing.task.number}`,
       status: TASK_STATUS.TODO,
       priority: TASK_PRIORITY.NONE,
+      assignee: null,
       name: "Billing",
       repository: RELAY_FULL_NAME,
       archived,
@@ -2297,7 +2306,12 @@ function sessionEndsOf(host: CoderHost) {
   const { events } = coderChannelInput(
     async () => undefined,
     { reachesSession: async () => false, reachesConversation: async () => false },
-    { secret: undefined, admits: CODER_DEPLOYMENT_TURNS, presents: CODER_DEPLOYMENT_PRESENCE },
+    {
+      secret: undefined,
+      admits: CODER_DEPLOYMENT_TURNS,
+      presents: CODER_DEPLOYMENT_PRESENCE,
+      streams: CODER_DEPLOYMENT_STREAMS,
+    },
     (sessionId) => database.run(host.sessionEnded(sessionId)),
   );
   const failed = events?.["session.failed"];
@@ -2972,5 +2986,85 @@ test("create_task, update_task, list_tasks, and read_task carry a task's status,
   assert.deepEqual(
     await call(CODER_TOOL.CREATE_TASK, { name: "Odd", priority: "p0" }, "call-odd"),
     { status: ACTION_RESULT_STATUS.REJECTED, reason: CREATE_TASK_REFUSAL.UNREADABLE },
+  );
+});
+
+test("create_task, update_task, list_tasks, and read_task carry a task's assignee by their mention link, list_tasks narrows by it, and one who is no member is refused", async () => {
+  const { workspaceId, plans: taskIds, agents } = await openWorkspaces();
+  const { caller, teammates, strangers, otherWorkspaces } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const taskOf = (answer: WireRecord) =>
+    isRecord(answer.task) ? answer.task : assert.fail(JSON.stringify(answer));
+  const listedIds = async (input: WireBoundaryInput) => {
+    const listed = await call(CODER_TOOL.LIST_TASKS, input);
+    assert.ok(Array.isArray(listed.tasks), JSON.stringify(listed));
+    return listed.tasks.map((each) => (isRecord(each) ? each.id : undefined));
+  };
+  const personLink = (userId: string) =>
+    `https://tryluke.dev/workspace-${workspaceId}/person/${userId}`;
+
+  const filed = taskOf(
+    await call(
+      CODER_TOOL.CREATE_TASK,
+      { name: "Refund export", assignee: `[@Bob](${personLink(teammates.userId)})` },
+      "call-assigned",
+    ),
+  );
+  assert.ok(isWireString(filed.id) && isWireString(filed.assignee), JSON.stringify(filed));
+  assert.ok(filed.assignee.endsWith(`(${personLink(teammates.userId)})`), filed.assignee);
+  const stored = Option.getOrThrow(await database.run(readTask(caller.userId, filed.id)));
+  assert.equal(stored.task.assignee?.userId, teammates.userId);
+
+  // The link a read hands back is one a call may name, whole or as its bare address.
+  assert.deepEqual(await listedIds({ assignee: filed.assignee }), [filed.id]);
+  assert.deepEqual(await listedIds({ assignee: personLink(teammates.userId) }), [filed.id]);
+  const unassigned = await listedIds({ assignee: null });
+  assert.ok(unassigned.includes(taskIds.billing) && !unassigned.includes(filed.id));
+  assert.equal(
+    taskOf(await call(CODER_TOOL.READ_TASK, { taskId: filed.id })).assignee,
+    filed.assignee,
+  );
+
+  const cleared = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: filed.id, assignee: null },
+    "call-clear",
+  );
+  assert.deepEqual([cleared.already, taskOf(cleared).assignee], [false, null]);
+  const again = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: filed.id, assignee: null },
+    "call-again",
+  );
+  assert.equal(again.already, true, JSON.stringify(again));
+  const mine = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: taskIds.billing, assignee: personLink(caller.userId) },
+    "call-mine",
+  );
+  assert.ok(
+    String(taskOf(mine).assignee).endsWith(`(${personLink(caller.userId)})`),
+    JSON.stringify(mine),
+  );
+
+  for (const assignee of [personLink(strangers.userId), "Bob, please"]) {
+    assert.deepEqual(await call(CODER_TOOL.UPDATE_TASK, { taskId: filed.id, assignee }), {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: UPDATE_TASK_REFUSAL.NOT_MEMBER,
+    });
+  }
+  // Carol is a member of another workspace of Alice's, not this one.
+  assert.deepEqual(
+    await call(
+      CODER_TOOL.CREATE_TASK,
+      { name: "Elsewhere's", assignee: personLink(otherWorkspaces.userId) },
+      "call-elsewhere",
+    ),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: CREATE_TASK_REFUSAL.NOT_MEMBER },
+  );
+  assert.equal(
+    Option.getOrThrow(await database.run(readTask(caller.userId, filed.id))).task.assignee,
+    undefined,
   );
 });

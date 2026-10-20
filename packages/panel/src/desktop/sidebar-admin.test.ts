@@ -64,7 +64,7 @@ async function mount(
   platform: Pick<AppPlatform, "adminDashboard">,
 ): Promise<HTMLElement> {
   fakeAppPlatform(platform);
-  handState({}, { access: { admin } });
+  handState({}, { access: { admin, nativeAgents: false } });
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);

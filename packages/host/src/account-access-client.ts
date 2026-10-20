@@ -2,17 +2,18 @@
  * account-access-client.ts -- what the signed-in account may open in the app, as the service answers it, held for the account it was read for.
  *
  * Today that is whether the account is an admin, which a window reads to
- * offer the admin dashboard. It draws by it and authorizes nothing: the
+ * offer the admin dashboard, and whether it is in the native-agents cohort,
+ * which draws the plan sign-ins in Settings. It draws by it and authorizes nothing: the
  * dashboard's own gate decides every admin read on the service. A read
  * that fails, or an answer that is not the shape the wire declares, is
- * read as no admin, so a doubt never offers the dashboard.
+ * read as nothing opened, so a doubt never offers the dashboard or a plan sign-in.
  */
 import type { CallCredential } from "@luke/features";
 import { askHosted, type HostedClient, hostedClient } from "@luke/features/hosted-link";
 import { Effect, type Layer } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { AppAccessSlice } from "./app-state.js";
+import { type AppAccessSlice, NO_ACCESS } from "./app-state.js";
 
 interface AccountAccessClientOptions {
   /** What authorizes each call on the signed-in account, read fresh for every attempt. */
@@ -36,18 +37,23 @@ export class AccountAccessClient {
     this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
-  /** Whether the signed-in account is an admin; no for any failure. */
-  readAdmin(): Effect.Effect<boolean> {
+  /** What the signed-in account may open; nothing for any failure. */
+  readAccess(): Effect.Effect<AppAccessSlice> {
     return askHosted(this.#hosted.account.access, undefined).pipe(
-      Effect.map((answer) => answer.admin),
-      Effect.orElseSucceed(() => false),
+      Effect.map(
+        (answer): AppAccessSlice => ({
+          admin: answer.admin,
+          nativeAgents: answer.nativeAgents === true,
+        }),
+      ),
+      Effect.orElseSucceed(() => NO_ACCESS),
       Effect.provide(this.#client),
     );
   }
 }
 
 interface AccountAccessHolderOptions {
-  readonly client: Pick<AccountAccessClient, "readAdmin">;
+  readonly client: Pick<AccountAccessClient, "readAccess">;
   /** Who is signed in now, as the host keys an account, or nobody. */
   readonly accountKey: () => string | undefined;
   /** Hands the access on whenever what it answers may have moved. */
@@ -78,21 +84,21 @@ export interface AccountAccessHolder {
  */
 export function accountAccessHolder(options: AccountAccessHolderOptions): AccountAccessHolder {
   const { client, accountKey, publish } = options;
-  let held: { readonly accountKey: string; readonly admin: boolean } | undefined;
+  let held: { readonly accountKey: string; readonly access: AppAccessSlice } | undefined;
   let generation = 0;
 
   const current = (): AppAccessSlice => {
     const key = accountKey();
-    return { admin: key !== undefined && held?.accountKey === key && held.admin };
+    return key !== undefined && held?.accountKey === key ? held.access : NO_ACCESS;
   };
 
   const refresh = Effect.gen(function* () {
     const key = accountKey();
     if (key === undefined) return;
     const asked = generation;
-    const admin = yield* client.readAdmin();
+    const access = yield* client.readAccess();
     if (generation !== asked || accountKey() !== key) return;
-    held = { accountKey: key, admin };
+    held = { accountKey: key, access };
     publish(current());
   });
 

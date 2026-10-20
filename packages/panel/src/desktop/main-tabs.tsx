@@ -1,7 +1,6 @@
 import {
   CODING_AGENT_BOUNDS,
   type CodingAgentAttachment,
-  type CodingAgentBrief,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
@@ -10,7 +9,7 @@ import { TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
-import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
+import type { InlineRename } from "@luke/ui/use-inline-rename";
 import { memo, useEffect, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
@@ -29,15 +28,10 @@ import type { AgentFork } from "../tasks/fork-model.js";
 import { NEEDS_YOU } from "../tasks/inbox-model.js";
 import { agentEndMark, TAB_KIND, tabLook } from "../tasks/tab-look.js";
 import type { ToolTarget } from "../tasks/tool-call-model.js";
-import {
-  agentTranscript,
-  readWholeTranscript,
-  type TranscriptCopy,
-} from "../tasks/transcript-copy.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { MAIN_TAB, type MainTab, type MainTabsControl } from "../tasks/use-main-tabs.js";
 import type { ColumnPinnableTab, PinnedTab } from "../tasks/use-side-panel.js";
-import { useAgentArchive } from "./agent-archive.js";
+import { type AgentTerminalDoors, useAgentActions } from "./agent-actions.js";
 import type { TaskCards } from "./side-panel.js";
 import {
   type AddEntry,
@@ -47,9 +41,6 @@ import {
   type TabLook,
   type TabPin,
   type TabViews,
-  type TranscriptCopier,
-  type TranscriptRead,
-  useTranscriptCopier,
 } from "./strip-tabs.js";
 import { TabStrip } from "./tab-strip.js";
 
@@ -127,20 +118,6 @@ const RETRY_AGENTS = "Retry agents";
 /** The "+" menu's row for the plan's Chat tab. */
 const CHAT_ROW = "chat";
 
-/** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
-export function agentTranscriptRead(
-  readTranscript: CodingAgentsControl["readTranscript"],
-  agentId: string,
-  title: string,
-  brief: CodingAgentBrief | undefined,
-  chatOn: boolean,
-): TranscriptRead {
-  return () =>
-    readWholeTranscript(readTranscript, { agentId }).then((messages) =>
-      messages === undefined ? undefined : agentTranscript({ title, messages, brief, chatOn }),
-    );
-}
-
 /**
  * A tab whose name may be edited where it stands: an agent's.
  * While the edit is open the tab is its name's field, and a key that ends
@@ -195,7 +172,7 @@ function RenamableTab({
   );
 }
 
-/** An agent's tab, renamed in place from its menu while its task is not archived, and archived from it (`agent-archive.tsx`). */
+/** An agent's tab, whose menu and toolbar ⋯ offer the agent's own actions (`agent-actions.tsx`), renamed in place while its task is not archived. */
 function AgentMenuTab({
   agent,
   agents,
@@ -203,6 +180,7 @@ function AgentMenuTab({
   doors,
   shown,
   slot,
+  terminals,
 }: {
   agent: CodingAgentSummary;
   agents: CodingAgentsControl;
@@ -210,38 +188,35 @@ function AgentMenuTab({
   doors: TabDoors;
   shown: boolean;
   slot: HTMLElement | null;
+  terminals: Pick<AgentTerminalDoors, "onOpenTerminal" | "onOpenOnMac">;
 }): React.JSX.Element {
-  const rename = useInlineRename(agent.id, agents.onRename);
-  const archive = useAgentArchive(agent, agents, shown);
+  const actions = useAgentActions(agent, agents, { label: look.label, shown, terminals });
   return (
     <>
       <RenamableTab
         look={look}
-        doors={{ ...doors, archive: archive.action }}
-        // A rename still open when the task is archived elsewhere is let go unsaved.
-        rename={agents.onUnarchive === undefined ? rename : undefined}
+        doors={{ ...doors, ...actions.doors }}
+        rename={actions.rename}
         field={{ label: "Agent name", maxLength: CODING_AGENT_BOUNDS.MAX_TITLE_CHARS }}
         slot={slot}
       />
-      {archive.dialog}
+      {actions.dialog}
     </>
   );
 }
 
-/** One tab the strip draws: the tab, how it looks, how it closes, how its transcript is copied, and the agent it is, for an agent's. */
+/** One tab the strip draws: the tab, how it looks, how it closes, and the agent it is, for an agent's. */
 interface DrawnTab {
   tab: MainTab;
   look: TabLook;
   /** Closes the tab, as its × does; none for the Call's while it stands alone. */
   close: (() => void) | undefined;
-  copy?: ((copy: TranscriptCopy) => void) | undefined;
   agent?: CodingAgentSummary | undefined;
 }
 
 /**
  * The agents' tabs and the draft's, in the order started, each closing
- * through `main`. An agent's transcript is read whole from the service for a
- * copy, since its tab holds it only while shown, and its card previews its
+ * through `main`. An agent's card previews its
  * latest step from what its tab last held (`heldLatest`). An agent's tab,
  * and the draft's, wears the Draft pencil at its end while its box holds
  * words and another tab is chosen (`draft-mark.tsx`); an agent's failure
@@ -252,11 +227,10 @@ function agentTabs(input: {
   agents: CodingAgentsControl;
   unread: readonly StripTab[];
   views: TabViews;
-  copied: TranscriptCopier;
   /** The started agents whose boxes hold a draft (`useDraftedAgents`). */
   drafted: readonly string[];
 }): DrawnTab[] {
-  const { main, agents, unread, views, copied, drafted } = input;
+  const { main, agents, unread, views, drafted } = input;
   const chosen = (tab: MainTab) => sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -269,13 +243,6 @@ function agentTabs(input: {
   const own = open.map((agent) => {
     const tab = { agent: agent.id };
     const label = agentTabLabel(agent, agents.models);
-    const read = agentTranscriptRead(
-      agents.readTranscript,
-      agent.id,
-      label,
-      agent.brief,
-      agents.chatOn,
-    );
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
     const draftMark = drafted.includes(agent.id) && !chosen(tab) ? <DraftMark /> : undefined;
     return {
@@ -287,7 +254,6 @@ function agentTabs(input: {
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => main.onClose(tab),
-      copy: copied(read),
     };
   });
   const draft = agents.draft?.id;
@@ -454,7 +420,6 @@ export function MainTabStrip({
   /** Whether there is a chat to read, so the "+" menu offers the plan's Chat tab. */
   chat: boolean;
 }): React.JSX.Element {
-  const copied = useTranscriptCopier();
   const drafted = useDraftedAgents();
   const pinnedOf = (tab: ColumnPinnableTab) =>
     pins.pinned.some((pin) => pin.task === task.id && sameTab(pin.tab, tab));
@@ -474,7 +439,7 @@ export function MainTabStrip({
   // The agents', the draft's, and Chat's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
-    [...agentTabs({ main, agents, unread, views, copied, drafted }), ...chatTab],
+    [...agentTabs({ main, agents, unread, views, drafted }), ...chatTab],
     main.tabs,
     (entry) => entry.tab,
   );
@@ -507,12 +472,9 @@ export function MainTabStrip({
     };
   };
   const doorsOf = (entry: DrawnTab): TabDoors => {
+    // An agent's link is its own action (`agent-actions.tsx`); the Call's is the task's.
     const linked: LinkPlace | undefined =
-      entry.agent !== undefined
-        ? { kind: LINK_PLACE.AGENT, planId: task.id, agentId: entry.agent.id }
-        : entry.tab === MAIN_TAB.CALL
-          ? { kind: LINK_PLACE.CALL, planId: task.id }
-          : undefined;
+      entry.tab === MAIN_TAB.CALL ? { kind: LINK_PLACE.CALL, planId: task.id } : undefined;
     const others = strip.flatMap((other) =>
       other === entry || other.close === undefined ? [] : [other.close],
     );
@@ -534,13 +496,6 @@ export function MainTabStrip({
               main.onChoose(entry.tab);
             },
       pin: pinTab === undefined ? undefined : pinDoor(pinTab, entry.look.label, agent?.model),
-      onCopy: entry.copy,
-      onOpenTerminal:
-        agent === undefined || onOpenTerminal === undefined
-          ? undefined
-          : () => onOpenTerminal(agent.id),
-      onOpenOnMac:
-        agent === undefined || onOpenOnMac === undefined ? undefined : () => onOpenOnMac(agent.id),
       copyLink: linked === undefined ? undefined : copyLink(linked),
     };
   };
@@ -571,6 +526,7 @@ export function MainTabStrip({
               doors={doorsOf(entry)}
               shown={shown}
               slot={actionsSlot}
+              terminals={{ onOpenTerminal, onOpenOnMac }}
             />
           ),
         )}

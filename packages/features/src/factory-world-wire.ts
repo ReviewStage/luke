@@ -107,7 +107,7 @@ export type FactoryZone = typeof factoryZoneSchema.Type;
  * what its row says, when it was opened where that is known, and the areas
  * it touched.
  */
-export const factoryPullRequestSchema = EffectSchema.Struct({
+const factoryPullRequestSchema = EffectSchema.Struct({
   ...codingAgentPullRequestSchema.fields,
   /** Epoch milliseconds the pull request was opened; absent where the service has not read it. */
   openedAt: EffectSchema.optionalKey(countedNumber),
@@ -122,7 +122,7 @@ export type FactoryPullRequest = typeof factoryPullRequestSchema.Type;
  * who started it, the task it works on, when it last moved, and the pull
  * request it opened.
  */
-export const factoryAgentSchema = EffectSchema.Struct({
+const factoryAgentSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none yet. */
   title: EffectSchema.NullOr(EffectSchema.String),
@@ -168,7 +168,7 @@ export type FactoryShipped = typeof factoryShippedSchema.Type;
  * priority, and the zones it is placed on, those the pull requests of its
  * task's agents touched; empty where no task of it has touched any.
  */
-export const factoryPlannedSchema = EffectSchema.Struct({
+const factoryPlannedSchema = EffectSchema.Struct({
   /** The issue's key, `ENG-123`. */
   identifier: EffectSchema.String,
   title: EffectSchema.String,

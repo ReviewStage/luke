@@ -87,6 +87,7 @@ import { dictationRequestSchema } from "./dictation-wire.js";
 import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   askHosted,
+  askLive,
   HOSTED_DEADLINE,
   type HostedClient,
   type HostedFailure,
@@ -106,7 +107,6 @@ import {
 } from "./inbox-wire.js";
 import {
   type AgentTranscriptLiveAnswer,
-  LIVE_POLL,
   TRANSCRIPT_NOW_QUERY,
   type TranscriptNowAnswer,
 } from "./live-wire.js";
@@ -116,7 +116,13 @@ import {
   modelChoiceSchema,
 } from "./models-wire.js";
 import { planTemplateWriteRequestSchema } from "./plan-document-template.js";
-import { PROVIDER_KEY_QUERY, providerKeySaveRequestSchema } from "./provider-key-wire.js";
+import {
+  type ChatGptCredentialsSaveRequest,
+  type ChatGptHostAnswer,
+  chatGptCredentialsSaveRequestSchema,
+  PROVIDER_KEY_QUERY,
+  providerKeySaveRequestSchema,
+} from "./provider-key-wire.js";
 import {
   type ChaptersModelAnswerView,
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
@@ -501,6 +507,26 @@ export class HostedCodingAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
   }
 
+  /** The account's `ext_agent_host_id` for Luke's hosted runtime, which a ChatGPT sign-in names as its host. */
+  chatGptHost(): Effect.Effect<ChatGptHostAnswer | Failed, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.account.chatGptHost, undefined), {});
+  }
+
+  /**
+   * A ChatGPT sign-in the desktop completed, handed to the service once,
+   * answering the keys as they then stand and, where the service kept
+   * nothing, why; a sign-in the service would refuse by shape never travels.
+   */
+  saveChatGptCredentials(
+    credentials: ChatGptCredentialsSaveRequest,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(chatGptCredentialsSaveRequestSchema)(credentials),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.account.saveChatGptCredentials, admitted), {});
+  }
+
   /** One provider's key of the kind named, an API key where none is, removed, answering the keys as they then stand. */
   removeProviderKey(
     params: ProviderKeyRemoveParams,
@@ -651,10 +677,13 @@ export class HostedCodingAgentClient {
     agentId: string,
     callId?: string,
     poll = false,
+    after?: string,
   ): Effect.Effect<AgentTranscriptLiveAnswer | Failed, never, HttpClient.HttpClient> {
     const named = callId === undefined ? { id: agentId } : { id: agentId, call: callId };
-    const asked = poll ? { ...named, [LIVE_POLL.QUERY]: LIVE_POLL.ON } : named;
-    return hostedAnswer(askHosted(this.#hosted.live.agentTranscript, asked), ROW_REFUSALS);
+    return hostedAnswer(
+      askLive(this.#hosted.live.agentTranscript, named, poll, after),
+      ROW_REFUSALS,
+    );
   }
 
   /**

@@ -10,7 +10,7 @@ import { AVATAR_OFF } from "@luke/voice/avatar";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { keepIdentity } from "@luke/wire";
 import { type Context, Effect, Equal, type Scope, Stream, SubscriptionRef } from "effect";
-import type { AppState, AppStateSnapshot } from "../app-state.js";
+import { type AppState, type AppStateSnapshot, NO_ACCESS } from "../app-state.js";
 import type { HostBootstrap } from "../host-operator.js";
 import type { RunMode } from "../run-mode.js";
 import { idleUpdateSnapshot } from "../update-service.js";
@@ -289,7 +289,7 @@ export function initialAppState(
       agentTraceEnabled: false,
     },
     account: { status: ACCOUNT_STATUS.SIGNED_OUT },
-    access: { admin: false },
+    access: NO_ACCESS,
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     hotkeys: { talkHeld: true },

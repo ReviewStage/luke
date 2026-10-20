@@ -32,6 +32,8 @@ import {
   planTemplateWriteRequestSchema,
 } from "../plan-document-template.js";
 import {
+  chatGptCredentialsSaveRequestSchema,
+  chatGptHostAnswerSchema,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_QUERY,
   providerKeyKindSchema,
@@ -47,6 +49,9 @@ const PLAN_TEMPLATE_BODY_BYTES = PLAN_TEMPLATE_BOUNDS.MAX_CHARS * 6 + 1_024;
 
 /** A key's save is a provider and a key bounded at 512 characters, so a body past this is not one. */
 const PROVIDER_KEY_BODY_BYTES = 2_048;
+
+/** A ChatGPT sign-in's save is three tokens of at most 16 KiB each and a few ids, so a body past this is not one. */
+const CHATGPT_CREDENTIALS_BODY_BYTES = 64 * 1_024;
 
 /** A revision's number as a path or a query carries it: text, read as a whole number from one. */
 const revisionSeqText = EffectSchema.FiniteFromString.pipe(
@@ -127,5 +132,15 @@ export const accountContract = {
         }),
       }),
     )
+    .output(EffectSchema.flip(providerKeysAnswerSchema)),
+  chatGptHost: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_HOST }))
+    .output(EffectSchema.flip(chatGptHostAnswerSchema)),
+  saveChatGptCredentials: hostedProcedure
+    .meta(bodyCap(CHATGPT_CREDENTIALS_BODY_BYTES))
+    .meta(
+      openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.ACCOUNT_CHATGPT_CREDENTIALS }),
+    )
+    .input(exactInput(chatGptCredentialsSaveRequestSchema))
     .output(EffectSchema.flip(providerKeysAnswerSchema)),
 };

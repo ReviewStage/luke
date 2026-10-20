@@ -3,8 +3,6 @@
 import assert from "node:assert/strict";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { EXPERIMENT } from "@luke/settings";
-import { experimentsOn } from "@luke/settings/testing";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -46,7 +44,7 @@ beforeEach(() => {
   window.localStorage.clear();
   pointer(false);
   fakeAppBridge({});
-  handState(experimentsOn(EXPERIMENT.SECTIONS));
+  handState({});
 });
 
 afterEach(() => {

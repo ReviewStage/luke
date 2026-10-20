@@ -76,7 +76,7 @@ const MCP_SERVER = "luke";
 const DENIED_VARIABLES = [
   RUNNER_ENV.CLAUDE_TOKEN,
   RUNNER_ENV.BEARER,
-  "ANTHROPIC_API_KEY",
+  RUNNER_ENV.API_KEY,
   "ANTHROPIC_AUTH_TOKEN",
   "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
 ] as const;
@@ -193,8 +193,11 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
   switch (value.type) {
     case INPUT_LINE.MESSAGE: {
       const running = yield* Ref.getAndSet(launch.turnRunning, true);
-      const uuid = randomUUID();
+      // SAFETY: a line's uuid is checked against the UUID pattern as the line is read.
+      const uuid = (value.uuid as UUID | undefined) ?? randomUUID();
       yield* Ref.update(launch.unanswered, (sent) => new Set(sent).add(uuid));
+      // Posted ahead of the hand-off, so it is numbered before anything the CLI says of the message.
+      yield* launch.sink.emit({ type: RUNNER_EVENT.ACCEPTED, uuid });
       yield* Queue.offer(launch.prompts, userMessage(uuid, value.content, running));
       return;
     }
@@ -370,10 +373,12 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
     return yield* new RunnerFailed({ detail: `${RUNNER_ENV.BEARER} is not set` });
   }
   const bearer = Redacted.make(bearerValue);
-  const tokens = [RUNNER_ENV.CLAUDE_TOKEN, RUNNER_ENV.CODEX_TOKEN].flatMap((name) => {
-    const value = input.env[name];
-    return value === undefined || value === "" ? [] : [Redacted.make(value)];
-  });
+  const tokens = [RUNNER_ENV.CLAUDE_TOKEN, RUNNER_ENV.API_KEY, RUNNER_ENV.CODEX_TOKEN].flatMap(
+    (name) => {
+      const value = input.env[name];
+      return value === undefined || value === "" ? [] : [Redacted.make(value)];
+    },
+  );
   const secrets = [bearer, ...tokens];
 
   // Stdin is read in a loop of its own from the first line on, so nothing

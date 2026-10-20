@@ -9,7 +9,7 @@ developer talks a task through with Luke, who writes its plan down as they go.
 | --- | --- |
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
 | `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; optional before a push, since CI runs every check |
-| `./scripts/check.sh` | Every portable repository, type, test, and build check: before a release, for a broad refactor, or on request |
+| `./scripts/check.sh` | Every portable repository, migration, lint, type, and test check: before a release, for a broad refactor, or on request |
 | `./scripts/run.sh` | Launch against live sessions, replacing the running plain instance (`--fixture smoke`, `--keep-running`, `--no-trace`); `--instance <name>` runs a named one beside it, with its own profile, and `--preview` is one named for its Preview |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
@@ -68,7 +68,29 @@ Review places a module and a component alike under this rule.
   view in main (`apps/desktop/src/main/window/browser-views.ts`), never into a
   trace, a counted event, a fixture, app state, the service, or the voice
   window; the still is left out of the screen recording, and the title and
-  address the tab draws are masked there as every word is.
+  address the tab draws are masked there as every word is. Amended, approved
+  by Dean on 2026-10-20: while that Mac's "Let agents run commands on this
+  Mac" switch (`macCommands`, `packages/settings/src/schema.ts`) is on, an
+  agent on a task may drive that task's Browser tabs on the Mac, over the
+  view's debugger, with no approval for each action, and a tab's address,
+  title, a downscaled screenshot and a text snapshot of its page then also
+  reach that agent and its workers, the service and the model, and the agent's
+  transcript, where the screenshot goes to the model and is left out of the
+  stored conversation, as `look_at_picture`'s is; to that extent "only to the
+  panel" and "never the service" above no longer hold. Everything else in the
+  line stays: none of it reaches a trace, a counted event, a fixture, app
+  state, or the voice window, and the screen recording still leaves it out.
+  With the switch off, the line stands as first written.
+  And, approved by Dean (the cloud browser), an agent's cloud browser, a Chromium
+  in that agent's own Vercel Sandbox, shows its pages, their live-view frames,
+  address, title, screenshots, and text snapshots to that agent and its workers,
+  the model, the agent's transcript (a screenshot reaches the model but is left
+  out of the stored conversation, as `look_at_picture`'s picture is,
+  `packages/service/src/tasks/picture-look.ts`), and the panels of the workspace
+  members who open the task; the service keeps the tab list, each tab's address
+  and title; none of it ever goes into a trace, a counted event, a fixture, or the
+  voice window, and session replay masks the live view; the cookies a member types
+  into it stay in that agent's sandbox, and its snapshots, for the sandbox's life.
   And, approved by Charles on 2026-10-16: Sentry's SDKs run with their default
   data collection (`packages/service/src/observability/sentry.ts`, the eve
   roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web
@@ -148,7 +170,8 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
   exempt one by extension, because a test body is its own edge
   (`tools/anti-slop/shared/effect-edges.ts`), so review is the check.
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
-  helpers, with the diff explained in the PR.
+  helpers, with the diff explained in the PR. A JSON Schema golden is kept
+  only for a schema a model is shown as a tool's input.
 - Never loosen or skip a test to go green: no `.only`, `.skip`, `.todo`, or
   `it.flakyTest`, which no lint rule refuses either. Fix or delete a flaky
   test. A test that breaks on a refactor because it checks internal

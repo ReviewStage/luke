@@ -1,7 +1,6 @@
 import { CHANNEL_KIND, type ChatChannel } from "@luke/features/chat-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
-import { EXPERIMENT } from "@luke/settings";
 import {
   ArchiveIcon,
   BackIcon,
@@ -47,7 +46,6 @@ import { useMinute } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
-import { useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { type ChannelDialogs, useChannelDialogs } from "./chat-channel-dialogs.js";
 import { previewWords } from "./chat-preview.js";
@@ -93,9 +91,9 @@ const CHAT_LIST = "Chat";
 /**
  * How the rail groups the tasks' channels: as the reader's sidebar groups
  * the tasks, the pinned first in the pins' order, then each of the
- * reader's sections in the listed workspace, while sections are on.
+ * reader's sections in the listed workspace.
  */
-function taskGrouping(tasks: TasksControl, sectionsOn: boolean): ChatTaskGrouping {
+function taskGrouping(tasks: TasksControl): ChatTaskGrouping {
   const pinned = inPinOrder(
     tasks.tasks.filter((task) => task.pinnedAt !== undefined),
     (task) => ({ position: task.pinPosition, at: task.pinnedAt ?? 0 }),
@@ -103,7 +101,7 @@ function taskGrouping(tasks: TasksControl, sectionsOn: boolean): ChatTaskGroupin
   const workspaceId = tasks.workspace?.id;
   const state = tasks.taskSections;
   const sections =
-    !sectionsOn || workspaceId === undefined
+    workspaceId === undefined
       ? []
       : workspaceSections(state, workspaceId).map((section) => ({
           id: section.id,
@@ -413,7 +411,6 @@ function ChatView({
     () => chatNames(listed, read?.agents ?? [], accountName),
     [listed, read, accountName],
   );
-  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const dialogs = useChannelDialogs(tasks.workspace?.id, read?.answer, view.onChannel, view.open);
   const actorOf = useChatActor(read?.answer, names);
   const folds = useRailFolds();
@@ -448,7 +445,7 @@ function ChatView({
     );
   }
   const chat = read.answer;
-  const rail = chatRail(chat, names, taskGrouping(tasks, sectionsOn));
+  const rail = chatRail(chat, names, taskGrouping(tasks));
   const hidden = hiddenColumns(room, view.listed);
   const groups = railGroups(rail);
   const row = (each: ChatRailRow) => (

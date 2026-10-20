@@ -2,6 +2,7 @@ import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import { codingAgentAgentAnswerSchema } from "./coding-agent-view.js";
 import {
+  CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   codingAgentCallIdSchema,
   codingAgentMessagesAnswerSchema,
@@ -28,7 +29,7 @@ import {
   planPageVersionAnswerSchema,
   taskPagesAnswerSchema,
 } from "./page-wire.js";
-import { pictureDataUrlSchema, pictureTypeSchema } from "./picture-wire.js";
+import { pictureDataUrlSchema } from "./picture-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import {
   planCommentActionRequestSchema,
@@ -54,6 +55,7 @@ import {
   repositoryPinRequestSchema,
   repositoryPinSchema,
   shownCodeSchema,
+  taskAssigneeIdSchema,
   taskCreateRequestSchema,
   taskFileRefusalSchema,
   taskFileRequestSchema,
@@ -569,16 +571,23 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
-/** Whether a change of where a task stands names its status, its priority, or both. */
-function namesAStanding(params: { status?: unknown; priority?: unknown }): boolean {
-  return params.status !== undefined || params.priority !== undefined;
+/** Whether a change of where a task stands names its status, its priority, its assignee, or any of them. */
+function namesAStanding(params: {
+  status?: unknown;
+  priority?: unknown;
+  assigneeId?: unknown;
+}): boolean {
+  return (
+    params.status !== undefined || params.priority !== undefined || params.assigneeId !== undefined
+  );
 }
 
-/** Setting where a task stands, how much it matters, or both, as the window asks it. */
+/** Setting where a task stands, how much it matters, who it is assigned to (null for no one), or any of them, as the window asks it. */
 export const tasksSetStandingParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
+  assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
 }).check(EffectSchema.makeFilter(namesAStanding));
 
 export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;
@@ -960,7 +969,7 @@ export const tasksRevisionAnswerSchema = EffectSchema.Union([
 
 export type TasksRevisionAnswer = typeof tasksRevisionAnswerSchema.Type;
 
-/** One picture of a plan, as the window drawing it names it: the plan, and the picture's id its text names. */
+/** One attachment of a plan, as the window drawing it names it: the plan, and the id its text or a comment's file names. */
 export const tasksPictureParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   attachmentId: EffectSchema.NonEmptyString,
@@ -969,14 +978,18 @@ export const tasksPictureParamsSchema = EffectSchema.Struct({
 export type TasksPictureParams = typeof tasksPictureParamsSchema.Type;
 
 /**
- * One picture of a plan, as the window hears it: its bytes in base64 under
- * its media type, which the window draws from a `data:` URL of its own
- * making, or why there is none: not the account's to read, or no answer.
- * The host fetched it under the account, so the window holds no bearer and
- * no address.
+ * One attachment of a plan, as the window hears it: its bytes in base64
+ * under its media type, which the window draws or offers from a `data:` URL
+ * of its own making, or why there is none: not the account's to read, or no
+ * answer. A picture the plan's text names is an image; a file a comment
+ * carries is any type a coding agent's file may be. The host fetched it
+ * under the account, so the window holds no bearer and no address.
  */
 export const tasksPictureAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ contentType: pictureTypeSchema, base64: EffectSchema.String }),
+  EffectSchema.Struct({
+    contentType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+    base64: EffectSchema.String,
+  }),
   EffectSchema.Struct({
     failure: EffectSchema.Literals([TASK_CALL_FAILURE.NOT_FOUND, TASK_CALL_FAILURE.UNANSWERED]),
   }),

@@ -20,6 +20,7 @@ import {
   automationViewSchema,
 } from "@luke/features/automation-view";
 import {
+  type ChatGptSignInAnswerView,
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAccountInboxAnswerView,
   type CodingAgentAccountInboxParams,
@@ -75,6 +76,7 @@ import {
   type CodingAgentTranscriptChanged,
   type CodingAgentTranscriptKey,
   type CodingAgentWorkspaceListParams,
+  chatGptSignInAnswerViewSchema,
   codingAgentAccountInboxAnswerViewSchema,
   codingAgentAgentAnswerSchema,
   codingAgentChangesAnswerViewSchema,
@@ -669,8 +671,12 @@ export interface HostOperator {
   providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
-  /** One provider's key removed; the keys as they then stand. */
+  /** One provider's key of the kind named removed, an API key where none is; the keys as they then stand. */
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** A ChatGPT sign-in run through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
+  chatGptSignIn(): Effect.Effect<ChatGptSignInAnswerView>;
+  /** The ChatGPT sign-in waiting on the browser, withdrawn. */
+  chatGptSignInCancel(): Effect.Effect<void>;
   /** The member's own GitHub token as its login, hint, and status; or why there is none. */
   githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
   /** The member's GitHub token saved, carried once; the token as it then stands, or why nothing was kept. */
@@ -1927,9 +1933,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     providerKeyRemove: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, { provider: params.provider }),
+        client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, {
+          provider: params.provider,
+          ...(params.kind === undefined ? undefined : { kind: params.kind }),
+        }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
       ),
+    chatGptSignIn: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN),
+        codingAgentAnswer(chatGptSignInAnswerViewSchema),
+      ),
+    chatGptSignInCancel: () => fire(client.call(GATEWAY_METHOD.CHATGPT_SIGN_IN_CANCEL)),
     githubTokenRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.GITHUB_TOKEN_READ),
@@ -2143,7 +2158,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.ACCOUNT_ACCESS_CHANGED,
         (payload): AppAccessSlice | undefined =>
-          isRecord(payload) && isWireBoolean(payload.admin) ? { admin: payload.admin } : undefined,
+          isRecord(payload) && isWireBoolean(payload.admin)
+            ? { admin: payload.admin, nativeAgents: payload.nativeAgents === true }
+            : undefined,
         listener,
       ),
     onVoiceLiveSessionChanged: (listener) =>

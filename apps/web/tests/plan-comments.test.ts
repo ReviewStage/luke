@@ -10,6 +10,7 @@ import {
   joinWorkspace,
   openWorkspace,
 } from "@luke/database/testing";
+import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "@luke/features/coding-agent-wire";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
@@ -651,7 +652,9 @@ it.layer(getTestDB())("the comment paths' refusals, byte for byte", (it) => {
       const body = JSON.stringify({
         action: PLAN_COMMENT_ACTION.REPLY,
         clientKey: randomUUID(),
-        words: "x".repeat(PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 7),
+        words: "x".repeat(
+          PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 6 + MAXIMUM_ATTACHMENTS_BODY_BYTES + 2_048,
+        ),
       });
       const answered = yield* answer(
         "comments",

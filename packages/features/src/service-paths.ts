@@ -25,6 +25,14 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
   /**
+   * The account's ChatGPT sign-in for Luke's hosted runtime, as the desktop
+   * hands it over (PUT); its removal is `ACCOUNT_PROVIDER_KEYS`'s DELETE with
+   * its kind. The answer is the provider keys' and never carries a token.
+   */
+  ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
+  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for Luke's hosted runtime under (GET). */
+  ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
+  /**
    * The Markdown the account's new tasks start from: read it (GET), or keep
    * one verbatim or go back to the default (PUT).
    * `plan-document-template.ts` declares both bodies.
@@ -95,6 +103,12 @@ export const HOSTED_SERVICE_PATH = {
    * declares the bodies.
    */
   MAC_COMMANDS: "/api/mac-commands",
+  /**
+   * One browser command's result, posted by the Mac that took it (POST): its
+   * JSON and at most one image, under a body cap of its own that fits the
+   * image. `mac-command-wire.ts` declares the body.
+   */
+  MAC_COMMAND_BROWSER_RESULTS: "/api/mac-commands/browser",
   /**
    * The account's automations: list them, newest first, or one task's where
    * `planId` names it (GET), or make one (POST). `automation-wire.ts`

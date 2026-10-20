@@ -714,6 +714,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /** A task's row of the list: everything but its document and what is written of it. */
+  /** A task's row or document without the assignee it stood with. */
+  function withoutAssignee<T extends { readonly assignee?: unknown }>(
+    standing: T,
+  ): Omit<T, "assignee"> {
+    const { assignee: _assignee, ...rest } = standing;
+    return rest;
+  }
+
   function summaryOf({
     document: _document,
     agentEdits: _agentEdits,
@@ -1137,14 +1145,14 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function followBoard(taskId: string) {
     const following = () => gate() && view.activeTaskId === taskId;
-    const seal = (poll = false) =>
-      Effect.map(served(client.boardLive(taskId, poll)), (sealed) =>
+    const seal = (poll = false, after?: string) =>
+      Effect.map(served(client.boardLive(taskId, poll, after)), (sealed) =>
         sealed.ok ? sealed.answer : { failure: sealed.failure },
       );
     // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing or polling it.
-    const sealedFor = (poll: boolean) =>
+    const sealedFor = (poll: boolean, after?: string) =>
       following()
-        ? Effect.map(seal(poll), (renewed) =>
+        ? Effect.map(seal(poll, after), (renewed) =>
             "failure" in renewed && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
               ? { ...renewed, gone: true }
               : renewed,
@@ -1159,7 +1167,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       const moves = boardMoves(
         {
           seal: () => sealedFor(false),
-          poll: () => sealedFor(true),
+          poll: (after) => sealedFor(true, after),
           openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
         },
@@ -1303,16 +1311,24 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     write({ document: { status: TASKS_READ.READY, task: { ...held, name: listed.name } } });
   }
 
-  /** Draws `task` as the service answered it, in the list's row and in the open document where it is the one held. */
+  /**
+   * Draws `task` as the service answered it, in the list's row and in the
+   * open document where it is the one held. Note that the assignee standing
+   * is dropped first, because an answer names one only where the task has
+   * one, so an answer that names none is a task assigned to no one.
+   */
   function takeAnswered(task: Task): void {
     const tasks = view.tasks.map((row) =>
-      row.id === task.id ? { ...row, ...summaryOf(task) } : row,
+      row.id === task.id ? { ...withoutAssignee(row), ...summaryOf(task) } : row,
     );
     const held = heldTaskOf(task.id);
     write(
       held === undefined
         ? { tasks }
-        : { tasks, document: { status: TASKS_READ.READY, task: { ...held, ...task } } },
+        : {
+            tasks,
+            document: { status: TASKS_READ.READY, task: { ...withoutAssignee(held), ...task } },
+          },
     );
   }
 
@@ -1974,7 +1990,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.gen(function* () {
         const read = readEither(tasksSetStandingParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
-          return yield* invalid("setting where a task stands names it and its status or priority");
+          return yield* invalid(
+            "setting where a task stands names it and its status, priority, or assignee",
+          );
         }
         if (!gate()) return { changed: false };
         const { taskId, ...standing } = read.success;

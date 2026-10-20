@@ -29,7 +29,12 @@ import {
   type EveTypedTurn,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
-import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
+import {
+  CODER_DEPLOYMENT_PRESENCE,
+  CODER_DEPLOYMENT_STREAMS,
+  CODER_DEPLOYMENT_TURNS,
+  coderChannelInput,
+} from "./channel.js";
 import { type EveReach, eveFor } from "./stop.js";
 
 /**
@@ -80,6 +85,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   nativeAgentAccounts: [],
+  agentSandboxSnapshot: undefined,
 };
 
 const WITH_SECRET = Layer.succeed(HostedEnvironment, {
@@ -111,6 +117,7 @@ const DOORS = {
       secret: Redacted.make(SECRET),
       admits: CODER_DEPLOYMENT_TURNS,
       presents: CODER_DEPLOYMENT_PRESENCE,
+      streams: CODER_DEPLOYMENT_STREAMS,
     },
     async () => undefined,
   ).auth,
@@ -118,6 +125,7 @@ const DOORS = {
     secret: Redacted.make(SECRET),
     admits: DEPLOYMENT_TURNS,
     presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+    streams: true,
   }).auth,
 } as const satisfies Readonly<Record<EveMount, EveChannelInput["auth"]>>;
 

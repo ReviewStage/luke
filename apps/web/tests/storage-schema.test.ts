@@ -40,10 +40,12 @@ afterAll(() => database.close());
 /** Every table the migrations declare, by its Postgres name, better-auth's own alongside Luke's. */
 const DECLARED_TABLES = [
   "account",
+  "account_chatgpt_host",
   "account_plan_template_revision",
   "account_preference",
   "account_provider_key",
   "admin_favorite",
+  "agent_browser_tab",
   "agent_pin",
   "asks",
   "attachment",
@@ -76,6 +78,7 @@ const DECLARED_TABLES = [
   "jwks",
   "mac_command",
   "mac_command_listener",
+  "mac_command_listener_kind",
   "member",
   "messages",
   "oauth_access_token",

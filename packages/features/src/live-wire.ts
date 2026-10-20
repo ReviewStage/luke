@@ -41,10 +41,23 @@ import { countedNumber } from "./service-wire.js";
 export const LIVE_POLL_URL = "luke-poll:";
 
 /** How a reader asks for a live read's rows inline rather than sealed, while Realtime fails it. */
-export const LIVE_POLL = { QUERY: "poll", ON: "true" } as const;
+export const LIVE_POLL = { QUERY: "poll", ON: "true", AFTER: "after" } as const;
+
+/**
+ * Where a polled read's rows stand as one value: each part's digest, in
+ * the parts' name order. A reader sends the one it last saw as `after`, and
+ * the service holds the poll until the rows move past it.
+ */
+export function liveDigestOf(
+  queries: Readonly<Record<string, { readonly digest?: string }>>,
+): string | undefined {
+  const parts = Object.keys(queries).toSorted();
+  const digests = parts.map((part) => queries[part]?.digest);
+  return digests.every((digest) => digest !== undefined) ? digests.join(",") : undefined;
+}
 
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
-export const sealedLiveQuerySchema = EffectSchema.Struct({
+const sealedLiveQuerySchema = EffectSchema.Struct({
   capability: EffectSchema.String,
   queryFingerprint: EffectSchema.String,
   /** When the seal expires, in epoch milliseconds; the reader renews it before. */
@@ -57,6 +70,12 @@ export const sealedLiveQuerySchema = EffectSchema.Struct({
   rows: EffectSchema.optionalKey(
     EffectSchema.fromJsonString(EffectSchema.Array(EffectSchema.Unknown)),
   ),
+  /**
+   * Where the statement's rows stand, answered only at `LIVE_POLL_URL`: a
+   * poll held past `after` that ends with nothing moved carries the digest
+   * and no rows.
+   */
+  digest: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;

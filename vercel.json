@@ -2,8 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
     "deploymentEnabled": {
-      "gh-readonly-queue/**": false,
-      "luke/**": false
+      "gh-readonly-queue/**": false
     }
   },
   "services": {
@@ -55,6 +54,10 @@
           "dest": "/api/default.js?route=account/integrations/connected"
         },
         {
+          "src": "/api/agents/runner-events",
+          "dest": "/api/default.js?route=agents/runner-events"
+        },
+        {
           "src": "/api/github/install",
           "dest": "/api/default.js?route=github/install"
         },
@@ -81,6 +84,10 @@
         {
           "src": "/api/workspaces/linear/connected",
           "dest": "/api/default.js?route=workspaces/linear/connected"
+        },
+        {
+          "src": "/api/agents/mcp",
+          "dest": "/api/luke-mcp.js?route=agents/mcp"
         },
         {
           "src": "/api/maintenance/sweep",
