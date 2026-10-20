@@ -12,7 +12,7 @@ import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
  * file, a pull request, or an issue with is one Luke draws as a chip: the
  * coding agent's instructions, which show every kind it names as a mention,
  * its inbox and plan tools, the planner's, and the notetaker's; the coding
- * agent's last example is one of the workspace's own issues. An example spelled with `<owner>/<name>` and `<path>` is
+ * agent's last example is another agent's. An example spelled with `<owner>/<name>` and `<path>` is
  * read as an author fills it in. Synthetic repository.
  */
 
