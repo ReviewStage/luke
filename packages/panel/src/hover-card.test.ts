@@ -152,6 +152,11 @@ test("a working agent's card says only how long its run has gone at its corner, 
     card.querySelector('.actor-card-head .state-glyph[data-state="working"]'),
     "the tile wears the working mark",
   );
+  assert.equal(
+    card.querySelector("[data-tab-card] > .visually-hidden")?.textContent,
+    "Working",
+    "a reader, whom the tile's mark is hidden from, hears that it works",
+  );
 });
 
 test("a plan's, a skill's, an agent tab's, and a Changes tab's cards each name their subject in the one head, its line and corner in the same places", async () => {

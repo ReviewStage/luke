@@ -17,6 +17,7 @@ import {
 } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { usePerson } from "../member-directory.js";
+import { GLYPH_STATE, glyphStateWords } from "../state-glyph.js";
 import {
   type ArchivedByReading,
   agentParts,
@@ -43,7 +44,7 @@ import { WorkingTime } from "./working-time.js";
  * every place draws the pair (`model-label.tsx`), where they are known; and
  * the time at the head's right: the run's count while the agent works, its
  * tile's mark in its harness's place saying that it works, as a tab's glyph
- * does, with no word beside it; and how long ago it last moved once it has
+ * does, with no word beside it but one only a reader hears; and how long ago it last moved once it has
  * ended, in the sidebar's letters, after how it
  * ended where it stopped or failed ("Stopped · 3m"): when its
  * latest turn finished, where the tab holds it, or else when its newest
@@ -332,6 +333,10 @@ export function AgentTabCard({
           {head}
         </div>
       )}
+      {corner.kind === CARD_CORNER.WORKING ? (
+        // Note that the word is a reader's alone, because the tile that shows the work hides its mark from a reader and nothing drawn says it.
+        <span className="visually-hidden">{glyphStateWords(GLYPH_STATE.WORKING, false)}</span>
+      ) : null}
       <StartedBy by={startedBy} automationId={automationId} />
       {archivedBy === undefined ? null : <ArchivedByNote archivedBy={archivedBy} />}
       {transcript === undefined ? null : <ActivityLine transcript={transcript} />}

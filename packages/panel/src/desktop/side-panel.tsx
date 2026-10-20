@@ -1244,7 +1244,7 @@ function subagentCardReading(
     const running = state === GLYPH_STATE.WORKING;
     const own = held.workers.get(tab.subagent);
     const messages = heldLatest(own, { writing: running, runStartedAt: own?.runStartedAt }, chosen);
-    const choice = delegationChoices(delegation, tab.subagent, agents, held).delegated;
+    const choices = delegationChoices(delegation, tab.subagent, agents, held);
     return {
       corner: cardCorner({
         writing: running,
@@ -1252,8 +1252,9 @@ function subagentCardReading(
         movedAt: lastFinished(messages),
         state: stateWords,
       }),
-      choice,
-      tile: subagentActor(choice?.model, state, label),
+      choice: choices.delegated,
+      // Note that the tile falls back on its agent's model, as the worker's tab does, until the call that started it is held.
+      tile: subagentActor((choices.delegated ?? choices.own)?.model, state, label),
       transcript:
         messages &&
         agentTranscript({
