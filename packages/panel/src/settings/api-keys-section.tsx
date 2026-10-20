@@ -94,6 +94,8 @@ function keyStatusWords(provider: ProviderKeyProvider, status: ProviderKeyStatus
       return `Out of quota or credit at ${name}.`;
     case PROVIDER_KEY_STATUS.UNREADABLE:
       return "This key can no longer be read.";
+    case PROVIDER_KEY_STATUS.UNVERIFIED:
+      return "Not checked yet";
   }
 }
 
@@ -114,6 +116,8 @@ function rejectionWords(provider: ProviderKeyProvider, rejection: ProviderKeyRej
       return `Couldn't reach ${name} to check this key. Try again.`;
     case PROVIDER_KEY_REJECTION.TOO_MANY_TRIES:
       return "Too many keys tried in the last hour. Try again later.";
+    case PROVIDER_KEY_REJECTION.OTHER_KIND_HELD:
+      return `Your ${name} subscription is connected. Disconnect it before adding a key.`;
   }
 }
 

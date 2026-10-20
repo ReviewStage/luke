@@ -6,7 +6,7 @@
  * method it has always answered on. A revision's number travels in the
  * path, and a page of the history names the revision it is read before in
  * the query, each as the text a URL carries, read as a revision number;
- * a key is removed by the provider its query names, since a `DELETE`
+ * a key is removed by the provider and the kind its query names, since a `DELETE`
  * carries no body. A JSON body is read whole, a key it does not name
  * refused (`exactInput`), but for the preferences write, whose parts the
  * service has always read one by one and whose other keys it passes over.
@@ -34,6 +34,7 @@ import {
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_QUERY,
+  providerKeyKindSchema,
   providerKeySaveRequestSchema,
   providerKeysAnswerSchema,
 } from "../provider-key-wire.js";
@@ -122,6 +123,7 @@ export const accountContract = {
           [PROVIDER_KEY_QUERY.PROVIDER]: EffectSchema.Literals(
             Object.values(PROVIDER_KEY_PROVIDER),
           ),
+          [PROVIDER_KEY_QUERY.KIND]: EffectSchema.optionalKey(providerKeyKindSchema),
         }),
       }),
     )

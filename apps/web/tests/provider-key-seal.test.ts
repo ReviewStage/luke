@@ -9,7 +9,7 @@ import {
   sealGitHubToken,
   sealProviderKey,
 } from "@luke/database/models/provider-key-seal";
-import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { Redacted, Result } from "effect";
 import { test } from "vitest";
 
@@ -29,7 +29,11 @@ const KEK = {
   OTHER: Buffer.alloc(32, 9).toString("base64"),
 } as const;
 
-const OWNER: SealOwner = { userId: "user-owner", provider: PROVIDER_KEY_PROVIDER.ANTHROPIC };
+const OWNER: SealOwner = {
+  userId: "user-owner",
+  provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+  kind: PROVIDER_KEY_KIND.API_KEY,
+};
 const PROVIDER_KEY = Redacted.make("sk-ant-test-0000000000000000000000abcd");
 
 function ring(value: string): KeyRing {
@@ -66,6 +70,20 @@ test("a seal moved onto another account's row or another provider's fails closed
     openProviderKey(one, { ...OWNER, provider: PROVIDER_KEY_PROVIDER.OPENAI }, sealed),
     Result.fail(PROVIDER_KEY_UNREADABLE),
   );
+});
+
+test("an API key's seal never opens as a setup-token's, nor a setup-token's as an API key's", () => {
+  const one = ring(`1:${KEK.ONE}`);
+  const tokenOwner: SealOwner = { ...OWNER, kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN };
+  const keySealed = sealProviderKey(one, OWNER, PROVIDER_KEY);
+  const tokenSealed = sealProviderKey(one, tokenOwner, PROVIDER_KEY);
+
+  assert.equal(opened(openProviderKey(one, tokenOwner, tokenSealed)), Redacted.value(PROVIDER_KEY));
+  assert.deepEqual(
+    openProviderKey(one, tokenOwner, keySealed),
+    Result.fail(PROVIDER_KEY_UNREADABLE),
+  );
+  assert.deepEqual(openProviderKey(one, OWNER, tokenSealed), Result.fail(PROVIDER_KEY_UNREADABLE));
 });
 
 test("a GitHub token's seal opens for its member alone, and no provider key's seal opens as one", () => {
