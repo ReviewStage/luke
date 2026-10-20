@@ -74,6 +74,25 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
   }
 });
 
+test("a coding agent with Chat on is shown its task's Luke as the link Luke draws as his chip, and an agent on no task is shown no link of a Luke's", () => {
+  const chatOf = (taskLink: string | null) => {
+    const words = coderInstructions(
+      REPOSITORY,
+      CODING_AGENT_BRIEF.PLAN,
+      true,
+      taskLink,
+      undefined,
+      true,
+    );
+    const from = words.indexOf("## Chat with other agents");
+    return words.slice(from, words.indexOf("\n## ", from + 1));
+  };
+  const onTask = chatOf(TASK_ADDRESS);
+  assert.deepEqual(drawnAs(onTask), [MENTION_KIND.LUKE]);
+  assert.ok(onTask.includes(`[@Luke](${TASK_ADDRESS}/luke)`));
+  assert.deepEqual(drawnAs(chatOf(null)), []);
+});
+
 test("the inbox's post tool and the plan's edit tool show a file's link Luke draws as its chip", () => {
   assert.deepEqual(drawnAs(INBOX_TOOLS.POST.description), [MENTION_KIND.FILE]);
   assert.deepEqual(drawnAs(EDIT_PLAN_TOOL.description), [MENTION_KIND.FILE]);
@@ -81,4 +100,21 @@ test("the inbox's post tool and the plan's edit tool show a file's link Luke dra
 
 test("the planner shows an issue's link for the plan and a file's link for code, each drawn as its chip", () => {
   assert.deepEqual(drawnAs(BRAIN_INSTRUCTIONS), [MENTION_KIND.LINK, MENTION_KIND.FILE]);
+});
+
+/** Every date mention the words show, as the mention its target names. */
+function datesIn(words: string): (string | undefined)[] {
+  return [...words.matchAll(/\]\((luke:\/\/date\/[^)\s`]+)\)/gu)].map(
+    ([, target]) => decodeMention(target ?? "", REPOSITORY)?.kind,
+  );
+}
+
+test("a coding agent and the planner are each shown a day, a time, and a range, each a date Luke draws as its chip", () => {
+  const words = coderInstructions(REPOSITORY, CODING_AGENT_BRIEF.PLAN, true, TASK_ADDRESS);
+  assert.deepEqual(datesIn(words), [MENTION_KIND.DATE, MENTION_KIND.DATE, MENTION_KIND.DATE]);
+  assert.deepEqual(datesIn(BRAIN_INSTRUCTIONS), [
+    MENTION_KIND.DATE,
+    MENTION_KIND.DATE,
+    MENTION_KIND.DATE,
+  ]);
 });

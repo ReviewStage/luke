@@ -14,8 +14,8 @@ import { useAppState } from "../use-app-state.js";
  * narrow for its word draws its glyph alone and still names it.
  */
 
-/** What the pill's hint says: why reads are failing, and that nothing needs doing. */
-const OFFLINE_HINT = "You're offline. Luke will catch up as soon as you reconnect.";
+/** What the pill's hint says: why reads are failing. */
+const OFFLINE_HINT = "You're offline.";
 
 /** Whether main last found the Mac offline: what the pill, and the room the title bar makes for it, answer. */
 export function useOffline(): boolean {

@@ -18,6 +18,8 @@ import {
 
 export const METRICS_PATH = ADMIN_ROUTE_PATH.METRICS;
 
+export const COST_PATH = ADMIN_ROUTE_PATH.COST;
+
 const USER_DETAIL_PATH = ADMIN_ROUTE_PATH.USER;
 
 export const USERS_PATH = ADMIN_ROUTE_PATH.USERS;
@@ -45,6 +47,7 @@ const TAB_PARAM = "view";
 
 const USERS_TAB_VALUE = "users";
 
+const COST_TAB_VALUE = "cost";
 const WORKSPACES_TAB_VALUE = "workspaces";
 
 const ANIMATIONS_TAB_VALUE = "animations";
@@ -62,11 +65,12 @@ const SEARCH_VIEW_PARAM = "q";
 export const SEARCH_DEBOUNCE_MS = 250;
 
 /** The sidebar's destinations; an open account highlights Users. */
-export type AdminTab = "dashboard" | "reliability" | "workspaces" | "users" | "animations";
+export type AdminTab = "dashboard" | "cost" | "reliability" | "workspaces" | "users" | "animations";
 
 /** Which of the page's views the address bar names. */
 export type AdminView =
   | { kind: "dashboard" }
+  | { kind: "cost" }
   | { kind: "reliability" }
   | { kind: "workspaces" }
   | { kind: "users" }
@@ -82,6 +86,7 @@ export function viewFromLocation(): AdminView {
   // broken page, the same reading an out-of-set window gets.
   const day = params.get(DAY_VIEW_PARAM);
   if (day !== null && isUtcDayKey(day)) return { kind: "day", day };
+  if (params.get(TAB_PARAM) === COST_TAB_VALUE) return { kind: "cost" };
   if (params.get(TAB_PARAM) === RELIABILITY_TAB_VALUE) return { kind: "reliability" };
   if (params.get(TAB_PARAM) === WORKSPACES_TAB_VALUE) return { kind: "workspaces" };
   if (params.get(TAB_PARAM) === USERS_TAB_VALUE) return { kind: "users" };
@@ -172,6 +177,7 @@ export function dayHref(day: string): string {
 
 export function tabHref(tab: AdminTab): string {
   const params = new URLSearchParams();
+  if (tab === "cost") params.set(TAB_PARAM, COST_TAB_VALUE);
   if (tab === "reliability") params.set(TAB_PARAM, RELIABILITY_TAB_VALUE);
   if (tab === "workspaces") params.set(TAB_PARAM, WORKSPACES_TAB_VALUE);
   if (tab === "users") params.set(TAB_PARAM, USERS_TAB_VALUE);

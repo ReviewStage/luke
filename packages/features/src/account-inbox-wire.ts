@@ -47,7 +47,7 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * under a key of its own (`chat`), on the same terms: every open ask
  * someone else posted, and the one direct message or mention their member
  * was last told of and has not read past. Each says only enough to be
- * announced and opened, who posted it by handle and the plan of the
+ * announced and opened, who posted it by name and the plan of the
  * channel it stands in, and none of its words, which the window reads
  * from the chat itself. A build that predates it reads none.
  */
@@ -160,7 +160,7 @@ export const ACCOUNT_CHAT_REASON = {
 /**
  * One chat message that waits on the developer, as the account's read
  * carries it: the message by its id and its place in its workspace's chat,
- * the workspace, why it waits, who posted it by handle, the plan of the
+ * the workspace, why it waits, who posted it by name, the plan of the
  * channel it stands in where it stands in a plan's, the place it last
  * changed at, which an ask posted again moves, and when it last changed.
  */

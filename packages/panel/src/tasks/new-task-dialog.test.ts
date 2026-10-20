@@ -2,6 +2,13 @@
 
 import assert from "node:assert/strict";
 import {
+  GITHUB_AUTHOR_ASSOCIATION,
+  type GitHubIssuePick,
+  type GitHubRepositoryIssuesAnswer,
+  ISSUE_STATE,
+  type RepositoryIssuesAsk,
+} from "@luke/features/github-repositories-wire";
+import {
   INTEGRATION_PROVIDER,
   INTEGRATION_PROVIDER_LIST,
   INTEGRATION_STATUS,
@@ -12,9 +19,14 @@ import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
-import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import {
+  TASK_ISSUE_PROVIDER,
+  TASK_ISSUE_RELATION,
+  type TaskIssueChoice,
+} from "@luke/features/task-issue-wire";
+import { TASK_STATUS, TASK_TREE_ENTRY, type TaskStatus } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -24,7 +36,13 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActPort,
+  fakeActs,
+  fakeAppBridge,
+} from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import {
@@ -89,6 +107,7 @@ beforeEach(() => {
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeActPort({});
 });
 
 afterEach(() => {
@@ -115,8 +134,10 @@ function keptInLukeMode(): void {
  * `preset` is what the press that opened it chose, a repository as a
  * repository group's + does or an issue as its Start task… does, `issues`
  * the workspace's Linear issues where it has Linear connected, `finds`
- * what its Linear answers a search or an identifier with, and `own` the
- * workspace's own issues where Issues stand on.
+ * what its Linear answers a search or an identifier with, `own` the
+ * workspace's own issues where Issues stand on, and `github` what a
+ * repository's GitHub issues read answers, where the workspace has GitHub
+ * connected.
  */
 async function mount(
   answer: string | undefined = undefined,
@@ -125,16 +146,20 @@ async function mount(
   issues?: readonly LinearIssueSummary[],
   finds: (ask: LinearIssuesAsk) => readonly LinearIssueSummary[] = () => [],
   own?: readonly NewTaskIssue[],
+  github?: (repository: string, ask: RepositoryIssuesAsk) => GitHubRepositoryIssuesAnswer,
 ) {
   const starts: [string, string | null][] = [];
+  const githubAsks: [string, RepositoryIssuesAsk][] = [];
+  const choices: (readonly TaskIssueChoice[] | undefined)[] = [];
   const asks: LinearIssuesAsk[] = [];
   const planned: boolean[] = [];
   const agents: (NewTaskAgent | undefined)[] = [];
   const agentsAtOnce: (boolean | undefined)[] = [];
-  const fromIssues: (string | undefined)[] = [];
+  const fromIssues: (readonly (string | number)[] | undefined)[] = [];
   const fromWorkspaceIssues: (string | undefined)[] = [];
   const briefs: (string | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];
+  const statuses: (TaskStatus | undefined)[] = [];
   const control = tasksControl();
   let repositories: RepositoryChooser = {
     ...control.repositories,
@@ -168,10 +193,12 @@ async function mount(
           planned.push(planning);
           agents.push(from?.handed);
           agentsAtOnce.push(from?.agent);
-          fromIssues.push(from?.linearIssueId);
+          fromIssues.push(from?.issues?.map((issue) => ("id" in issue ? issue.id : issue.number)));
+          choices.push(from?.issues);
           fromWorkspaceIssues.push(from?.issueId);
           briefs.push(from?.brief);
           startedIn.push(workspaceId);
+          statuses.push(from?.status);
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
@@ -184,6 +211,13 @@ async function mount(
                 return Promise.resolve(finds(ask));
               },
         issuesIn: () => (own === undefined ? undefined : () => Promise.resolve(own)),
+        githubIssuesIn: () =>
+          github === undefined
+            ? undefined
+            : (repository: string, ask: RepositoryIssuesAsk) => {
+                githubAsks.push([repository, ask]);
+                return Promise.resolve(github(repository, ask));
+              },
       },
     });
     return createElement(
@@ -222,12 +256,18 @@ async function mount(
     asks,
     /** The Linear issue each start came from, where it came from one. */
     fromIssues,
+    /** The issues each start linked, with their relations. */
+    choices,
+    /** Every read of a repository's GitHub issues, by repository, and what it asked. */
+    githubAsks,
     /** The workspace's own issue each start came from, where it came from one. */
     fromWorkspaceIssues,
     /** The brief each start handed Luke, where it handed one. */
     briefs,
     /** The workspace each start asked for. */
     startedIn,
+    /** The status each start asked its task to stand in, where it asked for one. */
+    statuses,
     /** Whether each start asked for its planning phase. */
     planned,
     /** The coding agent each start handed its words, where it asked for one. */
@@ -361,21 +401,11 @@ test("a model picked on the chip runs this agent alone, and the account's defaul
 });
 
 test("a server whose sign-in expired is offered nowhere in the card, which hands an agent no servers", async () => {
-  fakeAppBridge({
-    act: (request: Act) =>
-      Promise.resolve(
-        request.kind === ACT_KIND.INTEGRATIONS_STATUS
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                integrations: {
-                  ...UNAVAILABLE,
-                  [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.EXPIRED,
-                },
-              },
-            }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      ),
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_STATUS]: () =>
+      Promise.resolve({
+        integrations: { ...UNAVAILABLE, [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.EXPIRED },
+      }),
   });
   const card = await mount();
   await settle();
@@ -413,9 +443,9 @@ test("Shift+Return is a new line, and the agent is handed both lines", async () 
 });
 
 test("once a repository is chosen, an @ offers its files, read through the workspace, and the row chosen is drawn as its chip and handed to the agent as its link", async () => {
-  const told: Act[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+  const told: AnyAct[] = [];
+  fakeActs({
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       told.push(request);
       return Promise.resolve(
         request.kind === ACT_KIND.TASKS_TREE
@@ -572,32 +602,27 @@ test("with Issues on, an @ offers the workspace's issues, and the one chosen is 
 });
 
 test("a skill chosen from the / list is its chip, which opens its SKILL.md in the chosen repository on GitHub", async () => {
-  const told: Act[] = [];
+  const onGitHub: string[] = [];
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: (request: Act) => {
-      told.push(request);
-      return Promise.resolve(
-        request.kind === ACT_KIND.TASKS_SKILLS
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                skills: {
-                  repository: "acme/web",
-                  branch: "main",
-                  skills: [
-                    {
-                      name: "release",
-                      description: "Cut a release.",
-                      path: ".agents/skills/release/SKILL.md",
-                    },
-                  ],
-                },
-              },
-            }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      );
+  fakeActPort({
+    [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
+      onGitHub.push(url);
+      return Promise.resolve();
     },
+    [ACT_KIND.TASKS_SKILLS]: () =>
+      Promise.resolve({
+        skills: {
+          repository: "acme/web",
+          branch: "main",
+          skills: [
+            {
+              name: "release",
+              description: "Cut a release.",
+              path: ".agents/skills/release/SKILL.md",
+            },
+          ],
+        },
+      }),
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -627,10 +652,9 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
     assert.fail("the skill is a chip that opens");
   act(() => chip.click());
 
-  assert.deepEqual(
-    told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
-    [{ url: "https://github.com/acme/web/blob/HEAD/.agents/skills/release/SKILL.md" }],
-  );
+  assert.deepEqual(onGitHub, [
+    "https://github.com/acme/web/blob/HEAD/.agents/skills/release/SKILL.md",
+  ]);
 });
 
 test("Plan mode: Shift+Tab turns it on, the model chip stands down, and Start begins the plan and its call, Untitled, handing Luke the words as its brief", async () => {
@@ -1076,7 +1100,7 @@ const ISSUES: readonly LinearIssueSummary[] = [
 
 /** What the Issue chip is named, and its search field's. */
 const ISSUE_CHIP = '[aria-label="Choose an issue"]';
-const LINEAR_SEARCH = 'input[aria-label="Search issues, or paste a key or link"]';
+const LINEAR_SEARCH = 'input[aria-label="Search issues, or paste a key, #number, or link"]';
 
 /** The Issue chip's search, open. */
 function linearSearch(): HTMLInputElement {
@@ -1270,7 +1294,7 @@ test("choosing one of the workspace's own issues lays it over the words in the L
   await bare.press("Enter", linearSearch());
   await bare.key("Enter");
 
-  assert.equal(linear, "ENG-1Restack the deploy queueTodo");
+  assert.equal(linear, "ENG-1Restack the deploy queueCloses");
   assert.deepEqual(chosen, { chip: "ACME-7Invites expire", starts: 0 });
   assert.deepEqual(card.starts, [["Invites expire", "acme/web"]]);
   assert.deepEqual(card.fromWorkspaceIssues, ["own-1"]);
@@ -1320,10 +1344,10 @@ test("choosing a Linear issue from the Issue chip lays it over the words as a ch
     highlighted: "Restack the deploy queueENG-1 · Todo",
   });
   assert.equal(moved, "Add support for stacked PRsENG-2 · In Progress");
-  assert.deepEqual(chosen, { chip: "ENG-2Add support for stacked PRsIn Progress", starts: 0 });
+  assert.deepEqual(chosen, { chip: "ENG-2Add support for stacked PRsCloses", starts: 0 });
   assert.deepEqual(card.starts, [["Add support for stacked PRs", "acme/web"]]);
   assert.deepEqual(card.planned, [false]);
-  assert.deepEqual(card.fromIssues, ["issue-2"]);
+  assert.deepEqual(card.fromIssues, [["issue-2"]]);
   assert.equal(
     card.agents[0]?.prompt,
     "[@ENG-2 Add support for stacked PRs](https://linear.app/acme/issue/ENG-2)\n\nReproduce it first.",
@@ -1336,8 +1360,6 @@ test("an issue picked and Return with no words starts an agent on the issue alon
   await card.press("Enter", linearSearch());
   await card.key("Enter");
   const dropped = await (async () => {
-    await openLinear();
-    await card.press("Enter", linearSearch());
     act(() => card.button("Remove issue").click());
     await settle();
     return issueChip();
@@ -1356,7 +1378,7 @@ test("an issue picked and Return with no words starts an agent on the issue alon
   assert.equal(dropped, undefined);
   assert.deepEqual(card.starts.at(-1), ["Restack the deploy queue", "acme/web"]);
   assert.deepEqual(card.planned.at(-1), true);
-  assert.deepEqual(card.fromIssues.at(-1), "issue-1");
+  assert.deepEqual(card.fromIssues.at(-1), ["issue-1"]);
   assert.equal(card.agents.at(-1), undefined);
 });
 
@@ -1370,7 +1392,7 @@ test("Plan mode with an issue picked and words written names the task by the iss
 
   assert.deepEqual(card.starts, [["Restack the deploy queue", "acme/web"]]);
   assert.deepEqual(card.planned, [true]);
-  assert.deepEqual(card.fromIssues, ["issue-1"]);
+  assert.deepEqual(card.fromIssues, [["issue-1"]]);
   assert.deepEqual(card.briefs, ["Keep the queue order stable."]);
   assert.deepEqual(card.agents, [undefined]);
 });
@@ -1448,7 +1470,7 @@ test("an issue Linear finds that sorts ahead of the highlighted one leaves the h
       ],
       highlighted: "Redeploy the docsENG-9",
     });
-    assert.equal(issueChip(), "ENG-9Redeploy the docs");
+    assert.equal(issueChip(), "ENG-9Redeploy the docsCloses");
   } finally {
     vi.useRealTimers();
   }
@@ -1468,7 +1490,7 @@ test("a link to an issue pasted in the Linear search asks Linear for that one is
 
     assert.deepEqual(card.asks, [{ identifier: "ENG-301" }]);
     assert.equal(listed.highlighted, "Queue jumps on retryENG-301 · Backlog");
-    assert.equal(issueChip(), "ENG-301Queue jumps on retryBacklog");
+    assert.equal(issueChip(), "ENG-301Queue jumps on retryCloses");
     assert.deepEqual(card.starts, []);
   } finally {
     vi.useRealTimers();
@@ -1574,4 +1596,273 @@ test("opened as a new agent's card on an issue, it offers no Plan toggle, holds 
   assert.deepEqual(card.planned, [false]);
   assert.deepEqual(card.fromWorkspaceIssues, ["issue-1"]);
   assert.deepEqual(card.agentsAtOnce, [true]);
+});
+
+test("File for later files the task in the backlog with no call and no agent, named by the words' first line and keeping them as its brief", async () => {
+  const card = await mount();
+  card.type("Rate limit the public search\nThirty a minute per installation.");
+  act(() => card.button("File for later").click());
+  await settle();
+
+  assert.deepEqual(card.starts, [["Rate limit the public search", "acme/web"]]);
+  assert.deepEqual(card.statuses, [TASK_STATUS.BACKLOG]);
+  assert.deepEqual(card.planned, [false]);
+  assert.deepEqual(card.agents, [undefined]);
+  assert.deepEqual(card.agentsAtOnce, [undefined]);
+  assert.deepEqual(card.briefs, [
+    "Rate limit the public search\nThirty a minute per installation.",
+  ]);
+});
+
+test("File for later is held while the box is empty, and Start's task names no status, so it starts to do", async () => {
+  const card = await mount();
+  assert.equal(card.button("File for later").disabled, true);
+
+  card.type("Fix the refresh");
+  await card.key("Enter");
+
+  assert.deepEqual(card.statuses, [undefined]);
+});
+
+test("Retry after a refused File for later files the task for later again, rather than starting it", async () => {
+  const card = await mount("Luke can't reach acme/web.");
+  act(() => modeToggle().click());
+  card.type("Rate limit search");
+  act(() => card.button("File for later").click());
+  await settle();
+  act(() => card.button("Retry").click());
+  await settle();
+
+  assert.deepEqual(card.statuses, [TASK_STATUS.BACKLOG, TASK_STATUS.BACKLOG]);
+  assert.deepEqual(card.planned, [false, false]);
+});
+
+test("a task filed for later is named by as much of its first line as a name holds, an emoji kept whole", async () => {
+  const card = await mount();
+  card.type(`${"a".repeat(199)}🚀 and more`);
+  act(() => card.button("File for later").click());
+  await settle();
+
+  assert.deepEqual(
+    card.starts.map(([name]) => name),
+    ["a".repeat(199)],
+  );
+});
+
+/** A GitHub issue of `repository`, opened by `author` standing to it as `association`. */
+function githubIssue(
+  repository: string,
+  number: number,
+  title: string,
+  author = "priya",
+  association: string = GITHUB_AUTHOR_ASSOCIATION.MEMBER,
+): GitHubIssuePick {
+  return {
+    nodeId: `I_${repository}_${number}`,
+    repository,
+    number,
+    title,
+    url: `https://github.com/${repository}/issues/${number}`,
+    state: ISSUE_STATE.OPEN,
+    author,
+    authorAssociation: association,
+    updatedAt: Date.now(),
+  };
+}
+
+const SAFARI = githubIssue("acme/web", 312, "Login fails on Safari 18");
+const TOOLTIPS = githubIssue("acme/web", 301, "Chart tooltips unreadable", "j-random", "NONE");
+const API_ISSUE = githubIssue("acme/api", 5, "Rate limit the search endpoint");
+
+/** acme/web's open issues and its search, acme/api's one issue, and an installation that grants acme/ledger none. */
+function acmeGitHub(repository: string, ask: RepositoryIssuesAsk): GitHubRepositoryIssuesAnswer {
+  if (repository === "acme/ledger") {
+    return {
+      ungranted: { settingsUrl: "https://github.com/organizations/acme/settings/installations/7" },
+    };
+  }
+  const open = repository === "acme/web" ? [SAFARI, TOOLTIPS] : [API_ISSUE];
+  if (ask.number !== undefined)
+    return { issues: open.filter((issue) => issue.number === ask.number) };
+  if (ask.query === "cookie") return { issues: [SAFARI] };
+  return { issues: ask.query === undefined ? open : [] };
+}
+
+test("the Issue chip lists the chosen repository's open GitHub issues under its own heading above Linear's, an author outside the repository wearing a badge, and words search GitHub once the typing rests", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const card = await mount(undefined, undefined, {}, ISSUES, () => [], undefined, acmeGitHub);
+    await openLinear();
+    const listed = issueRows().rows;
+    const headings = Object.keys(issueGroups());
+    const outside = [...document.querySelectorAll('[role="option"] .luke-badge')].map(
+      (badge) => badge.textContent,
+    );
+    search("cookie");
+    await settle();
+    const before = card.githubAsks.filter(([, ask]) => ask.query !== undefined).length;
+    await rest();
+
+    assert.deepEqual(
+      listed.slice(0, 2).map((row) => row.split("#")[0]),
+      ["Login fails on Safari 18", "Chart tooltips unreadableoutside"],
+    );
+    assert.deepEqual(headings, ["GitHub · acme/web", "Linear"]);
+    assert.deepEqual(outside, ["outside"]);
+    assert.equal(before, 0, "the search waits for the typing to rest");
+    assert.deepEqual(card.githubAsks.at(-1), ["acme/web", { query: "cookie" }]);
+    assert.deepEqual(
+      issueRows().rows.map((row) => row.split("#")[0]),
+      ["Login fails on Safari 18"],
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("GitHub and Linear issues picked stand as chips with a Closes / Part of switch, and Return starts the task linked to each with its relation, named by the first", async () => {
+  const card = await mount(undefined, undefined, {}, ISSUES, () => [], undefined, acmeGitHub);
+  await openLinear();
+  await card.press("Enter", linearSearch());
+  await openLinear();
+  const marked = issueRows().rows[0];
+  search("restack");
+  await settle();
+  await card.press("Enter", linearSearch());
+  const chips = [...document.querySelectorAll("[data-issue-chip]")].map((chip) => chip.textContent);
+  act(() => card.button("Closes").click());
+  await settle();
+  card.type("Fix both.");
+  await card.key("Enter");
+
+  assert.match(marked ?? "", /Linked$/u, "an issue linked already is not offered again");
+  assert.deepEqual(chips, [
+    "#312Login fails on Safari 18Closes",
+    "ENG-1Restack the deploy queueCloses",
+  ]);
+  assert.deepEqual(card.starts, [["Login fails on Safari 18", "acme/web"]]);
+  assert.deepEqual(card.choices, [
+    [
+      {
+        provider: TASK_ISSUE_PROVIDER.GITHUB,
+        repository: "acme/web",
+        number: 312,
+        relation: TASK_ISSUE_RELATION.PART_OF,
+      },
+      { provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1", relation: TASK_ISSUE_RELATION.CLOSES },
+    ],
+  ]);
+  assert.equal(
+    card.agents[0]?.prompt,
+    "[@acme/web#312 Login fails on Safari 18](https://github.com/acme/web/issues/312)\n[@ENG-1 Restack the deploy queue](https://linear.app/acme/issue/ENG-1)\n\nFix both.",
+  );
+});
+
+test("a pasted #N, owner/name#N, or link to a GitHub issue offers that one issue, and with no repository chosen picking it makes its repository the task's", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    const card = await mount(
+      undefined,
+      undefined,
+      { recent: [] },
+      undefined,
+      () => [],
+      undefined,
+      acmeGitHub,
+    );
+    await openLinear();
+    const unchosen = issueRows().rows;
+    search("acme/api#5");
+    await rest();
+    const pasted = issueRows().rows;
+    await card.press("Enter", linearSearch());
+    await openLinear();
+    search("https://github.com/acme/api/issues/5");
+    await rest();
+    const linked = issueRows().rows;
+    search("#7");
+    await rest();
+    const missing = issueRows().rows;
+    act(() => card.button("Remove issue").click());
+    await settle();
+    card.type("Throttle it.");
+    await card.key("Enter");
+
+    assert.deepEqual(
+      unchosen,
+      [],
+      "with no repository and nothing pasted, no GitHub section stands",
+    );
+    assert.deepEqual(
+      pasted.map((row) => row.split("#")[0]),
+      ["Rate limit the search endpoint"],
+    );
+    assert.match(linked[0] ?? "", /Linked$/u);
+    assert.deepEqual(
+      missing.map((row) => row.split("#")[0]),
+      ["No open issues match"],
+    );
+    assert.deepEqual(card.starts, [["", "acme/api"]]);
+    assert.ok(
+      card.githubAsks.some(([repository, ask]) => repository === "acme/api" && ask.number === 5),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a change of repository lets go the GitHub issues picked in the one before, keeps Linear's, and reads the new one's issues", async () => {
+  const card = await mount(undefined, undefined, {}, ISSUES, () => [], undefined, acmeGitHub);
+  await openLinear();
+  await card.press("Enter", linearSearch());
+  await openLinear();
+  search("restack");
+  await settle();
+  await card.press("Enter", linearSearch());
+  await card.rechoose({ recent: ["acme/api"] });
+  const chips = [...document.querySelectorAll("[data-issue-chip]")].map((chip) => chip.textContent);
+  await openLinear();
+  const listed = issueRows().rows;
+
+  assert.deepEqual(chips, ["ENG-1Restack the deploy queueCloses"]);
+  assert.equal(listed[0]?.split("#")[0], "Rate limit the search endpoint");
+  assert.deepEqual(
+    [...new Set(card.githubAsks.map(([repository]) => repository))],
+    ["acme/web", "acme/api"],
+  );
+});
+
+test("a repository whose installation grants Luke no issues says so in the GitHub section, whose row opens the installation's settings on GitHub, while Linear's issues stand beside it, and the menu opened again after a grant lists its issues", async () => {
+  const opened: string[] = [];
+  fakeAppPlatform({ openGitHub: (url) => opened.push(url) });
+  let granted = false;
+  const card = await mount(
+    undefined,
+    undefined,
+    { recent: ["acme/ledger"] },
+    ISSUES,
+    () => [],
+    undefined,
+    (repository, ask) =>
+      granted
+        ? { issues: [githubIssue(repository, 4, "Ledger totals drift")] }
+        : acmeGitHub(repository, ask),
+  );
+  await openLinear();
+  const listed = issueRows().rows;
+  await card.press("Enter", linearSearch());
+  granted = true;
+  await openLinear();
+  const regranted = issueRows().rows[0]?.split("#")[0];
+
+  assert.deepEqual(listed, [
+    "Luke can't read acme/ledger's issues yetGrant access",
+    "Restack the deploy queueENG-1 · Todo",
+    "Add support for stacked PRsENG-2 · In Progress",
+    "Rotate the deploy keyOPS-7",
+  ]);
+  assert.deepEqual(opened, ["https://github.com/organizations/acme/settings/installations/7"]);
+  assert.equal(regranted, "Ledger totals drift");
+  assert.equal(document.querySelector("[data-issue-chip]"), null);
+  assert.deepEqual(card.starts, []);
 });

@@ -12,7 +12,7 @@ import { UPDATE_STATUS } from "@luke/settings/update";
 import { CHAT_PLACE, type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useEffect, useState } from "react";
@@ -79,6 +79,7 @@ const SETTINGS: SettingsPanelProps = {
   },
   notifications: {
     status: NOTIFICATIONS_STATUS.UNKNOWN,
+    grantor: NOTIFICATIONS_GRANTOR.MACOS,
     packaged: true,
     onOpenSettings: ignore,
     onTest: ignore,

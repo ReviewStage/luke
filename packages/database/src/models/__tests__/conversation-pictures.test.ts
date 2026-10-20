@@ -5,8 +5,8 @@ import { CONVERSATION_PICTURE_BOUNDS } from "@luke/features/conversation-picture
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
 import { Effect, Option } from "effect";
 import { Database } from "../../core/query.js";
+import { attachment } from "../../schemas/attachment.js";
 import { user } from "../../schemas/auth.js";
-import { conversationAttachment } from "../../schemas/conversation-attachment.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
@@ -87,7 +87,7 @@ it.layer(getTestDB())("a conversation's pictures", (it) => {
       // the budget is read off the rows' byte counts and two hundred megabytes of real bytes
       // would only slow the test.
       const db = yield* Database;
-      yield* db.insert(conversationAttachment).values({
+      yield* db.insert(attachment).values({
         userId: target.userId,
         conversationId: target.conversationId,
         sha256: "f".repeat(64),

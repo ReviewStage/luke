@@ -9,7 +9,7 @@ import type {
 } from "../plan-editor/contract.js";
 import type { ComposerFieldMentions } from "./composer-field.js";
 import { MentionNodeChip, pastedMentionNode } from "./mention-chip.js";
-import { MENTION_MENU_SIDE, useMentionPicker } from "./mention-picker.js";
+import { MENTION_MENU_SIDE, type MentionMenuSide, useMentionPicker } from "./mention-picker.js";
 import { MentionedServers, type MentionedServersPlace } from "./server-card.js";
 import { useSkillOpener } from "./skill-chip.js";
 import { type SkillSource, useSkillPicker } from "./skill-picker.js";
@@ -64,6 +64,7 @@ export function useComposerPickers({
   servers,
   onNote,
   onLeave,
+  side = MENTION_MENU_SIDE.ABOVE,
 }: {
   /** The box's editor; nothing until it has mounted. */
   editor: RefObject<ComposerEditorHandle | undefined>;
@@ -83,10 +84,19 @@ export function useComposerPickers({
   onNote: (note: string | undefined) => void;
   /** What Escape does where no list or dictation takes it: New task's box closes its card; the box gives up the caret where none is given. */
   onLeave?: (() => void) | undefined;
+  /** Which side of the caret's line the `@` and `/` lists stand: over it, as at a tab's foot, or under it, where the box stands at the top of its page. */
+  side?: MentionMenuSide;
 }): ComposerPickers {
   const dictation = useDictation({ editor, keywords, onNote });
   const openSkill = useSkillOpener();
-  const skillPicker = useSkillPicker({ editor, room, draft, source: skills, onOpen: openSkill });
+  const skillPicker = useSkillPicker({
+    editor,
+    room,
+    draft,
+    source: skills,
+    onOpen: openSkill,
+    side,
+  });
   // An `@` picks a mention of the page the box stands on, where it stands on one that hands them.
   const taskMentions = useTaskMentions();
   // A Luke address pasted whole is called by the name the window holds for what it names.
@@ -110,7 +120,7 @@ export function useComposerPickers({
       standing: (status) => status === INTEGRATION_STATUS.CONNECTED,
     }),
     room,
-    side: MENTION_MENU_SIDE.ABOVE,
+    side,
     onChoose: (mention) => editor.current?.chooseMention(mention),
   });
 
@@ -140,9 +150,13 @@ export function useComposerPickers({
           : {
               onTrigger: mentionPicker.onTrigger,
               // A server's chip in the box says what a send now does with it.
-              chip: (mention) => (
+              chip: (mention, node) => (
                 <MentionedServers value={servers.place}>
-                  <MentionNodeChip mention={mention} doors={taskMentions.doors} />
+                  <MentionNodeChip
+                    mention={mention}
+                    doors={taskMentions.doors}
+                    edit={{ node, pickDate: mentionPicker.pickDate }}
+                  />
                 </MentionedServers>
               ),
               pasted: (words) =>

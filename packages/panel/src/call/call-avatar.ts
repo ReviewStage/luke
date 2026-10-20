@@ -16,7 +16,8 @@
  */
 
 import type { AvatarGrant } from "@luke/features/avatar-grant";
-import { ACT_KIND, type ActPayload } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
+import type { PortActPayload } from "@luke/host/contract";
 import {
   AVATAR_CLOSE_REASON,
   type AvatarCloseReason,
@@ -55,7 +56,7 @@ import { rendererRegistry, rendererRuntime } from "../renderer-runtime.js";
 const AUDIO_RETRY_MS = 1_000;
 
 /** The avatar as this window reports it to main. */
-export type AvatarReport = ActPayload<typeof ACT_KIND.AVATAR_REPORT>;
+export type AvatarReport = PortActPayload<typeof ACT_KIND.AVATAR_REPORT>;
 
 /** What a running avatar reaches beyond its session: Luke's voice feed, main's document, and the SDK's bundle. */
 export interface CallAvatarDoors {

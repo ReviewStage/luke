@@ -9,7 +9,7 @@ import {
 import type { FactoryWorld } from "@luke/features/factory-world-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   areaOf,
@@ -34,7 +34,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { tasksControl } from "../testing/tasks-control.js";
 import { WORLD_LAYER } from "./world.js";
@@ -113,12 +113,11 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.FACTORY_WORLD) throw new Error(`unexpected ${request.kind}`);
-      asked.push(request.payload.workspaceId);
-      const value = answers.shift() ?? { world: WORLD };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.FACTORY_WORLD]: (payload) => {
+      asked.push(payload.workspaceId);
+      return Promise.resolve(answers.shift() ?? { world: WORLD });
     },
   });
 });

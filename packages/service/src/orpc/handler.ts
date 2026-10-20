@@ -9,6 +9,12 @@
  * `hostedMethod` and `hostedNotFoundRoute` answered them, where the handler
  * would answer it unmatched; and a defect is a bare 500 with no body, as the
  * platform's web handler answered one, where oRPC would describe it.
+ *
+ * Every body is bounded once, before any procedure, by oRPC's request limit
+ * plugin at the platform's own ceiling, which is above the largest body any
+ * hosted endpoint takes; a procedure holds its own, smaller cap with
+ * `bodyLimit` (`base.ts`). Past either, the refusal is the hosted
+ * vocabulary's `request-too-large`, as `readBodyBytesEffect` answered it.
  */
 
 import { HTTP_METHOD } from "@luke/wire";
@@ -40,7 +46,7 @@ const HOSTED_CACHE_CONTROL = "private, no-store";
  * and above the largest cap any hosted endpoint holds (a task's Start, about
  * 4.2 MB, which carries an agent's Start with its files).
  */
-const HOSTED_BODY_CEILING_BYTES = 4_500_000;
+export const HOSTED_BODY_CEILING_BYTES = 4_500_000;
 
 const HTTP_METHOD_HEAD = "HEAD";
 

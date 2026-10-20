@@ -12,7 +12,7 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -20,8 +20,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import { lineWords } from "../testing/actor-line.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handState, signedInAs } from "../testing/app-state.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
@@ -96,19 +97,19 @@ interface Drawn {
   readonly onShowHistory?: (save: number | undefined) => void;
   /** The account signed in on this Mac, as main's document names it; none where the test names nobody. */
   readonly account?: { readonly id: string; readonly email: string; readonly name: string };
+  /** The task's own page, where each section and the title carry a ⋯. */
+  readonly sectionLinks?: NonNullable<React.ComponentProps<typeof PlanBody>["sectionLinks"]>;
 }
 
 /** The plan drawn in a workspace whose members read answers `MEMBERS`, as `drawn` says. */
 async function draw(task: Task, drawn: Drawn = {}): Promise<HTMLElement> {
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-          : request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ
-            ? { status: ACT_OUTCOME_STATUS.DONE, value: FORMER }
-            : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-      ),
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
+    [ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ]: () => Promise.resolve(FORMER),
   });
   if (drawn.account !== undefined) handState({}, { account: signedInAs(drawn.account).account });
   const container = document.body.appendChild(document.createElement("div"));
@@ -409,4 +410,27 @@ test("the sections changed since the last look are counted beside a face for eac
   assert.equal(line.querySelector(".visually-hidden")?.textContent, "Charles Pan, Luke");
   act(() => line.querySelector("button")?.click());
   assert.equal(dismissed, 1);
+});
+
+test("a title long enough to fill its line wraps short of its ⋯, as a section's heading wraps short of its own", async () => {
+  const sheets = layContainersAt({});
+  const view = await draw(
+    { ...TASK, name: "A plan whose name runs on long enough to fill the whole line it stands on" },
+    {
+      sectionLinks: {
+        workspace: "acme",
+        onOpen: () => undefined,
+        onOpenFile: () => undefined,
+        reveal: undefined,
+      },
+    },
+  );
+  const title = view.querySelector(".plan-unit-attributed .task-title > .markdown-heading");
+  const titleRow = title?.closest(".plan-unit-attributed")?.querySelector(".plan-unit-more");
+  // Note that jsdom resolves no custom property, so the room reads as the length it is declared by.
+  const room = title === null || title === undefined ? "" : getComputedStyle(title).paddingRight;
+  sheets.remove();
+
+  assert.ok(titleRow, "the title carries its ⋯");
+  assert.doesNotMatch(room, /^(0(px)?)?$/u, "the title keeps room at its line's end");
 });

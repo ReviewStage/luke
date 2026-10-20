@@ -8,11 +8,16 @@
     },
     "to": {
       "type": "string",
-      "maxLength": 81
+      "maxLength": 512
     },
     "replyTo": {
       "type": "number",
       "minimum": 0
+    },
+    "purpose": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 250
     },
     "key": {
       "type": "string",

@@ -8,6 +8,7 @@ import { logStoreFailure } from "../../http/store-failure.js";
 import {
   type ChatAgent,
   type ChatReader,
+  editAsAgent,
   type MessageLine,
   peekAsAgent,
   postAsAgent,
@@ -18,10 +19,11 @@ import {
 import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
 
 /**
- * chat.ts -- the plan's Luke in its workspace's chat: the coding agent's chat tools run as `@luke`, and what Luke has not read as a turn opens.
+ * chat.ts -- the plan's Luke in its workspace's chat: the coding agent's chat tools run as the plan's Luke, and what Luke has not read as a turn opens.
  *
- * A plan's planner is one member of its workspace's chat, `@luke`, minted
- * the first time it posts or reads, and the planning model speaks as it.
+ * A plan's planner is one member of its workspace's chat, named by its
+ * plan's `…/plan/<taskId>/luke` link, minted the first time it posts, reads,
+ * or is named, and the planning model speaks as it.
  * Its tools are the coding agent's own (`../coder-host/chat.ts`), run as
  * the plan's Luke: a post goes to the plan's channel unless it names
  * another place, is told to the members it addresses through the door
@@ -144,6 +146,14 @@ export function runBrainRead(
   input: UnparsedWireValue,
 ): Effect.Effect<WireRecord, never, DatabaseServices> {
   return Effect.map(readAsAgent(call.luke, input), (answer) => ({ ...answer }));
+}
+
+/** Runs one edit of a topic channel as Luke. */
+export function runBrainEditChannel(
+  call: BrainChatCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, DatabaseServices> {
+  return Effect.map(editAsAgent(call.luke, input), (answer) => ({ ...answer }));
 }
 
 /** Runs one resolve of an ask of Luke's. */

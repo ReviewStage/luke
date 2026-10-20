@@ -10,6 +10,10 @@ import {
 import type { CodingAgentAttachment, TasklessAgent } from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
+import type {
+  GitHubRepositoryIssuesAnswer,
+  RepositoryIssuesAsk,
+} from "@luke/features/github-repositories-wire";
 import { issueIdentifier } from "@luke/features/issue-list-model";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
@@ -18,8 +22,15 @@ import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { PageLine } from "@luke/features/page-wire";
 import type { PlanEditRequest } from "@luke/features/plan-edit";
 import { planMarkdown } from "@luke/features/plan-markdown";
+import type { TaskIssueChoice } from "@luke/features/task-issue-wire";
 import type { TaskSections, TaskSectionWrite } from "@luke/features/task-section-wire";
-import { type CodeRef, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
+import {
+  type CodeRef,
+  type Task,
+  type TaskStanding,
+  type TaskStatus,
+  UNTITLED_TASK_NAME,
+} from "@luke/features/task-wire";
 import {
   TASK_CALL_FAILURE,
   TASKS_READ,
@@ -28,13 +39,14 @@ import {
 } from "@luke/features/tasks-view";
 import { managesWorkspace } from "@luke/features/workspace-role";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, type ChatShown } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   type AppInboxTask,
   type AppInboxTaskHolding,
   type AppInboxTasklessItem,
   RUN_PROFILE,
 } from "@luke/host/app-state";
+import type { ChatShown } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { DIALOG_TONE, type DialogConfirm, type DialogQuestion, useConfirmDialog } from "@luke/ui";
@@ -42,10 +54,12 @@ import { callCard } from "@luke/ui/call-card-model";
 import {
   CHAT_PLACE,
   type ChatAskAnswer,
+  type ChatChannelChange,
   type ChatPlace,
   type ChatPost,
   FOR_YOU,
 } from "@luke/ui/chat-model";
+import type { PictureAnswer } from "@luke/ui/picture-cache";
 import {
   isAgentTab,
   isBrowserTab,
@@ -312,9 +326,10 @@ const STAND_IN = {
   AUTOMATIONS: "automations",
   CHAT: "chat",
   ISSUES: "issues",
+  BOARD: "board",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, Chat with the place shown in it, or the Issues page. */
+/** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, Chat with the place shown in it, the Issues page, or the Board. */
 type StandIn =
   | {
       readonly kind: typeof STAND_IN.INBOX;
@@ -338,10 +353,18 @@ type StandIn =
       /** Whether the rail stands rather than the place, which only a narrow room draws apart. */
       readonly listed: boolean;
     }
-  | { readonly kind: typeof STAND_IN.ISSUES; readonly place: IssuesPlace };
+  | { readonly kind: typeof STAND_IN.ISSUES; readonly place: IssuesPlace }
+  | { readonly kind: typeof STAND_IN.BOARD };
 
 /** The window's Factory: whether it stands in the task's place, and the presses that open and leave it. */
 interface FactoryViewControl {
+  readonly open: boolean;
+  readonly onOpen: () => void;
+  readonly onClose: () => void;
+}
+
+/** The window's Board: whether it stands in the task's place, and the presses that open and leave it. */
+interface BoardViewControl {
   readonly open: boolean;
   readonly onOpen: () => void;
   readonly onClose: () => void;
@@ -423,6 +446,10 @@ interface ChatViewControl {
   readonly onPost: (post: ChatPost) => Promise<string | undefined>;
   /** Answers an ask as the developer; answers why it was refused, or nothing once it is taken. */
   readonly onAnswer: (answer: ChatAskAnswer) => Promise<string | undefined>;
+  /** Opens or edits a topic channel as the developer; answers why it was refused, or nothing once it is taken. */
+  readonly onChannel: (change: ChatChannelChange) => Promise<string | undefined>;
+  /** Reads one picture a message carries, by the message and the attachment its block names; a fixture run's are not there to read. */
+  readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
 }
 
 /** The fixture's staging, as a fixture run imports it. */
@@ -476,18 +503,21 @@ export interface NewTaskPreset {
 
 /**
  * What a start comes from beyond its name, repository, workspace, and
- * planning: a Linear issue, one of the workspace's own issues, whether an
+ * planning: the Linear and GitHub issues it links, each with its relation,
+ * one of the workspace's own issues, whether an
  * agent starts on the task's plan once the task opens (`agent`), the
  * agent New task's composer starts on its words in the task's own start
- * (`handed`), and the words Plan mode hands Luke as the task's brief
- * (`brief`), trimmed and none where blank.
+ * (`handed`), the words Plan mode hands Luke as the task's brief
+ * (`brief`), trimmed and none where blank, and where it starts (`status`).
  */
 export interface NewTaskStart {
-  readonly linearIssueId?: string;
+  readonly issues?: readonly TaskIssueChoice[];
   readonly issueId?: string;
   readonly agent?: boolean;
   readonly handed?: NewTaskAgent;
   readonly brief?: string;
+  /** Where the task starts: to do where none is named, or the backlog for one New task files for later. */
+  readonly status?: TaskStatus;
 }
 
 /** Which Issues page stands: the list, or one issue's. */
@@ -705,6 +735,8 @@ export interface TasksControl {
   automationsView: AutomationsViewControl;
   /** The window's Issues page: whether it stands in the plan's place, which, and its presses (`issues-page.tsx`). */
   issuesView: IssuesViewControl;
+  /** The window's Board of the listed workspace's tasks by status: whether it stands in the plan's place, and its presses (`tasks-board.tsx`). */
+  boardView: BoardViewControl;
   /** The task the call in progress on this Mac is about, or none: what Factory marks as being planned. */
   callTaskId: string | undefined;
   /** The window's Chat: whether it stands in the plan's place, the chat it reads, the place shown in it, and its presses. */
@@ -725,6 +757,8 @@ export interface TasksControl {
   onChangeRepository: (taskId: string) => void;
   /** Gives a task its repository, or takes it away with null; answers why the service refused, or nothing once it is kept. */
   onSetRepository: (taskId: string, repository: string | null) => Promise<string | undefined>;
+  /** Sets where a task stands, how much it matters, or both; answers whether the service kept it. */
+  onSetTaskStanding: (taskId: string, standing: TaskStanding) => Promise<boolean>;
   /** Opens a task's repository on GitHub in the browser. */
   onOpenOnGitHub: (taskId: string) => void;
   /** Opens Settings › Workspace at its GitHub, for the workspace the task belongs to. */
@@ -808,6 +842,18 @@ export interface TasksControl {
     issuesIn: (
       workspaceId: string | undefined,
     ) => (() => Promise<readonly NewTaskIssue[]>) | undefined;
+    /**
+     * The read of a repository's GitHub issues through a workspace's
+     * installation, where that workspace has GitHub connected; none where it
+     * has not. Asked nothing, it answers the repository's open issues; asked
+     * words or a number, what GitHub finds for them; either way, or that the
+     * installation grants the App no issues, with where that is granted.
+     */
+    githubIssuesIn: (
+      workspaceId: string | undefined,
+    ) =>
+      | ((repository: string, ask: RepositoryIssuesAsk) => Promise<GitHubRepositoryIssuesAnswer>)
+      | undefined;
   };
   /** Leaves the open task for the home page; a call on it stands, as opening another task leaves one. */
   onLeaveTask: () => void;
@@ -1027,8 +1073,7 @@ const DELETE_REFUSED: ActionResult = {
  * What the Inbox holds, by workspace. Main reads what waits across every
  * task the account can reach, and the window lists one workspace at a time,
  * so everything the window lists of the Inbox, its rows, the sidebar's
- * count, and Home's waiting list, is the listed workspace's share
- * (`docs/proposals/workspace-clarity.md`, decision 11). A task is placed by
+ * count, and Home's waiting list, is the listed workspace's share. A task is placed by
  * the workspace the account's task list says it is in, so an item of a task
  * not yet listed is in no workspace's share until it is.
  */
@@ -1376,6 +1421,7 @@ export function useTasksTab(input: {
         : tabReading,
     readChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT, params),
     writeChat: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_POST, params),
+    readPicture: (params) => act(ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT, params),
   });
   const liveRun = fixture === undefined;
   const shownChat: FixtureChat | undefined = liveRun
@@ -2385,6 +2431,12 @@ export function useTasksTab(input: {
     );
   };
 
+  // A fixture's tasks are read from nowhere, so nothing keeps where they stand.
+  const setTaskStanding = (taskId: string, standing: TaskStanding): Promise<boolean> => {
+    if (fixture !== undefined) return Promise.resolve(false);
+    return act(ACT_KIND.TASKS_SET_STANDING, { taskId, ...standing }).catch(() => false);
+  };
+
   // A fixture's tasks move nowhere, as they are read from nowhere. Note that
   // the workspace moves with the task, because the sidebar lists one
   // workspace's tasks and the open task must not drop out of it, but only
@@ -2500,9 +2552,12 @@ export function useTasksTab(input: {
       ...(name.length === 0 ? undefined : { name }),
       ...(repository === null ? undefined : { repository }),
       ...(workspaceId === undefined ? undefined : { workspaceId }),
-      ...(from.linearIssueId === undefined ? undefined : { linearIssueId: from.linearIssueId }),
+      ...(from.issues === undefined || from.issues.length === 0
+        ? undefined
+        : { issues: from.issues }),
       ...(from.issueId === undefined ? undefined : { issueId: from.issueId }),
       ...(from.brief === undefined || from.brief.trim() === "" ? undefined : { brief: from.brief }),
+      ...(from.status === undefined ? undefined : { status: from.status }),
       ...(planning ? undefined : { planning }),
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
     }).then(
@@ -2558,6 +2613,13 @@ export function useTasksTab(input: {
     const linked = viewed.workspaces.find((each) => each.id === workspaceId);
     if (linked?.linear?.active !== true) return undefined;
     return (ask) => act(ACT_KIND.WORKSPACE_LINEAR_ISSUES, { ...ask, workspaceId: linked.id });
+  };
+  // The dialog lists the chosen repository's GitHub issues, where the workspace has GitHub connected.
+  const githubIssuesIn: TasksControl["newTask"]["githubIssuesIn"] = (workspaceId) => {
+    const linked = viewed.workspaces.find((each) => each.id === workspaceId);
+    if (linked?.github == null || !linked.github.active) return undefined;
+    return (repository, ask) =>
+      act(ACT_KIND.WORKSPACE_GITHUB_ISSUES, { workspaceId: linked.id, repository, ...ask });
   };
   // The dialog lists the workspace's own issues beside Linear's, while Issues stand on.
   const issuesOn = useExperiment(EXPERIMENT.ISSUES);
@@ -3205,6 +3267,11 @@ export function useTasksTab(input: {
         liveRun
           ? liveChat.onAnswer(answer)
           : stage((held, staging) => staging.stagedAnswer(held, answer, Date.now())),
+      onChannel: (change) =>
+        liveRun
+          ? liveChat.onChannel(change)
+          : stage((held, staging) => staging.stagedChannel(held, change)),
+      readPicture: liveChat.readPicture,
     },
     // An agent's page stands over the task's place as the Inbox does, so a version history there gives way.
     agentView: {
@@ -3271,6 +3338,15 @@ export function useTasksTab(input: {
       peeked: issuePeek,
       onPeek: setIssuePeek,
     },
+    // The Board stands over the plan's place as Factory does, each giving way to the others.
+    boardView: {
+      open: standIn?.kind === STAND_IN.BOARD,
+      onOpen: guard(() => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.BOARD });
+      }),
+      onClose: guard(() => setStandIn(undefined)),
+    },
     callTaskId: callInProgress(reported) ? reported.callTaskId : undefined,
     onShowFile: showFile,
     // A version's Open lands where its writer wrote it: an agent's tab as a
@@ -3319,6 +3395,7 @@ export function useTasksTab(input: {
     repositoryMenu,
     onChangeRepository: changeRepository,
     onSetRepository: setRepository,
+    onSetTaskStanding: setTaskStanding,
     onMoveTask: moveTask,
     onOpenWorkspaceGitHub: (taskId) => {
       // The open document names its workspace where the list read did not land.
@@ -3359,6 +3436,7 @@ export function useTasksTab(input: {
       tasks: [...sidebar.pinned, ...sidebar.rest, ...sidebar.archived],
       onShowMention: guard(showMention),
       linearIssuesIn,
+      githubIssuesIn,
       issuesIn,
     },
     onLeaveTask: guard(() => leaveTask()),

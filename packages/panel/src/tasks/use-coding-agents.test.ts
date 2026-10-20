@@ -9,7 +9,9 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "@luke/host/acts";
+import { ACT_KIND, type ActKind } from "@luke/host/acts";
+import type { PortActKind, PortActPayload } from "@luke/host/contract";
+import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -40,9 +42,12 @@ interface Standing {
   archived?: boolean;
 }
 
+/** Any kind the hook asks: one `app:act` carries, or one the act port answers. */
+type AnyKind = ActKind | PortActKind;
+
 /** One act as the hook asked it. */
 interface Asked {
-  kind: ActKind;
+  kind: AnyKind;
   payload: unknown;
 }
 
@@ -74,7 +79,9 @@ function mount(
   const asked: Asked[] = [];
   const started: string[] = [];
   let unarchives = 0;
-  const answers = new Map<ActKind, unknown[]>();
+  /** An answer as a test queues it: at once, or a promise it settles when it chooses. */
+  type Queued = WireBoundaryInput | Promise<WireBoundaryInput>;
+  const answers = new Map<AnyKind, Queued[]>();
   let keys = 0;
   let control: CodingAgentsControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
@@ -83,17 +90,13 @@ function mount(
     restand = setHeld;
     control = useCodingAgents({
       acts: {
-        // SAFETY: this suite's window asks no kind the act port answers, so its fake answers `app:act` kinds alone.
-        act: (<Kind extends ActKind>(
-          kind: Kind,
-          ...[payload]: unknown[]
-        ): Promise<ActResultFor<Kind>> => {
+        // SAFETY: the test scripts each kind's answer in that kind's own shape, whichever side carries it.
+        act: ((kind: AnyKind, ...[payload]: WireBoundaryInput[]): Promise<WireBoundaryInput> => {
           asked.push({ kind, payload });
           const queue = answers.get(kind);
           const next = queue?.shift();
           if (next === undefined) return Promise.reject(new Error("Not answered in this test."));
-          // SAFETY: the test scripts each kind's answer in that kind's own shape.
-          return Promise.resolve(next as ActResultFor<Kind>);
+          return Promise.resolve(next);
         }) as ActHandle["act"],
       },
       taskId: held.taskId,
@@ -123,7 +126,7 @@ function mount(
     /** How many times the control's Unarchive was pressed. */
     unarchives: () => unarchives,
     /** Queues the answers one kind gives, in order. */
-    answer: (kind: ActKind, ...queued: unknown[]) => {
+    answer: (kind: AnyKind, ...queued: Queued[]) => {
       answers.set(kind, [...(answers.get(kind) ?? []), ...queued]);
     },
     mount: async () => {
@@ -145,10 +148,10 @@ function mount(
 /** The Starts the hook asked, each with the payload its kind takes. */
 function startPayloads(
   asked: readonly Asked[],
-): readonly ActPayload<typeof ACT_KIND.CODING_AGENTS_START>[] {
+): readonly PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>[] {
   const starts = asked.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_START);
   // SAFETY: an ask recorded under the Start kind carries the payload the hook built for that kind.
-  return starts.map((each) => each.payload as ActPayload<typeof ACT_KIND.CODING_AGENTS_START>);
+  return starts.map((each) => each.payload as PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>);
 }
 
 // Note that the refusal raises the window's toast, whose waits stand on the test's clock.

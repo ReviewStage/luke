@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import { Button } from "@luke/ui";
+import { drawnDark, onDrawnThemeChange } from "@luke/ui/appearance";
 import {
   DIAGRAM_APPEARANCE,
   DIAGRAM_DRAWING,
@@ -23,9 +24,6 @@ import { DIAGRAM_REFUSED_LINE, useSideBundles } from "./bundle-loader.js";
  * figure is left out of the screen recording (`ph-no-capture`): a picture
  * of words is the one thing the recording's masking cannot reach.
  */
-
-/** The query the window's appearance is read off, as the whiteboard's is. */
-const DARK_APPEARANCE = "(prefers-color-scheme: dark)";
 
 /** How many pictures the window keeps in each appearance, the oldest let go first; enough for every diagram in a plan, and the drafts the editor's preview drew. */
 const HELD_PICTURES = 64;
@@ -75,16 +73,12 @@ function drawnBy(
 
 /** The window's appearance now. */
 function appearanceNow(): DiagramAppearance {
-  return window.matchMedia(DARK_APPEARANCE).matches
-    ? DIAGRAM_APPEARANCE.DARK
-    : DIAGRAM_APPEARANCE.LIGHT;
+  return drawnDark() ? DIAGRAM_APPEARANCE.DARK : DIAGRAM_APPEARANCE.LIGHT;
 }
 
 /** Calls back each time the window's appearance flips; answers what stops it. */
 function onAppearance(changed: () => void): () => void {
-  const query = window.matchMedia(DARK_APPEARANCE);
-  query.addEventListener("change", changed);
-  return () => query.removeEventListener("change", changed);
+  return onDrawnThemeChange(changed);
 }
 
 /** The window's appearance, kept as it flips. */

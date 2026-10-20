@@ -182,15 +182,15 @@ test("a plain press on an account or its row opens it; a modified press is the b
   expect(opened).toEqual(["account-ada", "account-grace"]);
 });
 
-test("the way back to the dashboard moves in place on a plain press, loading or loaded", async () => {
+test("the way back to the overview moves in place on a plain press, loading or loaded", async () => {
   const loading = await openDay(undefined);
   expect(headings(loading.page, "h1")).toEqual(["October 12, 2026"]);
-  expect(press(link(loading.page, "Dashboard"))).toBe(true);
+  expect(press(link(loading.page, "Overview"))).toBe(true);
   expect(loading.backs).toHaveLength(1);
   act(() => root?.unmount());
 
   const loaded = await openDay(detail());
-  const back = link(loaded.page, "Dashboard");
+  const back = link(loaded.page, "Overview");
   expect(press(back, { ctrlKey: true })).toBe(false);
   expect(press(back)).toBe(true);
   expect(loaded.backs).toHaveLength(1);

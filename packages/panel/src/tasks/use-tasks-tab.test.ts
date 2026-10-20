@@ -18,8 +18,9 @@ import {
   type PullRequestThreadView,
 } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
+import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
@@ -31,7 +32,7 @@ import {
   type TaskWorkTurn,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
+import { ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import { isPortActKind, type PortActKind, type PortActResult } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
@@ -97,7 +98,6 @@ const OPEN: TasksView = {
   activeTaskId: TASK.id,
   document: { status: TASKS_READ.READY, task: TASK },
 };
-
 /** The shown act's payload, read back as the act's own schema admits it. */
 const readShown = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -146,9 +146,9 @@ function mount(
   } = {},
   registry?: AtomRegistry,
 ) {
-  const told: ActKind[] = [];
+  const told: (ActKind | PortActKind)[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
-  const agentActs: ActKind[] = [];
+  const agentActs: (ActKind | PortActKind)[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
   /** Which task's Inbox main was told is shown, each time it was told. */
@@ -158,10 +158,11 @@ function mount(
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
-  const payloads: { readonly kind: ActKind; readonly payload: unknown }[] = [];
+  const payloads: { readonly kind: ActKind | PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
-  const record = (kind: ActKind) => {
-    (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
+  const record = (kind: ActKind | PortActKind) => {
+    if (!kind.startsWith("codingAgents.")) told.push(kind);
+    else agentActs.push(kind);
   };
   let control: TasksControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
@@ -184,11 +185,13 @@ function mount(
   const portAnswers: {
     [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>>;
   } = answers;
-  /** An act-port kind's answer as the test gives it, or a rejection where it gives none. */
+  /** An act-port kind's answer as the test gives it, recorded, or a rejection where it gives none. */
   function portAnswer<Kind extends PortActKind>(
     kind: Kind,
     ...args: unknown[]
   ): Promise<PortActResult<Kind>> {
+    record(kind);
+    payloads.push({ kind, payload: args[0] });
     const answer = portAnswers[kind];
     if (answer !== undefined) return answer(...args);
     return Promise.reject(new Error("Not answered in this test."));
@@ -209,16 +212,18 @@ function mount(
     restand = setHeld;
     control = useTasksTab({
       acts: {
-        // An `app:act` kind the test does not answer is recorded and refused;
-        // an act-port kind is answered as the port would, and recorded nowhere.
+        // A kind the test does not answer is recorded and refused, whichever
+        // side carries it, so a test reads what was asked the same way for both.
         // SAFETY: each kind is answered by its own act or procedure's answer, the dispatch on the kind the one erasure.
         act: (<Kind extends ActKind | PortActKind>(kind: Kind, ...args: unknown[]) =>
           isPortActKind(kind)
             ? portAnswer(kind, ...args)
             : appAnswer(kind, ...args)) as ActHandle["act"],
-        // SAFETY: this suite's window asks no kind the act port answers, so its fake answers `app:act` kinds alone.
-        tell: ((kind: ActKind, ...args: unknown[]) => {
-          record(kind);
+        // A told port kind is answered as an asked one is, recorded there, its answer or refusal read by no one, as `tell` reads none.
+        // SAFETY: a told kind is recorded alike whichever side carries it, the dispatch on the kind the one erasure.
+        tell: ((kind: ActKind | PortActKind, ...args: unknown[]) => {
+          if (isPortActKind(kind)) void portAnswer(kind, ...args).catch(() => undefined);
+          else record(kind);
           // The one told payload the tests read, parsed as the boundary would.
           const shown = Option.getOrUndefined(readShown(args[0]));
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
@@ -408,8 +413,8 @@ const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.Strin
 
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
-  payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[],
-  kind: ActKind,
+  payloads: readonly { readonly kind: ActKind | PortActKind; readonly payload: unknown }[],
+  kind: ActKind | PortActKind,
 ): (string | undefined)[] {
   return payloads
     .filter((asked) => asked.kind === kind)
@@ -497,7 +502,7 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
 });
 
 test("a task started opens with the side panel shown on its plan, a refused start hides it again where it stood hidden, and a panel hidden before the start answers stays hidden", async () => {
-  const answers: Array<(answer: ActResultFor<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
@@ -1576,7 +1581,9 @@ test("a person's page opened in another workspace lists it without reopening its
 });
 
 /** The tasks each open the tab asked of main named, in order. */
-function opensAsked(payloads: readonly { readonly kind: ActKind; readonly payload: unknown }[]) {
+function opensAsked(
+  payloads: readonly { readonly kind: ActKind | PortActKind; readonly payload: unknown }[],
+) {
   return payloads
     .filter((asked) => asked.kind === ACT_KIND.TASKS_SELECT)
     .map((asked) => Option.getOrUndefined(readOpened(asked.payload))?.taskId);
@@ -1900,7 +1907,7 @@ test("New plan hands Luke the brief it was given beside its issue, and a blank b
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
 
   await tab.control().newTask.start("", null, "workspace-acme", true, {
-    linearIssueId: "issue-1",
+    issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
     brief: "Keep the queue order stable.",
   });
   await tab.control().newTask.start("", null, "workspace-acme", true, { brief: " \n " });
@@ -1912,7 +1919,7 @@ test("New plan hands Luke the brief it was given beside its issue, and a blank b
     [
       {
         workspaceId: "workspace-acme",
-        linearIssueId: "issue-1",
+        issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
         brief: "Keep the queue order stable.",
       },
       { workspaceId: "workspace-acme" },
@@ -1951,7 +1958,7 @@ test("the repository chooser says the account manages the workspace it owns, and
 });
 
 test("a Disconnect whose page did not open says why in a toast", async () => {
-  const refusal = ACT[ACT_KIND.GITHUB_DISCONNECT].refusal;
+  const refusal = "Could not disconnect GitHub on this system.";
   const tab = mount(
     { shown: true, tasks: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },
     { [ACT_KIND.GITHUB_DISCONNECT]: () => Promise.reject(new Error(refusal)) },
@@ -2416,7 +2423,7 @@ test("Home from an open plan leaves it, and from the home page only puts the Inb
 });
 
 test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {
-  const answers: ((answer: ActResultFor<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const answers: ((answer: PortActResult<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
@@ -2445,7 +2452,7 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
 });
 
 test("an agent's pin still waiting its turn when the account changes is never asked, so it lands on no one else's pins", async () => {
-  const answers: ((answer: ActResultFor<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const answers: ((answer: PortActResult<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
@@ -2890,6 +2897,29 @@ test("a task started from an issue's Start agent… presses its Start once it st
   await startFrom();
   assert.equal(agentStarts().length, 2);
   assert.ok(tab.control().agents.start.note, "why the agent did not start stands beside the Start");
+});
+
+test("a task New task files for later asks the host to start it in the backlog, with no planning and its brief", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    { [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }) },
+  );
+  await settle();
+  await act(async () => {
+    await tab.control().newTask.start("Rate limit search", "acme/web", "workspace-acme", false, {
+      status: TASK_STATUS.BACKLOG,
+      brief: "Thirty a minute.",
+    });
+  });
+
+  assert.deepEqual(tab.payloads.find(({ kind }) => kind === ACT_KIND.TASKS_START)?.payload, {
+    name: "Rate limit search",
+    repository: "acme/web",
+    workspaceId: "workspace-acme",
+    brief: "Thirty a minute.",
+    status: TASK_STATUS.BACKLOG,
+    planning: false,
+  });
 });
 
 test("an agent asked of Start agent… whose task was left before it could start starts nothing when the task is opened again", async () => {

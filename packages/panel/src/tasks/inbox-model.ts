@@ -3,6 +3,8 @@ import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
   codeLinesReadable,
   fieldValueWords,
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
@@ -11,6 +13,8 @@ import {
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  type InboxAnswers,
+  type InboxAsk,
   type InboxChoice,
   type InboxCodeBlock,
   type InboxFieldValue,
@@ -18,10 +22,12 @@ import {
   type InboxFormValue,
   type InboxItem,
   type InboxMessage,
+  type InboxReadAsk,
   type InboxReadResponse,
   type InboxReply,
   type InboxReplyKind,
   type InboxResponse,
+  inboxAnswersRefusal,
   inboxReplyRefusal,
   knownBlock,
   knownResponse,
@@ -64,12 +70,20 @@ import { plainWords } from "./tool-call-model.js";
  * of the file around them, the lines it points at lit. Nothing here draws.
  */
 
-/** What the developer has put on a card so far: the options picked on a choice, the fields filled on a form, their note, and the files they attached to it. */
+/**
+ * What the developer has put on a card so far: the options picked on a
+ * choice, the fields filled on a form, their note, and the files they
+ * attached to it; on a thread, the steps ticked in its open `do` ask and the
+ * answer pressed in it and attached to the reply (Mark done, Couldn't do it,
+ * Submit, or Answer), a `decide`'s pick being its choices.
+ */
 export interface InboxDraft {
   readonly choices: readonly string[];
   readonly values: readonly InboxFormValue[];
   readonly note: string;
   readonly attachments: readonly CodingAgentAttachment[];
+  readonly steps?: readonly number[] | undefined;
+  readonly press?: InboxReplyKind | undefined;
 }
 
 export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "", attachments: [] };
@@ -157,7 +171,7 @@ function replyKindOf(
 }
 
 /** A form's values as sent, in the form's own order: words trimmed, a field left blank left out, and a switch left alone sent as no. */
-function sentValues(form: InboxForm, draft: InboxDraft): readonly InboxFormValue[] {
+function sentValues(form: Pick<InboxForm, "fields">, draft: InboxDraft): readonly InboxFormValue[] {
   return form.fields.flatMap((field) => {
     const held = fieldValueOf(draft, field.label);
     const value =
@@ -411,6 +425,330 @@ export function inboxMessageOf(draft: InboxDraft): InboxMessageDraft | undefined
 }
 
 /**
+ * The thread an item is drawn as from version 5, or nothing where it is
+ * drawn from the fields a desktop before it reads: a thread holding an ask,
+ * or one a note opens, the agent's words with nothing in the item's blocks,
+ * since a post that asks nothing leaves those empty. An item from before
+ * version 5, whose question its blocks hold and whose thread asks nothing,
+ * is drawn as it always was.
+ */
+export function inboxThreadOf(item: InboxItem): readonly InboxMessage[] | undefined {
+  const thread = item.thread ?? [];
+  if (thread.some((message) => message.ask !== undefined)) return thread;
+  const opens = thread[0]?.author === INBOX_MESSAGE_AUTHOR.AGENT;
+  return opens && item.blocks.length === 0 ? thread : undefined;
+}
+
+/** An ask this build knows, as a read carries it, with where it stands. */
+export type InboxKnownAsk = Extract<InboxReadAsk, { type: InboxAsk["type"] }>;
+
+/** A `decide` ask as a read carries it. */
+export type InboxDecideAsk = Extract<InboxKnownAsk, { type: typeof INBOX_ASK.DECIDE }>;
+
+/** A `do` ask as a read carries it. */
+export type InboxDoAsk = Extract<InboxKnownAsk, { type: typeof INBOX_ASK.DO }>;
+
+/** Whether an ask read off the wire is one this build knows, which its type decides. */
+export function knownAsk(ask: InboxReadAsk): ask is InboxKnownAsk {
+  return Object.values<string>(INBOX_ASK).includes(ask.type);
+}
+
+/** The message whose ask waits on an answer, and the ask; none where nothing waits. */
+export interface InboxAsking {
+  readonly message: InboxMessage;
+  readonly ask: InboxReadAsk;
+}
+
+/** The thread's open ask: the latest message whose ask stands open; none where none does. */
+export function openAskOf(thread: readonly InboxMessage[]): InboxAsking | undefined {
+  const message = thread.findLast((each) => each.ask?.status === INBOX_ASK_STATUS.OPEN);
+  return message?.ask === undefined ? undefined : { message, ask: message.ask };
+}
+
+/** The most characters an option may spell and still stand as one of two small buttons. */
+const BUTTON_OPTION_CHARS = 24;
+
+/**
+ * Whether a `decide` is a yes or no in other words, approve or decline,
+ * approve or request changes: exactly two short options of one pick with no
+ * detail, drawn as two small buttons, the first going ahead and the second
+ * holding back.
+ */
+export function decideButtons(ask: Pick<InboxDecideAsk, "options" | "multiple">): boolean {
+  return (
+    ask.multiple !== true &&
+    ask.options.length === 2 &&
+    ask.options.every(
+      (option) => option.detail === undefined && option.label.length <= BUTTON_OPTION_CHARS,
+    )
+  );
+}
+
+/** How many steps a `do` ask shows: its own, or one, the item's title, for a to-do from before version 5 that named none. */
+export function shownSteps(ask: Pick<InboxDoAsk, "steps">): number {
+  return Math.max(ask.steps.length, 1);
+}
+
+/** The steps the draft ticks, in order, each once. */
+function tickedSteps(draft: InboxDraft): readonly number[] {
+  return [...new Set(draft.steps ?? [])].toSorted((a, b) => a - b);
+}
+
+/** Whether every step the ask shows is ticked, which Mark done waits for. */
+export function everyStepTicked(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): boolean {
+  const ticked = new Set(draft.steps ?? []);
+  return Array.from({ length: shownSteps(ask) }, (_, at) => at).every((at) => ticked.has(at));
+}
+
+/** The draft with the step at `at` ticked, or let go where it was. */
+export function withStep(draft: InboxDraft, at: number): InboxDraft {
+  const ticked = tickedSteps(draft);
+  const steps = ticked.includes(at) ? ticked.filter((each) => each !== at) : [...ticked, at];
+  return { ...draft, steps };
+}
+
+/** Whether a form's required fields are filled as the draft holds them, which Submit waits for. */
+export function formFilled(form: Pick<InboxForm, "fields">, draft: InboxDraft): boolean {
+  const sent = new Set(sentValues(form, draft).map((value) => value.label));
+  return form.fields.every((field) => field.required !== true || sent.has(field.label));
+}
+
+/**
+ * The answer the draft attaches to the reply for the open ask, or none: a
+ * `decide`'s options picked, a `do`'s Mark done or Couldn't do it with the
+ * steps ticked, an `answer`'s Submit with its fields' values, or its Answer,
+ * whose words are the reply's own. Note that the title standing as a `do`'s
+ * one step is ticked on the card alone, since the ask names no such step.
+ */
+export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAnswers | undefined {
+  const { ask } = asking;
+  if (!knownAsk(ask)) return undefined;
+  const id = asking.message.id;
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+      return draft.choices.length === 0
+        ? undefined
+        : { ask: id, reply: INBOX_REPLY.CHOSE, choices: draft.choices };
+    case INBOX_ASK.DO: {
+      if (draft.press !== INBOX_REPLY.DONE && draft.press !== INBOX_REPLY.NOT_DONE)
+        return undefined;
+      const steps = tickedSteps(draft).filter((at) => at < ask.steps.length);
+      return { ask: id, reply: draft.press, steps };
+    }
+    case INBOX_ASK.ANSWER:
+      if (ask.fields !== undefined) {
+        return draft.press === INBOX_REPLY.SUBMITTED
+          ? {
+              ask: id,
+              reply: INBOX_REPLY.SUBMITTED,
+              values: sentValues({ fields: ask.fields }, draft),
+            }
+          : undefined;
+      }
+      return draft.press === INBOX_REPLY.ANSWERED
+        ? { ask: id, reply: INBOX_REPLY.ANSWERED }
+        : undefined;
+  }
+}
+
+/**
+ * The draft after the open ask's option numbered `number`, counted from
+ * one, is picked by its key: a `decide`'s, as `withChoice` picks it, the
+ * first of two buttons going ahead; none for any other ask.
+ */
+export function askNumberedPick(
+  ask: InboxReadAsk,
+  draft: InboxDraft,
+  number: number,
+): InboxDraft | undefined {
+  if (!knownAsk(ask) || ask.type !== INBOX_ASK.DECIDE) return undefined;
+  const option = ask.options[number - 1];
+  return option === undefined ? undefined : withChoice(ask, draft, option.label);
+}
+
+/** The draft with its attached answer taken off: the pick let go, or the press. */
+export function withoutAnswer(draft: InboxDraft): InboxDraft {
+  return { ...draft, choices: [], press: undefined };
+}
+
+/** What a reply sends on a thread: its words, its files, and the answer to the open ask it carries, if any. */
+export interface InboxThreadSend {
+  readonly text: string;
+  readonly attachments: readonly CodingAgentAttachment[];
+  readonly answers?: InboxAnswers;
+}
+
+/**
+ * What the box sends on a thread, or nothing where the service would take
+ * nothing: a plain reply of words or files or both, never neither, or the
+ * answer attached, with whatever words and files go with it, which the ask
+ * must take as it stands (`inboxAnswersRefusal`); words within the bound.
+ */
+export function inboxThreadSend(
+  thread: readonly InboxMessage[],
+  draft: InboxDraft,
+): InboxThreadSend | undefined {
+  const text = draft.note.trim();
+  if (text.length > INBOX_BOUNDS.MAX_MESSAGE_CHARS) return undefined;
+  const { attachments } = draft;
+  const asking = openAskOf(thread);
+  const answers = asking === undefined ? undefined : attachedAnswers(asking, draft);
+  if (asking === undefined || answers === undefined || !knownAsk(asking.ask)) {
+    return text === "" && attachments.length === 0 ? undefined : { text, attachments };
+  }
+  const refusal = inboxAnswersRefusal(asking.ask, answers, text, attachments);
+  return refusal === undefined ? { text, attachments, answers } : undefined;
+}
+
+/** Which way an answer goes: ahead, a check in green, or holding back, a turn back in red. */
+export const ANSWER_TONE = {
+  AHEAD: "ahead",
+  BACK: "back",
+} as const;
+
+type AnswerTone = (typeof ANSWER_TONE)[keyof typeof ANSWER_TONE];
+
+/** An answer as words: what the reply's stamp says, attached or sent, and which way it goes. */
+export interface AnswerStamp {
+  readonly tone: AnswerTone;
+  readonly words: string;
+}
+
+/** The pick of two buttons' past tense, where its words are an act this build can say done; nothing for another. */
+const DONE_WORDS: ReadonlyMap<string, string> = new Map([
+  ["Approve", "Approved"],
+  ["Decline", "Declined"],
+  ["Request changes", "Requested changes"],
+]);
+
+/** The two buttons' pick an answer makes, and which of the two it is; none where the ask is no pair of buttons. */
+function buttonPick(
+  answers: InboxAnswers,
+  ask: InboxReadAsk | undefined,
+): { readonly label: string; readonly tone: AnswerTone } | undefined {
+  if (ask === undefined || !knownAsk(ask) || ask.type !== INBOX_ASK.DECIDE) return undefined;
+  if (!decideButtons(ask) || answers.reply !== INBOX_REPLY.CHOSE) return undefined;
+  const label = answers.choices?.[0];
+  const at = ask.options.findIndex((option) => option.label === label);
+  if (label === undefined || at < 0) return undefined;
+  return { label, tone: at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK };
+}
+
+/** The steps a `do` answer ticked of those its ask shows, "2/3"; nothing where the ask named none. */
+function stepCount(answers: InboxAnswers, ask: InboxReadAsk | undefined): string | undefined {
+  if (ask === undefined || !knownAsk(ask) || ask.type !== INBOX_ASK.DO) return undefined;
+  if (ask.steps.length === 0) return undefined;
+  return `${(answers.steps ?? []).length}/${ask.steps.length}`;
+}
+
+/** Words with a count after them where there is one. */
+function counting(words: string, count: string | undefined): string {
+  return count === undefined ? words : `${words} ${count}`;
+}
+
+/** Whether an answer holds back: Couldn't do it, or the second of two buttons. */
+function toneOf(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerTone {
+  const pick = buttonPick(answers, ask);
+  if (pick !== undefined) return pick.tone;
+  return answers.reply === INBOX_REPLY.NOT_DONE || answers.reply === INBOX_REPLY.DECLINED
+    ? ANSWER_TONE.BACK
+    : ANSWER_TONE.AHEAD;
+}
+
+/** What each answer but a pick or a to-do's says it was, once sent. */
+const SENT_WORDS = {
+  [INBOX_REPLY.CHOSE]: "chose",
+  [INBOX_REPLY.APPROVED]: "approved",
+  [INBOX_REPLY.DECLINED]: "declined",
+  [INBOX_REPLY.ANSWERED]: "answered",
+  [INBOX_REPLY.DONE]: "done",
+  [INBOX_REPLY.NOT_DONE]: "couldn't do it",
+  [INBOX_REPLY.SUBMITTED]: "submitted",
+  [INBOX_REPLY.ACKNOWLEDGED]: "acknowledged",
+} as const satisfies Record<InboxReplyKind, string>;
+
+/** What each press attached to a reply says, and what the send it renames reads. */
+const PRESS_WORDS = {
+  [INBOX_REPLY.CHOSE]: "Choose",
+  [INBOX_REPLY.APPROVED]: "Approve",
+  [INBOX_REPLY.DECLINED]: "Decline",
+  [INBOX_REPLY.ANSWERED]: "Answer",
+  [INBOX_REPLY.DONE]: "Mark done",
+  [INBOX_REPLY.NOT_DONE]: "Couldn't do it",
+  [INBOX_REPLY.SUBMITTED]: "Submit",
+  [INBOX_REPLY.ACKNOWLEDGED]: "Got it",
+} as const satisfies Record<InboxReplyKind, string>;
+
+/**
+ * What a sent answer's stamp says on the thread, in the past: "Approved",
+ * "Requested changes", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
+ * "Submitted", or "Answered". The ask it answers is read where the thread
+ * still carries it.
+ */
+export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerStamp {
+  const tone = toneOf(answers, ask);
+  const pick = buttonPick(answers, ask);
+  const chose = `Chose ${(answers.choices ?? []).join(", ")}`;
+  const words = (() => {
+    switch (answers.reply) {
+      case INBOX_REPLY.CHOSE:
+        return pick === undefined ? chose : (DONE_WORDS.get(pick.label) ?? chose);
+      case INBOX_REPLY.DONE:
+        return counting("Done", stepCount(answers, ask));
+      case INBOX_REPLY.NOT_DONE:
+        return counting("Couldn't do it", stepCount(answers, ask));
+      default:
+        return sentenceCased(SENT_WORDS[answers.reply]);
+    }
+  })();
+  return { tone, words };
+}
+
+/**
+ * What an attached answer's stamp says over the box, and what the send it
+ * renames reads: the button pressed, "Approve" or "Request changes", the
+ * options picked, `Choose "7 days"`, or the press, "Mark done", "Submit".
+ */
+export function attachedStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerStamp {
+  const tone = toneOf(answers, ask);
+  const pick = buttonPick(answers, ask);
+  if (pick !== undefined) return { tone, words: pick.label };
+  if (answers.reply === INBOX_REPLY.CHOSE) {
+    const picked = (answers.choices ?? []).map((choice) => `"${choice}"`).join(", ");
+    return { tone, words: `${PRESS_WORDS[INBOX_REPLY.CHOSE]} ${picked}` };
+  }
+  return { tone, words: PRESS_WORDS[answers.reply] };
+}
+
+/**
+ * What a settled ask's line says its answerer did, after who they are:
+ * "requested changes", "chose 7 days", "marked it done", or what any other
+ * answer is called on an item (`REPLY_WORDS`).
+ */
+export function answeredWords(answers: InboxAnswers, ask: InboxReadAsk | undefined): string {
+  const pick = buttonPick(answers, ask);
+  const done = pick === undefined ? undefined : DONE_WORDS.get(pick.label);
+  if (done !== undefined) return done.toLowerCase();
+  if (answers.reply === INBOX_REPLY.CHOSE) {
+    return `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answers.choices ?? []).join(", ")}`;
+  }
+  return REPLY_WORDS[answers.reply];
+}
+
+/** The message that answers an ask, where the thread read carries it. */
+export function answerOf(
+  thread: readonly InboxMessage[],
+  messageId: string,
+): InboxMessage | undefined {
+  return thread.find((message) => message.answers?.ask === messageId);
+}
+
+/** How many messages a thread's line counts, "1 message", "6 messages". */
+export function messagesWords(count: number): string {
+  return counted(count, "message");
+}
+
+/**
  * The two ways an approval and a to-do are decided, the one that holds
  * back and the one that goes ahead, and the nod a note is answered by:
  * the Inbox's cards in the question and a chat ask's presses (`chat-ask.tsx`)
@@ -482,10 +820,11 @@ export function proposedOptions(item: InboxItem): readonly ProposedOption[] {
   );
 }
 
-/** Who settled an item: the developer, by answering it, or its agent, by taking it back. */
+/** Who settled an item: the developer, by answering it; its agent, by taking it back; or a member, by closing it without an answer. */
 export const SETTLED_BY = {
   DEVELOPER: "developer",
   AGENT: "agent",
+  CLOSER: "closer",
 } as const;
 
 /** What each answer's kind says its answerer did, after who they are. */
@@ -505,7 +844,8 @@ const REPLY_WORDS = {
  * `answeredBy`, whom its line names before what they did in a few words
  * (`did`: "chose Postgres"), with a form's values one per line and the note
  * they wrote, which is Markdown as their box wrote it, its mentions links;
- * or taken back by its agent, said whole, and why.
+ * taken back by its agent, said whole, and why; or closed by a member
+ * without an answer, by the item's `closedBy`.
  */
 export type Settlement =
   | {
@@ -514,7 +854,20 @@ export type Settlement =
       readonly values?: string;
       readonly note?: string;
     }
-  | { readonly by: typeof SETTLED_BY.AGENT; readonly lead: string; readonly words?: string };
+  | { readonly by: typeof SETTLED_BY.AGENT; readonly lead: string; readonly words?: string }
+  | { readonly by: typeof SETTLED_BY.CLOSER };
+
+/**
+ * Whether an item was closed by a member without an answer rather than taken
+ * back by its agent. Note that the agent's close always says why, so a closed
+ * item with no reason is a member's, whose account may be gone since.
+ */
+function closedByMember(item: InboxItem): boolean {
+  return (
+    item.status === INBOX_STATUS.CLOSED &&
+    (item.closedBy !== undefined || item.closedReason === undefined)
+  );
+}
 
 /** A form's values as the developer filled them, one per line; nothing where they filled none. */
 function valueLines(answer: InboxReply): string | undefined {
@@ -527,6 +880,7 @@ function valueLines(answer: InboxReply): string | undefined {
 /** How an item was settled, or nothing while it waits: what its answerer did and wrote, or the agent taking it back and why. */
 export function settlementOf(item: InboxItem): Settlement | undefined {
   if (item.status === INBOX_STATUS.OPEN) return undefined;
+  if (closedByMember(item)) return { by: SETTLED_BY.CLOSER };
   if (item.status === INBOX_STATUS.CLOSED) {
     return {
       by: SETTLED_BY.AGENT,
@@ -552,6 +906,9 @@ export function settlementOf(item: InboxItem): Settlement | undefined {
 
 /** A member named on an item, as an answer's or a message's writer. */
 type InboxMember = NonNullable<InboxItem["answeredBy"]>;
+
+/** What an item a member closed without an answer says of it, after who closed it. */
+export const CLOSED_WORDS = "Closed without answering";
 
 /** What parts a preview's words, as a menu's detail parts them. */
 const PREVIEW_PART = " · ";
@@ -719,7 +1076,8 @@ export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
  * led by who said it: a message on the thread by its writer, "Agent" for
  * the item's own and a member by `nameOf`, which says "You" for the
  * reader; the answer by its answerer, in a few words; the agent taking the
- * item back as "Withdrawn" and why; and, on an open item nobody has
+ * item back as "Withdrawn" and why; a member's close by who closed it;
+ * and, on an open item nobody has
  * written on, what it asks, "Choice · 3 options, one recommended".
  */
 export function inboxPreview(
@@ -734,6 +1092,7 @@ export function inboxPreview(
     const words = plainWords(message.text);
     return `${who}: ${words === "" ? (filesWords(message.files) ?? "") : words}`;
   }
+  if (closedByMember(item)) return `${nameOf(item.closedBy)}: ${CLOSED_WORDS}`;
   if (item.status === INBOX_STATUS.CLOSED) {
     const why = item.closedReason === undefined ? "" : plainWords(item.closedReason);
     return why === "" ? "Withdrawn" : `Withdrawn: ${why}`;
@@ -744,16 +1103,14 @@ export function inboxPreview(
 /**
  * The Inbox's one name for an item waiting on the developer's answer, in
  * each form its surfaces say it: the list's filter, a count's words after
- * its figure, the line where nothing is listed, and the line under it where
- * the filter leaves out every item listed. A settled item reads as
- * answered. Every surface reads its words here, so the name is changed in
+ * its figure, and the line where nothing is listed. A settled item reads
+ * as answered. Every surface reads its words here, so the name is changed in
  * this one place.
  */
 export const NEEDS_YOU = {
   LABEL: "Needs you",
   COUNT: { one: "needs you", many: "need you" } satisfies CountNoun,
   NONE: "Nothing needs you",
-  ANSWERED: "You've answered everything",
 } as const;
 
 /** What an item is listed under: the task its agent works on, or, for an agent with no task, the automation that started it. */

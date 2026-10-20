@@ -1,7 +1,7 @@
 import type { CodingAgent } from "@luke/database/models/coding-agent-store";
 import { RETIRED_TOOL } from "@luke/features/agent-tools";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
-import { INBOX_BLOCK } from "@luke/features/inbox-wire";
+import { inboxSandboxPicturePaths } from "@luke/features/inbox-attachment-link";
 import { WireValueSchema } from "@luke/wire";
 import { verbatimJsonSchema } from "@luke/wire/effect";
 import type { ToolSet } from "ai";
@@ -57,9 +57,8 @@ export const CODER_TOOL = {
   LOOK_AT_PICTURE: AGENT_TOOL.LOOK_AT_PICTURE,
   WRITE_TODOS: AGENT_TOOL.WRITE_TODOS,
   POST_TO_INBOX: AGENT_TOOL.POST_TO_INBOX,
-  CLOSE_INBOX_ITEM: AGENT_TOOL.CLOSE_INBOX_ITEM,
+  WITHDRAW_ASK: AGENT_TOOL.WITHDRAW_ASK,
   READ_INBOX: AGENT_TOOL.READ_INBOX,
-  REPLY_INBOX: AGENT_TOOL.REPLY_INBOX,
   OPEN_PULL_REQUEST: AGENT_TOOL.OPEN_PULL_REQUEST,
   LIST_AGENTS: AGENT_TOOL.LIST_AGENTS,
   READ_AGENT: AGENT_TOOL.READ_AGENT,
@@ -80,6 +79,7 @@ export const CODER_TOOL = {
   POST_CHAT: AGENT_TOOL.POST_CHAT,
   READ_CHAT: AGENT_TOOL.READ_CHAT,
   RESOLVE_ASK: AGENT_TOOL.RESOLVE_ASK,
+  EDIT_CHANNEL: AGENT_TOOL.EDIT_CHANNEL,
   LIST_MODELS: AGENT_TOOL.LIST_MODELS,
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
@@ -99,7 +99,7 @@ export type TaskTool =
   | typeof CODER_TOOL.SHOW_PAGE
   | (typeof COMMENT_TASK_TOOLS)[number];
 
-/** The comment tools every agent on a task is offered, one handed a prompt among them, since a member may send any of them a thread. */
+/** The comment tools every agent on a task is offered, since a member may send any of them a thread. */
 const COMMENT_TASK_TOOLS = [
   CODER_TOOL.READ_COMMENTS,
   CODER_TOOL.REPLY_TO_COMMENT,
@@ -109,24 +109,26 @@ const COMMENT_TASK_TOOLS = [
 
 /**
  * The plan's tools an agent is offered: none for one on no plan, as an
- * automation's run starts one, and no `edit_plan` for one handed a prompt,
- * which never saw the plan; every agent on a task reads and answers its
- * comments. Note that each tool withheld is one its call
- * would only be refused by (`host.ts`'s `editPlan` and `showPage`), and that
- * the instructions leave out the same words (`instructions.ts`).
+ * automation's run starts one, and all of them for one on a task, whether
+ * it was handed the plan or a prompt, since New task starts every agent on
+ * the developer's own words while Luke writes the plan beside it. Note that
+ * each tool withheld is one its call would only be refused by (`host.ts`'s
+ * `editPlan` and `showPage`), and that the instructions leave out the same
+ * words (`instructions.ts`).
  */
-export function taskToolsOf(agent: Pick<CodingAgent, "taskId" | "prompt">): ReadonlySet<TaskTool> {
+export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<TaskTool> {
   if (agent.taskId === null) return new Set();
-  if (agent.prompt !== null) return new Set([CODER_TOOL.SHOW_PAGE, ...COMMENT_TASK_TOOLS]);
   return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...COMMENT_TASK_TOOLS]);
 }
 
 /**
  * The tools a coding agent's transcript may name that no agent is offered
  * now: eve's provider-run web reads, which coding agents ran before they had
- * the hosted pair, and the archive, unarchive, and move of a task into a
- * section since folded into `update_agent` and `update_task`. A transcript
- * written then names them, and reads back under the same set.
+ * the hosted pair, the archive, unarchive, and move of a task into a
+ * section since folded into `update_agent` and `update_task`, and the close
+ * of and reply on an inbox item since folded into `withdraw_ask` and
+ * `post_to_inbox`. A transcript written then names them, and reads back
+ * under the same set.
  */
 export const RETIRED_CODER_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -134,6 +136,8 @@ export const RETIRED_CODER_TOOL = {
   ARCHIVE_AGENT: RETIRED_TOOL.ARCHIVE_AGENT,
   UNARCHIVE_AGENT: RETIRED_TOOL.UNARCHIVE_AGENT,
   MOVE_TASK: RETIRED_TOOL.MOVE_TASK,
+  CLOSE_INBOX_ITEM: RETIRED_TOOL.CLOSE_INBOX_ITEM,
+  REPLY_INBOX: RETIRED_TOOL.REPLY_INBOX,
 } as const;
 
 /**
@@ -155,17 +159,20 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.SHOW_IMAGE,
 ]);
 
-/** What a chat post's or an inbox post's input is read for here: the types of its blocks, an image's among them. */
+/** What a chat post's input is read for here: the types of its blocks, an image's among them. */
 const readPostedBlocks = Schema.decodeUnknownOption(
   Schema.Struct({ blocks: Schema.Array(Schema.Struct({ type: Schema.String })) }),
 );
 
+/** What an inbox post's input is read for here: its body, whose pictures name files in the sandbox. */
+const readPostedBody = Schema.decodeUnknownOption(Schema.Struct({ body: Schema.String }));
+
 /**
  * Whether an event of the agent's session opened its sandbox: a request for
  * a sandbox tool, for a page read from a file in the sandbox, for an
- * edit of the plan adding a picture read from one, for a chat post or an
- * inbox post with a picture, or for an inbox reply with one, each read
- * from a file in the sandbox, or a message
+ * edit of the plan adding a picture read from one, for a chat post with a
+ * picture, or for an inbox post whose body draws one by a path naming no
+ * scheme, each read from a file in the sandbox, or a message
  * received with files, which eve stages in the sandbox before the
  * turn opens, opening it to do so.
  */
@@ -180,16 +187,14 @@ export function opensSandbox(event: MessageStreamEvent): boolean {
             (action.toolName === CODER_TOOL.EDIT_PLAN &&
               Array.isArray(action.input.pictures) &&
               action.input.pictures.length > 0) ||
-            (action.toolName === CODER_TOOL.REPLY_INBOX &&
-              Array.isArray(action.input.images) &&
-              action.input.images.length > 0) ||
             (action.toolName === CODER_TOOL.POST_CHAT &&
               Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
                 blocks.some((block) => block.type === CHAT_BLOCK.IMAGE),
               )) ||
             (action.toolName === CODER_TOOL.POST_TO_INBOX &&
-              Option.exists(readPostedBlocks(action.input), ({ blocks }) =>
-                blocks.some((block) => block.type === INBOX_BLOCK.IMAGE),
+              Option.exists(
+                readPostedBody(action.input),
+                ({ body }) => inboxSandboxPicturePaths(body).length > 0,
               ))),
       );
     case "message.received":

@@ -62,7 +62,7 @@ const grantingConsent: OpenConsent = (options) => ({
 const accountService: typeof globalThis.fetch = async (input, init) => {
   const request = new Request(input, init);
   if (request.url === `${SERVICE_BASE_URL}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`)
-    return new Response(null, { status: 200 });
+    return jsonResponse({ deleted: true });
   if (request.url === `${ACCOUNT_BASE_URL}/oauth2/token`)
     return jsonResponse({ access_token: "access-2", refresh_token: "refresh-2" });
   if (request.url === `${ACCOUNT_BASE_URL}/oauth2/userinfo`)

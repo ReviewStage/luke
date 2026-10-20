@@ -36,6 +36,8 @@ export const GATEWAY_METHOD = {
   TASKS_REPOSITORIES: "tasks.repositories",
   /** One task given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   TASKS_SET_REPOSITORY: "tasks.setRepository",
+  /** One task's status, priority, or both set on the service; the list and the open document take the task it answered without reading either again. */
+  TASKS_SET_STANDING: "tasks.setStanding",
   /** One task moved to another of the account's workspaces on the service; the list and the open document take the task it answered without reading either again. */
   TASKS_MOVE: "tasks.move",
   /** The developer's edit of a task's document saved on the service; the open document takes the task it answered, and a conflict leaves it unchanged. */
@@ -56,6 +58,8 @@ export const GATEWAY_METHOD = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_ISSUE: "tasks.issue",
+  /** A repository's issues as New task's picker asks for them, read from GitHub through the service as they stand now, or that its installation grants none; answered to the caller, never held in the view. */
+  TASKS_GITHUB_ISSUES: "tasks.githubIssues",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
@@ -204,7 +208,9 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
   /** One item of a task's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
-  /** One message of the account's on an item's thread, open or settled, under the panel's own key; the item as it then stands, its thread with the message on it, or why there is no answer. */
+  /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
+  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
+  /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
   CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
   CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
@@ -214,6 +220,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_CHAT: "codingAgents.chat",
   /** A write to a workspace's chat as the account's own member: a post, an answer to an ask, a resolve, or how far it has read; what the write came to, or why there is no answer. */
   CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
+  /** One picture a chat message carries, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
+  CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
   /** Where every one of the account's integrations stands, read from the service now. */
   INTEGRATIONS_STATUS: "integrations.status",
   /** A browser sign-in to one account at a provider, or to a new one, begun on the service and opened on this Mac; whether it was opened and the account it signs in, never the address. */
@@ -226,8 +234,15 @@ export const GATEWAY_METHOD = {
   INTEGRATIONS_DISCONNECT: "integrations.disconnect",
   /** One account at a provider named as the developer calls it, on the service; the account as it then stands. */
   INTEGRATIONS_RENAME: "integrations.rename",
-  /** What waits on the developer across the account's tasks past a cursor: every open inbox item, held open by the service while nothing changed. Main's own read, which no window asks. */
-  CODING_AGENTS_ACCOUNT_INBOX: "codingAgents.accountInbox",
+  /**
+   * What waits on the developer across the account's tasks, followed from
+   * now until it is let go or the account signs out, over Neon Realtime. What
+   * it says is heard as `ACCOUNT_INBOX_CHANGED` events, never answered.
+   * Main's own read, which no window asks; following again starts over.
+   */
+  CODING_AGENTS_ACCOUNT_INBOX_FOLLOW: "codingAgents.accountInboxFollow",
+  /** The account's inbox let go: no more `ACCOUNT_INBOX_CHANGED` events until it is followed again. */
+  CODING_AGENTS_ACCOUNT_INBOX_UNFOLLOW: "codingAgents.accountInboxUnfollow",
   /** One image of an inbox item, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
   CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   /** One picture a tool answered an agent or one of its workers, fetched under the account: its bytes in base64 under the media type the service kept, or why there is none. */
@@ -558,6 +573,8 @@ export const GATEWAY_EVENT = {
   TERMINAL_OUTPUT: "terminal.output",
   /** How an attached shell's connection stands, named by its connection. */
   TERMINAL_STATE: "terminal.state",
+  /** What waits on the developer across the account, whole, each time it changes while it is followed. */
+  ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

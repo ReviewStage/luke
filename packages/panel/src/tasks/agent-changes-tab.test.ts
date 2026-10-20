@@ -22,9 +22,9 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_ERROR, SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import {
   APP_COMMAND,
   FILES_CHANGED_KEYS,
@@ -32,19 +32,26 @@ import {
   type ShortcutChord,
 } from "@luke/settings/shortcuts";
 import { DisclosureFind } from "@luke/ui";
+import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { appBridge } from "../app-bridge.js";
 import { useAppCommand, useAppKeymap } from "../app-commands.js";
 import type { SideBundles } from "../bundle-loader.js";
 import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
-import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActPort,
+  fakeActPortCalls,
+  fakeActs,
+  fakeAppBridge,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -265,14 +272,12 @@ interface DrawOptions {
   readonly finding?: boolean;
   /** Whether the view is the Pull request tab's chosen one; it is unless told. */
   readonly shown?: boolean;
-  /** The window's way to open Settings at a place; nothing unless told. */
-  readonly openSettings?: (link: SettingsLink) => void;
 }
 
 /** Draws the view again in the root standing, its tree open or not, beside whatever else is given. */
 async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
-  const { AgentChangesTab } = await import("./agent-changes-tab.js");
-  const tab = createElement(AgentChangesTab, {
+  const { ChangesTabReading } = await import("../testing/changes-tab.js");
+  const tab = createElement(ChangesTabReading, {
     agentId: AGENT.id,
     control: options.control ?? control,
     shown: options.shown ?? true,
@@ -286,12 +291,9 @@ async function redraw(options: DrawOptions = {}): Promise<DiffListProps> {
         registry,
         onSideBundles(
           bundles,
-          createElement(OpenSettingsProvider, {
-            value: options.openSettings ?? (() => undefined),
-            children: createElement(DisclosureFind, {
-              finding: options.finding ?? false,
-              children: createElement("div", null, tab, options.beside ?? null),
-            }),
+          createElement(DisclosureFind, {
+            finding: options.finding ?? false,
+            children: createElement("div", null, tab, options.beside ?? null),
           }),
         ),
       ),
@@ -835,9 +837,8 @@ test("? outside Files changed, or typed into its tree's search, opens no sheet",
   assert.equal(keysSheet(), null);
 });
 
-test("View settings groups its rows under Diff, Lines, and Text, shows one appearance's theme at a time, and opens Settings at its Diffs from its foot", async () => {
-  const opened: SettingsLink[] = [];
-  await drawTab({ openSettings: (link) => opened.push(link) });
+test("View settings groups its rows under Diff, Lines, and Text, shows one appearance's theme at a time, and holds no way out to Settings", async () => {
+  await drawTab();
   const popover = openSettings("dark");
 
   const groups = [...popover.querySelectorAll<HTMLElement>(".view-settings-group")].map((group) => [
@@ -861,14 +862,13 @@ test("View settings groups its rows under Diff, Lines, and Text, shows one appea
     "the other appearance's theme is a press away",
   );
 
-  const foot = [...popover.querySelectorAll<HTMLButtonElement>("button")].find(
-    (button) => button.textContent === "All diff and code settings\u2026",
+  assert.deepEqual(
+    [...popover.querySelectorAll<HTMLButtonElement>("button")].filter((button) =>
+      /settings/iu.test(button.textContent ?? ""),
+    ),
+    [],
+    "no button opens Settings",
   );
-  act(() => foot?.click());
-  assert.deepEqual(opened, [
-    { page: SETTINGS_VIEW.APPEARANCE, section: SETTINGS_SECTION.APPEARANCE_DIFFS },
-  ]);
-  assert.equal(document.querySelector('[role="dialog"]'), null, "and the popover closes");
 });
 
 test("the diff settings set the layout, the indicators, and a switch for every diff, kept for the next view", async () => {
@@ -954,16 +954,15 @@ test("a setting is drawn as written while its write is out, so a press reads the
   assert.equal(lastDrawn().look.ligatures, true);
 });
 
-/** Holds every settings write unanswered, and the window's document unchanged, until a test answers one. */
-function holdSettingWrites(): Array<(outcome: ActOutcome) => void> {
-  const held: Array<(outcome: ActOutcome) => void> = [];
-  const before = appBridge().act;
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    act: (request: Act) =>
-      request.kind === ACT_KIND.SETTING_UPDATE
-        ? new Promise((resolve) => held.push(resolve))
-        : before(request),
+/** Holds every settings write unanswered, and the window's document unchanged, until a test refuses one with its sentence. */
+function holdSettingWrites(): Array<(sentence: string) => void> {
+  const held: Array<(sentence: string) => void> = [];
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [SETTINGS_ACT_KIND.SETTING_UPDATE]: () =>
+      new Promise((_resolve, reject) =>
+        held.push((sentence) => reject(new ORPCError(ACT_ERROR.REFUSED, { message: sentence }))),
+      ),
   });
   return held;
 }
@@ -976,7 +975,7 @@ test("a write answered while a later one to the same setting is out leaves the l
   act(() => settingControl(popover, '[role="radio"]', "Split").click());
   act(() => settingControl(popover, '[role="radio"]', "Unified").click());
   act(() => settingControl(popover, '[role="radio"]', "Split").click());
-  held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+  held[0]?.("Not in this test.");
   await flush();
 
   assert.equal(lastDrawn().look.layout, "split");
@@ -988,7 +987,7 @@ test("a refused write is said under its row, and the row can be pressed again", 
   const popover = openSettings();
 
   act(() => settingControl(popover, '[role="switch"]', "Ligatures").click());
-  held[0]?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not save that setting." });
+  held[0]?.("Could not save that setting.");
   await flush();
 
   const ligatures = settingControl(popover, '[role="switch"]', "Ligatures");
@@ -1101,25 +1100,24 @@ function comeIntoView(): void {
   }
 }
 
+/** Every `app:act` this test does not answer, refused. */
+function refuseEveryAct(): Promise<ActOutcome> {
+  return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+}
+
 /** The images the service was asked for, by address, each answered with a picture of its own. */
 function answerImages(refusing: Set<string> = new Set()): string[] {
   const asked: string[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      }
-      asked.push(request.payload.src);
-      if (refusing.has(request.payload.src)) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Unreachable." });
-      }
-      return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { contentType: "image/png", base64: btoa(request.payload.src) },
-      });
+  fakeAppBridge({ act: refuseEveryAct });
+  handSettings();
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: ({ src }) => {
+      asked.push(src);
+      if (refusing.has(src)) return Promise.reject(refusedOnPort("Unreachable."));
+      return Promise.resolve({ contentType: "image/png", base64: btoa(src) });
     },
   });
-  handSettings();
   return asked;
 }
 
@@ -1368,16 +1366,15 @@ const MARKED: CodingAgentPullRequestViewedAnswerView = {
 /** Every mark asked of the service, answered as `answer` says. */
 function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionRequest[] {
   const asked: PullRequestActionRequest[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      }
-      asked.push(request.payload.request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer() });
+  fakeAppBridge({ act: refuseEveryAct });
+  handSettings();
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+      asked.push(request);
+      return Promise.resolve(answer());
     },
   });
-  handSettings();
   return asked;
 }
 
@@ -1544,20 +1541,16 @@ function holdMarks(): Array<{
     readonly request: PullRequestActionRequest;
     readonly answer: (answer: PullRequestWriteAnswer) => void;
   }> = [];
-  fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      }
-      const answered = Promise.withResolvers<ActOutcome>();
-      held.push({
-        request: request.payload.request,
-        answer: (value) => answered.resolve({ status: ACT_OUTCOME_STATUS.DONE, value }),
-      });
+  fakeAppBridge({ act: refuseEveryAct });
+  handSettings();
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+      const answered = Promise.withResolvers<PullRequestWriteAnswer>();
+      held.push({ request, answer: answered.resolve });
       return answered.promise;
     },
   });
-  handSettings();
   return held;
 }
 
@@ -1779,6 +1772,69 @@ test("minimized, the threads on no line take a row of their own for their chip, 
   assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
 });
 
+/** The seats patch and a second hunk far below it, so a long gap stands between them, its line 30 the same line on both sides but one. */
+const GAPPED_PATCH = [
+  PATCH,
+  "@@ -59,3 +60,3 @@",
+  " const kept = 59;",
+  "-const late = 60;",
+  "+const late = 61;",
+  " const end = 61;",
+].join("\n");
+
+test("a review thread on a line between hunks moves onto its line once a gap opened over it draws it, and back above the diff as the gap closes; an outdated one stays above", async () => {
+  commits = { headSha: HEAD_SHA };
+  files = [changed("src/seats.ts", { patch: GAPPED_PATCH })];
+  const threads: ChangesThreads = {
+    list: [seatsThread(30, "in-gap"), seatsThread(null, "was-3")],
+    draw: (thread) => createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+  };
+  await drawTab({ threads });
+  const file = () => lastDrawn().files[0] ?? assert.fail("the file is drawn");
+  const onLines = () =>
+    file()
+      .annotations.filter((note) => note.line !== 0)
+      .map((note) => [note.key, note.side, note.line]);
+  const aboveWords = () => {
+    const above = file().annotations.find((note) => note.line === 0);
+    return lastDrawn()
+      .renderAnnotation("src/seats.ts", above?.key ?? "")
+      .querySelector('[aria-label="Comments on lines this diff does not show"]')?.textContent;
+  };
+  assert.deepEqual(file().hidden, [30], "the list is asked to tell of the thread's line");
+  assert.deepEqual(onLines(), []);
+  assert.equal(aboveWords(), "in-gapwas-3");
+
+  // The gap's arrow opened over line 30, as the list tells it.
+  act(() => lastDrawn().onDrawn?.("src/seats.ts", [30]));
+  await flush();
+  assert.deepEqual(onLines(), [[`${PAGE}#in-gap`, "additions", 30]]);
+  assert.equal(
+    lastDrawn().renderAnnotation("src/seats.ts", `${PAGE}#in-gap`).textContent,
+    "in-gap",
+  );
+  assert.equal(aboveWords(), "was-3", "the outdated thread stays above");
+
+  // Minimized, the thread that moved is its line's chip.
+  press(listBox(), { key: "i" });
+  await flush();
+  assert.equal(
+    lastDrawn()
+      .renderAnnotation("src/seats.ts", `${PAGE}#in-gap`)
+      .querySelector(".diff-thread-chip")
+      ?.getAttribute("aria-label"),
+    "1 comment by octo · 1 open, show",
+  );
+  press(listBox(), { key: "i" });
+  await flush();
+
+  // The gap closed again, its patch read anew.
+  act(() => lastDrawn().onDrawn?.("src/seats.ts", []));
+  await flush();
+  assert.deepEqual(onLines(), []);
+  assert.equal(aboveWords(), "in-gapwas-3");
+});
+
 test("a header copies the path it names on a press, the path a file moved from apart from the one it moved to", async () => {
   files = [
     changed("src/seats.ts"),
@@ -1844,12 +1900,12 @@ const BASE_TEXT = HEAD_TEXT.replace("five", "5");
 const HEAD_PATCH = "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8";
 
 /** Answers each read of a file whole as given, keeping every read asked. */
-function answerFileReads(answer: (path: string) => TasksFileAnswer): Act[] {
-  const asked: Act[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+function answerFileReads(answer: (path: string) => TasksFileAnswer): AnyAct[] {
+  const asked: AnyAct[] = [];
+  fakeActs({
+    act: (request: AnyAct) => {
       asked.push(request);
-      const outcome: ActOutcome = {
+      const outcome: AnyActOutcome = {
         status: ACT_OUTCOME_STATUS.DONE,
         value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,
       };
@@ -2093,8 +2149,8 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
     changed("src/plan.ts", { patch: HEAD_PATCH }),
   ];
   const held: Array<() => void> = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+  fakeActs({
+    act: (request: AnyAct) => {
       const value =
         request.kind === ACT_KIND.TASKS_FILE
           ? {
@@ -2106,7 +2162,7 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
               },
             }
           : undefined;
-      const outcome: ActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
+      const outcome: AnyActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
       // The first file's read is held until the test lets it land.
       if (request.kind === ACT_KIND.TASKS_FILE && request.payload.path === "src/seats.ts") {
         return new Promise((resolve) => held.push(() => resolve(outcome)));

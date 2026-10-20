@@ -4,20 +4,20 @@ import {
   CHANNEL_KIND,
   CHAT_ASK,
   CHAT_BLOCK,
+  CHAT_BOUNDS,
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatChannel,
   type ChatMessage,
   formValueLines,
   GENERAL_CHANNEL,
-  LUKE_HANDLE,
   MEMBER_KIND,
   replyWords,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { MENTION_KIND } from "@luke/features/mention-link";
+import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import type { TaskAgentLine } from "@luke/features/task-wire";
-import type { ChatAskAnswer, ChatPost } from "@luke/ui/chat-model";
+import type { ChatAskAnswer, ChatChannelChange, ChatPost } from "@luke/ui/chat-model";
 import { FIXTURE_TASK_ID } from "./tasks-fixture.js";
 
 /**
@@ -63,6 +63,24 @@ const MEMBER = {
   LUKE: "2e3f4a5b-6c7d-4e8f-a091-c2d3e4f5a6b7",
   AGENT_ONE: "3f4a5b6c-7d8e-4f90-b1a2-d3e4f5a6b7c8",
   AGENT_TWO: "4a5b6c7d-8e9f-4a01-82b3-e4f5a6b7c8d9",
+} as const;
+
+/** Where the fixture's chips are written: the team workspace the fixture's tasks stand in. */
+const PLACE = { workspace: "acme", repository: null } as const;
+
+/** The members as their messages name them, each by the mention link a chip writes, as every member writes another. */
+const CHIP = {
+  DEAN: mentionMarkdown({ kind: MENTION_KIND.PERSON, userId: "dean" }, "Dean Stratakos", PLACE),
+  AGENT_ONE: mentionMarkdown(
+    { kind: MENTION_KIND.AGENT, taskId: FIXTURE_TASK_ID, agentId: AGENT_ONE.id },
+    "Add teammate invitations",
+    PLACE,
+  ),
+  AGENT_TWO: mentionMarkdown(
+    { kind: MENTION_KIND.AGENT, taskId: FIXTURE_TASK_ID, agentId: AGENT_TWO.id },
+    "Invite emails",
+    PLACE,
+  ),
 } as const;
 
 /** The channels, by the ids the messages name them by. */
@@ -147,8 +165,8 @@ function messages(at: number): readonly ChatMessage[] {
       authorId: MEMBER.LUKE,
       mentions: [MEMBER.AGENT_ONE, MEMBER.AGENT_TWO],
       blocks: words(
-        "@agent-1 is adding `invite_token` to `memberships` on `luke/teammate-invitations`, " +
-          "migration pushed. @agent-2 only reads it and based its branch on that migration.",
+        `${CHIP.AGENT_ONE} is adding \`invite_token\` to \`memberships\` on \`luke/teammate-invitations\`, ` +
+          `migration pushed. ${CHIP.AGENT_TWO} only reads it and based its branch on that migration.`,
       ),
     }),
     said(at, 31, {
@@ -158,7 +176,7 @@ function messages(at: number): readonly ChatMessage[] {
       authorId: MEMBER.AGENT_TWO,
       mentions: [MEMBER.AGENT_ONE],
       blocks: words(
-        "@agent-1 are you changing `memberships` columns? My template reads `invite_token` and " +
+        `${CHIP.AGENT_ONE} are you changing \`memberships\` columns? My template reads \`invite_token\` and ` +
           "I'd rather import your migration than write one.",
       ),
     }),
@@ -233,7 +251,7 @@ function messages(at: number): readonly ChatMessage[] {
       mentions: [MEMBER.AGENT_ONE],
       blocks: words(
         "Can I take `src/members/invite.ts` too? The email template needs the token format, and " +
-          "@agent-1 is still on it. If you'd rather, I'll wait for #214 and base on it.",
+          `${CHIP.AGENT_ONE} is still on it. If you'd rather, I'll wait for #214 and base on it.`,
       ),
     }),
     said(at, 9, {
@@ -243,7 +261,7 @@ function messages(at: number): readonly ChatMessage[] {
       authorId: MEMBER.LUKE,
       mentions: [MEMBER.DEAN, MEMBER.AGENT_TWO],
       blocks: words(
-        "@dean two agents are both changing the `memberships` table. I told @agent-2 to wait for " +
+        `${CHIP.DEAN} two agents are both changing the \`memberships\` table. I told ${CHIP.AGENT_TWO} to wait for ` +
           "#214; say if you'd rather they split it another way.",
       ),
     }),
@@ -288,7 +306,7 @@ function messages(at: number): readonly ChatMessage[] {
       authorId: MEMBER.DEAN,
       mentions: [MEMBER.AGENT_ONE, MEMBER.AGENT_TWO],
       blocks: words(
-        "Split it: @agent-1 owns the schema, @agent-2 only reads it. @agent-2, wait for #214 " +
+        `Split it: ${CHIP.AGENT_ONE} owns the schema, ${CHIP.AGENT_TWO} only reads it. ${CHIP.AGENT_TWO}, wait for #214 ` +
           "before you touch the template.",
       ),
     }),
@@ -317,19 +335,25 @@ export function fixtureChat(
     self: MEMBER.DEAN,
     readSeq: READ_SEQ,
     members: [
-      { id: MEMBER.DEAN, kind: MEMBER_KIND.HUMAN, handle: "dean", userId: "dean", left: false },
-      { id: MEMBER.MARIA, kind: MEMBER_KIND.HUMAN, handle: "maria", userId: "maria", left: false },
       {
-        id: MEMBER.LUKE,
-        kind: MEMBER_KIND.LUKE,
-        handle: LUKE_HANDLE,
-        planId: FIXTURE_TASK_ID,
+        id: MEMBER.DEAN,
+        kind: MEMBER_KIND.HUMAN,
+        name: "Dean Stratakos",
+        userId: "dean",
         left: false,
       },
       {
+        id: MEMBER.MARIA,
+        kind: MEMBER_KIND.HUMAN,
+        name: "Maria Chen",
+        userId: "maria",
+        left: false,
+      },
+      { id: MEMBER.LUKE, kind: MEMBER_KIND.LUKE, planId: FIXTURE_TASK_ID, left: false },
+      {
         id: MEMBER.AGENT_ONE,
         kind: MEMBER_KIND.AGENT,
-        handle: "agent-1",
+        name: "Add teammate invitations",
         agentId: AGENT_ONE.id,
         planId: FIXTURE_TASK_ID,
         left: false,
@@ -337,7 +361,7 @@ export function fixtureChat(
       {
         id: MEMBER.AGENT_TWO,
         kind: MEMBER_KIND.AGENT,
-        handle: "agent-2",
+        name: "Invite emails",
         agentId: AGENT_TWO.id,
         planId: FIXTURE_TASK_ID,
         left: false,
@@ -377,31 +401,23 @@ export type Staged = { readonly chat: FixtureChat } | { readonly refused: string
 /** What a fixture's post or answer refuses with: a place, a message, or a revision that is not the chat's. */
 const STAGED_REFUSAL = {
   NO_PLACE: "There is no such channel or member.",
+  NAME_TAKEN: "Another channel already has that name.",
+  TOO_MANY_TOPICS: "The workspace keeps as many topic channels open as it may. Archive one first.",
   NO_MESSAGE: "That message is not in this chat.",
   STALE: "The ask changed since you read it.",
 } as const;
 
-/** The channel a post goes to: its thread's, a channel by `#name`, or the developer's DM with a member by `@handle`. */
+/** The channel a post goes to: its thread's, the channel the window shows by its id, or a channel by `#name`. */
 function placeOf(chat: ChatAnswer, post: ChatPost): ChatChannel | undefined {
   if (post.replyTo !== undefined) {
     const root = chat.messages.find((message) => message.seq === post.replyTo);
     return chat.channels.find((channel) => channel.id === root?.channelId);
   }
-  const to = post.to ?? "";
-  const name = to.slice(1);
-  if (to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)) {
-    return chat.channels.find(
-      (channel) => channel.kind !== CHANNEL_KIND.DM && channel.name === name,
-    );
+  if (post.channelId !== undefined) {
+    return chat.channels.find((channel) => channel.id === post.channelId);
   }
-  const member = chat.members.find((each) => each.handle === name);
-  return chat.channels.find(
-    (channel) =>
-      channel.kind === CHANNEL_KIND.DM &&
-      member !== undefined &&
-      (channel.members ?? []).includes(member.id) &&
-      (channel.members ?? []).includes(chat.self),
-  );
+  const name = (post.to ?? "").slice(CHAT_TARGET_SIGIL.CHANNEL.length);
+  return chat.channels.find((channel) => channel.kind !== CHANNEL_KIND.DM && channel.name === name);
 }
 
 /** The chat with one more message of the developer's at the next place in its sequence, which their own unread counts never count. */
@@ -417,12 +433,9 @@ function withMessage(
 ): ChatAnswer {
   const seq = Math.max(0, ...chat.messages.map((each) => each.touchedSeq)) + 1;
   const words = message.blocks.flatMap((block) => ("text" in block ? [block.text] : []));
-  // Note that the fixture reads whom the words name as the service does: the handles typed, and the people and agents their chips write.
+  // Note that the fixture reads whom the words name as the service does: the people, agents, and Lukes their chips write.
   const named = chatMentionsIn(words.join("\n"));
   const mentions = [
-    ...named.handles.flatMap(
-      (handle) => chat.members.find((member) => member.handle === handle)?.id ?? [],
-    ),
     ...named.members.flatMap(
       ({ mention }) =>
         chat.members.find((member) =>
@@ -462,10 +475,17 @@ export function stagedPost(read: FixtureChat, post: ChatPost, at: number): Stage
   // Note that a reply to a reply joins its root's thread, as every thread has one root.
   const replied = chat.messages.find((message) => message.seq === post.replyTo);
   const parentId = replied === undefined ? undefined : (replied.parentId ?? replied.id);
+  // A picture is named by an id of its own, as the service names one it keeps, after the words.
+  const pictures = (post.attachments ?? []).map((file) => ({
+    type: CHAT_BLOCK.IMAGE,
+    attachmentId: crypto.randomUUID(),
+    alt: file.name,
+  }));
+  const blocks = [...(post.text === undefined ? [] : words(post.text)), ...pictures];
   const answer = withMessage(
     chat,
     at,
-    { channelId: channel.id, blocks: words(post.text), parentId },
+    { channelId: channel.id, blocks, parentId },
     () => chat.messages,
   );
   return { chat: { ...read, answer } };
@@ -507,4 +527,57 @@ export function stagedAnswer(read: FixtureChat, answered: ChatAskAnswer, at: num
       ),
   );
   return { chat: { ...read, answer } };
+}
+
+/**
+ * A topic channel opened or edited in a fixture's chat, as the service
+ * takes it: a new name another channel holds, `general` among them, is
+ * refused, an edit names a topic, and a purpose of null clears it.
+ */
+export function stagedChannel(read: FixtureChat, change: ChatChannelChange): Staged {
+  const chat = read.answer;
+  const taken = (name: string, except: string | undefined) =>
+    name === GENERAL_CHANNEL ||
+    chat.channels.some((channel) => channel.name === name && channel.id !== except);
+  // An archived topic frees its place under the bound, as the service counts them.
+  const full =
+    chat.channels.filter((channel) => channel.kind === CHANNEL_KIND.TOPIC && !channel.archived)
+      .length >= CHAT_BOUNDS.MAX_TOPIC_CHANNELS;
+  if ("open" in change) {
+    const { name, purpose } = change.open;
+    if (taken(name, undefined)) return { refused: STAGED_REFUSAL.NAME_TAKEN };
+    if (full) return { refused: STAGED_REFUSAL.TOO_MANY_TOPICS };
+    const opened: ChatChannel = {
+      id: crypto.randomUUID(),
+      kind: CHANNEL_KIND.TOPIC,
+      name,
+      archived: false,
+      ...(purpose === undefined ? undefined : { purpose }),
+    };
+    return { chat: { ...read, answer: { ...chat, channels: [...chat.channels, opened] } } };
+  }
+  const { channelId, name, purpose, archived } = change.edit;
+  const standing = chat.channels.find((channel) => channel.id === channelId);
+  if (standing?.kind !== CHANNEL_KIND.TOPIC) return { refused: STAGED_REFUSAL.NO_PLACE };
+  if (name !== undefined && taken(name, channelId)) return { refused: STAGED_REFUSAL.NAME_TAKEN };
+  if (archived === false && standing.archived && full) {
+    return { refused: STAGED_REFUSAL.TOO_MANY_TOPICS };
+  }
+  const { purpose: was, ...rest } = standing;
+  const said = purpose === undefined ? was : (purpose ?? undefined);
+  const edited: ChatChannel = {
+    ...rest,
+    ...(name === undefined ? undefined : { name }),
+    ...(archived === undefined ? undefined : { archived }),
+    ...(said === undefined ? undefined : { purpose: said }),
+  };
+  return {
+    chat: {
+      ...read,
+      answer: {
+        ...chat,
+        channels: chat.channels.map((channel) => (channel.id === channelId ? edited : channel)),
+      },
+    },
+  };
 }

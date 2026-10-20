@@ -5,11 +5,13 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
   type CodingAgentInboxParams,
 } from "@luke/features/coding-agent-view";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { inboxAttachmentIdsIn } from "@luke/features/inbox-attachment-link";
 import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
@@ -17,6 +19,7 @@ import {
   type InboxItem,
   type InboxReplyKind,
   inboxAnswerHeard,
+  inboxAnswersReply,
   knownBlock,
 } from "@luke/features/inbox-wire";
 import { Equal } from "effect";
@@ -33,9 +36,12 @@ import {
   EMPTY_INBOX_DRAFT,
   type InboxBoardView,
   type InboxDraft,
+  type InboxThreadSend,
   inboxBoard,
   inboxMessageOf,
   inboxReply,
+  inboxThreadOf,
+  inboxThreadSend,
 } from "./inbox-model.js";
 import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
 
@@ -71,10 +77,14 @@ import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
  * window's other reads of the item until they hold it. It reaches the agent as one of the
  * developer's messages, which may wake it, so the agents are read again
  * too. A message refused leaves nothing on the thread, and the box says
- * why.
+ * why. On a thread from version 5 the message may carry the answer to its
+ * open ask, which the reader pressed and attached: such a reply settles
+ * the ask, so it stands over every read from the moment it is sent, as an
+ * answer does, and a refusal brings the item back as it stood.
  *
  * An image block names an attachment the service keeps, and so does each
- * file an answer carried, and their bytes are read apart from the inbox, once per attachment while the task is open,
+ * file an answer carried and each picture of the item's own its Markdown
+ * draws, and their bytes are read apart from the inbox, once per attachment while the task is open,
  * as a card first draws the block: the host fetches them under the account
  * and the hook holds them as a `data:` URL the card draws, so a read of
  * the inbox that replaces every item draws the same picture again without
@@ -105,6 +115,11 @@ export type InboxReader = (params: CodingAgentInboxParams) => Promise<CodingAgen
 /** How one answer is sent: the item, its revision, the answer, and the key the send is known by. */
 export type InboxAnswerer = (
   params: CodingAgentInboxAnswerParams,
+) => Promise<CodingAgentInboxAnsweredView>;
+
+/** How one close of an item without an answer is sent: the item, its revision, and the key the send is known by. */
+export type InboxCloser = (
+  params: CodingAgentInboxCloseParams,
 ) => Promise<CodingAgentInboxAnsweredView>;
 
 /** How one message on an item's thread is sent: the item, the words and files, and the key the send is known by. */
@@ -145,7 +160,9 @@ export interface TaskInboxControl {
   ) => void;
   /** Sends the card's answer, with the press where its kind is answered by one; nothing where it holds none or one is out. */
   readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
-  /** Sends the box's words and files as a message on the item's thread, open or settled; nothing where it holds neither or a send is out. */
+  /** Closes an open item without an answer, its draft let go once taken; nothing where it is settled or a send is out. */
+  readonly onClose: (item: InboxItem) => void;
+  /** Sends the box's words and files as a message on the item's thread, open or settled, with the answer attached to the thread's open ask where one is; nothing where it holds nothing the service takes or a send is out. */
   readonly onMessage: (item: InboxItem, draft: InboxDraft) => void;
   /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
   readonly images: ReadonlyMap<string, InboxImage>;
@@ -159,21 +176,28 @@ export interface TaskInboxControl {
 const INBOX_NOT_TAKEN_NOTE = {
   /** The agent changed the item before the answer landed. */
   CHANGED: "The agent changed this item before your answer landed. Answer it as it stands now.",
+  /** The agent changed the item before the close landed. */
+  CHANGED_BEFORE_CLOSE:
+    "The agent changed this item before you closed it. Read it as it stands now.",
   /** The item was answered first, from another window or Mac. */
   ANSWERED: "This item was already answered.",
   /** The agent took the item back first. */
   CLOSED: "The agent took this item back.",
+  /** A member closed the item first, from another window or Mac. */
+  CLOSED_BY_MEMBER: "This item was already closed.",
 } as const;
 
-/** Why an answer was not taken, from the item as the service answered it. */
-function notTakenNote(item: InboxItem): string {
+/** Why an answer, or a close where `closing`, was not taken, from the item as the service answered it. */
+function notTakenNote(item: InboxItem, closing = false): string {
   switch (item.status) {
     case INBOX_STATUS.ANSWERED:
       return INBOX_NOT_TAKEN_NOTE.ANSWERED;
     case INBOX_STATUS.CLOSED:
-      return INBOX_NOT_TAKEN_NOTE.CLOSED;
+      return item.closedBy === undefined
+        ? INBOX_NOT_TAKEN_NOTE.CLOSED
+        : INBOX_NOT_TAKEN_NOTE.CLOSED_BY_MEMBER;
     case INBOX_STATUS.OPEN:
-      return INBOX_NOT_TAKEN_NOTE.CHANGED;
+      return closing ? INBOX_NOT_TAKEN_NOTE.CHANGED_BEFORE_CLOSE : INBOX_NOT_TAKEN_NOTE.CHANGED;
   }
 }
 
@@ -196,16 +220,30 @@ function fresh(taskId: string | undefined): Held {
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
-/** Every attachment the items name: their blocks' pictures, and the files their answers and their threads' messages carried. */
+/**
+ * Every attachment the items name: their blocks' pictures, the files their
+ * answers and their threads' messages carried, and the item's own pictures
+ * their Markdown draws, in its blocks, its thread's messages, a read before
+ * version 5's and its whole thread alike, and its answer's note
+ * (`inbox-attachment-link`).
+ */
 function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
   const named = new Set<string>();
   for (const item of items) {
+    const drawn = (text: string | undefined) => {
+      if (text === undefined) return;
+      for (const attachmentId of inboxAttachmentIdsIn(text, item.id)) named.add(attachmentId);
+    };
     for (const block of item.blocks) {
-      if (knownBlock(block) && block.type === INBOX_BLOCK.IMAGE) named.add(block.attachmentId);
+      if (!knownBlock(block)) continue;
+      if (block.type === INBOX_BLOCK.IMAGE) named.add(block.attachmentId);
+      if (block.type === INBOX_BLOCK.MARKDOWN) drawn(block.text);
     }
     for (const file of item.answerFiles ?? []) named.add(file.attachmentId);
-    for (const message of item.messages ?? []) {
+    drawn(item.answer?.note);
+    for (const message of [...(item.messages ?? []), ...(item.thread ?? [])]) {
       for (const file of message.files ?? []) named.add(file.attachmentId);
+      drawn(message.text);
     }
   }
   return named;
@@ -257,6 +295,7 @@ export function useTaskInbox(input: {
     readonly heldIds: readonly string[] | undefined;
     readonly readInbox: InboxReader;
     readonly answerInbox: InboxAnswerer;
+    readonly closeInbox: InboxCloser;
     readonly messageInbox: InboxMessenger;
     readonly readInboxImage: InboxImageReader;
     /** Reads the task's agents again, for where an agent an answer reached stands now. */
@@ -391,23 +430,74 @@ export function useTaskInbox(input: {
     [sending, note, taskId, writer, settler],
   );
 
-  const onMessage = useCallback(
-    (item: InboxItem, draft: InboxDraft) => {
-      const message = inboxMessageOf(draft);
-      if (message === undefined || sending.has(item.id)) return;
-      const { text, attachments } = message;
-      const words = JSON.stringify([text, attachments]);
+  const onClose = useCallback(
+    (item: InboxItem) => {
+      if (item.status !== INBOX_STATUS.OPEN || sending.has(item.id)) return;
+      const words = JSON.stringify([item.revision, "close"]);
       const was = attempts.current.get(item.id);
       const key = was?.words === words ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, words });
       setSending((standing) => new Set(standing).add(item.id));
       note(item.id, undefined);
+      // Note that the close stands over every read the moment it is sent, as an answer does.
+      const sent = settler.close(item);
+      const askedOn = taskId;
+      latest.current
+        .closeInbox({ itemId: item.id, revision: item.revision, clientKey: key })
+        .catch((): CodingAgentInboxAnsweredView => UNANSWERED)
+        .then((answer) => {
+          setSending((standing) => {
+            const next = new Set(standing);
+            next.delete(item.id);
+            return next;
+          });
+          if ("failure" in answer) {
+            settler.refuse(sent);
+            note(item.id, messageFailureWords(answer.failure));
+            return;
+          }
+          setHeld((standing) =>
+            standing.taskId === askedOn
+              ? { ...standing, items: withItem(standing.items, answer.item) }
+              : standing,
+          );
+          if (!answer.taken) {
+            settler.refuse(sent);
+            note(item.id, notTakenNote(answer.item, true));
+            return;
+          }
+          settler.take(sent, answer.item);
+          writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
+          // Note that a close the agent waits on reaches it as a message, which may open its turn, so the agents are read again.
+          if (item.needsReply) latest.current.onRetryList();
+        });
+    },
+    [sending, note, taskId, writer, settler],
+  );
+
+  const onMessage = useCallback(
+    (item: InboxItem, draft: InboxDraft) => {
+      const thread = inboxThreadOf(item);
+      const message: InboxThreadSend | undefined =
+        thread === undefined ? inboxMessageOf(draft) : inboxThreadSend(thread, draft);
+      if (message === undefined || sending.has(item.id)) return;
+      const { text, attachments, answers } = message;
+      const words = JSON.stringify([text, attachments, answers]);
+      const was = attempts.current.get(item.id);
+      const key = was?.words === words ? was.key : crypto.randomUUID();
+      attempts.current.set(item.id, { key, words });
+      setSending((standing) => new Set(standing).add(item.id));
+      note(item.id, undefined);
+      // Note that a reply carrying an answer settles the ask, so it stands over every read the moment it is sent, as an answer does.
+      const sent =
+        answers === undefined ? undefined : settler.answer(item, inboxAnswersReply(answers, text));
       const askedOn = taskId;
       latest.current
         .messageInbox({
           itemId: item.id,
           text,
           ...(attachments.length === 0 ? undefined : { attachments }),
+          ...(answers === undefined ? undefined : { answers }),
           clientKey: key,
         })
         .catch((): CodingAgentInboxMessagedView => UNANSWERED)
@@ -418,6 +508,7 @@ export function useTaskInbox(input: {
             return next;
           });
           if ("failure" in answer) {
+            if (sent !== undefined) settler.refuse(sent);
             note(item.id, messageFailureWords(answer.failure));
             return;
           }
@@ -427,7 +518,8 @@ export function useTaskInbox(input: {
               : standing,
           );
           // Note that the message stands over every other read until it holds it, so none draws the thread without it meanwhile.
-          settler.message(answer.item);
+          if (sent === undefined) settler.message(answer.item);
+          else settler.take(sent, answer.item);
           writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
           // Note that the key is let go with the words, because the same words written again are a new message, which the service refuses under a key already spent.
           attempts.current.delete(item.id);
@@ -518,6 +610,8 @@ export function useTaskInbox(input: {
             values: kept.values,
             note: kept.text,
             attachments: kept.attachments,
+            steps: kept.steps,
+            press: kept.press,
           };
     },
     [drafts],
@@ -530,6 +624,8 @@ export function useTaskInbox(input: {
         choices: draft.choices,
         values: draft.values,
         attachments: draft.attachments,
+        steps: draft.steps,
+        press: draft.press,
       })),
     [writer, draftsOn],
   );
@@ -558,6 +654,7 @@ export function useTaskInbox(input: {
     sending,
     notes,
     onAnswer,
+    onClose,
     onMessage,
     images,
     onImage,

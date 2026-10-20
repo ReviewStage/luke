@@ -308,7 +308,11 @@ someone else posted, and the last direct message or mention of you that you
 have not read, each named only by who posted it, its plan, and its place,
 never its words. While Luke's window is behind, a Mac notification says no
 more than that, such as "@agent-2 messaged you" under the plan's name,
-unless you turn notifications off in Settings › Coding agents.
+unless you turn notifications off in Settings › Coding agents. Luke in a
+browser tells you of the same things, in the same words, through the
+browser's own notifications, only while its tab is hidden and only once you
+allowed them from Settings › Notifications; the browser shows and keeps them
+as it does any site's, and nothing more leaves for it.
 
 **Files you attach to a coding agent.** You can attach files to a coding
 agent's message, to the prompt you start one with, or to an Inbox answer, by picking them with +,
@@ -611,7 +615,14 @@ word for why, and whether its pull request is open, merged, or closed; which
 providers you saved a key for or connected, and whether each key or
 connection works; your coding-agent model and effort, and the experiments
 you turned on; and when a call of yours dropped or an automation of yours
-failed to start, with the fixed word for why.
+failed to start, with the fixed word for why. For the most active accounts it
+also shows how many coding agents you started and pull requests of theirs
+merged, on how many days you created a task, wrote a plan revision, started
+an agent, or held a call, and when you last signed in. Counted across all
+accounts, never named to one, it shows how many plan revisions, inbox
+answers, and automation runs there were, and how many accounts posted in a
+workspace's chat, have GitHub connected on a workspace, have an integration
+connected, or opened or merged a pull request.
 Across every account, the same page counts how many of Luke's turns, coding
 agents' runs, calls, and automation runs ended and how many failed, were
 dropped, or were skipped, each by the fixed word the service records for why.
@@ -620,7 +631,14 @@ one of your integrations stands expired, or a workspace you belong to has its
 GitHub installation suspended or removed, the page lists your account with
 which provider or integration it is and that status, when it last changed,
 and how many of your coding agents failed in the past week; that list names
-no workspace and no repository. Past those names, nothing you
+no workspace and no repository. The same page shows the service's use at
+public list prices, a figure for comparison and not what we are billed,
+from the model tokens each turn recorded and the seconds of voice,
+dictation, and video avatar it metered: mostly as totals across every
+account, and, for the accounts whose use comes to the most at those prices
+over the days chosen, what each one's use comes to, how many tokens of it
+no price was known for, and how many of its coding agents' pull requests
+merged. Past those names, nothing you
 type, say, or run appears on it: no task's title, plan, prompt, or message,
 no pull request's title, no key, and no error's own words.
 
@@ -1107,12 +1125,13 @@ only when you press Send.
   Mac loads straight from Keyframe's public storage as the menu is drawn, so
   Keyframe sees your Mac's IP address then, as any site serving an image does;
   no referrer and nothing of yours is sent with it.
-- PostHog, for usage data and screen recordings from the Mac app, and the
-  counts our service makes of the work done through it. The counts
-  go through our own service; the recordings go from Luke to PostHog directly.
-- Sentry, for the Mac app's crash and performance reports, and our service's
-  and Luke's agents' error, performance, log, and agent reports, described
-  above.
+- PostHog, for usage data and screen recordings from the Mac app, screen
+  recordings from Luke in a browser, and the counts our service makes of the
+  work done through it. The counts go through our own service; the
+  recordings go from Luke, on the Mac or in your browser, to PostHog directly.
+- Sentry, for the Mac app's and Luke in a browser's crash and performance
+  reports, and our service's and Luke's agents' error, performance, log, and
+  agent reports, described above.
 - Anthropic and OpenAI, for a coding agent. When you, or Luke on a call, start
   one on a task, our service runs it in a Vercel Sandbox of its own with the
   task's repository checked out, and calls the model chosen (or your default)
@@ -1287,6 +1306,23 @@ The hand-off page is one of the sign-in pages above: not recorded, its
 address cut to the page itself. Your browser contacts PostHog directly, so
 PostHog sees your network address, as it does for the app's recordings.
 
+Luke in a browser, the app at tryluke.dev/app and at every link to something
+in Luke, is not one of the site's pages above: it records and reports what the
+Mac app does. It makes screen recordings as described under "Screen
+recordings", with every word masked and the same parts left out, and with
+the tab's address, which names the workspace and what it opens, and the
+address of the page that sent you there, replaced by the app's own; only the
+site's production deployment records, never a preview of it. A recording
+follows your account in that browser: signing out files what follows under
+nobody, and deleting your account in one tab stops the recording in every
+tab of that browser until you sign in again. It sends Sentry reports of the
+errors it did not handle and of a tab that could not draw, and performance
+traces for about one page load in ten, using Sentry's default data
+collection, as described under "Crash and performance reports from the Mac
+app", where the page's address, your browser's details, and the addresses of
+the requests it made take the place of the Mac's. Your browser contacts
+PostHog and Sentry directly, so each sees your network address.
+
 A link to something in Luke, pasted into Slack, iMessage, or anywhere else
 that previews links, shows only Luke's own card: the Luke name and logo, the
 same for every link, and nothing of the task, the agent, the person, or the
@@ -1303,7 +1339,11 @@ Mac beyond the layout of its window described under "On your Mac", and the
 switch for commands on your Mac and each repository's run command for Run
 are kept with that Mac's settings. Luke in a browser keeps your settings in
 that browser's own storage for the site, and no sign-in token at all: it is
-signed in by the site's session cookie, which only the browser holds. Our service
+signed in by the site's session cookie, which only the browser holds. Its
+screen recording keeps, in that browser's storage for the site, the
+anonymous id it records under, the account id it files under once you sign
+in, and whether it may send, under `luke_app_replay` and
+`luke_app_replay_consent`, apart from the site's own counting. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and

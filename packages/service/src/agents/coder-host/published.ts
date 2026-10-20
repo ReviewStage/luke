@@ -11,7 +11,7 @@ import type {
   CodingAgentPullRequestAnswer,
 } from "@luke/features/coding-agent-wire";
 import { type PullRequestArea, pullRequestAreasOf } from "@luke/features/pull-request-area";
-import { Cache, Data, Duration, Effect, Exit, type Layer, Option, type Redacted } from "effect";
+import { Cache, Data, Duration, Effect, Exit, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   GitHubApp,
@@ -27,7 +27,7 @@ import {
   pullRequestFiles,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
-import { agentWorkspace } from "../../github/workspace-repository.js";
+import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { CODER } from "./bounds.js";
 
@@ -202,7 +202,7 @@ export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function*
   const app = yield* GitHubApp;
   const reached = Option.isNone(workspace)
     ? Option.none()
-    : yield* app.repositoryPullRequestToken(workspace.value, agent.repository);
+    : yield* app.repositoryPullRequestToken(workspace.value, agent.repository, agentMember(agent));
   if (Option.isNone(reached)) {
     return yield* new RepositoryNotReachable({ repository: agent.repository });
   }
@@ -314,16 +314,32 @@ const lookupPublished = (
     return yield* agentPublished(key.userId, agent.value);
   });
 
-/** The cache, built once where the routes are composed. */
+/** The cache, made once per instance by `instancePublishedCache`. */
 const publishedCache: Effect.Effect<PublishedCache> = Cache.makeWith(lookupPublished, {
   capacity: KEPT_AGENTS,
   requireServicesAt: "lookup",
   timeToLive: (exit) => (Exit.isSuccess(exit) ? CODER.PUBLISHED_TTL : Duration.zero),
 });
 
-/** The routes composed over a cache of their own. */
-export function withPublishedCache<A, E, R>(
-  routes: (cache: PublishedCache) => Layer.Layer<A, E, R>,
-): Effect.Effect<Layer.Layer<A, E, R>> {
-  return Effect.map(publishedCache, routes);
+/**
+ * A cache of its own for procedures that are built with no Effect to build
+ * one in: made on the first ask and kept for the instance's life, as a
+ * route group's is. Note that two first asks at once each make one and the
+ * first to land is the one kept, so every later ask shares it. The hosted
+ * router makes one and hands it to every resource that reads the kept
+ * answers or lets them go (`PublishedReach`), so a change to a pull request
+ * lets go of what each of them read.
+ */
+export function instancePublishedCache(): Effect.Effect<PublishedCache> {
+  let kept: PublishedCache | undefined;
+  return Effect.suspend(() =>
+    kept === undefined
+      ? Effect.map(publishedCache, (made) => (kept ??= made))
+      : Effect.succeed(kept),
+  );
+}
+
+/** The kept published answers a resource's procedures read and let go of: the instance's one cache where the router hands it, one of their own otherwise. */
+export interface PublishedReach {
+  readonly published?: Effect.Effect<PublishedCache>;
 }

@@ -486,6 +486,22 @@
         "closedReason": {
           "type": "string"
         },
+        "closedBy": {
+          "type": "object",
+          "properties": {
+            "userId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "userId",
+            "name"
+          ],
+          "additionalProperties": false
+        },
         "messages": {
           "type": "array",
           "items": {
@@ -546,6 +562,629 @@
                   ],
                   "additionalProperties": false
                 }
+              },
+              "ask": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "decide"
+                        ]
+                      },
+                      "options": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160
+                            },
+                            "detail": {
+                              "type": "string",
+                              "maxLength": 600
+                            }
+                          },
+                          "required": [
+                            "label"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 2,
+                        "maxItems": 6
+                      },
+                      "multiple": {
+                        "type": "boolean"
+                      },
+                      "recommended": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "answered",
+                          "replaced",
+                          "withdrawn"
+                        ]
+                      },
+                      "withdrawnReason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "options",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "do"
+                        ]
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 600
+                        },
+                        "maxItems": 8
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "answered",
+                          "replaced",
+                          "withdrawn"
+                        ]
+                      },
+                      "withdrawnReason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "steps",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "answer"
+                        ]
+                      },
+                      "fields": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text",
+                                "number",
+                                "select",
+                                "boolean"
+                              ]
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160
+                            },
+                            "required": {
+                              "type": "boolean"
+                            },
+                            "options": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "minItems": 2,
+                              "maxItems": 6
+                            },
+                            "recommended": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "label"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 8
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "answered",
+                          "replaced",
+                          "withdrawn"
+                        ]
+                      },
+                      "withdrawnReason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "answered",
+                          "replaced",
+                          "withdrawn"
+                        ]
+                      },
+                      "withdrawnReason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "answers": {
+                "type": "object",
+                "properties": {
+                  "ask": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
+                  },
+                  "reply": {
+                    "type": "string",
+                    "enum": [
+                      "chose",
+                      "approved",
+                      "declined",
+                      "answered",
+                      "done",
+                      "not-done",
+                      "submitted",
+                      "acknowledged"
+                    ]
+                  },
+                  "choices": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 6
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "value": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "maxItems": 8
+                  }
+                },
+                "required": [
+                  "ask",
+                  "reply"
+                ],
+                "additionalProperties": false
+              },
+              "createdAt": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "id",
+              "author",
+              "text",
+              "createdAt"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "thread": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 36
+              },
+              "author": {
+                "type": "string",
+                "enum": [
+                  "member",
+                  "agent"
+                ]
+              },
+              "member": {
+                "type": "object",
+                "properties": {
+                  "userId": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "userId",
+                  "name"
+                ],
+                "additionalProperties": false
+              },
+              "text": {
+                "type": "string"
+              },
+              "files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "attachmentId": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 36
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "mediaType": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "attachmentId",
+                    "name",
+                    "mediaType"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "ask": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "decide"
+                        ]
+                      },
+                      "options": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160
+                            },
+                            "detail": {
+                              "type": "string",
+                              "maxLength": 600
+                            }
+                          },
+                          "required": [
+                            "label"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 2,
+                        "maxItems": 6
+                      },
+                      "multiple": {
+                        "type": "boolean"
+                      },
+                      "recommended": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "answered",
+                          "replaced",
+                          "withdrawn"
+                        ]
+                      },
+                      "withdrawnReason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "options",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "do"
+                        ]
+                      },
+                      "steps": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 600
+                        },
+                        "maxItems": 8
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "answered",
+                          "replaced",
+                          "withdrawn"
+                        ]
+                      },
+                      "withdrawnReason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "steps",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": [
+                          "answer"
+                        ]
+                      },
+                      "fields": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "enum": [
+                                "text",
+                                "number",
+                                "select",
+                                "boolean"
+                              ]
+                            },
+                            "label": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 160
+                            },
+                            "required": {
+                              "type": "boolean"
+                            },
+                            "options": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 160
+                              },
+                              "minItems": 2,
+                              "maxItems": 6
+                            },
+                            "recommended": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "label"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "minItems": 1,
+                        "maxItems": 8
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "answered",
+                          "replaced",
+                          "withdrawn"
+                        ]
+                      },
+                      "withdrawnReason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "open",
+                          "answered",
+                          "replaced",
+                          "withdrawn"
+                        ]
+                      },
+                      "withdrawnReason": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "status"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              },
+              "answers": {
+                "type": "object",
+                "properties": {
+                  "ask": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
+                  },
+                  "reply": {
+                    "type": "string",
+                    "enum": [
+                      "chose",
+                      "approved",
+                      "declined",
+                      "answered",
+                      "done",
+                      "not-done",
+                      "submitted",
+                      "acknowledged"
+                    ]
+                  },
+                  "choices": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 6
+                  },
+                  "values": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "label": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 160
+                        },
+                        "value": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "type": "boolean"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "label",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "maxItems": 8
+                  },
+                  "steps": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "maxItems": 8
+                  }
+                },
+                "required": [
+                  "ask",
+                  "reply"
+                ],
+                "additionalProperties": false
               },
               "createdAt": {
                 "type": "number",

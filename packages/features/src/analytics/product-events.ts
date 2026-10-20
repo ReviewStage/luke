@@ -245,6 +245,7 @@ export const PRODUCT_EXPERIMENT = {
   VIDEO_CALLS: "video-calls",
   ISSUES: "issues",
   SECTIONS: "sections",
+  GITHUB_TOKEN: "github-token",
 } as const;
 
 export type ProductExperiment = (typeof PRODUCT_EXPERIMENT)[keyof typeof PRODUCT_EXPERIMENT];

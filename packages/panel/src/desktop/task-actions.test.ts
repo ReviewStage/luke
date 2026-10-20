@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
@@ -16,7 +16,12 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { lineWords } from "../testing/actor-line.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
@@ -580,19 +585,20 @@ test("a task's card says you of the reader's own task outside a member directory
 function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ && members !== undefined
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: members.map((member) => ({
-                ...member,
-                email: `${member.userId}@example.com`,
-                role: WORKSPACE_ROLE.MEMBER,
-              })),
-            }
-          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." },
-      ),
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." }),
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>
+      members === undefined
+        ? Promise.reject(refusedOnPort("Could not read."))
+        : Promise.resolve(
+            members.map((member) => ({
+              ...member,
+              email: `${member.userId}@example.com`,
+              role: WORKSPACE_ROLE.MEMBER,
+            })),
+          ),
   });
 }
 test("Archive asks first of a plan with agents, from its menu and its row's own button alike, and archives on its answer, while a plan with none archives at once", async () => {

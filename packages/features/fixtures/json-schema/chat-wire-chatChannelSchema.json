@@ -35,6 +35,9 @@
     },
     "archived": {
       "type": "boolean"
+    },
+    "purpose": {
+      "type": "string"
     }
   },
   "required": [

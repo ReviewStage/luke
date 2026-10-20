@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { it } from "@effect/vitest";
+import { afterEach, it } from "@effect/vitest";
 import {
   TERMINAL_CONNECTION,
   TERMINAL_PORT_MESSAGE,
@@ -10,8 +10,9 @@ import {
   type TerminalPortTicket,
 } from "@luke/features/terminal-acts";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
-import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
+import type { ActSender } from "@luke/host/act-router";
+import { ACT_KIND } from "@luke/host/acts";
 import type { HostOperator } from "@luke/host/host-operator";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Deferred, Effect, Fiber } from "effect";
@@ -19,7 +20,7 @@ import type { WebContents } from "electron";
 import {
   type MainTerminalPort,
   type TerminalActsDependencies,
-  terminalActRows,
+  terminalProcedures,
   whenPageGone,
 } from "./terminal-acts";
 
@@ -35,6 +36,13 @@ import {
  * and only a panel is answered.
  * Synthetic ids and bytes throughout.
  */
+
+/** Every act port a fixture opened, closed once its test is done. */
+const ports: TestActPort<WebContents>[] = [];
+
+afterEach(() => {
+  for (const port of ports.splice(0)) port.close();
+});
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const SHELL_ID = "8b3c7a1e-2f4d-4c6b-9e0a-1d2f3a4b5c6d";
@@ -110,41 +118,42 @@ function fixture(
       return () => undefined;
     },
   };
-  const rows = terminalActRows({
-    host,
-    ports: {
-      open: (sender, ticket): MainTerminalPort => {
-        let heard: ((message: WireBoundaryInput) => void) | undefined;
-        const port: ScriptedPort = {
-          sender,
-          ticket,
-          posted: [],
-          closed: false,
-          send: (message) => heard?.(message),
-        };
-        opened.push(port);
-        return {
-          post: (message) => void port.posted.push(message),
-          onMessage: (listener) => {
-            heard = listener;
-          },
-          close: () => {
-            port.closed = true;
-          },
-        };
+  const actPort = testActPort(
+    terminalProcedures({
+      host,
+      ports: {
+        open: (sender, ticket): MainTerminalPort => {
+          let heard: ((message: WireBoundaryInput) => void) | undefined;
+          const port: ScriptedPort = {
+            sender,
+            ticket,
+            posted: [],
+            closed: false,
+            send: (message) => heard?.(message),
+          };
+          opened.push(port);
+          return {
+            post: (message) => void port.posted.push(message),
+            onMessage: (listener) => {
+              heard = listener;
+            },
+            close: () => {
+              port.closed = true;
+            },
+          };
+        },
+        whenGone: (sender, then) => void gone.set(sender, then),
       },
-      whenGone: (sender, then) => void gone.set(sender, then),
-    },
-    createId: () => `connection-${++ids}`,
-    run: <A>(effect: Effect.Effect<A>) => {
-      pending.push(effect);
-      return new Promise<A>(() => undefined);
-    },
-  });
-  // SAFETY: the router dispatches only the terminal kinds these tests send.
-  const router = createActRouter(rows as ActRows<WebContents>);
+      createId: () => `connection-${++ids}`,
+      run: <A>(effect: Effect.Effect<A>) => {
+        pending.push(effect);
+        return new Promise<A>(() => undefined);
+      },
+    }),
+  );
+  ports.push(actPort);
   return {
-    router,
+    actPort,
     asked,
     opened,
     /** The host's events, as the operator would hand them up. */
@@ -163,28 +172,32 @@ function fixture(
 
 const DETACH = { agentId: AGENT_ID, terminalId: SHELL_ID };
 
+/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
+const REFUSAL = {
+  [ACT_KIND.TERMINAL_LIST]: "Could not reach this agent's sandbox.",
+  [ACT_KIND.TERMINAL_RENAME]: "Could not rename that shell.",
+  [ACT_KIND.TERMINAL_ATTACH]: "Could not open that shell.",
+} as const;
+
 /** The kind's own refusal, as the asking window hears it. */
-const refusedAs = (kind: keyof typeof ACT) => ({
-  status: ACT_OUTCOME_STATUS.REFUSED,
-  reason: ACT[kind].refusal,
-});
+const refusedAs = (kind: keyof typeof REFUSAL) => ({ refused: REFUSAL[kind] });
 
 it.effect(
   "each call answers what the host said, or the kind's own refusal where it had nothing",
   () =>
     Effect.gen(function* () {
-      const { router, asked } = fixture();
+      const { actPort, asked } = fixture();
       const panel = panelOf();
 
-      const listed = yield* router.performAct(
+      const listed = yield* actPort.perform(
         { kind: ACT_KIND.TERMINAL_LIST, payload: { agentId: AGENT_ID } },
         panel,
       );
-      const created = yield* router.performAct(
+      const created = yield* actPort.perform(
         { kind: ACT_KIND.TERMINAL_CREATE, payload: { agentId: AGENT_ID } },
         panel,
       );
-      const renamed = yield* router.performAct(
+      const renamed = yield* actPort.perform(
         {
           kind: ACT_KIND.TERMINAL_RENAME,
           payload: { agentId: AGENT_ID, terminalId: SHELL_ID, title: "tests" },
@@ -193,12 +206,10 @@ it.effect(
       );
 
       assert.deepEqual(listed, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] },
+        answer: { sandbox: SANDBOX_STATE.RUNNING, terminals: [SHELL] },
       });
       assert.deepEqual(created, {
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { refused: TERMINAL_REFUSAL.SANDBOX_STOPPED },
+        answer: { refused: TERMINAL_REFUSAL.SANDBOX_STOPPED },
       });
       assert.deepEqual(renamed, refusedAs(ACT_KIND.TERMINAL_RENAME));
       assert.deepEqual(asked, [`list:${AGENT_ID}`]);
@@ -207,14 +218,14 @@ it.effect(
 
 it.effect("only a panel is answered", () =>
   Effect.gen(function* () {
-    const { router, asked, opened } = fixture();
+    const { actPort, asked, opened } = fixture();
     const voice: ActSender<WebContents> = { ...panelOf(), panel: false, voice: true };
 
-    const listed = yield* router.performAct(
+    const listed = yield* actPort.perform(
       { kind: ACT_KIND.TERMINAL_LIST, payload: { agentId: AGENT_ID } },
       voice,
     );
-    const attached = yield* router.performAct(
+    const attached = yield* actPort.perform(
       { kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH },
       voice,
     );
@@ -230,12 +241,12 @@ it.effect(
   "an attach posts a port to the asking panel alone, and what the host hears of that connection reaches that port and no other",
   () =>
     Effect.gen(function* () {
-      const { router, asked, opened, hostSays } = fixture();
+      const { actPort, asked, opened, hostSays } = fixture();
       const one = panelOf();
       const other = panelOf();
 
-      yield* router.performAct({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, one);
-      yield* router.performAct({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, other);
+      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, one);
+      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, other);
       hostSays.output("connection-1", "README.md\r\n");
       hostSays.state("connection-1", TERMINAL_CONNECTION.EXITED, 3);
       hostSays.output("connection-9", "nobody's");
@@ -264,9 +275,9 @@ it.effect(
   "what the panel sends on its port reaches the host by connection, and anything else is dropped",
   () =>
     Effect.gen(function* () {
-      const { router, asked, opened, drain } = fixture();
+      const { actPort, asked, opened, drain } = fixture();
 
-      yield* router.performAct({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panelOf());
+      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panelOf());
       const [port] = opened;
       assert.ok(port);
       port.send({ type: TERMINAL_PORT_MESSAGE.INPUT, data: "ls\r" });
@@ -288,14 +299,14 @@ it.effect(
   "a second attach of the same shell, a detach, and the page's end each close the port and let the connection go",
   () =>
     Effect.gen(function* () {
-      const { router, asked, opened, hostSays, pageGone, drain } = fixture();
+      const { actPort, asked, opened, hostSays, pageGone, drain } = fixture();
       const panel = panelOf();
       const leaving = panelOf();
 
-      yield* router.performAct({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
-      yield* router.performAct({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
-      yield* router.performAct({ kind: ACT_KIND.TERMINAL_DETACH, payload: DETACH }, panel);
-      yield* router.performAct({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, leaving);
+      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
+      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
+      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_DETACH, payload: DETACH }, panel);
+      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, leaving);
       pageGone(leaving.sender);
       yield* drain;
       hostSays.output("connection-2", "late");
@@ -314,9 +325,9 @@ it.effect(
 
 it.effect("an attach the host did not take is refused, and its port closed", () =>
   Effect.gen(function* () {
-    const { router, opened } = fixture({ connectTaken: false });
+    const { actPort, opened } = fixture({ connectTaken: false });
 
-    const attached = yield* router.performAct(
+    const attached = yield* actPort.perform(
       { kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH },
       panelOf(),
     );
@@ -331,20 +342,20 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const firstAnswer = yield* Deferred.make<boolean>();
-      const { router, asked, opened } = fixture({
+      const { actPort, asked, opened } = fixture({
         connect: (connectionId) =>
           connectionId === "connection-1" ? Deferred.await(firstAnswer) : Effect.succeed(true),
       });
       const panel = panelOf();
 
       const first = yield* Effect.forkChild(
-        router.performAct({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel),
+        actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel),
       );
       yield* Effect.yieldNow;
-      yield* router.performAct({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
+      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
       yield* Deferred.succeed(firstAnswer, false);
       yield* Fiber.join(first);
-      yield* router.performAct({ kind: ACT_KIND.TERMINAL_DETACH, payload: DETACH }, panel);
+      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_DETACH, payload: DETACH }, panel);
 
       assert.equal(opened[1]?.closed, true, "the newer port is still the panel's to detach");
       assert.ok(asked.includes("disconnect:connection-2"));
@@ -374,16 +385,16 @@ it.effect(
   "one shell id under two agents is two shells: a detach of one leaves the other's port",
   () =>
     Effect.gen(function* () {
-      const { router, opened, hostSays } = fixture();
+      const { actPort, opened, hostSays } = fixture();
       const panel = panelOf();
       const otherAgent = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
-      yield* router.performAct({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
-      yield* router.performAct(
+      yield* actPort.perform({ kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH }, panel);
+      yield* actPort.perform(
         { kind: ACT_KIND.TERMINAL_ATTACH, payload: { ...ATTACH, agentId: otherAgent } },
         panel,
       );
-      yield* router.performAct(
+      yield* actPort.perform(
         { kind: ACT_KIND.TERMINAL_DETACH, payload: { agentId: otherAgent, terminalId: SHELL_ID } },
         panel,
       );
@@ -394,5 +405,30 @@ it.effect(
         [false, true],
       );
       assert.equal(opened[0]?.posted.length, 1, "the first agent's shell still hears its output");
+    }),
+);
+
+it.effect(
+  "a frame this build does not trust is refused, even as a panel, and no port is posted",
+  () =>
+    Effect.gen(function* () {
+      const { actPort, asked, opened } = fixture();
+      const untrusted = { trusted: false };
+
+      const listed = yield* actPort.perform(
+        { kind: ACT_KIND.TERMINAL_LIST, payload: { agentId: AGENT_ID } },
+        panelOf(),
+        untrusted,
+      );
+      const attached = yield* actPort.perform(
+        { kind: ACT_KIND.TERMINAL_ATTACH, payload: ATTACH },
+        panelOf(),
+        untrusted,
+      );
+
+      assert.deepEqual(listed, refusedAs(ACT_KIND.TERMINAL_LIST));
+      assert.deepEqual(attached, refusedAs(ACT_KIND.TERMINAL_ATTACH));
+      assert.deepEqual(asked, []);
+      assert.deepEqual(opened, []);
     }),
 );

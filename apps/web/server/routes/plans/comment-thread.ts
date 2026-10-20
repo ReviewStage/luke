@@ -1,9 +1,7 @@
-import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { planCommentsApp } from "@luke/service/tasks/plan-comments-app";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
-/** One thing done to one comment thread of a plan, by the ids its path carries (POST). */
-export default routeFromHttpRouter(
-  planCommentsApp({ resolveUserId: resolveHostedUserId, eveOrigin: deploymentEveOrigin }),
-);
+/**
+ * One thing done to one comment thread of a plan (POST), answered by the
+ * hosted oRPC router (`packages/service/src/tasks/plan-comments-procedures.ts`).
+ */
+export default orpcRoute;

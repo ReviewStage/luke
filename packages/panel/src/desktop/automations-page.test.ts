@@ -27,7 +27,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -39,7 +39,13 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
 import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActs,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
@@ -214,8 +220,8 @@ beforeEach(() => {
   noRecent = false;
   integrationsHeld = false;
   integrationsRefusals = 0;
-  fakeAppBridge({
-    act: (request: Act) => {
+  fakeActs({
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
         listed.push(request.payload.workspaceId);
         if (listHeld) return new Promise(() => undefined);
@@ -285,30 +291,13 @@ beforeEach(() => {
           value: { integrations: integrations as Record<IntegrationProvider, IntegrationStatus> },
         });
       }
-      if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
-        catalogReads += 1;
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
-      }
-      if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
-        const value = defaultRefused
-          ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
-          : { choice: DEFAULT_CHOICE };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
-        agentsAsked.push(request.payload);
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { agents: [CI_DIGEST] },
-        });
-      }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
-        if (runsHeld) return new Promise<never>(() => undefined);
+        if (runsHeld) return new Promise(() => undefined);
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
       }
       if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
         runsAsked.push(request.payload.automationId);
-        if (runHeld) return new Promise<never>(() => undefined);
+        if (runHeld) return new Promise(() => undefined);
         if (runRefusal !== undefined) {
           return Promise.resolve({
             status: ACT_OUTCOME_STATUS.DONE,
@@ -340,6 +329,23 @@ beforeEach(() => {
         deletes.push(request.payload.automationId);
         standing = standing.filter((each) => each.id !== request.payload.automationId);
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { deleted: true } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
+        catalogReads += 1;
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_READ) {
+        const value = defaultRefused
+          ? { failure: AUTOMATION_CALL_FAILURE.UNANSWERED }
+          : { choice: DEFAULT_CHOICE };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
+        agentsAsked.push(request.payload);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { agents: [CI_DIGEST] },
+        });
       }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },

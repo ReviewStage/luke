@@ -8,7 +8,7 @@ import {
   pinPositionsForMove,
 } from "@luke/features/pin-order";
 import { TASK_SECTION_WRITE, type TaskSectionWrite } from "@luke/features/task-section-wire";
-import type { TaskSummary } from "@luke/features/task-wire";
+import type { TaskStatus, TaskSummary } from "@luke/features/task-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
@@ -19,8 +19,6 @@ import {
   Button,
   ComposeIcon,
   ConfirmDialog,
-  DIALOG_TONE,
-  type DialogQuestion,
   EllipsisIcon,
   ErrorState,
   FolderIcon,
@@ -47,10 +45,12 @@ import {
   agentRow,
   type CreatorGroup,
   creatorGroups,
+  hiddenStatuses,
   orderTaskRows,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
+  shownStatuses,
   TASK_GROUPING,
   TASK_ROW,
   type TaskOrder,
@@ -58,6 +58,7 @@ import {
   taskRow,
   taskRowRepository,
   taskRowsCreatedBy,
+  taskRowsInStatuses,
   taskRowTime,
 } from "@luke/ui/task-list-model";
 import {
@@ -76,17 +77,21 @@ import {
   InboxIcon,
   ListTodoIcon,
   MessagesSquareIcon,
+  SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
 import { useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
+import { useNewTaskDrafted } from "../composer-drafts.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { DraftMark } from "../draft-mark.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { Shortcut } from "../shortcut.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { useChatOn } from "../tasks/chat-gate.js";
@@ -106,7 +111,11 @@ import { LukeIdentity } from "./luke-identity.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse.js";
 import { SidebarFoot } from "./sidebar-foot.js";
-import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
+import {
+  archiveTasksQuestion,
+  type CountNoun,
+  SidebarGroupHeader,
+} from "./sidebar-group-header.js";
 import { SidebarPinnedTab } from "./sidebar-pinned-tab.js";
 import {
   type DrawnSection,
@@ -116,7 +125,9 @@ import {
   useSectionDialogs,
 } from "./sidebar-sections.js";
 import {
+  HiddenStatusesLine,
   SidebarSectionHead,
+  TaskStatusFilter,
   TaskViewOptions,
   useTaskViewCommands,
   ViewChips,
@@ -622,17 +633,6 @@ function groupTasks(group: RepositoryGroup): readonly TaskSummary[] {
   return group.rows.flatMap((row) => (row.kind === TASK_ROW.TASK ? [row.task] : []));
 }
 
-/** What a repository's Archive tasks asks where a task under it has coding agents, which the archive stops and archives with them. */
-function archiveTasksQuestion(named: string, count: number): DialogQuestion {
-  return {
-    title: count === 1 ? "Archive task?" : `Archive ${count} tasks?`,
-    body: `Archiving the tasks in ${named} will stop and archive all their agents. Unarchiving a task brings its agents back.`,
-    verb: "Archive",
-    running: "Archiving",
-    tone: DIALOG_TONE.PRIMARY,
-  };
-}
-
 /**
  * One repository's tasks under a header in the headings' voice, which folds
  * and unfolds them, the fold kept across launches. The header is a row like
@@ -1103,6 +1103,32 @@ function SidebarFactoryRow({
 }
 
 /**
+ * The Board's row, under the Inbox's: the board's columns, and its name. A
+ * press opens the listed workspace's tasks by status (`tasks-board.tsx`),
+ * and the row is the place shown while it stands. It is always offered.
+ */
+function SidebarBoardRow({
+  current,
+  disabled,
+  onOpen,
+}: {
+  current: boolean;
+  disabled: boolean;
+  onOpen: () => void;
+}): React.JSX.Element {
+  return (
+    <NavItem
+      icon={<SquareKanbanIcon />}
+      current={current ? NAV_CURRENT.PAGE : undefined}
+      disabled={disabled}
+      onClick={onOpen}
+    >
+      Board
+    </NavItem>
+  );
+}
+
+/**
  * The Issues page's row, after the Automations page's and drawn as it is:
  * its glyph, its name, and its chord. A press opens the window's Issues page
  * (`issues-page.tsx`), and the row is the place shown while it stands.
@@ -1199,6 +1225,19 @@ function sectionedTasks(
   return { sections, taskIds };
 }
 
+/** A section as the status filter leaves it: its tasks of the statuses shown, and any with no status, each with its entry, in its order. */
+function sectionInStatuses(drawn: DrawnSection, statuses: readonly TaskStatus[]): DrawnSection {
+  const kept = drawn.tasks.filter(
+    (task) => task.status === undefined || statuses.includes(task.status),
+  );
+  const keptIds = new Set(kept.map((task) => task.id));
+  return {
+    ...drawn,
+    entries: drawn.entries.filter((entry) => keptIds.has(entry.taskId)),
+    tasks: kept,
+  };
+}
+
 /** New section, at the head of Tasks while the account keeps sections: it opens the section dialog in the listed workspace. */
 function NewSectionButton({ onNew }: { onNew: () => void }): React.JSX.Element {
   return (
@@ -1223,24 +1262,34 @@ interface DesktopSidebarProps {
   call: CallCardInput | undefined;
   /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
   onPressWithin: () => void;
+  /** The room the panel's stage gives; narrow, the sidebar is a phone's drawer, whose page rows scroll away with its tasks. Wide where left out. */
+  room?: ShellRoom | undefined;
 }
 
 /**
  * New task, heading the list: a press opens the New task dialog at once, as
  * the menu bar's and the chord's New task do, whose name field also
  * searches the workspace's Linear issues where Linear is connected
- * (`new-task-dialog.tsx`).
+ * (`new-task-dialog.tsx`). While words left in its card wait as the
+ * workspace's draft, it wears the Draft pencil at its end, which its chord
+ * takes the place of while it is hovered; none while the card or Home,
+ * whose composer shows those words, is open, as a task open wears none.
  */
 function NewTaskButton({
   tasks,
+  shown,
   onNewTask,
 }: {
   tasks: TasksControl;
+  /** Whether New task's words are in sight: its card open, or Home shown. */
+  shown: boolean;
   onNewTask: () => void;
 }): React.JSX.Element {
+  const drafted = useNewTaskDrafted(tasks.newTask.workspaceId) && tasks.signedIn && !shown;
   return (
     <NavItem
       icon={<ComposeIcon />}
+      mark={drafted ? <DraftMark /> : undefined}
       aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.NEW_TASK)}
       shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.NEW_TASK].chord} />}
       disabled={!tasks.signedIn}
@@ -1301,8 +1350,10 @@ function SidebarColumn({
   onSignOut,
   call,
   onPressWithin,
+  room = SHELL_ROOM.WIDE,
 }: DesktopSidebarProps): React.JSX.Element {
   const onTasks = tab === PANEL_TAB.TASKS;
+  const narrow = room === SHELL_ROOM.NARROW;
   const overlay = useFloatingSidebar(sidebar);
   // The window's Inbox, an agent's page, Factory, the Automations page, Chat, and the Issues page stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
@@ -1310,6 +1361,7 @@ function SidebarColumn({
   const inAutomations = onTasks && tasks.automationsView.open;
   const inChat = onTasks && tasks.chatView.open;
   const inIssues = onTasks && tasks.issuesView.open;
+  const inBoard = onTasks && tasks.boardView.open;
   // Opening an automation sees its failed run, which the Automations row is marked for until then.
   const { place: automationsPlace } = tasks.automationsView;
   const automationFailed = useFailedRunsMark(
@@ -1326,6 +1378,7 @@ function SidebarColumn({
     inAutomations ||
     inChat ||
     inIssues ||
+    inBoard ||
     (onTasks && tasks.agentView.agentId !== undefined);
   // Factory, Chat, and the Issues page are experiments: each row stands only while the account has it on.
   const chatOn = useChatOn();
@@ -1362,6 +1415,10 @@ function SidebarColumn({
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.issuesView.onOpen();
   };
+  const openBoard = () => {
+    if (!onTasks) onTabChange(PANEL_TAB.TASKS);
+    tasks.boardView.onOpen();
+  };
   const openAutomations = () => {
     if (!onTasks) onTabChange(PANEL_TAB.TASKS);
     tasks.automationsView.onOpen();
@@ -1383,6 +1440,8 @@ function SidebarColumn({
   };
   const folds = useFoldedGroups(sidebar.staged);
   const taskView = useTaskListView(tasks.workspace?.id, sidebar.staged);
+  // The status filter's menu, which its button on the Tasks head and the hidden tasks' line both open.
+  const statusMenu = useMenu(tasks.shown && overlay.inSight);
   const reader = useMemberDirectory();
   // Only a workspace somebody shares has creators to group and filter by.
   const { memberCount } = tasks.workspace ?? {};
@@ -1442,6 +1501,9 @@ function SidebarColumn({
     sectionsShown ? tasks.workspace?.id : undefined,
     tasks.listed.tasks.filter((task) => task.pinnedAt === undefined),
   );
+  // The status filter thins the sections' tasks as it thins the list's, a row dropped among them landing among those drawn.
+  const statuses = shownStatuses(taskView.view);
+  const shownSections = sectioned.sections.map((drawn) => sectionInStatuses(drawn, statuses));
   const sectionDialogs = useSectionDialogs(tasks, tasks.shown && overlay.inSight);
   // Note that the sidebar draws a task in one place, so a row dragged into
   // Pinned leaves its section, and one dragged out of Pinned is unpinned and
@@ -1459,7 +1521,7 @@ function SidebarColumn({
       tasks.onWriteSections([{ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }]);
       return;
     }
-    const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
+    const target = shownSections.find((drawn) => drawn.section.id === zone);
     if (target === undefined) return;
     tasks.onWriteSections(placeWrites(target.entries, taskId, zone, at, Date.now()));
   };
@@ -1475,7 +1537,7 @@ function SidebarColumn({
       if (task !== undefined) tasks.onWriteSections(leaveSection(tasks, task.id));
       return;
     }
-    const target = sectioned.sections.find((drawn) => drawn.section.id === zone);
+    const target = shownSections.find((drawn) => drawn.section.id === zone);
     if (target === undefined || task === undefined) return;
     unpin(row, tasks);
     tasks.onWriteSections([
@@ -1533,9 +1595,13 @@ function SidebarColumn({
     : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
   const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
   const rows = taskRowsCreatedBy(unpinned, createdBy);
+  // The status filter thins the tasks listed, never the archived ones, which are all settled out of the way.
+  const sectionRows = sectioned.sections.flatMap((drawn) => drawn.tasks.map(taskRow));
+  const hidden = archive.shown ? [] : hiddenStatuses([...sectionRows, ...rows], statuses);
+  const statusRows = archive.shown ? rows : taskRowsInStatuses(rows, statuses);
   const { grouping, order } = taskView.view;
   const sections = taskSections(
-    rows,
+    statusRows,
     grouping === TASK_GROUPING.CREATOR && !shared ? TASK_GROUPING.REPOSITORY : grouping,
     order,
     tasks,
@@ -1552,7 +1618,7 @@ function SidebarColumn({
   // away, the open row standing in its place even under a fold, so walking
   // the list still moves from it.
   const pinnedDrawn = pinnedTaskRows(pinnedSection);
-  const sectionsDrawn = sectioned.sections.flatMap(({ section, tasks: held }) =>
+  const sectionsDrawn = shownSections.flatMap(({ section, tasks: held }) =>
     (folds.sectionFolded(section.id) ? held.filter((task) => current(task.id)) : held).map(taskRow),
   );
   const drawn = [
@@ -1577,30 +1643,20 @@ function SidebarColumn({
   useAppCommand(APP_COMMAND.PREVIOUS_TASK, listed && at > 0 ? () => step(-1) : undefined);
   useAppCommand(APP_COMMAND.NEXT_TASK, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
-  return (
-    <aside
-      ref={overlay.ref}
-      className="desktop-sidebar"
-      data-row-drop-scope=""
-      inert={!overlay.inSight}
-      onPointerDown={onPressWithin}
-      onPointerLeave={overlay.onPointerLeave}
-      onKeyDown={overlay.onKeyDown}
-    >
-      <div className="desktop-drag-strip" />
-      <HistoryButtons history={history} />
-      {/* The workspace heads the sidebar once one is read, as everything under it is that
-          workspace's; Luke's own head stands until then. */}
-      {tasks.signedIn && tasks.workspace !== undefined ? (
-        <WorkspaceSwitcher tasks={tasks} inSight={overlay.inSight} />
-      ) : (
-        <LukeIdentity />
-      )}
-
+  // The pages' rows, then the rule under them. Beside the work they stand
+  // put over the tasks' scroller; in a phone's drawer they scroll away with
+  // the tasks, so the tasks are not left a strip under them.
+  const places = (
+    <>
       <div className="sidebar-places">
-        <NewTaskButton tasks={tasks} onNewTask={chosen(newTask)} />
+        <NewTaskButton
+          tasks={tasks}
+          // A person's page stands in Home's place without leaving its page, and draws no composer.
+          shown={tasks.newTask.open || (atHome && tasks.personView.userId === undefined)}
+          onNewTask={chosen(newTask)}
+        />
         {/* Search is a second door to the command palette, drawn as New task
-          is, since it heads the list the same way. */}
+            is, since it heads the list the same way. */}
         <NavItem
           icon={<SearchIcon />}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
@@ -1616,6 +1672,7 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openInbox)}
         />
+        <SidebarBoardRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
         {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
         {chatOn && tasks.signedIn && tasks.chatView.available ? (
           <SidebarChatRow
@@ -1646,14 +1703,41 @@ function SidebarColumn({
         ) : null}
       </div>
       <hr className="sidebar-rule" />
+    </>
+  );
+  return (
+    <aside
+      ref={overlay.ref}
+      className="desktop-sidebar"
+      data-row-drop-scope=""
+      inert={!overlay.inSight}
+      onPointerDown={onPressWithin}
+      onPointerLeave={overlay.onPointerLeave}
+      onKeyDown={overlay.onKeyDown}
+    >
+      <div className="desktop-drag-strip" />
+      <HistoryButtons history={history} />
+      {/* The workspace heads the sidebar once one is read, as everything under it is that
+          workspace's; Luke's own head stands until then. */}
+      {tasks.signedIn && tasks.workspace !== undefined ? (
+        <WorkspaceSwitcher tasks={tasks} inSight={overlay.inSight} />
+      ) : (
+        <LukeIdentity />
+      )}
+
+      {narrow ? null : places}
 
       {/* One scroller for both sections, so the pinned tasks scroll away
-          with the rest rather than holding half the column. */}
+          with the rest rather than holding half the column; in a phone's
+          drawer the pages' rows ride it too. */}
       <div className="sidebar-section">
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <div className="sidebar-section-body">
-            {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin. */}
-            {tasks.signedIn && (pinnedSection.length > 0 || sectionsShown) && !archive.shown ? (
+            {narrow ? places : null}
+            {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, beside the work: a phone, which drags no row, draws it only once it holds one. */}
+            {tasks.signedIn &&
+            (pinnedSection.length > 0 || (sectionsShown && !narrow)) &&
+            !archive.shown ? (
               <PinnedSection
                 rows={pinnedSection}
                 folds={folds}
@@ -1663,13 +1747,14 @@ function SidebarColumn({
                 onDropOut={sectionsShown ? dropPinned : undefined}
               />
             ) : null}
-            {sectioned.sections.length > 0 ? (
+            {shownSections.length > 0 ? (
               <SidebarSections
-                sections={sectioned.sections}
+                sections={shownSections}
                 context={{
                   tasks,
                   dialogs: sectionDialogs,
                   current,
+                  unread,
                   inSight: overlay.inSight,
                   folded: folds.sectionFolded,
                   onToggle: folds.toggleSection,
@@ -1705,6 +1790,13 @@ function SidebarColumn({
                       })}
                     />
                   ) : null}
+                  {archive.shown ? null : (
+                    <TaskStatusFilter
+                      menu={statusMenu}
+                      statuses={statuses}
+                      onStatuses={taskView.onStatuses}
+                    />
+                  )}
                   <TaskViewOptions
                     shown={tasks.shown && overlay.inSight}
                     control={taskView}
@@ -1776,6 +1868,7 @@ function SidebarColumn({
                 onNewTaskIn={chosen(newTaskIn)}
                 context={context}
               />
+              <HiddenStatusesLine menu={statusMenu} hidden={hidden} />
             </nav>
           </div>
         </ScrollArea>

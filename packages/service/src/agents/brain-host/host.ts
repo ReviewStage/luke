@@ -454,7 +454,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           task,
           Option.getOrElse(board, () => EMPTY_BOARD),
           chat,
-          seams.now(),
+          { now: seams.now(), timeZone: admitted.timeZone },
           Option.getOrElse(comments, () => []),
         );
         return chat.through === undefined ? { text } : { text, chatThrough: chat.through };
@@ -627,6 +627,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           { userId: admitted.caller, conversationId: admitted.target.conversationId },
           taskWorkspace(admitted.caller, task.task.id),
           repository,
+          admitted.caller,
           brainSkillMarkdown,
         );
       }),

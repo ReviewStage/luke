@@ -1,7 +1,7 @@
 /**
  * tools.ts -- every tool Luke offers any of its agents, and the roles each one serves.
  *
- * The one registry of the agent runtime's tools (`docs/proposals/one-agent-runtime.md`):
+ * The one registry of the agent runtime's tools:
  * each tool, named once by the name a model calls it by
  * (`@luke/features/agent-tools`, which the desktop reads its calls by too),
  * is listed here with the roles it serves (`role.ts`), and everything that would otherwise be kept
@@ -73,9 +73,8 @@ const TOOL_ROLES = {
   [AGENT_TOOL.EDIT_PLAN]: [BRAIN, CODER],
   [AGENT_TOOL.WRITE_TODOS]: [CODER],
   [AGENT_TOOL.POST_TO_INBOX]: [CODER],
-  [AGENT_TOOL.CLOSE_INBOX_ITEM]: [CODER],
+  [AGENT_TOOL.WITHDRAW_ASK]: [CODER],
   [AGENT_TOOL.READ_INBOX]: [CODER],
-  [AGENT_TOOL.REPLY_INBOX]: [CODER],
   [AGENT_TOOL.OPEN_PULL_REQUEST]: [CODER],
   [AGENT_TOOL.LOAD_SKILL]: [BRAIN, CODER],
   [AGENT_TOOL.SHOW_PAGE]: [BRAIN, CODER],
@@ -89,6 +88,7 @@ const TOOL_ROLES = {
   [AGENT_TOOL.POST_CHAT]: [BRAIN, CODER],
   [AGENT_TOOL.READ_CHAT]: [BRAIN, CODER],
   [AGENT_TOOL.RESOLVE_ASK]: [BRAIN, CODER],
+  [AGENT_TOOL.EDIT_CHANNEL]: [BRAIN, CODER],
 } as const satisfies { readonly [Tool in AgentTool]: readonly AgentRole[] };
 
 /** The tools a role is offered, in the registry's order. */

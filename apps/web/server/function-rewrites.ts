@@ -53,84 +53,101 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/account/integrations/([^/]+)/connect",
     route: "account/integrations/connect",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/tools",
     route: "account/integrations/tools",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/cancel",
     route: "account/integrations/cancel",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/disconnect",
     route: "account/integrations/disconnect",
     query: "provider=$1",
+    orpc: true,
   },
   {
     src: "/api/account/integrations/([^/]+)/rename",
     route: "account/integrations/rename",
     query: "provider=$1",
+    orpc: true,
   },
-  { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/work", route: "plans/work", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/work", route: "plans/work", query: "id=$1", orpc: true },
   {
     src: "/api/plans/([^/]+)/subagents/([^/]+)/messages",
     route: "plans/subagent-messages",
     query: "id=$1&call=$2",
+    orpc: true,
   },
-  { src: "/api/plans/([^/]+)/messages", route: "plans/messages", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/code", route: "plans/code", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/file", route: "plans/file", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/tree", route: "plans/tree", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/skills", route: "plans/skills", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/stop", route: "plans/stop", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/messages", route: "plans/messages", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/code", route: "plans/code", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/file", route: "plans/file", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/tree", route: "plans/tree", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/skills", route: "plans/skills", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/stop", route: "plans/stop", query: "id=$1", orpc: true },
   {
     src: "/api/plans/([^/]+)/comments/([^/]+)",
     route: "plans/comment-thread",
     query: "id=$1&thread=$2",
+    orpc: true,
   },
-  { src: "/api/plans/([^/]+)/comments", route: "plans/comments", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/comments", route: "plans/comments", query: "id=$1", orpc: true },
   {
     src: "/api/plans/([^/]+)/attachments/([^/]+)",
     route: "plans/attachment",
     query: "id=$1&attachment=$2",
   },
-  { src: "/api/plans/([^/]+)/attachments", route: "plans/attachments", query: "id=$1" },
-  { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/attachments", route: "plans/attachments", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1", orpc: true },
   { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1", orpc: true },
   {
     src: "/api/plans/([^/]+)/revisions/([^/]+)/restore",
     route: "plans/restore",
     query: "id=$1&seq=$2",
+    orpc: true,
   },
-  { src: "/api/plans/([^/]+)/revisions/([^/]+)", route: "plans/revision", query: "id=$1&seq=$2" },
-  { src: "/api/plans/([^/]+)/revisions", route: "plans/revisions", query: "id=$1" },
+  {
+    src: "/api/plans/([^/]+)/revisions/([^/]+)",
+    route: "plans/revision",
+    query: "id=$1&seq=$2",
+    orpc: true,
+  },
+  { src: "/api/plans/([^/]+)/revisions", route: "plans/revisions", query: "id=$1", orpc: true },
   {
     src: "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
     route: "plans/page",
     query: "id=$1&page=$2&version=$3",
+    orpc: true,
   },
-  { src: "/api/plans/([^/]+)/pages", route: "plans/pages", query: "id=$1" },
-  { src: "/api/plans/([^/]+)", route: "plans/plan", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/pages", route: "plans/pages", query: "id=$1", orpc: true },
+  { src: "/api/plans/([^/]+)", route: "plans/plan", query: "id=$1", orpc: true },
   {
     src: "/api/account/plan-template/revisions/([^/]+)/restore",
     route: "account/plan-template/restore",
     query: "seq=$1",
+    orpc: true,
   },
   {
     src: "/api/account/plan-template/revisions/([^/]+)",
     route: "account/plan-template/revision",
     query: "seq=$1",
+    orpc: true,
   },
   {
     src: "/api/agents/([^/]+)/subagents/([^/]+)/messages",
     route: "agents/subagent-messages",
     query: "id=$1&call=$2",
+    orpc: true,
   },
   {
     src: "/api/agents/([^/]+)/subagents/([^/]+)/pictures/([^/]+)",
@@ -142,51 +159,73 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     route: "agents/picture",
     query: "id=$1&picture=$2",
   },
-  { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
-  { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
-  { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1", orpc: true },
+  { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1", orpc: true },
+  {
+    src: "/api/agents/([^/]+)/pull-request",
+    route: "agents/pull-request",
+    query: "id=$1",
+    orpc: true,
+  },
   {
     src: "/api/agents/([^/]+)/pull-request/action",
     route: "agents/pull-request-action",
     query: "id=$1",
+    orpc: true,
   },
   {
     src: "/api/agents/([^/]+)/pull-request/viewed",
     route: "agents/pull-request-viewed",
     query: "id=$1",
+    orpc: true,
   },
-  { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/changes", route: "agents/changes", query: "id=$1", orpc: true },
   {
     src: "/api/agents/([^/]+)/overview/pull-request",
     route: "agents/overview-pull-request",
     query: "id=$1",
+    orpc: true,
   },
-  { src: "/api/agents/([^/]+)/overview/checks", route: "agents/overview-checks", query: "id=$1" },
+  {
+    src: "/api/agents/([^/]+)/overview/checks",
+    route: "agents/overview-checks",
+    query: "id=$1",
+    orpc: true,
+  },
   {
     src: "/api/agents/([^/]+)/overview/conversation",
     route: "agents/overview-conversation",
     query: "id=$1",
+    orpc: true,
   },
   { src: "/api/agents/([^/]+)/github-image", route: "agents/github-image", query: "id=$1" },
   {
     src: "/api/agents/([^/]+)/review-options",
     route: "agents/review-options",
     query: "id=$1",
+    orpc: true,
   },
   { src: "/api/agents/([^/]+)/inbox", route: "agents/inbox", query: "id=$1", orpc: true },
   {
     src: "/api/agents/([^/]+)/terminals/([^/]+)",
     route: "agents/terminal",
     query: "id=$1&terminal=$2",
+    orpc: true,
   },
-  { src: "/api/agents/([^/]+)/terminals", route: "agents/terminals", query: "id=$1" },
-  { src: "/api/agents/([^/]+)/sandbox/resume", route: "agents/sandbox-resume", query: "id=$1" },
-  { src: "/api/agents/([^/]+)", route: "agents/agent", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/terminals", route: "agents/terminals", query: "id=$1", orpc: true },
+  {
+    src: "/api/agents/([^/]+)/sandbox/resume",
+    route: "agents/sandbox-resume",
+    query: "id=$1",
+    orpc: true,
+  },
+  { src: "/api/agents/([^/]+)", route: "agents/agent", query: "id=$1", orpc: true },
   {
     src: "/api/inbox/([^/]+)/attachments/([^/]+)",
     route: "inbox/attachment",
     query: "id=$1&attachment=$2",
   },
+  { src: "/api/inbox/([^/]+)/close", route: "inbox/close", query: "id=$1", orpc: true },
   { src: "/api/inbox/([^/]+)/messages", route: "inbox/messages", query: "id=$1", orpc: true },
   { src: "/api/inbox/([^/]+)/read", route: "inbox/read", query: "id=$1", orpc: true },
   // Every item of the Inbox marked read, ahead of the one item's rewrite that would read `read` as an id.
@@ -197,7 +236,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/automations/([^/]+)/runs", route: "automations/runs", query: "id=$1", orpc: true },
   { src: "/api/automations/([^/]+)/run", route: "automations/run", query: "id=$1", orpc: true },
   { src: "/api/automations/([^/]+)", route: "automations/automation", query: "id=$1", orpc: true },
-  { src: "/api/issues/([^/]+)", route: "issues/issue", query: "id=$1" },
+  { src: "/api/issues/([^/]+)", route: "issues/issue", query: "id=$1", orpc: true },
 ];
 
 /** The characters a route key may spell for its exact rewrite to be its own regular expression. */
@@ -272,6 +311,26 @@ const decodeApiRewrites = Schema.decodeUnknownSync(
   Schema.fromJsonString(Schema.Array(RewriteSchema)),
 );
 
+/**
+ * A route of the web service as `vercel.json` writes it: a rewrite, and the
+ * response headers a page route sends beside it, as the app's routes send
+ * its Content Security Policy; or a redirect, its status and its `Location`
+ * header, as the app's built file name sends the browser to `/app`. A
+ * generated `/api/` rewrite carries neither.
+ */
+const WebRouteSchema = Schema.Union([
+  Schema.Struct({
+    src: Schema.String,
+    dest: Schema.String,
+    headers: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+  }),
+  Schema.Struct({
+    src: Schema.String,
+    status: Schema.Number,
+    headers: Schema.Struct({ Location: Schema.String }),
+  }),
+]);
+
 /** The table as committed. */
 export async function readApiRewritesTable(web: string): Promise<readonly Rewrite[]> {
   return decodeApiRewrites(await readFile(join(web, API_REWRITES_FILE), "utf8"));
@@ -302,7 +361,7 @@ const WebService = Schema.Struct({
   installCommand: Schema.String,
   buildCommand: Schema.String,
   ignoreCommand: Schema.String,
-  routes: Schema.Array(RewriteSchema),
+  routes: Schema.Array(WebRouteSchema),
 });
 
 const EveService = Schema.Struct({
@@ -383,9 +442,10 @@ async function readVercelConfig(web: string): Promise<VercelConfig> {
   return decodeVercelConfig(source);
 }
 
-const isApiRewrite = (rewrite: Rewrite) => rewrite.src.startsWith(API_ROUTE_PREFIX);
+const isApiRewrite = (rewrite: { readonly src: string }) =>
+  rewrite.src.startsWith(API_ROUTE_PREFIX);
 
-const sameRewrites = (a: readonly Rewrite[], b: readonly Rewrite[]) =>
+const sameRewrites = (a: readonly { readonly src: string }[], b: readonly Rewrite[]) =>
   JSON.stringify(a) === JSON.stringify(b);
 
 /**

@@ -114,8 +114,16 @@ const SCOPED_AFTER = {
   // The plan as an agent is handed it, and the budget a mention quotes it under.
   brief: ["packages/service/src/agents/coder-host/start.ts"],
   chars: ["packages/service/src/agents/mentioned-context.ts"],
-  // The plan's tools, offered to an agent handed its plan.
-  tools: ["apps/dev/host.ts", "apps/dev/tools/edit_plan.ts", "apps/dev/tools/show_page.ts"],
+  // The plan's tools, offered to an agent on a task: its notes, its pages, and its comments.
+  tools: [
+    "apps/dev/host.ts",
+    "apps/dev/tools/edit_plan.ts",
+    "apps/dev/tools/show_page.ts",
+    "apps/dev/tools/read_comments.ts",
+    "apps/dev/tools/reply_to_comment.ts",
+    "apps/dev/tools/resolve_thread.ts",
+    "apps/dev/tools/reopen_thread.ts",
+  ],
   // The plan editor's own `@`, and the words it shows in an empty plan.
   mentions: ["packages/panel/src/plan-editor/", "packages/panel/src/plan-editor/"],
   placeholder: ["packages/panel/src/plan-editor/", "packages/panel/src/plan-editor/"],
@@ -182,13 +190,20 @@ const WIRE_NAME = {
     "packages/host/src/agent-notices.test.ts",
     "packages/service/src/agents/coder-host/inbox-page.ts",
     "packages/service/src/agents/coder-host/inbox-store.test.ts",
+    // The same part followed over Neon Realtime: sealed, delivered, and decoded under its wire key.
+    "packages/features/src/live-wire.ts",
+    "packages/features/src/live-wire.test.ts",
+    "packages/host/src/account-inbox-follow.ts",
+    "packages/host/src/compose-coding-agents.test.ts",
+    "packages/service/src/inbox/inbox-store.ts",
+    "packages/service/src/live/live-app.ts",
   ],
   // The tasks list's agents with no task (`task-wire.ts`).
   planlessAgents: [
     "packages/features/src/task-wire.ts",
     "packages/host/src/compose-tasks.ts",
     "packages/host/src/compose-tasks.test.ts",
-    "packages/service/src/tasks/tasks-app.ts",
+    "packages/service/src/tasks/tasks-procedures.ts",
     "packages/service/src/agents/coding-agents-app.test.ts",
     "apps/web/tests/tasks-app.test.ts",
   ],

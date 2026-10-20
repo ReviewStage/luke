@@ -4,15 +4,15 @@ import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { PlanBody } from "./plan-body.js";
@@ -40,27 +40,23 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   installEditorLayout();
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.TASKS_TREE
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                folder: {
-                  path: "",
-                  repository: "acme/relay",
-                  branch: "main",
-                  entries: [
-                    { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
-                    { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
-                    { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
-                  ],
-                  truncated: false,
-                },
-              },
-            }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      ),
+    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
+  });
+  fakeActPort({
+    [ACT_KIND.TASKS_TREE]: () =>
+      Promise.resolve({
+        folder: {
+          path: "",
+          repository: "acme/relay",
+          branch: "main",
+          entries: [
+            { name: "apps/web/rollout-store.ts", kind: TASK_TREE_ENTRY.FILE },
+            { name: "apps/web", kind: TASK_TREE_ENTRY.FOLDER },
+            { name: "apps", kind: TASK_TREE_ENTRY.FOLDER },
+          ],
+          truncated: false,
+        },
+      }),
   });
 });
 
@@ -170,7 +166,7 @@ test("an @ typed in the plan offers the plan's sections and, as the word is type
 
   assert.deepEqual(empty, [
     ["Plan", ["Goal", "Rollout", "Teammate invitations"]],
-    ["Mention from", ["Files and folders", "Plan"]],
+    ["Mention from", ["Files and folders", "Plan", "Dates"]],
   ]);
   assert.deepEqual(listed(task.container), [
     ["Files and folders", ["rollout-store.ts"]],
@@ -192,6 +188,27 @@ test("Enter writes the highlighted row as its mention, drawn in the editor as it
     ["Rollout"],
   );
   assert.equal(task.container.querySelector(".mention-menu"), null);
+});
+
+test("words after an @ that read as a time on a day, up to six of them, offer it first, and Enter draws it as a chip saying it from today", async () => {
+  vi.useFakeTimers({ now: Date.parse("2026-10-19T12:00:00Z"), toFake: ["Date"] });
+  try {
+    const task = await opened();
+
+    await task.typeAtEnd(" Ship @next fri at 3pm to 5pm");
+    const offered = listed(task.container)[0];
+    task.press("Enter");
+    await act(async () => undefined);
+
+    const chips = [...task.container.querySelectorAll(".plan-document-text [data-mention-ref]")];
+    assert.deepEqual(offered, ["Dates", ["Oct 30 3:00 PM → 5:00 PM"]]);
+    assert.deepEqual(
+      chips.map((chip) => chip.textContent),
+      ["Oct 30 3:00 PM → 5:00 PM"],
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("Escape closes the list and leaves the editor open", async () => {
@@ -333,7 +350,7 @@ test("a plan with no repository offers no files and folders to narrow to", async
 
   assert.deepEqual(
     listed(plan.container).find(([group]) => group === "Mention from"),
-    ["Mention from", ["Plan"]],
+    ["Mention from", ["Plan", "Dates"]],
   );
 });
 

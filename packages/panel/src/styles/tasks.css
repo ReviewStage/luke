@@ -214,6 +214,12 @@
     var(--luke-control-height) -
     var(--luke-space-6)
   );
+  /* What the title keeps of the column for its ⋯ alone, which has no byline. */
+  --plan-unit-menu-room: calc(
+    var(--luke-control-height) +
+    var(--luke-space-4) -
+    var(--luke-space-6)
+  );
 }
 
 .plan-unit-attributed {
@@ -232,6 +238,12 @@
 .plan-unit-attributed > .plan-unit > .markdown-heading:first-child,
 .plan-document-editor .plan-unit > .markdown-heading:is([data-level="1"], [data-level="2"]) {
   padding-right: var(--plan-unit-row-room);
+}
+
+/* The title wraps short of its ⋯ in the same way, read or edited, so a name
+   long enough to fill its line never runs under it. */
+.plan-unit-attributed .task-title > .markdown-heading {
+  padding-right: var(--plan-unit-menu-room);
 }
 
 /* The byline and the section's ⋯ stand in one row at the heading's line, a
@@ -329,6 +341,26 @@
   max-width: 100%;
 }
 
+/* The date picker (`date-picker.tsx`), hung from a chip or an @ word in
+   the room the @ list stands in, over the editor. Its anchor stands over
+   the chip and takes no press, so the chip under it still does. */
+.date-picker-anchor {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.date-picker-anchor > * {
+  pointer-events: auto;
+}
+
+/* Its foot, ruled off from the switches, holds Clear as a quiet word that
+   lines up with the fields and the rows' names above it. */
+.date-picker-foot {
+  padding-top: var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+}
+
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
    stands under its own; a kind typed with its colon has no back arrow, so
    its glyph keeps the rows' inset. */
@@ -364,6 +396,14 @@
   display: flex;
   gap: var(--luke-space-12);
   padding: var(--luke-space-6) calc(var(--row-inset) + var(--luke-menu-inset));
+}
+
+/* A touch screen picks a row with a finger, so the keys the foot names say
+   nothing there, and the foot goes. */
+@media (pointer: coarse) {
+  .mention-menu .mention-menu-foot {
+    display: none;
+  }
 }
 
 /* The editor of a plan's text is the room its @ list hangs in. */
@@ -1053,7 +1093,10 @@
    stand on the theme's ground, as a diff in that theme does; every run
    coloured in the theme names its own ink. */
 .code-lines-ground {
-  --code-ground: var(--theme-ground-dark, var(--luke-color-ground));
+  --code-ground: light-dark(
+    var(--theme-ground-light, var(--luke-color-ground)),
+    var(--theme-ground-dark, var(--luke-color-ground))
+  );
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -1062,11 +1105,6 @@
   background: var(--code-ground);
 }
 
-@media (prefers-color-scheme: light) {
-  .code-lines-ground {
-    --code-ground: var(--theme-ground-light, var(--luke-color-ground));
-  }
-}
 .code-lines[data-wrap="false"] {
   width: max-content;
   min-width: 100%;
@@ -1637,8 +1675,7 @@
   gap: var(--luke-space-4);
 }
 
-.view-settings-group + .view-settings-group,
-.view-settings-foot {
+.view-settings-group + .view-settings-group {
   padding-top: var(--luke-space-12);
   border-top: 1px solid var(--luke-color-border);
 }
@@ -2119,22 +2156,27 @@
   color: var(--luke-color-text-subtle);
 }
 
-/* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a File tab's
-   bar, wearing the pull request's standing as a pill in its own colour and
-   its branches quiet beside it, over the page read top to bottom in one
+/* An agent's Pull request tab (`agent-pull-request-tab.tsx`): a header of
+   as few rows as it can, the pull request's standing as a pill in its own
+   colour beside its title, over the page read top to bottom in one
    scroller, its sections each under a quiet heading.
 
    It keeps to the panel's top row's two edges, so the tab reads down from
-   the strip above it: whatever is boxed or edged (the pill, the merge box,
-   the checks, a comment) stands at the row's inset, where a tab's chip
-   does, and every word and glyph at the content inset, where a tab's glyph
-   does, a box holding its own at a row's inset within; the bar's last
-   control ends where the row's last control ends, as every tab's bar's
-   does (`.file-view-bar`). A boxed thing's hairline counts toward its inset
+   the strip above it: whatever is boxed or edged (the pill, the merge
+   control, the checks, a comment) stands at the row's inset, where a tab's
+   chip does, and every word and glyph at the content inset, where a tab's
+   glyph does, a box holding its own at a row's inset within; each row's
+   last control ends where the row's last control ends, as every tab's
+   bar's does (`.file-view-bar`). A boxed thing's hairline counts toward its inset
    (`--boxed-inset`), so what it holds lands on the content inset to the
    pixel. */
 .pull-request-tab {
   --boxed-inset: calc(var(--row-inset) - 1px);
+  /* Note that the tab isolates its stacking, so its header, raised over its
+     own rows, rises over nothing outside the tab; and answers its own width,
+     so its tabs' row folds by the room the tab has wherever it stands. */
+  isolation: isolate;
+  container: pull-request-tab / inline-size;
 }
 
 /* The tab shown fills the room under the header and the tabs, the others
@@ -2151,23 +2193,116 @@
 }
 
 /* The band the views' tabs stand in under the header, whose hairline is the
-   band's rather than the tabs'. */
+   band's rather than the tabs', with Review at its end while the pull
+   request is open: the tabs give way first, folding to their glyphs. */
 .pull-request-tabs {
+  display: flex;
   flex: none;
-  padding-block: var(--luke-space-6);
+  align-items: center;
+  gap: var(--luke-control-gap);
+  padding: var(--luke-space-6) var(--column-inset);
   border-bottom: 1px solid var(--luke-color-border);
 }
 
-/* The fixed header under the bar: the title, the branches, who opened it
-   and its reviewers, and whether it merges, standing put while the tab
-   under it scrolls. */
-.pull-request-header {
+.side-panel-content .pull-request-tabs {
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+.pull-request-tabs > .luke-choice-bar {
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.pull-request-tabs > .pull-request-review {
   flex: none;
-  padding: var(--luke-space-8) var(--column-inset) var(--luke-space-12);
+}
+
+/* The row gives way in steps as the tab narrows, so every tab keeps its
+   name for as long as it can and none is named while the others are not:
+   first Review draws its glyph and its count alone, its word left to its
+   hint; then the tabs take in their room; and only once their names no
+   longer fit do they fold, every one to its glyph at once
+   (`CHOICE_BAR_FOLD.TOGETHER`), about 480px with counts of a usual size. */
+@container pull-request-tab (width < 650px) {
+  .pull-request-tabs .pull-request-review-words {
+    display: none;
+  }
+}
+
+@container pull-request-tab (width < 560px) {
+  .pull-request-tabs {
+    --luke-fold: tight;
+  }
+}
+
+/* The fixed header: the pill, the title, and the merge control and ⋯ in
+   one row, then the branches, who opened it and its reviewers in one line,
+   standing put while the tab under it scrolls. It answers its own width,
+   so a narrow header shortens the merge control's words. */
+.pull-request-header {
+  /* Note that the container makes the header a stacking context of its
+     own, so it stands over the rows after it, or the merge control's panel
+     hung from it would pass under the tabs. */
+  position: relative;
+  z-index: 1;
+  flex: none;
+  container: pull-request-header / inline-size;
+  padding: var(--luke-space-8) var(--column-inset);
 }
 
 .side-panel-content .pull-request-header {
   padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+/* The title's row: the pill at the row's inset, the title taking the room
+   between, wrapping beside the controls rather than under them, and the
+   controls at the row's end, each centred on the row. The title stands at
+   least the controls' height, so one of a single line reads level with
+   them. */
+.pull-request-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.pull-request-title-row > .luke-chip,
+.pull-request-title-row > .luke-badge {
+  flex: none;
+}
+
+.pull-request-title-row > .pull-request-title,
+.pull-request-title-row > .luke-skeleton-region {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding-block: calc((var(--luke-control-height) - var(--luke-type-dialog-leading)) / 2);
+}
+
+.pull-request-title-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-space-2);
+  margin-inline-start: auto;
+}
+
+/* A narrow header, a phone's or the side panel's at its least, gives the
+   title a line of its own over the pill and the controls, which stand
+   under it at the row's two ends; beside them it would wrap a word to a
+   line. Note that Tab follows the row as it is drawn (`reading-flow`)
+   rather than the markup's pill-first order, where the browser reads it. */
+@container pull-request-header (max-width: 520px) {
+  .pull-request-title-row {
+    flex-wrap: wrap;
+    reading-flow: flex-visual;
+  }
+
+  .pull-request-title-row > .pull-request-title,
+  .pull-request-title-row > .luke-skeleton-region {
+    order: -1;
+    flex-basis: 100%;
+    padding-block: 0;
+  }
 }
 
 /* The Conversation's filters, Hide resolved and Hide bots, at the end of a
@@ -2208,7 +2343,7 @@
   margin-top: 0;
 }
 
-/* Where GitHub did not take the last change: a line under the bar, at the
+/* Where GitHub did not take the last change: a line over the header, at the
    content inset, its dismissal at the row's end. */
 .pull-request-write-note {
   flex: 0 0 auto;
@@ -2320,7 +2455,7 @@
 
 /* The branches it merges, quiet in the code face under the title. */
 .pull-request-branches {
-  margin: var(--luke-space-2) 0 0;
+  margin: 0;
   min-width: 0;
   overflow: hidden;
   color: var(--luke-color-text-subtle);
@@ -2335,6 +2470,7 @@
 .pull-request-branch-row {
   display: flex;
   min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: var(--luke-space-8);
 }
@@ -2366,23 +2502,22 @@
   max-width: 100%;
   overflow: hidden;
   padding: 1px var(--luke-space-8);
-  border: 1px solid var(--label-edge-dark, var(--luke-color-border));
+  border: 1px solid;
+  border-color: light-dark(
+    var(--label-edge-light, var(--luke-color-border)),
+    var(--label-edge-dark, var(--luke-color-border))
+  );
   border-radius: var(--luke-radius-full);
-  background: var(--label-fill-dark, transparent);
-  color: var(--label-words-dark, var(--luke-color-text-muted));
+  background: light-dark(var(--label-fill-light, transparent), var(--label-fill-dark, transparent));
+  color: light-dark(
+    var(--label-words-light, var(--luke-color-text-muted)),
+    var(--label-words-dark, var(--luke-color-text-muted))
+  );
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-medium);
   line-height: var(--luke-type-caption-leading);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-@media (prefers-color-scheme: light) {
-  .pull-request-label {
-    border-color: var(--label-edge-light, var(--luke-color-border));
-    background: var(--label-fill-light, transparent);
-    color: var(--label-words-light, var(--luke-color-text-muted));
-  }
 }
 
 /* The labels at the end of the header's line of people, after the
@@ -2422,7 +2557,6 @@
    inset. */
 .pull-request-title,
 .pull-request-view .pull-request-branches,
-.pull-request-header .pull-request-branches,
 .changes-people.pull-request-people,
 .pull-request-heading,
 .pull-request-none,
@@ -2453,6 +2587,17 @@
   );
 }
 
+/* Beside the pill, the title starts at the row's gap, and the controls
+   after it take the pencil's overhang, so it keeps the pencil's room
+   itself. */
+.pull-request-title-row > .pull-request-title {
+  padding-inline-start: 0;
+}
+
+.pull-request-title-row > .pull-request-title.pull-request-title-editable {
+  padding-inline-end: calc(var(--luke-space-2) + var(--luke-space-24));
+}
+
 .pull-request-title-end {
   white-space: nowrap;
 }
@@ -2481,10 +2626,11 @@
   font-weight: var(--luke-weight-regular);
 }
 
-/* Who opened it and its reviewers, standing on the page rather than
-   across it. */
+/* Its branches, who opened it and its reviewers, one line standing on the
+   page rather than across it, wrapping under the title row. */
 .changes-people.pull-request-people {
-  padding-block: var(--luke-space-6) 0;
+  gap: var(--luke-space-4) var(--luke-space-12);
+  padding-block: var(--luke-space-4) 0;
   border-bottom: 0;
 }
 
@@ -2492,60 +2638,46 @@
   color: var(--luke-color-text-subtle);
 }
 
-/* Whether it would merge as it stands, boxed as GitHub's own box is, its
-   glyph in the colour of what it means: ready green, a wait amber, and
-   something to fix red. */
-.pull-request-merge {
+/* The merge control at the title row's end (`merge-box.tsx`): `@luke/ui`'s
+   Button in the look of where the merge stands, its words then a muted
+   chevron saying it opens a panel, which hangs from it. A narrow header
+   draws its shorter words, its name still the whole. */
+.merge-control {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: var(--luke-space-8);
-  margin: var(--luke-space-12) 0 0;
-  padding: var(--luke-space-8) var(--boxed-inset);
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-caption-size);
 }
 
-.pull-request-merge > svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  color: var(--merge-tone);
+.merge-control-short {
+  display: none;
 }
 
-.pull-request-merge-words {
-  min-width: 0;
-  flex: 1 1 auto;
+.merge-control-chevron {
+  margin-inline-start: var(--luke-space-2);
+  opacity: 0.7;
+  vertical-align: middle;
 }
 
-/* The merge box's presses at the line's end (`merge-box.tsx`): what stands
-   of a merge already asked for, quiet, then the one press, `@luke/ui`'s
-   Button, or its SplitButton where a chevron chooses the method. */
-.merge-box-actions {
-  display: inline-flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--luke-space-8);
-  margin-inline-start: auto;
+@container pull-request-header (max-width: 520px) {
+  .merge-control-words {
+    display: none;
+  }
+
+  .merge-control-short {
+    display: inline;
+  }
 }
 
-.merge-box-note {
+/* The panel's mergeability under GitHub's sentence, and its press at the
+   foot's end, as the review panel's foot stands its own. */
+.merge-panel-words {
+  margin: calc(-1 * var(--luke-space-8)) 0 0;
   color: var(--luke-color-text-muted);
 }
 
-[data-merge-tone="ready"] {
-  --merge-tone: var(--luke-color-complete);
-}
-
-[data-merge-tone="waiting"] {
-  --merge-tone: var(--luke-color-attention);
-}
-
-[data-merge-tone="blocked"] {
-  --merge-tone: var(--luke-color-danger);
+.merge-panel-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--luke-control-gap);
 }
 
 .pull-request-section {
@@ -2587,8 +2719,8 @@
 }
 
 .pull-request-head-skeleton,
-.pull-request-title + .pull-request-failure {
-  margin-top: var(--luke-space-8);
+.pull-request-title-row + .pull-request-failure {
+  margin-top: var(--luke-space-6);
 }
 
 .pull-request-checks-skeleton {
@@ -3284,14 +3416,7 @@
    transcript's fenced block is coloured the same way. */
 .code-line-text > span,
 .transcript-code-body span {
-  color: var(--run-dark, var(--code-text));
-}
-
-@media (prefers-color-scheme: light) {
-  .code-line-text > span,
-  .transcript-code-body span {
-    color: var(--run-light, var(--code-text));
-  }
+  color: light-dark(var(--run-light, var(--code-text)), var(--run-dark, var(--code-text)));
 }
 
 /* A transcript's markdown (../ai-elements/message.tsx's MessageResponse):
@@ -5772,6 +5897,30 @@ button.subagent-line:hover {
   margin: 0;
 }
 
+/* Pictures standing alone in a paragraph of words drawn as a document
+   (transcript-blocks.tsx's `PictureRowElement`, as an Inbox item's are): side
+   by side, sharing the column's width, so a before and an after read as a
+   pair; each still hugs its own picture, and none grows past its own size. */
+.transcript-pictures {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--luke-space-12);
+  margin: var(--luke-space-12) 0;
+}
+
+.transcript-pictures > .picture-block {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+}
+
+/* A link standing alone in a paragraph of a document (lone-link-card.tsx):
+   its card of one row, a pull request's or a page's, or the Code tab's card
+   of the lines it names, standing apart from the words around it. */
+.lone-link-card {
+  margin: var(--luke-space-12) 0;
+}
+
 /* A picture in written words (`picture-block.tsx`): its own block, at its
    own width up to the column's and no taller than a screenful's worth, on
    the section's fill while its bytes are read, a press opening the file
@@ -6169,6 +6318,19 @@ button.picture-frame {
   left: calc(100% + var(--luke-space-2));
 }
 
+/* The web's gutter is a finger's target across (desktop.css), which its
+   count, a glyph and its figures, fills when drawn tighter than a toolbar's
+   button; its press still takes the whole target on a touch screen, inside
+   the column. It ends where the block's button ends, a hair inside the
+   column, so a count of more figures grows in toward the words rather than
+   past the column's edge. */
+[data-luke-profile="web"] .comment-count {
+  --luke-control-inset: var(--luke-space-6);
+  --luke-icon-gap: var(--luke-space-4);
+  right: calc(var(--luke-space-2) - var(--comment-gutter));
+  left: auto;
+}
+
 .comment-float {
   position: absolute;
   z-index: 3;
@@ -6177,6 +6339,12 @@ button.picture-frame {
   width: var(--comment-card-width);
   flex-direction: column;
   gap: var(--luke-space-4);
+}
+
+/* On a phone narrower than a card and the web's gutter, the open thread
+   gives way to the column rather than start past its other edge. */
+[data-luke-profile="web"] .comment-float {
+  max-width: calc(100% + var(--luke-space-6));
 }
 
 /* A line's other threads stand closed beside the open one, each on the

@@ -71,12 +71,14 @@ the check names. A component is placed by review under the same rule.
   address the tab draws are masked there as every word is.
   And, approved by Charles on 2026-10-16: Sentry's SDKs run with their default
   data collection (`packages/service/src/observability/sentry.ts`, the eve
-  roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`), so what a
+  roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web
+  app's browser SDK, `apps/web/src/app/web-sentry-sdk.ts`, with the desktop
+  renderer's token filters, `@luke/features/sentry-breadcrumbs`), so what a
   request, a log line, a local variable, or an agent's prompt, reply, or tool
   result carries may reach Sentry; a credential among it is replaced only
   where Sentry's denylist catches it by name, and `PRIVACY.md` says so.
 - Session replay records the rendered panel with every word masked
-  (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
+  (`packages/panel/src/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
   would change that.
 - Never push PR media to a branch but `pr-assets`, under `pr-<number>/`
@@ -389,10 +391,20 @@ Conventional Branch 1.1.0 (https://conventionalbranch.org/), both exactly.
 
 ## Merging
 
+Do not rebase onto or merge in `main` to bring a branch up to date unless the
+user asks or the branch cannot go on without it: a conflict GitHub reports,
+or a change on `main` the work needs. Being behind `main` is not a reason: CI
+runs on the PR's merge with `main`, and the merge queue tests each PR against
+the latest `main` before it lands, so an up-to-date branch buys nothing and
+costs a rebuild, a re-run of CI, and a force-push. This holds before a push,
+while CI runs, before arming auto-merge, and while a PR waits in the queue.
+Restacking a stack onto the PR beneath it after that PR changed is the one
+routine rebase.
+
 To merge a PR, run `gh pr merge --auto` right away, once any manual pre-merge
-step (`docs/WORKFLOW.md` step 3's preview run) is done; the merge queue waits on
-CI, so do not, and do not rebase onto `main` unless it conflicts. In a stack,
-arm a PR only once it targets `main`.
+step (`docs/WORKFLOW.md` step 3's preview run) is done; the merge queue waits
+on CI, so do not wait on it yourself, and do not update the branch first. In a
+stack, arm a PR only once it targets `main`.
 
 ## TypeScript
 

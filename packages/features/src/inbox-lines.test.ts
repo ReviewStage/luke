@@ -3,6 +3,7 @@ import { test } from "vitest";
 import {
   INBOX_REPLY,
   inboxAnswerMessage,
+  inboxClosedMessage,
   inboxLineWords,
   inboxThreadMessage,
 } from "./inbox-wire.js";
@@ -15,6 +16,13 @@ import {
  */
 
 const ITEM = { key: "acting-for.v2", title: 'Ship "Billing agent for Dean"?' };
+
+test("a member's close reads back to the developer as the item's title and that it was closed without an answer, without its key", () => {
+  assert.equal(
+    inboxLineWords(inboxClosedMessage(ITEM)),
+    'Inbox closed on "Ship "Billing agent for Dean"?": Closed without an answer.',
+  );
+});
 
 test("an inbox answer and a thread message read back without the item's key, their title and words kept, and any other line as it is", () => {
   const answer = inboxAnswerMessage(ITEM, {

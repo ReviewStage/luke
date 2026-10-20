@@ -37,6 +37,7 @@ import {
   type TasksEditAnswer,
   type TasksFileAnswer,
   type TasksGitHubDisconnectAnswer,
+  type TasksGitHubIssuesAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
   type TasksLinearIssuesAnswer,
@@ -69,6 +70,7 @@ import {
   tasksCommentsParamsSchema,
   tasksEditParamsSchema,
   tasksFileParamsSchema,
+  tasksGitHubIssuesParamsSchema,
   tasksIssueParamsSchema,
   tasksLinearIssuesParamsSchema,
   tasksMessagesParamsSchema,
@@ -85,6 +87,7 @@ import {
   tasksRevisionParamsSchema,
   tasksRevisionsParamsSchema,
   tasksSetRepositoryParamsSchema,
+  tasksSetStandingParamsSchema,
   tasksSkillsParamsSchema,
   tasksStartRequestSchema,
   tasksTreeParamsSchema,
@@ -337,6 +340,7 @@ export type TasksClient = Pick<
   | "readRepositorySkills"
   | "readRepositoryPullRequest"
   | "readRepositoryIssue"
+  | "readRepositoryIssues"
   | "readRevisions"
   | "readRevision"
   | "readPages"
@@ -350,6 +354,7 @@ export type TasksClient = Pick<
   | "stopWork"
   | "repositories"
   | "setRepository"
+  | "setStanding"
   | "move"
   | "edit"
 > & {
@@ -1386,6 +1391,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const answer = yield* served(client.readRepositoryIssue(place, number));
         return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
+    // A repository's issues are answered as an issue is: to the picker that asked, and held nowhere.
+    [GATEWAY_METHOD.TASKS_GITHUB_ISSUES]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksGitHubIssuesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid(
+            "reading a repository's issues names a workspace, its repository, and words or a number where it asks for some",
+          );
+        }
+        if (!gate()) {
+          return carried<TasksGitHubIssuesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        const { workspaceId, repository, query, number } = read.success;
+        const ask = number !== undefined ? { number } : query !== undefined ? { query } : {};
+        const answer = yield* served(client.readRepositoryIssues({ workspaceId, repository }, ask));
+        return carried<TasksGitHubIssuesAnswer>(
+          answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        );
+      }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps
     // what it read, and reads again as the task moves on.
@@ -1627,6 +1651,25 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                   },
             );
             return { renamed: true };
+          }),
+        );
+      }),
+    // The service answers the task as changed, so the list's row and the open
+    // document take it in place and nothing is read again.
+    [GATEWAY_METHOD.TASKS_SET_STANDING]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksSetStandingParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("setting where a task stands names it and its status or priority");
+        }
+        if (!gate()) return { changed: false };
+        const { taskId, ...standing } = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const changed = yield* served(client.setStanding(taskId, standing));
+            if (changed === undefined) return { changed: false };
+            takeAnswered(changed);
+            return { changed: true };
           }),
         );
       }),

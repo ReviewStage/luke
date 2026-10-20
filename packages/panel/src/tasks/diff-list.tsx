@@ -25,6 +25,7 @@ import {
   type DiffSelection,
   type DiffTextSelection,
   GAP_LINES,
+  sameLines,
   sameListSelection,
   sameLook,
   sameNotes,
@@ -65,6 +66,8 @@ export interface DiffListEntry {
   readonly expandable: boolean;
   /** Its whole text before and after, where it is drawn whole. */
   readonly whole?: DiffFileTexts | undefined;
+  /** The lines of its new side between its hunks a note waits on, which the view is told of as a gap opens over them (`onDrawn`). */
+  readonly hidden?: readonly number[] | undefined;
   readonly header: ReactNode;
   readonly notes: readonly DiffNote[];
 }
@@ -182,6 +185,7 @@ function listFileOf(entry: DiffListEntry): DiffListFile {
     lead: entry.lead,
     expandable: entry.expandable,
     whole: entry.whole,
+    hidden: entry.hidden,
     annotations: entry.notes.map(placeOf),
   };
   LIST_FILES.set(entry, file);
@@ -203,11 +207,15 @@ function sameFiles(a: readonly DiffListFile[], b: readonly DiffListFile[]): bool
           file.lead === other.lead &&
           file.expandable === other.expandable &&
           file.whole === other.whole &&
+          sameLines(file.hidden ?? NO_LINES, other.hidden ?? NO_LINES) &&
           sameNotes(file.annotations, other.annotations))
       );
     })
   );
 }
+
+/** No lines. */
+const NO_LINES: readonly number[] = [];
 
 /** The element kept by `key` in `held`, made with `className` the first time it is asked for. */
 function keptElement(held: Map<string, HTMLDivElement>, key: string, className: string) {
@@ -236,6 +244,7 @@ export function PierreDiffList({
   selected,
   readTexts,
   reveal,
+  onDrawn,
 }: {
   entries: readonly DiffListEntry[];
   look: DiffLook;
@@ -255,6 +264,8 @@ export function PierreDiffList({
   readTexts?: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
   /** The file, and the line of it, to scroll to once the list draws it open; each ask once. */
   reveal?: DiffListReveal | undefined;
+  /** Told which of a file's hidden lines it draws, each time that changes; a door that stays the same. */
+  onDrawn?: ((path: string, lines: readonly number[]) => void) | undefined;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().diffView);
   // The hint over the gap arrow under the pointer, which Pierre draws in a shadow root no hint of the window's own reaches.
@@ -322,6 +333,7 @@ export function PierreDiffList({
     onSelectText: onComment === undefined ? undefined : tellText,
     selected,
     readTexts: readTexts === undefined ? undefined : askTexts,
+    onDrawn,
   };
   // What the list was last drawn with; the mount reads the latest, so it is mounted once.
   const drawn = useRef(props);

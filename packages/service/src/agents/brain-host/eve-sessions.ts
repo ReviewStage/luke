@@ -257,6 +257,8 @@ export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly turn: Turn;
   /** The words alone, or the AI SDK's user content where a coding agent's message carries files (`attached-files.ts`). */
   readonly message: string | UserContent;
+  /** The sender's time zone, which the turn the message opens reads the day in; none reads UTC. */
+  readonly timeZone?: string;
 }
 
 /**
@@ -505,6 +507,9 @@ function sessionsOver<Turn extends BrainHostTurn>(
   const turnHeaders = (message: EveMessage<Turn>) => ({
     [BRAIN_HOST_HEADER.CONVERSATION]: message.conversationId,
     [BRAIN_HOST_HEADER.TURN]: message.turn,
+    ...(message.timeZone === undefined
+      ? undefined
+      : { [BRAIN_HOST_HEADER.TIME_ZONE]: message.timeZone }),
   });
   return {
     open: (message) =>

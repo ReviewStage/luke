@@ -431,6 +431,8 @@ export interface HostedLiveBrainOptions {
   readonly accountId: string;
   /** The conversation every ask lands in: the task's, the same one its record writes, under the member who opened it. */
   readonly conversation: ConversationTarget;
+  /** The developer's time zone, handed with every ask so the turn reads the day in it; none reads UTC. */
+  readonly timeZone?: string | undefined;
   /** The ask door's seams: the ask record, and eve under the deployment principal for this account, which sends a spoken ask and nothing else. */
   readonly asks: AskSeams<typeof BRAIN_HOST_TURN.SPOKEN>;
   /** The store the standing and the journal are read from, on the connection the socket's own fiber holds. */
@@ -1056,6 +1058,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
           clientId: ask.submissionId,
           conversationId: options.conversation.conversationId,
           voice: { sessionId: ask.sessionId, revision: ask.revision },
+          timeZone: options.timeZone,
         },
         ask.revision,
       );
@@ -1083,6 +1086,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
             origin: ASK_ORIGIN.SPOKEN,
             clientId: sessionId,
             conversationId: options.conversation.conversationId,
+            timeZone: options.timeZone,
           },
           0,
         );

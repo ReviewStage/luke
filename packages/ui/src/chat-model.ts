@@ -2,17 +2,27 @@ import type { ChatMemberMention } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
   CHANNEL_KIND,
+  CHAT_BOUNDS,
+  CHAT_MEMBER_LABEL,
   CHAT_TARGET_SIGIL,
   type ChatAnswer,
   type ChatChannel,
+  type ChatEditRequest,
   type ChatMember,
   type ChatMessage,
+  type ChatOpenRequest,
+  type ChatPostRequest,
   type ChatReply,
+  GENERAL_CHANNEL,
   MEMBER_KIND,
-  type postChatInputSchema,
 } from "@luke/features/chat-wire";
 import { DICTATION_BOUNDS } from "@luke/features/dictation-wire";
-import { MENTION_KIND } from "@luke/features/mention-link";
+import {
+  encodeMention,
+  MENTION_KIND,
+  type MentionPlace,
+  mentionMarkdown,
+} from "@luke/features/mention-link";
 import type { TaskAgentLine, TaskSummary } from "@luke/features/task-wire";
 import type { ChatTarget } from "./chat-mention.js";
 
@@ -35,7 +45,10 @@ import type { ChatTarget } from "./chat-mention.js";
  * What the window sends is a post, in the shape an agent's `post_chat`
  * takes, to the place shown or into a thread, or an answer to an ask at
  * the revision the developer read. The composer offers every member who
- * has not left by `@handle` and every channel standing by `#name`.
+ * has not left by name, written as their mention link, and every channel
+ * standing by `#name`. Every member is named by who they are, never by a
+ * handle: a person by their account's name, an agent by its title, and a
+ * task's Luke as Luke.
  */
 
 /** The places the window's Chat shows: For you, or one channel. */
@@ -63,8 +76,11 @@ export const FOR_YOU_REASON = {
 
 type ForYouReason = (typeof FOR_YOU_REASON)[keyof typeof FOR_YOU_REASON];
 
-/** A post the window sends: the words, where they go, and the message they reply to in a thread (`chat-wire.ts`'s `postChatInputSchema`). */
-export type ChatPost = typeof postChatInputSchema.Type;
+/** A post the window sends: the words, the pictures under them, where they go, and the message they reply to in a thread (`chat-wire.ts`'s `chatPostRequestSchema`, its key the sender's to mint). */
+export type ChatPost = Omit<ChatPostRequest, "blocks" | "clientKey">;
+
+/** A topic channel opened, or one renamed, its purpose said or cleared, or archived or brought back, as the window writes it. */
+export type ChatChannelChange = ChatOpenRequest | ChatEditRequest;
 
 /** An answer the window sends to an ask: the message carrying it, the revision the developer read, and the answer. */
 export interface ChatAskAnswer {
@@ -72,9 +88,6 @@ export interface ChatAskAnswer {
   readonly revision: number;
   readonly reply: ChatReply;
 }
-
-/** What Luke is called wherever a task's Luke speaks. */
-const LUKE_NAME = "Luke";
 
 /** The order the rail lists channels in, by kind: `#general`, the plans', then the topics. */
 const CHANNEL_ORDER = {
@@ -88,6 +101,8 @@ const CHANNEL_ORDER = {
 export interface ChatNames {
   readonly agents: ReadonlyMap<string, TaskAgentLine>;
   readonly tasks: ReadonlyMap<string, string>;
+  /** The task each agent a plan's summary names works on, by the agent's id. */
+  readonly agentTasks: ReadonlyMap<string, string>;
   readonly selfName: string | undefined;
 }
 
@@ -101,36 +116,76 @@ export function chatNames(
   return {
     agents: new Map(lines.map((line) => [line.id, line])),
     tasks: new Map(tasks.map((task) => [task.id, task.name])),
+    agentTasks: new Map(
+      tasks.flatMap((task) =>
+        (task.agents?.agents ?? []).map((line) => [line.id, task.id] as const),
+      ),
+    ),
     selfName,
   };
 }
 
-/** A member as a line names it: what it is called, its handle, the agent's line where it is one, and the plan it stands for. */
+/** A member as a line names it: what it is called, the agent's line where it is one, and the plan it stands for. */
 export interface ChatWho {
   readonly member: ChatMember | undefined;
   readonly name: string;
-  readonly handle: string;
   readonly agent: TaskAgentLine | undefined;
   readonly taskName: string | undefined;
 }
 
-/** One row of the rail: the channel, what it is called, what it says beside that, and how many unread messages it holds. */
+/** One row of the rail: the channel, what it is called, and how many unread messages it holds. */
 export interface ChatRailRow {
   readonly channel: ChatChannel;
   readonly label: string;
-  /** What a direct message's row says after the name: the other member's agent title or plan. */
-  readonly sub: string | undefined;
   /** The other member of a direct message, for its mark. */
   readonly other: ChatWho | undefined;
   readonly unread: number;
+  /** The newest root or reply the channel holds as read, which its row previews; none in an empty one. */
+  readonly latest: ChatMessage | undefined;
 }
 
 export interface ChatRail {
   /** How many messages wait on the reader in For you. */
   readonly forYou: number;
+  /** #general, then the topics standing. */
   readonly channels: readonly ChatRailRow[];
+  /** The tasks' own channels, grouped as the reader's sidebar groups the tasks. */
+  readonly tasks: readonly ChatRailGroup[];
+  /** The channels archived: a task's that was archived with it, and a topic archived. */
+  readonly archived: readonly ChatRailRow[];
   readonly direct: readonly ChatRailRow[];
 }
+
+/** A group of task channels in the rail: under the reader's pinned tasks, one of their sections, or none, and its rows in order. */
+interface ChatRailGroup {
+  /** The group's own key, which a list draws it under. */
+  readonly key: string;
+  /** What heads it; none for the tasks no pin or section holds where nothing else is grouped. */
+  readonly title: string | undefined;
+  readonly rows: readonly ChatRailRow[];
+}
+
+/** How the reader's sidebar groups tasks: the tasks pinned, in their order, and the sections they keep, each with its tasks in order. */
+export interface ChatTaskGrouping {
+  readonly pinned: readonly string[];
+  readonly sections: readonly {
+    readonly id: string;
+    readonly title: string;
+    readonly taskIds: readonly string[];
+  }[];
+}
+
+/** What a group of task channels is headed by, where the rail draws it. */
+const TASK_GROUP = {
+  PINNED: "Pinned",
+  OTHER: "Other tasks",
+} as const;
+
+/** The keys of the groups no section names. */
+const TASK_GROUP_KEY = {
+  PINNED: "pinned",
+  OTHER: "other",
+} as const;
 
 /** A root message and the replies of its thread, each in the order posted. */
 export interface ChatThread {
@@ -165,21 +220,20 @@ function otherOf(chat: ChatAnswer, channel: ChatChannel): string | undefined {
   return channel.members?.find((id) => id !== chat.self) ?? channel.members?.[0];
 }
 
-/** A member by its id, the way every line names it: an agent by its title, a task's Luke as Luke, a person by their handle, the reader by their own name. */
+/** A member by its id, the way every line names it: an agent by its title, a task's Luke as Luke, a person by their account's name, the reader by their own. */
 export function chatWho(chat: ChatAnswer, names: ChatNames, memberId: string): ChatWho {
   const member = chat.members.find((each) => each.id === memberId);
-  const handle = member?.handle ?? "unknown";
   const agent = member?.agentId === undefined ? undefined : names.agents.get(member.agentId);
   const taskName = member?.planId === undefined ? undefined : names.tasks.get(member.planId);
   const name =
     member?.kind === MEMBER_KIND.LUKE
-      ? LUKE_NAME
+      ? CHAT_MEMBER_LABEL.LUKE
       : member?.kind === MEMBER_KIND.AGENT
-        ? (agent?.title ?? handle)
+        ? (agent?.title ?? member.name ?? CHAT_MEMBER_LABEL.FORMER_AGENT)
         : memberId === chat.self && names.selfName !== undefined
           ? names.selfName
-          : handle;
-  return { member, name, handle, agent, taskName };
+          : (member?.name ?? CHAT_MEMBER_LABEL.FORMER_PERSON);
+  return { member, name, agent, taskName };
 }
 
 /** Whether the reader is one of a direct message's two; a channel holds no such pair. */
@@ -199,13 +253,13 @@ export function postsIn(chat: ChatAnswer, channel: ChatChannel): boolean {
   return channel.kind !== CHANNEL_KIND.DM || inDm(chat, channel);
 }
 
-/** What a channel is called: a channel's own name, a direct message's other member's handle, or both of its two's where the reader is neither. */
+/** What a channel is called: a channel's own name, a direct message's other member's name, or both of its two's where the reader is neither. */
 export function channelLabel(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
   if (channel.kind === CHANNEL_KIND.DM && !inDm(chat, channel)) {
-    return (channel.members ?? []).map((id) => chatWho(chat, names, id).handle).join(" ↔ ");
+    return (channel.members ?? []).map((id) => chatWho(chat, names, id).name).join(" ↔ ");
   }
   const other = otherOf(chat, channel);
-  if (other !== undefined) return chatWho(chat, names, other).handle;
+  if (other !== undefined) return chatWho(chat, names, other).name;
   return (
     channel.name ?? (channel.planId === undefined ? "" : names.tasks.get(channel.planId)) ?? ""
   );
@@ -217,31 +271,93 @@ function messagesIn(chat: ChatAnswer, channelId: string): readonly ChatMessage[]
 }
 
 /** The rail: For you's count, the channels in their order, and the direct messages, the latest spoken in first. */
-export function chatRail(chat: ChatAnswer, names: ChatNames): ChatRail {
+/**
+ * The task channels grouped as the sidebar groups their tasks: the pinned
+ * first, in the pins' order, then each section in its order, then the rest
+ * by name, under Other tasks where any group stands above them and headed
+ * by nothing where none does. A task stands in its first group only. Note
+ * that the order within a group is the sidebar's own, so a task is found
+ * where the reader keeps it.
+ */
+function taskGroups(
+  rows: readonly ChatRailRow[],
+  grouping: ChatTaskGrouping | undefined,
+): readonly ChatRailGroup[] {
+  const byTask = new Map(
+    rows.flatMap((row) =>
+      row.channel.planId === undefined ? [] : [[row.channel.planId, row] as const],
+    ),
+  );
+  const placed = new Set<string>();
+  const take = (taskIds: readonly string[]) =>
+    taskIds.flatMap((taskId) => {
+      const row = byTask.get(taskId);
+      if (row === undefined || placed.has(taskId)) return [];
+      placed.add(taskId);
+      return [row];
+    });
+  const groups: ChatRailGroup[] = [];
+  const pinned = take(grouping?.pinned ?? []);
+  if (pinned.length > 0)
+    groups.push({ key: TASK_GROUP_KEY.PINNED, title: TASK_GROUP.PINNED, rows: pinned });
+  for (const section of grouping?.sections ?? []) {
+    const held = take(section.taskIds);
+    if (held.length > 0) groups.push({ key: section.id, title: section.title, rows: held });
+  }
+  const rest = rows.filter(
+    (row) => row.channel.planId === undefined || !placed.has(row.channel.planId),
+  );
+  if (rest.length > 0) {
+    groups.push({
+      key: TASK_GROUP_KEY.OTHER,
+      title: groups.length === 0 ? undefined : TASK_GROUP.OTHER,
+      rows: rest,
+    });
+  }
+  return groups;
+}
+
+export function chatRail(
+  chat: ChatAnswer,
+  names: ChatNames,
+  grouping?: ChatTaskGrouping | undefined,
+): ChatRail {
   const row = (channel: ChatChannel): ChatRailRow => {
     const other = otherOf(chat, channel);
     const who = other === undefined ? undefined : chatWho(chat, names, other);
     return {
       channel,
       label: channelLabel(chat, names, channel),
-      sub: who?.agent?.title ?? who?.taskName,
       other: who,
       unread: messagesIn(chat, channel.id).filter((message) => unreadBy(chat, message)).length,
+      latest: messagesIn(chat, channel.id).at(-1),
     };
   };
   const shown = chat.channels.filter((channel) => !channel.archived);
   const latest = (channel: ChatChannel) => messagesIn(chat, channel.id).at(-1)?.seq ?? 0;
+  const byName = (one: ChatChannel, other: ChatChannel) =>
+    CHANNEL_ORDER[one.kind] - CHANNEL_ORDER[other.kind] ||
+    channelLabel(chat, names, one).localeCompare(channelLabel(chat, names, other));
   const channels = shown
-    .filter((channel) => channel.kind !== CHANNEL_KIND.DM)
-    .toSorted(
-      (one, other) =>
-        CHANNEL_ORDER[one.kind] - CHANNEL_ORDER[other.kind] ||
-        channelLabel(chat, names, one).localeCompare(channelLabel(chat, names, other)),
-    );
+    .filter(
+      (channel) => channel.kind === CHANNEL_KIND.GENERAL || channel.kind === CHANNEL_KIND.TOPIC,
+    )
+    .toSorted(byName);
+  const tasks = shown.filter((channel) => channel.kind === CHANNEL_KIND.TASK).toSorted(byName);
+  // Note that an archived DM has no place to come back from, so the archive holds channels alone.
+  const archived = chat.channels
+    .filter((channel) => channel.archived && channel.kind !== CHANNEL_KIND.DM)
+    .toSorted(byName);
   const direct = shown
     .filter((channel) => channel.kind === CHANNEL_KIND.DM)
     .toSorted((one, other) => latest(other) - latest(one));
-  return { forYou: forYou(chat).length, channels: channels.map(row), direct: direct.map(row) };
+  return {
+    forYou: forYou(chat).length,
+    channels: channels.map(row),
+    tasks: taskGroups(tasks.map(row), grouping),
+    archived: archived.map(row),
+    direct: direct.map(row),
+  };
 }
 
 /**
@@ -295,24 +411,13 @@ export function placeChannel(chat: ChatAnswer, place: ChatPlace): ChatChannel | 
   return chat.channels.find((channel) => channel.id === place.channelId);
 }
 
-/** Where a post to the channel goes, as `post_chat`'s `to` names it: `#name`, or a DM's `@handle`. */
-export function postTarget(chat: ChatAnswer, names: ChatNames, channel: ChatChannel): string {
-  const label = channelLabel(chat, names, channel);
-  return channel.kind === CHANNEL_KIND.DM
-    ? `${CHAT_TARGET_SIGIL.MEMBER}${label}`
-    : `${CHAT_TARGET_SIGIL.CHANNEL}${label}`;
-}
-
-/** What the composer offers to name: every member who has not left but the reader, and every channel standing that is not a DM. */
-/**
- * The mention a chip writes a member as: a person by their account, an
- * agent by its id. Note that Luke has none here: every task's Luke answers
- * to `@luke`, which the service reads by the channel's task, so he is
- * written as that word rather than as one task's link.
- */
+/** The mention a chip writes a member as: a person by their account, an agent by its id, and a Luke by his task; none for a member whose account, agent, or task is gone. */
 function mentionOf(member: ChatMember): ChatMemberMention | undefined {
   if (member.kind === MEMBER_KIND.HUMAN && member.userId !== undefined) {
     return { kind: MENTION_KIND.PERSON, userId: member.userId };
+  }
+  if (member.kind === MEMBER_KIND.LUKE && member.planId !== undefined) {
+    return { kind: MENTION_KIND.LUKE, taskId: member.planId };
   }
   if (member.kind === MEMBER_KIND.AGENT && member.agentId !== undefined) {
     // An agent on a task is linked under it, so its chip opens the task's tab for it rather than the agent alone.
@@ -323,18 +428,35 @@ function mentionOf(member: ChatMember): ChatMemberMention | undefined {
   return undefined;
 }
 
-export function chatTargets(chat: ChatAnswer, names: ChatNames): readonly ChatTarget[] {
+/**
+ * What the composer offers to name: every member who has not left but the
+ * reader, by name, each with the link a chip writes them as in the
+ * workspace's place, and every channel standing that is not a DM. Note that
+ * a member is offered only where that place is known, since a member is
+ * written as their link and nothing else.
+ */
+export function chatTargets(
+  chat: ChatAnswer,
+  names: ChatNames,
+  place: MentionPlace | undefined,
+): readonly ChatTarget[] {
   const members = chat.members
     .filter((member) => !member.left && member.id !== chat.self)
-    .map((member): ChatTarget => {
+    .flatMap((member): readonly ChatTarget[] => {
+      const mention = mentionOf(member);
+      if (mention === undefined || place === undefined) return [];
       const who = chatWho(chat, names, member.id);
-      const detail = member.kind === MEMBER_KIND.HUMAN ? undefined : who.name;
-      return {
-        sigil: CHAT_TARGET_SIGIL.MEMBER,
-        name: member.handle,
-        detail,
-        mention: mentionOf(member),
-      };
+      return [
+        {
+          sigil: CHAT_TARGET_SIGIL.MEMBER,
+          name: who.name,
+          // An agent or a Luke is told apart from another of its name by the task it works on.
+          detail: member.kind === MEMBER_KIND.HUMAN ? undefined : who.taskName,
+          mention,
+          link: encodeMention(mention, place),
+          markdown: mentionMarkdown(mention, who.name, place),
+        },
+      ];
     });
   const channels = chat.channels
     .filter((channel) => !channel.archived && channel.kind !== CHANNEL_KIND.DM)
@@ -345,12 +467,7 @@ export function chatTargets(chat: ChatAnswer, names: ChatNames): readonly ChatTa
         detail: channel.planId === undefined ? undefined : names.tasks.get(channel.planId),
       }),
     );
-  // Note that every plan's planner answers to `@luke`, so a handle is offered once.
-  const offered = [...members, ...channels];
-  return offered.filter(
-    (target, at) =>
-      offered.findIndex((each) => each.sigil === target.sigil && each.name === target.name) === at,
-  );
+  return [...members, ...channels];
 }
 
 /** What the wire refuses in a dictation's word: a line break, or an angle bracket. */
@@ -358,14 +475,14 @@ const REFUSED_KEYWORD = /[<>\r\n]/u;
 
 /**
  * The words a dictation in the chat is likely to say, which tell the
- * transcription model how to spell them: every handle of a member still
- * here, each agent's title, and every standing channel's name, each once
+ * transcription model how to spell them: the name of every person and
+ * agent still here, each agent's title, and every standing channel's name, each once
  * and within the wire's bounds, as `dictation-keywords.ts` holds a task's.
  */
 export function chatKeywords(chat: ChatAnswer, names: ChatNames): readonly string[] {
   const here = chat.members.filter((member) => !member.left);
   const named = [
-    ...here.map((member) => member.handle),
+    ...here.map((member) => member.name ?? ""),
     ...here.map((member) =>
       member.agentId === undefined ? "" : (names.agents.get(member.agentId)?.title ?? ""),
     ),
@@ -382,4 +499,34 @@ export function chatKeywords(chat: ChatAnswer, names: ChatNames): readonly strin
     if (kept.size === DICTATION_BOUNDS.MAX_KEYWORDS) break;
   }
   return [...kept];
+}
+
+/** The characters a channel's name is spelled in, its first a letter or a digit (`chatChannelNameSchema`). */
+const CHANNEL_NAME = /^[a-z0-9][a-z0-9._-]*$/u;
+
+/** The most characters a channel's name may spell (`CHAT_BOUNDS.MAX_KEY_CHARS`). */
+const MAX_CHANNEL_NAME_CHARS = CHAT_BOUNDS.MAX_KEY_CHARS;
+
+/** What a channel's name as typed is written as: lower case, each run of spaces a hyphen, nothing around it. */
+export function topicName(words: string): string {
+  return words.trim().toLowerCase().replace(/\s+/gu, "-");
+}
+
+/** Why a name a person typed cannot be a topic channel's, the channel being renamed aside; nothing where it can. */
+export function topicNameProblem(
+  chat: ChatAnswer,
+  name: string,
+  renaming: string | undefined,
+): string | undefined {
+  if (name === "") return "Name the channel.";
+  if (name.length > MAX_CHANNEL_NAME_CHARS) {
+    return `A channel's name is at most ${MAX_CHANNEL_NAME_CHARS} characters.`;
+  }
+  if (!CHANNEL_NAME.test(name)) {
+    return "Use lowercase letters, numbers, dots, dashes, and underscores, starting with a letter or a number.";
+  }
+  const taken =
+    name === GENERAL_CHANNEL ||
+    chat.channels.some((channel) => channel.name === name && channel.id !== renaming);
+  return taken ? `#${name} is already a channel.` : undefined;
 }

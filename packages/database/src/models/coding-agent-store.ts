@@ -11,12 +11,14 @@ import {
   contextWindowSchema,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
   integrationConnectionNameSchema,
   integrationConnectionOf,
 } from "@luke/features/integration-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { pullRequestAreasSchema } from "@luke/features/pull-request-area";
+import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { TURN_STATUS } from "@luke/wire";
 import {
   and,
@@ -51,6 +53,7 @@ import {
 } from "../schemas/coding-agent.js";
 import { conversations, messages, turns } from "../schemas/storage.js";
 import { task } from "../schemas/task.js";
+import { taskIssue } from "../schemas/task-issue.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../storage-vocabulary.js";
 import { InstantColumnSchema } from "./columns.js";
 import {
@@ -179,6 +182,8 @@ export interface CodingAgent {
   readonly disabledServers: readonly string[];
   /** Who the agent's commits are by and its pull request is opened as; null until its first session settles it. */
   readonly author: CodingAgentAuthor | null;
+  /** How its repository was reached as it started: the workspace's GitHub App, or its starter's own token. */
+  readonly githubAccess: GitHubAccess;
   readonly createdAt: Date;
 }
 
@@ -247,6 +252,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly disabledServers?: readonly string[] | undefined;
   /** The MCP servers the prompt mentions, which the first turn is handed whatever the switches say; none where it mentions none. */
   readonly mentionedServers?: readonly string[] | undefined;
+  /** How the repository was reached for the Start; the App's where none is named. */
+  readonly githubAccess?: GitHubAccess | undefined;
 };
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -272,6 +279,7 @@ const CODING_AGENT_COLUMNS = {
   archivedBy: codingAgent.archivedBy,
   disabledServers: codingAgent.disabledServers,
   author: codingAgent.author,
+  githubAccess: codingAgent.githubAccess,
   createdAt: codingAgent.createdAt,
 };
 
@@ -356,6 +364,7 @@ const CodingAgentRowSchema = Schema.Struct({
   archivedBy: ArchivedByColumnSchema,
   disabledServers: DisabledServersColumnSchema,
   author: Schema.NullOr(AuthorColumnSchema),
+  githubAccess: Schema.Literals(Object.values(GITHUB_ACCESS)),
   createdAt: InstantColumnSchema,
 });
 
@@ -473,6 +482,7 @@ const insertAgent = SqlSchema.findOne({
     startBranch: Schema.NullOr(Schema.String),
     disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
+    githubAccess: Schema.Literals(Object.values(GITHUB_ACCESS)),
     now: Schema.Date,
   }),
   Result: CodingAgentRowSchema,
@@ -499,6 +509,7 @@ const insertAgent = SqlSchema.findOne({
           startBranch: write.startBranch,
           disabledServers: write.disabledServers,
           mentionedServers: write.mentionedServers,
+          githubAccess: write.githubAccess,
           idempotencyKey: write.idempotencyKey,
           createdAt: write.now,
         })
@@ -915,10 +926,23 @@ const findAgentPublished = SqlSchema.findOneOption({
     ),
 });
 
-/** The Linear issue an agent's task links, by its key; null for an agent with no task, or a task that links none. */
-const AGENT_LINEAR_ISSUE = sql<
-  string | null
->`(select ${task.linearIssue} ->> 'identifier' from ${task} where ${task.id} = ${codingAgent.taskId})`;
+/**
+ * The first Linear issue an agent's task links, by its key; null for an
+ * agent with no task, or a task that links none. Note that it is built as a
+ * subquery, because a column in a raw template is spelled without its table
+ * and the task's id would then name the link's own.
+ */
+const AGENT_LINEAR_ISSUE = sql<string | null>`(${queryBuilder
+  .select({ key: taskIssue.key })
+  .from(taskIssue)
+  .where(
+    and(
+      eq(taskIssue.taskId, codingAgent.taskId),
+      eq(taskIssue.provider, TASK_ISSUE_PROVIDER.LINEAR),
+    ),
+  )
+  .orderBy(asc(taskIssue.createdAt), asc(taskIssue.id))
+  .limit(1)})`;
 
 /** The pull request states under which a pull request is still open for review or still a draft. */
 const OPEN_PULL_REQUEST_STATES: readonly string[] = [
@@ -1240,6 +1264,7 @@ export function createCodingAgent(
           startBranch: started.startBranch ?? null,
           disabledServers: storedServers(started.disabledServers ?? []),
           mentionedServers: storedServers(started.mentionedServers ?? []),
+          githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
         return Option.some({ agent: row, created: true });

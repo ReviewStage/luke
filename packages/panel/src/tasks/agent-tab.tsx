@@ -12,7 +12,6 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { FAILURE_REASON, type FailureReason, remedyLabel } from "@luke/features/failure-remedy";
 import { inboxLineWords } from "@luke/features/inbox-wire";
-import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel, ModelChoice } from "@luke/features/models-wire";
 import type { KnownNames } from "@luke/features/place-chip-model";
 import { CALL_KIND, CALL_WORDS } from "@luke/features/turn-rows";
@@ -24,8 +23,6 @@ import {
   DocumentIcon,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  HoverCard,
-  HoverCardHead,
   INLINE_REF_LOOK,
   TEXT_LINK_LOOK,
   TEXT_TONE,
@@ -37,14 +34,7 @@ import { MESSAGE_ROLE } from "@luke/wire";
 import { BotIcon, WebhookIcon, ZapIcon } from "lucide-react";
 import { Fragment, type ReactNode, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
-import {
-  ACTOR_SIZE,
-  ActorLine,
-  ActorMark,
-  ActorRef,
-  AutomationCard,
-  automationActor,
-} from "../actor-ref.js";
+import { ActorLine, ActorRef, AutomationCard, automationActor } from "../actor-ref.js";
 import {
   Conversation,
   ConversationContent,
@@ -71,6 +61,7 @@ import {
   useAgentPictureDoor,
 } from "./agent-pictures.js";
 import { type PublishedDoors, PublishedRow } from "./agent-published.js";
+import { SendingAgent } from "./agent-ref.js";
 import type { AgentServersControl } from "./agent-servers.js";
 import type { HeldTranscript } from "./agent-tab-card.js";
 import { ArchivedComposerNote } from "./archived-task.js";
@@ -118,7 +109,6 @@ import { CopyMessageAction } from "./copy-message.js";
 import { ForkedToLine, useForkOffered } from "./fork-action.js";
 import { type ForkCut, forkCutOf, openReply } from "./fork-model.js";
 import { linkChip } from "./mention-chip.js";
-import { MentionedAgentCard } from "./mentioned-agent-card.js";
 import {
   agentMessagePlace,
   MESSAGE_GONE,
@@ -172,7 +162,6 @@ import { useAgentServers } from "./use-agent-servers.js";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { useKnownNames } from "./use-known-names.js";
-import { useOpenPlace } from "./use-open-link.js";
 import { WorkedFor, WorkingLine } from "./working-time.js";
 
 /**
@@ -970,49 +959,6 @@ function MessageSender({ actor }: { actor: Actor }): React.JSX.Element {
       )}
     </span>
   );
-}
-
-/**
- * Another coding agent named as a line's sender, by the id the service
- * answered for it: its harness's mark and its name, as it sent the line,
- * hanging its tab's card as it stands now, read as the card is first hung
- * (`mentioned-agent-card.tsx`), and opening its tab on a press.
- */
-function SendingAgent({
-  actor,
-  agentId,
-}: {
-  actor: Extract<Actor, { kind: typeof ACTOR_KIND.AGENT }>;
-  agentId: string;
-}): React.JSX.Element {
-  const { workspaceId } = useMemberDirectory();
-  const openPlace = useOpenPlace();
-  const { taskId } = actor;
-  // Its own card stands while the agent is read, and where the read answers nothing.
-  const fallback = (
-    <HoverCard>
-      <HoverCardHead glyph={<ActorMark actor={actor} size={ACTOR_SIZE.CARD} />} name={actor.name} />
-    </HoverCard>
-  );
-  const card = (
-    <MentionedAgentCard
-      agentId={agentId}
-      taskId={taskId}
-      name={actor.name}
-      workspaceId={workspaceId}
-      fallback={fallback}
-    />
-  );
-  const open =
-    openPlace === undefined
-      ? undefined
-      : () =>
-          openPlace({
-            kind: LINK_PLACE.AGENT,
-            ...(taskId === undefined ? undefined : { planId: taskId }),
-            agentId,
-          });
-  return <ActorRef actor={actor} card={card} onOpen={open} />;
 }
 
 /** One of the developer's lines that reached a turn while it ran, with who sent it, named over it as any line of theirs is. */

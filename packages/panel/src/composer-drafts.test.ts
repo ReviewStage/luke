@@ -465,6 +465,86 @@ test("a task opened from a tab pinned to the sidebar is open still, so its row w
   assert.equal(away(INVITES.plan.name), true);
 });
 
+/** The workspace New task starts its tasks in. */
+const WORKSPACE = "workspace-personal";
+
+/** New task's words as storage keeps them, in `workspaceId`, and on one of its issues where `issueId` names one. */
+function newTaskEntry(workspaceId: string, issueId?: string) {
+  return {
+    accountId: null,
+    place: { kind: "newTask", workspaceId, ...(issueId === undefined ? undefined : { issueId }) },
+    text: "Expire invites after a week",
+  };
+}
+
+/** Whether the sidebar's New task row wears the Draft pencil, drawn over `tasks` with the drafts storage holds. */
+async function newTaskDrafted(tasks: TasksControl): Promise<boolean> {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      onRegistry(AtomRegistry.make(), createElement(DesktopSidebar, sidebarProps(tasks))),
+    ),
+  );
+  await settle();
+  const row =
+    [...container.querySelectorAll<HTMLElement>("button")].find((button) =>
+      button.querySelector(".luke-nav-item-name")?.textContent?.startsWith("New task"),
+    ) ?? assert.fail("the sidebar draws New task");
+  const drafted = row.querySelector(`[role="img"][aria-label="${DRAFT_WORD}"]`) !== null;
+  for (const each of roots.splice(0)) act(() => each.unmount());
+  return drafted;
+}
+
+test("words left in New task's card mark its sidebar row with the Draft pencil while neither the card nor Home shows them", async () => {
+  const inWorkspace = (overrides: Partial<TasksControl["newTask"]> = {}) =>
+    tasksControl({
+      page: TASKS_PAGE.DOCUMENT,
+      tasks: [INVITES.plan],
+      activeTaskId: INVITES.plan.id,
+      newTask: { ...tasksControl().newTask, workspaceId: WORKSPACE, ...overrides },
+    });
+  assert.equal(await newTaskDrafted(inWorkspace()), false, "nothing is kept yet");
+
+  window.localStorage.setItem("luke.composerDrafts", JSON.stringify([newTaskEntry(WORKSPACE)]));
+  assert.equal(await newTaskDrafted(inWorkspace()), true, "the words wait while a task is open");
+  assert.equal(
+    await newTaskDrafted(inWorkspace({ open: true })),
+    false,
+    "the open card shows them",
+  );
+  assert.equal(
+    await newTaskDrafted({ ...inWorkspace(), page: TASKS_PAGE.HOME }),
+    false,
+    "Home's composer shows them",
+  );
+  assert.equal(
+    await newTaskDrafted({
+      ...inWorkspace(),
+      page: TASKS_PAGE.HOME,
+      personView: { ...tasksControl().personView, userId: "user-sam", name: "Sam" },
+    }),
+    true,
+    "a person's page opened from Home stands in its composer's place",
+  );
+  assert.equal(
+    await newTaskDrafted(inWorkspace({ workspaceId: "workspace-team" })),
+    false,
+    "another workspace's New task starts from nothing of this one's",
+  );
+
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([newTaskEntry(WORKSPACE, "issue-invites")]),
+  );
+  assert.equal(
+    await newTaskDrafted(inWorkspace()),
+    false,
+    "a card opened on an issue keeps its words for that issue alone",
+  );
+});
+
 /** The key the Teammate invitations task's draft agent starts under. */
 const DRAFT_KEY = "draft-invites";
 
@@ -734,6 +814,7 @@ async function tasklessInbox(agentId: string, items: readonly InboxItem[]) {
         heldIds: [agentId],
         readInbox: () => new Promise(() => undefined),
         answerInbox: () => new Promise(() => undefined),
+        closeInbox: () => new Promise(() => undefined),
         messageInbox: () => new Promise(() => undefined),
         readInboxImage: () => new Promise(() => undefined),
         onRetryList: () => undefined,

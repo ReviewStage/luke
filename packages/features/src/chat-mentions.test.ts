@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { chatMentionsIn, chatWordsForAgents } from "./chat-mentions.js";
+import { chatMentionsIn, chatTargetMember, withoutMemberLinks } from "./chat-mentions.js";
 import { encodeMention, MENTION_KIND } from "./mention-link.js";
 
 /**
- * chat-mentions.test.ts -- whom a chat message's words name, as links and as handles, and the words an agent reads back.
+ * chat-mentions.test.ts -- whom a chat message's words name as mention links, and the member a post's `to` names.
  */
 
 const PLACE = { workspace: "acme", repository: null } as const;
@@ -17,7 +17,7 @@ const agent = `[@Invite emails](${encodeMention({ kind: MENTION_KIND.AGENT, agen
 const luke = `[@Luke](${encodeMention({ kind: MENTION_KIND.LUKE, taskId: TASK }, PLACE)})`;
 const task = `[@Teammate invitations](${encodeMention({ kind: MENTION_KIND.TASK, taskId: TASK }, PLACE)})`;
 
-test("a message names the people, agents, and Lukes its links write, and the handles typed outside any link, never a link's label read as a handle", () => {
+test("a message names the people, agents, and Lukes its links write, and an @word outside any link names no one", () => {
   const read = chatMentionsIn(`${person} and ${agent}, ask ${luke} and @maria about ${task}`);
   assert.deepEqual(
     read.members.map(({ mention, label }) => [mention.kind, label]),
@@ -27,18 +27,17 @@ test("a message names the people, agents, and Lukes its links write, and the han
       [MENTION_KIND.LUKE, "@Luke"],
     ],
   );
-  assert.deepEqual(read.handles, ["maria"]);
 });
 
-test("an agent reads each member's link as its @handle, a link to no member as its label, and any other link as written", () => {
-  const words = chatWordsForAgents(`${person}, ${agent}, ${luke}: see ${task}`, (mention) =>
-    mention.kind === MENTION_KIND.AGENT
-      ? "agent-2"
-      : mention.kind === MENTION_KIND.LUKE
-        ? "luke"
-        : undefined,
-  );
-  assert.equal(words, `@Ada Lovelace, @agent-2, @luke: see ${task}`);
+test("a `to` names the member its mention link names, written whole or as its address, and nothing for a channel, a task, or a handle", () => {
+  const address = encodeMention({ kind: MENTION_KIND.PERSON, userId: USER }, PLACE);
+  assert.deepEqual(chatTargetMember(person), { kind: MENTION_KIND.PERSON, userId: USER });
+  assert.deepEqual(chatTargetMember(address), { kind: MENTION_KIND.PERSON, userId: USER });
+  assert.deepEqual(chatTargetMember(luke), { kind: MENTION_KIND.LUKE, taskId: TASK });
+  assert.equal(chatTargetMember(task), undefined);
+  assert.equal(chatTargetMember("#general"), undefined);
+  assert.equal(chatTargetMember("@agent-2"), undefined);
+  assert.equal(chatTargetMember(`${person} and more`), undefined);
 });
 
 test("a member named after many references is still read, however many references come first", () => {
@@ -48,8 +47,14 @@ test("a member named after many references is still read, however many reference
     read.members.map(({ mention }) => mention.kind),
     [MENTION_KIND.PERSON],
   );
+});
+
+test("a member's link is written as its name alone, its address written bare too, and a link to anything else stays as written", () => {
   assert.equal(
-    chatWordsForAgents(`${references} and ${person}`, () => "ada"),
-    `${references} and @ada`,
+    withoutMemberLinks(`${person}, ${agent} and ${luke}: see ${task}`),
+    `@Ada Lovelace, @Invite emails and @Luke: see ${task}`,
   );
+  const bare = encodeMention({ kind: MENTION_KIND.PERSON, userId: USER }, PLACE);
+  const plan = encodeMention({ kind: MENTION_KIND.TASK, taskId: TASK }, PLACE);
+  assert.equal(withoutMemberLinks(`ask ${bare} about ${plan}`), `ask @Person about ${plan}`);
 });

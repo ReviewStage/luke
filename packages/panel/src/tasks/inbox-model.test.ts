@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
@@ -8,6 +10,7 @@ import {
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
+  type InboxAsk,
   type InboxItem,
   type InboxMessage,
 } from "@luke/features/inbox-wire";
@@ -17,6 +20,9 @@ import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
+  ANSWER_TONE,
+  answeredWords,
+  attachedStamp,
   CODE_READ,
   codeNotice,
   codeReadOf,
@@ -46,16 +52,20 @@ import {
   inboxPreview,
   inboxReply,
   inboxSteps,
+  inboxThreadOf,
+  inboxThreadSend,
   listedItems,
   nextNeedingYou,
   numberedPick,
   proposedOptions,
   SETTLED_BY,
+  sentStamp,
   settlementOf,
   taskHolder,
   tasklessGroups,
   withChoice,
   withDecision,
+  withStep,
   withValue,
 } from "./inbox-model.js";
 
@@ -1137,15 +1147,28 @@ test("an answered item previews its answer after who gave it: the options picked
   assert.equal(inboxPreview(unnamed, previewName), "Someone: Approved");
 });
 
-test("an item its agent took back previews that it was withdrawn and why, or that alone where it gave no reason", () => {
+test("an item its agent took back previews that it was withdrawn and why", () => {
   const withdrawn = item({
     id: "f1",
     status: INBOX_STATUS.CLOSED,
     closedReason: "the plan settled on 5",
   });
   assert.equal(inboxPreview(withdrawn, previewName), "Withdrawn: the plan settled on 5");
-  const { closedReason: _reason, ...unexplained } = withdrawn;
-  assert.equal(inboxPreview(unexplained, previewName), "Withdrawn");
+});
+
+test("an item a member closed without an answer previews who closed it, You for the reader, and never reads as withdrawn by its agent", () => {
+  const closed = item({ id: "f2", status: INBOX_STATUS.CLOSED, closedBy: YOU });
+  assert.equal(inboxPreview(closed, previewName), "You: Closed without answering");
+  assert.equal(
+    inboxPreview({ ...closed, closedBy: CHARLES }, previewName),
+    "Charles Pan: Closed without answering",
+  );
+  const { closedBy: _by, ...unnamed } = closed;
+  assert.equal(
+    inboxPreview(unnamed, previewName),
+    "Someone: Closed without answering",
+    "a closed item without the agent's reason is a member's, though their account is gone",
+  );
 });
 
 test("the latest message on an item's thread is its preview, open or settled, led by the agent, You, or the teammate who wrote it, a message of files alone saying so; a settlement after the last message is the preview instead", () => {
@@ -1263,4 +1286,118 @@ test("an item's media are its pictures and the pages it names, by any link outsi
     { kind: INBOX_MEDIA.PAGE, taskId: elsewhere, pageId: funnel },
   ]);
   assert.deepEqual(inboxMedia(item({ id: "m2" })), []);
+});
+
+/** The agent's message ending with `ask`, open unless it says otherwise. */
+function asking(ask: InboxAsk, id = "b1b2c3d4-0000-4000-8000-000000000001"): InboxMessage {
+  return {
+    id,
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+    text: "Which way?",
+    ask: { ...ask, status: INBOX_ASK_STATUS.OPEN },
+    createdAt: 1_000,
+  };
+}
+
+const ASKING_ID = "b1b2c3d4-0000-4000-8000-000000000001";
+
+test("an item is drawn as its thread where the thread asks, or where the agent's note opens it with nothing in the item's blocks; one from before version 5, its question in its blocks, is drawn as it was", () => {
+  const plain: InboxMessage = {
+    id: "b1b2c3d4-0000-4000-8000-000000000009",
+    author: INBOX_MESSAGE_AUTHOR.MEMBER,
+    member: DANA,
+    text: "Hm.",
+    createdAt: 2_000,
+  };
+  const note: InboxMessage = { ...plain, author: INBOX_MESSAGE_AUTHOR.AGENT, text: "Shipped." };
+  const asked = asking({ type: INBOX_ASK.ANSWER });
+  const words = [{ type: INBOX_BLOCK.MARKDOWN, text: "What should the email say?" }] as const;
+
+  assert.deepEqual(inboxThreadOf(item({ id: QUEUE.id, thread: [asked, plain] })), [asked, plain]);
+  assert.deepEqual(inboxThreadOf(item({ id: QUEUE.id, thread: [note] })), [note]);
+  assert.equal(inboxThreadOf(item({ id: QUEUE.id, blocks: words, thread: [note] })), undefined);
+  assert.equal(inboxThreadOf(item({ id: QUEUE.id, blocks: words, thread: [plain] })), undefined);
+  assert.equal(inboxThreadOf(item({ id: QUEUE.id, thread: [plain] })), undefined);
+  assert.equal(inboxThreadOf(item({ id: QUEUE.id })), undefined);
+});
+
+test("a reply on a thread is plain unless an answer is attached: a pick, a press, or Submit; an attached answer the ask would refuse sends nothing, as Answer with no words or Mark done with a step unticked", () => {
+  const pick: InboxAsk = { type: INBOX_ASK.DECIDE, options: [{ label: "A" }, { label: "B" }] };
+  const decide = [asking(pick)];
+  const draft: InboxDraft = { ...EMPTY_INBOX_DRAFT, note: "  Why not C?  " };
+  assert.deepEqual(inboxThreadSend(decide, draft), { text: "Why not C?", attachments: [] });
+  assert.equal(
+    inboxThreadSend(decide, EMPTY_INBOX_DRAFT),
+    undefined,
+    "an empty reply sends nothing",
+  );
+  assert.deepEqual(inboxThreadSend(decide, { ...EMPTY_INBOX_DRAFT, choices: ["B"] }), {
+    text: "",
+    attachments: [],
+    answers: { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: ["B"] },
+  });
+
+  const answer = [asking({ type: INBOX_ASK.ANSWER })];
+  const pressed: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.ANSWERED };
+  assert.equal(inboxThreadSend(answer, pressed), undefined, "Answer's words are the answer");
+  assert.deepEqual(inboxThreadSend(answer, { ...pressed, note: "Use 90%" })?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.ANSWERED,
+  });
+
+  const steps = [asking({ type: INBOX_ASK.DO, steps: ["One", "Two"] })];
+  const done: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.DONE, steps: [1] };
+  assert.equal(inboxThreadSend(steps, done), undefined);
+  assert.deepEqual(inboxThreadSend(steps, { ...done, press: INBOX_REPLY.NOT_DONE })?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.NOT_DONE,
+    steps: [1],
+  });
+  assert.deepEqual(inboxThreadSend(steps, withStep(done, 0))?.answers?.steps, [0, 1]);
+
+  const settled: InboxMessage = {
+    ...asking(pick),
+    ask: { ...pick, status: INBOX_ASK_STATUS.ANSWERED },
+  };
+  assert.deepEqual(
+    inboxThreadSend([settled], { ...EMPTY_INBOX_DRAFT, choices: ["B"], note: "x" }),
+    { text: "x", attachments: [] },
+    "a pick on a settled ask is no answer",
+  );
+});
+
+test("an answer's stamp names a pair of buttons' pick in the past where it can and which way it goes, any other pick by its options, and a to-do by the steps it ticked", () => {
+  const pair = asking({
+    type: INBOX_ASK.DECIDE,
+    options: [{ label: "Approve" }, { label: "Request changes" }],
+  }).ask;
+  const chose = (label: string) => ({
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.CHOSE,
+    choices: [label],
+  });
+  assert.deepEqual(sentStamp(chose("Approve"), pair), {
+    tone: ANSWER_TONE.AHEAD,
+    words: "Approved",
+  });
+  assert.deepEqual(sentStamp(chose("Request changes"), pair), {
+    tone: ANSWER_TONE.BACK,
+    words: "Requested changes",
+  });
+  assert.deepEqual(attachedStamp(chose("Request changes"), pair), {
+    tone: ANSWER_TONE.BACK,
+    words: "Request changes",
+  });
+  assert.equal(answeredWords(chose("Request changes"), pair), "requested changes");
+  assert.equal(sentStamp(chose("7 days"), undefined).words, "Chose 7 days");
+  assert.equal(attachedStamp(chose("7 days"), undefined).words, 'Choose "7 days"');
+
+  const todo = asking({ type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] }).ask;
+  const done = { ask: ASKING_ID, reply: INBOX_REPLY.DONE, steps: [0, 1, 2] };
+  assert.deepEqual(sentStamp(done, todo), { tone: ANSWER_TONE.AHEAD, words: "Done 3/3" });
+  assert.deepEqual(sentStamp({ ...done, reply: INBOX_REPLY.NOT_DONE, steps: [0] }, todo), {
+    tone: ANSWER_TONE.BACK,
+    words: "Couldn't do it 1/3",
+  });
+  assert.equal(attachedStamp(done, todo).words, "Mark done");
 });

@@ -129,10 +129,29 @@ export interface EditorDiagram {
   readonly previous: string | undefined;
 }
 
+/**
+ * What the panel may do to a mention it draws: name it anew in place, the
+ * caret put after it and the editor focused where asked, in one change undo
+ * takes back whole; take it out of the words; or put the caret after it
+ * and the editor focused, as a picker it opened closes.
+ */
+export interface MentionNodeDoors {
+  readonly rename: (mention: MentionNode, focus: boolean) => void;
+  readonly remove: () => void;
+  readonly focusAfter: () => void;
+}
+
+/** Draws a mention into the element its node stands as, with the doors to its node; answers what takes the drawing down. */
+export type MentionDrawer = (
+  element: HTMLElement,
+  mention: MentionNode,
+  doors: MentionNodeDoors,
+) => () => void;
+
 /** The composer's mentions, as the box picks and draws them. */
 interface ComposerMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
-  readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
+  readonly drawMention: MentionDrawer;
   /** The mention words pasted whole stand for, an address of Luke's own or a page of an integration's; nothing for any other words, which paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
   /** The `#` word the caret ends, as it changes, where the box names channels (chat's); none where it names none. */
@@ -169,7 +188,7 @@ export interface HeadingsChange {
 export interface PlanEditorMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly onKey: (event: KeyboardEvent) => boolean;
-  readonly drawMention: (element: HTMLElement, mention: MentionNode) => () => void;
+  readonly drawMention: MentionDrawer;
   readonly retarget: (target: string, change: HeadingsChange) => string | undefined;
   /** The mention words pasted whole stand for, an address of Luke's own or a page of an integration's; nothing for any other words, which paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;

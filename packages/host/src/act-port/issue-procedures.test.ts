@@ -14,9 +14,12 @@ import {
   type PortActResult,
 } from "../contract/index.js";
 import {
-  type AccountAskProceduresDependencies,
+  type ActPortDependencies,
   createActPortHandler,
   type IssueProceduresDependencies,
+  type PlatformActProcedures,
+  type TasksProceduresDependencies,
+  type WorkspaceProceduresDependencies,
 } from "./index.js";
 
 /**
@@ -55,8 +58,21 @@ const ACTS = [
 
 type HostAsk = IssueProceduresDependencies["host"];
 
+// SAFETY: these tests call the issue procedures alone, and building the others reads none of these.
+const UNREACHED = { accountAsks: {}, account: {}, settings: {} } as unknown as Omit<
+  ActPortDependencies,
+  "issues"
+>;
+
 /** The params any one of the host's issue asks takes. */
 type IssueParams = Parameters<HostAsk[keyof HostAsk]>[0];
+
+/** The workspace procedures' host, never asked here. */
+const NO_WORKSPACES: WorkspaceProceduresDependencies = {
+  // SAFETY: no test here calls a workspace kind, so no method of this host is ever read.
+  host: {} as WorkspaceProceduresDependencies["host"],
+  openExternal: () => Promise.resolve(),
+};
 
 const opened: MessagePort[] = [];
 
@@ -87,9 +103,25 @@ function windowPort(
     issueCreate: ask("create"),
     issueChange: ask("change"),
   } as HostAsk;
-  // SAFETY: no account ask is called here, so the account asks' host is never reached.
-  const accountAsks = { host: {} } as AccountAskProceduresDependencies;
-  const handler = createActPortHandler({ accountAsks, issues: { host } });
+  // SAFETY: these tests call the issue kinds alone, so no platform procedure is reached.
+  const platform = {} as PlatformActProcedures<unknown>;
+  // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
+  const tasks = { host: {} } as TasksProceduresDependencies;
+  // SAFETY: no agent, inbox, chat, automation, factory, or integration act is called here, so their hosts are never reached.
+  const elsewhere = {
+    agentInbox: { host: {} },
+    agents: { host: {}, notices: {} },
+    automations: { host: {} },
+    factory: { host: {} },
+    integrations: { host: {} },
+  } as Pick<
+    ActPortDependencies,
+    "agentInbox" | "agents" | "automations" | "factory" | "integrations"
+  >;
+  const handler = createActPortHandler(
+    { ...UNREACHED, ...elsewhere, issues: { host }, tasks, workspaces: NO_WORKSPACES },
+    platform,
+  );
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {
@@ -175,6 +207,21 @@ it("a payload its kind's schema refuses is refused in the kind's own words, and 
       error instanceof ORPCError &&
       error.code === ACT_ERROR.REFUSED &&
       error.message === REFUSAL[ISSUE_ACT_KIND.ISSUES_CREATE],
+  );
+  assert.deepEqual(asked, []);
+});
+
+it("a payload carrying a key its kind's schema does not name is refused in the kind's own words, and the host is not asked", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const call = portCall(client, ISSUE_ACT_KIND.ISSUES_LIST);
+  // SAFETY: the stray key is the point; a window's payload crosses as a structured-clone value.
+  const strayed = { workspaceId: WORKSPACE_ID, stray: true } as PortActPayload<PortActKind>;
+  await assert.rejects(
+    call(strayed),
+    (error) =>
+      error instanceof ORPCError &&
+      error.code === ACT_ERROR.REFUSED &&
+      error.message === REFUSAL[ISSUE_ACT_KIND.ISSUES_LIST],
   );
   assert.deepEqual(asked, []);
 });

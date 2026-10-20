@@ -5,8 +5,7 @@
  * sizes, and names, never a byte a shell printed; the bytes travel on one
  * `MessagePort` per attached shell, posted by main to the panel that asked
  * and to no other window, so nothing a shell prints ever enters app state,
- * an act, a trace, or the voice window (`docs/proposals/terminal-architecture.md`
- * §11). The port is posted on its own channel with a ticket naming the
+ * an act, a trace, or the voice window. The port is posted on its own channel with a ticket naming the
  * shell; the preload hands it into the page the way Electron hands a port to
  * an isolated world, and the page reads it back by that channel.
  */
@@ -24,9 +23,6 @@ export {
   TERMINAL_CONNECTION,
   TERMINAL_REFUSAL,
   type TerminalConnection,
-  type TerminalCreatedActAnswer,
-  type TerminalResumedActAnswer,
-  type TerminalsActAnswer,
   terminalAgentParamsSchema,
   terminalCreatedActAnswerSchema,
   terminalCreateParamsSchema,

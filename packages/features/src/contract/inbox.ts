@@ -1,5 +1,5 @@
 /**
- * inbox.ts -- what an agent posted for the developer (`inbox-wire.ts`, `account-inbox-wire.ts`), read, answered, messaged, and marked read.
+ * inbox.ts -- what an agent posted for the developer (`inbox-wire.ts`, `account-inbox-wire.ts`), read, answered, closed, messaged, and marked read.
  *
  * The three reads, a task's, an agent's, and the account's, are held by the
  * service while nothing changed since the reader's cursor, and travel as
@@ -18,6 +18,7 @@ import {
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
+  inboxCloseRequestSchema,
   inboxCursorSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
@@ -33,6 +34,7 @@ const INBOX_PROCEDURE_PATH = {
   TASK: "/api/plans/{id}/inbox",
   AGENT: "/api/agents/{id}/inbox",
   ITEM: "/api/inbox/{id}",
+  ITEM_CLOSE: "/api/inbox/{id}/close",
   ITEM_MESSAGES: "/api/inbox/{id}/messages",
   ITEM_READ: "/api/inbox/{id}/read",
 } as const;
@@ -73,6 +75,16 @@ export const inboxContract = {
       }),
     )
     .input(exactBodyInput(pathIdSchema, inboxAnswerRequestSchema))
+    .output(EffectSchema.flip(inboxAnsweredSchema)),
+  close: hostedProcedure
+    .meta(
+      openapi({
+        method: HTTP_METHOD.POST,
+        path: INBOX_PROCEDURE_PATH.ITEM_CLOSE,
+        inputStructure: "detailed",
+      }),
+    )
+    .input(exactBodyInput(pathIdSchema, inboxCloseRequestSchema))
     .output(EffectSchema.flip(inboxAnsweredSchema)),
   message: hostedProcedure
     .meta(

@@ -1,4 +1,6 @@
 import {
+  agentMembersOf,
+  type ChatAgentMember,
   type ChatChannelRow,
   type ChatMemberRow,
   type ChatMessageRow,
@@ -11,6 +13,7 @@ import {
   ensureMember,
   roster,
 } from "@luke/database/models/chat-store";
+import { readAccountNames } from "@luke/database/models/workspace-store";
 import {
   CHANNEL_KIND,
   type ChatAnswer,
@@ -51,21 +54,28 @@ function chatCursorOf(seq: number): string {
   return String(seq + 1);
 }
 
-/** A member as the window reads one. */
-function memberOnWire(row: ChatMemberRow): ChatMember {
+/** A member as the window reads one: a person by their account's name where `people` holds it, an agent by the name its tab shows and on the plan it works on where `agents` names them, and a Luke on his plan. */
+function memberOnWire(
+  row: ChatMemberRow,
+  agents: ReadonlyMap<string, ChatAgentMember>,
+  people: ReadonlyMap<string, string>,
+): ChatMember {
+  const agent = row.agentId === null ? undefined : agents.get(row.agentId);
+  const planId = row.taskId ?? agent?.taskId;
+  const name = row.userId === null ? agent?.name : people.get(row.userId);
   return {
     id: row.id,
     kind: row.kind,
     handle: row.handle,
+    ...(name === undefined ? undefined : { name }),
     ...(row.userId === null ? undefined : { userId: row.userId }),
     ...(row.agentId === null ? undefined : { agentId: row.agentId }),
-    ...(row.taskId === null ? undefined : { planId: row.taskId }),
+    ...(planId === undefined ? undefined : { planId }),
     left: row.leftAt !== null,
   };
 }
 
-/** A channel as the window reads one, a DM's two members named. */
-function channelOnWire(row: ChatChannelRow): ChatChannel {
+export function channelOnWire(row: ChatChannelRow): ChatChannel {
   const pair =
     row.kind === CHANNEL_KIND.DM && row.dmAMemberId !== null && row.dmBMemberId !== null
       ? { members: [row.dmAMemberId, row.dmBMemberId] }
@@ -77,6 +87,7 @@ function channelOnWire(row: ChatChannelRow): ChatChannel {
     ...(row.taskId === null ? undefined : { planId: row.taskId }),
     ...pair,
     archived: row.archivedAt !== null,
+    ...(row.purpose === null ? undefined : { purpose: row.purpose }),
   };
 }
 
@@ -182,6 +193,10 @@ export function workspaceChatPast(
     const past = yield* chatPast(userId, organizationId, self.value.id, after);
     if (Option.isNone(past)) return Option.none();
     const members = yield* roster(userId, organizationId);
+    const agents = yield* agentMembersOf(userId, organizationId);
+    const people = yield* readAccountNames(
+      members.flatMap((member) => (member.userId === null ? [] : [member.userId])),
+    );
     const channels = yield* channelsOf(userId, organizationId);
     const reader = members.find((member) => member.id === self.value.id) ?? self.value;
     const reads = yield* channelReads(userId, organizationId, reader.id);
@@ -189,7 +204,7 @@ export function workspaceChatPast(
       self: reader.id,
       readSeq: reader.readSeq,
       ...readsPast(reader.readSeq, reads),
-      members: members.map(memberOnWire),
+      members: members.map((member) => memberOnWire(member, agents, people)),
       channels: channels.map(channelOnWire),
       messages: past.value.messages.map(messageOnWire),
       cursor: chatCursorOf(past.value.cursor),

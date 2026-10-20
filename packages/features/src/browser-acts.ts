@@ -1,8 +1,8 @@
 /**
  * browser-acts.ts -- what a Browser tab says to the main process and hears back: the address a typed line opens, its acts' payloads, and how its page stands.
  *
- * A Browser tab draws one web page in a view main owns over the panel
- * (`docs/proposals/browser-tab.md`), so the tab names its view by an id it
+ * A Browser tab draws one web page in a view main owns over the panel,
+ * so the tab names its view by an id it
  * made and main keeps the page. The acts carry an address, a step, and where
  * the view stands on the window, never the page itself; what comes back is
  * how the page stands, its address, title, and whether it can step back or

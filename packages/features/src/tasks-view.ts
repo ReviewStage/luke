@@ -10,12 +10,14 @@ import {
   turnRecordFields,
 } from "./coding-agent-wire.js";
 import {
+  GITHUB_ISSUES_BOUNDS,
   githubIssueSummarySchema,
   githubPullRequestNumberSchema,
   githubPullRequestSummarySchema,
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
   githubRepositoryIssueAnswerSchema,
+  githubRepositoryIssuesAnswerSchema,
   githubRepositoryPullRequestAnswerSchema,
 } from "./github-repositories-wire.js";
 import { linearIssueSummarySchema } from "./linear-wire.js";
@@ -47,9 +49,11 @@ import {
   taskFileRefusalSchema,
   taskFileRequestSchema,
   taskFileTextSchema,
+  taskPrioritySchema,
   taskRenameRequestSchema,
   taskSchema,
   taskSkillsSchema,
+  taskStatusSchema,
   taskSummarySchema,
   taskTreeFolderSchema,
   taskTreeRequestSchema,
@@ -555,6 +559,20 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
+/** Whether a change of where a task stands names its status, its priority, or both. */
+function namesAStanding(params: { status?: unknown; priority?: unknown }): boolean {
+  return params.status !== undefined || params.priority !== undefined;
+}
+
+/** Setting where a task stands, how much it matters, or both, as the window asks it. */
+export const tasksSetStandingParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  status: EffectSchema.optionalKey(taskStatusSchema),
+  priority: EffectSchema.optionalKey(taskPrioritySchema),
+}).check(EffectSchema.makeFilter(namesAStanding));
+
+export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;
+
 /** Moving a task to another of the account's workspaces: the task, and the workspace it moves to. */
 export const tasksMoveParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
@@ -779,8 +797,6 @@ export type TasksPullRequestAnswer = typeof tasksPullRequestAnswerSchema.Type;
 /** The pull request as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksPullRequestSchema = EffectSchema.NullOr(githubPullRequestSummarySchema);
 
-export type TasksPullRequest = typeof tasksPullRequestSchema.Type;
-
 /** One issue of a repository, as a link to it asks the host for it: the workspace whose installation reaches the repository, the repository, and the issue's number. */
 export const tasksIssueParamsSchema = EffectSchema.Struct({
   ...repositoryPlaceFields,
@@ -800,7 +816,29 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
 
-export type TasksIssue = typeof tasksIssueSchema.Type;
+/**
+ * A repository's issues, as New task's picker asks the host for them: the
+ * workspace whose installation reaches the repository, the repository, and
+ * the words to search for or the number of the one issue asked, its open
+ * issues where neither is named.
+ */
+export const tasksGitHubIssuesParamsSchema = EffectSchema.Struct({
+  ...repositoryPlaceFields,
+  query: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(GITHUB_ISSUES_BOUNDS.MAX_QUERY_CHARS)),
+  ),
+  number: EffectSchema.optionalKey(githubPullRequestNumberSchema),
+});
+
+export type TasksGitHubIssuesParams = typeof tasksGitHubIssuesParamsSchema.Type;
+
+/** A repository's issues, as the window hears them: the issues, that the installation grants none, or that the service did not answer. */
+export const tasksGitHubIssuesAnswerSchema = EffectSchema.Union([
+  githubRepositoryIssuesAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(TASK_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type TasksGitHubIssuesAnswer = typeof tasksGitHubIssuesAnswerSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({

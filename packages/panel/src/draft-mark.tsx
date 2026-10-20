@@ -1,5 +1,5 @@
 /**
- * draft-mark.tsx -- the small muted pencil a sidebar task's row wears while a draft waits in one of its boxes and another task is open, and an Inbox item's row while its box holds one and another item is chosen (`composer-drafts.ts`).
+ * draft-mark.tsx -- the small muted pencil a sidebar task's row wears while a draft waits in one of its boxes and another task is open, an Inbox item's row while its box holds one and another item is chosen, and the sidebar's New task row while its words wait in the workspace and neither its card nor Home shows them (`composer-drafts.ts`).
  *
  * Slack marks a channel holding an unsent message with a pencil, and a
  * draft here wears the same, in a row's marks before its time, in the muted

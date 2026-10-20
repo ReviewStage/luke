@@ -12,6 +12,7 @@ import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { linearIssueIdSchema } from "./linear-wire.js";
 import { pinPositionSchema } from "./pin-order.js";
 import { countedNumber, memberRefSchema, wireUuidSchema } from "./service-wire.js";
+import { sameIssueChoice, type TaskIssueChoice, taskIssueChoiceSchema } from "./task-issue-wire.js";
 
 /**
  * task-wire.ts -- a named feature task and its one saved document, as the Tasks tab and the service read them.
@@ -63,10 +64,63 @@ export const TASK_BOUNDS = {
   MAX_WORKSPACE_ID_CHARS: 200,
   /** The most characters a task's brief may spell: as many as a coding agent's prompt (`CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS`). */
   MAX_BRIEF_CHARS: 16_000,
+  /** The most external issues one task may link (`task-issue-wire.ts`); a link past it is refused, and nothing is written. */
+  MAX_ISSUES: 10,
 } as const;
 
 /** The name a plan started without one stands under until the developer renames it. */
 export const UNTITLED_TASK_NAME = "Untitled";
+
+/**
+ * Where a task stands: filed for later, to do, under way, or settled one way
+ * or the other. A task starts to do, and moves to in progress when a coding
+ * agent first starts on it; archiving it is apart from where it stands.
+ */
+export const TASK_STATUS = {
+  BACKLOG: "backlog",
+  TODO: "todo",
+  IN_PROGRESS: "in-progress",
+  DONE: "done",
+  CANCELED: "canceled",
+} as const;
+
+export type TaskStatus = (typeof TASK_STATUS)[keyof typeof TASK_STATUS];
+
+/** The order a menu lists the statuses in: the order work moves through them, the settled last. */
+export const TASK_STATUS_ORDER: readonly TaskStatus[] = [
+  TASK_STATUS.BACKLOG,
+  TASK_STATUS.TODO,
+  TASK_STATUS.IN_PROGRESS,
+  TASK_STATUS.DONE,
+  TASK_STATUS.CANCELED,
+];
+
+/** How much a task matters; none is a task no one has weighed yet. */
+export const TASK_PRIORITY = {
+  NONE: "none",
+  URGENT: "urgent",
+  HIGH: "high",
+  MEDIUM: "medium",
+  LOW: "low",
+} as const;
+
+export type TaskPriority = (typeof TASK_PRIORITY)[keyof typeof TASK_PRIORITY];
+
+/** The order a menu lists the priorities in: the most pressing first, the unweighed last. */
+export const TASK_PRIORITY_ORDER: readonly TaskPriority[] = [
+  TASK_PRIORITY.URGENT,
+  TASK_PRIORITY.HIGH,
+  TASK_PRIORITY.MEDIUM,
+  TASK_PRIORITY.LOW,
+  TASK_PRIORITY.NONE,
+];
+
+export const taskStatusSchema = EffectSchema.Literals(Object.values(TASK_STATUS));
+
+export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIORITY));
+
+/** A task's number in its workspace, counted from one; its key is the workspace's prefix and this (`workspace-key.ts`). */
+export const taskNumberSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
@@ -148,12 +202,28 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
   return request.agent === undefined || request.planning !== true;
 }
 
+/** Whether a start names its issues one way and each once: never `linearIssueId` beside `issues`, and no issue twice among them. */
+function issuesNamedOnce(request: {
+  linearIssueId?: string;
+  issues?: readonly TaskIssueChoice[];
+}): boolean {
+  const issues = request.issues ?? [];
+  if (request.linearIssueId !== undefined && issues.length > 0) return false;
+  return issues.every((issue, index) =>
+    issues.slice(index + 1).every((later) => !sameIssueChoice(issue, later)),
+  );
+}
+
 /**
  * Starting a plan (POST): its name where one is given, the repository it is
  * about where one is chosen, the workspace it starts in where one is named,
  * the account's first workspace where none is, and the Linear issue it
  * starts from where one was picked, which the service reads through the
- * workspace's own Linear connection (`linear-wire.ts`), and the workspace's
+ * workspace's own Linear connection (`linear-wire.ts`), or the issues it
+ * links from the start, Linear's and GitHub's, up to `TASK_BOUNDS.MAX_ISSUES`,
+ * each named once and each with its relation (`task-issue-wire.ts`), a
+ * GitHub issue only of the repository the task is about, which the service
+ * reads itself, refusing the start where it reads none; and the workspace's
  * own issue it starts from where it was started from one (`issue-wire.ts`),
  * which must be an issue of the workspace it starts in; the document starts
  * as the untouched template, or empty where `planning` is false: a task
@@ -168,7 +238,8 @@ function agentStartsUnplanned(request: { agent?: TaskAgentStart; planning?: bool
  * beside the plan to plan from; one left out, or nothing but whitespace,
  * starts the task with none. A brief beside `planning: false` or an `agent`
  * is kept rather than refused, and goes unread until a call is opened on the
- * task, since that start opens none.
+ * task, since that start opens none. A task starts to do and unweighed
+ * unless `status` and `priority` say otherwise.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -177,13 +248,20 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
   linearIssueId: EffectSchema.optionalKey(linearIssueIdSchema),
+  issues: EffectSchema.optionalKey(
+    EffectSchema.Array(taskIssueChoiceSchema).check(
+      EffectSchema.isMaxLength(TASK_BOUNDS.MAX_ISSUES),
+    ),
+  ),
   issueId: EffectSchema.optionalKey(wireUuidSchema),
   planning: EffectSchema.optionalKey(EffectSchema.Boolean),
   agent: EffectSchema.optionalKey(taskAgentStartSchema),
   brief: EffectSchema.optionalKey(
     EffectSchema.Trim.check(EffectSchema.isMaxLength(TASK_BOUNDS.MAX_BRIEF_CHARS)),
   ),
-}).check(EffectSchema.makeFilter(agentStartsUnplanned));
+  status: EffectSchema.optionalKey(taskStatusSchema),
+  priority: EffectSchema.optionalKey(taskPrioritySchema),
+}).check(EffectSchema.makeFilter(agentStartsUnplanned), EffectSchema.makeFilter(issuesNamedOnce));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
 
@@ -202,6 +280,8 @@ function updateNamesAChange(update: {
   pinPosition?: string;
   archived?: boolean;
   workspaceId?: string;
+  status?: TaskStatus;
+  priority?: TaskPriority;
 }): boolean {
   return Object.keys(update).length > 0;
 }
@@ -215,8 +295,8 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
  * Changing a task (PATCH): its name, its repository, whether it is pinned,
  * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
  * which comes only with `pinned: true` and pins a plan not yet pinned,
- * whether it is archived, the workspace it moves to, or any of them at once.
- * A rename is one of these; a repository is confirmed reachable by the
+ * whether it is archived, the workspace it moves to, where it stands, how
+ * much it matters, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
  * workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
  * the task's repository.
@@ -228,9 +308,14 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
   pinPosition: EffectSchema.optionalKey(pinPositionSchema),
   archived: EffectSchema.optionalKey(EffectSchema.Boolean),
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
+  status: EffectSchema.optionalKey(taskStatusSchema),
+  priority: EffectSchema.optionalKey(taskPrioritySchema),
 }).check(EffectSchema.makeFilter(updateNamesAChange), EffectSchema.makeFilter(positionIsPinned));
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
+
+/** What a change of where a task stands names: its status, its priority, or both. */
+export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority">;
 
 /**
  * A repository the account pinned in the sidebar, and the instant it was
@@ -319,6 +404,12 @@ const taskSummaryFields = {
    * service before tasks were started from issues.
    */
   issueId: EffectSchema.optionalKey(wireUuidSchema),
+  /** Where the task stands; absent from a service before tasks had one. */
+  status: EffectSchema.optionalKey(taskStatusSchema),
+  /** How much the task matters; absent from a service before tasks had one. */
+  priority: EffectSchema.optionalKey(taskPrioritySchema),
+  /** The task's number in its workspace, which its key is drawn from with the workspace's prefix; absent from a service before tasks had one. */
+  number: EffectSchema.optionalKey(taskNumberSchema),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
@@ -524,8 +615,6 @@ export type TaskListAnswer = typeof taskListAnswerSchema.Type;
 
 /** A started, opened, or changed task (POST, GET, PATCH), with its document as saved. */
 export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
-
-export type TaskAnswer = typeof taskAnswerSchema.Type;
 
 /**
  * Why the agent a start asked for was not started beside the task it made,

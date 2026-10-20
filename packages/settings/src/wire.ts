@@ -1,4 +1,5 @@
-import type { ActionResult } from "@luke/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import { Predicate, Schema } from "effect";
 import type { ExperimentChoices } from "./experiments.js";
 import { APP_SETTING_DEFAULTS, type StoredAppSettings } from "./schema-access.js";
 import type { RuntimeStatus } from "./status.js";
@@ -68,3 +69,36 @@ export type SettingsUpdateResult = ActionResult & {
   /** Present only when the canonical action result is rejected or unsupported. */
   reason?: string;
 };
+
+/**
+ * A settings document as a settings write's answer carries it: read for its
+ * three halves and passed on whole, as that answer always crossed. Each
+ * stored field is the settings store's to check, which checked it before
+ * answering, so nothing here reads one, and nothing here drops one.
+ */
+const appSettingsSchema = Schema.declare(
+  (value): value is AppSettings =>
+    Predicate.isObject(value) &&
+    Predicate.isObject(value.stored) &&
+    Predicate.isObject(value.status) &&
+    Predicate.isObject(value.experiments),
+);
+
+/** A settings write's answer, the type above as a schema: its action result, the settings as they then stand, and why where it did not land. */
+export const settingsUpdateResultSchema = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal(ACTION_RESULT_STATUS.ACCEPTED),
+    settings: appSettingsSchema,
+    reason: Schema.optionalKey(Schema.String),
+  }),
+  Schema.Struct({
+    status: Schema.Literal(ACTION_RESULT_STATUS.REJECTED),
+    settings: appSettingsSchema,
+    reason: Schema.String,
+  }),
+  Schema.Struct({
+    status: Schema.Literal(ACTION_RESULT_STATUS.UNSUPPORTED),
+    settings: appSettingsSchema,
+    reason: Schema.String,
+  }),
+]);

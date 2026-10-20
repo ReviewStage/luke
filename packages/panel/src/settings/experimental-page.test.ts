@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { VIDEO_AVATAR, VIDEO_AVATAR_COVER_ORIGIN } from "@luke/features/video-avatar";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { SETTINGS_ACT_KIND } from "@luke/host/contract";
 import {
   type AppSettingField,
   EXPERIMENT,
@@ -20,7 +20,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { OpenFeedbackProvider } from "../open-feedback.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -34,8 +34,8 @@ import type { SettingsWrites } from "./writes.js";
  * and a note while signed out. Nothing of its own above the rows.
  */
 
-/** What the page asked the main process for. */
-let sent: Act[] = [];
+/** Each experiment switch the page asked the main process for, as its payload carried it. */
+let sent: unknown[] = [];
 /** Which experiment each Send feedback opened the dialog about. */
 let feedbackAbout: Experiment[] = [];
 /** Each stored setting a row wrote, with the value it wrote. */
@@ -54,12 +54,12 @@ beforeEach(() => {
   sent = [];
   feedbackAbout = [];
   written = [];
-  fakeAppBridge({
-    act: (request: Act) => {
-      sent.push(request);
+  fakeActPort({
+    [SETTINGS_ACT_KIND.EXPERIMENT_SET]: (payload) => {
+      sent.push(payload);
       return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { status: ACTION_RESULT_STATUS.ACCEPTED, settings: appSettingsWire(settingsView()) },
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        settings: appSettingsWire(settingsView()),
       });
     },
   });
@@ -113,12 +113,10 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(factory, "Factory has a switch");
   assert.equal(factory.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
-  assert.ok(page.textContent?.startsWith("Code review"));
+  assert.ok(page.textContent?.startsWith("GitHub personal access token"));
 
   await act(async () => factory.click());
-  assert.deepEqual(sent, [
-    { kind: ACT_KIND.EXPERIMENT_SET, payload: { experiment: EXPERIMENT.FACTORY, on: false } },
-  ]);
+  assert.deepEqual(sent, [{ experiment: EXPERIMENT.FACTORY, on: false }]);
 });
 
 test("an experiment's Send feedback opens the dialog about that experiment", () => {
@@ -131,6 +129,7 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
+    EXPERIMENT.GITHUB_TOKEN,
     EXPERIMENT.CODE_REVIEW,
     EXPERIMENT.BROWSER,
     EXPERIMENT.SECTIONS,
@@ -181,6 +180,7 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
     ),
   );
   assert.deepEqual(cards, [
+    ["GitHub personal access token"],
     ["Code review"],
     ["Browser tab"],
     ["Sections"],

@@ -1,10 +1,10 @@
 import { MAC_TERMINAL_PORT_CHANNEL } from "@luke/features/mac-terminal-wire";
+import { eventWithoutAccessTokens, withoutAccessTokens } from "@luke/features/sentry-breadcrumbs";
 import { TERMINAL_PORT_CHANNEL } from "@luke/features/terminal-acts";
 import { ACT_PORT, type AppBridge, actPortForwarder, bridgeEntries } from "@luke/host/bridge";
 import type { UnparsedWireValue } from "@luke/wire";
 import * as Sentry from "@sentry/electron/renderer";
 import { contextBridge, ipcRenderer } from "electron";
-import { eventWithoutAccessTokens, withoutAccessTokens } from "#shared/sentry-breadcrumbs";
 
 Sentry.init({ beforeBreadcrumb: withoutAccessTokens, beforeSend: eventWithoutAccessTokens });
 

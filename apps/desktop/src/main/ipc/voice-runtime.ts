@@ -1,8 +1,8 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@luke/features/analytics";
-import type { ActRows } from "@luke/host/act-router";
-import { ACT_KIND } from "@luke/host/acts";
+import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
 import { channels } from "@luke/host/bridge";
 import type { AppStateStore } from "@luke/host/client";
+import { VOICE_RUNTIME_ACT_KIND } from "@luke/host/contract";
 import type { HostOperator } from "@luke/host/host-operator";
 import { type LiveDiagnostics, liveExchangeActive } from "@luke/live";
 import { callInProgress, IDLE_VOICE_VIEW, VOICE_COMMAND } from "@luke/voice/voice-view";
@@ -41,19 +41,11 @@ export interface VoiceRuntimeDependencies {
   setShortcutCapturing: (capturing: boolean) => void;
 }
 
-type VoiceRuntimeActKind =
-  | typeof ACT_KIND.VOICE_COMMAND
-  | typeof ACT_KIND.CALL_SHOW_TASK
-  | typeof ACT_KIND.VOICE_CREATE_LIVE_SESSION
-  | typeof ACT_KIND.VOICE_END_LIVE_SESSION
-  | typeof ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT
-  | typeof ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY
-  | typeof ACT_KIND.VOICE_STOP_SPEAKING
-  | typeof ACT_KIND.LUKE_STOP
-  | typeof ACT_KIND.VOICE_DIAGNOSTICS
-  | typeof ACT_KIND.MICROPHONE_OPEN_SETTINGS;
+type VoiceRuntimeActKind = (typeof VOICE_RUNTIME_ACT_KIND)[keyof typeof VOICE_RUNTIME_ACT_KIND];
 
-/** Stop Luke on a task (`LUKE_STOP`): a call about it is told to stop, as the stop key always told it, and his turn on it is stopped on the service, call or no call. */
+const voicePort = actPortFor<WebContents>();
+
+/** Stop Luke on a task (`luke.stop`): a call about it is told to stop, as the stop key always told it, and his turn on it is stopped on the service, call or no call. */
 function stopLuke(dependencies: VoiceRuntimeDependencies, named: string | undefined) {
   const snapshot = dependencies.state.snapshot();
   const view = snapshot.voice.view ?? IDLE_VOICE_VIEW;
@@ -68,55 +60,90 @@ function stopLuke(dependencies: VoiceRuntimeDependencies, named: string | undefi
   return dependencies.liveSession.tasksStopWork(taskId);
 }
 
-export function voiceRuntimeActRows(
+export function voiceRuntimeProcedures(
   dependencies: VoiceRuntimeDependencies,
-): Pick<ActRows, VoiceRuntimeActKind> {
+): Pick<PlatformActProcedures<WebContents>, VoiceRuntimeActKind> {
   const { panels, voiceWindow, liveSession, state } = dependencies;
   return {
     // A panel's or the call window's command to the voice window. The act's
     // schema has already bounded it; here it is checked to come from one of
     // the two — the voice window does not command itself — and handed on.
-    [ACT_KIND.VOICE_COMMAND]: ({ command }, { panel, call }) => {
-      if (!panel && !call) return;
-      voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
-    },
+    [VOICE_RUNTIME_ACT_KIND.VOICE_COMMAND]: voicePort[VOICE_RUNTIME_ACT_KIND.VOICE_COMMAND].handler(
+      ({ input, context }) => {
+        const { panel, call } = context.actor;
+        if (!panel && !call) return;
+        voiceWindow
+          .current()
+          ?.webContents.send(channels.onVoiceCommand, { command: input.command });
+      },
+    ),
     // The call card's way back, from the floating window or from a panel's
     // own card, names no task: the call's is read here, so it cannot bring
     // forward a task the call is not about.
-    [ACT_KIND.CALL_SHOW_TASK]: (_payload, { call, panel }) => {
+    [VOICE_RUNTIME_ACT_KIND.CALL_SHOW_TASK]: voicePort[
+      VOICE_RUNTIME_ACT_KIND.CALL_SHOW_TASK
+    ].handler(({ context }) => {
+      const { call, panel } = context.actor;
       const taskId = state.snapshot().voice.view?.callTaskId;
       if ((!call && !panel) || taskId === undefined) return;
       panels.focusExpanded();
       panels.broadcast(channels.onShowTask, { taskId });
-    },
+    }),
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.
-    [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: ({ sdp, taskId }, { voice }) =>
-      voice
-        ? Effect.map(liveSession.createLiveSession(sdp, taskId), Option.getOrUndefined)
-        : Effect.succeed(undefined),
-    [ACT_KIND.VOICE_END_LIVE_SESSION]: (request, { voice }) =>
-      voice ? Effect.as(liveSession.endLiveSession(request), undefined) : Effect.succeed(undefined),
-    [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: (report, { voice }) =>
-      voice
-        ? Effect.as(liveSession.reportLiveTransport(report), undefined)
-        : Effect.succeed(undefined),
-    [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: ({ idle }, { voice }) =>
-      voice
-        ? Effect.as(liveSession.reportLiveActivity(idle), undefined)
-        : Effect.succeed(undefined),
+    [VOICE_RUNTIME_ACT_KIND.VOICE_CREATE_LIVE_SESSION]: voicePort[
+      VOICE_RUNTIME_ACT_KIND.VOICE_CREATE_LIVE_SESSION
+    ].effect(function* ({ input, context }) {
+      if (!context.actor.voice) return undefined;
+      const created = yield* liveSession.createLiveSession(input.sdp, input.taskId);
+      return Option.getOrUndefined(created);
+    }),
+    [VOICE_RUNTIME_ACT_KIND.VOICE_END_LIVE_SESSION]: voicePort[
+      VOICE_RUNTIME_ACT_KIND.VOICE_END_LIVE_SESSION
+    ].effect(function* ({ input, context }) {
+      if (context.actor.voice) yield* liveSession.endLiveSession(input);
+      return undefined;
+    }),
+    [VOICE_RUNTIME_ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: voicePort[
+      VOICE_RUNTIME_ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT
+    ].effect(function* ({ input, context }) {
+      if (context.actor.voice) yield* liveSession.reportLiveTransport(input);
+      return undefined;
+    }),
+    [VOICE_RUNTIME_ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: voicePort[
+      VOICE_RUNTIME_ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY
+    ].effect(function* ({ input, context }) {
+      if (context.actor.voice) yield* liveSession.reportLiveActivity(input.idle);
+      return undefined;
+    }),
     // The stop key, pressed in the voice window that owns the session; a
     // panel has no session to stop and is answered false.
-    [ACT_KIND.VOICE_STOP_SPEAKING]: (_payload, { voice }) =>
-      voice ? liveSession.stopSpeaking() : Effect.succeed(false),
-    [ACT_KIND.LUKE_STOP]: ({ taskId }, { voice, panel, call }) =>
-      voice || panel || call ? stopLuke(dependencies, taskId) : Effect.void,
-    [ACT_KIND.VOICE_DIAGNOSTICS]: () =>
-      Effect.map(dependencies.liveDiagnostics(), Option.getOrUndefined),
-    [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: () =>
-      dependencies.openExternal(
-        "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
-      ),
+    [VOICE_RUNTIME_ACT_KIND.VOICE_STOP_SPEAKING]: voicePort[
+      VOICE_RUNTIME_ACT_KIND.VOICE_STOP_SPEAKING
+    ].effect(function* ({ context }) {
+      if (!context.actor.voice) return false;
+      return yield* liveSession.stopSpeaking();
+    }),
+    [VOICE_RUNTIME_ACT_KIND.LUKE_STOP]: voicePort[VOICE_RUNTIME_ACT_KIND.LUKE_STOP].effect(
+      function* ({ input, context }) {
+        const { voice, panel, call } = context.actor;
+        if (voice || panel || call) yield* stopLuke(dependencies, input.taskId);
+      },
+    ),
+    [VOICE_RUNTIME_ACT_KIND.VOICE_DIAGNOSTICS]: voicePort[
+      VOICE_RUNTIME_ACT_KIND.VOICE_DIAGNOSTICS
+    ].effect(function* () {
+      return Option.getOrUndefined(yield* dependencies.liveDiagnostics());
+    }),
+    [VOICE_RUNTIME_ACT_KIND.MICROPHONE_OPEN_SETTINGS]: voicePort[
+      VOICE_RUNTIME_ACT_KIND.MICROPHONE_OPEN_SETTINGS
+    ].effect(function* () {
+      yield* Effect.promise(() =>
+        dependencies.openExternal(
+          "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+        ),
+      );
+    }),
   };
 }
 

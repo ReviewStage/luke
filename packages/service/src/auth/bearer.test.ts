@@ -8,13 +8,13 @@ import { repositoryPinsAnswerSchema } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { makeSignature } from "better-auth/crypto";
-import { Clock, Effect, Layer, Option, Result } from "effect";
-import { HttpRouter } from "effect/http";
-import { SqlClient } from "effect/sql";
+import { type Context, Effect, Option, Result } from "effect";
 import { afterEach, vi } from "vitest";
-import { repositoryPinsApp } from "../github/repository-pins-app.js";
+import { repositoryPinsProcedures } from "../github/repository-pins-procedures.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import type { UserIdResolver } from "../http/http-effect.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { auth } from "./auth.js";
 import {
@@ -104,23 +104,16 @@ const openAccounts = Effect.gen(function* () {
   };
 });
 
-/** The repositories one request to the pins group answers as pinned, failing the test where it answers anything else. */
+/** The repositories one request to the pins resource answers as pinned, failing the test where it answers anything else. */
 const pinnedBy = (resolveUserId: UserIdResolver, request: Request) =>
   Effect.gen(function* () {
-    // The handler runs on the router's own fiber, so it is handed the test's clock: a pin's instant is read from it.
-    const services = Layer.mergeAll(
-      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
-      Layer.succeed(Database, yield* Database),
-      Layer.succeed(Clock.Clock, yield* Clock.Clock),
-    );
-    const { handler, dispose } = HttpRouter.toWebHandler(
-      repositoryPinsApp({ resolveUserId }).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    const response = yield* Effect.promise(() => handler(request));
-    // SAFETY: the group answers JSON; the test reads it as the wire value it is.
+    // The procedure runs on the services handed to it, the test's clock among them: a pin's instant is read from it.
+    // SAFETY: the pins procedures yield the database and the clock alone, which the test's own context holds.
+    const services = (yield* Effect.context<never>()) as Context.Context<WebServices>;
+    const handle = hostedFetch({ repositoryPins: repositoryPinsProcedures({ resolveUserId }) });
+    const response = yield* Effect.promise(() => handle(request, services));
+    // SAFETY: the route answers JSON; the test reads it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
-    yield* Effect.promise(() => dispose());
     assert.equal(response.status, HOSTED_HTTP_STATUS.OK, JSON.stringify(body));
     const answered = readEither(repositoryPinsAnswerSchema)(unparsedWire(body));
     if (Result.isFailure(answered))
@@ -287,7 +280,7 @@ it.effect(
           resolveUserId,
           new Request(new URL(HOSTED_SERVICE_PATH.REPOSITORY_PINS, ORIGIN), {
             method: change === undefined ? "GET" : "PUT",
-            headers: { cookie },
+            headers: { cookie, "content-type": "application/json" },
             ...(change === undefined ? undefined : { body: JSON.stringify(change) }),
           }),
         ).pipe(Effect.provide(plugin.database));

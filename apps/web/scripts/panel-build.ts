@@ -34,6 +34,7 @@ const LUCIDE_WHOLE_ID = "\0lucide-whole";
 const CONTENT_TYPES = new Map([
   [".woff2", "font/woff2"],
   [".png", "image/png"],
+  [".m4a", "audio/mp4"],
 ]);
 
 // A dynamic `import("lucide-react")`, as the icon picker spells it. Note that

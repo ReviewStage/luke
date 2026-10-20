@@ -78,6 +78,7 @@ import {
   expandable,
   fileNotice,
   filePatch,
+  gapLines,
   headerPatch,
   linesChanged,
   listPatch,
@@ -123,13 +124,16 @@ import { PullRequestWriteNote } from "./pull-request-writes.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
 import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
-import { useViewedFiles } from "./viewed-files.js";
+import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
 /**
  * agent-changes-tab.tsx -- the Files changed view of an agent's Pull request tab (`agent-pull-request-tab.tsx`): its pull request's files drawn as a File tab draws a file, the chosen file's unified diff under the same bar and beside the same tree.
  *
  * The files are read from GitHub afresh by the service on each ask, so
- * nothing here reads on a clock: the tab asks as it first comes on screen,
+ * nothing here reads on a clock. The Pull request tab holds the reads, the
+ * files and the member's viewed marks with them (`useChangesReads`), so its
+ * own Files changed tab counts the lines left to review by the marks drawn
+ * here; it asks as the view first comes on screen,
  * when the developer presses Retry or Refresh changes, and the moment the
  * agent ends, since that is when what it published has settled. A refresh
  * leaves the files drawn standing until its answer lands; a read that
@@ -175,7 +179,9 @@ import { useViewedFiles } from "./viewed-files.js";
  * tint of a line added or removed, the words a changed line changed, and
  * the count of unchanged lines between two hunks, which open twenty at a
  * time or all at once, read from the file at the pull request's head the
- * first time one of its gaps is opened (`useFileTexts`).
+ * first time one of its gaps is opened (`useFileTexts`). A review thread
+ * on a line between hunks moves onto its line as a gap opened over it draws
+ * it, and back above the diff as the gap closes again (`useOpenedLines`).
  *
  * Where the Pull request tab lets the member comment, lines picked with
  * the gutter's +, or code selected as text over them, open a comment under
@@ -512,6 +518,8 @@ function entryOf(
   hover: ThreadHover | undefined,
   /** The file drawn whole, where it is, whether it may be, and the door that draws it so or back to its changes. */
   whole: FileWhole,
+  /** The lines of its new side between its hunks it draws now, its gaps opened over them; none where it draws none. */
+  opened: ReadonlySet<number> | undefined,
 ): DiffListEntry {
   const path = file.path;
   const image = imageTypeOfPath(path) === undefined || images === undefined ? undefined : images;
@@ -522,7 +530,7 @@ function entryOf(
   const drawnAs = pictured === undefined ? file : { ...file, patch: null };
   // A file drawn whole draws every one of its lines, so its threads are placed on them.
   const drawnWhole = pictured === undefined && !emptyWhole(whole.texts) ? whole.texts : undefined;
-  const { placed, above } = threadsOn(threads, drawnAs, drawnWhole);
+  const { placed, above } = threadsOn(threads, drawnAs, drawnWhole, opened);
   const notes: DiffNote[] =
     minimized === undefined
       ? placed.map((each) => ({
@@ -617,6 +625,11 @@ function entryOf(
     lead: lead !== undefined,
     expandable: lead === undefined && gaps.open,
     whole: lead === undefined ? whole.texts : undefined,
+    // The lines its threads wait on between its hunks, asked for only where a gap may open over them.
+    hidden:
+      lead === undefined && gaps.open && drawnWhole === undefined
+        ? gapLines(threads, file)
+        : undefined,
     header: (
       <FileHead
         file={file}
@@ -695,6 +708,7 @@ function useEntries(
   minimizedOf: (path: string) => FileMinimized | undefined,
   hover: ThreadHover | undefined,
   wholeOf: (file: CodingAgentChangedFile) => FileWhole,
+  openedOf: (path: string) => ReadonlySet<number> | undefined,
 ): readonly DiffListEntry[] {
   const kept = useRef(new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>());
   const next = new Map<string, { inputs: readonly unknown[]; entry: DiffListEntry }>();
@@ -704,6 +718,7 @@ function useEntries(
     const gaps = { open: texts.expandable(file), refused: texts.refused.get(file.path) };
     const minimized = minimizedOf(file.path);
     const whole = wholeOf(file);
+    const opened = own.length === 0 ? undefined : openedOf(file.path);
     const inputs = [
       ...entryInputs(file, list, own, threads?.draw, images, comments),
       gaps.open,
@@ -713,12 +728,25 @@ function useEntries(
       whole.texts,
       whole.offered,
       whole.toggle,
+      opened,
     ];
     const was = kept.current.get(file.path);
     const entry =
       was !== undefined && sameInputs(was.inputs, inputs)
         ? was.entry
-        : entryOf(file, list, own, threads?.draw, images, comments, gaps, minimized, hover, whole);
+        : entryOf(
+            file,
+            list,
+            own,
+            threads?.draw,
+            images,
+            comments,
+            gaps,
+            minimized,
+            hover,
+            whole,
+            opened,
+          );
     next.set(file.path, { inputs, entry });
     return entry;
   });
@@ -787,6 +815,39 @@ function useWholeFiles(texts: FileTexts): (file: CodingAgentChangedFile) => File
       toggle: door,
     };
   };
+}
+
+/** The lines between each file's hunks the list draws now, as it last told them: by file. */
+type OpenedLines = ReadonlyMap<string, ReadonlySet<number>>;
+
+/** No line between hunks drawn. */
+const NONE_OPENED: OpenedLines = new Map();
+
+/** Which lines between each file's hunks the list draws, and the door the list tells them through. */
+interface ListOpened {
+  readonly openedOf: (path: string) => ReadonlySet<number> | undefined;
+  readonly onDrawn: (path: string, lines: readonly number[]) => void;
+}
+
+/**
+ * Which of the lines between each file's hunks that its threads wait on
+ * the list draws now, as the list tells them (`DiffListProps.onDrawn`):
+ * a gap opened over one draws it, and a gap closed again, its patch read
+ * anew, draws it no more. Each file's answer is the same set until the list
+ * tells otherwise, so the files whose gaps stood keep their entries; the
+ * door stays the same, as the list holds it.
+ */
+function useOpenedLines(): ListOpened {
+  const [opened, setOpened] = useState<OpenedLines>(NONE_OPENED);
+  const onDrawn = useCallback((path: string, lines: readonly number[]) => {
+    setOpened((was) => {
+      const next = new Map(was);
+      if (lines.length === 0) next.delete(path);
+      else next.set(path, new Set(lines));
+      return next;
+    });
+  }, []);
+  return { openedOf: (path) => opened.get(path), onDrawn };
 }
 
 /** The lines that show their threads while Minimize inline comments is on: by file, by side, by line. */
@@ -1006,16 +1067,18 @@ interface RevealedPlace {
   readonly chip: { readonly side: DiffSelection["side"]; readonly line: number };
 }
 
-/** Where `thread` stands in `file`'s entry, drawn as `lead` (its threads above all) or whole (`whole`), as `entryOf` places it. */
+/** Where `thread` stands in `file`'s entry, drawn as `lead` (its threads above all), whole (`whole`), or with gaps opened over lines (`opened`), as `entryOf` places it. */
 function revealedPlace(
   thread: ReviewThread,
   file: CodingAgentChangedFile,
   lead: boolean,
   whole: DiffFileTexts | undefined,
+  opened: ReadonlySet<number> | undefined,
 ): RevealedPlace {
   const fileWide = { side: DIFF_SELECTION_SIDE.ADDITIONS, line: FILE_NOTE_LINE };
   if (lead) return { at: undefined, chip: fileWide };
-  const { placed, above } = threadsOn([thread], file, emptyWhole(whole) ? undefined : whole);
+  const drawnWhole = emptyWhole(whole) ? undefined : whole;
+  const { placed, above } = threadsOn([thread], file, drawnWhole, opened);
   const [onLine] = placed;
   if (onLine !== undefined) {
     const at = { side: onLine.side, line: onLine.line };
@@ -1068,6 +1131,7 @@ function useListLanding(
   entries: readonly DiffListEntry[],
   minimizedOf: (path: string) => FileMinimized | undefined,
   wholeOf: (file: CodingAgentChangedFile) => FileWhole,
+  openedOf: (path: string) => ReadonlySet<number> | undefined,
   box: React.RefObject<HTMLElement | null>,
 ): ListLandingControl {
   const [landing, setLanding] = useState<ListLanding | undefined>(undefined);
@@ -1088,7 +1152,13 @@ function useListLanding(
   const place =
     landing === undefined || entry === undefined
       ? undefined
-      : revealedPlace(landing.thread, landing.file, entry.lead, wholeOf(landing.file).texts);
+      : revealedPlace(
+          landing.thread,
+          landing.file,
+          entry.lead,
+          wholeOf(landing.file).texts,
+          openedOf(landing.file.path),
+        );
   // A minimized line's chip is shown once the thread is placed, each ask once.
   const chipShown = useRef<number | undefined>(undefined);
   const latestPlace = useRef({ landing, place, minimizedOf });
@@ -1105,7 +1175,7 @@ function useListLanding(
     landing === undefined || onLanded === undefined
       ? undefined
       : {
-          threadId: landing.threadId,
+          target: landing.threadId,
           ask: landing.ask,
           frames: LANDING_FRAMES,
           ready: (card: HTMLElement) => standsIn(box.current, card),
@@ -1395,6 +1465,7 @@ function FilesList({
   const minimizedOf = useMinimizedLines(settings.diffMinimizeComments);
   const wholeOf = useWholeFiles(texts);
   const resting = useThreadHover();
+  const opened = useOpenedLines();
   const entries = useEntries(
     list,
     threads,
@@ -1404,8 +1475,9 @@ function FilesList({
     minimizedOf,
     resting.hover,
     wholeOf,
+    opened.openedOf,
   );
-  const landing = useListLanding(reveal, list, entries, minimizedOf, wholeOf, box);
+  const landing = useListLanding(reveal, list, entries, minimizedOf, wholeOf, opened.openedOf, box);
   const query = list.query.trim();
   return (
     <section className="file-tab" aria-label="Diffs of the changed files">
@@ -1432,6 +1504,7 @@ function FilesList({
             selected={landing.lines ?? resting.lines ?? commenting?.lit}
             readTexts={texts.read}
             reveal={landing.reveal}
+            onDrawn={opened.onDrawn}
           />
         </ThreadLandingProvider>
       )}
@@ -1506,6 +1579,70 @@ export function ChangesCard({
   );
 }
 
+/** The pull request a changes answer names, with its files; none where it names none. */
+type ChangesPullRequest = Extract<
+  CodingAgentChangesAnswerView,
+  { pullRequest: unknown }
+>["pullRequest"];
+
+/**
+ * The Files changed view's reads, held by the Pull request tab rather than
+ * the view, so the tab's own row can count the lines left to review by the
+ * same marks the view draws: the changes as last answered, whether a read
+ * is out, the door that reads them again, how many answers have landed, and
+ * the member's viewed marks, read with each answer.
+ */
+export interface ChangesReads {
+  readonly answer: CodingAgentChangesAnswerView | undefined;
+  readonly out: boolean;
+  readonly ask: () => void;
+  /** How many answers have landed, which a changed image is drawn anew on. */
+  readonly count: number;
+  /** The pull request the latest answer names; none before one lands, where it failed, or where there is none. */
+  readonly pullRequest: ChangesPullRequest;
+  readonly viewedFiles: ViewedFiles;
+}
+
+/**
+ * The agent's changes and the member's viewed marks on them, read as the
+ * view first comes on screen (`shown`), and again as the agent ends, as
+ * `useAgentRead` reads; the marks with each answer of the changes, so the
+ * two describe the same push.
+ */
+export function useChangesReads(
+  agentId: string,
+  control: CodingAgentsControl,
+  shown: boolean,
+): ChangesReads {
+  const status = control.agents?.find((each) => each.id === agentId)?.status;
+  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
+  // The pull request the tab names by its number, where it names one other than the agent's own (`pull-request-number.ts`).
+  const number = usePullRequestNumber();
+  const { answer, out, ask } = useAgentRead(
+    agentId,
+    shown,
+    ended,
+    (id: string) => control.readChanges(id, number),
+    UNANSWERED,
+  );
+  const reads = useRef<{ readonly of: unknown; readonly count: number }>({
+    of: undefined,
+    count: 0,
+  });
+  if (reads.current.of !== answer) reads.current = { of: answer, count: reads.current.count + 1 };
+  const pullRequest = answer !== undefined && "pullRequest" in answer ? answer.pullRequest : null;
+  const readViewed = useCallback(
+    (id: string) => control.readPullRequestViewed(id, number),
+    [control.readPullRequestViewed, number],
+  );
+  const viewedFiles = useViewedFiles(
+    agentId,
+    readViewed,
+    pullRequest === null ? undefined : reads.current.count,
+  );
+  return { answer, out, ask, count: reads.current.count, pullRequest, viewedFiles };
+}
+
 export function AgentChangesTab({
   agentId,
   control,
@@ -1515,6 +1652,7 @@ export function AgentChangesTab({
   threads,
   lineComments,
   reveal,
+  reads,
 }: {
   agentId: string;
   control: CodingAgentsControl;
@@ -1530,29 +1668,14 @@ export function AgentChangesTab({
   lineComments?: LineComments | undefined;
   /** A review thread to bring into view on its file; told it is gone where its file is not among the changes. */
   reveal?: ChangesReveal | undefined;
+  /** The changes and the viewed marks, read by the Pull request tab as the view first comes on screen (`useChangesReads`). */
+  reads: ChangesReads;
 }): React.JSX.Element {
-  const status = control.agents?.find((each) => each.id === agentId)?.status;
-  const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
-  // The pull request the tab names by its number, where it names one other than the agent's own (`pull-request-number.ts`).
-  const number = usePullRequestNumber();
-  const { answer, out, ask } = useAgentRead(
-    agentId,
-    shown,
-    ended,
-    (id: string) => control.readChanges(id, number),
-    UNANSWERED,
-  );
-  // How many answers have landed, which a changed image is drawn anew on.
-  const reads = useRef<{ readonly of: unknown; readonly count: number }>({
-    of: undefined,
-    count: 0,
-  });
-  if (reads.current.of !== answer) reads.current = { of: answer, count: reads.current.count + 1 };
+  const { answer, out, ask, pullRequest, viewedFiles } = reads;
   const room = usePaneRoom(tree);
   const edge = useTreeEdge(tree);
   const [diffBox, setDiffBox] = useState<HTMLDivElement | null>(null);
   const roomy = useSplitRoom(diffBox);
-  const pullRequest = answer !== undefined && "pullRequest" in answer ? answer.pullRequest : null;
   // Note that the lists are kept while the answer is the same one, because
   // fresh ones would have the tree draw itself anew.
   const changed = useMemo(() => {
@@ -1560,16 +1683,6 @@ export function AgentChangesTab({
     const paths = files.map((file) => file.path);
     return { files, paths, ordered: treeOrder(files), folders: changedFolders(paths) };
   }, [pullRequest]);
-  // Note that the marks are read with each answer the changes read lands with, so the two describe the same push.
-  const readViewed = useCallback(
-    (id: string) => control.readPullRequestViewed(id, number),
-    [control.readPullRequestViewed, number],
-  );
-  const viewedFiles = useViewedFiles(
-    agentId,
-    readViewed,
-    pullRequest === null ? undefined : reads.current.count,
-  );
   const viewSettings = useFileViewSettings();
   const minimize = () =>
     viewSettings.change("diffMinimizeComments", !viewSettings.settings.diffMinimizeComments);
@@ -1578,7 +1691,7 @@ export function AgentChangesTab({
     () => changeMarks(changed.files, { threads: threads?.list, viewed: list.viewed }),
     [changed.files, threads?.list, list.viewed],
   );
-  const answered = reads.current.count;
+  const answered = reads.count;
   // Note that the images are named afresh only with an answer, because every changed image's entry is drawn from them.
   const images = useMemo(
     () => (pullRequest === null ? undefined : imagesOf(agentId, pullRequest, answered)),

@@ -47,12 +47,24 @@ import {
   contextWindowSchema,
   disabledServersSchema,
 } from "@luke/features/coding-agent-wire";
-import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  type GitHubAccess,
+  githubRepositoryFullNameSchema,
+} from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { TASK_BOUNDS } from "@luke/features/task-wire";
+import {
+  TASK_BOUNDS,
+  TASK_PRIORITY,
+  TASK_STATUS,
+  type TaskSummary,
+  taskPrioritySchema,
+  taskStatusSchema,
+} from "@luke/features/task-wire";
+import { taskKey } from "@luke/features/workspace-key";
 import { describeWire } from "@luke/wire/effect";
 import { isTextUIPart } from "ai";
 import { Clock, Data, Effect, Option, Result, Schema } from "effect";
@@ -108,7 +120,12 @@ import {
   workspaceAgent,
   workspaceAgentsOf,
 } from "./workspace-agents.js";
-import { taskStepOf, workspaceStepOf, writtenMention } from "./written-mentions.js";
+import {
+  taskStepOf,
+  workspaceNamingOf,
+  workspaceStepOf,
+  writtenMention,
+} from "./written-mentions.js";
 
 /**
  * coding-agent-tools.ts -- the tools every agent reaches the workspace's coding agents by: list them, read one's progress, message one, start one.
@@ -246,7 +263,8 @@ export const CODING_AGENT_TOOL_REFUSAL = {
     `most ${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters.`,
   UNREADABLE_FILTER: "Not run: narrow the list by a taskId, by thisTask, or by neither.",
   UNREADABLE_TASKS:
-    "Not run: narrow the tasks by words of their name, page them by an offset of 0 or more, and " +
+    "Not run: narrow the tasks by words of their name and by a status " +
+    `(${Object.values(TASK_STATUS).join(", ")}), page them by an offset of 0 or more, and ` +
     "ask for the archived ones too with includeArchived true, or leave it out.",
   NO_AGENT: `Not run: no coding agent of your workspace has that id; ${AGENT_TOOL.LIST_AGENTS} names them.`,
   NO_WORKSPACE:
@@ -271,12 +289,18 @@ export const CODING_AGENT_TOOL_REFUSAL = {
     "Not sent: that agent is archived, so it takes no message and is not woken until a member unarchives it.",
 } as const;
 
+/** How the task tools word a priority. */
+export const TASK_PRIORITY_WORDS =
+  "How much the task matters; none for a task no one has weighed yet.";
+
 /** Why a task's change changed nothing, in words the model can act on. */
 export const UPDATE_TASK_REFUSAL = {
   UNREADABLE:
     `Not run: name the task by the id ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered, ` +
     `and at least one change: a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a ` +
-    "repository as owner/name or null, archived, pinned, or a sectionId or null.",
+    "repository as owner/name or null, archived, pinned, a sectionId or null, a status " +
+    `(${Object.values(TASK_STATUS).join(", ")}), or a priority ` +
+    `(${Object.values(TASK_PRIORITY).join(", ")}).`,
   OWN_TASK:
     "Not archived: that is the task you work on, and you do not archive it yourself; say you are " +
     "done, and the developer archives it. Its other changes are yours to make without archived.",
@@ -284,7 +308,8 @@ export const UPDATE_TASK_REFUSAL = {
     "Not run: no task of your workspace has that id, so it is none you can change; " +
     `${AGENT_TOOL.LIST_TASKS} names them, the archived ones too with includeArchived.`,
   ARCHIVED:
-    "Not changed: that task is archived, so it takes no new name, repository, or section; bring " +
+    "Not changed: that task is archived, so it takes no new name, repository, status, priority, " +
+    "or section; bring " +
     "it back in the same call with archived false, or leave it as it is.",
   AGENTS_WORKING:
     "Not archived: an agent on that task is still starting or working, and archiving the task " +
@@ -618,6 +643,8 @@ const UPDATE_TASK_INPUT = Schema.Struct({
         "alone, no other member's.",
     ),
   ),
+  status: Schema.optionalKey(describeWire(taskStatusSchema, "Where the task now stands.")),
+  priority: Schema.optionalKey(describeWire(taskPrioritySchema, TASK_PRIORITY_WORDS)),
   sectionId: Schema.optionalKey(
     describeWire(
       Schema.NullOr(wireUuidSchema),
@@ -751,7 +778,8 @@ export const UPDATE_TASK_TOOL = {
   name: AGENT_TOOL.UPDATE_TASK,
   description:
     "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
-    "of the developer you work for: rename it, set or clear its repository, pin or unpin it in " +
+    "of the developer you work for: rename it, set or clear its repository, set where it stands " +
+    "(its status) or how much it matters (its priority), pin or unpin it in " +
     "their sidebar, or archive it or bring it back; name at least one change, and several go in " +
     "one call. An archived task leaves the sidebar and every list but the archived ones, its plan " +
     "takes no edit, and its agents take no message and start no new turn, while everything on it " +
@@ -955,6 +983,9 @@ const LIST_TASKS_INPUT = Schema.Struct({
       "Only the tasks whose name holds these words, whatever their case; leave it out for all.",
     ),
   ),
+  status: Schema.optionalKey(
+    describeWire(taskStatusSchema, "Only the tasks that stand here; leave it out for all."),
+  ),
   offset: Schema.optionalKey(
     describeWire(
       Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
@@ -970,7 +1001,8 @@ export const LIST_TASKS_TOOL = {
   name: AGENT_TOOL.LIST_TASKS,
   description:
     "List the open tasks of your workspace, started by any member, and the archived ones too " +
-    "where includeArchived asks: each with its id, its name, " +
+    "where includeArchived asks: each with its id, its key (such as ACME-42), its name, where " +
+    "it stands (its status) and how much it matters (its priority), " +
     "the repository its agents work in (null for none yet), who started it, whether it is " +
     "the task you work on, whether it is archived, the sectionId of the sidebar section the " +
     "developer you work for keeps it in (null for none, under Tasks), and its mention, the " +
@@ -978,7 +1010,7 @@ export const LIST_TASKS_TOOL = {
     `${TASKS_LIST_LIMIT} a page, with ` +
     "nextOffset where more stand; and beside them every section that developer keeps in this " +
     "workspace's sidebar, each with its id and title. Narrow it by words of a task's name with " +
-    `nameContains. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
+    `nameContains, and by where it stands with status. Call it to find the task to start an agent on with ${AGENT_TOOL.START_AGENT}'s ` +
     `taskId, to narrow ${AGENT_TOOL.LIST_AGENTS} to one, or to find the task and the section ` +
     `${AGENT_TOOL.UPDATE_TASK}'s sectionId and ${AGENT_TOOL.DELETE_SECTION} name.`,
   inputSchema: LIST_TASKS_INPUT,
@@ -1737,6 +1769,22 @@ const archiveChange = (
       : UPDATE_AGENT_REFUSAL.REARCHIVED;
   });
 
+/**
+ * A task's key, where it stands, and how much it matters, as every task tool
+ * answers them: its key drawn from its workspace's name as the member reads
+ * it (`workspace-key.ts`); null for any a service before them left out.
+ */
+export function taskStandingOf(
+  task: Pick<TaskSummary, "number" | "status" | "priority">,
+  workspaceName: string,
+) {
+  return {
+    key: task.number === undefined ? null : taskKey(workspaceName, task.number),
+    status: task.status ?? null,
+    priority: task.priority ?? null,
+  };
+}
+
 /** A task's change as the model reads it: the task as it now stands, with its mention, and whether every change named already stood before the call. */
 const taskUpdateAnswer = (
   userId: string,
@@ -1745,11 +1793,12 @@ const taskUpdateAnswer = (
   section: TaskSectionReading | null | undefined,
 ) =>
   Effect.map(
-    workspaceStepOf(userId, task.workspaceId),
-    (step): WireRecord => ({
+    workspaceNamingOf(userId, task.workspaceId),
+    ({ step, name }): WireRecord => ({
       status: ACTION_RESULT_STATUS.ACCEPTED,
       task: {
         id: task.id,
+        ...taskStandingOf(task, name),
         name: task.name,
         repository: task.repository,
         archived: task.archivedAt !== undefined,
@@ -1800,7 +1849,9 @@ function changesStand(task: StoredTask["task"], changes: TaskChanges): boolean {
     (changes.name === undefined || changes.name === task.name) &&
     (changes.repository === undefined || changes.repository === task.repository) &&
     (changes.archived === undefined || changes.archived === (task.archivedAt !== undefined)) &&
-    (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined))
+    (changes.pinned === undefined || changes.pinned === (task.pinnedAt !== undefined)) &&
+    (changes.status === undefined || changes.status === task.status) &&
+    (changes.priority === undefined || changes.priority === task.priority)
   );
 }
 
@@ -1814,15 +1865,34 @@ function repositoryRefusalWords(refusal: HostedRefusal): string {
     : CODING_AGENT_TOOL_REFUSAL.STORE;
 }
 
-/** A repository confirmed as the menu's PATCH confirms one, through the workspace's installation, or the refusal's words; none clears it. */
-export const reachedRepository = (workspaceId: string, repository: string | null) =>
+/** A repository as a task records it: its name as GitHub spells it, none where it is cleared, and how it was reached. */
+interface RecordedRepository {
+  readonly repository: string | null;
+  readonly githubAccess: GitHubAccess;
+}
+
+/**
+ * A repository confirmed as the menu's PATCH confirms one, through the
+ * workspace's installation or else the member's own token, or the refusal's
+ * words; none clears it.
+ */
+export const reachedRepository = (
+  workspaceId: string,
+  repository: string | null,
+  member: string,
+) =>
   repository === null
-    ? Effect.succeed<Result.Result<string | null, string>>(Result.succeed(null))
+    ? Effect.succeed<Result.Result<RecordedRepository, string>>(
+        Result.succeed({ repository: null, githubAccess: GITHUB_ACCESS.APP }),
+      )
     : Effect.map(
-        Effect.result(workspaceRepository(workspaceId, repository)),
-        (reached): Result.Result<string | null, string> =>
+        Effect.result(workspaceRepository(workspaceId, repository, member)),
+        (reached): Result.Result<RecordedRepository, string> =>
           Result.isSuccess(reached)
-            ? Result.succeed(reached.success.fullName)
+            ? Result.succeed({
+                repository: reached.success.repository.fullName,
+                githubAccess: reached.success.access,
+              })
             : Result.fail(repositoryRefusalWords(reached.failure)),
       );
 
@@ -1874,14 +1944,19 @@ export function runUpdateTask(
       const repository =
         changes.repository === undefined
           ? undefined
-          : yield* reachedRepository(workspace.value, changes.repository);
+          : yield* reachedRepository(workspace.value, changes.repository, userId);
       if (repository !== undefined && Result.isFailure(repository)) {
         return agentToolRejected(repository.failure);
       }
       // A repository is compared as GitHub spells it, which is how the task holds it.
       const asWritten = {
         ...changes,
-        ...(repository === undefined ? undefined : { repository: repository.success }),
+        ...(repository === undefined
+          ? undefined
+          : {
+              repository: repository.success.repository,
+              githubAccess: repository.success.githubAccess,
+            }),
       };
       const already = changesStand(read.value.task, asWritten) && (placing?.success.stands ?? true);
       // Note that the task's agents are archived with it, so one still at work, read under its
@@ -2201,7 +2276,8 @@ export function runListTasks(
       const matching = listed.filter(
         (task) =>
           task.workspaceId === workspace.value &&
-          (words === undefined || task.name.toLowerCase().includes(words)),
+          (words === undefined || task.name.toLowerCase().includes(words)) &&
+          (asked.success.status === undefined || task.status === asked.success.status),
       );
       const kept = yield* listTaskSections(userId);
       const sections = kept.sections.filter((section) => section.workspaceId === workspace.value);
@@ -2211,9 +2287,10 @@ export function runListTasks(
           .filter((entry) => shelved.has(entry.sectionId))
           .map((entry) => [entry.taskId, entry.sectionId]),
       );
-      const step = yield* workspaceStepOf(userId, workspace.value);
+      const { step, name } = yield* workspaceNamingOf(userId, workspace.value);
       const tasks = matching.slice(offset, offset + TASKS_LIST_LIMIT).map((task) => ({
         id: task.id,
+        ...taskStandingOf(task, name),
         name: task.name,
         repository: task.repository ?? null,
         startedBy: task.createdBy?.name ?? null,

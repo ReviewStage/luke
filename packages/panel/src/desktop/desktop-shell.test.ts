@@ -6,6 +6,19 @@ import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
+import {
+  ACCOUNT_ACT_KIND,
+  AGENT_ACT_KIND,
+  AGENT_INBOX_ACT_KIND,
+  AUTOMATION_ACT_KIND,
+  BROWSER_ACT_KIND,
+  FACTORY_ACT_KIND,
+  INTEGRATION_ACT_KIND,
+  SETTINGS_ACT_KIND,
+  TASKS_ACT_KIND,
+  UPDATE_ACT_KIND,
+  WINDOW_SURFACE_ACT_KIND,
+} from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -13,7 +26,7 @@ import { experimentsOn } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { NOTIFICATIONS_GRANTOR, NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -30,7 +43,7 @@ import { fixtureChat } from "../tasks/chat-fixture.js";
 import { HISTORY_READ } from "../tasks/use-plan-history.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -41,7 +54,6 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-
 /** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
   account: {
@@ -62,6 +74,7 @@ const SETTINGS: SettingsPanelProps = {
   },
   notifications: {
     status: NOTIFICATIONS_STATUS.UNKNOWN,
+    grantor: NOTIFICATIONS_GRANTOR.MACOS,
     packaged: true,
     onOpenSettings: ignore,
     onTest: ignore,
@@ -783,6 +796,21 @@ function CallShell({ place, folded }: { place: Place; folded: boolean }): React.
 /** Every act the window sent over the bridge, by kind, in order. */
 let sentActs: string[] = [];
 
+/** The port kinds this window's fake refuses rather than answers with nothing. */
+const REFUSED_ON_PORT: readonly string[] = Object.values({
+  ...ACCOUNT_ACT_KIND,
+  ...AGENT_ACT_KIND,
+  ...AGENT_INBOX_ACT_KIND,
+  ...AUTOMATION_ACT_KIND,
+  ...BROWSER_ACT_KIND,
+  ...FACTORY_ACT_KIND,
+  ...INTEGRATION_ACT_KIND,
+  ...SETTINGS_ACT_KIND,
+  ...TASKS_ACT_KIND,
+  ...UPDATE_ACT_KIND,
+  ...WINDOW_SURFACE_ACT_KIND,
+}).filter((kind) => kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN);
+
 /**
  * The bridge as the window meets it, every act written down, with Factory
  * on, and Settings' chunk already loaded, as it is
@@ -799,6 +827,12 @@ async function handBridge(): Promise<void> {
       sentActs.push(request.kind);
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
     },
+  });
+  fakeActPortAnswering((request) => {
+    sentActs.push(request.kind);
+    // A read of the account's automations, integrations, a Factory world, or its coding agents, their Inbox, or the chat, an account or settings act, a task kind, and the platform's updater, Browser tab, and window acts are refused, as `app:act` refused them before they moved onto the port.
+    if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
+    return Promise.resolve(undefined);
   });
 }
 

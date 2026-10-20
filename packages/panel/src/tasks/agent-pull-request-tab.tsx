@@ -17,8 +17,6 @@ import {
   type ConversationEntry,
   DEPLOYMENT_STATE,
   type DeploymentState,
-  MERGE_STATE,
-  type MergeState,
   PULL_REQUEST_STATE,
   type PullRequestCheck,
   type PullRequestDeployment,
@@ -27,7 +25,6 @@ import {
   type ReactionGroup,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
-import { githubImageOf } from "@luke/features/github-image";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   LINK_PLACE,
@@ -35,7 +32,6 @@ import {
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
 } from "@luke/features/luke-link";
-import { ACT_KIND } from "@luke/host/acts";
 import { INLINE_DIFF } from "@luke/settings/diff-view";
 import {
   AVATAR_SHAPE,
@@ -43,7 +39,7 @@ import {
   Avatar,
   Badge,
   Button,
-  CHOICE_BAR_INSET,
+  CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
   ChoiceBar,
   type ChoiceItem,
@@ -64,7 +60,6 @@ import {
   linesCount,
   PAGE_FRAME,
   ProviderMark,
-  SKELETON_SHAPE,
   Skeleton,
   SkeletonRegion,
   Switch,
@@ -99,7 +94,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useAct } from "../act.js";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -109,11 +103,13 @@ import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import {
   AgentChangesTab,
+  type ChangesReads,
   type ChangesReveal,
   type ChangesThreads,
   THREAD_PLACE,
   type ThreadPlace,
   useAgentRead,
+  useChangesReads,
 } from "./agent-changes-tab.js";
 import { threadPreview } from "./changes-model.js";
 import { centreWithin, scrollerOf } from "./code-pane.js";
@@ -127,8 +123,8 @@ import {
 } from "./conversation-filters.js";
 import { PierreDiff, useDiffLook } from "./file-diff.js";
 import type { TreeShown } from "./file-view.js";
-import type { PendingReview } from "./line-comment.js";
-import { blockedWords, MergeActions } from "./merge-box.js";
+import { MergeControl } from "./merge-box.js";
+import { ANCHOR_KIND, anchorIn } from "./pull-request-anchors.js";
 import {
   type PullRequestComment,
   PullRequestCommentBox,
@@ -143,6 +139,7 @@ import {
   type ReviewOptions,
   useReviewOptions,
 } from "./pull-request-pickers.js";
+import { EntryPictures, useGitHubImageRead, usePictureDrawer } from "./pull-request-pictures.js";
 import { Reactions } from "./pull-request-reactions.js";
 import { PullRequestReview } from "./pull-request-review.js";
 import { PullRequestStack } from "./pull-request-stack.js";
@@ -160,17 +157,13 @@ import {
   THREAD_REVEAL_WORDS,
   type ThreadLanding,
   ThreadLandingProvider,
+  useLandedEntry,
   useLandedThread,
   useWindowThreadReveal,
 } from "./thread-reveal.js";
-import {
-  type GitHubPictureDrawer,
-  GitHubPictureLink,
-  GitHubWords,
-  TranscriptWords,
-} from "./transcript-blocks.js";
+import { type GitHubPictureDrawer, GitHubWords, TranscriptWords } from "./transcript-blocks.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
-import { useOpenLink, useOpenPlace } from "./use-open-link.js";
+import { type OpenHere, OpenHereFirst, useOpenLink, useOpenPlace } from "./use-open-link.js";
 import { PULL_REQUEST_VIEW, type PullRequestView } from "./use-side-panel.js";
 import { useWorkingNow, workingTime } from "./working-time.js";
 
@@ -187,32 +180,35 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * mergeability, and people) and its conversation, whose reviews say where
  * each reviewer the header draws stands, both asked as the tab is shown;
  * and its checks, as the Checks tab is first shown. What Luke already holds of
- * the pull request, what the agent published, draws the bar, the title, and
- * the Files changed tab's lines at once; each part stands as a skeleton
+ * the pull request, what the agent published, draws the pill, the title,
+ * and the Files changed tab's lines at once; each part stands as a skeleton
  * until its read lands, and says so with its own Retry where its read
  * failed, the other parts and the tabs standing. Refresh reads again the
  * header's reads and the checks where their tab was shown, each part drawn
  * standing until its answer lands; an agent with no pull request yet says
  * that.
  *
- * The header stays put while the tab under it scrolls: a bar like a File
- * tab's, wearing the pull request's mark and the word for where it stands,
- * with its doors (Review while it is open, `pull-request-review.tsx`,
- * then GitHub and the ⋯); its title and number; its branches, with the
- * stack it stands in beside them (`pull-request-stack.tsx`); who opened it
- * and when, as the Changes tab names them (`pull-request-people.tsx`), with
- * its reviewers' first faces wearing where each stands, the reviewer and
- * label pickers, and its labels in their GitHub colours
- * (`pull-request-labels.tsx`) at the line's end, so a pull request with no
- * labels spends no line on them; and, while it is open,
- * whether it would merge as it stands, in
- * GitHub's own terms. Under it, a row of tabs, each its glyph, its name,
- * and a quiet count: Conversation, its description and its comments and
+ * The header stays put while the tab under it scrolls, and spends as few
+ * rows as it can. Its first row is the title's: the pill wearing the pull
+ * request's mark and the word for where it stands, its title and number
+ * (⌘-click opens it on GitHub), and at the row's end, while it is open or a
+ * draft, the merge control saying what can happen now, its panel holding
+ * GitHub's own sentence and the presses (`merge-box.tsx`), then the ⋯,
+ * which opens it on GitHub first. Under it one line, wrapping where it must:
+ * its branches, with the stack it stands in beside them
+ * (`pull-request-stack.tsx`); who opened it and when, as the Changes tab
+ * names them (`pull-request-people.tsx`), with its reviewers' first faces
+ * wearing where each stands, the reviewer and label pickers, and its labels
+ * in their GitHub colours (`pull-request-labels.tsx`) at the line's end, so
+ * a pull request with no labels spends no line on them. Under it, a row of
+ * tabs ending in Review while it is open or a draft
+ * (`pull-request-review.tsx`), each tab its glyph, its name, and a quiet
+ * count: Conversation, its description and its comments and
  * reviews in time order, as GitHub renders them (`body_html`), drawn
  * through the transcript's own markdown drawing (`GitHubWords`), with an
- * image GitHub serves read through the service on the App's token
- * (`GitHubPicture`) and any other drawn as its link, as ReviewStage/stage
- * draws them; Checks, its head's deployments, the newest of each
+ * image GitHub serves read through the service on the App's token and
+ * opened over the window in the file viewer (`pull-request-pictures.tsx`)
+ * and any other drawn as its link, as ReviewStage/stage draws them; Checks, its head's deployments, the newest of each
  * environment, each opening the address it serves, over every check on its
  * head, those that failed first, then those still running, each opening
  * its page, counted in the colour of how they went; and Files changed (`AgentChangesTab`), its own bar and
@@ -266,6 +262,11 @@ const PULL_REQUEST_WORDS = {
   /** What the folded checks' control says while folded, by how many checks there are in all. */
   showAll: (count: number) => `Show all ${count}`,
   SHOW_LESS: "Show less",
+  /** What the Files changed tab's count says after the lines left to review. */
+  LEFT: "left",
+  /** What the Files changed tab's hint says of every line the pull request changes. */
+  total: (additions: number, deletions: number) =>
+    `+${additions.toLocaleString()} −${deletions.toLocaleString()} total`,
 } as const;
 
 /** The lines a review thread is on, as its head names them: where it stands now, else where it was made; none for a thread on the whole file. */
@@ -324,41 +325,6 @@ function partOf<A>(read: PartRead<A>): Part<A> {
 /** What a landed part holds; none while it is on its way or failed. */
 function landed<A>(part: Part<A>): A | undefined {
   return part.kind === PART.LANDED ? part.value : undefined;
-}
-
-/** How a merge's standing reads: whether it is good news, a wait, or something to fix. */
-const MERGE_TONE = {
-  READY: "ready",
-  WAITING: "waiting",
-  BLOCKED: "blocked",
-} as const;
-
-type MergeTone = (typeof MERGE_TONE)[keyof typeof MERGE_TONE];
-
-/** What a merge's standing says, and in what tone. */
-interface MergeWords {
-  readonly line: string;
-  readonly tone: MergeTone;
-}
-
-/** What a merge's standing says, as GitHub's own box under a pull request says it, its base named where it matters. */
-function mergeWords(merge: MergeState, base: string): MergeWords {
-  switch (merge) {
-    case MERGE_STATE.CLEAN:
-      return { line: "Ready to merge", tone: MERGE_TONE.READY };
-    case MERGE_STATE.UNSTABLE:
-      return { line: "Can merge, though some checks are not passing", tone: MERGE_TONE.WAITING };
-    case MERGE_STATE.BLOCKED:
-      return { line: "Merging is blocked by a required review or check", tone: MERGE_TONE.BLOCKED };
-    case MERGE_STATE.BEHIND:
-      return { line: `Behind ${base}; it must be brought up to date`, tone: MERGE_TONE.BLOCKED };
-    case MERGE_STATE.CONFLICTS:
-      return { line: `Conflicts with ${base}`, tone: MERGE_TONE.BLOCKED };
-    case MERGE_STATE.DRAFT:
-      return { line: "A draft; mark it ready for review to merge", tone: MERGE_TONE.WAITING };
-    case MERGE_STATE.UNKNOWN:
-      return { line: "GitHub is still checking whether it merges", tone: MERGE_TONE.WAITING };
-  }
 }
 
 /** The glyph a check wears for where it stands. */
@@ -426,7 +392,7 @@ function unfoldedCountOf(checks: readonly PullRequestCheck[]): number {
   return Math.max(CHECKS_UNFOLDED, asking);
 }
 
-/** The bar's ⋯: the page read again, and the pull request's link copied. */
+/** The header's ⋯: the pull request opened on GitHub, the page read again, and its link copied. */
 function PullRequestMenu({
   url,
   reading,
@@ -441,6 +407,11 @@ function PullRequestMenu({
   const menu = useMenu(true);
   const copyWithToast = useCopyToast();
   const actions: MenuAction[] = [
+    {
+      label: "Open on GitHub",
+      icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
+      onSelect: () => appPlatform().openGitHub(url),
+    },
     {
       label: "Refresh pull request",
       icon: <RotateCwIcon aria-hidden="true" />,
@@ -465,8 +436,8 @@ function PullRequestMenu({
   );
 }
 
-/** What the bar draws of the pull request: its mark's three, and its page. */
-type BarPullRequest = Pick<CodingAgentPullRequest, "number" | "state" | "checks" | "url">;
+/** What the header draws of the pull request from the first frame: its mark's three, and its page. */
+type HeaderPullRequest = Pick<CodingAgentPullRequest, "number" | "state" | "checks" | "url">;
 
 /** The checks as one word, as the pull request's mark wears it: a failure beats a wait beats a pass. */
 function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
@@ -476,18 +447,18 @@ function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
 }
 
 /**
- * The pull request the bar draws: what the agent published, as last read
- * for the plan, from the first frame, each of its words replaced by the
- * overview's own as its read lands, since that is the newest and the page
- * under the bar says the same: where it stands by the pull request's read,
+ * The pull request the header's pill and ⋯ draw: what the agent published,
+ * as last read for the plan, from the first frame, each of its words
+ * replaced by the overview's own as its read lands, since that is the newest
+ * and the page under the header says the same: where it stands by the pull request's read,
  * and its checks by theirs, the published checks standing only for the
  * pull request they were read on. None while neither has been read.
  */
-function barPullRequestOf(
+function headerPullRequestOf(
   pullRequest: CodingAgentOverviewPullRequest | undefined,
   checks: CodingAgentOverviewChecks | undefined,
   published: CodingAgentPullRequest | undefined,
-): BarPullRequest | undefined {
+): HeaderPullRequest | undefined {
   const held = pullRequest ?? published;
   if (held === undefined) return undefined;
   const { number, state, url } = held;
@@ -524,57 +495,6 @@ function reviewersOf(
   ].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
-/**
- * The bar across the top of the fixed header: the pill saying where the
- * pull request stands, in its colour, as last read of what the agent
- * published until the header's own read lands, which opens the changes
- * that may be made from there (`pull-request-writes.tsx`), and at its end,
- * while the pull request is open, the Review press
- * (`pull-request-review.tsx`), then GitHub's page and the ⋯.
- */
-function PullRequestBar({
-  published,
-  writes,
-  review,
-  pending,
-  reading,
-  onRefresh,
-}: {
-  published: BarPullRequest | undefined;
-  writes: PullRequestWrites;
-  /** The review's own change, apart from the pill's, so each says its own answer where it was pressed. */
-  review: PullRequestWrites;
-  /** The member's own pending review, which the Review panel publishes or discards. */
-  pending: PendingReview;
-  /** Whether a read is out, which a refresh would only repeat. */
-  reading: boolean;
-  onRefresh: () => void;
-}): React.JSX.Element {
-  return (
-    <div className="file-view-bar pull-request-bar">
-      {published === undefined ? null : (
-        <>
-          <PullRequestStateMenu pullRequest={published} writes={writes} />
-          <div className="file-view-actions">
-            {published.state === PULL_REQUEST_STATE.OPEN ||
-            published.state === PULL_REQUEST_STATE.DRAFT ? (
-              <PullRequestReview writes={review} pending={pending} />
-            ) : null}
-            <Tooltip label="Open on GitHub">
-              <IconButton
-                icon={<ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />}
-                label="Open on GitHub"
-                onClick={() => appPlatform().openGitHub(published.url)}
-              />
-            </Tooltip>
-            <PullRequestMenu url={published.url} reading={reading} onRefresh={onRefresh} />
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
 /** A section of the page: its heading, what it counts beside it, and what it holds. */
 function Section({
   title,
@@ -593,16 +513,6 @@ function Section({
       </h3>
       {children}
     </section>
-  );
-}
-
-/** How the tab reads a picture GitHub names through the service, on the App's token as the agent's (`githubImageOf`). */
-function useGitHubImageRead() {
-  const { act } = useAct();
-  return useCallback(
-    (owner: string, address: string) =>
-      act(ACT_KIND.CODING_AGENTS_GITHUB_IMAGE, { agentId: owner, src: address }),
-    [act],
   );
 }
 
@@ -790,29 +700,6 @@ function Checks({
   );
 }
 
-/** Whether the pull request would merge as it stands, in its tone's colour; drawn only while it is open. */
-function MergeLine({
-  pullRequest,
-  actions,
-}: {
-  pullRequest: CodingAgentOverviewPullRequest;
-  /** The merge box's presses at the line's end (`merge-box.tsx`). */
-  actions: ReactNode;
-}): React.JSX.Element {
-  const { line, tone } = mergeWords(pullRequest.merge, pullRequest.base);
-  const blocked =
-    pullRequest.merge === MERGE_STATE.BLOCKED ? blockedWords(pullRequest.merging) : undefined;
-  return (
-    <div className="pull-request-merge" data-merge-tone={tone}>
-      {tone === MERGE_TONE.READY ? <CheckIcon aria-hidden="true" /> : null}
-      {tone === MERGE_TONE.BLOCKED ? <XIcon aria-hidden="true" /> : null}
-      {tone === MERGE_TONE.WAITING ? <CircleDotIcon aria-hidden="true" /> : null}
-      <span className="pull-request-merge-words">{blocked ?? line}</span>
-      {actions}
-    </div>
-  );
-}
-
 /** Quiet blocks where a part's words will stand, one per width given, which `label` names to a reader. */
 function PartSkeleton({
   label,
@@ -844,44 +731,13 @@ function PartFailure({ line, onRetry }: { line: string; onRetry: () => void }): 
   );
 }
 
-/**
- * One picture GitHub's rendering names, read through the service on the
- * App's token as the agent's (`githubImageOf`), drawn from its `data:` URL
- * once read, a quiet box while it is, and its link where GitHub answered
- * none the window draws.
- */
-function GitHubPicture({
-  agentId,
-  src,
-  alt,
-}: {
-  agentId: string;
-  src: string;
-  alt: string;
-}): React.JSX.Element {
-  const state = usePicture(agentId, src, useGitHubImageRead());
-  if (state.kind === PICTURE_STATE.READY) {
-    return <img className="pull-request-picture" src={state.url} alt={alt} />;
-  }
-  if (state.kind === PICTURE_STATE.READING) {
-    return (
-      <span className="pull-request-picture-waiting" role="img" aria-label={alt}>
-        <Skeleton shape={SKELETON_SHAPE.BLOCK} />
-      </span>
-    );
-  }
-  return <GitHubPictureLink src={src} alt={alt} />;
-}
+/** The tab's opener for a link to one of its pull request's own comments on GitHub, which opens the comment in the tab (`pull-request-anchors.ts`); none outside the tab. */
+const AnchorsContext = createContext<OpenHere | undefined>(undefined);
 
-/** How the tab draws a picture GitHub's rendering names: one it may read through the service as the agent's, and none else. */
-function usePictureDrawer(agentId: string): GitHubPictureDrawer {
-  return useCallback(
-    (src, alt) =>
-      githubImageOf(src) === undefined ? undefined : (
-        <GitHubPicture agentId={agentId} src={src} alt={alt} />
-      ),
-    [agentId],
-  );
+/** Words of the pull request's own, under which a link to one of its comments on GitHub opens the comment in the tab, and any other link as it would. */
+function Anchored({ children }: { children: ReactNode }): ReactNode {
+  const open = useContext(AnchorsContext);
+  return open === undefined ? children : <OpenHereFirst open={open}>{children}</OpenHereFirst>;
 }
 
 /** Words GitHub rendered, or, where it rendered none the read could carry, the words as markdown. */
@@ -895,13 +751,19 @@ function EntryWords({
   if (entry.html !== null) {
     return (
       <div className="pull-request-words">
-        <GitHubWords html={entry.html} picture={picture} />
+        <EntryPictures html={entry.html}>
+          <Anchored>
+            <GitHubWords html={entry.html} picture={picture} />
+          </Anchored>
+        </EntryPictures>
       </div>
     );
   }
   return entry.body === "" ? null : (
     <div className="pull-request-words">
-      <TranscriptWords text={entry.body} />
+      <Anchored>
+        <TranscriptWords text={entry.body} />
+      </Anchored>
     </div>
   );
 }
@@ -1182,8 +1044,16 @@ function EntryCard({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   const threads = entry.threads ?? [];
+  const landed = useLandedEntry(entry.url);
   return (
-    <li className="pull-request-entry">
+    <li
+      ref={landed.ref}
+      className="pull-request-entry"
+      // Note that the entry takes the focus a link to it on GitHub brings, though no key reaches it.
+      tabIndex={-1}
+      data-search-landed={landed.ringed ? "" : undefined}
+      onAnimationEnd={landed.onAnimationEnd}
+    >
       <span className="changes-comment-head">
         <PersonRef person={entry.by} />
         {entry.state === undefined ? null : <ReviewStanding state={entry.state} />}
@@ -1220,21 +1090,15 @@ interface OverviewParts {
   };
 }
 
-/** Under the title: the branches and the stack it stands in, who opened it and when, its reviewers, the pickers and its labels, and, while it is open, whether it merges; a skeleton while its read is out, and its failure with Retry. */
+/** Under the title, one line wrapping where it must: the branches and the stack it stands in, who opened it and when, its reviewers, the pickers and its labels; a skeleton while its read is out, and its failure with Retry. */
 function PullRequestHead({
   parts,
   now,
-  repository,
-  shown,
   writes,
   editing,
 }: {
   parts: OverviewParts;
   now: number;
-  /** The agent's repository, which the merge box keeps the method chosen by. */
-  repository: string | null;
-  /** Whether the panel is on screen, which a merge asked about goes with. */
-  shown: boolean;
   writes: PullRequestWrites;
   /** What the reviewer and label pickers read, and whether the pull request is being read again after a change. */
   editing: { readonly options: ReviewOptions; readonly refreshing: boolean };
@@ -1244,7 +1108,7 @@ function PullRequestHead({
     return (
       <PartSkeleton
         label={PULL_REQUEST_WORDS.READING}
-        widths={["40%", "65%"]}
+        widths={["65%"]}
         className="pull-request-head-skeleton"
       />
     );
@@ -1262,53 +1126,38 @@ function PullRequestHead({
   const open =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
   return (
-    <>
-      <div className="pull-request-branch-row">
+    <div className="changes-people pull-request-people">
+      <span className="pull-request-branch-row">
         <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
-          <p className="pull-request-branches">
+          <span className="pull-request-branches">
             <bdi>{pullRequest.base}</bdi>
             {" ← "}
             <bdi>{pullRequest.head}</bdi>
-          </p>
+          </span>
         </Tooltip>
         <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
-      </div>
-      <div className="changes-people pull-request-people">
-        {author === undefined ? null : <OpenedBy person={author} />}
-        {/* Note that a merged one says when it merged, which is the moment that matters once it has. */}
-        <span className="pull-request-quiet">
-          {mergedAt === null ? null : "Merged "}
-          <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
-        </span>
-        <span className="pull-request-reviewers">
-          {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
-          {open ? (
-            <ReviewerPicker
-              author={author?.login}
-              requested={pullRequest.requested}
-              requestedTeams={pullRequest.requestedTeams ?? []}
-              writes={writes}
-              {...editing}
-            />
-          ) : null}
-          <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
-        </span>
-        <PullRequestLabels labels={pullRequest.labels ?? []} />
-      </div>
-      {open ? (
-        <MergeLine
-          pullRequest={pullRequest}
-          actions={
-            <MergeActions
-              pullRequest={pullRequest}
-              repository={repository}
-              shown={shown}
-              writes={writes}
-            />
-          }
-        />
-      ) : null}
-    </>
+      </span>
+      {author === undefined ? null : <OpenedBy person={author} />}
+      {/* Note that a merged one says when it merged, which is the moment that matters once it has. */}
+      <span className="pull-request-quiet">
+        {mergedAt === null ? null : "Merged "}
+        <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
+      </span>
+      <span className="pull-request-reviewers">
+        {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
+        {open ? (
+          <ReviewerPicker
+            author={author?.login}
+            requested={pullRequest.requested}
+            requestedTeams={pullRequest.requestedTeams ?? []}
+            writes={writes}
+            {...editing}
+          />
+        ) : null}
+        <LabelPicker labels={pullRequest.labels ?? []} writes={writes} {...editing} />
+      </span>
+      <PullRequestLabels labels={pullRequest.labels ?? []} />
+    </div>
   );
 }
 
@@ -1425,7 +1274,11 @@ function DescriptionPart({
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_DESCRIPTION}</p>
       ) : (
         <div className="pull-request-words">
-          <GitHubWords html={part.value.html} picture={picture} />
+          <EntryPictures html={part.value.html}>
+            <Anchored>
+              <GitHubWords html={part.value.html} picture={picture} />
+            </Anchored>
+          </EntryPictures>
         </div>
       )}
       {part.kind === PART.PENDING ? null : <Reactions reactions={reactions} subject={subject} />}
@@ -1444,8 +1297,8 @@ function ConversationPart({
 }: {
   parts: OverviewParts;
   filters: ConversationFiltersControl["filters"];
-  /** The thread last brought into view here, by its id, which stands whatever the filters say. */
-  kept: string | undefined;
+  /** What was last brought into view here, a thread by its id and an entry by its page, which stands whatever the filters say. */
+  kept: ReadonlySet<string>;
   /** The pull request's page, which the earlier entries left on GitHub open. */
   url: string | undefined;
   now: number;
@@ -1504,12 +1357,12 @@ function ConversationPart({
   );
 }
 
-/** The fixed header's title and number, as the pull request's read says or, until it lands, as Luke held them; a skeleton where neither has. */
+/** The fixed header's title and number, as the pull request's read says or, until it lands, as Luke held them, ⌘-click opening it on GitHub; a skeleton where neither has. */
 function HeaderTitle({
   title,
   writes,
 }: {
-  title: Pick<CodingAgentPullRequest, "title" | "number"> | undefined;
+  title: Pick<CodingAgentPullRequest, "title" | "number" | "url"> | undefined;
   writes: PullRequestWrites;
 }): React.JSX.Element {
   if (title === undefined) {
@@ -1522,7 +1375,12 @@ function HeaderTitle({
     );
   }
   return (
-    <PullRequestTitle title={title.title} number={pullRequestNumberLabel(title)} writes={writes} />
+    <PullRequestTitle
+      title={title.title}
+      number={pullRequestNumberLabel(title)}
+      writes={writes}
+      onOpen={() => appPlatform().openGitHub(title.url)}
+    />
   );
 }
 
@@ -1575,6 +1433,55 @@ function checksCount(
   ];
 }
 
+/** What the Files changed tab counts: the lines left to review and, in its hint, the whole; or the whole alone. */
+interface FilesCount {
+  readonly count: readonly CountPart[];
+  readonly hint: string | undefined;
+}
+
+/**
+ * The lines the Files changed tab counts, as stage-cli counts them: those
+ * left to review, the whole less every file the member marked viewed, its
+ * whole in the hint, while some files are viewed and some are not; the whole
+ * alone where none or all are, or where the changes and the marks, read as
+ * Files changed is first opened, have not both landed. The whole is the
+ * changes' own once they are read, so it and the files it is cut by describe
+ * the same push; where the read stopped short of every file, it is what the
+ * agent published, and files the read left out count as still to review.
+ * Note that it reads the marks Files changed draws, so a box ticked there
+ * counts at once, and one GitHub refuses counts again as it goes back.
+ */
+function filesCountOf(
+  published: CodingAgentPullRequest | undefined,
+  reads: ChangesReads,
+): FilesCount | undefined {
+  const changes = reads.pullRequest;
+  const marks = reads.viewedFiles.marks;
+  if (changes === null || marks === undefined) {
+    return published === undefined
+      ? undefined
+      : { count: linesCount(published.additions, published.deletions), hint: undefined };
+  }
+  const { files, truncated } = changes;
+  const sum = (of: readonly (typeof files)[number][], key: "additions" | "deletions") =>
+    of.reduce((total, file) => total + file[key], 0);
+  const additions =
+    truncated && published !== undefined ? published.additions : sum(files, "additions");
+  const deletions =
+    truncated && published !== undefined ? published.deletions : sum(files, "deletions");
+  const whole = { count: linesCount(additions, deletions), hint: undefined };
+  const viewed = files.filter((file) => marks.viewed(file.path));
+  if (viewed.length === 0 || (viewed.length === files.length && !truncated)) return whole;
+  const left = linesCount(
+    Math.max(0, additions - sum(viewed, "additions")),
+    Math.max(0, deletions - sum(viewed, "deletions")),
+  );
+  return {
+    count: [...left, { text: PULL_REQUEST_WORDS.LEFT }],
+    hint: PULL_REQUEST_WORDS.total(additions, deletions),
+  };
+}
+
 /** How many entries the Conversation tab counts: its comments and reviews, the earlier ones left on GitHub, and every review thread. */
 function conversationCount(conversation: CodingAgentOverviewConversation): number {
   const threads = conversation.conversation.reduce(
@@ -1587,16 +1494,19 @@ function conversationCount(conversation: CodingAgentOverviewConversation): numbe
 /**
  * The three tabs under the header, each counting what Luke has read of it
  * so far: the conversation once read; the checks by how they went from the
- * first frame, as the bar's mark says it, and by how many once read; and
- * the files by the lines what was published adds and removes.
+ * first frame, as the pill's mark says it, and by how many once read; and
+ * the files by the lines left to review once some are marked viewed, else
+ * by the lines what was published adds and removes (`filesCountOf`).
  */
 function tabsOf(
   parts: OverviewParts,
   published: CodingAgentPullRequest | undefined,
-  bar: BarPullRequest | undefined,
+  held: HeaderPullRequest | undefined,
+  changes: ChangesReads,
 ): readonly ChoiceItem<PullRequestView>[] {
   const conversation = landed(parts.conversation);
   const checks = landed(parts.checks);
+  const files = filesCountOf(published, changes);
   return [
     {
       value: PULL_REQUEST_VIEW.CONVERSATION,
@@ -1610,19 +1520,19 @@ function tabsOf(
       icon: <CircleCheckIcon />,
       label: "Checks",
       count:
-        bar === undefined
+        held === undefined
           ? undefined
           : checksCount(
-              bar.checks,
-              checks === undefined ? undefined : summaryCountOf(checks.checks, bar.checks),
+              held.checks,
+              checks === undefined ? undefined : summaryCountOf(checks.checks, held.checks),
             ),
     },
     {
       value: PULL_REQUEST_VIEW.FILES,
       icon: <FileDiffIcon />,
       label: "Files changed",
-      count:
-        published === undefined ? undefined : linesCount(published.additions, published.deletions),
+      count: files?.count,
+      hint: files?.hint,
     },
   ];
 }
@@ -1716,9 +1626,9 @@ function ConversationView({
   url: string | undefined;
   /** The comment box's words and its own change, held by the tab so the box may come and go. */
   comment: PullRequestComment;
-  /** The thread last brought into view here, by its id, which stands whatever the filters say. */
-  kept: string | undefined;
-  /** The thread to land on, once; none lands on none. */
+  /** What was last brought into view here, a thread by its id and an entry by its page, which stands whatever the filters say. */
+  kept: ReadonlySet<string>;
+  /** The thread or entry to land on, once; none lands on none. */
   landing: ThreadLanding | undefined;
 }): React.JSX.Element {
   const now = useMinute();
@@ -1855,7 +1765,7 @@ function useThreadJumps(input: {
   const conversationLanding: ThreadLanding | undefined =
     jump?.view === PULL_REQUEST_THREAD_VIEW.CONVERSATION && target?.id !== undefined
       ? {
-          threadId: target.id,
+          target: target.id,
           ask: jump.ask,
           scroll: centreCard,
           onLanded: letGo,
@@ -1889,14 +1799,72 @@ function useThreadJumps(input: {
   };
 }
 
+/** How the tab opens a link to one of its pull request's own comments on GitHub, the entry it is bringing into view, and the last it brought there. */
+interface ConversationAnchors {
+  readonly open: OpenHere;
+  readonly landing: ThreadLanding | undefined;
+  readonly kept: string | undefined;
+}
+
+/**
+ * A link on GitHub to one of the pull request's own comments, pressed in its
+ * words, opens the comment in the Conversation rather than GitHub: a line
+ * comment's thread through the route its own link takes (`jumps`), and a
+ * comment on the pull request or a review brought into view in place; any
+ * other link, and one to a comment the read did not reach, opens as it
+ * would (`anchorIn`).
+ */
+function useConversationAnchors(input: {
+  pullRequestUrl: string | undefined;
+  conversation: readonly ConversationEntry[] | undefined;
+  jumps: ThreadJumps;
+  onView: (view: PullRequestView) => void;
+}): ConversationAnchors {
+  const { pullRequestUrl, conversation, jumps, onView } = input;
+  const [entry, setEntry] = useState<{ readonly url: string; readonly ask: number } | undefined>(
+    undefined,
+  );
+  // Note that the asks are counted apart from the one standing, which a landing lets go, so the same link pressed again is a new ask its card answers.
+  const asks = useRef(0);
+  const [kept, setKept] = useState<string | undefined>(undefined);
+  const open: OpenHere = (href) => {
+    const anchor =
+      pullRequestUrl === undefined || conversation === undefined
+        ? undefined
+        : anchorIn(href, pullRequestUrl, conversation);
+    if (anchor === undefined) return false;
+    if (anchor.kind === ANCHOR_KIND.THREAD) {
+      if (anchor.thread.id === undefined) return false;
+      jumps.jump(anchor.thread, PULL_REQUEST_THREAD_VIEW.CONVERSATION);
+      return true;
+    }
+    onView(PULL_REQUEST_VIEW.CONVERSATION);
+    setKept(anchor.entry.url);
+    asks.current += 1;
+    setEntry({ url: anchor.entry.url, ask: asks.current });
+    return true;
+  };
+  const landing =
+    entry === undefined
+      ? undefined
+      : {
+          target: entry.url,
+          ask: entry.ask,
+          scroll: centreCard,
+          onLanded: (ask: number) => setEntry((was) => (was?.ask === ask ? undefined : was)),
+          onFaded: () => undefined,
+        };
+  return { open, landing, kept };
+}
+
 /**
  * One agent's Pull request tab, laid out as stage-cli's pull request page:
- * a fixed header that stays put while what is under it scrolls (the bar
- * with the pill saying where it stands and GitHub's page and the ⋯; its
- * title and number; its branches; who opened it and when, and its
- * reviewers; and, while it is open, whether it would merge), then a row of
- * tabs, Conversation, Checks, and Files changed (`AgentChangesTab`), each
- * with its count. Each tab stands once shown, the others hidden, so
+ * a fixed header that stays put while what is under it scrolls (the pill
+ * saying where it stands, its title and number, and, while it is open, the
+ * merge control and the ⋯, in one row; then its branches, who opened it and
+ * when, and its reviewers, in one line), then a row of tabs, Conversation,
+ * Checks, and Files changed (`AgentChangesTab`), each with its count, and
+ * Review at its end while it is open. Each tab stands once shown, the others hidden, so
  * switching draws what each last read rather than asking GitHub again. The
  * header's reads, the pull request and its conversation, whose reviews say
  * where each reviewer stands, are asked as the tab is shown; the checks and
@@ -1994,11 +1962,21 @@ function PullRequestTabBody({
   };
   const reading = pullRequestRead.out || checksRead.out || conversationRead.out;
   const published = pullRequestOfTab(control, { changes: agentId, number });
-  const bar = barPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
+  const held = headerPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
   const none = [parts.pullRequest, parts.checks, parts.conversation].some(
     (part) => part.kind === PART.NONE,
   );
-  const title = landed(parts.pullRequest) ?? published;
+  // Files changed's reads, held here so its tab's count reads the same marks it draws; asked as it is first shown, as before.
+  const changes = useChangesReads(
+    agentId,
+    control,
+    shown && !none && view === PULL_REQUEST_VIEW.FILES,
+  );
+  const overview = landed(parts.pullRequest);
+  const title = overview ?? published;
+  // Review stands at the end of the tabs while the pull request is open or a draft, as the pill says it stands.
+  const reviewable =
+    held?.state === PULL_REQUEST_STATE.OPEN || held?.state === PULL_REQUEST_STATE.DRAFT;
   const now = useMinute();
   // A change is read back as Refresh reads: the tab, and what the agent published, which the plan's own marks draw.
   const written = refresh;
@@ -2031,104 +2009,128 @@ function PullRequestTabBody({
     conversation: parts.conversation,
     onView,
   });
+  const anchors = useConversationAnchors({
+    pullRequestUrl: title?.url,
+    conversation: conversation?.conversation,
+    jumps: threadJumps.jumps,
+    onView,
+  });
+  const kept = new Set(
+    [threadJumps.kept, anchors.kept].filter((each): each is string => each !== undefined),
+  );
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
   return (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
       <ThreadJumpContext.Provider value={threadJumps.jumps}>
-        <div className="file-view pull-request-tab ph-no-capture">
-          <PullRequestBar
-            published={bar}
-            writes={writes}
-            review={review}
-            pending={pendingReview}
-            reading={reading}
-            onRefresh={refresh}
-          />
-          <PullRequestWriteNote writes={writes} />
-          {none ? (
-            <EmptyState icon={<GitPullRequestIcon />}>
-              {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
-            </EmptyState>
-          ) : (
-            <>
-              <header className="pull-request-header">
-                <HeaderTitle title={title} writes={writes} />
-                <PullRequestHead
-                  parts={parts}
-                  now={now}
-                  repository={repository}
-                  shown={shown}
-                  writes={writes}
-                  editing={{ options, refreshing: pullRequestRead.out }}
-                />
-              </header>
-              <div className="pull-request-tabs">
-                <ChoiceBar<PullRequestView>
-                  label="Pull request"
-                  items={tabsOf(parts, published, bar)}
-                  value={view}
-                  onChange={onView}
-                  look={CHOICE_BAR_LOOK.FILL}
-                  panels={ids}
-                  inset={CHOICE_BAR_INSET.READING}
-                />
-              </div>
-              <div
-                className="pull-request-view"
-                role="tabpanel"
-                id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
-                aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
-                hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
-              >
-                <ConversationView
-                  agentId={agentId}
-                  parts={parts}
-                  url={title?.url}
-                  comment={comment}
-                  kept={threadJumps.kept}
-                  landing={threadJumps.conversationLanding}
-                />
-              </div>
-              <div
-                className="pull-request-view"
-                role="tabpanel"
-                id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
-                aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
-                hidden={view !== PULL_REQUEST_VIEW.CHECKS}
-              >
-                <DetailPage
-                  frame={PAGE_FRAME.TOOLBAR}
-                  label="Pull request checks"
-                  inset={DETAIL_PAGE_INSET.READING}
+        <AnchorsContext.Provider value={anchors.open}>
+          <div className="file-view pull-request-tab ph-no-capture">
+            <PullRequestWriteNote writes={writes} />
+            {none ? (
+              <EmptyState icon={<GitPullRequestIcon />}>
+                {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
+              </EmptyState>
+            ) : (
+              <>
+                <header className="pull-request-header">
+                  <div className="pull-request-title-row">
+                    {held === undefined ? null : (
+                      <PullRequestStateMenu pullRequest={held} writes={writes} />
+                    )}
+                    <HeaderTitle title={title} writes={writes} />
+                    <div className="pull-request-title-actions">
+                      {overview === undefined ? null : (
+                        <MergeControl
+                          pullRequest={overview}
+                          repository={repository}
+                          shown={shown}
+                          writes={writes}
+                        />
+                      )}
+                      {held === undefined ? null : (
+                        <PullRequestMenu url={held.url} reading={reading} onRefresh={refresh} />
+                      )}
+                    </div>
+                  </div>
+                  <PullRequestHead
+                    parts={parts}
+                    now={now}
+                    writes={writes}
+                    editing={{ options, refreshing: pullRequestRead.out }}
+                  />
+                </header>
+                <div className="pull-request-tabs">
+                  <ChoiceBar<PullRequestView>
+                    label="Pull request"
+                    items={tabsOf(parts, published, held, changes)}
+                    hint={Tooltip}
+                    value={view}
+                    onChange={onView}
+                    look={CHOICE_BAR_LOOK.FILL}
+                    fold={CHOICE_BAR_FOLD.TOGETHER}
+                    panels={ids}
+                  />
+                  {reviewable ? (
+                    <PullRequestReview writes={review} pending={pendingReview} />
+                  ) : null}
+                </div>
+                <div
+                  className="pull-request-view"
+                  role="tabpanel"
+                  id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
+                  aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
+                  hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
                 >
-                  <ChecksPart
+                  <ConversationView
                     agentId={agentId}
                     parts={parts}
-                    live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                    url={title?.url}
+                    comment={comment}
+                    kept={kept}
+                    landing={threadJumps.conversationLanding ?? anchors.landing}
                   />
-                </DetailPage>
-              </div>
-            </>
-          )}
-          <div
-            className="pull-request-view"
-            role="tabpanel"
-            id={ids(PULL_REQUEST_VIEW.FILES).panel}
-            aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
-            hidden={none || view !== PULL_REQUEST_VIEW.FILES}
-          >
-            <AgentChangesTab
-              agentId={agentId}
-              control={control}
-              shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-              repository={repository}
-              tree={tree}
-              threads={changesThreads}
-              lineComments={{ pending: pendingReview, onWritten: written }}
-              reveal={threadJumps.filesReveal}
-            />
+                </div>
+                <div
+                  className="pull-request-view"
+                  role="tabpanel"
+                  id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
+                  aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
+                  hidden={view !== PULL_REQUEST_VIEW.CHECKS}
+                >
+                  <DetailPage
+                    frame={PAGE_FRAME.TOOLBAR}
+                    label="Pull request checks"
+                    inset={DETAIL_PAGE_INSET.READING}
+                  >
+                    <ChecksPart
+                      agentId={agentId}
+                      parts={parts}
+                      live={shown && view === PULL_REQUEST_VIEW.CHECKS}
+                    />
+                  </DetailPage>
+                </div>
+              </>
+            )}
+            <div
+              className="pull-request-view"
+              role="tabpanel"
+              id={ids(PULL_REQUEST_VIEW.FILES).panel}
+              aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
+              hidden={none || view !== PULL_REQUEST_VIEW.FILES}
+            >
+              <AgentChangesTab
+                agentId={agentId}
+                control={control}
+                shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+                repository={repository}
+                tree={tree}
+                threads={changesThreads}
+                lineComments={{ pending: pendingReview, onWritten: written }}
+                reads={changes}
+                reveal={threadJumps.filesReveal}
+              />
+            </div>
           </div>
-        </div>
+        </AnchorsContext.Provider>
       </ThreadJumpContext.Provider>
     </ThreadWritesProvider>
   );

@@ -26,6 +26,13 @@ import {
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
+import {
+  type PortActKind,
+  type PortActPayload,
+  type PortActResult,
+  TASKS_ACT_KIND,
+  WORKSPACE_ACT_KIND,
+} from "@luke/host/contract";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION } from "@luke/settings/settings-views";
@@ -37,7 +44,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenPersonProvider } from "../person-door.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -98,7 +105,7 @@ const FIRST: Workspace = {
 /** The members the test's service holds. */
 let stored: WorkspaceMember[] = [];
 /** Every act the section sent, in order. */
-let sent: Act[] = [];
+let sent: Asked[] = [];
 /** Whether the service refuses to read the invitations. */
 let refuseInvitationsRead = false;
 /** Whether the service refuses to read the members. */
@@ -161,19 +168,32 @@ function automationOf(
   return mine === undefined ? summary : { ...summary, mine };
 }
 
-const done = (value: ActResultFor<ActKind>): ActOutcome => ({
-  status: ACT_OUTCOME_STATUS.DONE,
-  value,
-});
+/** One ask of the window, on `app:act` or on its act port. */
+type Asked =
+  | Act
+  | {
+      [Kind in PortActKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
+    }[PortActKind];
+
+/** Any answer a kind gives, on either side. */
+type AnswerValue = ActResultFor<ActKind> | PortActResult<PortActKind>;
+
+/** What the fake host answers an ask with, on either side. */
+type Answered =
+  | { readonly status: typeof ACT_OUTCOME_STATUS.DONE; readonly value: AnswerValue }
+  | { readonly status: typeof ACT_OUTCOME_STATUS.REFUSED; readonly reason: string }
+  | { readonly status: typeof ACT_OUTCOME_STATUS.UNKNOWN_ACT };
+
+const done = (value: AnswerValue): Answered => ({ status: ACT_OUTCOME_STATUS.DONE, value });
 
 /** What the Repositories group reads as the page opens, which a test of another group's acts leaves aside. */
-const MAC_GROUP_READS: ReadonlySet<ActKind> = new Set([
+const MAC_GROUP_READS: ReadonlySet<string> = new Set([
   ACT_KIND.TASKS_REPOSITORIES,
   ACT_KIND.MAC_REPOSITORIES,
 ]);
 
 /** The bridge, answering the section's acts the way the host would. */
-function answer(request: Act): Promise<ActOutcome> {
+function answer(request: Asked): Promise<Answered> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.WORKSPACE_MEMBERS_READ:
@@ -291,10 +311,6 @@ function answer(request: Act): Promise<ActOutcome> {
       );
       return Promise.resolve(done(stored));
     }
-    case ACT_KIND.AUTOMATIONS_LIST:
-      if (automations === undefined)
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-      return Promise.resolve(done({ automations: automations.map(automationOf) }));
     case ACT_KIND.TASKS_REPOSITORIES:
       if (repositoriesHeld !== undefined) {
         const held = repositoriesHeld;
@@ -337,6 +353,31 @@ function answer(request: Act): Promise<ActOutcome> {
   }
 }
 
+/** One kind on the act port, answered by `answer`, a refusal as the port's declared error. */
+function onPort(kind: PortActKind) {
+  return async (payload: PortActPayload<PortActKind>) => {
+    // SAFETY: the port hands each procedure the payload its own kind takes.
+    const outcome = await answer({ kind, payload } as Asked);
+    if (outcome.status === ACT_OUTCOME_STATUS.DONE) return outcome.value;
+    throw refusedOnPort(
+      outcome.status === ACT_OUTCOME_STATUS.REFUSED ? outcome.reason : "Not in this test.",
+    );
+  };
+}
+
+/** The act port answering every workspace and task kind, and the run commands', as `answer` does. */
+function workspacePort(): Parameters<typeof fakeActPort>[0] {
+  const kinds: readonly PortActKind[] = [
+    ...Object.values(TASKS_ACT_KIND),
+    ...Object.values(WORKSPACE_ACT_KIND),
+    ACT_KIND.MAC_REPOSITORIES,
+    ACT_KIND.MAC_REPOSITORY_SET,
+  ];
+  const procedures = kinds.map((kind) => [kind, onPort(kind)]);
+  // SAFETY: each kind's procedure answers that kind's own result, as `answer` gives it.
+  return Object.fromEntries(procedures) as Parameters<typeof fakeActPort>[0];
+}
+
 const roots: Root[] = [];
 const registries: AtomRegistry.AtomRegistry[] = [];
 
@@ -363,7 +404,15 @@ beforeEach(() => {
   macSaveHeld = undefined;
   githubRepositories = [];
   repositoriesHeld = undefined;
-  fakeAppBridge({ act: answer });
+  // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
+  fakeAppBridge({ act: (request) => answer(request) as Promise<ActOutcome> });
+  fakeActPort({
+    ...workspacePort(),
+    [ACT_KIND.AUTOMATIONS_LIST]: () =>
+      automations === undefined
+        ? Promise.reject(new Error("Not in this test."))
+        : Promise.resolve({ automations: automations.map(automationOf) }),
+  });
   handCapabilities(DESKTOP_CAPABILITIES);
 });
 

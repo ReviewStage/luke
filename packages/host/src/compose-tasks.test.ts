@@ -25,7 +25,11 @@ import {
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
-import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
+import {
+  type GitHubRepositoryIssuesAnswer,
+  ISSUE_STATE,
+  type RepositoryIssuesAsk,
+} from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
@@ -48,6 +52,8 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type RepositoryPin,
+  TASK_PRIORITY,
+  TASK_STATUS,
   type Task,
   type TaskAgentsSummary,
   type TaskFileAnswer,
@@ -171,6 +177,9 @@ interface FakeService extends TasksClient {
   pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
   /** What the service answers for a repository's issues, kept as its pull requests are. */
   issues: Record<string, Record<string, Map<number, GitHubRepositoryIssueAnswer>>>;
+  /** What a repository's issues read answers, by workspace and repository, and each ask it heard. */
+  repositoryIssues: Record<string, Record<string, GitHubRepositoryIssuesAnswer>>;
+  issueAsks: RepositoryIssuesAsk[];
   /** The newest page of the history, for any task; none answers nothing, as a service that did not answer. */
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
@@ -335,6 +344,8 @@ function fakeService(tasks: Task[]): FakeService {
     places: {},
     pullRequests: {},
     issues: {},
+    repositoryIssues: {},
+    issueAsks: [],
     history: undefined,
     olderHistory: {},
     revisions: {},
@@ -671,6 +682,11 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() => service.pullRequests[place.workspaceId]?.[place.repository]?.get(number)),
     readRepositoryIssue: (place, number) =>
       Effect.sync(() => service.issues[place.workspaceId]?.[place.repository]?.get(number)),
+    readRepositoryIssues: (place, ask) =>
+      Effect.sync(() => {
+        service.issueAsks.push(ask);
+        return service.repositoryIssues[place.workspaceId]?.[place.repository];
+      }),
     readBoard: (taskId) => Effect.sync(() => service.boards[taskId]),
     readTranscript: (taskId) => Effect.sync(() => service.transcripts[taskId]),
     readWork: (taskId, before) =>
@@ -755,6 +771,17 @@ function fakeService(tasks: Task[]): FakeService {
           candidate.id === taskId ? renamed : candidate,
         );
         return renamed;
+      }),
+    // The service sets the status and the priority named, and leaves the other standing.
+    setStanding: (taskId, standing) =>
+      Effect.sync(() => {
+        const found = service.tasks.find((candidate) => candidate.id === taskId);
+        if (found === undefined) return undefined;
+        const changed = { ...found, ...standing };
+        service.tasks = service.tasks.map((candidate) =>
+          candidate.id === taskId ? changed : candidate,
+        );
+        return changed;
       }),
     // The service stamps a pin or an archive at its own clock, and a false takes it away.
     mark: (taskId, { pinned, archived }) =>
@@ -2673,6 +2700,37 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a repository's issues are read with the number or the words asked, an installation granting none is answered so, a service that did not answer as unanswered, and nothing is told in the view",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.repositoryIssues[ACME.id] = {
+        "acme/relay": { issues: [] },
+        "acme/ledger": {
+          ungranted: { settingsUrl: "https://github.com/settings/installations/1" },
+        },
+      };
+      const { call, told } = yield* subject(service);
+      const asked = (repository: string, more: RepositoryIssuesAsk = {}) =>
+        call(GATEWAY_METHOD.TASKS_GITHUB_ISSUES, { workspaceId: ACME.id, repository, ...more });
+
+      const listed = yield* asked("acme/relay");
+      yield* asked("acme/relay", { query: "invite" });
+      yield* asked("acme/relay", { number: 7 });
+      const ungranted = yield* asked("acme/ledger");
+      const unanswered = yield* asked("acme/gone");
+
+      assert.deepEqual(listed, { issues: [] });
+      assert.deepEqual(ungranted, {
+        ungranted: { settingsUrl: "https://github.com/settings/installations/1" },
+      });
+      assert.deepEqual(unanswered, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(service.issueAsks, [{}, { query: "invite" }, { number: 7 }, {}, {}]);
+      assert.equal(told.length, 0, "issues are never told in the view");
+    }),
+);
+
 it.effect("the repository chip's read names the workspace it is for to the service", () =>
   Effect.gen(function* () {
     const service = fakeService([]);
@@ -2706,6 +2764,36 @@ it.effect(
       );
       const open = last()?.document;
       assert.equal(open?.status === TASKS_READ.READY ? open.task?.workspaceId : undefined, ACME.id);
+    }),
+);
+
+it.effect(
+  "a plan's status and priority set on the service land in the list and the open document in place, and a change naming neither never travels",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const { call, last } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+
+      const changed = yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, {
+        taskId: INVITES,
+        status: TASK_STATUS.DONE,
+        priority: TASK_PRIORITY.HIGH,
+      });
+      const bare = yield* Effect.exit(call(GATEWAY_METHOD.TASKS_SET_STANDING, { taskId: INVITES }));
+
+      assert.deepEqual(changed, { changed: true });
+      assert.ok(Exit.isFailure(bare));
+      assert.deepEqual(
+        last()?.tasks.map((each) => [each.status, each.priority]),
+        [[TASK_STATUS.DONE, TASK_PRIORITY.HIGH]],
+      );
+      const open = last()?.document;
+      assert.equal(
+        open?.status === TASKS_READ.READY ? open.task?.status : undefined,
+        TASK_STATUS.DONE,
+      );
     }),
 );
 

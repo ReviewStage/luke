@@ -1,4 +1,5 @@
 import { Schema as EffectSchema, Option } from "effect";
+import { dateLabel, isDateMoment, isDateRange } from "./date-mention.js";
 import {
   INTEGRATION_NAME,
   integrationConnectionNameSchema,
@@ -33,8 +34,7 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * Linear issue's address is the words' own, and is handed nothing.
  *
  * The target is the address the thing has on the web, so a mention copied
- * out of Luke, into Slack, a pull request or a mail, still leads somewhere
- * (`docs/proposals/web-and-links.md`):
+ * out of Luke, into Slack, a pull request or a mail, still leads somewhere:
  *
  * - A task is `https://tryluke.dev/<workspace>/plan/<id>`, and one of its
  *   sections that with `#<anchor>` after it. Only the id finds the task: the
@@ -87,6 +87,12 @@ import { PLAN_SECTION_BOUNDS } from "./task-wire.js";
  * the tool's own name
  * as the server lists it.
  *
+ * A date has no page of its own either, so it keeps the `luke:` form too:
+ * `luke://date/<start>`, and `luke://date/<start>/<end>` for a range, each
+ * end ISO 8601 as Notion holds a date's (`date-mention.ts`): a day,
+ * `2026-10-20`, or a time on one with its offset, `2026-10-20T15:00-07:00`.
+ * Its label is the date in full, so the words read as it anywhere.
+ *
  * A page of one of the integrations, a Linear issue or a pull request, is
  * named by its own web address, which a host of the integration's
  * (`INTEGRATION_HOSTS`) says it is the integration's. It is read last, after
@@ -110,6 +116,8 @@ export const MENTION_KIND = {
   LUKE: "luke",
   /** An issue of the workspace's own tracker. */
   ISSUE: "issue",
+  /** A day, a time on one, or a range of either. */
+  DATE: "date",
 } as const;
 
 const MENTION_BOUNDS = {
@@ -160,6 +168,7 @@ const LEGACY = {
     [MENTION_KIND.FILE]: "file",
     [MENTION_KIND.FOLDER]: "folder",
     [MENTION_KIND.SERVER]: "mcp",
+    [MENTION_KIND.DATE]: "date",
   },
 } as const;
 
@@ -276,6 +285,9 @@ const linesSchema = EffectSchema.Struct({
   endLine: lineSchema,
 }).check(EffectSchema.makeFilter(({ startLine, endLine }) => startLine <= endLine));
 
+/** One end of a date: a day, or a time on one with its offset (`date-mention.ts`). */
+const dateMomentSchema = EffectSchema.String.check(EffectSchema.makeFilter(isDateMoment));
+
 const mentionSchema = EffectSchema.Union([
   EffectSchema.Struct({
     kind: EffectSchema.Literal(MENTION_KIND.TASK),
@@ -343,6 +355,14 @@ const mentionSchema = EffectSchema.Union([
     /** The issue's id, as the service minted it. */
     issueId: thingIdSchema,
   }),
+  EffectSchema.Struct({
+    kind: EffectSchema.Literal(MENTION_KIND.DATE),
+    start: dateMomentSchema,
+    /** A range's end: both ends days or both times, the end after the start. */
+    end: EffectSchema.optionalKey(dateMomentSchema),
+  }).check(
+    EffectSchema.makeFilter(({ start, end }) => end === undefined || isDateRange(start, end)),
+  ),
 ]);
 
 export type Mention = typeof mentionSchema.Type;
@@ -429,7 +449,7 @@ function decodedPath(pathname: string): string | undefined {
 
 /**
  * A target read as an address, or nothing where it is none. Note that it is
- * `new URL` caught rather than `URL.parse`, because the "Open in Luke" page
+ * `new URL` caught rather than `URL.parse`, because the web app
  * reads a link in whatever browser opened it, and Safari before 18 has no
  * `URL.parse`.
  */
@@ -473,6 +493,12 @@ function legacyFields(url: URL) {
       const server = serverOfSegment(segment ?? "");
       if (tool === undefined) return { kind: MENTION_KIND.SERVER, ...server };
       return { kind: MENTION_KIND.TOOL, ...server, tool: decodedPart(tool) };
+    }
+    case LEGACY.HOST[MENTION_KIND.DATE]: {
+      const [start, end, ...rest] = url.pathname.replace(/^\//u, "").split("/");
+      if (rest.length > 0 || url.hash !== "" || url.search !== "") return undefined;
+      const moments = { kind: MENTION_KIND.DATE, start: decodedPart(start ?? "") };
+      return end === undefined ? moments : { ...moments, end: decodedPart(end) };
     }
     case LEGACY.HOST[MENTION_KIND.TASK]: {
       const taskId = decodedPart(url.pathname.replace(/^\//u, ""));
@@ -813,6 +839,11 @@ export function encodeMention(mention: Mention, place: MentionPlace): string {
       return `${taskTarget(mention.taskId, place, "")}/${LINK.LUKE_STEP}`;
     case MENTION_KIND.ISSUE:
       return `${LINK_ORIGIN}/${encodedPart(place.workspace)}/${LINK.ISSUE_STEP}/${encodedPart(mention.issueId)}`;
+    // A date has no page of its own, so it keeps the app's own form; its ends spell nothing a target must encode.
+    case MENTION_KIND.DATE: {
+      const date = `${LEGACY.PROTOCOL}//${LEGACY.HOST[MENTION_KIND.DATE]}/${mention.start}`;
+      return mention.end === undefined ? date : `${date}/${mention.end}`;
+    }
   }
 }
 
@@ -925,6 +956,8 @@ function bareName(mention: Mention): string {
       return BARE_NAME.LUKE;
     case MENTION_KIND.ISSUE:
       return BARE_NAME.ISSUE;
+    case MENTION_KIND.DATE:
+      return dateLabel(mention);
   }
 }
 
