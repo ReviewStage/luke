@@ -464,7 +464,7 @@ export type TasksConversationClient = Pick<HostedCodingAgentClient, "taskMessage
 /** Which planning worker's transcript: the task's, by the call that started the worker. */
 class TaskWorkerKey extends Data.Class<{ readonly taskId: string; readonly callId: string }> {}
 
-/** How soon a planning worker's page the service did not answer is asked again. */
+/** How soon a planning worker's page the service did not answer, or one with nothing on it, is asked again. */
 const WORKER_RETRY = Duration.seconds(1);
 
 /** The statuses a planning worker may still write under, while its follow asks on. */
@@ -1444,6 +1444,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }
         after = page.cursor;
         if (page.messages.length === 0 && !WORKER_WRITING.has(page.status)) return;
+        // Note that an empty page is followed by a pause, since a worker not yet recorded answers one at once.
+        if (page.messages.length === 0) yield* Effect.sleep(WORKER_RETRY);
       }
     });
   }
