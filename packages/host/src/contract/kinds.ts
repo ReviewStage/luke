@@ -443,6 +443,19 @@ export const WINDOW_SURFACE_ACT_KIND = {
   FEEDBACK_SEND: "feedback.send",
 } as const;
 
+/**
+ * A task's linked issues, GitHub's and Linear's, as its page asks for them:
+ * read with where each stands now, one linked, one's keyword changed, and
+ * one let go. Each answers the service's answer whole, or why there is none,
+ * which the page says.
+ */
+export const TASK_ISSUE_ACT_KIND = {
+  TASK_ISSUES_READ: "taskIssues.read",
+  TASK_ISSUES_LINK: "taskIssues.link",
+  TASK_ISSUES_RELATE: "taskIssues.relate",
+  TASK_ISSUES_UNLINK: "taskIssues.unlink",
+} as const;
+
 /** Every kind the act port answers, one spread per domain, in alphabetical order. */
 export const PORT_ACT_KIND = {
   ...ACCOUNT_ACT_KIND,
@@ -458,6 +471,7 @@ export const PORT_ACT_KIND = {
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
+  ...TASK_ISSUE_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...UPDATE_ACT_KIND,
   ...VOICE_RUNTIME_ACT_KIND,

@@ -13,11 +13,12 @@ import {
   linkTaskIssue,
   listTaskIssues,
   type NewTaskIssueLink,
+  refreshTaskIssue,
   relateTaskIssue,
   type TaskIssueLink,
   unlinkTaskIssue,
 } from "../task-issue-store.js";
-import { createTask, readTask } from "../task-store.js";
+import { createTask, readTask, updateTask } from "../task-store.js";
 
 /**
  * A task's links are its workspace's: every member reads and changes them,
@@ -233,6 +234,55 @@ it.layer(getTestDB())("a task's issue links", (it) => {
         );
         yield* linked(charles, started.id, linear(1));
         assert.equal(keysOf(yield* listTaskIssues(dean, started.id)).at(-1), "ENG-1");
+      }),
+  );
+
+  it.effect(
+    "an archived task takes no link, relation, or unlink, and a read's refresh of what a chip draws lands on it all the same",
+    () =>
+      Effect.gen(function* () {
+        const { dean, charles, priya, taskId } = yield* openSharedTask;
+        const link = yield* linked(dean, taskId, linear(7));
+        yield* updateTask(dean, taskId, { archived: true });
+
+        const refusedLink = yield* Effect.result(linkTaskIssue(charles, taskId, linear(8)));
+        assert.ok(Result.isFailure(refusedLink) && refusedLink.failure._tag === "TaskArchived");
+        const refusedRelation = yield* Effect.result(
+          relateTaskIssue(charles, taskId, link.id, TASK_ISSUE_RELATION.PART_OF),
+        );
+        assert.ok(
+          Result.isFailure(refusedRelation) && refusedRelation.failure._tag === "TaskArchived",
+        );
+        const refusedUnlink = yield* Effect.result(unlinkTaskIssue(charles, taskId, link.id));
+        assert.ok(Result.isFailure(refusedUnlink) && refusedUnlink.failure._tag === "TaskArchived");
+
+        const refreshed = yield* refreshTaskIssue(charles, taskId, link.id, {
+          key: "ENG-70",
+          title: "Renamed in Linear",
+        });
+        assert.deepEqual(
+          Option.map(refreshed, ({ key, title, description, relation }) => ({
+            key,
+            title,
+            description,
+            relation,
+          })),
+          Option.some({
+            key: "ENG-70",
+            title: "Renamed in Linear",
+            description: "What ENG-7 asks.",
+            relation: TASK_ISSUE_RELATION.CLOSES,
+          }),
+        );
+        assert.ok(
+          Option.isNone(
+            yield* refreshTaskIssue(priya, taskId, link.id, { key: "X-1", title: "x" }),
+          ),
+        );
+        assert.deepEqual(keysOf(yield* listTaskIssues(dean, taskId)), ["ENG-70"]);
+
+        yield* updateTask(dean, taskId, { archived: false });
+        assert.equal(yield* unlinkTaskIssue(charles, taskId, link.id), true);
       }),
   );
 });

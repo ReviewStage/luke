@@ -36,6 +36,7 @@ import * as pullRequestArea from "./pull-request-area.js";
 import * as pullRequestWriteWire from "./pull-request-write-wire.js";
 import * as repositoryReachWire from "./repository-reach-wire.js";
 import * as serviceWire from "./service-wire.js";
+import * as taskIssueWire from "./task-issue-wire.js";
 import * as taskSectionWire from "./task-section-wire.js";
 import * as taskWire from "./task-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
@@ -405,6 +406,17 @@ const EFFECT_MODULE_SCHEMAS = {
     taskSectionsAnswerSchema: taskSectionWire.taskSectionsAnswerSchema,
     taskSectionWriteSchema: taskSectionWire.taskSectionWriteSchema,
   } satisfies RecordedEffectJsonSchemas<typeof taskSectionWire>,
+  "task-issue-wire": {
+    taskIssueRelationSchema: taskIssueWire.taskIssueRelationSchema,
+    taskIssueChoiceSchema: taskIssueWire.taskIssueChoiceSchema,
+    taskIssueStandingSchema: taskIssueWire.taskIssueStandingSchema,
+    taskIssueLinkViewSchema: taskIssueWire.taskIssueLinkViewSchema,
+    taskIssueLinksAnswerSchema: taskIssueWire.taskIssueLinksAnswerSchema,
+    taskIssueLinkAnswerSchema: taskIssueWire.taskIssueLinkAnswerSchema,
+    taskIssueRelateRequestSchema: taskIssueWire.taskIssueRelateRequestSchema,
+    taskIssueLinkChangedAnswerSchema: taskIssueWire.taskIssueLinkChangedAnswerSchema,
+    taskIssueUnlinkAnswerSchema: taskIssueWire.taskIssueUnlinkAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof taskIssueWire>,
   "task-wire": {
     workspaceIdSchema: taskWire.workspaceIdSchema,
     taskStatusSchema: taskWire.taskStatusSchema,

@@ -39,7 +39,15 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
-import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
+import {
+  TASK_ISSUE_LINK_REFUSAL,
+  TASK_ISSUE_PROVIDER,
+  TASK_ISSUE_RELATION,
+  taskIssueLinkAnswerSchema,
+  taskIssueLinkChangedAnswerSchema,
+  taskIssueLinksAnswerSchema,
+  taskIssueUnlinkAnswerSchema,
+} from "@luke/features/task-issue-wire";
 import {
   PLAN_ACTOR,
   PLAN_FIELD,
@@ -139,6 +147,8 @@ const ONE_TASK = (taskId: string) => `${TASKS}/${taskId}`;
 const BOARD = (taskId: string) => `${ONE_TASK(taskId)}/board`;
 const TRANSCRIPT = (taskId: string) => `${ONE_TASK(taskId)}/transcript`;
 const WORK = (taskId: string) => `${ONE_TASK(taskId)}/work`;
+const ISSUES = (taskId: string) => `${ONE_TASK(taskId)}/issues`;
+const ISSUE = (taskId: string, linkId: string) => `${ISSUES(taskId)}/${linkId}`;
 const MESSAGES = "/api/plans/messages";
 const SUBAGENT_MESSAGES = "/api/plans/subagent-messages";
 const CODE = (taskId: string) => `${ONE_TASK(taskId)}/code`;
@@ -294,6 +304,8 @@ const TASK_ROUTES = [
   "plans/attachments",
   "plans/pages",
   "plans/page",
+  "plans/issues",
+  "plans/issue",
 ] as const;
 
 /**
@@ -1222,6 +1234,263 @@ it.layer(getTestDB())("the plan routes", (it) => {
           readAnswer(taskListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(TASKS, owner)))
             .plans.length,
           1,
+        );
+      }),
+  );
+
+  it.effect(
+    "a member links, relates, and unlinks a plan's issues after its start, each read from its provider, read back with where it stands now and its chip's words refreshed, and an archived plan, a full one, an issue linked twice, or an account outside the workspace is refused",
+    () =>
+      Effect.gen(function* () {
+        const relay: InstallationFixture = {
+          id: 7133,
+          login: "acme",
+          accountId: 9133,
+          repositories: [{ owner: "acme", name: "relay" }],
+          permissions: {
+            contents: "write",
+            metadata: "read",
+            pull_requests: "write",
+            issues: "write",
+          },
+        };
+        // GitHub answers acme/relay's issues 1 to 20, and issue 7 as it stands now; Linear its one issue, in progress.
+        const seven = {
+          title: "Invitations expire too soon",
+          state: "open",
+          reason: "reopened",
+        };
+        // Linear answers its issue in progress, until it answers it renamed and naming no state.
+        const linear = { title: LINEAR_ISSUE.title, state: { name: "In Progress" } as const };
+        let linearStated = true;
+        const github = githubReaching([relay], undefined, {}, (sent) => {
+          if (sent.url === "https://api.linear.app/graphql") {
+            return Response.json({
+              data: {
+                issue: {
+                  ...LINEAR_ISSUE,
+                  title: linear.title,
+                  state: linearStated ? linear.state : null,
+                  assignee: null,
+                },
+              },
+            });
+          }
+          const numbered = /^\/repos\/acme\/relay\/issues\/(\d+)$/u.exec(
+            new URL(sent.url).pathname,
+          );
+          const number = Number(numbered?.[1] ?? 0);
+          if (number < 1 || number > 20) return undefined;
+          return Response.json({
+            node_id: `I_kwDOrelay${number}`,
+            number,
+            title: number === 7 ? seven.title : `Issue ${number}`,
+            html_url: `https://github.com/acme/relay/issues/${number}`,
+            state: number === 7 ? seven.state : "open",
+            state_reason: number === 7 ? seven.reason : null,
+            body: "",
+            user: { login: "octo-dev" },
+            author_association: "MEMBER",
+            updated_at: "2026-10-01T00:00:00Z",
+          });
+        });
+        const { owner, other, ask } = yield* openAccounts(github);
+        const workspaceId = yield* openConnectedWorkspace(owner, relay);
+        yield* Database.use((db) =>
+          db.insert(workspaceIntegrationConnection).values({
+            organizationId: workspaceId,
+            provider: INTEGRATION_PROVIDER.LINEAR,
+            status: INTEGRATION_ROW_STATUS.CONNECTED,
+          }),
+        );
+        const { plan } = readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            request(TASKS, owner, {
+              method: "POST",
+              body: { ...RELAY, workspaceId, repository: "acme/relay" },
+            }),
+          ),
+        );
+        const link = (as: string, body: WireBoundaryInput) =>
+          ask(request(ISSUES(plan.id), as, { method: "POST", body }));
+        const githubIssue = (number: number) => ({
+          provider: TASK_ISSUE_PROVIDER.GITHUB,
+          repository: "acme/relay",
+          number,
+        });
+
+        const linkedSeven = readAnswer(
+          taskIssueLinkAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* link(owner, githubIssue(7)),
+        );
+        const linkedLinear = readAnswer(
+          taskIssueLinkAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* link(owner, {
+            provider: TASK_ISSUE_PROVIDER.LINEAR,
+            id: LINEAR_ISSUE.identifier,
+            relation: TASK_ISSUE_RELATION.PART_OF,
+          }),
+        );
+        assert.ok("issue" in linkedSeven && "issue" in linkedLinear);
+        assert.deepEqual(
+          [linkedSeven.issue, linkedLinear.issue].map(({ key, relation, externalId }) => ({
+            key,
+            relation,
+            externalId,
+          })),
+          [
+            {
+              key: "acme/relay#7",
+              relation: TASK_ISSUE_RELATION.CLOSES,
+              externalId: "I_kwDOrelay7",
+            },
+            {
+              key: LINEAR_ISSUE.identifier,
+              relation: TASK_ISSUE_RELATION.PART_OF,
+              externalId: LINEAR_ISSUE.id,
+            },
+          ],
+        );
+        assert.deepEqual(
+          readAnswer(
+            taskIssueLinkAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* link(owner, githubIssue(7)),
+          ),
+          { refused: TASK_ISSUE_LINK_REFUSAL.LINKED },
+        );
+        assert.deepEqual(
+          yield* link(owner, githubIssue(99)),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* link(other, githubIssue(8)),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(request(ISSUES(plan.id), other)),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+
+        // GitHub now answers issue 7 renamed and closed as not planned.
+        seven.title = "Invitations expire after an hour";
+        seven.state = "closed";
+        seven.reason = "not_planned";
+        const read = readAnswer(
+          taskIssueLinksAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ISSUES(plan.id), owner)),
+        );
+        assert.deepEqual(
+          read.issues.map(({ key, title, standing }) => ({ key, title, standing })),
+          [
+            {
+              key: "acme/relay#7",
+              title: "Invitations expire after an hour",
+              standing: { provider: TASK_ISSUE_PROVIDER.GITHUB, state: "not-planned" },
+            },
+            {
+              key: LINEAR_ISSUE.identifier,
+              title: LINEAR_ISSUE.title,
+              standing: { provider: TASK_ISSUE_PROVIDER.LINEAR, state: "In Progress" },
+            },
+          ],
+        );
+        const stored = Option.getOrElse(yield* readTask(owner, plan.id), () =>
+          assert.fail("the plan was not read"),
+        );
+        assert.equal(stored.issueLinks[0]?.title, "Invitations expire after an hour");
+
+        // A Linear issue renamed and naming no state is drawn renamed, with no state.
+        linear.title = "Invitations last a week";
+        linearStated = false;
+        const stateless = readAnswer(
+          taskIssueLinksAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ISSUES(plan.id), owner)),
+        ).issues[1];
+        assert.deepEqual(
+          [stateless?.title, stateless?.standing],
+          ["Invitations last a week", undefined],
+        );
+
+        const related = readAnswer(
+          taskIssueLinkChangedAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(ISSUE(plan.id, linkedSeven.issue.id), owner, {
+              method: "PATCH",
+              body: { relation: TASK_ISSUE_RELATION.PART_OF },
+            }),
+          ),
+        );
+        assert.equal(related.issue.relation, TASK_ISSUE_RELATION.PART_OF);
+        assert.deepEqual(
+          readAnswer(
+            taskIssueUnlinkAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(ISSUE(plan.id, linkedLinear.issue.id), owner, { method: "DELETE" })),
+          ),
+          { unlinked: true },
+        );
+        assert.deepEqual(
+          yield* ask(request(ISSUE(plan.id, linkedLinear.issue.id), owner, { method: "DELETE" })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+
+        // The plan links issue 7 already, so nine more bring it to its bound, and a tenth is one past it.
+        for (const number of [1, 2, 3, 4, 5, 6, 8, 9, 10]) {
+          assert.ok(
+            "issue" in
+              readAnswer(
+                taskIssueLinkAnswerSchema,
+                HOSTED_HTTP_STATUS.OK,
+                yield* link(owner, githubIssue(number)),
+              ),
+          );
+        }
+        assert.deepEqual(
+          readAnswer(
+            taskIssueLinkAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* link(owner, githubIssue(12)),
+          ),
+          { refused: TASK_ISSUE_LINK_REFUSAL.FULL },
+        );
+        assert.equal(
+          readAnswer(
+            taskIssueLinksAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(ISSUES(plan.id), owner)),
+          ).issues.length,
+          TASK_BOUNDS.MAX_ISSUES,
+        );
+
+        readAnswer(
+          taskAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(
+            request(ONE_TASK(plan.id), owner, { method: "PATCH", body: { archived: true } }),
+          ),
+        );
+        const archived = refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.TASK_ARCHIVED);
+        assert.deepEqual(yield* link(owner, githubIssue(20)), archived);
+        assert.deepEqual(
+          yield* ask(
+            request(ISSUE(plan.id, linkedSeven.issue.id), owner, {
+              method: "PATCH",
+              body: { relation: TASK_ISSUE_RELATION.CLOSES },
+            }),
+          ),
+          archived,
+        );
+        assert.deepEqual(
+          yield* ask(request(ISSUE(plan.id, linkedSeven.issue.id), owner, { method: "DELETE" })),
+          archived,
         );
       }),
   );
