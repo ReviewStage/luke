@@ -886,6 +886,52 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
+    "a refusal held longer than the repository's reach is kept is still answered from the hold, without asking GitHub again however it would answer",
+    () =>
+      Effect.gen(function* () {
+        let refusingAll = false;
+        const github = githubReaching(
+          [{ id: 7808, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          undefined,
+          {},
+          (sent) => {
+            const refusal = Response.json(
+              { message: "You have exceeded a secondary rate limit." },
+              { status: 403, headers: { "retry-after": "900" } },
+            );
+            if (refusingAll) return refusal;
+            return PULL_PATH.test(new URL(sent.url).pathname) ? refusal : undefined;
+          },
+        );
+        const { owner, bearers } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7808,
+          accountId: 9808,
+          accountLogin: "acme",
+        });
+        const logged: string[] = [];
+        const route = yield* routeOver(
+          bearers,
+          github,
+          Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
+        );
+        const pullRequest = keptPullRequest(route, owner, workspace);
+
+        const refused = yield* pullRequest;
+        refusingAll = true;
+        yield* TestClock.adjust(Duration.minutes(10));
+        const held = yield* Effect.all([pullRequest, pullRequest, pullRequest]);
+
+        const unavailable = refusal(
+          HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+          HOSTED_API_ERROR.UNAVAILABLE,
+        );
+        assert.deepEqual([refused, ...held], [unavailable, unavailable, unavailable, unavailable]);
+        assert.equal(logged.filter((line) => line.includes("GitHub App read failed")).length, 1);
+      }),
+  );
+
+  it.effect(
     "a kept pull request is answered none the moment the workspace's installation is removed, rather than when its minute is out",
     () =>
       Effect.gen(function* () {

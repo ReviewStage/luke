@@ -24,7 +24,9 @@
  * repository: through `GitHubApp`'s own kept reach and token, which read the
  * store's links and the member's token on every ask and GitHub only when
  * their own keeping lapses, so an installation disconnected or a token
- * revoked stops the kept answer at once rather than when it lapses.
+ * revoked stops the kept answer at once rather than when it lapses. A held
+ * refusal is answered before that check, since it shows nothing of the pull
+ * request and may outlast the reach `GitHubApp` keeps.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
@@ -138,6 +140,8 @@ export const pullRequestLinksLayer: Layer.Layer<PullRequestLinks> = Layer.effect
     return {
       read: (key) =>
         Effect.gen(function* () {
+          // Note that a held refusal is answered before the reach is read, because a hold may outlast the reach `GitHubApp` keeps, and a refusal shows nothing of the pull request.
+          yield* Cache.getOption(kept, key);
           const app = yield* GitHubApp;
           const reached = yield* app
             .repositoryPullRequestToken(key.workspaceId, key.repository, key.member)
