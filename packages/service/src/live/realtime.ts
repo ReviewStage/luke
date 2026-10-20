@@ -75,8 +75,9 @@ export function pollSealer(sql: SqlClient.SqlClient): LiveSealer {
           queryFingerprint: LIVE_POLL_URL,
           expiresAt: now,
           rows,
+          // Each row's text in sorted order, so the same rows in another order, which Postgres may answer, digest alike.
           digest: createHash("sha256")
-            .update(JSON.stringify(rows))
+            .update(JSON.stringify(rows.map((row) => JSON.stringify(row)).toSorted()))
             .digest("hex")
             .slice(0, DIGEST_CHARS),
         })),

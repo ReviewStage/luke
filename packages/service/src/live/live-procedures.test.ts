@@ -25,7 +25,7 @@ import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { liveProcedures } from "./live-procedures.js";
-import { type LiveSealer, LiveSealing, SealRefused } from "./realtime.js";
+import { type LiveSealer, LiveSealing, pollSealer, SealRefused } from "./realtime.js";
 
 /**
  * The reads the desktop follows over Neon Realtime, sealed by the
@@ -417,5 +417,21 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
         );
         assert.notEqual(liveDigestOf(answer.queries), digest);
       }),
+  );
+
+  it.effect("a polled statement's rows in another order digest alike", () =>
+    Effect.gen(function* () {
+      const sealer = pollSealer(yield* SqlClient.SqlClient);
+      const one = yield* sealer.seal({
+        sql: "select * from (values (1), (2)) as rows(n) order by n",
+        params: [],
+      });
+      const other = yield* sealer.seal({
+        sql: "select * from (values (1), (2)) as rows(n) order by n desc",
+        params: [],
+      });
+      assert.notDeepEqual(one.rows, other.rows);
+      assert.equal(one.digest, other.digest);
+    }),
   );
 });
