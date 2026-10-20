@@ -29,8 +29,9 @@ import { tasksProcedures } from "./tasks-procedures.js";
  * GitHub that answers from the test's script: the plan's owner names one
  * their token reaches where no installation does, and a teammate's own
  * token never puts another member's plan on it, since a plan on a token is
- * seen by its owner whatever the repository. Synthetic accounts, plans,
- * and tokens throughout.
+ * seen by its owner whatever the repository; an account outside the
+ * workspace reaches no such plan. Synthetic accounts, plans, and tokens
+ * throughout.
  */
 
 const ORIGIN = "https://luke.test";
@@ -91,6 +92,7 @@ it.layer(getTestDB())("a plan's repository on a member's own GitHub token", (it)
       Effect.gen(function* () {
         const owner = yield* openTokenMember();
         const teammate = yield* openTokenMember({ token: "fixture-teammate-token" });
+        const stranger = yield* openTokenMember({ token: "fixture-stranger-token" });
         const workspace = yield* openWorkspace(owner);
         yield* joinWorkspace(workspace, teammate);
         const task = yield* createTask(owner, { organizationId: workspace, name: "Side" });
@@ -98,12 +100,20 @@ it.layer(getTestDB())("a plan's repository on a member's own GitHub token", (it)
           new Map([
             ["Bearer owner", owner],
             ["Bearer teammate", teammate],
+            ["Bearer stranger", stranger],
           ]),
         );
         const accessOf = Effect.map(readTask(owner, task.id), (read) => {
           const { githubAccess, task: summary } = Option.getOrThrow(read);
           return { githubAccess, repository: summary.repository };
         });
+
+        // An account outside the workspace reaches no such plan, on its own token or any other.
+        const byStranger = yield* patch(task.id, "Bearer stranger", {
+          repository: "octo-member/side",
+        });
+        assert.deepEqual(byStranger, { status: 404, body: { error: HOSTED_API_ERROR.NOT_FOUND } });
+        assert.ok(Option.isNone(yield* readTask(stranger, task.id)));
 
         const byTeammate = yield* patch(task.id, "Bearer teammate", {
           repository: "octo-member/side",
