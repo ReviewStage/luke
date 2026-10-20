@@ -16,10 +16,10 @@
    the services build from (`scripts/vercel-ignore.sh --paths`) builds no
    Preview, and `run.sh --preview` finds the nearest one that did. A Preview run is
    an instance of its own beside the running Luke Dev, with its own sign-in
-   (`CONTRIBUTING.md`'s "Running more than one Luke Dev"). CI's jobs are Linux only;
-   the release rehearsal, `release.yml`'s `macos-15` job on a tag push, is the
-   only Mac gate, so do not wait for a macOS check and do not read a green PR
-   as covering the Mac.
+   (`CONTRIBUTING.md`'s "Running more than one Luke Dev"). CI's jobs are Linux only,
+   and no workflow runs the tests on a Mac: `release.yml`'s `macos-15` job on a
+   tag push only builds, signs, notarizes, and verifies the app. Do not wait for
+   a macOS check and do not read a green PR as covering the Mac.
 4. Review the complete diff for secrets, machine-specific paths, generated
    files, unsafe IPC, unsupported provider behavior, and accidental scope
    expansion.
