@@ -194,7 +194,14 @@ function ItemViewer({
   );
 }
 
-/** The item's pictures for every word drawn under it, read through the Inbox's own reads. */
+/**
+ * The item's pictures for every word drawn under it, read through the
+ * Inbox's own reads, and the one viewer a press on any opens over them all.
+ * Note that the viewer walks them in the order they stand in the window,
+ * because the words they stand in are drawn apart, a thread's messages and a
+ * row's pictures each by their own Markdown, so no one list holds them all in
+ * order; a picture drawn or gone while it is open joins or leaves the walk.
+ */
 export function InboxPictures({
   itemId,
   control,
@@ -207,22 +214,19 @@ export function InboxPictures({
   const { images, onImage, onRetryImage } = control;
   const drawn = useRef(new Map<string, DrawnPicture>());
   const [viewing, setViewing] = useState<
-    | { readonly itemId: string; readonly pictures: readonly WalkedPicture[]; readonly key: string }
-    | undefined
+    { readonly itemId: string; readonly key: string } | undefined
   >();
   const register = useCallback((key: string, picture: DrawnPicture) => {
     drawn.current.set(key, picture);
+    // An open viewer is drawn again to take the picture in.
+    setViewing((now) => (now === undefined ? now : { ...now }));
     return () => {
       drawn.current.delete(key);
+      // An open viewer lets the picture go, and closes where it was the one shown.
+      setViewing((now) => (now === undefined || now.key === key ? undefined : { ...now }));
     };
   }, []);
-  // Note that the set is taken as the press opens it, in the order the pictures stand in the
-  // window, because the words they stand in are drawn apart, a thread's messages and a row's
-  // pictures each by their own Markdown, so no one list holds them all in order.
-  const open = useCallback(
-    (key: string) => setViewing({ itemId, pictures: inDrawnOrder(drawn.current), key }),
-    [itemId],
-  );
+  const open = useCallback((key: string) => setViewing({ itemId, key }), [itemId]);
   const door = useMemo<InboxPicturesDoor>(
     () => ({ itemId, images, onImage, onRetryImage, register, open }),
     [itemId, images, onImage, onRetryImage, register, open],
@@ -232,10 +236,10 @@ export function InboxPictures({
       {children}
       {viewing?.itemId === itemId ? (
         <ItemViewer
-          pictures={viewing.pictures}
+          pictures={inDrawnOrder(drawn.current)}
           images={images}
           shownKey={viewing.key}
-          onShow={(key) => setViewing({ ...viewing, key })}
+          onShow={(key) => setViewing({ itemId, key })}
           onClose={() => setViewing(undefined)}
         />
       ) : null}

@@ -223,10 +223,10 @@ test("drawn as a document, pictures written next to each other stand side by sid
   );
 });
 
-test("a picture of an item opens a viewer the arrow keys walk across the item's pictures in the order they are drawn, one still read joining once held and one whose read failed left out, and none of another item's", () => {
+test("a picture of an item opens a viewer the arrow keys walk across the item's pictures in the order they are drawn, one still read or drawn later joining once held and one whose read failed left out, and none of another item's", () => {
   const third = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d03";
   const broken = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d04";
-  const text = [
+  let text = [
     PAIR,
     `![Third](${pictureOf(ITEM_ID, third)})`,
     `![Broken](${pictureOf(ITEM_ID, broken)})`,
@@ -291,6 +291,14 @@ test("a picture of an item opens a viewer the arrow keys walk across the item's 
   assert.deepEqual(viewer(), ["Before.png", "1 of 3"]);
   key("ArrowLeft");
   assert.deepEqual(viewer(), ["Third.png", "3 of 3"]);
+
+  // A picture drawn while the viewer stands, as a newer read of the item adds one, joins the walk.
+  const fourth = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d05";
+  text = `${text}\n\n![Fourth](${pictureOf(ITEM_ID, fourth)})`;
+  act(() => root.render(draw(new Map([...reading, [third, HELD], [fourth, HELD]]))));
+  assert.deepEqual(viewer(), ["Third.png", "3 of 4"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["Fourth.png", "4 of 4"]);
 });
 
 test("a picture of another item stands as its link and is never asked for", () => {
