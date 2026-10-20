@@ -372,7 +372,7 @@ function launchTag(firstSequence: number, stamp: string | undefined): string {
 }
 
 /** The runner a sandbox's tags name, where the sandbox runs the session it was started in. */
-interface TaggedRunner {
+export interface TaggedRunner {
   readonly sandboxSessionId: string;
   readonly commandId: string;
   readonly firstSequence: number;
@@ -390,7 +390,7 @@ function taggedLaunch(
   return { firstSequence, stamp: at < 0 ? undefined : launch.slice(at + 1) };
 }
 
-function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
+export function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   const tags = sandbox.tags ?? {};
   const sandboxSessionId = tags[RUNNER_TAG.SANDBOX_SESSION];
   const commandId = tags[RUNNER_TAG.COMMAND];

@@ -173,6 +173,11 @@ interface SandboxFile {
   readonly mode: number;
 }
 
+/** The order a list runs in by when each sandbox was created. */
+export const LIST_ORDER = { OLDEST_FIRST: "asc", NEWEST_FIRST: "desc" } as const;
+
+export type ListOrder = (typeof LIST_ORDER)[keyof typeof LIST_ORDER];
+
 /** A page of the running sandboxes: the sandboxes, and the cursor of the next page where there is one. */
 export interface RunningPage {
   readonly sandboxes: readonly ListedSandbox[];
@@ -185,12 +190,13 @@ export interface VercelSandboxApi {
     sessionId: string,
   ) => Effect.Effect<readonly ListedSandbox[], SandboxUnavailable>;
   /**
-   * One page of the project's running sandboxes, every kind, oldest first,
-   * from the cursor a page before answered; with the cursor of the next page
-   * where there is one.
+   * One page of the project's running sandboxes, every kind, by when they
+   * were created in the order given, from the cursor a page before answered;
+   * with the cursor of the next page where there is one.
    */
   readonly listRunning: (
     cursor: string | undefined,
+    order: ListOrder,
   ) => Effect.Effect<RunningPage, SandboxUnavailable>;
   /** The named sandbox, resumed from its snapshot first where it was stopped. */
   readonly resume: (name: string) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
@@ -572,7 +578,7 @@ export function vercelSandboxApi(
           }
           return page.success.sandboxes;
         }),
-      listRunning: (cursor) =>
+      listRunning: (cursor, order) =>
         Effect.gen(function* () {
           const asked = yield* credentials;
           const url = apiUrl("", asked.teamId, {
@@ -580,7 +586,7 @@ export function vercelSandboxApi(
             limit: String(SANDBOX_API.PAGE),
             // Note that the API takes a status filter only under a sort by creation.
             sortBy: "createdAt",
-            sortOrder: "asc",
+            sortOrder: order,
             status: RUNNING_STATUS,
             ...(cursor === undefined ? undefined : { cursor }),
           });

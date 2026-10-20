@@ -53,8 +53,10 @@ interface FakeSandbox {
 }
 
 /** Vercel Sandbox's REST API over the project's sandboxes, oldest first, keeping what it was asked. */
-function vercel(options: { readonly refuseList?: boolean } = {}) {
+function vercel(options: { readonly refuseList?: boolean; readonly refusePolicy?: boolean } = {}) {
   const sandboxes: FakeSandbox[] = [];
+  /** The detached commands, by id, with their exit code, or null while they run. */
+  const commands = new Map<string, number | null>();
   const stopped: string[] = [];
   const policies: string[] = [];
   const pagesListed: { status: string | null; sortBy: string | null; order: string | null }[] = [];
@@ -65,16 +67,19 @@ function vercel(options: { readonly refuseList?: boolean } = {}) {
     if (method === "GET" && parsed.pathname === "/api/v2/sandboxes") {
       const refused = sandboxListRefusal(parsed);
       if (refused !== undefined) return refused;
+      const tag = parsed.searchParams.get("tags");
+      if (tag !== null) {
+        const [key = "", value] = tag.split(":");
+        return Response.json({ sandboxes: sandboxes.filter((each) => each.tags[key] === value) });
+      }
       if (options.refuseList === true) return new Response(null, { status: 503 });
       assert.equal(parsed.searchParams.get("project"), PROJECT);
       const status = parsed.searchParams.get("status");
-      pagesListed.push({
-        status,
-        sortBy: parsed.searchParams.get("sortBy"),
-        order: parsed.searchParams.get("sortOrder"),
-      });
+      const order = parsed.searchParams.get("sortOrder");
+      pagesListed.push({ status, sortBy: parsed.searchParams.get("sortBy"), order });
       const from = Number(parsed.searchParams.get("cursor") ?? "0");
       const matching = sandboxes.filter((each) => status === null || each.status === status);
+      if (order === "desc") matching.reverse();
       const page = matching.slice(from, from + PAGE);
       const next = from + PAGE < matching.length ? String(from + PAGE) : null;
       return Response.json({ sandboxes: page, pagination: { count: page.length, next } });
@@ -91,11 +96,25 @@ function vercel(options: { readonly refuseList?: boolean } = {}) {
       }
       return Response.json({ session: { id: sessionId } });
     }
+    const command = /^cmd\/([^/]+)$/u.exec(rest);
+    if (command !== null) {
+      const id = command[1] ?? "";
+      if (!commands.has(id)) return new Response(null, { status: 404 });
+      return Response.json({ command: { id, exitCode: commands.get(id) ?? null } });
+    }
     assert.equal(rest, "network-policy", `an unexpected call: ${method} ${parsed.pathname}`);
+    if (options.refusePolicy === true) return new Response(null, { status: 502 });
     policies.push(sessionId);
     return Response.json({});
   };
-  return { layer: fakeHttpClientLayer(respond), sandboxes, stopped, policies, pagesListed };
+  return {
+    layer: fakeHttpClientLayer(respond),
+    sandboxes,
+    commands,
+    stopped,
+    policies,
+    pagesListed,
+  };
 }
 
 /** An agent on the runtime given, its newest turn in the status given where one is, settled at the instant given. */
@@ -130,14 +149,19 @@ const openAgent = (runtime: ConversationRuntime, turn?: { status: TurnStatus; at
     return agent;
   });
 
-/** A running sandbox as Luke names a native agent's, tagged with its agent. */
-function nativeSandbox(agentId: string): FakeSandbox {
+/** A running sandbox as Luke names a native agent's, tagged with its agent, and with the runner named where one was launched. */
+function nativeSandbox(agentId: string, commandId?: string): FakeSandbox {
   const id = randomUUID();
+  const running = `sbs_${id}`;
+  const runner =
+    commandId === undefined
+      ? {}
+      : { lukeRunnerSession: running, lukeRunnerCommand: commandId, lukeRunnerLaunch: "7" };
   return {
     name: `luke-agent-${id}`,
     status: "running",
-    currentSessionId: `sbs_${id}`,
-    tags: { sessionId: `luke-claude-code-${id}`, lukeAgent: agentId },
+    currentSessionId: running,
+    tags: { sessionId: `luke-claude-code-${id}`, lukeAgent: agentId, ...runner },
   };
 }
 
@@ -261,7 +285,7 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
   );
 
   it.effect(
-    "a sweep reads no more pages than its bound, so a native sandbox past them waits for a later sweep",
+    "a sweep reads no more pages than its bound, and a native sandbox past them is reached from the other end the next minute",
     () =>
       Effect.gen(function* () {
         vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
@@ -278,9 +302,22 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
 
         const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
 
-        assert.equal(api.pagesListed.length, NATIVE_SANDBOX_SWEEP.MAX_PAGES);
+        const pagesAsked = api.pagesListed.length;
+        const runningAfterFirst = beyond.status;
+        const nextMinute = yield* sweepNativeSandboxes(new Date(NOW.getTime() + 60_000)).pipe(
+          Effect.provide(api.layer),
+        );
+
+        assert.equal(pagesAsked, NATIVE_SANDBOX_SWEEP.MAX_PAGES);
         assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0 });
-        assert.equal(beyond.status, "running");
+        assert.equal(runningAfterFirst, "running");
+        assert.equal(
+          api.pagesListed.at(-1)?.order,
+          "desc",
+          "the next minute lists from the newest",
+        );
+        assert.deepEqual(nextMinute, { stopped: 1, held: 0, failed: 0, deferred: 0 });
+        assert.equal(beyond.status, "stopped");
       }),
   );
 
@@ -299,5 +336,53 @@ it.layer(getTestDB())("the native sandbox sweep", (it) => {
       assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 0, deferred: 0 });
       assert.deepEqual(api.stopped, []);
     }),
+  );
+  it.effect(
+    "a sandbox whose ended run was followed by a newer runner keeps running, and one whose old runner exited is stopped",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel();
+        const relaunched = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        const exited = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        api.commands.set("cmd_live", null);
+        api.commands.set("cmd_exited", 0);
+        const live = nativeSandbox(relaunched.id, "cmd_live");
+        const done = nativeSandbox(exited.id, "cmd_exited");
+        api.sandboxes.push(live, done);
+
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+
+        assert.deepEqual(outcome, { stopped: 1, held: 0, failed: 0, deferred: 0 });
+        assert.equal(live.status, "running");
+        assert.equal(done.status, "stopped");
+      }),
+  );
+
+  it.effect(
+    "a sandbox whose credential would not come off the firewall is left running for the next sweep",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel({ refusePolicy: true });
+        const agent = yield* openAgent(CONVERSATION_RUNTIME.CLAUDE_CODE, {
+          status: TURN_STATUS.SETTLED,
+          at: minutesBefore(10),
+        });
+        const sandbox = nativeSandbox(agent.id);
+        api.sandboxes.push(sandbox);
+
+        const outcome = yield* sweepNativeSandboxes(NOW).pipe(Effect.provide(api.layer));
+
+        assert.deepEqual(outcome, { stopped: 0, held: 0, failed: 1, deferred: 0 });
+        assert.deepEqual(api.stopped, []);
+        assert.equal(sandbox.status, "running");
+      }),
   );
 });
