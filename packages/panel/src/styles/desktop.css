@@ -6287,6 +6287,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   flex: 0 0 auto;
 }
 
+/* Hung there, it is no taller than the room its side of the "+" leaves
+   (`--luke-popover-room`), measured against what is seen of the window, so
+   a phone's keyboard or a short window never hides its last rows: its list
+   gives way and scrolls, under the search row that stays. */
+.luke-anchored-popover > .tab-add-menu {
+  max-height: var(--luke-popover-room, none);
+}
+
 [data-luke-profile="desktop"] .tab-add-menu {
   -webkit-app-region: no-drag;
 }

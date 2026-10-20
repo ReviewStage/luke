@@ -5,13 +5,15 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { AddTabButton } from "./strip-tabs.js";
 
 /**
  * tab-add-menu.test.ts -- the menu a strip's "+" drops lies within what is
- * seen of the window, whatever edge of a phone's row the "+" stands at, so
- * every tab it offers can be read and pressed; on the desktop the side
+ * seen of the window, whatever edge of a phone's row the "+" stands at, and
+ * however little of the screen a keyboard leaves, so every tab it offers
+ * can be read and pressed, scrolling where they are more than fit; on the desktop the side
  * panel's menu still hangs over the column beside the panel from the "+"'s
  * right edge, as it always has. jsdom lays nothing out, so each test stands
  * the "+" and the menu where a laid-out window would and reads where the
@@ -31,9 +33,15 @@ const ignore = () => undefined;
 
 const roots: Root[] = [];
 
+let laid: HTMLStyleElement | undefined;
+
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  laid?.remove();
+  laid = undefined;
+  document.documentElement.removeAttribute("data-luke-profile");
+  Reflect.deleteProperty(window, "visualViewport");
   vi.restoreAllMocks();
 });
 
@@ -135,4 +143,46 @@ test('on the desktop the side panel\'s "+" menu hangs from the "+"\'s right edge
   const plus = box(1097, 8, 32, 32);
   layOut(1280, 800, plus, box(940, 0, 340, 800));
   assert.deepEqual(await opened(await drawn(true), plus), [1129 - MENU_WIDTH, 1129]);
+});
+
+/** A length with every `var()` in it read off `element`, its fallback where the property is unset. */
+function resolved(element: Element, length: string): string {
+  const once = length.replace(
+    /var\((--[\w-]+)(?:,\s*([^)]*))?\)/g,
+    (_, name: string, fallback) =>
+      getComputedStyle(element).getPropertyValue(name).trim() || (fallback ?? ""),
+  );
+  return once === length ? once : resolved(element, once);
+}
+
+test('on a phone whose keyboard leaves the screen short of the "+" menu\'s height, the menu ends inside what is seen, its list scrolling the tabs that do not fit', async () => {
+  document.documentElement.setAttribute("data-luke-profile", "web");
+  laid = layContainersAt({}, { touch: true });
+  const plus = box(216, 60, 44, 44);
+  layOut(390, 844, plus, box(0, 0, 390, 844));
+  // The keyboard leaves 300px of the 844 seen; the visual viewport says so.
+  const seen = 300;
+  Object.defineProperty(window, "visualViewport", {
+    configurable: true,
+    value: {
+      offsetTop: 0,
+      offsetLeft: 0,
+      width: 390,
+      height: seen,
+      addEventListener: ignore,
+      removeEventListener: ignore,
+    },
+  });
+  const container = await drawn(true);
+  await opened(container, plus);
+  const layer = container.querySelector<HTMLElement>(".luke-anchored-popover") ?? assert.fail();
+  const menu = container.querySelector<HTMLElement>(".tab-add-menu") ?? assert.fail();
+  assert.equal(layer.dataset.side, "below", "the menu drops into the larger room, under the +");
+  const tallest = Number.parseFloat(resolved(menu, getComputedStyle(menu).maxHeight));
+  assert.ok(
+    plus.bottom + 4 + tallest <= seen - MARGIN,
+    `the menu, at most ${tallest}px tall, ends inside the ${seen}px seen`,
+  );
+  const list = menu.querySelector(".luke-combobox-list") ?? assert.fail("the menu lists its tabs");
+  assert.equal(getComputedStyle(list).overflowY, "auto", "the tabs that do not fit scroll");
 });
