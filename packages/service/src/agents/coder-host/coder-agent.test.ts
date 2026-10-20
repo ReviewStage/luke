@@ -279,6 +279,29 @@ test("every agent on a task is told how to update its plan, one handed a prompt 
   assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, false, false]);
 });
 
+test("every agent on a task is told to keep its task's status with update_task, moving it back to in progress and on to done, a helper on its starter's task leaving it to the starter and one on a task of its own keeping that one's, and one on no task told of no status", () => {
+  const STATUS = "## Your task's status";
+  const told = (brief: CodingAgentBrief, taskLink: string | null) => {
+    const words = coderInstructions("Acme/Relay", brief, true, taskLink);
+    const at = words.indexOf(STATUS);
+    if (at === -1) return [false, false, false, false, false];
+    const section = words.slice(at, words.indexOf("\n\n## ", at + STATUS.length));
+    return [
+      true,
+      section.includes(CODER_TOOL.UPDATE_TASK),
+      section.includes("Mark it done"),
+      section.includes(
+        "Where another agent started you on its task, leave the status to that agent",
+      ),
+      section.includes("one started on a task of its own keeps that status itself"),
+    ];
+  };
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    assert.deepEqual(told(brief, TASK_ADDRESS), [true, true, true, true, true], brief);
+    assert.deepEqual(told(brief, null), [false, false, false, false, false], brief);
+  }
+});
+
 test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the plan, a page, or its final message", () => {
   const NO_DOCUMENT = "never commit the write-up as a document";
   const PLAN = `write it into the plan with \`${CODER_TOOL.EDIT_PLAN}\``;

@@ -53,6 +53,9 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * grounds what it says in paths, lines, and command output, and returns a
  * result the agent reads whole, in the spirit of the brain's worker's
  * (`brain-host/brain.ts`).
+ * An agent on a task keeps that task's status with `update_task`, since
+ * nothing but a Start (`task-store.ts`'s `beginTask`) moves it; a helper on
+ * its starter's task leaves it to the starter.
  */
 
 /** The words the instructions say of what the agent was handed, a plan or a prompt, where the two differ. */
@@ -147,8 +150,9 @@ function writeUpPlace(brief: CodingAgentBrief, onTask: boolean): string {
 
 /**
  * What only an agent on a task is told of: a link that names the task, and
- * the task's pages, which a page is saved on; an agent an automation
- * started with no task has neither, so its instructions leave both out.
+ * the task's pages, which a page is saved on, and the task's status, which
+ * it keeps; an agent an automation started with no task has none of them,
+ * so its instructions leave them out.
  * An agent on a task keeps the agents it starts on that task; one on none
  * has no task of its own to start them on, so it names one.
  */
@@ -165,6 +169,11 @@ const TASK_PLACE_WORDS = {
 When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML document, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\`: by its path where you wrote it as a file in your sandbox, or as \`html\` where you have no file of it, such as on a call: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.
 
 To sketch a design, a flow, or how parts connect, draw it on the task's whiteboard with \`${CODER_TOOL.DRAW_ON_BOARD}\`, sending the whole diagram each time, and check it with \`${CODER_TOOL.LOOK_AT_BOARD}\` while the developer has the board open.`,
+    status: `
+
+## Your task's status
+
+Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task's id. Starting you moved it to in-progress; move it back there if you take up work on a task that stands done or canceled. Mark it done once all its work is finished, any agents you started on it included: its pull request merged, or, where it needed none, the write-up delivered. Leave it in-progress while a pull request awaits review, and never cancel it unless the developer says to. Where another agent started you on its task, leave the status to that agent; one started on a task of its own keeps that status itself. Say in your message when you change it.`,
     comments: `
 
 ## Comments
@@ -176,6 +185,7 @@ Members and agents leave comment threads on the plan's text, each beside the wor
     olderLinks: " and `luke://folder/<path>/`",
     pages: "",
     comments: "",
+    status: "",
     startAgent: ` You work on no task, so name the task to start it on by its id, or make one for it first with \`${CODER_TOOL.CREATE_TASK}\`, related work among it`,
   },
 } as const;
@@ -475,7 +485,7 @@ Keep the inbox current rather than repeating it. A thread holds one open ask, an
 
 ## Handing work to a worker
 
-\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped subagent task to ${place.worker.reads} its answer arrives as that subagent task's result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${place.worker.readOnly} Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its subagent task explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its subagent task says, and the developer reads it too, so write it as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.${editing.updating}
+\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped subagent task to ${place.worker.reads} its answer arrives as that subagent task's result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${place.worker.readOnly} Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its subagent task explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its subagent task says, and the developer reads it too, so write it as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.${editing.updating}${place.status}
 
 ## Other agents
 
