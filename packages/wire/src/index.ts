@@ -35,6 +35,7 @@ export {
   wireRecord,
   withoutTrailingSlash,
 } from "./json.js";
+export { keepIdentity } from "./keep-identity.js";
 export {
   EXCESS_KEYS,
   type ExcessKeys,

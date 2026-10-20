@@ -21,6 +21,7 @@ import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
 import {
   type LinkDrawer,
   MARKDOWN_MARK,
@@ -232,6 +233,9 @@ function EditTime({
     ) : (
       <TextButton
         aria-label={label}
+        // The pointer on the time is the way to the history, so its chunk is read now rather than at the press.
+        onPointerEnter={VERSION_HISTORY.prefetch}
+        onFocus={VERSION_HISTORY.prefetch}
         onClick={(event) => {
           event.stopPropagation();
           onShow();
@@ -919,7 +923,7 @@ export function PlanBody({
   agents?: EditAgents;
   /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
   standing?: TaskStandingDoor;
-  /** What the task's own page draws under its name and byline, ahead of its text, as its linked issues; nothing elsewhere. */
+  /** What the task's own page draws under its status and priority, over its byline, as its linked issues; nothing elsewhere. */
   underTitle?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
@@ -1249,8 +1253,8 @@ export function PlanBody({
               {taskStanding === undefined ? null : (
                 <TaskStandingChips task={task} onSet={taskStanding.onSet} />
               )}
-              <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
               {underTitle}
+              <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
               <ChangedLine looks={looks} marks={marks} />
             </>
           ) : null}

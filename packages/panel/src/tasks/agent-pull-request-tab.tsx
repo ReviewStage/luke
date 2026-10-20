@@ -153,7 +153,7 @@ import {
   usePullRequestComment,
 } from "./pull-request-comment-box.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
-import { ofPullRequestTab, PullRequestNumberProvider } from "./pull-request-number.js";
+import { PullRequestNumberProvider, pullRequestOfTab } from "./pull-request-number.js";
 import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people.js";
 import {
   LabelPicker,
@@ -2450,18 +2450,4 @@ function PullRequestTabBody({
   );
   // The member's own pending comments, told apart wherever a comment is drawn (`pending-comments.tsx`).
   return <PendingCommentsProvider value={pendingComments}>{page}</PendingCommentsProvider>;
-}
-
-/**
- * The pull request a Pull request tab shows, as the task's agents last read
- * it: the one it names by its number, kept apart (`numberedPullRequests`),
- * else its agent's own; none before it is read.
- */
-export function pullRequestOfTab(
-  control: Pick<CodingAgentsControl, "pullRequests" | "numberedPullRequests">,
-  tab: { readonly changes: string; readonly number?: number | undefined },
-): CodingAgentPullRequest | undefined {
-  return tab.number === undefined
-    ? control.pullRequests.get(tab.changes)
-    : ofPullRequestTab(control.numberedPullRequests, tab);
 }

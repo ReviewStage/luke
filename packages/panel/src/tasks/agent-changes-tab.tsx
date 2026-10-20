@@ -5,13 +5,10 @@ import {
 import {
   CODING_AGENT_STATUS,
   type CodingAgentChangedFile,
-  type CodingAgentChangesPeople,
-  type CodingAgentPullRequest,
   DIFF_SIDE,
   type ReviewThread,
 } from "@luke/features/coding-agent-wire";
 import { imageTypeOfPath } from "@luke/features/github-image";
-import type { CatalogModel } from "@luke/features/models-wire";
 import { TASK_FILE_REFUSAL, type TaskFileRefusal } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import {
@@ -23,9 +20,6 @@ import {
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
-  HoverCard,
-  HoverCardHead,
-  HoverCardNote,
   IconButton,
   TEXT_BUTTON_TONE,
   TextButton,
@@ -57,7 +51,6 @@ import {
 import { SpinnerRegion } from "../spinner.js";
 import { Tooltip } from "../tooltip.js";
 import { LinesChanged } from "./agent-published.js";
-import { AgentActorRef, type AgentSubject } from "./agent-ref.js";
 import {
   type ChangesList,
   FileHead,
@@ -93,7 +86,7 @@ import {
   wholeable,
 } from "./changes-model.js";
 import { ChangesStrip } from "./changes-strip.js";
-import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
+import { agentStillWriting } from "./coding-agent-model.js";
 import {
   type CommentDrafts,
   closeDraft,
@@ -119,12 +112,10 @@ import { FilesChangedKeysSheet } from "./files-changed-keys.js";
 import { ImageDiff, type ImageSides, imageDrawable } from "./image-diff.js";
 import { LineComment, type PendingReview } from "./line-comment.js";
 import { MinimizedThreads } from "./minimized-threads.js";
-import { PullRequestMark } from "./pull-request-mark.js";
 import { usePullRequestNumber } from "./pull-request-number.js";
-import { OpenedBy, ReviewersLine } from "./pull-request-people.js";
 import { PullRequestWriteNote } from "./pull-request-writes.js";
 import { landable, type ThreadLanding, ThreadLandingProvider } from "./thread-reveal.js";
-import type { CodingAgentsControl, HeldPeople } from "./use-coding-agents.js";
+import type { CodingAgentsControl } from "./use-coding-agents.js";
 import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
 import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
 
@@ -1524,73 +1515,6 @@ function FilesList({
         </ThreadLandingProvider>
       )}
     </section>
-  );
-}
-
-/** Who a pull request names, as its tab last read them for that very pull request; none where the tab read them for another, or has not yet. */
-export function peopleOf(
-  held: HeldPeople | undefined,
-  pullRequest: Pick<CodingAgentPullRequest, "url">,
-): CodingAgentChangesPeople | undefined {
-  return held?.url === pullRequest.url ? held.people : undefined;
-}
-
-/**
- * The card a Changes tab hangs, and its row in the task's summary, in a tab
- * card's look: the pull request's title with its mark and number at the
- * right, the coding agent whose pull request it is under the title, by its
- * tile and name as every place naming an agent draws it (`ActorRef`),
- * which hang the agent's card and open its tab, and under them how many
- * files it changes and the lines it adds and removes, as GitHub counts
- * them, then, once its Changes tab has read them, who opened it and its
- * reviewers, each face wearing where they stand (`pull-request-people.tsx`).
- */
-export function ChangesCard({
-  subject,
-  models,
-  pullRequest,
-  people,
-  onOpenAgent,
-}: {
-  /** The agent whose pull request it is, as the plan's list names it. */
-  subject: AgentSubject;
-  /** The catalog as last read, which names the agent's model on its card. */
-  models: readonly CatalogModel[] | undefined;
-  pullRequest: CodingAgentPullRequest;
-  /** Who the pull request names, as its Changes tab last read them; none before it has. */
-  people: CodingAgentChangesPeople | undefined;
-  /** Opens the agent's tab in the plan's column. */
-  onOpenAgent: () => void;
-}): React.JSX.Element {
-  const count = pullRequest.changedFiles;
-  const reviewers = people?.reviewers ?? [];
-  return (
-    <HoverCard data-tab-card="">
-      <HoverCardHead
-        name={pullRequest.title}
-        sub={<AgentActorRef subject={subject} models={models} onOpen={onOpenAgent} />}
-        corner={
-          <>
-            <PullRequestMark pullRequest={pullRequest} className="card-corner-mark" />
-            {pullRequestNumberLabel(pullRequest)}
-          </>
-        }
-      />
-      <HoverCardNote>
-        {count} {count === 1 ? "file" : "files"} changed{" "}
-        <LinesChanged additions={pullRequest.additions} deletions={pullRequest.deletions} />
-      </HoverCardNote>
-      {people?.author === undefined ? null : (
-        <HoverCardNote oneLine>
-          <OpenedBy person={people.author} />
-        </HoverCardNote>
-      )}
-      {reviewers.length === 0 ? null : (
-        <HoverCardNote>
-          <ReviewersLine reviewers={reviewers} />
-        </HoverCardNote>
-      )}
-    </HoverCard>
   );
 }
 

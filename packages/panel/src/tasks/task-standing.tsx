@@ -45,8 +45,8 @@ export const TASK_STATUS_WORDS = {
   [TASK_STATUS.CANCELED]: "Canceled",
 } as const satisfies Record<TaskStatus, string>;
 
-/** Each priority as its chip and its menu's row say it. */
-const TASK_PRIORITY_WORDS = {
+/** Each priority as its chip, its menu's row, and a Board card's say it. */
+export const TASK_PRIORITY_WORDS = {
   [TASK_PRIORITY.NONE]: "No priority",
   [TASK_PRIORITY.URGENT]: "Urgent",
   [TASK_PRIORITY.HIGH]: "High",
@@ -107,10 +107,9 @@ export function TaskKeyLine({
 
 /**
  * A status chip dropping the five statuses, each with its mark, the one
- * `status` names checked; a pick other than it is handed to `onPick`. The
- * task page's head and a Board card on a phone both draw it.
+ * `status` names checked; a pick other than it is handed to `onPick`.
  */
-export function TaskStatusPicker({
+function TaskStatusPicker({
   label = "Status",
   status,
   onPick,

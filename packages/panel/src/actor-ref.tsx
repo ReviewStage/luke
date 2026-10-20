@@ -37,8 +37,9 @@ import {
   SOMEONE_REASON,
 } from "@luke/ui/actor-model";
 import { BotIcon, ClockIcon, HistoryIcon, UserRoundIcon, UserRoundXIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { automationNextText, automationOwnerName } from "./desktop/automation-words.js";
+import { PERSON_PAGE } from "./desktop/pages-on-demand.js";
 import { InlineRef } from "./inline-ref.js";
 import { useActorDoor } from "./person-door.js";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph.js";
@@ -384,6 +385,8 @@ export function PersonCard({
   /** Their latest activity in this plan, in a line: "Edited Rollout · 2h ago". */
   latest?: ReactNode;
 }): React.JSX.Element {
+  // The card hanging is the pointer on their name, a press from their page, so its chunk is read now.
+  useEffect(PERSON_PAGE.prefetch, []);
   return (
     <HoverCard data-actor-card={actor.kind}>
       <ActorHead
