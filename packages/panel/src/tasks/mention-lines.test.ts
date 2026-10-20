@@ -126,7 +126,7 @@ async function page({ box = true }: { box?: boolean } = {}) {
             key: "file",
             file: { path: "src/invite.ts", range: undefined, opened: 1 },
             snippet: undefined,
-            notes: { notes: [], folded: [], onFold: ignore, onShow: ignore },
+            notes: { notes: [], folded: [], onFold: ignore, taskId: undefined },
             readFile,
             onRead: ignore,
           }),
