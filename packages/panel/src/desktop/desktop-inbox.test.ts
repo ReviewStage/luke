@@ -1331,7 +1331,7 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
   assert.deepEqual(answeredPicks(page), ["Email", "Pager"], "Enter let no pick go");
 });
 
-test("Enter anywhere in a form, in a short number field or its text field's composer, sends it once its required fields are filled, and before that takes the keyboard to the first one left empty, the box's foot naming it; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
+test("Enter anywhere in a form, in a short number field or its text field's composer, sends what is filled, a required field left empty absent from it, and with nothing filled takes the keyboard to the first required one, the box's foot naming it; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
   inboxes.set(INVITES.id, [
     {
       ...EXPIRY,
@@ -1365,17 +1365,6 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
   assert.equal(document.activeElement, segment(segmentedGroup(pane, "Severity"), "Low"));
   assert.equal(quietWords(pane), "Fill in Severity");
 
-  act(() => segment(segmentedGroup(pane, "Severity"), "High").click());
-  keyOn(segment(segmentedGroup(pane, "Severity"), "High"), "Enter");
-  await settle();
-  assert.deepEqual(sent, [], "Enter on the pill sends nothing yet");
-  assert.equal(document.activeElement, composerEditor(field("Reason")));
-  assert.equal(quietWords(pane), "Fill in Reason");
-  assert.equal(
-    segment(segmentedGroup(pane, "Severity"), "High").getAttribute("aria-checked"),
-    "true",
-  );
-
   typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
   await settle();
   pressInComposer(field("Reason"), "Enter");
@@ -1394,7 +1383,6 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
       {
         reply: INBOX_REPLY.SUBMITTED,
         values: [
-          { label: "Severity", value: "High" },
           { label: "Reason", value: `Spiked twice\nSee ${file}` },
           { label: "Page on-call", value: false },
         ],
@@ -6134,6 +6122,49 @@ test("an approve-or-request-changes ask is two small buttons: the one pressed is
   const reply = pane.querySelector(".inbox-thread > li:last-child") ?? assert.fail("the reply");
   assert.deepEqual(cardStanding(reply), ["Requested changes", "back"]);
   assert.deepEqual(askBoxes(pane), [["answered", "Pick oneRequested changes"]]);
+});
+
+test("a form's fields attach to the reply as they are filled, with no Submit, and a form filled in part sends what was filled, a required field left empty absent from it", async () => {
+  const shown = threadItem([
+    askingMessage({
+      type: INBOX_ASK.ANSWER,
+      fields: [
+        { type: INBOX_FIELD.TEXT, label: "Reason", required: true },
+        { type: INBOX_FIELD.SELECT, label: "Severity", required: true, options: ["Low", "High"] },
+      ],
+    }),
+  ]);
+  const pane = await mountThread(shown);
+  const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000013"));
+  assert.deepEqual(
+    [...pane.querySelectorAll(".inbox-ask button")].map((button) => button.textContent),
+    ["Low", "High"],
+    "the ask's box holds its fields and no Submit",
+  );
+  assert.equal(sendWords(pane), "Reply");
+
+  const reason =
+    [...pane.querySelectorAll<HTMLElement>("[data-inbox-field]")].find(
+      (each) => each.dataset.inboxFieldLabel === "Reason",
+    ) ?? assert.fail("no Reason field");
+  typeInComposer(reason, "Spiked twice");
+  await settle();
+  assert.equal(sendWords(pane), "Send 1 field");
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ answers }) => answers),
+    [
+      {
+        ask: ASKING_ID,
+        reply: INBOX_REPLY.SUBMITTED,
+        values: [{ label: "Reason", value: "Spiked twice" }],
+      },
+    ],
+  );
 });
 
 test("a to-do's steps are ticked in its box, Mark done needs none ticked and ticks every one, and Mark done sent carries every step; one naming no step stands its item's title as its one step", async () => {

@@ -85,7 +85,8 @@ import { plainWords } from "./tool-call-model.js";
  * choice, the fields filled on a form, their note, and the files they
  * attached to it; on a thread, the steps ticked in its open `do` ask and the
  * answer pressed in it and attached to the reply (Mark done, Couldn't do it,
- * Submit, or Answer), a `decide`'s pick being its choices.
+ * or Answer), a `decide`'s pick being its choices and an `answer`'s fields
+ * filled its values.
  */
 export interface InboxDraft {
   readonly choices: readonly string[];
@@ -207,7 +208,9 @@ function replyKindOf(
   }
   if (response.type === INBOX_RESPONSE.NONE) return INBOX_REPLY.ACKNOWLEDGED;
   if (response.type === INBOX_RESPONSE.CHOICE && draft.choices.length > 0) return INBOX_REPLY.CHOSE;
-  if (response.type === INBOX_RESPONSE.FORM) return INBOX_REPLY.SUBMITTED;
+  if (response.type === INBOX_RESPONSE.FORM) {
+    return formSendable(response, draft) ? INBOX_REPLY.SUBMITTED : undefined;
+  }
   return draft.note.trim() === "" && draft.attachments.length === 0
     ? undefined
     : INBOX_REPLY.ANSWERED;
@@ -223,6 +226,27 @@ function sentValues(form: Pick<InboxForm, "fields">, draft: InboxDraft): readonl
     const sent = isWireString(value) ? value.trim() : value;
     return sent === "" ? [] : [{ label: field.label, value: sent }];
   });
+}
+
+/**
+ * Whether the developer filled any field of a form: a value of theirs it
+ * sends. Note that a switch left alone fills nothing, though it is sent as no.
+ */
+function formFilledIn(form: Pick<InboxForm, "fields">, draft: InboxDraft): boolean {
+  const held = new Set(draft.values.map((value) => value.label));
+  return sentValues(form, draft).some((value) => held.has(value.label));
+}
+
+/**
+ * Whether a form holds something to send: every required field filled, or,
+ * where some are left empty, a field the developer filled, or words or
+ * files of their own, since a form filled in part sends what was filled.
+ */
+function formSendable(form: Pick<InboxForm, "fields">, draft: InboxDraft): boolean {
+  const sent = new Set(sentValues(form, draft).map((value) => value.label));
+  if (form.fields.every((field) => field.required !== true || sent.has(field.label))) return true;
+  if (draft.note.trim() !== "" || draft.attachments.length > 0) return true;
+  return formFilledIn(form, draft);
 }
 
 /**
@@ -283,9 +307,10 @@ const MISSING_LINE = {
 /**
  * What the card's answer still lacks, the first thing in the item's order,
  * or nothing where it lacks nothing it can be told to fill: a choice with
- * no pick and no words of the developer's own lacks an option, a form its
- * first required field left empty, an approval or a to-do its decision,
- * and words their words. A note lacks nothing, its nod being its answer.
+ * no pick and no words of the developer's own lacks an option, a form with
+ * nothing to send its first required field left empty, an approval or a
+ * to-do its decision, and words their words. A note lacks nothing, its nod
+ * being its answer.
  */
 export function inboxMissing(
   item: Pick<InboxItem, "response">,
@@ -302,6 +327,7 @@ export function inboxMissing(
         line: response.multiple === true ? MISSING_LINE.MANY : MISSING_LINE.ONE,
       };
     case INBOX_RESPONSE.FORM: {
+      if (formSendable(response, draft)) return undefined;
       const sent = new Set(sentValues(response, draft).map((value) => value.label));
       const empty = response.fields.find(
         (field) => field.required === true && !sent.has(field.label),
@@ -569,17 +595,12 @@ export function withStep(
     : { ...draft, steps };
 }
 
-/** Whether a form's required fields are filled as the draft holds them, which Submit waits for. */
-export function formFilled(form: Pick<InboxForm, "fields">, draft: InboxDraft): boolean {
-  const sent = new Set(sentValues(form, draft).map((value) => value.label));
-  return form.fields.every((field) => field.required !== true || sent.has(field.label));
-}
-
 /**
  * The answer the draft attaches to the reply for the open ask, or none: a
  * `decide`'s options picked, a `do`'s Mark done with every step ticked or
- * Couldn't do it with the steps ticked, an `answer`'s Submit with its fields' values, or its Answer,
- * whose words are the reply's own. Note that the title standing as a `do`'s
+ * Couldn't do it with the steps ticked, an `answer`'s fields' values once
+ * any is filled, as a form filled in part sends what was filled, or its
+ * Answer, whose words are the reply's own. Note that the title standing as a `do`'s
  * one step is ticked on the card alone, since the ask names no such step.
  */
 export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAnswers | undefined {
@@ -601,8 +622,9 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
       return { ask: id, reply: draft.press, steps };
     }
     case INBOX_ASK.ANSWER:
+      // A form's fields attach as they are filled, with no press, any filled in part sending what was filled.
       if (ask.fields !== undefined) {
-        return draft.press === INBOX_REPLY.SUBMITTED
+        return formFilledIn({ fields: ask.fields }, draft)
           ? {
               ask: id,
               reply: INBOX_REPLY.SUBMITTED,
@@ -674,9 +696,9 @@ export function askNumberedPick(
   return option === undefined ? undefined : withChoice(ask, draft, option.label);
 }
 
-/** The draft with its attached answer taken off: the pick let go, or the press. */
+/** The draft with its attached answer taken off: the pick let go, a form's fields emptied, or the press. */
 export function withoutAnswer(draft: InboxDraft): InboxDraft {
-  return { ...draft, choices: [], press: undefined };
+  return { ...draft, choices: [], values: [], press: undefined };
 }
 
 /** What a reply sends on a thread: its words, its files, and the answer to the open ask it carries, if any. */
@@ -783,7 +805,7 @@ const PRESS_WORDS = {
   [INBOX_REPLY.ANSWERED]: "Answer",
   [INBOX_REPLY.DONE]: "Mark done",
   [INBOX_REPLY.NOT_DONE]: "Couldn't do it",
-  [INBOX_REPLY.SUBMITTED]: "Submit",
+  [INBOX_REPLY.SUBMITTED]: "Send",
   [INBOX_REPLY.ACKNOWLEDGED]: "Got it",
 } as const satisfies Record<InboxReplyKind, string>;
 
@@ -815,7 +837,8 @@ export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined):
 /**
  * What an attached answer's stamp says over the box, and what the send it
  * renames reads: the button pressed, "Approve" or "Request changes", the
- * options picked, `Choose "7 days"`, or the press, "Mark done", "Submit".
+ * options picked, `Choose "7 days"`, a form's values counted, "Send 2
+ * fields", or the press, "Mark done".
  */
 export function attachedStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerStamp {
   const tone = toneOf(answers, ask);
@@ -824,6 +847,13 @@ export function attachedStamp(answers: InboxAnswers, ask: InboxReadAsk | undefin
   if (answers.reply === INBOX_REPLY.CHOSE) {
     const picked = (answers.choices ?? []).map((choice) => `"${choice}"`).join(", ");
     return { tone, words: `${PRESS_WORDS[INBOX_REPLY.CHOSE]} ${picked}` };
+  }
+  if (answers.reply === INBOX_REPLY.SUBMITTED) {
+    const count = answers.values?.length ?? 0;
+    return {
+      tone,
+      words: `${PRESS_WORDS[INBOX_REPLY.SUBMITTED]} ${count} ${count === 1 ? "field" : "fields"}`,
+    };
   }
   return { tone, words: PRESS_WORDS[answers.reply] };
 }
