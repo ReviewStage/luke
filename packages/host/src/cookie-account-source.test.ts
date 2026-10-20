@@ -1,4 +1,4 @@
-// cookie-account-source.test.ts -- a browser tab's account over the service's cookie session: read, signed into, signed out of, lost on a refused call, recovered after a launch blip, and what settings key on.
+// cookie-account-source.test.ts -- a browser tab's account over the service's cookie session: read, signed into, signed out of, switched, lost on a refused call, recovered after a launch blip, and what settings key on.
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
@@ -19,7 +19,7 @@ import {
   type RecordedRequest,
   recordingHttpClient,
 } from "@luke/wire/testing";
-import { ConfigProvider, Deferred, Effect, Fiber, Layer, Queue, Stream } from "effect";
+import { ConfigProvider, Deferred, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Path from "effect/Path";
@@ -73,6 +73,8 @@ interface ServiceState {
   signOutDown?: boolean;
   /** Holds the next session read's answer, as it stood when asked, until this settles. */
   heldRead?: Promise<void> | undefined;
+  /** Holds the next social sign-in's answer until this settles. */
+  heldSignIn?: Promise<void> | undefined;
 }
 
 /** The service's routes over `state`, answered as Better Auth and Luke's routes answer them. */
@@ -93,7 +95,12 @@ function respond(
       state.heldRead = undefined;
       return held === undefined ? answer : held.then(() => answer);
     }
-    case "/api/auth/sign-in/social":
+    case "/api/auth/sign-in/social": {
+      const answer = jsonResponse({ url: PROVIDER_CONSENT, redirect: true });
+      const held = state.heldSignIn;
+      state.heldSignIn = undefined;
+      return held === undefined ? answer : held.then(() => answer);
+    }
     case "/api/auth/link-social":
       return jsonResponse({ url: PROVIDER_CONSENT, redirect: true });
     case "/api/auth/sign-out":
@@ -142,6 +149,10 @@ function scene(initial: Partial<ServiceState> = {}) {
   const gate: string[] = [];
   /** Held open where a test wants the gate's opening still under way. */
   let opening: Effect.Effect<void> = Effect.void;
+  /** Held open where a test wants the gate's closing still under way. */
+  let closing: Effect.Effect<void> = Effect.void;
+  /** Held open where a test wants a departure's settings still being dropped. */
+  let forgetting: Effect.Effect<void> = Effect.void;
   let revisitQueue: Queue.Queue<void> | undefined;
   const revisits = Effect.gen(function* () {
     revisitQueue ??= yield* Queue.unbounded<void>();
@@ -161,10 +172,14 @@ function scene(initial: Partial<ServiceState> = {}) {
       setAccount: () => Effect.die("the cookie source stores no account"),
       // A departure drops what the settings kept for the account.
       clearAccount: () =>
-        Effect.sync(() => {
-          gate.push("forget");
-          return { status: ACCOUNT_STATUS.SIGNED_OUT } as const;
-        }),
+        Effect.suspend(() => forgetting).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              gate.push("forget");
+              return { status: ACCOUNT_STATUS.SIGNED_OUT } as const;
+            }),
+          ),
+        ),
       accountSnapshot: () => Effect.die("the cookie source reads no stored account"),
       // An arrival settles the settings on whoever arrives.
       settleSessionAccount: (email) => Effect.sync(() => void gate.push(`settle ${email}`)),
@@ -177,7 +192,9 @@ function scene(initial: Partial<ServiceState> = {}) {
     startCapabilities: Effect.suspend(() => opening).pipe(
       Effect.andThen(Effect.sync(() => void gate.push("open"))),
     ),
-    stopCapabilities: Effect.sync(() => void gate.push("close")),
+    stopCapabilities: Effect.suspend(() => closing).pipe(
+      Effect.andThen(Effect.sync(() => void gate.push("close"))),
+    ),
   };
   const open = Effect.gen(function* () {
     const source = yield* AccountSource;
@@ -189,12 +206,44 @@ function scene(initial: Partial<ServiceState> = {}) {
   const holdOpening = (until: Effect.Effect<void>) => {
     opening = until;
   };
-  return { state, service, navigated, gate, open, sent, holdOpening, revisit };
+  const holdClosing = (until: Effect.Effect<void>) => {
+    closing = until;
+  };
+  const holdForgetting = (until: Effect.Effect<void>) => {
+    forgetting = until;
+  };
+  return {
+    state,
+    service,
+    navigated,
+    gate,
+    open,
+    sent,
+    holdOpening,
+    holdClosing,
+    holdForgetting,
+    revisit,
+  };
 }
 
 /** The signed-in person's address, and nothing for any other status. */
 const signedInEmail = (account: AccountSnapshot) =>
   account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
+
+/** Lets `count` event-loop turns pass, for forked work that should have landed by then. */
+const turns = (count: number) =>
+  Effect.gen(function* () {
+    for (let turn = 0; turn < count; turn += 1) yield* Effect.promise(() => nextTurn());
+  });
+
+/** A promise the test settles by hand, for an answer the service holds. */
+function heldAnswer() {
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { held, release };
+}
 
 /** Advances the test clock a second at a time, letting each read land, until `fiber` ends. */
 const runOut = <A, E>(fiber: Fiber.Fiber<A, E>) =>
@@ -303,7 +352,7 @@ describe("the cookie account source", () => {
 
       const account = session.snapshot();
       assert.equal(account.status === ACCOUNT_STATUS.SIGNED_IN && account.id, "user-2");
-      assert.deepEqual(gate.slice(1), ["forget", "settle other@example.com", "close", "open"]);
+      assert.deepEqual(gate.slice(1), ["forget", "close", "settle other@example.com", "open"]);
     }).pipe(Effect.scoped),
   );
 
@@ -430,7 +479,7 @@ describe("the cookie account source", () => {
 
       const account = session.snapshot();
       assert.equal(account.status === ACCOUNT_STATUS.SIGNED_IN && account.id, "user-2");
-      assert.deepEqual(gate.slice(1), ["forget", "settle other@example.com", "close", "open"]);
+      assert.deepEqual(gate.slice(1), ["forget", "close", "settle other@example.com", "open"]);
     }).pipe(Effect.scoped),
   );
 
@@ -498,6 +547,415 @@ describe("the cookie account source", () => {
       const account = session.snapshot();
       assert.equal(account.status === ACCOUNT_STATUS.SIGNED_IN && account.name, "Dev Renamed");
       // Only the launch's own arrival touched the settings or the gate.
+      assert.deepEqual(gate, [`settle ${USER.email}`]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("shows another person only once the previous person's capabilities stopped", () =>
+    Effect.gen(function* () {
+      const { open, state, holdClosing } = scene();
+      const session = yield* open;
+      yield* session.initialize;
+      const closingBegan = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      holdClosing(
+        Effect.andThen(Deferred.succeed(closingBegan, undefined), Deferred.await(release)),
+      );
+
+      // Another tab signs in as someone else; the previous person's capabilities are still stopping.
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      const refreshed = yield* Effect.forkChild(session.refreshOnce());
+      yield* Deferred.await(closingBegan);
+      assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(refreshed);
+      assert.equal(signedInEmail(session.snapshot()), "other@example.com");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("closes the gate for a departure however many empty reads follow it", () =>
+    Effect.gen(function* () {
+      const { open, state, gate, holdOpening, sent } = scene({ user: undefined });
+      const session = yield* open;
+      yield* session.initialize;
+      const release = yield* Deferred.make<void>();
+      holdOpening(Deferred.await(release));
+      const reads = () => sent("/api/auth/get-session").length;
+      const reread = Effect.gen(function* () {
+        const before = reads();
+        yield* session.token.refreshAccount();
+        while (reads() === before) yield* Effect.promise(() => nextTurn());
+        yield* turns(5);
+      });
+
+      // The person is shown and their gate is still opening when the session ends elsewhere.
+      state.user = { ...USER };
+      yield* reread;
+      assert.equal(signedInEmail(session.snapshot()), USER.email);
+      state.user = undefined;
+      yield* reread;
+      // A second read finds nobody again before the closing had its turn.
+      yield* reread;
+      yield* Deferred.succeed(release, undefined);
+      yield* turns(10);
+
+      assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+      assert.equal(gate.at(-1), "close");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "closes the gate for the person a switch left even once a later read passed it over",
+    () =>
+      Effect.gen(function* () {
+        const { open, state, gate, holdOpening, sent } = scene({ user: undefined });
+        const session = yield* open;
+        yield* session.initialize;
+        const release = yield* Deferred.make<void>();
+        holdOpening(Deferred.await(release));
+        const reads = () => sent("/api/auth/get-session").length;
+        const reread = Effect.gen(function* () {
+          const before = reads();
+          yield* session.token.refreshAccount();
+          while (reads() === before) yield* Effect.promise(() => nextTurn());
+          yield* turns(5);
+        });
+
+        // The first person's gate is still opening when another person's session is read, then ends.
+        state.user = { ...USER };
+        yield* reread;
+        state.user = { ...USER, id: "user-2", email: "other@example.com" };
+        yield* reread;
+        state.user = undefined;
+        yield* reread;
+        yield* Deferred.succeed(release, undefined);
+        yield* turns(10);
+
+        assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+        assert.equal(gate.at(-1), "close");
+        assert.ok(!gate.includes("settle other@example.com"));
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("shows no arrival a read naming nobody overtook while the gate closed", () =>
+    Effect.gen(function* () {
+      const { open, state, gate, holdClosing } = scene();
+      const session = yield* open;
+      yield* session.initialize;
+      assert.ok(session.confirmAccount);
+      const closingBegan = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      holdClosing(
+        Effect.andThen(Deferred.succeed(closingBegan, undefined), Deferred.await(release)),
+      );
+
+      // Another person's session is read, then ends before the previous person's capabilities stopped.
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      const refreshed = yield* Effect.forkChild(session.refreshOnce());
+      yield* Deferred.await(closingBegan);
+      state.user = undefined;
+      yield* session.confirmAccount();
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(refreshed);
+
+      assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+      assert.deepEqual(gate.slice(1), ["forget", "close"]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("settles nothing and moves no gate once the session closed", () =>
+    Effect.gen(function* () {
+      const { held, release } = heldAnswer();
+      const { open, state, gate, sent } = scene();
+      const sessionScope = yield* Scope.make();
+      const session = yield* Scope.provide(open, sessionScope);
+      yield* session.initialize;
+
+      // A read is under way for another person's session when the session closes.
+      state.heldRead = held;
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      const refreshed = yield* Effect.forkChild(session.refreshOnce());
+      while (sent("/api/auth/get-session").length < 2) yield* Effect.promise(() => nextTurn());
+      yield* Scope.close(sessionScope, Exit.void);
+      yield* Effect.sync(release);
+      yield* Fiber.join(refreshed);
+      yield* turns(20);
+
+      assert.deepEqual(gate, [`settle ${USER.email}`]);
+    }),
+  );
+
+  it.effect("closes the first person's gate before a third person opens it", () =>
+    Effect.gen(function* () {
+      const { open, state, gate, holdOpening, sent } = scene({ user: undefined });
+      const session = yield* open;
+      yield* session.initialize;
+      const release = yield* Deferred.make<void>();
+      holdOpening(Deferred.await(release));
+      const reads = () => sent("/api/auth/get-session").length;
+      const reread = Effect.gen(function* () {
+        const before = reads();
+        yield* session.token.refreshAccount();
+        while (reads() === before) yield* Effect.promise(() => nextTurn());
+        yield* turns(5);
+      });
+
+      // The first person's gate is still opening as a second, then a third, session is read.
+      state.user = { ...USER };
+      yield* reread;
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      yield* reread;
+      state.user = { ...USER, id: "user-3", email: "third@example.com" };
+      yield* reread;
+      holdOpening(Effect.void);
+      yield* Deferred.succeed(release, undefined);
+      while (gate.at(-1) !== "open" || !gate.includes("settle third@example.com")) {
+        yield* Effect.promise(() => nextTurn());
+      }
+
+      assert.equal(signedInEmail(session.snapshot()), "third@example.com");
+      const third = gate.indexOf("settle third@example.com");
+      assert.equal(gate.lastIndexOf("close", third) > gate.indexOf("open"), true);
+      assert.ok(!gate.includes("settle other@example.com"));
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "closes the gate for a sign-out pressed while an opening ran, a later read passing it",
+    () =>
+      Effect.gen(function* () {
+        const { open, state, gate, holdOpening, sent } = scene({ user: undefined });
+        const session = yield* open;
+        yield* session.initialize;
+        const release = yield* Deferred.make<void>();
+        holdOpening(Deferred.await(release));
+
+        // The person's gate is still opening when they sign out, and a read then finds nobody.
+        state.user = { ...USER };
+        yield* session.token.refreshAccount();
+        yield* turns(5);
+        const signedOut = yield* Effect.forkChild(session.signOut({ revokeRemote: true }));
+        while (sent("/api/auth/sign-out").length === 0) yield* Effect.promise(() => nextTurn());
+        yield* turns(5);
+        yield* session.token.refreshAccount();
+        yield* turns(5);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(signedOut);
+
+        assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+        assert.equal(gate.at(-1), "close");
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("answers the launch with the person a re-read during it settled on", () =>
+    Effect.gen(function* () {
+      const { held, release } = heldAnswer();
+      const { open, state, sent } = scene({ user: undefined, heldRead: held });
+      const session = yield* open;
+
+      // The launch's read is held; a refused call's re-read meanwhile finds the session.
+      const launched = yield* Effect.forkChild(session.initialize);
+      while (sent("/api/auth/get-session").length === 0) yield* Effect.promise(() => nextTurn());
+      state.user = { ...USER };
+      yield* session.token.refreshAccount();
+      yield* Effect.sync(release);
+
+      assert.equal(signedInEmail(yield* Fiber.join(launched)), USER.email);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "opens for a person who arrives while a sign-out drops its settings only after it closed",
+    () =>
+      Effect.gen(function* () {
+        const { open, state, gate, holdForgetting, sent } = scene();
+        const session = yield* open;
+        yield* session.initialize;
+        const release = yield* Deferred.make<void>();
+        holdForgetting(Deferred.await(release));
+
+        // The person signs out, and their settings are still being dropped when someone else's session is read.
+        const signedOut = yield* Effect.forkChild(session.signOut({ revokeRemote: true }));
+        while (sent("/api/auth/sign-out").length === 0) yield* Effect.promise(() => nextTurn());
+        yield* turns(5);
+        assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+        state.user = { ...USER, id: "user-2", email: "other@example.com" };
+        yield* session.token.refreshAccount();
+        yield* turns(5);
+        holdForgetting(Effect.void);
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(signedOut);
+        yield* turns(10);
+
+        assert.equal(signedInEmail(session.snapshot()), "other@example.com");
+        assert.deepEqual(gate.slice(1), ["forget", "close", "settle other@example.com", "open"]);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("settles on one read for returns to the tab that come together", () =>
+    Effect.gen(function* () {
+      const { open, state, revisit } = scene();
+      const session = yield* open;
+      yield* session.initialize;
+      const shownAs = (email: string) =>
+        Effect.gen(function* () {
+          while (signedInEmail(session.snapshot()) !== email) {
+            yield* Effect.promise(() => nextTurn());
+          }
+        });
+
+      // Another tab signs in as someone else, and the tab is shown again: it settles on them.
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      yield* revisit;
+      yield* shownAs("other@example.com");
+
+      // The focus that comes with the same return is that return, not another read.
+      state.user = { ...USER, id: "user-3", email: "third@example.com" };
+      yield* revisit;
+      yield* turns(10);
+      assert.equal(signedInEmail(session.snapshot()), "other@example.com");
+
+      // A return a while later reads again.
+      yield* TestClock.adjust("2 seconds");
+      yield* revisit;
+      yield* shownAs("third@example.com");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("reads once, unretried, for a return to the tab during an outage", () =>
+    Effect.gen(function* () {
+      const { open, state, revisit } = scene();
+      const session = yield* open;
+      const signedIn = yield* session.initialize;
+
+      // The service is down for the return's read; it is back, naming someone else, right after.
+      state.outages = 1;
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      yield* revisit;
+      yield* revisit;
+      yield* revisit;
+      for (let second = 0; second < 60; second += 1) {
+        yield* turns(2);
+        yield* TestClock.adjust("1 second");
+      }
+      yield* turns(2);
+
+      // Nothing read again behind that return, and the outage was no sign-out.
+      assert.deepEqual(session.snapshot(), signedIn);
+
+      // A later return reads again, and settles on who the session names.
+      yield* revisit;
+      while (signedInEmail(session.snapshot()) !== "other@example.com") {
+        yield* Effect.promise(() => nextTurn());
+      }
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("confirms the account with a read of its own after a sign-out overtook one", () =>
+    Effect.gen(function* () {
+      const { held, release } = heldAnswer();
+      const { open, state, sent } = scene();
+      const session = yield* open;
+      yield* session.initialize;
+      assert.ok(session.confirmAccount);
+
+      // A read is under way as the first person when the sign-out is pressed.
+      state.heldRead = held;
+      const refreshed = yield* Effect.forkChild(session.refreshOnce());
+      while (sent("/api/auth/get-session").length < 2) yield* Effect.promise(() => nextTurn());
+      yield* session.signOut({ revokeRemote: true });
+      // Another tab then signs in as someone else, and a write asks who is signed in.
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      const confirmed = yield* Effect.forkChild(session.confirmAccount());
+      yield* turns(2);
+      yield* Effect.sync(release);
+      yield* Fiber.join(confirmed);
+      yield* Fiber.join(refreshed);
+
+      assert.equal(signedInEmail(session.snapshot()), "other@example.com");
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect(
+    "keeps the tab where it is when the sign-in is cancelled while the service answers",
+    () =>
+      Effect.gen(function* () {
+        const { held, release } = heldAnswer();
+        const { open, navigated, sent } = scene({ user: undefined, heldSignIn: held });
+        const session = yield* open;
+        yield* session.initialize;
+
+        const begun = yield* Effect.forkChild(session.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
+        while (sent("/api/auth/sign-in/social").length === 0) {
+          yield* Effect.promise(() => nextTurn());
+        }
+        assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNING_IN });
+        session.cancelSignIn();
+        yield* Effect.sync(release);
+
+        assert.deepEqual(yield* Fiber.join(begun), { status: ACCOUNT_STATUS.SIGNED_OUT });
+        assert.deepEqual(navigated, []);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("keeps leaving for the provider through a return to the tab while it asks", () =>
+    Effect.gen(function* () {
+      const { held, release } = heldAnswer();
+      const { open, navigated, sent, revisit } = scene({ user: undefined, heldSignIn: held });
+      const session = yield* open;
+      yield* session.initialize;
+
+      // The tab is focused while the service is still asked for the provider's address.
+      const begun = yield* Effect.forkChild(session.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
+      while (sent("/api/auth/sign-in/social").length === 0) {
+        yield* Effect.promise(() => nextTurn());
+      }
+      yield* revisit;
+      while (sent("/api/auth/get-session").length < 2) yield* Effect.promise(() => nextTurn());
+      yield* turns(5);
+      yield* Effect.sync(release);
+
+      assert.deepEqual(yield* Fiber.join(begun), { status: ACCOUNT_STATUS.SIGNING_IN });
+      assert.deepEqual(navigated, [PROVIDER_CONSENT]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("ends a sign-in the tab came back to unfinished, such as through the back button", () =>
+    Effect.gen(function* () {
+      const { open, navigated, revisit } = scene({ user: undefined });
+      const session = yield* open;
+      yield* session.initialize;
+      yield* session.beginSignIn(ACCOUNT_PROVIDER.GITHUB);
+      assert.deepEqual(navigated, [PROVIDER_CONSENT]);
+
+      // The page is restored from the back/forward cache, with no session made.
+      yield* revisit;
+      yield* turns(10);
+
+      assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("signs the same person in again by linking the provider anew", () =>
+    Effect.gen(function* () {
+      const { open, navigated, sent, gate } = scene();
+      const session = yield* open;
+      const signedIn = yield* session.initialize;
+
+      assert.equal(yield* session.signInAgain(ACCOUNT_PROVIDER.GITHUB), false);
+
+      const [request] = sent("/api/auth/link-social");
+      assert.ok(request);
+      assert.equal(request.method, HTTP_METHOD.POST);
+      assert.deepEqual(JSON.parse(request.body ?? ""), {
+        provider: ACCOUNT_PROVIDER.GITHUB,
+        callbackURL: "/plan/task-1?tab=inbox",
+      });
+      assert.deepEqual(navigated, [PROVIDER_CONSENT]);
+      assert.equal(sent("/api/auth/sign-in/social").length, 0);
+      // The person stands as they were; nothing of the gate or the settings moved.
+      assert.deepEqual(session.snapshot(), signedIn);
       assert.deepEqual(gate, [`settle ${USER.email}`]);
     }).pipe(Effect.scoped),
   );
