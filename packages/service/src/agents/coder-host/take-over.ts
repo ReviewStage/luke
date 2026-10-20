@@ -20,8 +20,10 @@
  *
  * Two members taking over the same agent at once each start an agent, but
  * the source is archived under its own lock for one of them alone, who
- * takes its items and automations; the other's agent is stopped and
- * archived, and its take-over refused. A key already spent on another
+ * takes its items and automations, its agent named in the source's
+ * archive; the other's take-over is refused, and its agent stopped and
+ * archived where a stop lands, or left standing for its member where it is
+ * still coming up. A key already spent on another
  * Start is refused rather than handed the source's work.
  *
  * Only a member of the source's workspace reaches it (`agent-reach.ts`),
@@ -39,6 +41,7 @@ import {
   archiveIdleCodingAgent,
   type CodingAgent,
   IDLE_ARCHIVE,
+  readCodingAgent,
   readCodingAgentByKey,
 } from "@luke/database/models/coding-agent-store";
 import { storeWriter } from "@luke/database/models/writer";
@@ -62,7 +65,7 @@ import {
   type StartServices,
   startCodingAgent,
 } from "./start.js";
-import { cancelledTurn } from "./stop.js";
+import { cancelledTurn, stopsForGood } from "./stop.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /** Why the source is archived, as its banner says beside who archived it. */
@@ -83,27 +86,39 @@ function placeOf(source: CodingAgent): StartPlace {
 }
 
 /**
- * The source archived as taken over by the account, and its open inbox
- * items and the automations that send it their runs handed to the agent
- * that goes on, together or not at all; answers whether this take-over
- * holds the source. The archive is stamped under the source's own lock
- * only where it stands unarchived, so of two take-overs racing one wins and
- * the other moves nothing; a retry of the winner (`retried`) finds it
- * archived and hands on whatever is still left.
+ * The source archived as taken over by the account for `agent`, which the
+ * archive names, and its open inbox items and the automations that send it
+ * their runs handed to that agent, together or not at all; answers whether
+ * `agent` holds the source. The archive is stamped under the source's own
+ * lock only where it stands unarchived, so of two take-overs racing one
+ * wins and the other moves nothing. A source already archived for the same
+ * agent, as by a retry or a second request under the same key, is held by
+ * it still, and hands on whatever is left; one archived for another agent,
+ * or by anything else, is not.
  */
-const handedOver = (userId: string, source: CodingAgent, agent: CodingAgent, retried: boolean) =>
+const handedOver = (userId: string, source: CodingAgent, agent: CodingAgent) =>
   Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const archived = yield* archiveIdleCodingAgent(
           userId,
           source.id,
-          { by: CODING_AGENT_ARCHIVER.MEMBER, userId, reason: TAKEN_OVER_REASON },
+          {
+            by: CODING_AGENT_ARCHIVER.MEMBER,
+            userId,
+            reason: TAKEN_OVER_REASON,
+            agentId: agent.id,
+          },
           () => Effect.succeed(true),
         );
-        const holds =
-          archived === IDLE_ARCHIVE.ARCHIVED || (archived === IDLE_ARCHIVE.ALREADY && retried);
-        if (!holds) return false;
+        if (archived === IDLE_ARCHIVE.ALREADY) {
+          // Read again under the lock the archive took, which the transaction holds.
+          const now = yield* readCodingAgent(userId, source.id);
+          const heldBy = Option.isSome(now) ? now.value.archivedBy : null;
+          if (heldBy?.reason !== TAKEN_OVER_REASON || heldBy.agentId !== agent.id) return false;
+        } else if (archived !== IDLE_ARCHIVE.ARCHIVED) {
+          return false;
+        }
         yield* handOverOpenInboxItems(
           userId,
           { userId: source.userId, agentId: source.id },
@@ -117,8 +132,11 @@ const handedOver = (userId: string, source: CodingAgent, agent: CodingAgent, ret
 
 /**
  * The agent a take-over started that lost the source to another one,
- * stopped and archived saying so, since the work goes on in the other; a
- * stop that fails is logged, as the archive stands either way.
+ * stopped and archived saying so, since the work goes on in the other.
+ * Note that one still coming up, with no turn a stop can name yet, or
+ * whose stop did not land, is left standing rather than archived, because
+ * an archive would hide an agent that may still be working; it is the
+ * member's own, to stop from its tab.
  */
 const lostRace = (
   eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
@@ -126,11 +144,15 @@ const lostRace = (
   agent: CodingAgent,
 ) =>
   Effect.gen(function* () {
+    if (agent.archivedAt !== null) return;
     yield* cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), agent).pipe(
       Effect.catch((refusal) =>
         Effect.logWarning(`a take-over that lost its source was not stopped: ${refusal.error}`),
       ),
     );
+    if (!(yield* stopsForGood(agent))) {
+      return yield* Effect.logWarning("a take-over that lost its source is still coming up");
+    }
     yield* hostedStoreOrUnavailable(
       archiveCodingAgent(userId, agent.id, true, {
         by: CODING_AGENT_ARCHIVER.MEMBER,
@@ -170,9 +192,7 @@ export const takeOverCodingAgent = /* @__PURE__ */ Effect.fn("web/takeOverCoding
   if (started.agent.startedFrom?.agentId !== source.id) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  // A retry of a take-over that lost the source finds its agent archived, and takes nothing.
-  if (started.agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-  const holds = yield* hostedStoreOrUnavailable(handedOver(userId, source, started.agent, retried));
+  const holds = yield* hostedStoreOrUnavailable(handedOver(userId, source, started.agent));
   if (!holds) {
     yield* lostRace(eve, userId, started.agent);
     return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);

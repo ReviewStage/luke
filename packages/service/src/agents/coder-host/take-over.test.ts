@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { DatabaseServices } from "@luke/database/core/query";
 import { createAutomation, readAutomation } from "@luke/database/models/automation-store";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { archiveCodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { createTask } from "@luke/database/models/task-store";
 import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import {
@@ -181,6 +181,7 @@ it.layer(getTestDB())("a teammate's agent taken over", (it) => {
           by: CODING_AGENT_ARCHIVER.MEMBER,
           userId: teammate,
           reason: TAKEN_OVER_REASON,
+          agentId: taken.agent.id,
         });
       }),
   );
@@ -296,7 +297,7 @@ it.layer(getTestDB())("a teammate's agent taken over", (it) => {
   );
 
   it.effect(
-    "of two members taking over at once, the one who archives the source first takes its items, and the other's agent is stopped, archived, and refused",
+    "of two members taking over at once, the one who archives the source first takes its items, and the other's take-over is refused",
     () =>
       Effect.gen(function* () {
         const { owner, teammate, workspaceId } = yield* openTeam;
@@ -346,6 +347,29 @@ it.layer(getTestDB())("a teammate's agent taken over", (it) => {
         );
         const archived = Option.getOrThrow(yield* readCodingAgent(owner, source.id));
         assert.equal(archived.archivedBy?.userId, teammate);
+      }),
+  );
+
+  it.effect(
+    "the take-over's key answers the agent it made even once that agent is archived, and a second request under the same key shares its outcome",
+    () =>
+      Effect.gen(function* () {
+        const { owner, teammate, workspaceId } = yield* openTeam;
+        const source = yield* ownersAgent(owner, workspaceId);
+        const key = randomUUID();
+        const takeOver = takeOverCodingAgent(fakeEve().eve, teammate, source.id, key).pipe(
+          Effect.provide(services),
+        );
+
+        const taken = yield* takeOver;
+        const shared = yield* takeOver;
+        yield* archiveCodingAgent(teammate, taken.agent.id, true);
+        const later = yield* takeOver;
+
+        assert.deepEqual(
+          [shared.agent.id, later.agent.id, later.created],
+          [taken.agent.id, taken.agent.id, false],
+        );
       }),
   );
 
