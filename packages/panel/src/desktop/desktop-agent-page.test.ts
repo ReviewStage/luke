@@ -30,6 +30,7 @@ import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { isMacTerminalTab } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -1172,7 +1173,7 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open ter
 type SidePanelChoice = Parameters<SidePanelControl["onChoose"]>[0];
 
 /** The page over a side panel that hears what it is asked to show, and shows nothing, so no terminal mounts. */
-function mountHearingPanel(): { page: HTMLElement; chosen: SidePanelChoice[] } {
+function mountHearingPanel() {
   const chosen: SidePanelChoice[] = [];
   const tasks = tasksControl({});
   const page = mount({
@@ -1206,7 +1207,7 @@ test("Run on the page's ⋯ runs the agent's branch on this Mac in the side pane
   await settle();
 
   const [tab] = chosen;
-  assert.ok(typeof tab === "object" && "macTerminal" in tab, "Run shows a Mac terminal");
+  assert.ok(tab !== undefined && isMacTerminalTab(tab), "Run shows a Mac terminal");
   assert.equal(chosen.length, 1);
   assert.equal(tab.macTerminal, AGENT_ID);
   assert.equal(tab.repository, PAGE.repository);
