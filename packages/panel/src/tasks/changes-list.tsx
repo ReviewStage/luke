@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { coarsePointerNow } from "../coarse-pointer.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
 import { LinesChanged } from "./agent-published.js";
@@ -427,7 +428,10 @@ function pointerOver(): PointerEvent {
  * the pointer or the keyboard comes to the header, because a list of
  * hundreds of files would otherwise mount two for every one of them up
  * front. Mounting them draws the fold anew, so where the keyboard's arrival
- * on the fold is what mounted them, the fold takes the focus back.
+ * on the fold is what mounted them, the fold takes the focus back. A finger
+ * finds them mounted from the start, and its arrival mounts nothing, because
+ * iOS plays a tap's arrival as a hover and spends the tap on what that draws
+ * anew: the fold would only fold on a second tap.
  */
 export function FileHead({
   file,
@@ -450,7 +454,7 @@ export function FileHead({
   onStand: () => void;
 }): React.JSX.Element {
   const copy = useCopyToast();
-  const [near, setNear] = useState(false);
+  const [near, setNear] = useState(coarsePointerNow);
   // The header's hinted parts, in order: its fold, its letter, the path it moved from, and its path.
   const parts = useRef<(HTMLElement | null)[]>([]);
   const partAt = (at: number) => (element: HTMLElement | null) => {
@@ -522,7 +526,7 @@ export function FileHead({
       data-collapsed={collapsed ? "" : undefined}
       onPointerDown={onStand}
       onPointerEnter={(event) => {
-        if (near) return;
+        if (near || event.pointerType === "touch") return;
         arrived.current = { focused: -1, over: partOf(event.target) };
         setNear(true);
       }}

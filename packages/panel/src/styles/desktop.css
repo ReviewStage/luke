@@ -743,9 +743,18 @@ body,
   transition: opacity var(--duration-hover) ease;
 }
 
-.sidebar-section-head:is(:hover, :focus-within) .sidebar-status-filter,
+.sidebar-section-head:focus-within .sidebar-status-filter,
 .sidebar-status-filter[data-menu-open="true"] {
   opacity: 1;
+}
+
+/* Note that the pointer's own reveals stand only where there is a hover,
+   because iOS plays a first tap as a hover, and a reveal spends the tap:
+   a row would open on the second tap alone. */
+@media (hover: hover) {
+  .sidebar-section-head:hover .sidebar-status-filter {
+    opacity: 1;
+  }
 }
 
 @media (hover: none) {
@@ -1348,9 +1357,14 @@ ul.actor-stack {
   cursor: grabbing;
 }
 
-.sidebar-task-item:hover .sidebar-task .sidebar-task-time,
 .sidebar-task-item:has(:focus-visible) .sidebar-task .sidebar-task-time {
   visibility: hidden;
+}
+
+@media (hover: hover) {
+  .sidebar-task-item:hover .sidebar-task .sidebar-task-time {
+    visibility: hidden;
+  }
 }
 
 /* A repository's plans under a header in the headings' voice, drawn as a
@@ -1690,9 +1704,14 @@ ul.actor-stack {
   transition: opacity var(--duration-hover) ease;
 }
 
-.sidebar-repository-header:is(:hover, :focus-within, [data-menu-open="true"])
-  .sidebar-repository-actions {
+.sidebar-repository-header:is(:focus-within, [data-menu-open="true"]) .sidebar-repository-actions {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .sidebar-repository-header:hover .sidebar-repository-actions {
+    opacity: 1;
+  }
 }
 
 /* A screen with no hover shows them at rest, in the room they keep. */
@@ -4271,9 +4290,14 @@ ul.actor-stack {
 
 /* A Factory row offers no Pin or Archive to give way to, so its time stays
    put while the row is hovered or holds the keyboard. */
-.factory-row:hover .sidebar-task-time,
 .factory-row:has(:focus-visible) .sidebar-task-time {
   visibility: visible;
+}
+
+@media (hover: hover) {
+  .factory-row:hover .sidebar-task-time {
+    visibility: visible;
+  }
 }
 
 /* A row that opens GitHub says so with a plain link's ↗ after its words. */
@@ -5367,9 +5391,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   opacity: 0;
 }
 
-.chat-message:hover .chat-byline-action,
 .chat-byline-action:focus-within {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .chat-message:hover .chat-byline-action {
+    opacity: 1;
+  }
 }
 
 @media (hover: none) {
@@ -6158,10 +6187,16 @@ polygon.factory-campus-edge[data-edge="selected"] {
   right: calc(var(--column-inset) - var(--card-edge));
 }
 
-.task-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) > .task-summary-chevron,
-.task-summary-card:hover .task-summary-collapse,
+.task-summary[data-mode="column"]:has(:focus-visible) > .task-summary-chevron,
 .task-summary-collapse:has(:focus-visible) {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .task-summary[data-mode="column"]:hover > .task-summary-chevron,
+  .task-summary-card:hover .task-summary-collapse {
+    opacity: 1;
+  }
 }
 
 /* A screen with no hover shows both chevrons at rest, since no pointer rests
@@ -6281,12 +6316,22 @@ polygon.factory-campus-edge[data-edge="selected"] {
   opacity: 0;
 }
 
-.task-summary-archived-agent:is(:hover, :has(:focus-visible)) > .task-summary-marks {
+.task-summary-archived-agent:has(:focus-visible) > .task-summary-marks {
   opacity: 1;
 }
 
-.task-summary-archived-agent:is(:hover, :has(:focus-visible)) .failed-mark {
+.task-summary-archived-agent:has(:focus-visible) .failed-mark {
   visibility: hidden;
+}
+
+@media (hover: hover) {
+  .task-summary-archived-agent:hover > .task-summary-marks {
+    opacity: 1;
+  }
+
+  .task-summary-archived-agent:hover .failed-mark {
+    visibility: hidden;
+  }
 }
 
 /* A screen with no hover shows each archived agent's Unarchive at rest, in
@@ -7030,9 +7075,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   transition: opacity var(--duration-hover) ease;
 }
 
-.tab:hover .tab-close,
 .tab[data-selected="true"] .tab-close {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .tab:hover .tab-close {
+    opacity: 1;
+  }
 }
 
 /* A close takes a finger's press up and down alone on a coarse pointer,
@@ -7049,20 +7099,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* A screen with no hover shows every tab's × at rest, over its label's
    faded end as under the pointer, but a marked tab's, whose mark keeps the
-   place, its Close in its menu. Note that a tap leaves its tab matching
-   `:hover` until the next one, so a marked tab's mark holds against the
-   swap below. */
+   place, its Close in its menu. */
 @media (hover: none) {
   .tab[data-marked="false"] .tab-close {
     opacity: 1;
-  }
-
-  .tab[data-marked="true"]:hover .tab-end-mark {
-    opacity: 1;
-  }
-
-  .tab[data-marked="true"]:hover .tab-close {
-    opacity: 0;
   }
 }
 
@@ -7086,12 +7126,22 @@ polygon.factory-campus-edge[data-edge="selected"] {
   transition: opacity var(--duration-hover) ease;
 }
 
-.tab:hover .tab-end-mark {
-  opacity: 0;
+@media (hover: hover) {
+  .tab:hover .tab-end-mark {
+    opacity: 0;
+  }
+
+  .tab[data-marked="true"]:not(:hover) .tab-close {
+    opacity: 0;
+  }
 }
 
-.tab[data-marked="true"]:not(:hover) .tab-close {
-  opacity: 0;
+/* Note that with no hover the swap never comes, so a marked tab's mark
+   keeps its place, the chosen tab's too. */
+@media (hover: none) {
+  .tab[data-marked="true"] .tab-close {
+    opacity: 0;
+  }
 }
 
 /* What follows a tab's label, the Inbox's count, is muted as a model's
@@ -7559,9 +7609,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* A home row offers no Pin or Archive to give way to, so its time stays put
    while the row is hovered or holds the keyboard, and its moment can be read. */
-.home-section .sidebar-task-item:hover .sidebar-task-time,
 .home-section .sidebar-task-item:has(:focus-visible) .sidebar-task-time {
   visibility: visible;
+}
+
+@media (hover: hover) {
+  .home-section .sidebar-task-item:hover .sidebar-task-time {
+    visibility: visible;
+  }
 }
 
 /* The time ends the row whether a context fills up to it or not, so the
@@ -8144,11 +8199,18 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] {
     transform var(--duration-hover) ease;
 }
 
-.toast:hover .toast-dismiss,
 .toast:focus-within .toast-dismiss {
   opacity: 1;
   transform: none;
   pointer-events: auto;
+}
+
+@media (hover: hover) {
+  .toast:hover .toast-dismiss {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
 }
 
 /* A screen with no hover shows the × at rest, since no pointer rests on

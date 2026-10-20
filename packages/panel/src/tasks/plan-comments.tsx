@@ -1155,6 +1155,8 @@ export function PlanCommentLayer({
   const caretOpened = useRef(false);
   // Whether a pointer is down, whose press moves the focus before its own rule says what becomes of the thread.
   const pressing = useRef(false);
+  // Whether the last press was a finger's, whose tap names the block its button stands by.
+  const touching = useRef(false);
   const [bubble, setBubble] = useState<
     { top: number; left: number; below: boolean; start: () => void } | undefined
   >(undefined);
@@ -1237,17 +1239,17 @@ export function PlanCommentLayer({
       room.getBoundingClientRect().top + top - element.getBoundingClientRect().top - REVEAL_ROOM;
   });
 
-  // A block under the pointer shows its button at the column's end; words selected raise the bubble over them.
+  // A block under the pointer, or the one a finger last tapped, shows its button at the column's end; words selected raise the bubble over them.
   useEffect(() => {
     const element = body.current;
     if (element === null) return;
-    const over = (event: PointerEvent) => {
+    const point = (target: EventTarget | null) => {
       const marked =
-        event.target instanceof Element
-          ? event.target.closest<HTMLElement>(`.${COMMENT_MARK_CLASS}[data-threads]`)
+        target instanceof Element
+          ? target.closest<HTMLElement>(`.${COMMENT_MARK_CLASS}[data-threads]`)
           : null;
       setPointed(marked?.dataset.threads?.split(" ")[0]);
-      const found = blockAt(event.target, unitClass);
+      const found = blockAt(target, unitClass);
       if (found === undefined) return;
       // Note that a block whose words a thread already covers is commented on through that thread, so it offers no button.
       if (threadedWhole(found.block)) {
@@ -1281,6 +1283,16 @@ export function PlanCommentLayer({
           if (begun !== undefined) setPending(begun);
         },
       });
+    };
+    // Note that a finger's arrival names no block, because iOS plays a tap's
+    // arrival as a hover and spends the tap on a button that comes in with
+    // it, a link's in the block among them; its tap names the block once
+    // the tap has gone where it leads.
+    const over = (event: PointerEvent) => {
+      if (event.pointerType !== "touch") point(event.target);
+    };
+    const tapped = (event: MouseEvent) => {
+      if (touching.current) point(event.target);
     };
     // In the editor, a caret standing in a thread's words opens it, and leaving them closes the one it opened.
     const letCaretGo = () => {
@@ -1403,13 +1415,15 @@ export function PlanCommentLayer({
       onActive(thread);
     };
     const left = () => setPointed(undefined);
-    const down = () => {
+    const down = (event: PointerEvent) => {
       pressing.current = true;
+      touching.current = event.pointerType === "touch";
     };
     const up = () => {
       pressing.current = false;
     };
     element.addEventListener("pointerover", over);
+    element.addEventListener("click", tapped);
     element.addEventListener("pointerleave", left);
     element.addEventListener("focusout", blurred);
     document.addEventListener("pointerdown", down, true);
@@ -1431,6 +1445,7 @@ export function PlanCommentLayer({
     return () => {
       hiding.disconnect();
       element.removeEventListener("pointerover", over);
+      element.removeEventListener("click", tapped);
       element.removeEventListener("pointerleave", left);
       element.removeEventListener("focusout", blurred);
       document.removeEventListener("pointerdown", down, true);

@@ -351,9 +351,16 @@
   transition: opacity var(--duration-hover) ease;
 }
 
-.plan-unit-attributed:hover .plan-unit-byline,
 .plan-unit-attributed:focus-within .plan-unit-byline {
   opacity: 1;
+}
+
+/* Note that the pointer's own reveal stands only where there is a hover,
+   because iOS plays a first tap as a hover, and a reveal spends the tap. */
+@media (hover: hover) {
+  .plan-unit-attributed:hover .plan-unit-byline {
+    opacity: 1;
+  }
 }
 
 /* A section's ⋯, which copies its link (`plan-body.tsx`): the row's end,
@@ -367,10 +374,15 @@
   transition: opacity var(--duration-hover) ease;
 }
 
-.plan-unit-attributed:hover .plan-unit-more,
 .plan-unit-attributed:focus-within .plan-unit-more,
 .plan-unit-more:has([aria-expanded="true"]) {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .plan-unit-attributed:hover .plan-unit-more {
+    opacity: 1;
+  }
 }
 
 /* A screen with no hover shows a section's byline and its ⋯ at rest, in
@@ -3167,9 +3179,14 @@
   opacity: 0;
 }
 
-.pull-request-title-editable:hover .pull-request-title-edit,
 .pull-request-title-edit:has(:focus-visible) {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .pull-request-title-editable:hover .pull-request-title-edit {
+    opacity: 1;
+  }
 }
 
 /* A finger has no hover to bring the pencil, and an unseen one still takes
@@ -7052,9 +7069,14 @@ button.picture-frame {
   transition: opacity var(--duration-hover) ease;
 }
 
-.plan-body:hover .comment-block-button,
 .comment-block-button:focus-within {
   opacity: 1;
+}
+
+@media (hover: hover) {
+  .plan-body:hover .comment-block-button {
+    opacity: 1;
+  }
 }
 
 /* A screen with no hover shows the button at rest, by the block last
@@ -7280,22 +7302,29 @@ button.picture-frame {
   transition: opacity var(--duration-hover) ease;
 }
 
-.comment-entry:hover .comment-tools,
 .comment-tools:focus-within,
 .comment-tools:has([aria-expanded="true"]) {
   opacity: 1;
 }
 
-/* Note that the time gives the tools its place under the pointer, presses
-   included, so a press over where it stood lands on the tools. */
-.comment-entry:hover .comment-head-end > .comment-time {
-  pointer-events: none;
+@media (hover: hover) {
+  .comment-entry:hover .comment-tools {
+    opacity: 1;
+  }
 }
 
-.comment-entry:hover .comment-head-end > .comment-time,
 .comment-head-end:has(.comment-tools:focus-within) > .comment-time,
 .comment-head-end:has([aria-expanded="true"]) > .comment-time {
   opacity: 0;
+}
+
+/* Note that the time gives the tools its place under the pointer, presses
+   included, so a press over where it stood lands on the tools. */
+@media (hover: hover) {
+  .comment-entry:hover .comment-head-end > .comment-time {
+    pointer-events: none;
+    opacity: 0;
+  }
 }
 
 /* A screen with no hover stands the tools in the time's place at rest, as
