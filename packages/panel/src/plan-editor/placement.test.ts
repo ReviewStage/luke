@@ -72,3 +72,78 @@ test("an empty text says the placeholder it was given, and the plan's own withou
   );
   assert.equal(plan.element.querySelector("p")?.getAttribute("data-placeholder"), "Write the plan");
 });
+
+test("an editor opened on the words a click landed on stands its caret in them, in their section, as many alike in, at the offset", () => {
+  const text = "## Goal\n\nShip it.\n\n## Risks\n\nShip it.\n\nShip it.\n";
+  const words = { section: 1, text: "Ship it.", occurrence: 1, offset: 5, code: false, top: 0 };
+  const { finished, element } = mount(text, { x: 0, y: 0, words });
+  const selection = window.getSelection();
+  const risks = [...element.querySelectorAll("p")];
+
+  assert.equal(
+    selection?.anchorNode,
+    risks[2]?.firstChild,
+    "the second alike in Risks, not one in Goal",
+  );
+  assert.equal(selection?.anchorOffset, 5);
+  pressEscape(element);
+  assert.deepEqual(finished, [1]);
+});
+
+test("words a click landed on outside code are not found in a diagram's code of the same words, which the text drew as its picture", () => {
+  const text = "## Flow\n\n```mermaid\nShip it.\n```\n\nShip it.\n";
+  const words = { section: 0, text: "Ship it.", occurrence: 0, offset: 2, code: false, top: 0 };
+  const { element } = mount(text, { x: 0, y: 0, words });
+  const selection = window.getSelection();
+
+  assert.equal(
+    selection?.anchorNode,
+    element.querySelector("p")?.firstChild,
+    "the paragraph, not the code",
+  );
+  assert.equal(selection?.anchorOffset, 2);
+});
+
+test("an editor opened on words it cannot find, in their section, an empty one, or one past the text's, falls back to the click's point and keeps no words", () => {
+  const text = "## Goal\n\nShip it.\n\n## Empty\n";
+  const words = (section: number, said: string) => ({
+    x: 0,
+    y: 0,
+    words: { section, text: said, occurrence: 0, offset: 2, code: false, top: 0 },
+  });
+  // Note that the click's point stands on nothing, as jsdom lays nothing out, so it puts the caret at the text's start.
+  Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => null });
+  try {
+    for (const placement of [words(0, "Not here."), words(1, "Ship it."), words(5, "Ship it.")]) {
+      const { handle, element } = mount(text, placement);
+      const selection = window.getSelection();
+
+      assert.equal(selection?.anchorNode, element.querySelector("h2")?.firstChild);
+      assert.equal(selection?.anchorOffset, 0);
+      assert.equal(handle.wordsTop(), undefined, "no words to keep under the finger");
+    }
+  } finally {
+    Reflect.deleteProperty(document, "elementFromPoint");
+  }
+});
+
+test("an editor opened on words it found measures their line until the caret is put elsewhere", () => {
+  const text = "## Goal\n\nShip it.\n";
+  const words = { section: 0, text: "Ship it.", occurrence: 0, offset: 2, code: false, top: 0 };
+  const { handle } = mount(text, { x: 0, y: 0, words });
+
+  assert.notEqual(handle.wordsTop(), undefined, "the words found are measured");
+  handle.focusAt(PLACEMENT_END);
+  assert.equal(handle.wordsTop(), undefined);
+});
+
+test("an editor opened on words stops measuring them once a merged answer replaces their paragraph", () => {
+  const text = "## Goal\n\nShip it.\n";
+  const words = { section: 0, text: "Ship it.", occurrence: 0, offset: 2, code: false, top: 0 };
+  const { handle } = mount(text, { x: 0, y: 0, words });
+  assert.notEqual(handle.wordsTop(), undefined, "the words found are measured");
+
+  handle.take(text, "## Goal\n\nLuke rewrote this.\n\nAnd added a line.\n");
+
+  assert.equal(handle.wordsTop(), undefined);
+});
