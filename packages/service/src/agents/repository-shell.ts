@@ -159,22 +159,23 @@ const IDENTITY_SCRIPT = [
   `git config user.email "$${SANDBOX_VARIABLE.GIT_EMAIL}"`,
 ].join("\n");
 
-/**
- * Whether the standing checkout is shallow, as git prints it: `true` for a
- * clone cut at a depth, `false` for one holding its whole history.
- */
-const SHALLOW_PROBE_SCRIPT = "git rev-parse --is-shallow-repository";
+/** The file a coding agent's deepen writes beside the checkout once it is whole, its identity set, and its credential standing. */
+const DEEPENED_RECORD = ".luke/deepened";
+
+/** Whether the deepen finished, printed as `true` or `false`: its record stands only once every step of it did. */
+const DEEPENED_PROBE_SCRIPT = `if [ -f ${DEEPENED_RECORD} ]; then echo true; else echo false; fi`;
 
 /** How long a deepen waits on another deepen of the same checkout before it goes ahead, in seconds. */
 const DEEPEN_LOCK_WAIT_SECONDS = 120;
 
 /**
  * The rest of a shallow checkout's history fetched, from the workspace
- * root. Note that two first writes of one session may deepen at once, so
- * the fetch runs under a lock of its own and asks again under it, so the
- * second finds the history whole and fetches nothing; and that a lock a
- * stopped sandbox left standing is waited on for a bounded while and then
- * taken over, so no deepen waits forever.
+ * root, through the credential the caller set at the firewall. Note that
+ * two first writes of one session may deepen at once, so the fetch runs
+ * under a lock of its own and asks again under it, so the second finds the
+ * history whole and fetches nothing; and that a lock a stopped sandbox left
+ * standing is waited on for a bounded while and then taken over, so no
+ * deepen waits forever.
  */
 const DEEPEN_SCRIPT = [
   "set -e",
@@ -184,8 +185,11 @@ const DEEPEN_SCRIPT = [
   `until mkdir "$lock" 2>/dev/null; do waited=$((waited + 1)); [ "$waited" -le ${DEEPEN_LOCK_WAIT_SECONDS} ] || break; sleep 1; done`,
   `trap 'rmdir "$lock" 2>/dev/null || true' EXIT`,
   "cd repository",
-  `if [ "$(${SHALLOW_PROBE_SCRIPT})" = true ]; then git fetch --quiet --unshallow; fi`,
+  `if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow; fi`,
 ].join("\n");
+
+/** The deepen's record written, once its every step is done. */
+const DEEPENED_MARK_SCRIPT = `mkdir -p .luke && touch ${DEEPENED_RECORD}`;
 
 /** The model's command, run by its own bash under the time bound and the clean environment, from the checkout root. Note that the variable is read by the outer bash, ahead of `env -i`, so the command reaches the inner bash as an argument and no variable. */
 const COMMAND_SCRIPT = `timeout ${REPOSITORY_SHELL_BOUNDS.COMMAND_TIMEOUT_SECONDS}s env -i ${COMMAND_CLEAN_ENVIRONMENT} bash -c "$${SANDBOX_VARIABLE.COMMAND}"`;
@@ -414,49 +418,62 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
   yield* underCloneCredential(sandbox, confirmed.fullName, token, access, clone);
 });
 
-/**
- * Whether the checkout standing in the sandbox is shallow, as a coding
- * agent's opens; refused where git could not say, a sandbox with no
- * checkout among them.
- */
-export const checkoutIsShallow = /* @__PURE__ */ Effect.fn("web/checkoutIsShallow")(function* (
+/** One step of a deepen, run from the workspace root under the step's own mark (`DEEPEN_STEP`). */
+function deepenStep(
   sandbox: RepositorySandbox,
-): Effect.fn.Return<boolean, RepositoryRefusal> {
-  const probed = yield* runInSandbox(
+  command: string,
+  step: (typeof DEEPEN_STEP)[keyof typeof DEEPEN_STEP],
+) {
+  return runInSandbox(
     sandbox,
     {
-      command: SHALLOW_PROBE_SCRIPT,
-      workingDirectory: SANDBOX_PATH.CHECKOUT,
-      env: { ...COMMAND_ENVIRONMENT, [SANDBOX_VARIABLE.DEEPEN]: DEEPEN_STEP.PROBE },
+      command,
+      workingDirectory: SANDBOX_PATH.WORKSPACE,
+      env: { ...COMMAND_ENVIRONMENT, [SANDBOX_VARIABLE.DEEPEN]: step },
     },
-    REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
+    REPOSITORY_REFUSAL.CHECKOUT_FAILED,
   );
+}
+
+/**
+ * Whether a coding agent's deepen finished in this sandbox: its history
+ * fetched, its identity set, and its credential set at the firewall, which
+ * its record is written after; refused where the sandbox could not say.
+ * A deepen cut short anywhere leaves no record, so the next write deepens
+ * again.
+ */
+export const checkoutDeepened = /* @__PURE__ */ Effect.fn("web/checkoutDeepened")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<boolean, RepositoryRefusal> {
+  const probed = yield* deepenStep(sandbox, DEEPENED_PROBE_SCRIPT, DEEPEN_STEP.PROBE);
   if (probed.exitCode !== 0) return yield* gitRefusal(probed);
   return probed.stdout.trim() === "true";
 });
 
 /**
- * The rest of the standing checkout's history fetched, with the token at
- * the firewall for the fetch alone (`underCloneCredential`), so a shallow
- * checkout holds its branch's whole history after, as one cloned whole
- * would; one already whole fetches nothing.
+ * The rest of the standing checkout's history fetched, through the
+ * credential the caller already set at the firewall, so a shallow checkout
+ * holds its branch's whole history after, as one cloned whole would; one
+ * already whole fetches nothing.
  */
 export const deepenRepository = /* @__PURE__ */ Effect.fn("web/deepenRepository")(function* (
   sandbox: RepositorySandbox,
-  fullName: string,
-  token: Redacted.Redacted,
-  access: GitHubTokenAccess,
 ): Effect.fn.Return<void, RepositoryRefusal> {
-  const fetch = runInSandbox(
-    sandbox,
-    {
-      command: DEEPEN_SCRIPT,
-      workingDirectory: SANDBOX_PATH.WORKSPACE,
-      env: { ...COMMAND_ENVIRONMENT, [SANDBOX_VARIABLE.DEEPEN]: DEEPEN_STEP.FETCH },
-    },
-    REPOSITORY_REFUSAL.CHECKOUT_FAILED,
+  const fetched = yield* deepenStep(sandbox, DEEPEN_SCRIPT, DEEPEN_STEP.FETCH).pipe(
+    Effect.timeoutOrElse({
+      duration: REPOSITORY_SHELL_BOUNDS.CHECKOUT_TIMEOUT,
+      orElse: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
+    }),
   );
-  yield* underCloneCredential(sandbox, fullName, token, access, fetch);
+  if (fetched.exitCode !== 0) return yield* gitRefusal(fetched);
+});
+
+/** The deepen's record written beside the checkout, once its every step is done (`checkoutDeepened`). */
+export const markDeepened = /* @__PURE__ */ Effect.fn("web/markDeepened")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<void, RepositoryRefusal> {
+  const marked = yield* deepenStep(sandbox, DEEPENED_MARK_SCRIPT, DEEPEN_STEP.MARK);
+  if (marked.exitCode !== 0) return yield* gitRefusal(marked);
 });
 
 /** Who a checkout's commits are by; a git identity is a name and an address as git takes them. */

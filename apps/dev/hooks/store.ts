@@ -134,16 +134,27 @@ async function withdrawCredential(ctx: HookContext): Promise<void> {
   );
 }
 
-/** A fresh credential set at the firewall, in place of the aged or lapsed one; a renewal that fails is logged and the next step tries again, and an agent with no repository mints none and sets nothing. */
+/**
+ * A fresh credential set at the firewall, in place of the aged or lapsed
+ * one; a renewal that fails is logged and the next step tries again, and an
+ * agent with no repository mints none and sets nothing. Note that a
+ * sandbox opened shallow is renewed only once its deepen finished, which
+ * its record says rather than the request the hook saw, since a write
+ * requested may have failed before its deepen did.
+ */
 async function renewCredential(
   ctx: HookContext,
   record: ReturnType<typeof pinnedState<SandboxRecord>>,
   now: number,
 ): Promise<void> {
+  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
+  const sandbox = await ctx.getSandbox(environment);
+  const shallow = record.get().openedShallow === true;
   const minted = await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
       if (Result.isFailure(admitted)) return undefined;
+      if (shallow && !(yield* host.deepened(admitted.success, sandbox))) return undefined;
       return yield* host.repositoryCredential(admitted.success);
     }).pipe(
       Effect.catch((failure) =>
@@ -157,8 +168,6 @@ async function renewCredential(
     ),
   );
   if (minted === undefined) return;
-  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
-  const sandbox = await ctx.getSandbox(environment);
   // The token is revealed only into the firewall rules set for GitHub.
   await sandbox.setNetworkPolicy(credentialPolicy(minted));
   record.update((held) => ({

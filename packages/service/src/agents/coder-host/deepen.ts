@@ -91,16 +91,36 @@ function commandName(part: string): string | undefined {
   return words.find((word) => word !== "" && !ASSIGNMENT.test(word));
 }
 
+/** A redirection that writes no file: one stream onto another, or onto nothing. */
+const HARMLESS_REDIRECTION = /[0-9&]?>>?\s*(&[0-9-]|\/dev\/null\b)/gu;
+
+/** A redirection left once the harmless ones are taken out, which writes a file. */
+const REDIRECTION = />/u;
+
+/** The arguments that make a plain read write: `sed` editing in place, and `find` running, deleting, or printing to a file. */
+const WRITING_ARGUMENTS = new Map<string, RegExp>([
+  ["sed", /(^|\s)(-i\S*|--in-place\S*|-[a-hj-zA-Z]*i\S*)(\s|$)/u],
+  ["find", /(^|\s)-(exec|execdir|ok|okdir|delete|fprint|fprint0|fprintf|fls)(\s|$)/u],
+]);
+
+/** Whether one command of a line only reads: a plain read, given no argument that makes it write. */
+function partReadsOnly(part: string): boolean {
+  const name = commandName(part);
+  if (name === undefined) return true;
+  if (!READ_COMMANDS.has(name)) return false;
+  return !(WRITING_ARGUMENTS.get(name)?.test(part) ?? false);
+}
+
 /**
  * Whether a shell command only reads: every command of it one of the plain
- * reads, none naming git or `gh`, and none run inside another's words.
+ * reads, given no argument that makes it write, none naming git or `gh`,
+ * none run inside another's words, and nothing redirected into a file.
  */
 function readsOnly(command: string): boolean {
   if (GIT_WORD.test(command) || SUBSTITUTION.test(command)) return false;
-  return command.split(COMMAND_BREAK).every((part) => {
-    const name = commandName(part);
-    return name === undefined || READ_COMMANDS.has(name);
-  });
+  const unredirected = command.replace(HARMLESS_REDIRECTION, "");
+  if (REDIRECTION.test(unredirected)) return false;
+  return unredirected.split(COMMAND_BREAK).every(partReadsOnly);
 }
 
 /** The tools whose every call deepens the checkout, whatever it was given. */

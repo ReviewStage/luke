@@ -24,16 +24,17 @@ import type { StoreFailure } from "../../http/store-failure.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
   type CheckoutIdentity,
-  checkoutIsShallow,
+  checkoutDeepened,
   cloneRepository,
   deepenRepository,
+  markDeepened,
   REPOSITORY_REFUSAL,
   type RepositorySandbox,
   runInSandbox,
   SHALLOW_CLONE_DEPTH,
   setCheckoutIdentity,
 } from "../repository-shell.js";
-import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
+import { credentialPolicy, type RepositoryCredential } from "../terminal/agent-sandbox.js";
 import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
@@ -369,35 +370,41 @@ export const openWorkingFolder = /* @__PURE__ */ Effect.fn("web/openWorkingFolde
 });
 
 /**
- * The agent's shallow checkout deepened to the whole history of its branch,
- * with its commit identity set in it, as its first write asks; answers the
- * write credential minted for it, for the caller to set at the firewall for
- * the commands that follow, or none where the checkout already holds its
- * whole history, whose credential the session already stands on. Note that
- * the identity is read ahead of the fetch, so an account GitHub cannot name
- * costs no fetch; and that a fetch two writes began at once runs once
- * (`deepenRepository`), each answering the credential for its caller to set.
+ * The agent's shallow checkout deepened, as its first write asks: a write
+ * token minted and set at the firewall in the session's own shape
+ * (`credentialPolicy`), where it stands from then on for the session's `gh`
+ * and `git`; the rest of the history fetched through it; the commit
+ * identity set; and the deepen's record written last. A sandbox whose
+ * record stands is left as it is. Note that the credential is set ahead of
+ * the fetch and never taken off after it, so two writes deepening at once
+ * each leave it standing whatever order they end in, the fetch itself
+ * running once (`deepenRepository`); that a deepen cut short anywhere
+ * writes no record, so the next write runs it again whole; and that the
+ * identity is read ahead of the fetch, so an account GitHub cannot name
+ * costs no fetch.
  */
 export const deepenAgentCheckout = /* @__PURE__ */ Effect.fn("web/deepenAgentCheckout")(function* (
   target: ConversationTarget,
   agent: WithRepository<CodingAgent>,
   sandbox: RepositorySandbox,
-): Effect.fn.Return<
-  Option.Option<RepositoryCredential>,
-  CheckoutRefused | StoreFailure,
-  CheckoutServices
-> {
-  if (!(yield* checkoutIsShallow(sandbox).pipe(Effect.mapError(refusedWith)))) {
-    return Option.none();
+): Effect.fn.Return<void, CheckoutRefused | StoreFailure, CheckoutServices> {
+  if (yield* checkoutDeepened(sandbox).pipe(Effect.mapError(refusedWith))) return;
+  const setNetworkPolicy = sandbox.setNetworkPolicy;
+  if (setNetworkPolicy === undefined) {
+    return yield* new CheckoutRefused({ reason: REPOSITORY_REFUSAL.NO_FIREWALL });
   }
   const minted = yield* agentRepositoryToken(target, agent);
   const author = yield* agentAuthor(target, agent);
   const identity = yield* commitIdentity(target, agent, author, minted);
-  yield* deepenRepository(sandbox, minted.fullName, minted.token, minted.access).pipe(
-    Effect.mapError(refusedWith),
-  );
+  const credential = { token: minted.token, fullName: minted.fullName, access: minted.access };
+  // The token is revealed only into the firewall rules set for GitHub.
+  yield* Effect.tryPromise({
+    try: () => setNetworkPolicy(credentialPolicy(credential)),
+    catch: () => new CheckoutRefused({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
+  });
+  yield* deepenRepository(sandbox).pipe(Effect.mapError(refusedWith));
   yield* setCheckoutIdentity(sandbox, identity).pipe(Effect.mapError(refusedWith));
-  return Option.some({ token: minted.token, fullName: minted.fullName, access: minted.access });
+  yield* markDeepened(sandbox).pipe(Effect.mapError(refusedWith));
 });
 
 /**

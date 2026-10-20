@@ -35,6 +35,7 @@ import {
 } from "../../testing/github-app-fake.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import { DEEPEN_STEP, REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
+import { credentialPolicy } from "../terminal/agent-sandbox.js";
 import { agentCoAuthor, checkOutAgentRepository, deepenAgentCheckout } from "./checkout.js";
 
 /**
@@ -212,7 +213,7 @@ const authorOf = (userId: string, agent: CodingAgent) =>
     (read): CodingAgentAuthor | null => Option.getOrThrow(read).author,
   );
 
-/** The sandbox's checkout as an agent's first write leaves it: opened shallow, then deepened; answers the credential the deepen handed back. */
+/** The sandbox's checkout as an agent's first write leaves it: opened shallow, then deepened; answers the policy standing at the firewall after. */
 const checkOutAndDeepen = (
   target: { readonly userId: string; readonly conversationId: string },
   agent: Parameters<typeof checkOutAgentRepository>[1],
@@ -220,8 +221,16 @@ const checkOutAndDeepen = (
 ) =>
   Effect.gen(function* () {
     yield* checkOutAgentRepository(target, agent, sandbox);
-    return Option.getOrThrow(yield* deepenAgentCheckout(target, agent, sandbox));
+    yield* deepenAgentCheckout(target, agent, sandbox);
+    return sandbox.policies.at(-1);
   });
+
+/** The App's installation token for the repository, as the session's firewall carries it. */
+const APP_CREDENTIAL = credentialPolicy({
+  token: Redacted.make(GITHUB_FIXTURE_INSTALLATION_TOKEN),
+  fullName: RELAY_FULL_NAME,
+  access: { kind: GITHUB_ACCESS.APP },
+});
 
 /** The mints sent to GitHub for one repository, by the permissions each asked for. */
 const repositoryMints = (sent: readonly SentToGitHub[]) =>
@@ -264,7 +273,7 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
   );
 
   it.effect(
-    "the first write deepens the checkout to its whole history with a write token at the firewall for the fetch alone, sets the identity, and hands back the write credential; no token reaches a command, and a developer whose GitHub may not push leaves the commits the App's",
+    "the first write sets the write token at the firewall, where it stays for the session, deepens the checkout to its whole history through it, sets the identity, and records the deepen; no token reaches a command, and a developer whose GitHub may not push leaves the commits the App's",
     () =>
       Effect.gen(function* () {
         const installation = installationOf(7);
@@ -272,40 +281,29 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const github = githubReaching([installation], undefined, {}, developerReach(false));
         const sandbox = sandboxDouble(() => undefined);
 
-        const credential = yield* checkOutAndDeepen(target, agent, sandbox).pipe(
+        const standing = yield* checkOutAndDeepen(target, agent, sandbox).pipe(
           Effect.provide(github.layer),
         );
 
-        assert.equal(Redacted.value(credential.token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
-        assert.deepEqual(credential.access, { kind: GITHUB_ACCESS.APP });
+        assert.deepEqual(standing, APP_CREDENTIAL);
         assert.equal(sandbox.shallow, false);
         assert.equal(sandbox.deepened, 1);
-        assert.deepEqual(sandbox.policiesDuringFetch, [
-          {
-            allow: {
-              "*": [],
-              "github.com": [
-                {
-                  match: { path: { startsWith: `/${RELAY_FULL_NAME}.git/` } },
-                  transform: [{ headers: { authorization: TOKEN_HEADER } }],
-                },
-              ],
-            },
-          },
-        ]);
-        assert.equal(sandbox.policies.at(-1), "allow-all");
+        assert.deepEqual(sandbox.policiesDuringFetch, [APP_CREDENTIAL]);
+        assert.equal(sandbox.deepenMarked, true);
         for (const run of sandbox.runs) {
           assert.equal(carriesToken(JSON.stringify(run)), false);
         }
-        // The identity is the checkout's own, set once its history is whole, under the App's bot.
+        // The identity is the checkout's own, set once its history is whole, under the App's bot, and the record after it.
         assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
-        const fetch = sandbox.runs.findIndex(
-          (run) => run.env?.[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.DEEPEN] === DEEPEN_STEP.FETCH,
-        );
+        const stepAt = (step: string) =>
+          sandbox.runs.findIndex(
+            (run) => run.env?.[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.DEEPEN] === step,
+          );
         const identity = sandbox.runs.findIndex(
           (run) => run.env?.[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.GIT_NAME] !== undefined,
         );
-        assert.ok(fetch >= 0 && identity > fetch);
+        assert.ok(stepAt(DEEPEN_STEP.FETCH) >= 0 && identity > stepAt(DEEPEN_STEP.FETCH));
+        assert.ok(stepAt(DEEPEN_STEP.MARK) > identity);
         assert.equal(yield* authorOf(target.userId, agent), CODING_AGENT_AUTHOR.APP_NO_PUSH);
         // The write mint asked for exactly what a push and a pull request need.
         assert.deepEqual(repositoryMints(github.sent).at(-1), {
@@ -316,7 +314,37 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
   );
 
   it.effect(
-    "a checkout already whole is not deepened again: no token is minted and no credential is handed back",
+    "a deepen cut short after its fetch records nothing, so the next write runs it again whole, its identity and credential among it",
+    () =>
+      Effect.gen(function* () {
+        const installation = installationOf(14);
+        const { agent, target } = yield* openAgent(installation);
+        const github = githubReaching([installation], undefined, {}, developerReach(false));
+        const sandbox = sandboxDouble(() => undefined);
+        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
+        sandbox.identityAnswers.push({ exitCode: 1, stderr: "error: could not lock config file" });
+
+        const cut = yield* deepenAgentCheckout(target, agent, sandbox).pipe(
+          Effect.provide(github.layer),
+          Effect.flip,
+        );
+        assert.equal(cut._tag, "CheckoutRefused");
+        assert.equal(sandbox.shallow, false);
+        assert.equal(sandbox.deepenMarked, false);
+        // Whatever stands at the firewall meanwhile, the next deepen sets the credential again.
+        yield* Effect.promise(async () => sandbox.setNetworkPolicy?.("allow-all"));
+
+        yield* deepenAgentCheckout(target, agent, sandbox).pipe(Effect.provide(github.layer));
+
+        assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
+        assert.deepEqual(sandbox.policies.at(-1), APP_CREDENTIAL);
+        assert.equal(sandbox.deepenMarked, true);
+        assert.equal(sandbox.deepened, 1);
+      }),
+  );
+
+  it.effect(
+    "a deepen that finished is not run again: no token is minted and nothing is set at the firewall",
     () =>
       Effect.gen(function* () {
         const installation = installationOf(13);
@@ -325,12 +353,11 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const sandbox = sandboxDouble(() => undefined);
         yield* checkOutAndDeepen(target, agent, sandbox).pipe(Effect.provide(github.layer));
         const mintsBefore = repositoryMints(github.sent).length;
+        const policiesBefore = sandbox.policies.length;
 
-        const again = yield* deepenAgentCheckout(target, agent, sandbox).pipe(
-          Effect.provide(github.layer),
-        );
+        yield* deepenAgentCheckout(target, agent, sandbox).pipe(Effect.provide(github.layer));
 
-        assert.ok(Option.isNone(again));
+        assert.equal(sandbox.policies.length, policiesBefore);
         assert.equal(sandbox.deepened, 1);
         assert.equal(repositoryMints(github.sent).length, mintsBefore);
         assert.deepEqual(sandbox.identities, [BOT_IDENTITY]);
@@ -346,12 +373,12 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
         const github = githubReaching([installation], undefined, {}, developerReach(true));
         const sandbox = sandboxDouble(() => undefined);
 
-        const credential = yield* checkOutAndDeepen(target, agent, sandbox).pipe(
+        const standing = yield* checkOutAndDeepen(target, agent, sandbox).pipe(
           Effect.provide(github.layer),
         );
         const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
 
-        assert.equal(Redacted.value(credential.token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
+        assert.deepEqual(standing, APP_CREDENTIAL);
         assert.deepEqual(sandbox.identities, [
           {
             name: DEVELOPER.name,
@@ -409,23 +436,31 @@ it.layer(getTestDB())("a coding agent's checkout", (it) => {
   );
 
   it.effect(
-    "an agent on its starter's own token writes as the account the token belongs to, with the App's bot as co-author, its row saying so, and hands back that token as theirs",
+    "an agent on its starter's own token writes as the account the token belongs to, with the App's bot as co-author, its row saying so, and sets that token at the firewall as theirs",
     () =>
       Effect.gen(function* () {
         const { agent, target } = yield* openTokenAgent;
         const github = githubReaching([], GITHUB_APP_WITH_TOKENS, {}, memberTokenReach);
         const sandbox = sandboxDouble(() => undefined);
 
-        const credential = yield* checkOutAndDeepen(target, agent, sandbox).pipe(
+        const standing = yield* checkOutAndDeepen(target, agent, sandbox).pipe(
           Effect.provide(github.layer),
         );
         const coAuthor = yield* agentCoAuthor(target, agent).pipe(Effect.provide(github.layer));
 
-        assert.equal(Redacted.value(credential.token), GITHUB_FIXTURE_MEMBER.TOKEN);
-        assert.ok(credential.access.kind === GITHUB_ACCESS.TOKEN);
+        // The member's own token, on the repository's own paths, as theirs.
         assert.deepEqual(
-          [credential.access.githubLogin, credential.access.githubUserId],
-          [GITHUB_FIXTURE_MEMBER.LOGIN, GITHUB_FIXTURE_MEMBER.ID],
+          standing,
+          credentialPolicy({
+            token: Redacted.make(GITHUB_FIXTURE_MEMBER.TOKEN),
+            fullName: RELAY_FULL_NAME,
+            access: {
+              kind: GITHUB_ACCESS.TOKEN,
+              githubLogin: GITHUB_FIXTURE_MEMBER.LOGIN,
+              githubUserId: GITHUB_FIXTURE_MEMBER.ID,
+              markInvalid: Effect.void,
+            },
+          }),
         );
         assert.deepEqual(sandbox.identities, [
           {

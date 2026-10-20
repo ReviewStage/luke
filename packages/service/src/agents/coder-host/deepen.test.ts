@@ -40,6 +40,9 @@ test("a write, a pull request, and a shell command that may reach git or a scrip
     "find . -name '*.ts' | sort | uniq",
     "LC_ALL=C sed -n '1,40p' README.md",
     "cd packages/service; rg 'show_code' -l",
+    "grep -rn invite src 2>/dev/null | head",
+    "ls missing 2>&1",
+    "sed -n '1,20p' a.ts",
   ]) {
     assert.equal(bash(read), false, read);
   }
@@ -53,6 +56,12 @@ test("a write, a pull request, and a shell command that may reach git or a scrip
     "cat $(git ls-files | head -1)",
     "find . -name '*.ts' -exec git blame {} \\;",
     "bash scripts/check.sh",
+    "echo change > src/a.ts",
+    "cat a.ts >> b.ts",
+    "sed -i 's/old/new/' src/app.ts",
+    "sed -ni 's/old/new/p' src/app.ts",
+    "find . -name '*.tmp' -delete",
+    "find . -exec touch x \\;",
   ]) {
     assert.equal(bash(write), true, write);
   }

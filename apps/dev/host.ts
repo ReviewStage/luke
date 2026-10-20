@@ -46,7 +46,6 @@ import {
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
-import { credentialPolicy } from "@luke/service/agents/terminal/agent-sandbox";
 import { hostedEnvironment } from "@luke/service/environment";
 import { type CommentToolName, commentToolRejected } from "@luke/service/tasks/comment-tools";
 import { showPageRejected } from "@luke/service/tasks/page-tool";
@@ -61,7 +60,7 @@ import {
   type WireRecord,
 } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
-import { Effect, Option, Result, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineTool, type ToolContext } from "eve/tools";
 import { runAgent } from "./runtime.js";
@@ -426,22 +425,22 @@ export function runBoardTool(
 /**
  * The session's checkout deepened before a call that writes runs
  * (`packages/service/src/agents/coder-host/deepen.ts`), for the tools that
- * write: the rest of its history fetched and the write token set at the
- * sandbox's firewall, in the shape `credentialPolicy` gives it, where the
- * checkout still stood shallow, and nothing where it already holds its
- * whole history. A deepen that fails fails the call that asked for it, in
- * the host's words, and the next write tries again.
+ * write: the write token set at the sandbox's firewall, in the shape
+ * `credentialPolicy` gives it, and the rest of the history fetched through
+ * it, where no deepen finished in the sandbox yet; nothing where one did. A
+ * deepen that fails fails the call that asked for it, in the host's words,
+ * and the next write runs it again.
  */
 export async function deepenCheckout(ctx: ToolContext): Promise<void> {
   // The sandbox under its Vercel environment, which is the handle that carries the firewall.
   const sandbox = await ctx.getSandbox(environment);
-  const credential = await runAgent(
+  await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
       if (Result.isFailure(admitted)) {
         return yield* Effect.fail(new CheckoutRefused({ reason: admitted.failure }));
       }
-      return yield* host.deepen(admitted.success, sandbox);
+      yield* host.deepen(admitted.success, sandbox);
     }).pipe(
       // A store failure by its kind alone, since its message may name a statement.
       Effect.mapError(
@@ -449,9 +448,6 @@ export async function deepenCheckout(ctx: ToolContext): Promise<void> {
       ),
     ),
   );
-  if (Option.isNone(credential)) return;
-  // The token is revealed only into the firewall rules set for GitHub.
-  await sandbox.setNetworkPolicy(credentialPolicy(credential.value));
 }
 
 /**
