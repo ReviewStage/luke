@@ -20,6 +20,8 @@ import {
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
   INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_CURSOR_START,
@@ -30,8 +32,11 @@ import {
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
+  type InboxAsk,
   type InboxItem,
   type InboxMessage,
+  type InboxReadAsk,
+  inboxReadAskSchema,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
@@ -48,7 +53,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { DocumentIcon } from "@luke/ui";
 import { TASK_MARK, type TaskMark } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -5153,4 +5158,414 @@ test("a mark another window makes later on the same item stands once the plan's 
   );
   await settle();
   assert.equal(unreadOf(page, "Alert at 80%?"), true);
+});
+
+/** The message of the agent's that asks, on the threads below. */
+const ASKING_ID = "e1b2c3d4-0000-4000-8000-000000000001";
+
+/** The agent's message that opens a thread, ending with `ask`, open unless it says otherwise. */
+function askingMessage(
+  ask: InboxAsk,
+  {
+    id = ASKING_ID,
+    status = INBOX_ASK_STATUS.OPEN,
+    withdrawnReason,
+    createdAt = 1_000,
+  }: {
+    id?: string;
+    status?: InboxReadAsk["status"];
+    withdrawnReason?: string;
+    createdAt?: number;
+  } = {},
+): InboxMessage {
+  return {
+    id,
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+    text: "Invites expire after 24 hours today, which trips up teams across time zones.",
+    ask: { ...ask, status, ...(withdrawnReason === undefined ? undefined : { withdrawnReason }) },
+    createdAt,
+  };
+}
+
+/** How long an invite lasts, the agent's choice of three. */
+const EXPIRY_ASK: InboxAsk = {
+  type: INBOX_ASK.DECIDE,
+  options: [
+    { label: "1 day", detail: "As today." },
+    { label: "7 days", detail: "What most teams use." },
+    { label: "30 days" },
+  ],
+  recommended: "7 days",
+};
+
+/** The waiting item, drawn as a thread from version 5: its question's title, no blocks, and `thread`. */
+function threadItem(thread: readonly InboxMessage[], extra: Partial<InboxItem> = {}): InboxItem {
+  return { ...THRESHOLD, title: "How long should invites last?", blocks: [], thread, ...extra };
+}
+
+/** The pane showing the item given, chosen from its row. */
+async function mountThread(shown: InboxItem): Promise<HTMLElement> {
+  inboxes = new Map([
+    [BILLING.id, [shown, RETRY]],
+    [INVITES.id, [EXPIRY]],
+  ]);
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, shown.title).click());
+  await settle();
+  return itemPane(page);
+}
+
+/** The thread's line under its title, a part a span. */
+function subjectLine(pane: HTMLElement): (string | null)[] {
+  const line = pane.querySelector("[data-inbox-subject-line]") ?? assert.fail("the line is drawn");
+  return [...line.children].map((part) => part.textContent);
+}
+
+/** Each ask's box on the thread: where it stands, then its head as a reader hears it. */
+function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
+  return [...pane.querySelectorAll<HTMLElement>(".inbox-ask")].map((box) => [
+    box.dataset.inboxAsk,
+    wordsOf(box.querySelector(".inbox-ask-head")),
+  ]);
+}
+
+/** The thread's box's one button, by its words, its chord left out. */
+function sendWords(pane: HTMLElement): string | null {
+  const button =
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]') ??
+    assert.fail("the box has its button");
+  const copy = button.cloneNode(true);
+  assert.ok(copy instanceof Element);
+  for (const chord of copy.querySelectorAll("kbd")) chord.remove();
+  return copy.textContent;
+}
+
+/** The answer attached over the box, as its stamp says it and the line beside it; none where nothing is attached. */
+function attachedOf(pane: HTMLElement): string | null {
+  const attached = pane.querySelector("[data-inbox-attached]");
+  return attached === null ? null : (attached.textContent ?? null);
+}
+
+/** The press of the ask's box whose words are `label`. */
+function askPress(pane: HTMLElement, label: string): HTMLButtonElement {
+  const found = [...pane.querySelectorAll<HTMLButtonElement>(".inbox-ask button")].find(
+    (button) => button.textContent === label,
+  );
+  assert.ok(found, `the ask offers ${label}`);
+  return found;
+}
+
+/** A reply as the service answers it: the reader's message on the thread, its answer settling the ask it names. */
+function repliedOn(item: InboxItem, id: string) {
+  return (params: CodingAgentInboxMessageParams): CodingAgentInboxMessagedView => {
+    const { answers } = params;
+    const thread = (item.thread ?? []).map((message) =>
+      answers !== undefined && message.id === answers.ask && message.ask !== undefined
+        ? { ...message, ask: { ...message.ask, status: INBOX_ASK_STATUS.ANSWERED } }
+        : message,
+    );
+    const reply: InboxMessage = {
+      ...threadMessage(id, { member: READER }, params.text, 9_000),
+      ...(answers === undefined ? undefined : { answers }),
+    };
+    return {
+      item: {
+        ...item,
+        updatedAt: 9_000,
+        ...(answers === undefined
+          ? undefined
+          : { status: INBOX_STATUS.ANSWERED, answeredBy: READER, settledAt: 9_000 }),
+        thread: [...thread, reply],
+      },
+    };
+  };
+}
+
+test("a thread draws every message, the agent's by its tile, name, and tag and a member's by their face and name, under its title and a line counting them and who wrote them, Waiting on you while its ask is open", async () => {
+  const shown = threadItem([
+    askingMessage(EXPIRY_ASK),
+    threadMessage(
+      "e1b2c3d4-0000-4000-8000-000000000002",
+      { member: TEAMMATE },
+      "7 days, surely?",
+      2_000,
+    ),
+    threadMessage(
+      "e1b2c3d4-0000-4000-8000-000000000003",
+      "agent",
+      "That is the default elsewhere.",
+      2_500,
+    ),
+  ]);
+  const pane = await mountThread(shown);
+
+  assert.equal(
+    pane.querySelector("[data-inbox-title]")?.textContent,
+    "How long should invites last?",
+  );
+  assert.deepEqual(subjectLine(pane), ["3 messages", "Alerts, Charles Pan", "Waiting on you"]);
+  assert.deepEqual(threadOf(pane.ownerDocument.body), [
+    [
+      "message",
+      "agent",
+      "Alerts",
+      "Invites expire after 24 hours today, which trips up teams across time zones.",
+    ],
+    ["message", "person", "Charles Pan", "7 days, surely?"],
+    ["message", "agent", "Alerts", "That is the default elsewhere."],
+  ]);
+  assert.equal(
+    pane.querySelectorAll(".inbox-comment-tag").length,
+    2,
+    "each agent message is tagged",
+  );
+  assert.deepEqual(askBoxes(pane), [["open", "Pick oneWaiting on you"]]);
+  assert.deepEqual(checkedOptions(pane), [], "nothing is picked for the reader");
+  assert.deepEqual(
+    openOptions(pane).map((option) => wordsOf(option)),
+    ["1 day1As today.", "7 daysRecommended2What most teams use.", "30 days3"],
+  );
+  // What the thread draws stands inside the pane's masked region.
+  assert.ok(pane.querySelector(".ph-no-capture .inbox-ask"));
+  assert.ok(pane.querySelector(".ph-no-capture [data-inbox-message-text]"));
+});
+
+test("a plain reply sends no answer and leaves the ask open, the box's one button reading Reply and its foot saying replying keeps the ask open", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  const answers = heldAnswers();
+  const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000010"));
+  assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply…");
+  assert.equal(sendWords(pane), "Reply");
+  assert.equal(quietWords(pane), "Replying keeps the ask open");
+
+  typeInComposer(pane, "Does it matter for SSO teams?");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ itemId, text, answers }) => ({ itemId, text, answers })),
+    [{ itemId: shown.id, text: "Does it matter for SSO teams?", answers: undefined }],
+  );
+  assert.deepEqual(answers, [], "the old answer path is never taken");
+  assert.deepEqual(askBoxes(pane), [["open", "Pick oneWaiting on you"]]);
+  assert.deepEqual(threadOf(pane.ownerDocument.body).at(-1), [
+    "message",
+    "person",
+    "You",
+    "Does it matter for SSO teams?",
+  ]);
+});
+
+test("picking an option attaches it over the box as a stamp, renaming the send, and × takes it off; sent, the reply carries the answer, leads with its stamp, and the ask says who chose what", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000011"));
+
+  act(() => openOptions(pane)[1]?.click());
+  assert.equal(attachedOf(pane), 'Choose "7 days"Sending answers the ask');
+  assert.equal(sendWords(pane), 'Choose "7 days"');
+  assert.equal(quietWords(pane), null, "the foot no longer says the ask stays open");
+
+  act(() => pane.querySelector<HTMLButtonElement>('[aria-label="Take off answer"]')?.click());
+  assert.equal(attachedOf(pane), null);
+  assert.deepEqual(checkedOptions(pane), [], "the pick is let go with it");
+  assert.equal(sendWords(pane), "Reply");
+
+  // The number keys still pick, from wherever in the Inbox the reader stands.
+  keyOn(document.body, "2");
+  assert.equal(sendWords(pane), 'Choose "7 days"');
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ text, answers }) => ({ text, answers })),
+    [{ text: "", answers: { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: ["7 days"] } }],
+  );
+  const reply = pane.querySelectorAll(".inbox-thread > li")[1] ?? assert.fail("the reply lands");
+  assert.equal(reply.querySelector("[data-inbox-stamp]")?.textContent, "Chose 7 days");
+  assert.equal(reply.querySelector("[data-inbox-stamp]")?.getAttribute("data-tone"), "ahead");
+  assert.deepEqual(askBoxes(pane), [["answered", "Pick oneYou chose 7 days"]]);
+  assert.deepEqual(subjectLine(pane), ["2 messages", "Alerts, You"], "nothing waits any more");
+});
+
+test("an approve-or-request-changes ask is two small buttons: the one pressed is attached and names the send, and the reply sent with words carries it, stamped as requested changes", async () => {
+  const shown = threadItem([
+    askingMessage({
+      type: INBOX_ASK.DECIDE,
+      options: [{ label: "Approve" }, { label: "Request changes" }],
+    }),
+  ]);
+  const pane = await mountThread(shown);
+  const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000012"));
+  assert.deepEqual(openOptions(pane), [], "no radio list stands for a yes or no");
+
+  act(() => askPress(pane, "Request changes").click());
+  assert.equal(attachedOf(pane), "Request changesSending answers the ask");
+  assert.equal(sendWords(pane), "Request changes");
+  typeInComposer(pane, "The banner overlaps the header.");
+  composerEditor(pane).focus();
+  pressInComposer(pane, "Enter");
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ text, answers }) => ({ text, answers })),
+    [
+      {
+        text: "The banner overlaps the header.",
+        answers: { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: ["Request changes"] },
+      },
+    ],
+  );
+  const stamp = pane.querySelector(".inbox-thread > li:last-child [data-inbox-stamp]");
+  assert.equal(stamp?.textContent, "Requested changes");
+  assert.equal(stamp?.getAttribute("data-tone"), "back");
+  assert.deepEqual(askBoxes(pane), [["answered", "Pick oneYou requested changes"]]);
+});
+
+test("a to-do's steps are ticked in its box, Mark done waiting for every one, and Mark done sent carries the steps ticked; one naming no step stands its item's title as its one step", async () => {
+  const shown = threadItem([
+    askingMessage({
+      type: INBOX_ASK.DO,
+      steps: ["Open the repository's settings", "Add the secret"],
+    }),
+  ]);
+  const pane = await mountThread(shown);
+  const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000013"));
+  const steps = () => [...pane.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")];
+  assert.equal(askPress(pane, "Mark done").disabled, true);
+  assert.deepEqual(askBoxes(pane), [["open", "Steps · 0 of 2Waiting on you"]]);
+
+  act(() => steps()[0]?.click());
+  assert.equal(askPress(pane, "Mark done").disabled, true, "one step is not every step");
+  act(() => steps()[1]?.click());
+  assert.deepEqual(askBoxes(pane), [["open", "Steps · 2 of 2Waiting on you"]]);
+  assert.equal(askPress(pane, "Mark done").disabled, false);
+  act(() => askPress(pane, "Mark done").click());
+  assert.equal(sendWords(pane), "Mark done");
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ answers }) => answers),
+    [{ ask: ASKING_ID, reply: INBOX_REPLY.DONE, steps: [0, 1] }],
+  );
+  assert.equal(
+    pane.querySelector(".inbox-thread > li:last-child [data-inbox-stamp]")?.textContent,
+    "Done 2/2",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const legacy = await mountThread(threadItem([askingMessage({ type: INBOX_ASK.DO, steps: [] })]));
+  assert.deepEqual(
+    [...legacy.querySelectorAll("[data-inbox-step]")].map((step) => step.textContent),
+    ["How long should invites last?"],
+  );
+});
+
+test("a replaced ask is struck through and says so, a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
+  const shown = threadItem(
+    [
+      askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
+      askingMessage(EXPIRY_ASK, {
+        id: "e1b2c3d4-0000-4000-8000-000000000020",
+        status: INBOX_ASK_STATUS.WITHDRAWN,
+        withdrawnReason: "Product picked 14 days.",
+        createdAt: 2_000,
+      }),
+      askingMessage(EXPIRY_ASK, {
+        id: "e1b2c3d4-0000-4000-8000-000000000021",
+        status: INBOX_ASK_STATUS.WITHDRAWN,
+        createdAt: 3_000,
+      }),
+    ],
+    { status: INBOX_STATUS.CLOSED, closedBy: TEAMMATE, settledAt: 3_500 },
+  );
+  const pane = await mountThread(shown);
+
+  assert.deepEqual(askBoxes(pane), [
+    ["replaced", "Pick oneReplaced"],
+    ["withdrawn", "Pick oneWithdrawn: Product picked 14 days."],
+    ["withdrawn", "Pick oneCharles Pan · Closed without answering"],
+  ]);
+  assert.equal(
+    pane.querySelector(".inbox-ask [role='radio']"),
+    null,
+    "a settled ask offers nothing",
+  );
+  assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
+});
+
+test("an ask of a type this build does not know reads as a line naming a newer Luke, and the box still replies", async () => {
+  const poll = Schema.decodeUnknownSync(inboxReadAskSchema)({ type: "poll", status: "open" });
+  const pane = await mountThread(threadItem([{ ...askingMessage(EXPIRY_ASK), ask: poll }]));
+  assert.equal(
+    pane.querySelector('[data-inbox-ask="newer"]')?.textContent,
+    "Answer this in a newer Luke.",
+  );
+  assert.equal(sendWords(pane), "Reply");
+});
+
+test("an item from before version 5, its question in its blocks and its thread asking nothing, still draws its question and is answered as before", async () => {
+  const note = threadMessage(
+    "e1b2c3d4-0000-4000-8000-000000000030",
+    { member: TEAMMATE },
+    "Is 80% too eager?",
+    2_500,
+  );
+  const shown: InboxItem = {
+    ...THRESHOLD,
+    blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Usage alerts fire at a threshold." }],
+    messages: [note],
+    thread: [note],
+  };
+  const pane = await mountThread(shown);
+  const answers = heldAnswers();
+  assert.deepEqual(threadOf(pane.ownerDocument.body), [
+    ["asked", "agent", "Alerts", null],
+    ["message", "person", "Charles Pan", "Is 80% too eager?"],
+  ]);
+  assert.equal(pane.querySelector(".inbox-ask"), null);
+
+  act(() => openOptions(pane)[1]?.click());
+  act(() => answerSend(pane).click());
+  await settle();
+  assert.deepEqual(
+    answers.map(({ reply, choices }) => ({ reply, choices })),
+    [{ reply: INBOX_REPLY.CHOSE, choices: ["Retry once"] }],
+  );
+});
+
+test("the steps ticked and the answer pressed are the item's draft, standing again when the reader comes back to it from another item", async () => {
+  const shown = threadItem([
+    askingMessage({
+      type: INBOX_ASK.DO,
+      steps: ["Open the repository's settings", "Add the secret"],
+    }),
+  ]);
+  const pane = await mountThread(shown);
+  const page = pane.ownerDocument.body;
+  const ticked = () =>
+    [...pane.querySelectorAll<HTMLInputElement>("[data-inbox-step] input")].map(
+      (box) => box.checked,
+    );
+  act(() => pane.querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
+  act(() => askPress(pane, "Couldn't do it").click());
+  assert.equal(attachedOf(pane), "Couldn't do itSending answers the ask");
+
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  act(() => rowNamed(page, shown.title).click());
+  await settle();
+
+  assert.deepEqual(ticked(), [true, false]);
+  assert.equal(attachedOf(pane), "Couldn't do itSending answers the ask");
+  assert.equal(sendWords(pane), "Couldn't do it");
 });
