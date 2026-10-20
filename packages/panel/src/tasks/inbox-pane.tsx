@@ -2652,6 +2652,7 @@ export function InboxPane({
       <DraftReply readerId={readerId}>
         <InboxAnswerBox
           item={item}
+          readerId={readerId}
           control={control}
           agent={by.subject.agent}
           agentName={by.subject.name}

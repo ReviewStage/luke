@@ -36,6 +36,7 @@ import {
   type InboxReply,
   type InboxReplyKind,
   type InboxResponse,
+  inboxAnswerHeard,
   inboxAnswersRefusal,
   inboxReplyRefusal,
   knownBlock,
@@ -1632,6 +1633,23 @@ export function waitsOnReader(
 /** Whether an item needs the reader: open, and theirs (`readersItem`); a teammate's open item waits on the teammate. */
 export function needsReader(item: InboxItem, readerId: string | undefined): boolean {
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
+}
+
+/**
+ * Whether opening the item acknowledges it, as Got it did: a notice waiting
+ * on a nod (`awaitsNod`), the reader's own (`needsReader`) by an id already
+ * known, since an acknowledgement settles it for every member, and one whose
+ * acknowledgement messages nobody (`inboxAnswerHeard`), since a note that
+ * asks to be heard back would reach its agent as "Acknowledged." on a mere
+ * open. A box holding no words or files for it offers no Got it.
+ */
+export function acknowledgedOnOpen(item: InboxItem, readerId: string | undefined): boolean {
+  return (
+    readerId !== undefined &&
+    needsReader(item, readerId) &&
+    awaitsNod(item, inboxThreadOf(item) ?? []) &&
+    !inboxAnswerHeard(item, { reply: INBOX_REPLY.ACKNOWLEDGED })
+  );
 }
 
 /** Whether a listed item needs the reader (`needsReader`) where it stands: never on a task put away in the archive, which nothing answers until it is back. */
