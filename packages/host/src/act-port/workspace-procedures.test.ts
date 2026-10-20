@@ -30,6 +30,7 @@ import {
   createActPortHandler,
   type PlatformActProcedures,
   type TasksProceduresDependencies,
+  WindowPushes,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
 
@@ -332,6 +333,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ...unreached,
       ...elsewhere,
       accountAsks,
+      pushes: new WindowPushes(),
       tasks,
       workspaces: {
         host,

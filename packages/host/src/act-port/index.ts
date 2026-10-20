@@ -25,6 +25,7 @@ import {
   type IntegrationProceduresDependencies,
   integrationProcedures,
 } from "./integration-procedures.js";
+import { pushProcedures, type WindowPushes } from "./push-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import {
@@ -46,6 +47,7 @@ export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
 export { type ActPortContext, actPortFor } from "./base.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
+export { WindowPushes } from "./push-procedures.js";
 export type {
   ClientSettingSideEffects,
   SettingsProceduresDependencies,
@@ -96,6 +98,8 @@ export interface ActPortDependencies {
   readonly automations: AutomationProceduresDependencies;
   readonly factory: FactoryProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
+  /** What main pushes each window, which the push stream reads. */
+  readonly pushes: WindowPushes;
   readonly settings: SettingsProceduresDependencies;
   readonly tasks: TasksProceduresDependencies;
   readonly workspaces: WorkspaceProceduresDependencies;
@@ -128,7 +132,7 @@ export function createActPortHandler<Sender>(
     ...tasksProcedures(dependencies.tasks),
     ...workspaceProcedures(dependencies.workspaces),
   } satisfies ContractedRouter<typeof actContract, ActPortContext<Sender>>;
-  return actPortHandlerOf(router);
+  return actPortHandlerOf({ ...router, ...pushProcedures(dependencies.pushes) });
 }
 
 /** The act port's handler over the procedures given, every failure but a refusal answered as `createActPortHandler` says. */

@@ -15,6 +15,7 @@ import { factoryActsContract } from "./factory.js";
 import { integrationActsContract } from "./integrations.js";
 import type { PortActKind } from "./kinds.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
+import { pushesContract } from "./pushes.js";
 import { settingsActsContract } from "./settings.js";
 import { tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
@@ -58,6 +59,15 @@ export {
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
 export { MAC_REPOSITORIES_REFUSAL } from "./mac-terminals.js";
+export {
+  PUSH,
+  PUSH_GUARD,
+  PUSH_METHOD,
+  PUSH_PROCEDURE,
+  type PushEvent,
+  type PushName,
+  type PushPayload,
+} from "./pushes.js";
 export type { SettingUpdatePayload } from "./settings.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
@@ -81,8 +91,18 @@ export const actContract = {
   ...workspaceActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 
+/**
+ * Everything a window's act port answers: every act kind's procedure, and
+ * beside them the stream of what main pushes the window, under a key no act
+ * kind spells.
+ */
+export const actPortContract = {
+  ...actContract,
+  ...pushesContract,
+};
+
 /** The window's typed client of the act port. */
-export type ActPortClient = ContractRouterClient<typeof actContract>;
+export type ActPortClient = ContractRouterClient<typeof actPortContract>;
 
 /** What one port kind takes. */
 export type PortActPayload<Kind extends PortActKind> = InferContractRouterInputs<

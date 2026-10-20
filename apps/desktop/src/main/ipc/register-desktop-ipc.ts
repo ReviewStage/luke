@@ -9,7 +9,7 @@ import { highlightSnippet } from "@luke/host";
 import { createActPortHandler, type PlatformActProcedures } from "@luke/host/act-port";
 import { createActRouter } from "@luke/host/act-router";
 import type { AppStateSnapshot } from "@luke/host/app-state";
-import { channels } from "@luke/host/bridge";
+import { PUSH } from "@luke/host/contract";
 import { startMacTerminal, worktreesRoot } from "@luke/host/node";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -27,6 +27,7 @@ import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { createBrowserViews } from "../window/browser-views";
 import { HOTKEY_RANK } from "../window/hotkey-registrar";
+import { windowPushes } from "../window/window-pushes";
 import { avatarProcedures, avatarReports } from "./avatar-acts";
 import { browserProcedures } from "./browser-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
@@ -86,9 +87,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
 
   // A Browser tab's page is told to the panel that opened it alone, and goes with that panel's page.
   const browserViews = createBrowserViews({
-    tellPage: (sender, page) => sender.send(channels.onBrowserState, page),
-    tellKey: (sender, key) => sender.send(channels.onBrowserKey, key),
-    tellFocus: (sender, focus) => sender.send(channels.onBrowserFocus, focus),
+    tellPage: (sender, page) => windowPushes.push(sender, PUSH.BROWSER_STATE, page),
+    tellKey: (sender, key) => windowPushes.push(sender, PUSH.BROWSER_KEY, key),
+    tellFocus: (sender, focus) => windowPushes.push(sender, PUSH.BROWSER_FOCUS, focus),
     whenGone: whenPageGone,
   });
 
@@ -226,6 +227,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         automations: { host: operator.host },
         factory: { host: operator.host },
         integrations: { host: operator.host },
+        pushes: windowPushes,
         settings: {
           host: operator.host,
           // The port names its window as an unknown sender; only a window of
@@ -250,7 +252,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
           serviceBaseUrl: config.hostedServiceBaseUrl,
           activeTaskId: () => state.snapshot().tasks.activeTaskId,
           talkAboutTask: (taskId) => {
-            voiceWindow.current()?.webContents.send(channels.onTasksTalk, { taskId });
+            const voice = voiceWindow.current();
+            if (voice) windowPushes.push(voice.webContents, PUSH.TASKS_TALK, { taskId });
           },
           voiceReady: () => {
             const snapshot = state.snapshot();

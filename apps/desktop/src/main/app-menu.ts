@@ -12,7 +12,7 @@
  * is on.
  */
 
-import { channels } from "@luke/host/bridge";
+import { PUSH } from "@luke/host/contract";
 import { type ExperimentChoices, type HostCapability, NO_EXPERIMENTS } from "@luke/settings";
 import {
   APP_COMMAND,
@@ -28,6 +28,7 @@ import {
 } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
 import { type BaseWindow, BrowserWindow, type MenuItemConstructorOptions } from "electron";
+import { windowPushes } from "./window/window-pushes";
 
 const SEPARATOR: MenuItemConstructorOptions = { type: "separator" };
 
@@ -113,7 +114,9 @@ function sendCommand(command: AppCommand): NonNullable<MenuItemConstructorOption
     if (event.triggeredByAccelerator) return;
     // The window arrives as the base type, and only a browser window has a
     // page to hand the command to.
-    if (window instanceof BrowserWindow) window.webContents.send(channels.onMenuCommand, command);
+    if (window instanceof BrowserWindow) {
+      windowPushes.push(window.webContents, PUSH.MENU_COMMAND, command);
+    }
   };
 }
 

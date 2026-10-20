@@ -20,6 +20,7 @@ import {
   createActPortHandler,
   type PlatformActProcedures,
   type TasksProceduresDependencies,
+  WindowPushes,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
 
@@ -149,7 +150,14 @@ function windowPort(
     "agentInbox" | "agents" | "automations" | "factory" | "integrations"
   >;
   const handler = createActPortHandler(
-    { ...unreached, ...elsewhere, accountAsks: { host }, tasks, workspaces },
+    {
+      ...unreached,
+      ...elsewhere,
+      accountAsks: { host },
+      pushes: new WindowPushes(),
+      tasks,
+      workspaces,
+    },
     platform,
   );
   const { port1, port2 } = new MessageChannel();

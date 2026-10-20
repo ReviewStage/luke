@@ -1,6 +1,11 @@
 import type { FileChip } from "@luke/features/attachment-model";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
+  INBOX_PICTURE_IN_WORDS,
+  inboxAttachmentOf,
+  inboxPictureDestination,
+} from "@luke/features/inbox-attachment-link";
+import {
   codeLinesReadable,
   fieldValueWords,
   INBOX_ASK,
@@ -33,13 +38,14 @@ import {
   knownResponse,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, readLink } from "@luke/features/luke-link";
-import { linksIn } from "@luke/features/mention-link";
+import { insideCode, linksIn } from "@luke/features/mention-link";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
+import { askHeadWords } from "./inbox-ask-words.js";
 import { plainWords } from "./tool-call-model.js";
 
 /**
@@ -485,7 +491,7 @@ export function decideButtons(ask: Pick<InboxDecideAsk, "options" | "multiple">)
 }
 
 /** How many steps a `do` ask shows: its own, or one, the item's title, for a to-do from before version 5 that named none. */
-export function shownSteps(ask: Pick<InboxDoAsk, "steps">): number {
+function shownSteps(ask: Pick<InboxDoAsk, "steps">): number {
   return Math.max(ask.steps.length, 1);
 }
 
@@ -1029,9 +1035,13 @@ const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYP
  * order its blocks hold them, a page named by a link block or by any link
  * in its words, labelled, an `@` mention, or bare, each page once; then the pictures
  * its answer carried, and the pages and pictures its thread's messages
- * name and carry, oldest first. A file that is no picture is no media.
+ * name and carry, oldest first. A file that is no picture is no media. An
+ * item drawn as its thread from version 5 (`inboxThreadOf`) shows its
+ * messages' instead (`threadMedia`).
  */
 export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
+  const thread = inboxThreadOf(item);
+  if (thread !== undefined) return threadMedia(item, thread);
   const found: InboxMedia[] = [];
   const page = (target: string) => {
     const place = readLink(target)?.place;
@@ -1072,15 +1082,110 @@ export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
 }
 
 /**
+ * The item's own pictures a message's words draw, where each is drawn: a
+ * picture, `![alt](address)`, whose address names one of the item's, as
+ * the pane draws it (`inbox-pictures.tsx`). Note that one written in code
+ * is code, which the pane draws as words, and a bare address is a link.
+ */
+function picturesDrawn(
+  text: string,
+  itemId: string,
+): readonly { readonly at: number; readonly attachmentId: string }[] {
+  return [...text.matchAll(INBOX_PICTURE_IN_WORDS)].flatMap((match) => {
+    if (insideCode(text, match.index)) return [];
+    const named = inboxAttachmentOf(inboxPictureDestination(match[2] ?? ""));
+    return named?.itemId === itemId ? [{ at: match.index, attachmentId: named.attachmentId }] : [];
+  });
+}
+
+/**
+ * The media of an item drawn as its thread (`inboxMedia`): each message's
+ * in turn, oldest first, the pictures its words draw by their addresses
+ * (`picturesDrawn`) and the pages it links to, outside code, in the order its
+ * words name them, each once, then the pictures among its files.
+ */
+function threadMedia(item: InboxItem, thread: readonly InboxMessage[]): readonly InboxMedia[] {
+  const found: InboxMedia[] = [];
+  const known = (media: InboxMedia) =>
+    found.some((each) =>
+      each.kind === INBOX_MEDIA.IMAGE
+        ? media.kind === INBOX_MEDIA.IMAGE && media.attachmentId === each.attachmentId
+        : media.kind === INBOX_MEDIA.PAGE &&
+          media.taskId === each.taskId &&
+          media.pageId === each.pageId,
+    );
+  const add = (media: InboxMedia) => {
+    if (!known(media)) found.push(media);
+  };
+  for (const message of thread) {
+    const named: { readonly at: number; readonly media: InboxMedia }[] = [];
+    for (const { at, attachmentId } of picturesDrawn(message.text, item.id)) {
+      named.push({ at, media: { kind: INBOX_MEDIA.IMAGE, attachmentId } });
+    }
+    for (const link of linksIn(message.text)) {
+      const place = readLink(link.target)?.place;
+      if (place?.kind !== LINK_PLACE.PAGE) continue;
+      const media = { kind: INBOX_MEDIA.PAGE, taskId: place.planId, pageId: place.pageId } as const;
+      named.push({ at: link.start, media });
+    }
+    for (const each of named.toSorted((a, b) => a.at - b.at)) add(each.media);
+    for (const file of message.files ?? []) {
+      if (PICTURE_TYPES.has(file.mediaType)) {
+        add({ kind: INBOX_MEDIA.IMAGE, attachmentId: file.attachmentId });
+      }
+    }
+  }
+  return found.slice(0, MAX_ROW_MEDIA);
+}
+
+/**
  * The last word in an item's thread, as its row's second line says it,
  * led by who said it: a message on the thread by its writer, "Agent" for
  * the item's own and a member by `nameOf`, which says "You" for the
  * reader; the answer by its answerer, in a few words; the agent taking the
  * item back as "Withdrawn" and why; a member's close by who closed it;
  * and, on an open item nobody has
- * written on, what it asks, "Choice · 3 options, one recommended".
+ * written on, what it asks, "Choice · 3 options, one recommended". An item
+ * drawn as its thread from version 5 (`inboxThreadOf`) says its latest
+ * message, after what its open ask asks while one waits, as its box leads
+ * with it (`askHeadWords`), "Pick one · Agent: Which window?", the steps
+ * counted as the reader's draft ticks them (`ticked`).
  */
 export function inboxPreview(
+  item: InboxItem,
+  nameOf: (member: InboxMember | undefined) => string,
+  ticked?: readonly number[],
+): string {
+  const thread = inboxThreadOf(item);
+  if (thread === undefined) return legacyPreview(item, nameOf);
+  const said = lastSaid(thread, nameOf);
+  const asking = openAskOf(thread);
+  if (asking === undefined || !knownAsk(asking.ask)) return said;
+  return `${askHeadWords(asking.ask, ticked ?? [])}${PREVIEW_PART}${said}`;
+}
+
+/**
+ * A thread's latest message as its row says it, led by who wrote it: the
+ * words of an answer's stamp first where it answered an ask, "You: Chose 7
+ * days · and say it in the docs", and its files where it said nothing.
+ */
+function lastSaid(
+  thread: readonly InboxMessage[],
+  nameOf: (member: InboxMember | undefined) => string,
+): string {
+  const last = thread.at(-1);
+  if (last === undefined) return "";
+  const who = last.author === INBOX_MESSAGE_AUTHOR.AGENT ? "Agent" : nameOf(last.member);
+  const words = plainWords(last.text);
+  const answers = last.answers;
+  if (answers === undefined)
+    return `${who}: ${words === "" ? (filesWords(last.files) ?? "") : words}`;
+  const stamp = sentStamp(answers, thread.find((each) => each.id === answers.ask)?.ask).words;
+  return `${who}: ${words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`}`;
+}
+
+/** The preview of an item drawn from the fields a desktop before version 5 reads (`inboxPreview`). */
+function legacyPreview(
   item: InboxItem,
   nameOf: (member: InboxMember | undefined) => string,
 ): string {

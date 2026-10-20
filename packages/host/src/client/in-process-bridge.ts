@@ -4,7 +4,8 @@
 import { Effect, type Scope } from "effect";
 import type { ActRouter, ActSender } from "../act-router/router.js";
 import type { AppStateSnapshot, AppWindowFacts } from "../app-state.js";
-import type { AppBridge, BridgeMethod, BridgeResultFor } from "../bridge.js";
+import type { AppBridge, PushPayloadFor } from "../bridge.js";
+import type { PushMethod } from "../contract/pushes.js";
 import { type AppStateStore, publishAppStateChanges } from "./app-state-store.js";
 
 /**
@@ -13,7 +14,7 @@ import { type AppStateStore, publishAppStateChanges } from "./app-state-store.js
  * Each is said once and never bootstrapped from.
  */
 type InProcessEventMethod = Extract<
-  BridgeMethod,
+  PushMethod,
   | "onShowAgent"
   | "onShowInbox"
   | "onShowInboxItem"
@@ -28,7 +29,7 @@ type InProcessEventMethod = Extract<
 
 /** Where the shell says each one-shot event, to every subscription standing in the page. */
 type InProcessEvents = {
-  readonly [Method in InProcessEventMethod]: (payload: BridgeResultFor<Method>) => void;
+  readonly [Method in InProcessEventMethod]: (payload: PushPayloadFor<Method>) => void;
 };
 
 interface InProcessBridgeDependencies<Sender = unknown> {
@@ -73,7 +74,7 @@ interface Listeners<Payload> {
 
 /** Each one-shot event's subscriptions, the page's side and the shell's of one set. */
 type EventListeners = {
-  readonly [Method in InProcessEventMethod]: Listeners<BridgeResultFor<Method>>;
+  readonly [Method in InProcessEventMethod]: Listeners<PushPayloadFor<Method>>;
 };
 
 /**

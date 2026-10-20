@@ -5,14 +5,14 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import type { GatewayHost, NodeRegistry } from "@luke/gateway";
 import type { AppSettings } from "@luke/settings/wire";
 import { Effect, Option, type Scope } from "effect";
-import { channels } from "../bridge.js";
+import { PUSH, type PushName, type PushPayload } from "../contract/pushes.js";
 import type { HostBootstrap, HostOperator } from "../host-operator.js";
 import { type AppStateStore, bootstrapPatch } from "./app-state-store.js";
 import { type GatewayWiringDependencies, wireGateway } from "./gateway-wiring.js";
 
 /** What the host's events reach in the windows that draw them. */
 interface OperatorClientLinks {
-  sendToVoice: <Payload>(channel: string, payload: Payload) => void;
+  sendToVoice: <Name extends PushName>(push: Name, payload: PushPayload<Name>) => void;
   /**
    * A voice that came or went moves the talk key: claimed now that there is
    * something to talk to, or given back to the machine now that there is not.
@@ -110,7 +110,7 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       }),
       // The live session's phase is handed to the voice window as the event it is.
       gateway.host.onVoiceLiveSessionChanged((change) => {
-        links().sendToVoice(channels.onVoiceLiveSessionChanged, change);
+        links().sendToVoice(PUSH.VOICE_LIVE_SESSION_CHANGED, change);
       }),
       // The host's own answer about recording stands the halt down: it is the
       // account transition the halt was waiting on.

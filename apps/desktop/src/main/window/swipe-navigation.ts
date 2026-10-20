@@ -11,9 +11,10 @@
  * overlay holding the keyboard holds off as it holds off ⌘[ and ⌘].
  */
 
-import { channels } from "@luke/host/bridge";
+import { PUSH } from "@luke/host/contract";
 import { APP_COMMAND, type AppCommand } from "@luke/settings/shortcuts";
 import type { Event, WebContents } from "electron";
+import { windowPushes } from "./window-pushes";
 
 /** The directions Electron names a swipe by. */
 const SWIPE_DIRECTION = {
@@ -41,13 +42,13 @@ function isSwipeDirection(direction: string): direction is SwipeDirection {
 /** The part of a window this reads: its swipes, and the page it hands them to. */
 interface SwipedWindow {
   on(event: "swipe", listener: (event: Event, direction: string) => void): this;
-  readonly webContents: Pick<WebContents, "send">;
+  readonly webContents: WebContents;
 }
 
 /** Runs each swipe left or right on `window` as its page's Back or Forward; a swipe up or down is left alone. */
 export function followSwipes(window: SwipedWindow): void {
   window.on("swipe", (_event, direction) => {
     const command = isSwipeDirection(direction) ? SWIPE_COMMANDS[direction] : undefined;
-    if (command !== undefined) window.webContents.send(channels.onMenuCommand, command);
+    if (command !== undefined) windowPushes.push(window.webContents, PUSH.MENU_COMMAND, command);
   });
 }
