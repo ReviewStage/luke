@@ -1158,15 +1158,15 @@ test("an item its agent took back previews that it was withdrawn and why", () =>
 
 test("an item a member closed without an answer previews who closed it, You for the reader, and never reads as withdrawn by its agent", () => {
   const closed = item({ id: "f2", status: INBOX_STATUS.CLOSED, closedBy: YOU });
-  assert.equal(inboxPreview(closed, previewName), "You: Closed without answering");
+  assert.equal(inboxPreview(closed, previewName), "You: Resolved without an answer");
   assert.equal(
     inboxPreview({ ...closed, closedBy: CHARLES }, previewName),
-    "Charles Pan: Closed without answering",
+    "Charles Pan: Resolved without an answer",
   );
   const { closedBy: _by, ...unnamed } = closed;
   assert.equal(
     inboxPreview(unnamed, previewName),
-    "Someone: Closed without answering",
+    "Someone: Resolved without an answer",
     "a closed item without the agent's reason is a member's, though their account is gone",
   );
 });

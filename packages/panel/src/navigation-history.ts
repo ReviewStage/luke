@@ -718,7 +718,7 @@ export function useWindowHistory(input: {
     | "tasks"
     | "archived"
     | "listFailed"
-    | "onSelect"
+    | "onRestoreTask"
     | "onLeaveTask"
     | "history"
     | "inboxView"
@@ -963,7 +963,7 @@ export function useWindowHistory(input: {
       return;
     }
     if (historyOpen) tasks.history.onClose();
-    if (to.kind === PLACE_KIND.TASK && boundFor !== to.taskId) tasks.onSelect(to.taskId);
+    if (to.kind === PLACE_KIND.TASK && boundFor !== to.taskId) tasks.onRestoreTask(to.taskId);
     if (to.kind === PLACE_KIND.TASK && to.panel !== undefined) standPanel(to.taskId, to.panel);
     if (to.kind === PLACE_KIND.HOME && boundFor !== undefined) tasks.onLeaveTask();
   };

@@ -263,6 +263,7 @@ export function tasksControl(overrides: Partial<TasksControl> = {}): TasksContro
     agents: codingAgentsControl(),
     history: versionHistoryControl(),
     onSelect: ignore,
+    onRestoreTask: ignore,
     onShowAgent: ignore,
     onShowSource: ignore,
     onShowTask: ignore,

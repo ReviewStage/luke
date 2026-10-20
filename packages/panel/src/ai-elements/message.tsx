@@ -5,7 +5,6 @@ import type { UIMessage } from "ai";
 import { AsyncResult } from "effect/reactivity";
 import { type ComponentProps, type HTMLAttributes, memo, type ReactNode, useState } from "react";
 import { type Components, Streamdown } from "streamdown";
-import { coarsePointerNow } from "../coarse-pointer.js";
 import { markdownHtmlParserAtom } from "../markdown-html-parser.js";
 import { Tooltip } from "../tooltip.js";
 
@@ -43,12 +42,16 @@ export type MessageProps = HTMLAttributes<HTMLDivElement> & {
 const OWN_CONTROL =
   "a, button, summary, input, textarea, select, label, [role='button'], [role='tab']";
 
+/** The media query a screen with no hover answers, the one the stylesheet shows a tapped message's actions under. */
+const NO_HOVER = "(hover: none)";
+
 /**
- * A finger has no hover to show a message's actions by, so a tap on the
- * message, anywhere but a control of its own, shows them, and another hides
- * them again (`.transcript-message[data-actions-shown]`, tasks.css). The
- * pointer is asked at the tap, never kept (`coarse-pointer.ts`), so a mouse
- * changes nothing.
+ * A screen with no hover has none to show a message's actions by, so a tap
+ * on the message, anywhere but a control of its own, shows them, and another
+ * hides them again (`.transcript-message[data-actions-shown]`, tasks.css,
+ * under the same `(hover: none)`). The screen is asked at the tap, never
+ * kept, so a mouse changes nothing, and a press that ends a selection of the
+ * message's words leaves them be.
  */
 export function Message({ className, from, onClick, ...props }: MessageProps): ReactNode {
   const [actionsShown, setActionsShown] = useState(false);
@@ -60,7 +63,8 @@ export function Message({ className, from, onClick, ...props }: MessageProps): R
       data-actions-shown={actionsShown ? "true" : undefined}
       onClick={(event) => {
         onClick?.(event);
-        if (!coarsePointerNow()) return;
+        if (!window.matchMedia(NO_HOVER).matches) return;
+        if (window.getSelection()?.isCollapsed === false) return;
         if (event.target instanceof Element && event.target.closest(OWN_CONTROL) !== null) return;
         setActionsShown((shown) => !shown);
       }}

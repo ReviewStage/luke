@@ -531,6 +531,22 @@ test("in a room still wide, as a 700px stage is, an Inbox showing one column by 
   assert.equal(window.standingAddress(), "/acme/inbox");
 });
 
+test("on the desktop's width the step's link names the Inbox's item standing alone where the Inbox shows one column by its own width, as Copy link does, and the Inbox where it splits", () => {
+  for (const single of [true, false]) {
+    const window = mount(SHELL_ROOM.WIDE, {
+      ...ON_TASK,
+      inbox: { open: true, chosen: undefined, listed: true, single },
+    });
+    window.press(() => {
+      window.shown().inboxView.onChoose(ITEM);
+      window.shown().inboxView.onListed(false);
+    });
+    assert.equal(window.standingAddress(), single ? `${TASK_PATH}/inbox/item-1` : "/acme/inbox");
+    assert.equal(copiedHere(), `${TASK_PATH}/inbox/item-1`, "Copy link names the item at hand");
+    unmountAll();
+  }
+});
+
 test("on a narrow stage a Settings page chosen from its list is a step, whose list stands at /settings", () => {
   const window = mount(SHELL_ROOM.NARROW, ON_TASK);
   window.move((held) => ({ ...held, tab: PANEL_TAB.SETTINGS, settings: ON_TASK.settings }));

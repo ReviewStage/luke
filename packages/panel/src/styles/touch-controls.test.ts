@@ -270,7 +270,7 @@ test("on a touch screen a failed agent's tab keeps its mark rather than its ×",
 /** A message drawn as the transcript draws it, its words and its actions set where `placement` says, worked by a finger. */
 function tappableMessage(placement: MessageActionsPlacement) {
   layFor(true);
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(hover: none)" }));
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
@@ -310,6 +310,15 @@ for (const placement of Object.values(MESSAGE_ACTIONS_PLACEMENT)) {
     assert.ok(faded(message.actions()), "another tap on the message hides them");
   });
 }
+
+test("on a touch screen a press that ends a selection of a message's words leaves its actions as they were", () => {
+  const message = tappableMessage(MESSAGE_ACTIONS_PLACEMENT.FLOATING);
+  const words = document.querySelector(".message-content") ?? assert.fail("the words");
+  window.getSelection()?.selectAllChildren(words);
+  message.tap(".message-content");
+  assert.ok(faded(message.actions()));
+  window.getSelection()?.removeAllRanges();
+});
 
 /** An archived agent's row, whose menu a long press opens. */
 function archivedAgent(): HTMLElement {

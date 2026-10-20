@@ -39,6 +39,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
 import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
+import { memoryHistory } from "@luke/ui/history-adapter";
 import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -61,6 +62,12 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
+import {
+  installWindowHistory,
+  useWindowHistory,
+  type WindowHistoryLists,
+} from "../navigation-history.js";
+import { PANEL_TAB } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -134,6 +141,8 @@ interface Standing {
   account: string;
   /** The room the panel's stage gives. */
   room: ShellRoom;
+  /** Whether the window's history stands over the tab, as the panel's root keeps it. */
+  history: boolean;
 }
 
 /** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names, an act-port kind among them. */
@@ -174,8 +183,27 @@ function mount(
     signedIn: true,
     account: "dev@example.com",
     room: SHELL_ROOM.WIDE,
+    history: false,
     ...initial,
   };
+  let windowHistory: WindowHistoryLists | undefined;
+  if (standing.history) installWindowHistory(memoryHistory());
+  /** The window's history over the tab, as the panel's root keeps it, on the room the tab stands in. */
+  function WindowHistoryProbe({ tasks, room }: { tasks: TasksControl; room: ShellRoom }) {
+    windowHistory = useWindowHistory({
+      known: true,
+      link: undefined,
+      tab: PANEL_TAB.TASKS,
+      onTabChange: () => undefined,
+      settingsView: SETTINGS_VIEW.ACCOUNT,
+      onSettingsViewChange: () => undefined,
+      settingsListed: true,
+      onSettingsList: () => undefined,
+      room,
+      tasks,
+    });
+    return null;
+  }
   /** An act-port kind's answer as the test gives it, recorded, or a rejection where it gives none. */
   function portAnswer<Kind extends PortActKind>(
     kind: Kind,
@@ -232,7 +260,9 @@ function mount(
       leaveGuard: useLeaveGuard(),
       room: held.room,
     });
-    return null;
+    return held.history
+      ? createElement(WindowHistoryProbe, { tasks: control, room: held.room })
+      : null;
   }
   const container = document.createElement("div");
   document.body.append(container);
@@ -255,6 +285,8 @@ function mount(
       assert.ok(control);
       return control;
     },
+    /** The window's history, where the tab was mounted with one. */
+    history: () => windowHistory ?? assert.fail("the window's history stands"),
     stand: (patch: Partial<Standing>) => {
       standing = { ...standing, ...patch };
       act(() => restand?.(standing));
@@ -859,6 +891,29 @@ test("in a narrow room a task opened from a list lands on its plan, the side pan
       assert.equal(tab.control().sidePanel.open, false, "wide leaves the panel shut");
     }
   }
+});
+
+test("in a narrow room Back to a task opens it as it stood, its plan's tab closed there staying closed, where a task opened from a list lands on its plan", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW, history: true },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+  );
+  const panel = () => tab.control().sidePanel;
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
+  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.BOARD]);
+
+  act(() => tab.control().onSelect(OTHER_TASK_ID));
+  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+  await settle();
+  assert.equal(panel().tab, SIDE_PANEL_TAB.PLAN, "the task opened from a list lands on its plan");
+
+  act(() => tab.history().onBack());
+  assert.equal(tab.control().boundFor, TASK.id);
+  tab.stand({ tasks: OPEN });
+  await settle();
+  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.BOARD], "the plan's tab stays closed");
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
 });
 
 test("in a narrow room a Luke link to another task's panel item opens that item, not the plan a task opened from a list lands on", async () => {

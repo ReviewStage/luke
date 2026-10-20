@@ -1468,6 +1468,64 @@ function useScrollToOwnMessage(
   }, [board, item.id, last, own]);
 }
 
+/** The question an open item waits on in its thread: a thread's open ask's box, or an older item's answer controls. */
+function openQuestion(scroller: HTMLElement): Element | null {
+  return (
+    scroller.querySelector(".inbox-ask-body")?.closest(".inbox-ask") ??
+    scroller.querySelector(".inbox-response")
+  );
+}
+
+/** Scrolls `scroller` so `question` stands just over its foot, the box docked under it, or its top in view where it is taller than the room. */
+function standOverFoot(scroller: HTMLElement, question: Element): void {
+  const room = scroller.getBoundingClientRect();
+  const box = question.getBoundingClientRect();
+  const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom) || 0;
+  const under = box.bottom - (room.bottom - padding);
+  if (under !== 0) scroller.scrollTop += Math.min(under, box.top - room.top);
+}
+
+/** The reader's own ways of moving a thread, after any of which the pane leaves where it stands to them. */
+const READER_MOVES = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+
+/**
+ * Opens each item at its thread's top, rather than where the last item was
+ * scrolled, as the pane stands for every item in turn. A narrow room leaves
+ * the thread little room over the box docked under it, so there an item
+ * waiting on an answer opens on its question instead, standing just over the
+ * box, where its options would otherwise wait out of sight under it; and
+ * while what stands above the question still lands, a picture read late, it
+ * is stood there again, until the reader moves the thread themselves.
+ */
+function useOpenOnAsk(
+  board: React.RefObject<HTMLDivElement | null>,
+  pane: React.RefObject<HTMLElement | null>,
+  itemId: string,
+): void {
+  useLayoutEffect(() => {
+    const scroller = board.current;
+    if (scroller === null) return undefined;
+    scroller.scrollTop = 0;
+    const narrow =
+      pane.current?.closest(".desktop-shell")?.getAttribute("data-room") === SHELL_ROOM.NARROW;
+    if (!narrow || openQuestion(scroller) === null) return undefined;
+    const stand = () => {
+      const question = openQuestion(scroller);
+      if (question !== null) standOverFoot(scroller, question);
+    };
+    stand();
+    const content = scroller.querySelector(".inbox-board");
+    const observer = new ResizeObserver(stand);
+    if (content !== null) observer.observe(content);
+    const letGo = () => {
+      observer.disconnect();
+      for (const move of READER_MOVES) scroller.removeEventListener(move, letGo);
+    };
+    for (const move of READER_MOVES) scroller.addEventListener(move, letGo, { passive: true });
+    return letGo;
+  }, [board, pane, itemId]);
+}
+
 /** What an ask's box says where its type is one this build does not know. */
 const NEWER_LUKE_ASK = "Answer this in a newer Luke.";
 
@@ -2178,24 +2236,7 @@ export function InboxPane({
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLElement>(null);
-  // Note that the pane stands for every item in turn, so another item opens at its thread's top rather than where the last was scrolled.
-  // A narrow room leaves the thread little room over the box docked under it, so there an item
-  // waiting on an answer opens on its ask, standing just over the box, rather than at the top,
-  // where its options would wait out of sight under the box.
-  useLayoutEffect(() => {
-    const scroller = board.current;
-    if (scroller === null) return;
-    scroller.scrollTop = 0;
-    const narrow =
-      pane.current?.closest(".desktop-shell")?.getAttribute("data-room") === SHELL_ROOM.NARROW;
-    const ask = narrow ? scroller.querySelector(".inbox-ask-body")?.closest(".inbox-ask") : null;
-    if (ask == null) return;
-    const room = scroller.getBoundingClientRect();
-    const box = ask.getBoundingClientRect();
-    const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom) || 0;
-    const under = box.bottom - (room.bottom - padding);
-    if (under > 0) scroller.scrollTop += Math.min(under, box.top - room.top);
-  }, [item.id]);
+  useOpenOnAsk(board, pane, item.id);
   const directory = useMemberDirectory();
   const readerId = directory.readerId ?? agents.me;
   useScrollToOwnMessage(board, item, readerId);

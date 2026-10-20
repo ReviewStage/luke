@@ -638,7 +638,10 @@ export interface TasksControl {
   agents: CodingAgentsControl;
   /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
   history: VersionHistoryControl;
+  /** Opens a task from a list, the drawer, or Home: in a narrow room on its plan. */
   onSelect: (taskId: string) => void;
+  /** Opens a task as the window's history goes back or forward to it, as it stood, since the history stands its panel itself. */
+  onRestoreTask: (taskId: string) => void;
   /** Opens a task on one agent's tab: what a notification's click asks. */
   onShowAgent: (taskId: string, agentId: string) => void;
   /** Leaves the version history for the place that wrote a version: its agent's tab, its call in the Transcript, or its turn in Work. */
@@ -3131,12 +3134,16 @@ export function useTasksTab(input: {
     // go only once it opens. A narrow room shows one pane, so a task opened
     // there from a list lands on its plan, the side panel standing full
     // screen on the plan's tab, rather than on whatever tab it last showed;
-    // a link names its own place (`openLink`), and the history stands the
-    // pane its step held after this (`navigation-history.ts`).
+    // a link names its own place (`openLink`), and the history opens a task
+    // through `onRestoreTask` instead, standing the pane its step held.
     onSelect: guard((taskId: string) => {
       setChosen((held) => (held?.pin.task === taskId ? undefined : held));
       select(taskId);
       if (input.room === SHELL_ROOM.NARROW) sidePanel.onShow(taskId, SIDE_PANEL_TAB.PLAN);
+    }),
+    onRestoreTask: guard((taskId: string) => {
+      setChosen((held) => (held?.pin.task === taskId ? undefined : held));
+      select(taskId);
     }),
     onShowAgent: guard((taskId: string, agentId: string) =>
       showColumnTab(taskId, { agent: agentId }),
