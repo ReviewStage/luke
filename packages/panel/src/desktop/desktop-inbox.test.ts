@@ -5629,7 +5629,7 @@ function repliedOn(item: InboxItem, id: string) {
   };
 }
 
-test("a thread draws every message, the agent's by its tile, name, and tag and a member's by their face and name, under its title alone, Waiting on you on its open ask", async () => {
+test("a thread draws every message, the agent's by its tile and name alone, no tag after its chip, and a member's by their face and name, under its title alone, Waiting on you on its open ask", async () => {
   const shown = threadItem([
     askingMessage(EXPIRY_ASK),
     threadMessage(
@@ -5666,10 +5666,16 @@ test("a thread draws every message, the agent's by its tile, name, and tag and a
     ["message", "person", "Charles Pan", "7 days, surely?"],
     ["message", "agent", "Alerts", "That is the default elsewhere."],
   ]);
-  assert.equal(
-    pane.querySelectorAll(".inbox-comment-tag").length,
-    2,
-    "each agent message is tagged",
+  assert.deepEqual(
+    [...pane.querySelectorAll(".inbox-thread .inbox-comment-head")].map((head) =>
+      [...head.children].map((part) => part.className),
+    ),
+    [
+      ["inbox-comment-name", "inbox-comment-when"],
+      ["inbox-comment-name", "inbox-comment-when"],
+      ["inbox-comment-name", "inbox-comment-when"],
+    ],
+    "an agent's message, as a member's, is headed by its name and when alone, with no tag after its chip",
   );
   assert.deepEqual(askBoxes(pane), [["open", "Pick oneWaiting on you"]]);
   assert.deepEqual(checkedOptions(pane), [], "nothing is picked for the reader");

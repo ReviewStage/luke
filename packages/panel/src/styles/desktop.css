@@ -3595,11 +3595,6 @@ ul.actor-stack {
   color: var(--luke-color-text-muted);
 }
 
-/* An agent's message names it, then a quiet "agent" after the name. */
-.inbox-comment-tag {
-  color: var(--luke-color-text-subtle);
-}
-
 /* A message is a Markdown document, set at the reading leading. */
 .inbox-message-words {
   line-height: var(--luke-type-reading-leading);
