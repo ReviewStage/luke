@@ -653,7 +653,8 @@ const REALTIME_SEALED: AccountInboxLiveAnswer = {
 /**
  * Realtime as a script: the address each client was opened at, each part's
  * subscription by its capability, the seals each was renewed with, and a
- * way to deliver rows to one or stop it for good.
+ * way to deliver rows to one, stop it for good, or have the client last
+ * opened report something going wrong.
  */
 function fakeRealtime() {
   const opened: string[] = [];
@@ -663,8 +664,10 @@ function fakeRealtime() {
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
   >();
   const renewed: string[] = [];
-  const open = (url: string): LiveClient => {
+  let reporting: ((trouble: string) => void) | undefined;
+  const open = (url: string, hear: (trouble: string) => void): LiveClient => {
     opened.push(url);
+    reporting = hear;
     return {
       subscribe: (query) => ({
         onChange: (listener) => {
@@ -695,11 +698,13 @@ function fakeRealtime() {
     drop: (part: string) =>
       listeners.get(`capability-${part}`)?.({ status: "connecting", data: [] }),
     fail: (part: string) => listeners.get(`capability-${part}`)?.({ status: "error", data: [] }),
+    /** What the client last opened reports going wrong, in the words the follow is told. */
+    say: (trouble: string) => reporting?.(trouble),
     subscribed: () => [...listeners.keys()].toSorted(),
   };
 }
 
-/** A frame the stubbed socket sends, as Realtime's protocol spells the two it needs. */
+/** A frame the stubbed socket sends, as Realtime's protocol spells the ones it needs. */
 type RealtimeServerFrame =
   | { readonly type: "ready" }
   | {
@@ -708,7 +713,41 @@ type RealtimeServerFrame =
       readonly code: string;
       readonly message: string;
       readonly retry_after_ms: number;
+    }
+  | {
+      readonly type: "subscribed";
+      readonly request_id: string;
+      readonly live_id: string;
+      readonly epoch: string;
+      readonly first_sequence: string;
+      readonly columns: readonly {
+        readonly name: string;
+        readonly type_oid: number;
+        readonly typmod: number;
+        readonly codec: string;
+      }[];
+    }
+  | {
+      readonly type: "baseline_sync_start";
+      readonly live_id: string;
+      readonly epoch: string;
+      readonly baseline_sync_attempt: string;
+      readonly mvcc: {
+        readonly xmin: string;
+        readonly xmax: string;
+        readonly xip: readonly string[];
+      };
+    }
+  | {
+      readonly type: "baseline_sync_end";
+      readonly live_id: string;
+      readonly epoch: string;
+      readonly baseline_sync_attempt: string;
+      readonly batch_count: number;
     };
+
+/** How the stubbed socket answers each subscription: refused with a code, to be asked for again after a hint, or admitted with no rows. */
+type StubbedAdmission = { readonly refused: string } | "empty";
 
 /** A subscription Realtime's client sent, read off its frame; none for any other frame. */
 const readSubscribe = Schema.decodeUnknownOption(
@@ -718,16 +757,17 @@ const readSubscribe = Schema.decodeUnknownOption(
 );
 
 /**
- * Realtime's socket as a Realtime whose backend cannot start answers it,
- * stubbed where Realtime's own client opens one, the client's one process
- * boundary: ready at once, and every subscription refused with `code`, to be
- * asked for again after a hint, as production's proxy refused each one while
- * its backend's logical slot would not start.
+ * Realtime's socket, stubbed where Realtime's own client opens one, the
+ * client's one process boundary: ready at once, and every subscription
+ * answered as `admission` says: refused, to be asked for again after a hint,
+ * as production's proxy refused each one while its backend's logical slot
+ * would not start, or admitted with a result of no rows.
  */
-function refusingRealtimeSocket(code: string) {
-  return class RefusingRealtimeSocket {
+function stubbedRealtimeSocket(admission: StubbedAdmission) {
+  return class StubbedRealtimeSocket {
     readyState = 0;
     readonly #listeners: ((event: { readonly data: string }) => void)[] = [];
+    #lives = 0;
 
     constructor() {
       queueMicrotask(() => {
@@ -743,15 +783,39 @@ function refusingRealtimeSocket(code: string) {
     send(frame: string) {
       const subscribe = readSubscribe(frame);
       if (Option.isNone(subscribe)) return;
-      queueMicrotask(() =>
+      const { request_id } = subscribe.value;
+      if (admission !== "empty") {
+        const { refused } = admission;
+        queueMicrotask(() =>
+          this.#receive({
+            type: "subscribe_rejected",
+            request_id,
+            code: refused,
+            message: "Realtime is unavailable",
+            retry_after_ms: 30_000,
+          }),
+        );
+        return;
+      }
+      this.#lives += 1;
+      const live_id = String(this.#lives);
+      const version = { live_id, epoch: "1", baseline_sync_attempt: "1" };
+      queueMicrotask(() => {
         this.#receive({
-          type: "subscribe_rejected",
-          request_id: subscribe.value.request_id,
-          code,
-          message: "Realtime is unavailable",
-          retry_after_ms: 30_000,
-        }),
-      );
+          type: "subscribed",
+          request_id,
+          live_id,
+          epoch: "1",
+          first_sequence: "1",
+          columns: [{ name: "id", type_oid: 25, typmod: -1, codec: "pg_text" }],
+        });
+        this.#receive({
+          type: "baseline_sync_start",
+          ...version,
+          mvcc: { xmin: "1", xmax: "1", xip: [] },
+        });
+        this.#receive({ type: "baseline_sync_end", ...version, batch_count: 0 });
+      });
     }
 
     close() {
@@ -1374,7 +1438,7 @@ it.effect(
   "a follow Realtime will not admit is reported with what Realtime's own client last reported, its code among it, and no address or seal",
   () =>
     Effect.gen(function* () {
-      vi.stubGlobal("WebSocket", refusingRealtimeSocket("backend_unavailable"));
+      vi.stubGlobal("WebSocket", stubbedRealtimeSocket({ refused: "backend_unavailable" }));
       // Realtime's client loaded already, as a host that has followed before holds it.
       yield* Effect.promise(() => import("@neon/realtime/client"));
       const { call, seal } = yield* subject({ ownRealtime: true });
@@ -1398,21 +1462,63 @@ it.effect(
 );
 
 it.effect(
-  "a seal Realtime's own client refuses is let go and asked for again after a pause, rather than ending the follow",
+  "a seal Realtime's own client refuses is let go rather than ending the follow, which answers once the service seals again, every empty part counted as delivered",
   () =>
     Effect.gen(function* () {
-      vi.stubGlobal("WebSocket", refusingRealtimeSocket("backend_unavailable"));
+      vi.stubGlobal("WebSocket", stubbedRealtimeSocket("empty"));
       yield* Effect.promise(() => import("@neon/realtime/client"));
-      const { call, seal, asked } = yield* subject({ ownRealtime: true });
+      const { call, seal, inboxes } = yield* subject({ ownRealtime: true });
       // The scripted statements are no compact JWE, which Realtime's client throws on as it is handed one.
       seal(SEALED);
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
-      assert.deepEqual(asked, ["account-inbox-live"]);
+      assert.deepEqual(inboxes(), []);
 
+      seal(REALTIME_SEALED);
       yield* TestClock.adjust("5 seconds");
       yield* settled;
-      assert.deepEqual(asked, ["account-inbox-live", "account-inbox-live"]);
+      const published = inboxes().map((inbox) => {
+        const { cursor: _cursor, ...rest } =
+          Schema.decodeUnknownSync(accountInboxAnswerSchema)(inbox);
+        return rest;
+      });
+      assert.deepEqual(published, [
+        {
+          items: [],
+          plans: [],
+          planless: [],
+          automations: [],
+          failedRuns: [],
+          chat: [],
+          readAt: NOW,
+        },
+      ]);
+    }),
+);
+
+it.effect(
+  "what Realtime's client reported is said beside the attempt it was heard on and no later one: a seal the service then fails to answer is reported alone",
+  () =>
+    Effect.gen(function* () {
+      const { call, seal, realtime } = yield* subject();
+      const { lines, layer } = heard();
+      seal(SEALED);
+      yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+      yield* settled;
+      // The client reports trouble and its subscription stops; the service then seals nothing.
+      realtime.say("connection_lost");
+      realtime.fail("items");
+      seal(undefined);
+      yield* settled;
+
+      yield* TestClock.adjust("30 seconds");
+      yield* settled;
+      assert.deepEqual(
+        lines.filter((line) => line.includes("account inbox")),
+        [
+          "the account inbox's live read has not answered in 30 seconds: the service sealed nothing (unanswered)",
+        ],
+      );
     }),
 );
 

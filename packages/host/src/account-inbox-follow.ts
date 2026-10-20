@@ -48,9 +48,9 @@ import {
  * this a socket the page may not open (the web app's
  * `Content-Security-Policy`), or a Realtime whose backend cannot start,
  * leaves the account's inbox empty in silence. The report says too what
- * Realtime's client last reported going wrong for the subscription standing,
- * by its diagnostic's name and code alone (`troubleOf`), which tells those
- * two apart.
+ * Realtime's client last reported going wrong on the attempt whose end it
+ * names, by its diagnostic's name and code alone (`troubleOf`), which tells
+ * those two apart.
  *
  * Where the shell says when its page came back (`returns`: shown again, or
  * back online), a follow whose subscriptions had been live and dropped,
@@ -103,8 +103,8 @@ const NOT_DELIVERED = "Realtime has not delivered every part";
  */
 const ADMISSION_RETRIED = "subscription_retry_scheduled";
 
-/** A code as Realtime's protocol and client spell one; anything else beside a diagnostic is left unsaid. */
-const TROUBLE_CODE = /^[a-z][a-z0-9_]{0,63}$/u;
+/** A diagnostic's event or code as Realtime's protocol and client spell one; anything else is left unsaid. */
+const TROUBLE_WORD = /^[a-z][a-z0-9_]{0,63}$/u;
 
 /** The parts the account inbox is followed in, one sealed statement each. */
 const LIVE_PART = {
@@ -148,17 +148,17 @@ type TroubleHeard = (trouble: string) => void;
 /**
  * What one of Realtime's diagnostics says went wrong, or nothing where it
  * says nothing did: a warning, an error, or an admission it will ask for
- * again, named by the diagnostic's event and the code beside it. Note that
- * nothing else of the entry is said, because its error may carry what the
- * proxy answered, while an event's name and a code name no address, seal, or
- * row.
+ * again, named by the diagnostic's event and the code beside it, each only as
+ * Realtime spells one (`TROUBLE_WORD`). Note that nothing else of the entry
+ * is said, because its error may carry what the proxy answered, while an
+ * event's name and a code name no address, seal, or row.
  */
 function troubleOf(entry: RealtimeLogEntry): string | undefined {
-  if (entry.level !== "warn" && entry.level !== "error" && entry.event !== ADMISSION_RETRIED) {
-    return undefined;
-  }
+  const troubling =
+    entry.level === "warn" || entry.level === "error" || entry.event === ADMISSION_RETRIED;
+  if (!troubling || !TROUBLE_WORD.test(entry.event)) return undefined;
   const code = "code" in entry ? entry.code : undefined;
-  return code !== undefined && TROUBLE_CODE.test(code) ? `${entry.event} (${code})` : entry.event;
+  return code !== undefined && TROUBLE_WORD.test(code) ? `${entry.event} (${code})` : entry.event;
 }
 
 /**
@@ -371,7 +371,7 @@ export function followAccountInbox(
   return Effect.gen(function* () {
     let answered = false;
     let stopped = NOT_DELIVERED;
-    // What Realtime's client last reported going wrong for the subscription standing, if anything.
+    // What Realtime's client last reported going wrong on the attempt `stopped` describes, if anything.
     let trouble: string | undefined;
     const heard: TroubleHeard = (said) => {
       trouble = said;
@@ -420,6 +420,7 @@ export function followAccountInbox(
       const sealed = yield* dependencies.live();
       if ("failure" in sealed) {
         stopped = `the service sealed nothing (${sealed.failure})`;
+        trouble = undefined;
         return yield* pause;
       }
       stopped = NOT_DELIVERED;
