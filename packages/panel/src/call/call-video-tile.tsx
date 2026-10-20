@@ -18,7 +18,6 @@
 import {
   BUTTON_SHAPE,
   Button,
-  type ButtonShape,
   IconButton,
   ResetIcon,
   VideoIcon,
@@ -143,17 +142,15 @@ export function AvatarVoice({
 /**
  * Video off or Video on: one button that says which the press will do,
  * named on hover by the system's own hint, since the floating window is too
- * small to hold a tooltip. Over the tile it is `round`, a disc on the
- * tile's round ground, so its fill under the pointer is the ground's own
- * outline rather than a square inside a circle.
+ * small to hold a tooltip. It is round wherever it stands, as a call's own
+ * controls are, so the toggle keeps its shape as it flips; over the tile
+ * the disc is the round ground itself, never a square inside a circle.
  */
 export function VideoToggle({
   on,
-  shape = BUTTON_SHAPE.SQUARE,
   onSetVideo,
 }: {
   on: boolean;
-  shape?: ButtonShape;
   onSetVideo: (on: boolean) => void;
 }): React.JSX.Element {
   const label = on ? CALL_VIDEO_LABEL.VIDEO_OFF : CALL_VIDEO_LABEL.VIDEO_ON;
@@ -162,7 +159,7 @@ export function VideoToggle({
       <IconButton
         icon={on ? <VideoOffIcon /> : <VideoIcon />}
         label={label}
-        shape={shape}
+        shape={BUTTON_SHAPE.ROUND}
         onClick={() => onSetVideo(!on)}
       />
     </span>
@@ -197,7 +194,7 @@ export function CallVideoTile({
     <section className="call-video-tile" aria-label={CALL_VIDEO_LABEL.TILE} data-status={status}>
       <TileGround status={status} video={video} onRestart={() => onSetVideo(true)} />
       <div className="call-video-controls">
-        <VideoToggle on shape={BUTTON_SHAPE.ROUND} onSetVideo={onSetVideo} />
+        <VideoToggle on onSetVideo={onSetVideo} />
       </div>
     </section>
   );
