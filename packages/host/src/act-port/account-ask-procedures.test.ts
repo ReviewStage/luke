@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
+import { PROVIDER_KEY_KIND, PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import {
@@ -44,6 +44,9 @@ const REFUSAL = {
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_READ]: "Could not read your API keys on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_SAVE]: "Could not save your API key on this system.",
   [ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE]: "Could not remove your API key on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN]: "Could not sign in with ChatGPT on this system.",
+  [ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL]:
+    "Could not cancel the ChatGPT sign-in on this system.",
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: "Could not read your plan template on this system.",
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE]: "Could not save your plan template on this system.",
   [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_REVISIONS]:
@@ -66,6 +69,12 @@ const ACTS = [
     payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI },
     ask: "providerKeyRemove",
   },
+  {
+    kind: ACCOUNT_ASK_ACT_KIND.PROVIDER_KEYS_REMOVE,
+    payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI, kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH },
+    ask: "providerKeyRemove",
+  },
+  { kind: ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN, payload: undefined, ask: "chatGptSignIn" },
   { kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ, payload: undefined, ask: "planTemplateRead" },
   {
     kind: ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_WRITE,
@@ -121,7 +130,16 @@ function windowPort(
         return answer();
       });
   // SAFETY: each fake answers what its test hands it; the port's output schema checks it.
-  const host = Object.fromEntries(ACTS.map((act) => [act.ask, ask(act.ask)])) as HostAsk;
+  const host = Object.fromEntries([
+    ...ACTS.map((act) => [act.ask, ask(act.ask)]),
+    [
+      "chatGptSignInCancel",
+      () =>
+        Effect.sync(() => {
+          asked.push(["chatGptSignInCancel"]);
+        }),
+    ],
+  ]) as HostAsk;
   const port = testActPort(accountAskProcedures({ host }));
   ports.push(port);
   const client = port.as(actor, { trusted: options.trusted ?? true });
@@ -225,4 +243,19 @@ it("a payload its kind's schema refuses, or one sent to a kind that carries none
     { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ] },
   );
   assert.deepEqual(asked, []);
+});
+
+it("a ChatGPT sign-in waiting on the browser is withdrawn by a panel alone, and the voice window is refused", async () => {
+  const panel = windowPort(PANEL);
+  assert.deepEqual(
+    await settled(panel.client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, undefined),
+    { answer: undefined },
+  );
+  assert.deepEqual(panel.asked, [["chatGptSignInCancel"]]);
+  const voice = windowPort(VOICE);
+  assert.deepEqual(
+    await settled(voice.client, ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL, undefined),
+    { refused: REFUSAL[ACCOUNT_ASK_ACT_KIND.CHATGPT_SIGN_IN_CANCEL] },
+  );
+  assert.deepEqual(voice.asked, []);
 });

@@ -286,6 +286,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@luke/credentials": "workspace:*",
     "@modelcontextprotocol/sdk": "1.32.1",
     "@types/node": "catalog:",
     "@types/pg": "8.21.0",

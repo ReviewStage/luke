@@ -30,6 +30,15 @@ export const ACCOUNT_ASK_ACT_KIND = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /**
+   * Settings › Coding agents › Codex: Sign in with ChatGPT for Luke's hosted
+   * runtime, run by the host through the developer's browser, and the one
+   * waiting withdrawn. Nothing crosses from the renderer but the press, and
+   * the answer is the keys as the service then holds them: the sign-in's
+   * tokens go from the host to the service and never reach a window.
+   */
+  CHATGPT_SIGN_IN: "chatGpt.signIn",
+  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
+  /**
    * Settings › Integrations › GitHub: the member's own classic GitHub
    * personal access token read as its login, hint, and status, saved, and
    * removed. The save's payload carries the token from the renderer once,
