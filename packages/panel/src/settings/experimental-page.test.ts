@@ -178,7 +178,6 @@ test("with Video calls on, its avatar is chosen from every face at once in its c
     ),
   );
   assert.deepEqual(cards, [
-    ["GitHub personal access token"],
     ["Code review"],
     ["Browser tab"],
     ["Sections"],

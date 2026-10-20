@@ -171,15 +171,7 @@ test("an experiment is found by its name, what it brings, and what other apps ca
   for (const query of ["Experimental", "beta", "labs"]) {
     assert.deepEqual(
       experimentalFound(query, true),
-      [
-        "GitHub personal access token",
-        "Code review",
-        "Browser tab",
-        "Sections",
-        "Chat",
-        "Video calls",
-        "Factory",
-      ],
+      ["Code review", "Browser tab", "Sections", "Chat", "Video calls", "Factory"],
       query,
     );
   }
