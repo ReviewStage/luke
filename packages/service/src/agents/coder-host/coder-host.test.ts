@@ -16,6 +16,7 @@ import {
   archiveCodingAgent,
   type CodingAgentBriefText,
   createCodingAgent,
+  delegationsOf,
   fillCodingAgentTitle,
   hasRepository,
   latestTurnsOf,
@@ -29,7 +30,7 @@ import { holdSandbox } from "@luke/database/models/sandbox-terminal-lease";
 import { openTaskConversation, readTask, updateTask } from "@luke/database/models/task-store";
 import { type ConversationTarget, storeWriter } from "@luke/database/models/writer";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
-import { conversations, turns } from "@luke/database/schemas/storage";
+import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, joinWorkspace, leaveWorkspace, startTask } from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
@@ -55,7 +56,7 @@ import { noNetwork } from "@luke/wire/testing";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
+import { Clock, Duration, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -90,7 +91,7 @@ import {
 } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import type { RepositorySandbox } from "../repository-shell.js";
-import { CODER_REFUSAL } from "./bounds.js";
+import { CODER, CODER_REFUSAL } from "./bounds.js";
 import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
 import { type CoderHost, coderHost } from "./host.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
@@ -101,7 +102,13 @@ import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
 import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf, turnToolsOf } from "./tool-set.js";
-import { CURSOR_START, transcriptNow, transcriptPast } from "./transcript.js";
+import {
+  CURSOR_START,
+  titleMayLand,
+  titleWindowEdge,
+  transcriptNow,
+  transcriptPast,
+} from "./transcript.js";
 import { agentFollowedBy, transcriptLiveStatements } from "./transcript-live.js";
 
 /**
@@ -549,6 +556,50 @@ const liveRowsOf = (
 
 it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) => {
   it.effect(
+    "a line no turn takes after the agent's turn ended holds the read running, which the read says it wakes from once the line's grace ends",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target } = yield* openAgent(host);
+        const db = yield* Database;
+        const now = yield* Clock.currentTimeMillis;
+        yield* db.insert(turns).values({
+          userId,
+          conversationId: target.conversationId,
+          origin: TURN_ORIGIN.TYPED,
+          status: TURN_STATUS.SETTLED,
+          queuedAt: new Date(now - 60_000),
+          settledAt: new Date(now - 30_000),
+        });
+        const writtenAt = new Date(now - 10_000);
+        yield* db.insert(messages).values({
+          userId,
+          conversationId: target.conversationId,
+          seq: 50,
+          clientId: randomUUID(),
+          role: MESSAGE_ROLE.USER,
+          parts: [{ type: "text", text: "Are you there?" }],
+          placedAt: writtenAt,
+          createdAt: writtenAt,
+          turnId: null,
+        });
+        const read = (cursor: typeof CURSOR_START) =>
+          transcriptNow(target, CODER_TOOL_SET, cursor, agent, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
+          );
+        const first = yield* read(CURSOR_START);
+        const past = yield* read(first.page.cursor);
+
+        assert.equal(past.page.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(past.holds, true);
+        assert.equal(
+          past.wakeIn,
+          writtenAt.getTime() + Duration.toMillis(CODER.LINE_GRACE) + 1 - now,
+        );
+      }),
+  );
+
+  it.effect(
     "a transcript's live statements move at every write a page past the reader's cursor says something of, the agent's own and a worker's alike, and hold nothing for an account outside the agent's workspace, nor for a member once removed",
     () =>
       Effect.gen(function* () {
@@ -565,6 +616,16 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         let cursor = CURSOR_START;
         let read = yield* now(cursor);
         let rows = yield* liveRowsOf(target, parent);
+        // Before its first turn the agent is starting, which only the clock ends: the read says when.
+        assert.equal(read.page.status, CODING_AGENT_STATUS.STARTING);
+        assert.equal(read.holds, true);
+        assert.equal(
+          read.wakeIn,
+          agent.createdAt.getTime() +
+            Duration.toMillis(CODER.STARTING_GRACE) +
+            1 -
+            (yield* Clock.currentTimeMillis),
+        );
         let said = 0;
         for (const event of codingTurn("turn_0", "turn.completed")) {
           // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
@@ -594,6 +655,21 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.ok(said > 2, "the turn said something more than once");
         assert.equal(read.page.status, CODING_AGENT_STATUS.COMPLETED);
 
+        // Ended and untitled, the read holds on the title, until its window closes with the clock.
+        const ended = (yield* latestTurnsOf(userId, [parent])).get(parent)?.settledAt;
+        assert.ok(ended);
+        const awaiting = yield* transcriptNow(
+          target,
+          CODER_TOOL_SET,
+          cursor,
+          agent,
+          agent,
+          titleMayLand(target),
+          titleWindowEdge(target),
+        ).pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        assert.equal(awaiting.holds, true);
+        assert.equal(awaiting.wakeIn, ended.getTime() + 20_001 - (yield* Clock.currentTimeMillis));
+
         // A title landing is heard on the agent's own transcript.
         assert.equal(yield* fillCodingAgentTitle(userId, agent.id, "Teammate invitations"), true);
         const titled = yield* liveRowsOf(target, parent);
@@ -614,6 +690,13 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         yield* writeDelegation(child, workerCall, { model: agent.model, effort: agent.effort });
         const delegated = yield* liveRowsOf(worker, parent);
         assert.notEqual(delegated, opened);
+        // An untitled worker's read waits on its title until the window opened at its start closes.
+        const [recorded] = yield* delegationsOf(target);
+        assert.equal(recorded?.childConversationId, child);
+        assert.equal(
+          yield* titleWindowEdge(target, child),
+          (recorded?.createdAt.getTime() ?? 0) + 20_001,
+        );
         const ownBefore = yield* liveRowsOf(target, parent);
         assert.equal(yield* fillChildTitle(target, child, "Invite expiry"), true);
         assert.notEqual(yield* liveRowsOf(worker, parent), delegated);
