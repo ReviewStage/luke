@@ -247,15 +247,16 @@ const PAGE_FIND_SCRIPT = `(() => {
 
   // A find chord is the panel's, as it is anywhere else in the window: the page never sees it.
   addEventListener("keydown", (event) => {
-    if (!event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+    if (!event.metaKey || event.ctrlKey || event.altKey) return;
     const letter = event.key.toLowerCase();
     const key = letter === "f" && !event.shiftKey ? ${JSON.stringify(PAGE_FIND_KEY.FIND)}
       : letter === "g" ? (event.shiftKey ? ${JSON.stringify(PAGE_FIND_KEY.PREVIOUS)} : ${JSON.stringify(PAGE_FIND_KEY.NEXT)})
       : undefined;
     if (key === undefined) return;
+    // Note that a held chord's repeats stay the panel's too, though only the press runs it.
     event.preventDefault();
     event.stopImmediatePropagation();
-    post({ key });
+    if (!event.repeat) post({ key });
   }, true);
 
   document.addEventListener("selectionchange", () => {
