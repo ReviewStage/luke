@@ -692,6 +692,26 @@ test("while Factory's chunk is still loading its frame stands under its title, E
   );
 });
 
+test("while a version history's chunk is still loading, its Back row and Escape leave the history, as they do once it stands", async () => {
+  const closed: string[] = [];
+  const history = { ...tasksControl().history, open: true, onClose: () => closed.push("closed") };
+  handState({});
+  const page = mount(false, false, { history });
+  const versions = page.querySelector<HTMLElement>("nav[aria-label=Versions]");
+  assert.ok(versions, "the versions' column stands");
+  assert.equal(versions.querySelector("[role=listbox], ul"), null, "its chunk has not loaded yet");
+  const back = [...versions.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim().startsWith("Back") === true,
+  );
+  assert.ok(back, "the Back row stands");
+  act(() => back.click());
+  act(() => {
+    assert.ok(runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY), "Escape leaves the history");
+  });
+  assert.deepEqual(closed, ["closed", "closed"]);
+  await settle();
+});
+
 test("the Automations page stands in the plan's place, titled for the listed workspace", async () => {
   const closed: string[] = [];
   const automationsView = {

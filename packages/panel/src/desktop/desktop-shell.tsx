@@ -2,13 +2,15 @@ import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot
 import type { Task } from "@luke/features/task-wire";
 import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND, APP_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
+  BackIcon,
   COLLECTION_STATE,
   CollectionPage,
   ComposeIcon,
   DetailPage,
   IconButton,
+  NavItem,
   PAGE_FRAME,
   ScrollArea,
   SettingsPage,
@@ -29,6 +31,7 @@ import type { NavigationHistory, WindowHistory } from "../navigation-history.js"
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { type HiddenColumns, hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { Shortcut } from "../shortcut.js";
 import { SignInGate } from "../sign-in-gate.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards.js";
@@ -41,7 +44,7 @@ import {
   type AutomationsPlace,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
-import { Tooltip } from "../tooltip.js";
+import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
@@ -164,8 +167,8 @@ const PERSON_SKELETON_NAME = "180px";
 
 /**
  * What stands while a version history's chunk loads: its frame, the list's
- * column under its title where the sidebar stood, and its own way out, so
- * Escape leaves the history as it would once drawn.
+ * column where the sidebar stood, and its own way out, its Back row and
+ * Escape, so the history is left as it would be once drawn.
  */
 function VersionHistoryLoading({
   onExit,
@@ -179,6 +182,14 @@ function VersionHistoryLoading({
     <div className="desktop-version-history">
       <nav className="version-log" aria-label="Versions" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
+        <NavItem
+          icon={<BackIcon />}
+          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_VERSION_HISTORY)}
+          shortcut={<Shortcut chord={APP_SHORTCUTS[APP_COMMAND.EXIT_VERSION_HISTORY].chord} />}
+          onClick={onExit}
+        >
+          Back
+        </NavItem>
       </nav>
       <section className="version-page" aria-label="Version" hidden={hidden.item}>
         <div className="desktop-drag-strip" />
