@@ -6,7 +6,7 @@ import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   ensureGeneral,
   ensureMember,
-  findOrMakeDm,
+  openTopicChannel,
   postAsk,
   postMessage,
 } from "@luke/database/models/chat-store";
@@ -16,7 +16,13 @@ import { createTask } from "@luke/database/models/task-store";
 import { type AwaitingLineMetadata, storeWriter } from "@luke/database/models/writer";
 import { user } from "@luke/database/schemas/auth";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
+import {
+  getTestDB,
+  joinWorkspace,
+  openWorkspace,
+  startTask,
+  turnIntoDm,
+} from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import {
   CHANNEL_KIND,
@@ -326,8 +332,8 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
             userId: room.owner,
           }),
         );
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(room.owner, room.workspace, ownerMember.id, teammateMember.id),
+        const dm = Result.getOrThrow(
+          yield* openTopicChannel(room.owner, room.workspace, "just-us", ownerMember.id),
         );
         yield* postMessage(room.owner, room.workspace, {
           authorMemberId: ownerMember.id,
@@ -335,6 +341,7 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Just between us." }],
           clientKey: randomUUID(),
         });
+        yield* turnIntoDm(dm.id, ownerMember.id, teammateMember.id);
 
         const read = yield* room.read(CHAT_CURSOR_START, room.teammate);
         assert.ok(read.channels.every((channel) => channel.kind !== CHANNEL_KIND.DM));
@@ -525,15 +532,7 @@ it.layer(getTestDB())("a person's chat post told to an agent through eve", (it) 
           sessionId,
           yield* DateTime.nowAsDate,
         );
-        const poster = Option.getOrThrow(
-          yield* ensureMember(teammate, workspace, { kind: MEMBER_KIND.HUMAN, userId: teammate }),
-        );
-        const agentMember = Option.getOrThrow(
-          yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.AGENT, agentId: agent.id }),
-        );
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(teammate, workspace, poster.id, agentMember.id),
-        );
+        yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.AGENT, agentId: agent.id });
 
         // eve answers on the same fake client GitHub does, and every request is written down in `github.sent`.
         const eveAt = `${ORIGIN}/eve/coder/v1/session/`;
@@ -543,8 +542,7 @@ it.layer(getTestDB())("a person's chat post told to an agent through eve", (it) 
             : undefined,
         );
         const answer = yield* writeWorkspaceChat({ eveOrigin: () => ORIGIN }, teammate, workspace, {
-          text: "The invite table is yours.",
-          channelId: dm.id,
+          text: `[@Invites](https://tryluke.dev/acme/plan/${task.id}/agent/${agent.id}) the invite table is yours.`,
           clientKey: randomUUID(),
         }).pipe(
           Effect.provide(Layer.merge(github.layer, Layer.succeed(HostedEnvironment, BOTH_SECRETS))),

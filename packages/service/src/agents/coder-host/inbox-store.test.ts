@@ -11,8 +11,8 @@ import {
 import {
   ensureMember,
   ensureTaskChannel,
-  findOrMakeDm,
   markNoticed,
+  openTopicChannel,
   postAsk,
   postMessage,
 } from "@luke/database/models/chat-store";
@@ -23,7 +23,13 @@ import { automation as automationTable } from "@luke/database/schemas/automation
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { inboxItem } from "@luke/database/schemas/inbox";
 import { inboxItemRead } from "@luke/database/schemas/inbox-item-read";
-import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
+import {
+  getTestDB,
+  joinWorkspace,
+  openWorkspace,
+  startTask,
+  turnIntoDm,
+} from "@luke/database/testing";
 import { ACCOUNT_CHAT_REASON } from "@luke/features/account-inbox-wire";
 import {
   AUTOMATION_ACTION,
@@ -350,8 +356,9 @@ it.layer(getTestDB())("the inbox store", (it) => {
             },
           }),
         );
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(owner, workspace, agentMember.id, teammateMember.id),
+        // A DM made before the chat held none, its notice to the teammate left standing.
+        const dm = Result.getOrThrow(
+          yield* openTopicChannel(owner, workspace, "old-dm", agentMember.id),
         );
         const direct = Result.getOrThrow(
           yield* postMessage(owner, workspace, {
@@ -361,6 +368,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
             clientKey: randomUUID(),
           }),
         );
+        yield* turnIntoDm(dm.id, agentMember.id, teammateMember.id);
         assert.ok(
           yield* markNoticed(owner, workspace, teammateMember.id, dm.id, direct.message.seq),
         );

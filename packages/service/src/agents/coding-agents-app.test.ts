@@ -20,7 +20,6 @@ import {
   type ChatMemberRow,
   ensureMember,
   ensureTaskChannel,
-  findOrMakeDm,
   history,
   postAsk,
   postMessage,
@@ -6792,26 +6791,14 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
-    "a DM steers the other agent once as a chat-marked line of its own, a second while the first is unread is held, and one after it reads is told",
+    "a post naming another agent steers it once as a chat-marked line of its own, a second while the first is unread is held, and one after it reads is told",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
         const chat = yield* openChat(eve);
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(
-            chat.owner,
-            chat.workspace,
-            chat.first.member.id,
-            chat.second.member.id,
-          ),
-        );
+        const words = `${chat.links.second} the invite table is mine.`;
         const key = randomUUID();
-        const sent = yield* chat.post(
-          chat.first.member,
-          "The invite table is mine.",
-          { channelId: dm.id },
-          key,
-        );
+        const sent = yield* chat.post(chat.first.member, words, undefined, key);
         assert.deepEqual(sent.receipt, {
           told: [chat.links.second],
           held: [],
@@ -6835,7 +6822,7 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         const noticeLine = notice.message.parts.flatMap((part) =>
           part.type === "text" ? [part.text] : [],
         );
-        assert.deepEqual(noticeLine.map(chatNoticeWords), ["The invite table is mine."]);
+        assert.deepEqual(noticeLine.map(chatNoticeWords), [words]);
         assert.deepEqual(
           (yield* lineSendersOf(chat.second.target, [notice.message.id])).get(notice.message.id),
           // An agent's notice names it by its name, and by its member's agent and the model that agent posted under.
@@ -6862,20 +6849,15 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
             agent: { id: chat.first.agent.id, taskId: chat.first.agent.planId ?? undefined },
           },
         );
-        const again = yield* chat.post(
-          chat.first.member,
-          "The invite table is mine.",
-          { channelId: dm.id },
-          key,
-        );
+        const again = yield* chat.post(chat.first.member, words, undefined, key);
         assert.equal(again.repeated, true);
         assert.equal(eve.sent.length, 1);
 
-        const held = yield* chat.post(chat.first.member, "And the emails.", { channelId: dm.id });
+        const held = yield* chat.post(chat.first.member, `${chat.links.second} and the emails.`);
         assert.deepEqual(held.receipt.held, [chat.links.second]);
         assert.equal(eve.sent.length, 1);
         yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
-        const told = yield* chat.post(chat.first.member, "Done now.", { channelId: dm.id });
+        const told = yield* chat.post(chat.first.member, `${chat.links.second} done now.`);
         assert.deepEqual(told.receipt.told, [chat.links.second]);
         assert.equal(eve.sent.length, 2);
       }),
@@ -6888,14 +6870,13 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         const chat = yield* openChat();
         yield* chooseChat(chat.owner, false);
         const telling = { ...chat.telling, doors: CHAT_DOORS };
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
-        );
         const before = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
+        const text = `${chat.links.person} can I take the invite file too?`;
         yield* postChat(telling, {
           authorMemberId: chat.first.member.id,
-          to: { channelId: dm.id },
-          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
+          to: { channelId: chat.channel.id },
+          blocks: [{ type: CHAT_BLOCK.MARKDOWN, text }],
+          ...namedIn(text),
           clientKey: randomUUID(),
         }).pipe(Effect.provide(chat.github.layer));
         const after = yield* accountInboxPast(chat.owner, INBOX_CURSOR_START);
@@ -7051,32 +7032,6 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         );
         const silenced = yield* chat.post(chat.second.member, "Still here.").pipe(Effect.result);
         assert.ok(Result.isFailure(silenced));
-      }),
-  );
-
-  it.effect(
-    "a DM tells its other member alone, a mention in it naming no one else, so its words reach no one who may not read them",
-    () =>
-      Effect.gen(function* () {
-        const eve = fakeEve();
-        const chat = yield* openChat(eve);
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(chat.owner, chat.workspace, chat.first.member.id, chat.person.id),
-        );
-        const sent = yield* chat.post(
-          chat.first.member,
-          `${chat.links.second} is slow, between us.`,
-          {
-            channelId: dm.id,
-          },
-        );
-        assert.deepEqual(sent.receipt, {
-          told: [],
-          held: [chat.links.person],
-          left: [],
-          unresolved: [],
-        });
-        assert.equal(eve.sent.length, 0);
       }),
   );
 
@@ -7239,14 +7194,6 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
       Effect.gen(function* () {
         const eve = fakeEve();
         const chat = yield* openChat(eve);
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(
-            chat.owner,
-            chat.workspace,
-            chat.first.member.id,
-            chat.second.member.id,
-          ),
-        );
         const titled = (title: string) =>
           Database.use((db) =>
             db.update(codingAgent).set({ title }).where(eq(codingAgent.id, chat.first.agent.id)),
@@ -7260,11 +7207,11 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
         });
         // Each emoji is two UTF-16 units, so after one letter the bound falls between an emoji's halves.
         yield* titled(`a${"🙂".repeat(100)}`);
-        yield* chat.post(chat.first.member, "Long name.", { channelId: dm.id });
+        yield* chat.post(chat.first.member, `${chat.links.second} long name.`);
         assert.equal(yield* fromOf, `a${"🙂".repeat((CHAT_NOTICE_FROM_CHARS - 2) / 2)}`);
         yield* unreadFor(chat.owner, chat.workspace, chat.second.member.id);
         yield* titled("   ");
-        yield* chat.post(chat.first.member, "No name.", { channelId: dm.id });
+        yield* chat.post(chat.first.member, `${chat.links.second} no name.`);
         assert.equal(yield* fromOf, CHAT_MEMBER_LABEL.FORMER_AGENT);
       }),
   );

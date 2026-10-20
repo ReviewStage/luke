@@ -1024,9 +1024,10 @@ function cursorIn(readerId: string, floor: Column | number, channelId: Column | 
 }
 
 /**
- * Stamps the notice told where none is outstanding: none stands, or the
- * member's cursor in its channel has passed it; and where the member has
- * not read the told channel past it already.
+ * Stamps the notice told where none is outstanding: none stands, the
+ * member's cursor in its channel has passed it, or it stands in a DM, which
+ * no one reads while the chat holds none; and where the member has not
+ * read the told channel past it already.
  */
 const claimNotice = SqlSchema.findAll({
   Request: Schema.Struct({ ...ReadKeySchema.fields, channelId: Schema.String, seq: Schema.Number }),
@@ -1045,6 +1046,18 @@ const claimNotice = SqlSchema.findAll({
             or(
               isNull(chatMember.noticeSeq),
               sql`${chatMember.noticeSeq} <= ${cursorIn(key.readerId, chatMember.readSeq, chatMember.noticeChannelId)}`,
+              // A notice standing in a DM made before the chat held none can never be read, so it holds back no other.
+              exists(
+                db
+                  .select({ id: chatChannel.id })
+                  .from(chatChannel)
+                  .where(
+                    and(
+                      eq(chatChannel.id, chatMember.noticeChannelId),
+                      eq(chatChannel.kind, CHANNEL_KIND.DM),
+                    ),
+                  ),
+              ),
             ),
           ),
         )
@@ -1150,25 +1163,19 @@ function lockedFor(userId: string, organizationId: string): ChatStoreEffect<bool
 }
 
 /**
- * The condition that the reader may see the channel a statement reads:
- * every channel for a person; any but a DM, and a DM it is one of, for an
- * agent or a planner.
+ * The condition that the reader may see the channel a statement reads: any
+ * but a DM, for every member. Note that the chat holds no direct messages
+ * for now, one agent telling another alone through `message_agent`, so a DM
+ * made before stands in the store and is read by no one: no read, no
+ * thread, no reply to it, and no ask in it reaches anyone.
  */
-function visibleTo(reader: ChatMemberRow): SQL {
-  if (reader.kind === MEMBER_KIND.HUMAN) return sql`true`;
-  return (
-    or(
-      ne(chatChannel.kind, CHANNEL_KIND.DM),
-      eq(chatChannel.dmAMemberId, reader.id),
-      eq(chatChannel.dmBMemberId, reader.id),
-    ) ?? sql`false`
-  );
+function visibleTo(_reader: ChatMemberRow): SQL {
+  return ne(chatChannel.kind, CHANNEL_KIND.DM);
 }
 
-/** Whether the author may post in the channel: any but a DM, and a DM it is one of. */
-function postsIn(author: ChatMemberRow, channel: ChatChannelRow): boolean {
-  if (channel.kind !== CHANNEL_KIND.DM) return true;
-  return channel.dmAMemberId === author.id || channel.dmBMemberId === author.id;
+/** Whether a post may land in the channel: any but a DM, which takes no post, not even a reply in a thread of one, while the chat holds none. */
+function postsIn(channel: ChatChannelRow): boolean {
+  return channel.kind !== CHANNEL_KIND.DM;
 }
 
 /** Whether the reader may see the channel, which must be of its workspace: as `visibleTo` reads it. */
@@ -1177,7 +1184,7 @@ function seesChannel(reader: ChatMemberRow, channelId: string): ChatStoreEffect<
     findChannelInWorkspace({ organizationId: reader.organizationId, channelId }),
     Option.match({
       onNone: () => false,
-      onSome: (channel) => reader.kind === MEMBER_KIND.HUMAN || postsIn(reader, channel),
+      onSome: postsIn,
     }),
   );
 }
@@ -1717,7 +1724,7 @@ function placePost(
     });
     const channel = yield* findChannelInWorkspace({ organizationId, channelId });
     if (Option.isNone(channel)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
-    if (!postsIn(author.value, channel.value)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
+    if (!postsIn(channel.value)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
     if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
     // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
     const named = yield* Effect.forEach(post.subjects ?? [], ({ subject, label }) =>

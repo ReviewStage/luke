@@ -20,7 +20,7 @@ import { attachment } from "../../schemas/attachment.js";
 import { member, organization, user } from "../../schemas/auth.js";
 import { chatMessage, workspaceChat } from "../../schemas/chat.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { getTestDB } from "../../testing/index.js";
+import { getTestDB, turnIntoDm } from "../../testing/index.js";
 import {
   agentMembersOf,
   agentWorkspace,
@@ -578,6 +578,20 @@ const openRoom = Effect.gen(function* () {
     });
   const posted = (...args: Parameters<typeof post>) =>
     Effect.map(post(...args), (result) => Result.getOrThrow(result).message);
+  /** A DM between the two members, filled as given, as one made before the chat held none stands: a channel filled, then turned into the DM. */
+  const legacyDm = <A, E, R>(
+    a: ChatMemberRow,
+    b: ChatMemberRow,
+    fill: (channelId: string) => Effect.Effect<A, E, R>,
+  ) =>
+    Effect.gen(function* () {
+      const opened = Result.getOrThrow(
+        yield* openTopicChannel(owner, workspace, `old-${randomUUID().slice(0, 8)}`, ada.id),
+      );
+      const filled = yield* fill(opened.id);
+      yield* turnIntoDm(opened.id, a.id, b.id);
+      return { channel: opened, filled };
+    });
   return {
     owner,
     teammate,
@@ -590,6 +604,7 @@ const openRoom = Effect.gen(function* () {
     channel,
     post,
     posted,
+    legacyDm,
   };
 });
 
@@ -839,38 +854,46 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
   );
 
   it.effect(
-    "every person reads every DM, one with a person in it included, an agent reads only its own, and only a DM's pair posts in it",
+    "no one reads a DM made before the chat held none, its own two included, no one posts in it or replies in its threads, and a notice standing in one holds back no other",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
-        const third = Option.getOrThrow(
-          yield* ensureMember(room.owner, room.workspace, {
-            kind: MEMBER_KIND.AGENT,
-            agentId: yield* openAgent(room.owner, room.plan),
-          }),
+        const personal = yield* room.legacyDm(room.first, room.ada, (channelId) =>
+          room.posted(room.first, "For Ada.", { channelId }),
         );
-        const dm = (a: ChatMemberRow, b: ChatMemberRow) =>
-          Effect.map(findOrMakeDm(room.owner, room.workspace, a.id, b.id), Option.getOrThrow);
-        const personal = yield* dm(room.ada, room.first);
-        const between = yield* dm(room.first, room.second);
-        const toAda = yield* room.posted(room.first, "For Ada.", { channelId: personal.id });
-        const toSecond = yield* room.posted(room.first, "For agent-2.", { channelId: between.id });
+        const between = yield* room.legacyDm(room.first, room.second, (channelId) =>
+          room.posted(room.first, "For agent-2.", { channelId }),
+        );
         const seen = (reader: ChatMemberRow) =>
           Effect.map(chatPast(room.owner, room.workspace, reader.id, 0), (read) =>
             Option.getOrThrow(read).messages.map((message) => message.id),
           );
-
-        assert.deepEqual(yield* seen(room.ada), [toAda.id, toSecond.id]);
-        assert.deepEqual(yield* seen(room.grace), [toAda.id, toSecond.id]);
-        assert.deepEqual(yield* seen(room.second), [toSecond.id]);
-        assert.deepEqual(yield* seen(third), []);
+        for (const reader of [room.ada, room.grace, room.first, room.second]) {
+          assert.deepEqual(yield* seen(reader), []);
+        }
         assert.deepEqual(
-          yield* room.post(room.grace, "Butting in.", { channelId: personal.id }, room.teammate),
+          yield* room.post(room.first, "Still for Ada.", { channelId: personal.channel.id }),
           Result.fail(CHAT_REFUSAL.NOT_FOUND),
         );
         assert.deepEqual(
-          yield* room.post(room.grace, "Steering them.", { channelId: between.id }, room.teammate),
+          yield* room.post(room.second, "Noted.", { replyTo: between.filled.seq }),
           Result.fail(CHAT_REFUSAL.NOT_FOUND),
+        );
+        // A notice stamped in the DM before can never be read away, so the next notice is told past it.
+        assert.equal(
+          yield* markNoticed(
+            room.owner,
+            room.workspace,
+            room.second.id,
+            between.channel.id,
+            between.filled.seq,
+          ),
+          true,
+        );
+        const told = yield* room.posted(room.first, `${agentLink(room.second)} ping.`);
+        assert.equal(
+          yield* markNoticed(room.owner, room.workspace, room.second.id, room.channel.id, told.seq),
+          true,
         );
       }),
   );
@@ -906,18 +929,23 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
       Effect.gen(function* () {
         const room = yield* openRoom;
         const posted = yield* room.posted(room.first, "In the channel.");
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(room.owner, room.workspace, room.first.id, room.ada.id),
+        const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
+        const elsewhere = yield* room.posted(room.first, "In general.", { channelId: general.id });
+        const old = yield* room.legacyDm(room.first, room.ada, (channelId) =>
+          room.posted(room.first, "To Ada alone.", { channelId }),
         );
-        const private_ = yield* room.posted(room.first, "To Ada alone.", { channelId: dm.id });
         const at = (reader: ChatMemberRow, seq: number) =>
           Effect.map(
             messageAt(room.owner, room.workspace, reader.id, seq),
             Option.map((message) => message.id),
           );
         assert.deepEqual(yield* at(room.ada, posted.seq), Option.some(posted.id));
-        assert.deepEqual(yield* at(room.ada, private_.seq), Option.some(private_.id));
-        assert.deepEqual(yield* at(room.second, private_.seq), Option.none());
+        assert.deepEqual(yield* at(room.second, elsewhere.seq), Option.some(elsewhere.id));
+        assert.deepEqual(
+          yield* at(room.ada, old.filled.seq),
+          Option.none(),
+          "a DM is read by no one",
+        );
         assert.deepEqual(yield* at(room.ada, 999), Option.none());
 
         assert.equal(
@@ -930,7 +958,7 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
         );
         // The notice it passed is let go, so the next one is told.
         assert.equal(
-          yield* markNoticed(room.owner, room.workspace, room.ada.id, dm.id, private_.seq),
+          yield* markNoticed(room.owner, room.workspace, room.ada.id, general.id, elsewhere.seq),
           true,
         );
         assert.deepEqual(
@@ -939,11 +967,11 @@ it.layer(getTestDB())("the chat store's messages, sequence, and cursors", (it) =
         );
         assert.deepEqual(
           yield* readAllTo(room.owner, room.workspace, room.ada.id, 999),
-          Option.some(private_.seq),
+          Option.some(old.filled.seq),
         );
         // A person moves no other person's cursor.
         assert.deepEqual(
-          yield* readAllTo(room.teammate, room.workspace, room.ada.id, private_.seq),
+          yield* readAllTo(room.teammate, room.workspace, room.ada.id, elsewhere.seq),
           Option.none(),
         );
         assert.deepEqual(
@@ -1345,14 +1373,12 @@ it.layer(getTestDB())("the chat store's asks", (it) => {
         const room = yield* openRoom;
         const inChannel = yield* ask(room, room.first, "in-channel", "Which expiry?");
         yield* ask(room, room.ada, "adas-own", "My own question.");
-        const toAda = Option.getOrThrow(
-          yield* findOrMakeDm(room.owner, room.workspace, room.second.id, room.ada.id),
+        yield* room.legacyDm(room.second, room.ada, (channelId) =>
+          ask(room, room.second, "to-ada", "Ada, which?", channelId),
         );
-        yield* ask(room, room.second, "to-ada", "Ada, which?", toAda.id);
-        const between = Option.getOrThrow(
-          yield* findOrMakeDm(room.owner, room.workspace, room.first.id, room.second.id),
+        yield* room.legacyDm(room.first, room.second, (channelId) =>
+          ask(room, room.first, "between-agents", "agent-2, which?", channelId),
         );
-        yield* ask(room, room.first, "between-agents", "agent-2, which?", between.id);
         const answered = yield* ask(room, room.second, "answered", "Answered?");
         yield* answer(room, room.grace, answered.message.seq, 1, undefined, room.teammate);
 
@@ -1845,7 +1871,7 @@ it.layer(getTestDB())("the chat store's reads for telling a message", (it) => {
 
 it.layer(getTestDB())("a plan's chat moving with the plan", (it) => {
   it.effect(
-    "a plan moved to another workspace takes its channel, messages, thread, and ask there at the end of that workspace's sequence, its agents minted again, while a DM elsewhere stays and the old workspace reads none of the plan's chat",
+    "a plan moved to another workspace takes its channel, messages, thread, and ask there at the end of that workspace's sequence, its agents minted again, while what was said elsewhere stays and the old workspace reads none of the plan's chat",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
@@ -1871,10 +1897,8 @@ it.layer(getTestDB())("a plan's chat moving with the plan", (it) => {
           reply: { reply: CHAT_REPLY.CHOSE, choices: ["Seven days"] },
           clientKey: randomUUID(),
         });
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(room.owner, room.workspace, room.first.id, room.second.id),
-        );
-        const stays = yield* room.posted(room.first, "Between us.", { channelId: dm.id });
+        const general = Option.getOrThrow(yield* ensureGeneral(room.owner, room.workspace));
+        const stays = yield* room.posted(room.first, "For everyone.", { channelId: general.id });
         const destination = yield* openWorkspace(room.owner);
 
         yield* updateTask(room.owner, room.plan, { organizationId: destination });
@@ -2039,27 +2063,24 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
   );
 
   it.effect(
-    "an agent reads and marks no DM it is not one of, and an account not in the workspace reads no counts",
+    "no member reads, counts, or marks a DM made before the chat held none, its own two included, and an account not in the workspace reads no counts",
     () =>
       Effect.gen(function* () {
         const room = yield* openRoom;
-        const dm = Option.getOrThrow(
-          yield* findOrMakeDm(room.owner, room.workspace, room.first.id, room.ada.id),
+        const { channel: dm } = yield* room.legacyDm(room.first, room.ada, (channelId) =>
+          room.posted(room.ada, "Just us.", { channelId }),
         );
-        yield* room.posted(room.ada, "Just us.", { channelId: dm.id });
-        assert.deepEqual(
-          yield* unreadFor(room.owner, room.workspace, room.second.id, { channelId: dm.id }),
-          Option.none(),
-        );
-        assert.equal(yield* readTo(room.owner, room.workspace, room.second.id, dm.id, 1), false);
-        assert.deepEqual(
-          Option.getOrThrow(yield* unreadCounts(room.owner, room.workspace, room.second.id)),
-          [],
-        );
-        assert.deepEqual(
-          Option.getOrThrow(yield* unreadCounts(room.owner, room.workspace, room.first.id)),
-          [{ channelId: dm.id, unread: 1 }],
-        );
+        for (const reader of [room.first, room.second]) {
+          assert.deepEqual(
+            yield* unreadFor(room.owner, room.workspace, reader.id, { channelId: dm.id }),
+            Option.none(),
+          );
+          assert.equal(yield* readTo(room.owner, room.workspace, reader.id, dm.id, 1), false);
+          assert.deepEqual(
+            Option.getOrThrow(yield* unreadCounts(room.owner, room.workspace, reader.id)),
+            [],
+          );
+        }
         const stranger = yield* openAccount();
         assert.deepEqual(
           yield* unreadCounts(stranger, room.workspace, room.first.id),
