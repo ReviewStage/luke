@@ -489,7 +489,7 @@ function listRead(
     return {
       agents: [automationId === null ? agent : { ...agent, automationId }],
       workspaceId: answer.agent.workspaceId,
-      repository: answer.agent.repository,
+      ...(answer.agent.repository === null ? undefined : { repository: answer.agent.repository }),
       ...(origin === undefined ? undefined : { origin }),
     };
   });
@@ -1141,10 +1141,14 @@ export function useCodingAgents(input: {
     );
   }, []);
 
+  // Every transcript page says where its agent stands, mostly as it stood:
+  // the list is kept as it was then, so the window is not drawn again for it.
   const onStatus = useCallback((agentId: string, run: AgentRun) => {
-    setList((was) =>
-      was.agents === undefined ? was : { ...was, agents: withAgentRun(was.agents, agentId, run) },
-    );
+    setList((was) => {
+      if (was.agents === undefined) return was;
+      const agents = withAgentRun(was.agents, agentId, run);
+      return agents === was.agents ? was : { ...was, agents };
+    });
   }, []);
 
   const readTranscript = useCallback<TranscriptReader>(

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { BUTTON_SHAPE } from "@luke/ui";
 import { AVATAR_STATUS } from "@luke/voice/avatar";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -93,6 +94,14 @@ test("a live avatar plays its video track", () => {
   assert.doesNotMatch(container.textContent ?? "", new RegExp(CALL_VIDEO_LABEL.CONNECTING));
 });
 
+test("a live avatar's picture is filled out by a blurred copy of the same track, hidden from a reader", () => {
+  const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
+  const fill = container.querySelector<HTMLVideoElement>(".call-video-fill");
+  assert.deepEqual(playing(fill), [VIDEO]);
+  assert.equal(fill?.getAttribute("aria-hidden"), "true");
+  assert.deepEqual(playing(container.querySelector(".call-video-frame")), [VIDEO]);
+});
+
 test("a live avatar with no video track draws Luke's face as a still frame", () => {
   const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE }));
   assert.equal(container.querySelector("video"), null);
@@ -155,4 +164,11 @@ test("the avatar's voice is let go of once its track is", () => {
   act(() => root.render(voice({ audio: undefined })));
   assert.equal(container.querySelector("audio"), audio);
   assert.equal(playing(audio), undefined);
+});
+
+test("the video toggle is round whichever way it flips, as the call's own controls are", () => {
+  const live = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO })).container;
+  assert.equal(button(live, CALL_VIDEO_LABEL.VIDEO_OFF)?.dataset.shape, BUTTON_SHAPE.ROUND);
+  const off = mountRoot(tile({ status: AVATAR_STATUS.OFF })).container;
+  assert.equal(button(off, CALL_VIDEO_LABEL.VIDEO_ON)?.dataset.shape, BUTTON_SHAPE.ROUND);
 });

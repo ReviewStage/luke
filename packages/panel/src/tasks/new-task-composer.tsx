@@ -17,14 +17,10 @@ import { TASK_BOUNDS, TASK_STATUS } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
-  BUTTON_SIZE,
-  BUTTON_VARIANT,
-  Button,
   CHIP_LOOK,
   CHIP_WIDTH,
   Chip,
   ChipName,
-  IconButton,
   PencilIcon,
   TaskStatusMark,
   TEXT_ELEMENT,
@@ -595,30 +591,21 @@ export function NewTaskComposer({
             <NewTaskLinks links={links} disabled={starting} onChange={setLinks} />
           )
         }
-        beforeSend={(narrow) =>
-          // Note that a card too narrow for the words draws the backlog's mark in their place, still named, so Start keeps its room.
-          narrow ? (
-            <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
-              <IconButton
-                icon={<TaskStatusMark status={TASK_STATUS.BACKLOG} />}
-                label={COMPOSER_WORDS.FILE}
-                disabled={starting || !filable}
-                onClick={file}
-              />
-            </Tooltip>
-          ) : (
-            <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
-              <Button
-                variant={BUTTON_VARIANT.OUTLINE}
-                size={BUTTON_SIZE.COMPACT}
-                disabled={starting || !filable}
-                onClick={file}
-              >
-                {COMPOSER_WORDS.FILE}
-              </Button>
-            </Tooltip>
-          )
-        }
+        beforeSend={(narrow) => (
+          // Note that File for later is a chip as the Plan toggle is, and a card too narrow for its words draws the backlog's mark alone, still named, so Start keeps its room.
+          <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
+            <Chip
+              look={CHIP_LOOK.FILTER}
+              iconOnly={narrow}
+              aria-label={COMPOSER_WORDS.FILE}
+              disabled={starting || !filable}
+              onClick={file}
+            >
+              <TaskStatusMark status={TASK_STATUS.BACKLOG} />
+              <ChipName>{COMPOSER_WORDS.FILE}</ChipName>
+            </Chip>
+          </Tooltip>
+        )}
         actions={(narrow) => (
           <span className="new-task-plan-toggle">
             <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>

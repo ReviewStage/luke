@@ -48,7 +48,7 @@ const commitSchema = EffectSchema.NonEmptyString;
 const generationCommits = { headSha: commitSchema, baseSha: commitSchema };
 
 /** The pull request's newest chapters, by where their generation stands. */
-export const pullRequestChaptersStateSchema = EffectSchema.Union([
+const pullRequestChaptersStateSchema = EffectSchema.Union([
   EffectSchema.Struct({ status: EffectSchema.Literal(PULL_REQUEST_CHAPTERS_STATE.NONE) }),
   EffectSchema.Struct({
     status: EffectSchema.Literal(PULL_REQUEST_CHAPTERS_STATE.GENERATING),

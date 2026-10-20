@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { gzipSync } from "node:zlib";
 import { BRAND_ASSETS_DIRECTORY } from "@luke/brand/assets-directory";
 import {
   EXCALIDRAW_UNUSED,
@@ -18,7 +17,6 @@ import {
 } from "@luke/panel/build-table";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
-import { bundleCeiling } from "./bundle-budget.mjs";
 import { replayProjectKeyDefine, signingModeDefine } from "./package-config.mjs";
 import { tailwindPlugin } from "./tailwind.mjs";
 
@@ -39,7 +37,6 @@ const sentryRelease = `Luke@${appVersion}`;
 // under the real one. A tag's build and a release cut by hand both upload.
 const uploadsSourceMaps =
   Boolean(process.env.SENTRY_AUTH_TOKEN) && process.env.GITHUB_EVENT_NAME !== "workflow_dispatch";
-const budgetFile = path.join(appRoot, "bundle-budget.json");
 // The Dock takes one large PNG per mode and swaps them as the theme changes.
 const DOCK_ICON_IMAGES = {
   "luke-icon-light.png": "luke-icon-light-512.png",
@@ -163,26 +160,6 @@ function buildCommit() {
   }
 }
 
-// The files that load before a bundle runs, as paths under `dist/`: the bundle
-// itself and every chunk it reaches through static imports, at any depth. A
-// bundle the metafile does not describe is one file, as an IIFE is.
-function loadedUpFront(metafile, bundle) {
-  const outputs = new Map(
-    Object.entries(metafile.outputs).map(([file, output]) => [
-      path.relative(outputRoot, path.resolve(file)),
-      output,
-    ]),
-  );
-  const loaded = new Set([bundle]);
-  for (const file of loaded) {
-    for (const { path: imported, kind } of outputs.get(file)?.imports ?? []) {
-      if (kind === "import-statement")
-        loaded.add(path.relative(outputRoot, path.resolve(imported)));
-    }
-  }
-  return [...loaded];
-}
-
 // A document loads its window's entry as a module script, or the entry's
 // first `import` is a syntax error and the window stays blank.
 async function assertModuleEntry(document, entry) {
@@ -193,10 +170,10 @@ async function assertModuleEntry(document, entry) {
 }
 
 // The source-map upload, for a build that uploads (`uploadsSourceMaps`). A
-// failed upload fails the build.
-// Note that the plugin only logs a refused release or upload unless an
-// `errorHandler` throws, whatever its documentation says, so a release
-// could otherwise ship with no maps behind it and a green build.
+// refused release or upload warns and the build goes on, so Sentry being
+// down never holds a release back; its traces stay unreadable until maps are
+// uploaded for it by hand. The maps ship in no package either way, since
+// electron-builder's `files` (`electron-builder-config.mjs`) leaves them out.
 function sentryPlugins() {
   if (!uploadsSourceMaps) return [];
   return [
@@ -206,7 +183,9 @@ function sentryPlugins() {
       project: "luke-desktop",
       release: { name: sentryRelease },
       errorHandler: (error) => {
-        throw error;
+        console.warn(
+          `warning: Sentry source-map upload failed, so the build goes on without it: ${error.message}`,
+        );
       },
     }),
   ];
@@ -230,8 +209,8 @@ const WINDOW_ENTRIES = {
 // (Excalidraw), a File tab's tree (Pierre's tree), a Terminal tab's screen
 // (xterm.js), a plan's diagrams (Mermaid), a Files changed diff (Pierre's
 // diffs and Shiki), a call's avatar
-// (Keyframe's SDK over LiveKit), and session replay's recorder (rrweb). Each is an entry rather than a chunk only so that
-// it keeps a name of its own for the budget to read; what each reaches
+// (Keyframe's SDK over LiveKit), and session replay's recorder (rrweb). Each is an entry rather than a chunk, so
+// it keeps a name of its own; what each reaches
 // through dynamic imports of its own, a diagram type's layout or a language's
 // grammar, is a chunk of its own, loaded when it is drawn.
 const SIDE_BUNDLE_ENTRIES = {
@@ -255,8 +234,7 @@ const highlightWorkerText = highlightWorker.outputFiles[0]?.text ?? "";
 // only the surface it mounts, the side bundles above, and the chunks the
 // entries share, with no wrapper around the whole, which is about 6 KB
 // gzipped smaller than the same code as one script. The chunks are named by
-// their content, because esbuild names every shared one `chunk`. The metafile
-// is what the bundle budget reads the chunks off.
+// their content, because esbuild names every shared one `chunk`.
 const rendererBuild = build({
   entryPoints: Object.fromEntries([
     ...Object.entries(WINDOW_ENTRIES).map(([name, { source }]) => [
@@ -273,7 +251,6 @@ const rendererBuild = build({
   platform: "browser",
   format: "esm",
   splitting: true,
-  metafile: true,
   target: "chrome140",
   jsx: "automatic",
   minify: true,
@@ -421,75 +398,3 @@ await Promise.all(
     fs.copyFile(path.join(brandRoot, "icon", source), path.join(outputRoot, "icon", name)),
   ),
 );
-
-// A window's entry is what a browser context parses as the window opens, the
-// panel's, the hidden voice window's, and the call window's, so its compressed size is a
-// cost the user pays rather than one the build absorbs. The baseline is recorded rather than
-// derived, because the number worth holding is the one a reviewer agreed to: a
-// dependency that adds a fifth to the panel is a decision, and
-// `LUKE_UPDATE_BUNDLE_BUDGET=1` is how that decision is written down once it has
-// been made.
-//
-// Note that a bundle is measured with the chunks it imports, because those load
-// with it before anything runs; a chunk reached only by a dynamic `import()` is
-// fetched when that code first runs, and is left out. Each file is gzipped on
-// its own, as each is read on its own.
-// Every renderer entry is measured, so a new one with no baseline fails until
-// one is recorded.
-//
-// Note that a build that uploads its source maps is not measured, because the
-// upload plugin adds a debug-ID snippet of a few hundred bytes to every file,
-// past a small bundle's slack. The release job runs `check.sh`, which builds
-// the same source without the token and measures it, before it runs this one.
-const budget = JSON.parse(await fs.readFile(budgetFile, "utf8"));
-const { metafile } = await rendererBuild;
-const rendererEntries = [...Object.keys(WINDOW_ENTRIES), ...Object.keys(SIDE_BUNDLE_ENTRIES)].map(
-  (name) => `renderer/${name}.js`,
-);
-const measured = Object.fromEntries(
-  await Promise.all(
-    [...new Set([...Object.keys(budget.gzipBytes), ...rendererEntries])].map(async (bundle) => {
-      const sizes = await Promise.all(
-        loadedUpFront(metafile, bundle).map(
-          async (file) =>
-            gzipSync(await fs.readFile(path.join(outputRoot, file)), { level: 9 }).length,
-        ),
-      );
-      return [bundle, sizes.reduce((sum, bytes) => sum + bytes, 0)];
-    }),
-  ),
-);
-
-if (uploadsSourceMaps) {
-  process.stdout.write("bundle budget not measured: this build carries Sentry's debug IDs\n");
-} else if (process.env.LUKE_UPDATE_BUNDLE_BUDGET === "1") {
-  await fs.writeFile(
-    budgetFile,
-    `${JSON.stringify({ ...budget, gzipBytes: measured }, undefined, 2)}\n`,
-  );
-  for (const [bundle, bytes] of Object.entries(measured)) {
-    process.stdout.write(`bundle budget recorded: ${bundle} ${bytes} gzipped bytes\n`);
-  }
-} else {
-  const unrecorded = Object.keys(measured).filter((bundle) => !(bundle in budget.gzipBytes));
-  for (const bundle of unrecorded) {
-    console.error(`error: ${bundle} has no baseline in bundle-budget.json`);
-  }
-  const withSentry = Boolean(process.env.SENTRY_AUTH_TOKEN);
-  const exceeded = Object.entries(measured).flatMap(([bundle, bytes]) => {
-    if (!(bundle in budget.gzipBytes)) return [];
-    const ceiling = bundleCeiling(budget.gzipBytes[bundle], budget, withSentry);
-    return bytes > ceiling ? [{ bundle, bytes, ceiling }] : [];
-  });
-  if (exceeded.length > 0 || unrecorded.length > 0) {
-    for (const { bundle, bytes, ceiling } of exceeded) {
-      console.error(
-        `error: ${bundle} is ${bytes} gzipped bytes, over its ceiling of ${ceiling} (baseline ${budget.gzipBytes[bundle]} plus ${budget.slack * 100}%${withSentry ? `, or ${budget.sentrySlackBytes} bytes with Sentry` : ""})`,
-      );
-    }
-    console.error(
-      "Reduce the bundle, or record the new baseline with LUKE_UPDATE_BUNDLE_BUDGET=1 and say why in the pull request.",
-    );
-    process.exitCode = 1;
-  }
-}

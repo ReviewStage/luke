@@ -16,6 +16,7 @@ import {
   type TaskShownCode,
   type TaskWorkAnswer,
 } from "@luke/features/tasks-view";
+import type { ToolSet } from "ai";
 import { Effect, Option } from "effect";
 import { BRAIN_DELEGATION_TOOLS } from "../agents/brain-host/brain.js";
 import { isStoredToolPart, storedToolName } from "../core.js";
@@ -57,18 +58,25 @@ import {
 export const brainDelegationJournalsOf = Effect.fnUntraced(function* (
   userId: string,
   conversationId: string,
+  tools: ToolSet = HOSTED_TOOL_SET,
 ) {
-  const rows = yield* brainDelegationRowsOf(userId, conversationId);
+  const rows = yield* brainDelegationRowsOf(userId, conversationId, tools);
   return rows.map((row) => row.message);
 });
 
-/** The rows of the conversation's journals that delegate to the worker, as `brainDelegationJournalsOf` reads them, each with the turn it is the journal of. */
+/**
+ * The rows of the conversation's journals that delegate to the worker, as
+ * `brainDelegationJournalsOf` reads them, each with the turn it is the
+ * journal of: read under the brain's tools, or under the tools given for a
+ * conversation another backend runs, such as an agent's a call speaks into.
+ */
 export const brainDelegationRowsOf = Effect.fnUntraced(function* (
   userId: string,
   conversationId: string,
+  tools: ToolSet = HOSTED_TOOL_SET,
 ) {
   const reads = yield* Effect.forEach([...BRAIN_DELEGATION_TOOLS], (name) =>
-    listJournalsCalling(userId, conversationId, HOSTED_TOOL_SET, name),
+    listJournalsCalling(userId, conversationId, tools, name),
   );
   return reads
     .flatMap((read) => (read.ok ? read.value : []))

@@ -10,7 +10,7 @@ import {
 import { formatDayHeading, formatNumber } from "@luke/ui/admin-format";
 import { partialDayKey } from "@luke/ui/daily-series";
 import { AccountCell } from "../accounts-table/accounts-table";
-import { SectionHeading, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card";
+import { AdminSection, STAT_CELL, STAT_ROW, StatCard } from "../charts/stat-card";
 import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing } from "../chrome/controls";
 import { DayNote } from "../chrome/notes";
@@ -146,39 +146,41 @@ export function DayScreen({
       return frame(
         <AdminPage title={formatDayHeading(detail.day)} back={back} controls={controls}>
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <SectionHeading>Hosted tier · this day</SectionHeading>
-            {/* Note that each card shares the row from nothing up but never
+            <AdminSection title="Hosted tier · this day">
+              {/* Note that each card shares the row from nothing up but never
             shrinks below its own figure, so the pair stacks once a figure
             needs the room rather than overflowing its card. */}
-            <div className={STAT_ROW}>
-              <div className={STAT_CELL}>
-                <StatCard
-                  label="Active accounts"
-                  value={formatNumber(detail.totals.accounts)}
-                  hint={soFar}
-                />
+              <div className={STAT_ROW}>
+                <div className={STAT_CELL}>
+                  <StatCard
+                    label="Active accounts"
+                    value={formatNumber(detail.totals.accounts)}
+                    hint={soFar}
+                  />
+                </div>
+                <div className={STAT_CELL}>
+                  <StatCard
+                    label="Hosted calls"
+                    value={formatNumber(detail.totals.calls)}
+                    hint={soFar}
+                  />
+                </div>
               </div>
-              <div className={STAT_CELL}>
-                <StatCard
-                  label="Hosted calls"
-                  value={formatNumber(detail.totals.calls)}
-                  hint={soFar}
-                />
-              </div>
-            </div>
+            </AdminSection>
 
-            <SectionHeading>Accounts active this day</SectionHeading>
-            <DayAccountsTable accounts={detail.accounts} onOpen={onOpenAccount} />
-            {detail.accounts.length > 0 ? (
-              <DayNote
-                truncatedTo={
-                  detail.totals.accounts > detail.accounts.length
-                    ? detail.accounts.length
-                    : undefined
-                }
-                totalAccounts={detail.totals.accounts}
-              />
-            ) : null}
+            <AdminSection title="Accounts active this day">
+              <DayAccountsTable accounts={detail.accounts} onOpen={onOpenAccount} />
+              {detail.accounts.length > 0 ? (
+                <DayNote
+                  truncatedTo={
+                    detail.totals.accounts > detail.accounts.length
+                      ? detail.accounts.length
+                      : undefined
+                  }
+                  totalAccounts={detail.totals.accounts}
+                />
+              ) : null}
+            </AdminSection>
           </Refreshing>
         </AdminPage>,
       );

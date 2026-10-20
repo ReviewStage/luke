@@ -1,5 +1,7 @@
 import { FAILURE_REASON, type Failure } from "@luke/features/failure-remedy";
+import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { createContext, useContext } from "react";
+import { useOpenSettings } from "../open-settings.js";
 
 /**
  * repository-remedy.tsx -- what the press under a refused start or message does when the task's repository is out of reach.
@@ -10,7 +12,9 @@ import { createContext, useContext } from "react";
  * doors on: Settings › Workspace's GitHub for the task's workspace, the
  * installation's settings page on GitHub, the task's repository chip, or
  * the task moved to the workspace whose GitHub reaches it, after which the
- * same send goes again by itself. Outside the window, as in a test of one
+ * same send goes again by itself. A member's own GitHub token is replaced
+ * in Settings › Profile, through the window's Settings opener, or
+ * authorized for an organization's SAML SSO on GitHub. Outside the window, as in a test of one
  * surface, every door does nothing.
  */
 
@@ -48,6 +52,7 @@ export function useRepositoryRemedy(): (
   retry?: () => void,
 ) => (() => void) | undefined {
   const doors = useContext(RepositoryRemedyContext);
+  const openSettings = useOpenSettings();
   return (failure, retry) => {
     switch (failure.reason) {
       case FAILURE_REASON.CONNECT_GITHUB:
@@ -55,6 +60,10 @@ export function useRepositoryRemedy(): (
         return () => doors.openWorkspaceGitHub(failure.taskId);
       case FAILURE_REASON.ADD_REPOSITORY:
         return () => doors.openGitHub(failure.settingsUrl);
+      case FAILURE_REASON.GITHUB_TOKEN:
+        return () => openSettings({ page: SETTINGS_VIEW.ACCOUNT });
+      case FAILURE_REASON.AUTHORIZE_TOKEN:
+        return () => doors.openGitHub(failure.authorizeUrl);
       case FAILURE_REASON.CHOOSE_REPOSITORY:
         return () => doors.chooseRepository(failure.taskId);
       case FAILURE_REASON.MOVE_TASK:

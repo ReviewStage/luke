@@ -13,8 +13,8 @@
  * (`SENTRY_TRACES_SAMPLE_RATE`).
  *
  * Note that the SDK is a chunk of its own (`web-sentry-sdk.ts`), imported
- * the moment the root starts rather than carried in the entry, because the entry is held to its
- * budget (`bundle-budget.json`) and a tab with no DSN should not parse it at
+ * the moment the root starts rather than carried in the entry, because the entry is
+ * parsed as the tab opens and a tab with no DSN should not parse it at
  * all. What is reported before it lands, a failure an Effect boundary of the
  * tab's runtime reported, a tab that could draw nothing, or a refusal of the
  * page's policy, is kept for it, a few at most, and sent once it stands.

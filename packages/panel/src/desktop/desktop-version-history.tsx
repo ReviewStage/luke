@@ -36,6 +36,7 @@ import { ACTOR_SIZE, ActorMark, LeftWords } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
+import { FadingWords } from "../fading-words.js";
 import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { FoldingButton } from "../folding-button.js";
 import type { NavigationHistory } from "../navigation-history.js";
@@ -297,10 +298,10 @@ function SectionsHead({
   onBack: () => void;
 }): React.JSX.Element {
   const name = (
-    <span className="version-row-author" data-author={author.kind}>
+    <FadingWords className="version-row-author" data-author={author.kind}>
       {actorName(author)}
       <LeftWords actor={author} />
-    </span>
+    </FadingWords>
   );
   return (
     <>
@@ -863,4 +864,14 @@ export function DesktopVersionHistory({
       </section>
     </div>
   );
+}
+
+/** The open plan's version history, as the window draws it in place of the tasks (`pages-on-demand.ts`). */
+export function TaskVersionHistory({
+  tasks,
+  ...view
+}: Omit<Parameters<typeof DesktopVersionHistory>[0], "subject"> & {
+  tasks: TasksControl;
+}): React.JSX.Element {
+  return <DesktopVersionHistory {...view} subject={taskVersionSubject(tasks)} />;
 }

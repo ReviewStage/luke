@@ -4,11 +4,11 @@ import { Duration, Effect, Option, Ref } from "effect";
 import type { HttpClient } from "effect/http";
 import { type HostedRefusal, hostedCarriesBearer } from "../http/http-effect.js";
 import {
+  type AgentSessions,
   describeUnreachable,
   EVE_MOUNT,
   EVE_RESET_OUTCOME,
   type EveMount,
-  type EveSessions,
 } from "./brain-host/eve-sessions.js";
 import { type EveReach, eveFor } from "./coder-host/stop.js";
 
@@ -55,7 +55,7 @@ const RETIRE_SESSIONS = {
 /** How a caller reaches eve under one mount: the delete's own caller's client, typed to retire a session and nothing else, or the refusal that there is none. */
 export type EveAt = (
   mount: EveMount,
-) => Effect.Effect<Pick<EveSessions, "reset">, HostedRefusal, HttpClient.HttpClient>;
+) => Effect.Effect<Pick<AgentSessions, "reset">, HostedRefusal, HttpClient.HttpClient>;
 
 /**
  * How a delete's caller reaches eve to retire what it deletes, settled
@@ -76,7 +76,7 @@ export const retiringReach = /* @__PURE__ */ Effect.fnUntraced(function* (
   const composed = {
     [EVE_MOUNT.CODER]: yield* eveFor(reach, request, account, EVE_MOUNT.CODER),
     [EVE_MOUNT.TASKS]: yield* eveFor(reach, request, account, EVE_MOUNT.TASKS),
-  } satisfies Readonly<Record<EveMount, Pick<EveSessions, "reset">>>;
+  } satisfies Readonly<Record<EveMount, Pick<AgentSessions, "reset">>>;
   return (mount) => Effect.succeed(composed[mount]);
 });
 

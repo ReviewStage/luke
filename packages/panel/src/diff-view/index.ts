@@ -19,6 +19,11 @@ import {
 } from "@pierre/diffs";
 import { FONT_STACK, LIGATURES, LINE_HEIGHT_RATIO } from "../code-type.js";
 import { FIND_SHADOW_ATTRIBUTE } from "../find-matches.js";
+import {
+  ANNOTATION_BAND,
+  ANNOTATION_BAND_ATTRIBUTE,
+  markAnnotationBands,
+} from "./annotation-bands.js";
 import { colouredFrom } from "./colour-lines.js";
 import {
   type ColouredLines,
@@ -129,6 +134,11 @@ import { wholeOf } from "./whole-diff.js";
  * which it keeps on the rows it draws however it draws them again, worn
  * with a fade of the file's own (`FLASH_CSS`), whose end lets them go, or
  * a deadline of the moment's own where the rows were taken down first.
+ *
+ * A note under a changed line keeps that line's band, its code's and its
+ * numbers' ground and its change bar, behind the card it holds
+ * (`./annotation-bands.ts`), so a comment inside an added block reads as
+ * standing in it.
  *
  * Where the view comments on lines, code selected as text is read once the
  * drag that began in a file lets go (`watchTextSelection`): the lines it
@@ -275,6 +285,60 @@ const LOOK_CSS = `
   [data-line-annotation][data-selected-line],
   [data-gutter-buffer="annotation"][data-selected-line] {
     --diffs-computed-selected-line-bg: var(--diffs-computed-diff-line-bg, transparent);
+  }
+  /* A note under a changed line continues that line's band behind its card
+     (\`./annotation-bands.ts\`): its code's ground and its numbers' ground
+     are the line's own, mixed as Pierre mixes them, with the change bar
+     beside them where bars mark a change, solid for an addition and
+     striped for a deletion. It holds even under lit lines, which stay blue
+     above it while the band runs on behind the card. */
+  [data-line-annotation][${ANNOTATION_BAND_ATTRIBUTE}] {
+    --mix-light: 88%;
+    --mix-dark: 80%;
+  }
+  [data-gutter-buffer="annotation"][${ANNOTATION_BAND_ATTRIBUTE}] {
+    --mix-light: 91%;
+    --mix-dark: 85%;
+  }
+  [data-line-annotation][${ANNOTATION_BAND_ATTRIBUTE}],
+  [data-gutter-buffer="annotation"][${ANNOTATION_BAND_ATTRIBUTE}] {
+    background-color: light-dark(
+      color-mix(in lab, var(--diffs-bg, var(--luke-color-ground)) var(--mix-light), var(--annotation-band)),
+      color-mix(in lab, var(--diffs-bg, var(--luke-color-ground)) var(--mix-dark), var(--annotation-band))
+    );
+  }
+  [data-line-annotation][${ANNOTATION_BAND_ATTRIBUTE}="${ANNOTATION_BAND.ADDITION}"] {
+    --annotation-band: var(--diffs-bg-addition-override, var(--diffs-addition-base, var(--diff-added-mark)));
+  }
+  [data-line-annotation][${ANNOTATION_BAND_ATTRIBUTE}="${ANNOTATION_BAND.DELETION}"] {
+    --annotation-band: var(--diffs-bg-deletion-override, var(--diffs-deletion-base, var(--diff-removed-mark)));
+  }
+  [data-gutter-buffer="annotation"][${ANNOTATION_BAND_ATTRIBUTE}="${ANNOTATION_BAND.ADDITION}"] {
+    --annotation-band: var(--diffs-bg-addition-number-override, var(--diffs-addition-base, var(--diff-added-mark)));
+  }
+  [data-gutter-buffer="annotation"][${ANNOTATION_BAND_ATTRIBUTE}="${ANNOTATION_BAND.DELETION}"] {
+    --annotation-band: var(--diffs-bg-deletion-number-override, var(--diffs-deletion-base, var(--diff-removed-mark)));
+  }
+  [data-indicators="bars"] [data-gutter-buffer="annotation"][${ANNOTATION_BAND_ATTRIBUTE}]::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    pointer-events: none;
+  }
+  [data-indicators="bars"] [data-gutter-buffer="annotation"][${ANNOTATION_BAND_ATTRIBUTE}="${ANNOTATION_BAND.ADDITION}"]::after {
+    background-color: var(--diffs-addition-base, var(--diff-added-mark));
+  }
+  [data-indicators="bars"] [data-gutter-buffer="annotation"][${ANNOTATION_BAND_ATTRIBUTE}="${ANNOTATION_BAND.DELETION}"]::after {
+    background-image: linear-gradient(
+      0deg,
+      var(--diffs-bg-deletion, var(--diff-removed-ground)) 50%,
+      var(--diffs-deletion-base, var(--diff-removed-mark)) 50%
+    );
+    background-repeat: repeat;
+    background-size: 2px 2px;
   }
   /* Note that a line's code scrolls sideways alone, so it keeps no room for a
      scroll bar up and down, which a system that draws its bars in the
@@ -786,6 +850,8 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   };
   const dress = (element: HTMLElement, path: string, phase: PostRenderPhase) => {
     watchGaps(element, phase);
+    // Each note drawn anew is marked with the band of the line it stands under, as Pierre draws its rows again.
+    if (phase !== "unmount" && element.shadowRoot !== null) markAnnotationBands(element.shadowRoot);
     element.toggleAttribute(LEAD_ATTRIBUTE, drawnFiles.get(path)?.file.lead === true);
     elementPaths.set(element, path);
     markFlash(element);
@@ -1025,6 +1091,8 @@ async function colourLines(request: ColourRequest): Promise<ColouredLines | unde
       await highlighting.follow(request.look);
       await pool.primeFileHighlightCache(file);
       const cached = pool.getFileResultCache(file)?.result;
+      // Its key is never asked for again, so the result is let go once read.
+      pool.evictFileFromCache(file.cacheKey);
       return cached === undefined ? undefined : colouredFrom(cached, request.lines.length);
     }
     const { dark, light } = request.look.themes;

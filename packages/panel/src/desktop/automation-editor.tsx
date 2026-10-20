@@ -665,12 +665,12 @@ function AutomationActions({
   );
 }
 
-/** The crumb naming the automation, cut short with an ellipsis where the toolbar is narrow, the pointer reading it whole. */
+/** The crumb naming the automation, fading out at its end where the toolbar is narrow, the pointer reading it whole. */
 function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
   const [words, clipped] = useClipped(name);
   return (
     <Tooltip label={clipped ? name : undefined}>
-      <span ref={words} className="automation-crumb">
+      <span ref={words} className="automation-crumb" data-overflow={String(clipped)}>
         {name}
       </span>
     </Tooltip>

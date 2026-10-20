@@ -4,7 +4,12 @@ import type { AppStateStore } from "@luke/host/client";
 import { PUSH, VOICE_RUNTIME_ACT_KIND } from "@luke/host/contract";
 import type { HostOperator } from "@luke/host/host-operator";
 import { type LiveDiagnostics, liveExchangeActive } from "@luke/live";
-import { callInProgress, IDLE_VOICE_VIEW, VOICE_COMMAND } from "@luke/voice/voice-view";
+import {
+  callInProgress,
+  IDLE_VOICE_VIEW,
+  VOICE_COMMAND,
+  withCallTranscriptChange,
+} from "@luke/voice/voice-view";
 import { Effect, Option } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import type { ReportHandlers } from "../bridge-host";
@@ -160,12 +165,17 @@ export function voiceRuntimeReports(
     // main process owns — whether an exchange is live, which the media duck
     // follows on every display. A kind arrives only with the edge that opened
     // the exchange, so its presence is the count and no level change of its
-    // own is one.
-    reportVoiceView(context, view, countedKind) {
+    // own is one. The call's transcript arrives as what moved in it and is
+    // held whole here, so a panel that opens mid-call reads all of it.
+    reportVoiceView(context, view, countedKind, transcript) {
       if (!voiceWindow.owns(context.sender)) return;
       const { state } = dependencies;
       const held = state.snapshot().voice;
-      state.update({ voice: { ...held, view } });
+      const callTranscript =
+        transcript === undefined
+          ? held.callTranscript
+          : withCallTranscriptChange(held.callTranscript, transcript);
+      state.update({ voice: { ...held, view, callTranscript } });
       panels.setVoiceExchange(liveExchangeActive(view));
       if (countedKind !== undefined) {
         dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {

@@ -8,17 +8,17 @@ developer talks a task through with Luke, who writes its plan down as they go.
 | Command | What it does |
 | --- | --- |
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
-| `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; run before pushing |
+| `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; optional before a push, since CI runs every check |
 | `./scripts/check.sh` | Every portable repository, type, test, and build check: before a release, for a broad refactor, or on request |
 | `./scripts/run.sh` | Launch against live sessions, replacing the running plain instance (`--fixture smoke`, `--keep-running`, `--no-trace`); `--instance <name>` runs a named one beside it, with its own profile, and `--preview` is one named for its Preview |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
 | `pnpm lint:fix` | Repository formatting and safe lint fixes |
 
-CI runs the portable check on Linux alone. The release rehearsal
-(`release.yml`'s `macos-15` job, run on a `v*` tag push or a manual dispatch)
-is the only Mac gate, so a green PR says nothing about the Mac and there is no
-macOS check to wait for.
+CI runs the portable check on Linux alone, and no workflow runs the tests on a
+Mac: the release job (`release.yml`'s `macos-15` job, run on a `v*` tag push or
+a manual dispatch) only builds, signs, notarizes, and verifies the app. A green
+PR says nothing about the Mac and there is no macOS check to wait for.
 
 ## Layout
 
@@ -34,12 +34,10 @@ web's tab alike, in `packages/panel`, the hosted service's logic in
 wire value in `packages/wire`. A
 `.ts` module whose imports name no module of its app and no platform
 library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
-`@vercel/*`) is logic and belongs in a package. The logic-lives-in-packages
-check in `scripts/repository-checks.sh` refuses one under
-`apps/desktop/src`, `apps/web/src`, `apps/web/server`, `apps/luke`, or `apps/dev` unless it is shell:
-an app entry in `knip.json`, a `runtimeEdges` row in
-`tools/anti-slop/effect-edges.json`, or a deployment or test-support file
-the check names. A component is placed by review under the same rule.
+`@vercel/*`) is logic and belongs in a package unless it is shell: an app
+entry in `knip.json`, a `runtimeEdges` row in
+`tools/anti-slop/effect-edges.json`, or a deployment or test-support file.
+Review places a module and a component alike under this rule.
 
 ## Never
 
@@ -83,10 +81,9 @@ the check names. A component is placed by review under the same rule.
   (`packages/panel/src/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
   would change that.
-- Never push PR media to a branch but `pr-assets`, under `pr-<number>/`
-  (`docs/WORKFLOW.md` step 7). A fresh `pr-assets-<topic>` branch mails a
-  failed Vercel Preview on every push; a push refused because another workspace
-  got there first is fetched, rebased, and pushed again.
+- Never push PR media to a branch but `pr-assets`, under `pr-<number>/`, if
+  you add any; a fresh `pr-assets-<topic>` branch mails a failed Vercel Preview
+  on every push. PR media is not required.
 - Never add to this file (`AGENTS.md`, which `CLAUDE.md` links to) unless the
   user explicitly approved the addition.
 
@@ -101,21 +98,23 @@ past its bound (`packages/database/src/models/abandoned-turns.ts`'s
 `TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
 agent's turn, whose one turn is its whole run), and ends on Luke's key every
 voice session whose device detached and did not come back within the grace. It
-reads no account's words and runs no model.
+also starts due automation runs, and for coding agents on a member's GitHub
+token it reads their open pull requests' reviews, comments, and checks on that
+token and wakes the agent with them, as the webhook does for the App.
 
 ## Testing
 
 ```
-pnpm check:affected                      # before pushing: the checks for what changed
+pnpm check:affected                      # optional: the checks for what changed
 ./scripts/check.sh                       # CI's checks, bar the Postgres job
 pnpm exec vitest run <path>              # one file
-pnpm --filter @luke/web test:store       # store tests on a real Postgres (CI's postgres job runs it)
 pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, by hand
 ```
 
-`pnpm check:affected` must exit 0 before a push; then push and let CI, which
-runs every check, gate the PR. `check.sh` is the full local run, for a
-release, a broad refactor, or on request, and must exit 0 when it is run.
+Push and let CI, which runs every check, gate the PR. Running the tests you
+touched (`pnpm exec vitest run <path>`) or `pnpm check:affected` before a push
+is optional. `check.sh` is the full local run, for a release, a broad
+refactor, or on request, and must exit 0 when it is run.
 
 The vendored `testing` skill (`.agents/skills/testing`, lobehub's) is the
 testing guide, and the rules below agree with it. Its `bunx vitest` is
@@ -124,7 +123,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 - Every behavior change ships with a test that fails without it, same PR.
 - Use the smallest layer that catches the bug: a type or lint rule, then a
   test through the module's public export, then a real Postgres or child
-  process (`test:store`, which CI's postgres job runs).
+  process.
 - Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
   No network, personal data, live provider, or real clock. They pass alone
   and in any order.
@@ -149,7 +148,8 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
   exempt one by extension, because a test body is its own edge
   (`tools/anti-slop/shared/effect-edges.ts`), so review is the check.
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
-  helpers, with the diff explained in the PR.
+  helpers, with the diff explained in the PR. A JSON Schema golden is kept
+  only for a schema a model is shown as a tool's input.
 - Never loosen or skip a test to go green: no `.only`, `.skip`, `.todo`, or
   `it.flakyTest`, which no lint rule refuses either. Fix or delete a flaky
   test. A test that breaks on a refactor because it checks internal
@@ -162,8 +162,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 
 What the checks hold a test to is narrower than the rules above:
 `anti-slop/no-node-test` refuses `node:test` in TypeScript, so every test runs
-on vitest, and `scripts/repository-checks.sh` refuses a hand-rolled `mkdtemp`
-in a desktop or host test (`temporaryDirectory` instead) and a workspace whose
+on vitest, and `scripts/repository-checks.sh` refuses a workspace whose
 `vitest.config.ts` the root `vitest.config.ts` projects list does not name.
 
 ## Effect idioms
@@ -243,7 +242,10 @@ the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.
 foreign boundaries the effects around them compose over rather than
 replace, `apps/web/server/db/migrate.ts` (the migration command, through
 `NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape
-probe, same terms), and `tools/trace-export/src/cli.ts` (the trace command).
+probe, same terms), `tools/claude-code-probe/src/cli.ts` (the Claude Code
+sandbox probe, same terms), `packages/agent-runner/src/main.ts` (the coding
+agent's runner, its own process in the agent's sandbox, same terms), and
+`tools/trace-export/src/cli.ts` (the trace command).
 `Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, their
 `runPromiseExit`/`runSyncExit`/`runCallback` siblings, and the `…With` form of
 any of them — which is where a `Runtime<R>` went, v4 having removed the type —
@@ -360,11 +362,6 @@ reads it: `packages/host/src/acts.ts`,
   host's event loop for as long as it stands, so a store with an automatic
   reset enabled holds its host open for as long as its generation does: mind
   this when the caller is a process that would otherwise exit.
-- A bundle-budget baseline (`apps/desktop/bundle-budget.json`, checked with 5%
-  slack) is re-recorded with `LUKE_UPDATE_BUNDLE_BUDGET=1` by a PR that
-  genuinely needs the room, a feature's or a library's, which states the reason
-  and the size delta in its body. Drift and accidental growth are not a reason:
-  the slack is the speed bump that makes a PR stop and say why.
 
 ## Code style
 
@@ -403,8 +400,8 @@ while CI runs, before arming auto-merge, and while a PR waits in the queue.
 Restacking a stack onto the PR beneath it after that PR changed is the one
 routine rebase.
 
-To merge a PR, run `gh pr merge --auto` right away, once any manual pre-merge
-step (`docs/WORKFLOW.md` step 3's preview run) is done; the merge queue waits
+Open a PR ready for review, never as a draft, so CI and review start on it at
+once. To merge a PR, run `gh pr merge --auto` right away; the merge queue waits
 on CI, so do not wait on it yourself, and do not update the branch first. In a
 stack, arm a PR only once it targets `main`.
 

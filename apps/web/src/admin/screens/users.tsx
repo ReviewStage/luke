@@ -21,7 +21,7 @@ import { formatDate, formatNumber } from "@luke/ui/admin-format";
 import { useEffect, useState } from "react";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
 import { SignInMethodsChart } from "../charts/signups-chart";
-import { SectionHeading } from "../charts/stat-card";
+import { AdminSection } from "../charts/stat-card";
 import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { RosterNote } from "../chrome/notes";
@@ -214,10 +214,9 @@ export function UsersScreen({
       // Note that the methods describe every account the scope keeps, so a
       // search that narrows the rows, or finds none, leaves the chart standing.
       const signInMethods = (
-        <>
-          <SectionHeading>Sign-in methods</SectionHeading>
+        <AdminSection title="Sign-in methods">
           <SignInMethodsChart methods={list.signIn.methods} totalAccounts={list.signIn.accounts} />
-        </>
+        </AdminSection>
       );
 
       return page({
@@ -235,26 +234,30 @@ export function UsersScreen({
         state: rows.length === 0 ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY,
         empty: refreshed(
           <>
-            <EmptyState icon={<SearchIcon />}>{USERS_EMPTY}</EmptyState>
-            {truncatedTo === undefined ? null : (
-              <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
-            )}
+            <AdminSection>
+              <EmptyState icon={<SearchIcon />}>{USERS_EMPTY}</EmptyState>
+              {truncatedTo === undefined ? null : (
+                <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+              )}
+            </AdminSection>
             {signInMethods}
           </>,
         ),
         children: refreshed(
           <>
-            <AccountsTable
-              rows={rows}
-              windowDays={list.windowDays}
-              emptyText={USERS_EMPTY}
-              minWidth={ACCOUNTS_TABLE_MIN_WIDTH.ROSTER}
-              onOpen={onOpenAccount}
-              detailColumns={ROSTER_DETAIL_COLUMNS}
-              sortable
-              favorite={{ starred: (row) => row.favorite, onToggle: toggleFavorite }}
-            />
-            <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+            <AdminSection>
+              <AccountsTable
+                rows={rows}
+                windowDays={list.windowDays}
+                emptyText={USERS_EMPTY}
+                minWidth={ACCOUNTS_TABLE_MIN_WIDTH.ROSTER}
+                onOpen={onOpenAccount}
+                detailColumns={ROSTER_DETAIL_COLUMNS}
+                sortable
+                favorite={{ starred: (row) => row.favorite, onToggle: toggleFavorite }}
+              />
+              <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+            </AdminSection>
             {signInMethods}
           </>,
         ),

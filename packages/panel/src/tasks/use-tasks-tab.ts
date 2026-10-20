@@ -134,7 +134,12 @@ import {
   type TranscriptRegion,
   transcriptRegion,
 } from "@luke/voice/transcript-model";
-import { callInProgress, VOICE_COMMAND, type VoiceView } from "@luke/voice/voice-view";
+import {
+  callInProgress,
+  VOICE_COMMAND,
+  type VoiceCallTranscript,
+  type VoiceView,
+} from "@luke/voice/voice-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
@@ -263,6 +268,13 @@ interface InboxViewControl {
   readonly onOpen: () => void;
   readonly onClose: () => void;
   readonly onChoose: (chosen: InboxChoice) => void;
+  /**
+   * Opens the Inbox on an item, from wherever the window stands: a row of
+   * the inbox-first sidebar's list, which stands while the Inbox does not.
+   * Asked first where leaving would lose unsaved work, as every door that
+   * moves the place is.
+   */
+  readonly onOpenItem: (chosen: InboxChoice) => void;
   /**
    * Whether the list stands alone rather than the item chosen, where the
    * Inbox shows one column (`inbox-columns.ts`): asked for by its way back or
@@ -1147,6 +1159,8 @@ export function useTasksTab(input: {
   failedRuns: readonly AccountFailedRun[];
   voice: {
     view: VoiceView;
+    /** What was said on the standing call so far (`voice.callTranscript`), which the live transcript draws. */
+    callTranscript: VoiceCallTranscript | undefined;
     listening: boolean;
     requestMicrophoneAccess: () => void;
   };
@@ -1488,7 +1502,11 @@ export function useTasksTab(input: {
   // call's words.
   const reported =
     tasksFixture === undefined || fixture === undefined
-      ? voice.view
+      ? {
+          voiceStatus: voice.view.voiceStatus,
+          callTaskId: voice.view.callTaskId,
+          callTranscript: voice.callTranscript,
+        }
       : tasksFixture.FIXTURE_TASKS_CALL;
   const [heard, setHeard] = useState<readonly HeardCall[]>([]);
   useEffect(() => {
@@ -3197,6 +3215,14 @@ export function useTasksTab(input: {
       onClose: guard(() => setStandIn(undefined)),
       onChoose: (chosen) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, chosen } : held)),
+      onOpenItem: guard((chosen: InboxChoice) => {
+        setHistoryFor(undefined);
+        setStandIn((held) =>
+          held?.kind === STAND_IN.INBOX
+            ? { ...held, chosen, listed: false }
+            : { kind: STAND_IN.INBOX, chosen, listed: false },
+        );
+      }),
       listed: inboxView?.listed ?? false,
       onListed: (listed) =>
         setStandIn((held) => (held?.kind === STAND_IN.INBOX ? { ...held, listed } : held)),

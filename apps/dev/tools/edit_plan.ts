@@ -10,7 +10,7 @@ import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
 import { ACTION_RESULT_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineDynamic, defineTool } from "eve/tools";
-import { editPlanNotes, offeredPlanTools } from "../host.js";
+import { editPlanNotes, offeredTaskTools } from "../host.js";
 import { planNotesTaken } from "../session-prompt.js";
 
 /**
@@ -31,7 +31,7 @@ import { planNotesTaken } from "../session-prompt.js";
 export default defineDynamic({
   events: {
     "turn.started": async (_event, ctx) =>
-      (await offeredPlanTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.EDIT_PLAN)
+      (await offeredTaskTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.EDIT_PLAN)
         ? defineTool({
             description: EDIT_PLAN_TOOL.description,
             inputSchema: emitJsonSchema(EDIT_PLAN_TOOL.inputSchema),

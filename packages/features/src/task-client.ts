@@ -33,6 +33,7 @@ import {
   hostedClient,
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
+import { LIVE_POLL, type TaskBoardLiveAnswer } from "./live-wire.js";
 import type { PageLine, PageVersion } from "./page-wire.js";
 import { pictureTypeSchema } from "./picture-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
@@ -402,6 +403,30 @@ export class HostedTaskClient {
   readBoard(taskId: string): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
     return orNothing(
       Effect.map(askHosted(this.#hosted.plans.readBoard, { id: taskId }), (answer) => answer.board),
+    );
+  }
+
+  /**
+   * Where one task's whiteboard stands, sealed for following over Neon
+   * Realtime, or with `poll` its rows inline at the poll address, for a
+   * reader polling while Realtime fails it: not found where the account
+   * reaches no such task, unanswered for anything else, which the caller
+   * answers by sealing it again.
+   */
+  boardLive(
+    taskId: string,
+    poll = false,
+  ): Effect.Effect<
+    TaskCallResult<TaskBoardLiveAnswer, TaskCallFailure>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return hostedResult(
+      askHosted(
+        this.#hosted.live.taskBoard,
+        poll ? { id: taskId, [LIVE_POLL.QUERY]: LIVE_POLL.ON } : { id: taskId },
+      ),
+      NOT_FOUND_REFUSAL,
     );
   }
 

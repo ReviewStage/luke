@@ -5,6 +5,7 @@ import { openHostedStoreTestDatabase } from "@luke/database/testing";
 import type { ModelChoice } from "@luke/features/models-wire";
 import {
   FAST_ACCESS,
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   type ProviderKeyProvider,
 } from "@luke/features/provider-key-wire";
@@ -91,10 +92,20 @@ async function accountWithKeys(saved: Partial<Record<ProviderKeyProvider, string
     const providerId = named as ProviderKeyProvider;
     const sealed = sealProviderKey(
       ring.success,
-      { userId, provider: providerId },
+      { userId, provider: providerId, kind: PROVIDER_KEY_KIND.API_KEY },
       Redacted.make(key),
     );
-    await database.run(saveProviderKey(userId, providerId, sealed, "sk-…test", null, new Date(0)));
+    await database.run(
+      saveProviderKey(
+        userId,
+        providerId,
+        PROVIDER_KEY_KIND.API_KEY,
+        sealed,
+        "sk-…test",
+        null,
+        new Date(0),
+      ),
+    );
   }
   return userId;
 }
@@ -164,6 +175,34 @@ test("a step runs on the account's own key where it saved one, and on Luke's for
   assert.deepEqual(openAi.keys, [Redacted.value(LUKE.openAi ?? Redacted.make(""))]);
 });
 
+test("a Claude setup-token is no key a step runs on: an account holding only one runs on Luke's key", async () => {
+  const userId = await database.createUser();
+  const ring = parseKeyRing(Redacted.make(RING.HELD));
+  if (Result.isFailure(ring)) return assert.fail("not a ring");
+  const owner = {
+    userId,
+    provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+    kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+  };
+  const token = "sk-ant-oat01-account-setup-token-1111";
+  await database.run(
+    saveProviderKey(
+      userId,
+      owner.provider,
+      owner.kind,
+      sealProviderKey(ring.success, owner, Redacted.make(token)),
+      "sk-ant-…1111",
+      null,
+      new Date(0),
+    ),
+  );
+  const anthropic = provider([jsonResponse(ANTHROPIC_MESSAGE, 200)]);
+
+  await step(await stepModel(userId, PROVIDER_KEY_PROVIDER.ANTHROPIC, anthropic.fetch));
+
+  assert.deepEqual(anthropic.keys, [Redacted.value(LUKE.anthropic ?? Redacted.make(""))]);
+});
+
 test("an account's key the ring cannot open, or one on a deployment holding no ring, refuses the step and never runs it on Luke's key", async () => {
   const userId = await accountWithKeys({ [PROVIDER_KEY_PROVIDER.OPENAI]: ACCOUNT_KEY.OPENAI });
   const reached = provider([jsonResponse({}, 200)]);
@@ -194,7 +233,7 @@ const FAST_CHOICE = { model: "anthropic/claude-opus-5.5-fast", effort: "high" } 
 
 /** The fast access the account's Anthropic row now says. */
 async function rowFastAccess(userId: string) {
-  const rows = await database.run(listProviderKeyRows(userId));
+  const rows = await database.run(listProviderKeyRows(userId, PROVIDER_KEY_KIND.API_KEY));
   return rows.find((row) => row.provider === PROVIDER_KEY_PROVIDER.ANTHROPIC)?.fastAccess;
 }
 

@@ -42,8 +42,10 @@ import { type CountNoun, SidebarGroupHeader } from "./sidebar-group-header.js";
  * after its name, the fold landing at once as the sidebar's does.
  * Unfolded, each archived agent is a muted row in the summary's own shape, a failed one's mark at
  * its end as a standing row's, whose Unarchive stands in the mark's place
- * while it is hovered or reached from the keyboard, in the sidebar
- * rows' Pin and Archive style, and whose right-click offers the same. The
+ * while it is hovered or reached from the keyboard, as the sidebar task
+ * rows' Pin and Archive do: at rest it takes no room, the name running the
+ * row's full width, and shown, the name is cut where it begins and fades
+ * out there. A screen with no hover shows it at rest. Its right-click offers the same. The
  * row hangs the agent's card beside it as a standing row does, saying it
  * was archived and when (`agent-ref.tsx`), though no press opens it,
  * since its tab is gone. It draws nothing while no agent is archived, and

@@ -41,6 +41,7 @@ function snapshotWith(experiments: ExperimentChoices): AppStateSnapshot {
       name: "Dev",
       provider: "github",
     },
+    access: { admin: false },
     update: {
       status: UPDATE_STATUS.IDLE,
       currentVersion: "1.0.0",

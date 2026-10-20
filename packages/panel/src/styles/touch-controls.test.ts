@@ -391,3 +391,24 @@ for (const metaAt of [LIST_ROW_META.MIDDLE, LIST_ROW_META.TITLE]) {
     }
   });
 }
+
+test("on a touch screen the open row whose metadata stands on the title's line keeps its title clear of its acts, the title's line ending where they begin, and a row not open keeps its whole line", () => {
+  layFor(true);
+  drawRows(LIST_ROW_META.TITLE);
+  const [open, other] = [...document.querySelectorAll<HTMLElement>(".luke-list-row")];
+  assert.ok(open !== undefined && other !== undefined);
+  // jsdom lays nothing out, so the row is handed the width its acts would be measured at.
+  open.style.setProperty("--luke-list-row-acts", "56px");
+  const head = (row: Element) => row.querySelector(".luke-list-row-head");
+  const room = (row: Element) => {
+    const line = head(row);
+    assert.ok(line !== null, "the title's line is drawn");
+    return getComputedStyle(line).paddingInlineEnd;
+  };
+  assert.match(
+    room(open),
+    /--luke-list-row-acts/u,
+    "the open row's title line ends where its acts begin",
+  );
+  assert.ok(!/--luke-list-row-acts/u.test(room(other)), "a row not open keeps its whole line");
+});

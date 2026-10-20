@@ -97,8 +97,9 @@ import {
  * new keys as nothing, and its `messages` leave out every message that
  * asks or answers, which those fields stand for, so such a desktop draws
  * neither twice; its `thread` carries every message, for a desktop from
- * version 5. A thread whose agent asks nothing waits on nobody, and stands
- * to an older desktop as a note already settled. The functions at the end
+ * version 5. A thread whose agent asks nothing, a notice, holds no ask and
+ * waits open on the developer's nod alone, which its agent never hears, and
+ * stands to an older desktop as a note to answer with Got it. The functions at the end
  * of this file map an ask to the version 4 response nearest it, a stored
  * response to the ask it stands for, and an older desktop's answer to the
  * answer of the open ask.
@@ -404,13 +405,8 @@ export function codeLinesReadable(block: Pick<InboxCodeBlock, "startLine" | "end
 /** An image block as an item carries one, naming the attachment the desktop fetches. */
 export type InboxImageBlock = Extract<InboxBlock, { type: typeof INBOX_BLOCK.IMAGE }>;
 
-/** An item's context: its blocks in order, few. */
-export const inboxBlocksSchema = EffectSchema.Array(inboxBlockSchema).check(
-  EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_BLOCKS),
-);
-
 /** One block as the agent posts it: the word blocks as they are kept, and an image by the path of its file in the agent's sandbox, which the service reads and keeps. */
-export const inboxPostBlockSchema = EffectSchema.Union([
+const inboxPostBlockSchema = EffectSchema.Union([
   ...WORD_BLOCKS,
   EffectSchema.Struct({
     type: EffectSchema.Literal(INBOX_BLOCK.IMAGE),
@@ -510,7 +506,7 @@ export type InboxPost = typeof inboxPostInputSchema.Type;
 export const inboxReadInputSchema = EffectSchema.Struct({});
 
 /** What a form's field holds once filled: words, a number, an option, or yes or no, by the field's type. */
-export const inboxFieldValueSchema = EffectSchema.Union([
+const inboxFieldValueSchema = EffectSchema.Union([
   boundedText(INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS),
   EffectSchema.Finite,
   EffectSchema.Boolean,
@@ -568,7 +564,7 @@ const unknownTypeSchema = unknownTypeOf([
 ]);
 
 /** A block as a desktop reads one: one this build knows, or the type alone of one it does not. */
-export const inboxReadBlockSchema = EffectSchema.Union([
+const inboxReadBlockSchema = EffectSchema.Union([
   ...inboxBlockSchema.members,
   EffectSchema.Struct({ type: unknownTypeSchema }),
 ]);
@@ -926,6 +922,8 @@ export const inboxMessageRequestSchema = EffectSchema.Struct({
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
   /** The answer to the thread's open ask, which names it; absent on a plain reply. */
   answers: EffectSchema.optionalKey(inboxAnswersSchema),
+  /** The revision of the notice the reply was written on, which it settles where the notice still stands there; absent where it settles none, as from a client before it. */
+  revision: EffectSchema.optionalKey(countedNumber),
 }).check(
   EffectSchema.makeFilter(
     ({ text, attachments, answers }) => answers !== undefined || hasWordsOrFiles(text, attachments),
@@ -1087,10 +1085,21 @@ function filled(value: InboxFieldValue): boolean {
   return !isWireString(value) || value.trim() !== "";
 }
 
-/** Why a form's values do not fill the form, or nothing where they do: each names a field once and is of its type, and every required field is filled. */
+/** The refusal of a form whose required field is empty. */
+const REQUIRED_EMPTY = "A required field of the form is empty.";
+
+/**
+ * Why a form's values do not answer the form, or nothing where they do:
+ * each names a field once and is of its type, a required one never blank,
+ * and every required field is filled, unless the answer gives something, a
+ * value filled or the developer's own words or files, since a form filled
+ * in part still sends what was filled; a field left empty is simply absent
+ * from the values, never there blank.
+ */
 function formRefusal(
   form: Pick<InboxForm, "fields">,
   values: InboxFormValues | undefined,
+  said: boolean,
 ): string | undefined {
   const given = new Map((values ?? []).map(({ label, value }) => [label, value]));
   if (given.size !== (values ?? []).length) return "A value names a field twice.";
@@ -1099,14 +1108,19 @@ function formRefusal(
     const field = fields.get(label);
     if (field === undefined) return "A value names no field of the form.";
     if (!fieldTakes(field, value)) return "A value is not of its field's type.";
+    if (field.required === true && !filled(value)) return REQUIRED_EMPTY;
   }
+  if (said || [...given.values()].some(filled)) return undefined;
   for (const field of form.fields) {
     const value = given.get(field.label);
-    if (field.required === true && (value === undefined || !filled(value))) {
-      return "A required field of the form is empty.";
-    }
+    if (field.required === true && value === undefined) return REQUIRED_EMPTY;
   }
   return undefined;
+}
+
+/** Whether the developer said something of their own beside an answer: words, or a file. */
+function saysAny(words: string, files: AnswerFiles): boolean {
+  return words.trim() !== "" || files.length > 0;
 }
 
 /** Why a pick does not fit the choice, or nothing where it does: at least one option, each offered and once, and one alone unless the choice allows several. */
@@ -1125,7 +1139,7 @@ function choiceRefusal(
 
 /** Why an answer in the developer's own words does not stand, or nothing where it does: words or files, as a message to an agent may be files alone. */
 function ownWordsRefusal(words: string, files: AnswerFiles): string | undefined {
-  if (words.trim() === "" && files.length === 0) {
+  if (!saysAny(words, files)) {
     return "An answer in the developer's own words needs words or a file.";
   }
   return undefined;
@@ -1134,9 +1148,10 @@ function ownWordsRefusal(words: string, files: AnswerFiles): string | undefined 
 /**
  * Why an answer does not fit its item, or nothing where it does: the
  * response takes the reply, a pick names offered options, a form's values
- * fill it, and words or files stand where the answer is the developer's
- * own, as a message to an agent may be files alone. A response this build
- * does not know takes nothing.
+ * fit it, filling it or giving something beside the note or the files,
+ * and words or files stand where the answer is the developer's own, as a
+ * message to an agent may be files alone. A response this build does not
+ * know takes nothing.
  */
 export function inboxReplyRefusal(
   item: Pick<InboxItem, "response">,
@@ -1151,7 +1166,7 @@ export function inboxReplyRefusal(
     return choiceRefusal(response, reply.choices);
   }
   if (reply.reply === INBOX_REPLY.SUBMITTED && response.type === INBOX_RESPONSE.FORM) {
-    return formRefusal(response, reply.values);
+    return formRefusal(response, reply.values, saysAny(reply.note ?? "", files));
   }
   if (reply.reply === INBOX_REPLY.ANSWERED) return ownWordsRefusal(reply.note ?? "", files);
   return undefined;
@@ -1181,8 +1196,10 @@ function stepsRefusal(
  * Why an answer does not fit the ask it answers, or nothing where it does:
  * a `decide` takes a pick of offered options, or words or files where none
  * fits; a `do` takes Mark done, with every step ticked, or Couldn't do it;
- * an `answer` with fields takes their values, and one without takes words
- * or files. The words and files are those of the answering message.
+ * an `answer` with fields takes their values, every required one filled
+ * unless something is given, a value or words or files, and one without
+ * takes words or files. The words and files are those of the answering
+ * message.
  */
 export function inboxAnswersRefusal(
   ask: InboxAsk,
@@ -1203,7 +1220,7 @@ export function inboxAnswersRefusal(
     case INBOX_ASK.ANSWER:
       if (ask.fields !== undefined) {
         return answers.reply === INBOX_REPLY.SUBMITTED
-          ? formRefusal({ fields: ask.fields }, answers.values)
+          ? formRefusal({ fields: ask.fields }, answers.values, saysAny(words, files))
           : NOT_TAKEN;
       }
       return answers.reply === INBOX_REPLY.ANSWERED ? ownWordsRefusal(words, files) : NOT_TAKEN;

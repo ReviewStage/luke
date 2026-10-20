@@ -11,6 +11,7 @@ import { wireValidatedTool } from "../../core.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
+import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
@@ -27,8 +28,9 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * reads (`chat.ts`), its reach to the other coding agents of
  * its workspace (`../coding-agent-tools.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
- * (`../page-tool.ts`), and eve's own durable `sleep`, which it waits on its
- * checks or a deploy with. The worker's own rows name
+ * (`../page-tool.ts`), eve's own durable `sleep`, which it waits on its
+ * checks or a deploy with, and, on a spoken turn alone, the call's own
+ * question queue and hang-up (`turnToolsOf`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -40,8 +42,9 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
 /**
  * The tools the coding agent is offered, by the name eve mounts each under:
  * the coder's in the registry (`../agent-runtime/tools.ts`), named here for
- * the callers that pick one out. Its test holds this to the registry's role
- * and the files under `apps/dev/tools/` to this.
+ * the callers that pick one out. Its test holds this to the registry's role,
+ * and `../agent-runtime/coder-tool-files.test.ts` the files under
+ * `apps/dev/tools/` to this.
  */
 export const CODER_TOOL = {
   BASH: AGENT_TOOL.BASH,
@@ -87,13 +90,20 @@ export const CODER_TOOL = {
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
   SHOW_IMAGE: AGENT_TOOL.SHOW_IMAGE,
   SLEEP: AGENT_TOOL.SLEEP,
+  QUEUE_QUESTION: AGENT_TOOL.QUEUE_QUESTION,
+  WITHDRAW_QUESTION: AGENT_TOOL.WITHDRAW_QUESTION,
+  END_CALL: AGENT_TOOL.END_CALL,
+  SHOW_CODE: AGENT_TOOL.SHOW_CODE,
+  DRAW_ON_BOARD: AGENT_TOOL.DRAW_ON_BOARD,
+  LOOK_AT_BOARD: AGENT_TOOL.LOOK_AT_BOARD,
 } as const;
 
-/** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, `show_page`, which shows a page on it, and the four that read and answer its comments. */
+/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it, the four that read and answer its comments, and the two that draw on and look at its whiteboard. */
 export type TaskTool =
   | typeof CODER_TOOL.EDIT_PLAN
   | typeof CODER_TOOL.SHOW_PAGE
-  | (typeof COMMENT_TASK_TOOLS)[number];
+  | (typeof COMMENT_TASK_TOOLS)[number]
+  | (typeof BOARD_TASK_TOOLS)[number];
 
 /** The comment tools every agent on a task is offered, since a member may send any of them a thread. */
 const COMMENT_TASK_TOOLS = [
@@ -103,18 +113,76 @@ const COMMENT_TASK_TOOLS = [
   CODER_TOOL.REOPEN_THREAD,
 ] as const;
 
+/** The whiteboard's tools, which draw on the task's board and look at it as the developer's Mac drew it (`../../tasks/board-tool.ts`, `../../tasks/board-look.ts`). */
+const BOARD_TASK_TOOLS = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD] as const;
+
 /**
- * The plan's tools an agent is offered: none for one on no plan, as an
+ * The task's tools an agent is offered: none for one on no task, as an
  * automation's run starts one, and all of them for one on a task, whether
  * it was handed the plan or a prompt, since New task starts every agent on
  * the developer's own words while Luke writes the plan beside it. Note that
  * each tool withheld is one its call would only be refused by (`host.ts`'s
- * `editPlan` and `showPage`), and that the instructions leave out the same
- * words (`instructions.ts`).
+ * `editPlan`, `showPage`, and `board`), and that the instructions leave out
+ * the same words (`instructions.ts`).
  */
 export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<TaskTool> {
   if (agent.taskId === null) return new Set();
-  return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...COMMENT_TASK_TOOLS]);
+  return new Set([
+    CODER_TOOL.EDIT_PLAN,
+    CODER_TOOL.SHOW_PAGE,
+    ...COMMENT_TASK_TOOLS,
+    ...BOARD_TASK_TOOLS,
+  ]);
+}
+
+/** The call's own tools, which mean something only while someone is listening (`../../tasks/queue-question.ts`, `../../tasks/end-call.ts`). */
+const SPOKEN_TURN_TOOLS = [
+  CODER_TOOL.QUEUE_QUESTION,
+  CODER_TOOL.WITHDRAW_QUESTION,
+  CODER_TOOL.END_CALL,
+] as const;
+
+/** A tool a coding agent is offered on a spoken turn alone. */
+export type SpokenTurnTool = (typeof SPOKEN_TURN_TOOLS)[number];
+
+/**
+ * The tools a turn is offered by its kind: the call's own on a spoken turn,
+ * and none of them on a typed one or one that names no kind, where a
+ * question for the developer goes to the inbox instead. Note that `sleep`
+ * and eve's `task_wait` are offered on every turn, spoken or not, because
+ * eve offers a workflow tool on every turn (a resolver returns plain tools
+ * alone) and adds `task_wait` beside any task tool, with no way to withhold
+ * it; a spoken turn's words tell the model never to wait (`turn-context.ts`).
+ */
+export function turnToolsOf(turn: BrainHostTurn | undefined): ReadonlySet<SpokenTurnTool> {
+  return turn === BRAIN_HOST_TURN.SPOKEN ? new Set(SPOKEN_TURN_TOOLS) : new Set();
+}
+
+/** The tools only an agent working in a repository is offered: the pull request the service opens for it, the two that write into its checkout, and `show_code`, which puts lines of it on the developer's screen. */
+export type RepositoryTool =
+  | typeof CODER_TOOL.OPEN_PULL_REQUEST
+  | typeof CODER_TOOL.WRITE_FILE
+  | typeof CODER_TOOL.APPLY_PATCH
+  | typeof CODER_TOOL.SHOW_CODE;
+
+/**
+ * The repository's tools an agent is offered, on every turn, typed or
+ * spoken: all of them for one working in a repository, and none for one
+ * with no repository, whose sandbox holds no checkout to write into or
+ * show lines of and which has no branch to open a pull request from. Note that its shell and its reads stay, in the empty working folder
+ * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), and that the
+ * instructions leave out the same words (`instructions.ts`).
+ */
+export function repositoryToolsOf(
+  agent: Pick<CodingAgent, "repository">,
+): ReadonlySet<RepositoryTool> {
+  if (agent.repository === null) return new Set();
+  return new Set([
+    CODER_TOOL.OPEN_PULL_REQUEST,
+    CODER_TOOL.WRITE_FILE,
+    CODER_TOOL.APPLY_PATCH,
+    CODER_TOOL.SHOW_CODE,
+  ]);
 }
 
 /**
@@ -153,6 +221,7 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.GREP,
   CODER_TOOL.APPLY_PATCH,
   CODER_TOOL.SHOW_IMAGE,
+  CODER_TOOL.SHOW_CODE,
 ]);
 
 /** What a chat post's input is read for here: the types of its blocks, an image's among them. */

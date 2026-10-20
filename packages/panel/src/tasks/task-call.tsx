@@ -32,7 +32,8 @@ import {
 } from "@luke/voice/transcript-model";
 import { isRecord, isWireString, MESSAGE_ROLE } from "@luke/wire";
 import type { UIMessage } from "ai";
-import { Fragment, useEffect, useRef, useState } from "react";
+import * as Atom from "effect/reactivity/Atom";
+import { Fragment, memo, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import {
   Conversation,
@@ -42,11 +43,12 @@ import {
 } from "../ai-elements/conversation.js";
 import { usePerson } from "../member-directory.js";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { AGENT_LEAD, AgentMessage, type DelegationDoors } from "./agent-tab.js";
 import { CallCheckpoint, CallEnded } from "./call-card.js";
 import { useChatOn } from "./chat-gate.js";
 import { REVEAL_MARK, useRevealInLog } from "./reveal-in-log.js";
+import { useMinute } from "./task-time.js";
 import { TranscriptNote } from "./transcript-blocks.js";
 import {
   type TaskConversation,
@@ -104,6 +106,12 @@ const EARLIER_READ = {
 } as const;
 
 type EarlierRead = (typeof EARLIER_READ)[keyof typeof EARLIER_READ];
+
+/** The task open, which redraws Luke's Stop only as another opens. */
+const activeTaskAtom: Atom.Atom<string | undefined> = Atom.map(
+  APP_SLICE.TASKS,
+  (planning) => planning?.activeTaskId,
+);
 
 /** What the row before the oldest turn drawn says, by where the read stands; a read out draws the spinner over the row's words. */
 const EARLIER_LINE = {
@@ -193,7 +201,7 @@ interface WorkDoors {
 /** The Stop Luke's working line ends on: the stop key's own action, on the task open. */
 function StopLuke(): React.JSX.Element {
   const { tell } = useAct();
-  const taskId = useAppState()?.tasks.activeTaskId;
+  const taskId = useAppSlice(activeTaskAtom);
   return (
     <span className="ml-2">
       <Button
@@ -407,7 +415,14 @@ function ThreadSections({
   );
 }
 
-export function TaskCall({
+/**
+ * The task's Call tab: what was said on its calls, and what Luke did between them.
+ *
+ * A memo boundary: the task's page drawn again over the same transcript and
+ * the same doors, as its column's focus and its side panel's width draw it,
+ * leaves the transcript and its every turn as they were.
+ */
+export const TaskCall = memo(function TaskCall({
   region,
   onRetry,
   conversation,
@@ -444,7 +459,8 @@ export function TaskCall({
 }): React.JSX.Element {
   const rows = workRowsOf(conversation);
   const earlier = conversation?.earlier;
-  const now = Date.now();
+  // Note that the clock is the minute's own, so the headings move on with it while the transcript holds.
+  const now = useMinute();
   const root = useRef<HTMLElement>(null);
   // A chat call's row opens Chat while the window offers it, as an agent's tab's does.
   const chatOn = useChatOn();
@@ -517,4 +533,4 @@ export function TaskCall({
       )}
     </section>
   );
-}
+});

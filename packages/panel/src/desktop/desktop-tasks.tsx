@@ -1,6 +1,7 @@
-import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { CodingAgentAttachment, CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
+import type { TaskStanding } from "@luke/features/task-wire";
 import { TERMINAL_ASK } from "@luke/features/terminal-entry";
 import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -20,7 +21,7 @@ import { agentOfTab, followedAgent, sameTab, TAB_WORDS } from "@luke/ui/tab-stri
 import { DOCUMENT_REGION, RENAME_FAILED_NOTE, TASK_MARK, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { InboxIcon } from "lucide-react";
-import { Fragment, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { Fragment, memo, useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { AutomationDirectory } from "../automation-directory.js";
@@ -31,10 +32,12 @@ import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import type { ShellRoom } from "../shell-room.js";
 import { SPINNER_SIZE, Spinner } from "../spinner.js";
+import { useSteadyDoor } from "../steady-door.js";
 import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { ArchivedBanner } from "../tasks/archived-task.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
+import type { AgentFork } from "../tasks/fork-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
@@ -72,6 +75,7 @@ import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenHereProvider, openPullRequestsHere, useOpenLink } from "../tasks/use-open-link.js";
+import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { type TaskInboxControl, useTaskInbox } from "../tasks/use-task-inbox.js";
 import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
@@ -500,117 +504,16 @@ function PlanDocument({
           { path, startLine: lines.startLine, endLine: lines.endLine },
           lines.commit,
         );
-  const sectionLinksOf = (shown: string, workspace: string): SectionLinks => ({
-    workspace,
-    onOpen: openMention,
-    onOpenFile: openMentionedFile,
-    reveal: revealed?.taskId === shown ? revealed.reveal : undefined,
-    onRevealed: tasks.onSectionRevealed,
-  });
-  if (region.kind !== DOCUMENT_REGION.READY) {
-    const line =
-      region.kind === DOCUMENT_REGION.FAILED
-        ? "The task could not be read."
-        : "Choose a task, or start a new one.";
-    // A plan that cannot be drawn offers no menu, so its way back to the home page is said here.
-    const close = { label: "Close task", onClick: tasks.onLeaveTask };
-    return (
-      <>
-        <Toolbar
-          heading={
-            <div className="desktop-toolbar-heading">
-              {region.kind === DOCUMENT_REGION.READING ? (
-                <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
-              ) : null}
-            </div>
-          }
-        />
-        {/* A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs. */}
-        {region.kind === DOCUMENT_REGION.MISSING ? (
-          <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
-        ) : (
-          <section className="desktop-empty">
-            {region.kind === DOCUMENT_REGION.READING ? (
-              <Spinner label="Loading task" size={SPINNER_SIZE.REGION} />
-            ) : region.kind === DOCUMENT_REGION.FAILED ? (
-              <ErrorState onRetry={tasks.onRetryDocument} placement={ERROR_STATE_PLACEMENT.CENTRED}>
-                {line}
-              </ErrorState>
-            ) : (
-              <p role="alert">{line}</p>
-            )}
-            {region.kind === DOCUMENT_REGION.FAILED ? (
-              <Button onClick={close.onClick}>{close.label}</Button>
-            ) : null}
-          </section>
-        )}
-      </>
-    );
-  }
-  const { task } = region;
   const { mainTabs, sidePanel, agents } = tasks;
-  const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
-  // The slug the task's links are written under, as its ⋯ menu's Copy link to task writes it.
-  const { workspace } = taskLinkPlace(tasks.workspaces, task);
-  const archived = task.archivedAt !== undefined;
-  const listed = listedOpen ?? task;
-  const unarchive = () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE);
-  const repositoryNote = refusal?.taskId === task.id ? refusal.note : undefined;
-  const chooseRepository = (repository: string) => {
-    const { id: taskId } = task;
-    setRefusal(undefined);
-    tasks.onSetRepository(taskId, repository).then(
-      (note) => setRefusal(note === undefined ? undefined : { taskId, note }),
-      () => undefined,
-    );
-  };
-  const menuRequest =
-    tasks.repositoryMenu?.taskId === task.id ? tasks.repositoryMenu.request : undefined;
-  // The panel holds the keys while the focus went into it last, or while it
-  // fills the window over this column; shut, it hands them back.
-  const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
-  // The agent a terminal command means from where the developer is: the one
-  // whose own tab, Changes tab, or Terminal tab holds the keys, if any.
-  const terminalHere = agentOfTab(
-    sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
-  );
   const { tab } = mainTabs;
-  // Start and the task's ⋯ are the task's, not an agent's, so only the
-  // Call's tab, which anchors the column, draws them; the task's chords
-  // stand on every tab.
-  const onTaskTab = tab === MAIN_TAB.CALL;
-  // A delegation's row in an agent's transcript opens its worker in the side
-  // panel, where every subagent stands; where the worker stands seeds its glyph.
-  const openDelegation = (
-    agent: string,
-    callId: string,
-    task: string,
-    status: CodingAgentStatus,
-  ) => {
-    views.onWorkerStatus(callId, status);
-    sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
-  };
-  // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
-  // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
-  const openPullRequest = (agentId: string, number?: number) =>
-    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION, number);
-  // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
-  // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
-  // pull request of the task's repository opens in a Pull request tab by its number.
-  const openHere = openPullRequestsHere(agents, openPullRequest, task.repository);
-  const openTaskLink = (href: string) => {
-    if (!openHere(href)) openLink(href);
-  };
-  // Run opens the agent's run on this Mac in the side panel at once;
-  // the tab reads the agent's pushed branch and starts it (`mac-terminal-tab.tsx`).
-  const { repository } = task;
-  const openOnMac =
-    repository === null || !macTerminalOffered
+  const archived = opened?.archivedAt !== undefined;
+  const home =
+    opened === undefined
       ? undefined
-      : (agentId: string) => {
-          sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
-          showSide();
-        };
+      : tasks.workspaces.find((each) => each.id === opened.workspaceId);
+  // The slug the task's links are written under, as its ⋯ menu's Copy link to task writes it.
+  const workspace =
+    opened === undefined ? undefined : taskLinkPlace(tasks.workspaces, opened).workspace;
   // A row that opens a tab of this column, as a coding agent's start on the
   // Call tab opens the agent's, first has a panel filling the window over it
   // give way, and hands the keys to this column, so ⌘W closes the tab it opened.
@@ -652,60 +555,282 @@ function PlanDocument({
       }
     }
   };
-  // A chat notice in an agent's transcript reads its message from the chat
-  // the window holds, and opens the window's Chat on its channel.
-  const chatRead = tasks.chatView.chat;
-  const chat =
-    chatRead === undefined
-      ? undefined
-      : {
-          chat: chatRead.answer,
-          names: chatNames(tasks.tasks, chatRead.agents, undefined),
-          onOpen: tasks.chatView.onShow,
-        };
-  // A row in a transcript that opens a tab hangs that tab's card, read as
-  // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
-  const cards = taskCards({
-    agents,
-    workRows: workRowsOf(tasks.work.conversation),
-    held: views.held,
-    chosen: (opened) =>
-      sameTab(opened, tab) || (sidePanel.tab !== undefined && sameTab(opened, sidePanel.tab)),
-    shownCode: tasks.shownCode ?? [],
-    task: { name: task.name, card: taskCardOf(tasks, listed, now) },
-  });
-  // The panel's toggle is the window's (desktop-shell.tsx); while no panel
-  // stands beside the toolbar, the toolbar is the one that leaves it room.
+  // A delegation's row in an agent's transcript opens its worker in the side
+  // panel, where every subagent stands; where the worker stands seeds its glyph.
+  const openDelegation = (
+    agent: string,
+    callId: string,
+    task: string,
+    status: CodingAgentStatus,
+  ) => {
+    views.onWorkerStatus(callId, status);
+    sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
+  };
+  // An agent's pull request chip opens its pull request in the side panel, beside its tab, in
+  // the one Pull request tab the "+" offers for that pull request (`showPullRequest`), on its conversation.
+  const openPullRequest = (agentId: string, number?: number) =>
+    showPullRequest(sidePanel, agents, agentId, PULL_REQUEST_VIEW.CONVERSATION, number);
   // An agent a mention names wears its tab's tile and hangs its tab's card, read as its tab reads them.
   const agentLook = (agentId: string) => {
     const subject = agentSubject(agents, agentId, views.held, false);
     return { actor: subject.tile, card: <AgentCard subject={subject} models={agents.models} /> };
   };
-  // What every place on the page that picks or draws a mention reads (`task-mentions.tsx`).
-  const mentions: TaskMentionsValue = {
-    taskId: task.id,
-    taskName: task.name,
-    workspace,
-    repository: task.repository,
-    text: () => task.document.body,
-    pages: tasks.pages,
-    agents: (agents.agents ?? []).map((agent) => {
-      const name = agentTabLabel(agent, agents.models);
-      return { id: agent.id, name, actor: agentActor(agent, name) };
-    }),
-    readAgents: readMentionAgents,
-    pullRequests: mentionablePullRequests(agents),
-    doors: {
-      taskId: task.id,
-      place: { workspace, repository: task.repository },
-      anchors: new Set(
-        sectionAnchors(planSections(task.document.body).map((section) => section.heading)),
+  // Note that what the transcripts and the plan are handed, and what they
+  // read from around them, is held across this page's draws over the same
+  // task, because each holds while that does (`TaskCall`, `AgentPane`,
+  // `PlanBody`), and the page is drawn again as its column's focus, its side
+  // panel's width, and the minute's clock move; only the cards a
+  // transcript's rows hang move with the minute. Each door stands across
+  // draws and calls the newest closure (`useSteadyDoor`).
+  const openTargetDoor = useSteadyDoor(openTarget);
+  const openSubagent = useSteadyDoor((callId: string) => openPanelTab({ subagent: callId }));
+  const openDelegationDoor = useSteadyDoor(openDelegation);
+  const openPullRequestDoor = useSteadyDoor(openPullRequest);
+  const openAgent = useSteadyDoor((agent: string) => openColumnTab({ agent }));
+  const agentLookDoor = useSteadyDoor(agentLook);
+  const openMentionedFileDoor = useSteadyDoor(openMentionedFile);
+  const forkDoor = useSteadyDoor(
+    archived ? undefined : (fork: AgentFork) => openColumnTab({ draft: agents.onForkDraft(fork) }),
+  );
+  const continueDoor = useSteadyDoor(
+    archived
+      ? undefined
+      : (agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) =>
+          openColumnTab({ draft: agents.onContinueDraft(agentId, words, attachments) }),
+  );
+  const showHistory = useSteadyDoor((save: number | undefined) => {
+    if (opened !== undefined) tasks.history.onOpen(opened.id, save);
+  });
+  const edit: PlanEditDoor | undefined =
+    archived || opened === undefined ? undefined : (request) => tasks.edit(opened.id, request);
+  const editDoor = useSteadyDoor(edit);
+  const renameDoor = useSteadyDoor(archived ? undefined : (name: string) => rename.end(name));
+  const draftNameDoor = useSteadyDoor(
+    archived || opened === undefined
+      ? undefined
+      : (name: string | undefined) => tasks.onDraftName(opened.id, name),
+  );
+  const markRead = useSteadyDoor((unread: boolean) => {
+    if (opened !== undefined) reads.mark(opened, unread);
+  });
+  const setStanding = useSteadyDoor(
+    archived || opened === undefined
+      ? undefined
+      : (standing: TaskStanding) => {
+          void tasks.onSetTaskStanding(opened.id, standing);
+        },
+  );
+  const openedId = opened?.id;
+  const openedRepository = opened?.repository ?? null;
+  const reader = useMemo(() => ({ readerId: tasks.me }), [tasks.me]);
+  const editAgents = useMemo(() => ({ control: agents, onOpen: openAgent }), [agents, openAgent]);
+  const unread = openedId === undefined ? false : reads.markedUnread(openedId);
+  const readMark = useMemo(() => ({ unread, onMark: markRead }), [unread, markRead]);
+  const workspaceName = home?.name ?? "";
+  const standing = useMemo(
+    () => ({ workspaceName, onSet: setStanding }),
+    [workspaceName, setStanding],
+  );
+  const reveal = revealed?.taskId === openedId ? revealed?.reveal : undefined;
+  const { onSectionRevealed } = tasks;
+  const sectionLinks = useMemo<SectionLinks | undefined>(
+    () =>
+      workspace === undefined
+        ? undefined
+        : {
+            workspace,
+            onOpen: openMention,
+            onOpenFile: openMentionedFileDoor,
+            reveal,
+            onRevealed: onSectionRevealed,
+          },
+    [workspace, openMention, openMentionedFileDoor, reveal, onSectionRevealed],
+  );
+  const { linearIssuesIn, githubIssuesIn } = tasks.newTask;
+  const underTitle = useMemo(
+    () =>
+      opened === undefined ? undefined : (
+        <TaskIssueLinks
+          taskId={opened.id}
+          workspaceId={opened.workspaceId}
+          repository={opened.repository}
+          archived={archived}
+          linearIn={linearIssuesIn}
+          githubIn={githubIssuesIn}
+        />
       ),
-      onOpenTask: openMention,
-      onOpenFile: openMentionedFile,
-      agentOf: agentLook,
-    },
+    [opened, archived, linearIssuesIn, githubIssuesIn],
+  );
+  const video = useMemo(
+    () => (openedId === undefined ? undefined : <CallTabVideo taskId={openedId} />),
+    [openedId],
+  );
+  // A chat notice in an agent's transcript reads its message from the chat
+  // the window holds, and opens the window's Chat on its channel.
+  const chatRead = tasks.chatView.chat;
+  const { onShow: showChat } = tasks.chatView;
+  const chat = useMemo(
+    () =>
+      chatRead === undefined
+        ? undefined
+        : {
+            chat: chatRead.answer,
+            names: chatNames(tasks.tasks, chatRead.agents, undefined),
+            onOpen: showChat,
+          },
+    [chatRead, tasks.tasks, showChat],
+  );
+  // A row in a transcript that opens a tab hangs that tab's card, read as
+  // the tab reads it, so an agent, a subagent, or a file is previewed alike wherever named.
+  const listedCard = listedOpen ?? opened;
+  const conversation = tasks.work.conversation;
+  const sideTab = sidePanel.tab;
+  const { shownCode } = tasks;
+  const cards = useMemo(
+    () =>
+      listedCard === undefined
+        ? undefined
+        : taskCards({
+            agents,
+            workRows: workRowsOf(conversation),
+            held: views.held,
+            chosen: (chosen) =>
+              sameTab(chosen, tab) || (sideTab !== undefined && sameTab(chosen, sideTab)),
+            shownCode: shownCode ?? [],
+            task: { name: listedCard.name, card: taskCardOf(tasks, listedCard, now) },
+          }),
+    [agents, conversation, views.held, tab, sideTab, shownCode, listedCard, tasks, now],
+  );
+  // A link anywhere on the task to a pull request one of its agents opened, a chip in the plan,
+  // a transcript, or an Inbox item, opens that same tab rather than GitHub; a link to any other
+  // pull request of the task's repository opens in a Pull request tab by its number.
+  const openHere = useMemo(
+    () => openPullRequestsHere(agents, openPullRequestDoor, openedRepository),
+    [agents, openPullRequestDoor, openedRepository],
+  );
+  // What every place on the page that picks or draws a mention reads (`task-mentions.tsx`).
+  const { pages } = tasks;
+  const mentions = useMemo<TaskMentionsValue | undefined>(() => {
+    if (opened === undefined || workspace === undefined) return undefined;
+    return {
+      taskId: opened.id,
+      taskName: opened.name,
+      workspace,
+      repository: opened.repository,
+      text: () => opened.document.body,
+      pages,
+      agents: (agents.agents ?? []).map((agent) => {
+        const name = agentTabLabel(agent, agents.models);
+        return { id: agent.id, name, actor: agentActor(agent, name) };
+      }),
+      readAgents: readMentionAgents,
+      pullRequests: mentionablePullRequests(agents),
+      doors: {
+        taskId: opened.id,
+        place: { workspace, repository: opened.repository },
+        anchors: new Set(
+          sectionAnchors(planSections(opened.document.body).map((section) => section.heading)),
+        ),
+        onOpenTask: openMention,
+        onOpenFile: openMentionedFileDoor,
+        agentOf: agentLookDoor,
+      },
+    };
+  }, [
+    opened,
+    workspace,
+    pages,
+    agents,
+    readMentionAgents,
+    openMention,
+    openMentionedFileDoor,
+    agentLookDoor,
+  ]);
+  if (
+    region.kind !== DOCUMENT_REGION.READY ||
+    workspace === undefined ||
+    cards === undefined ||
+    mentions === undefined ||
+    sectionLinks === undefined
+  ) {
+    const line =
+      region.kind === DOCUMENT_REGION.FAILED
+        ? "The task could not be read."
+        : "Choose a task, or start a new one.";
+    // A plan that cannot be drawn offers no menu, so its way back to the home page is said here.
+    const close = { label: "Close task", onClick: tasks.onLeaveTask };
+    return (
+      <>
+        <Toolbar
+          heading={
+            <div className="desktop-toolbar-heading">
+              {region.kind === DOCUMENT_REGION.READING ? (
+                <Skeleton shape={SKELETON_SHAPE.CONTROL} width={TAB_SKELETON_WIDTH} />
+              ) : null}
+            </div>
+          }
+        />
+        {/* A plan the service would not hand the reader is not there for them, whether it was deleted or never theirs. */}
+        {region.kind === DOCUMENT_REGION.MISSING ? (
+          <NotFound thing={NOT_FOUND_THING.TASK} action={close} />
+        ) : (
+          <section className="desktop-empty">
+            {region.kind === DOCUMENT_REGION.READING ? (
+              <Spinner label="Loading task" size={SPINNER_SIZE.REGION} />
+            ) : region.kind === DOCUMENT_REGION.FAILED ? (
+              <ErrorState onRetry={tasks.onRetryDocument} placement={ERROR_STATE_PLACEMENT.CENTRED}>
+                {line}
+              </ErrorState>
+            ) : (
+              <p role="alert">{line}</p>
+            )}
+            {region.kind === DOCUMENT_REGION.FAILED ? (
+              <Button onClick={close.onClick}>{close.label}</Button>
+            ) : null}
+          </section>
+        )}
+      </>
+    );
+  }
+  const { task } = region;
+  const listed = listedOpen ?? task;
+  const unarchive = () => tasks.onMarkTask(task.id, TASK_MARK.UNARCHIVE);
+  const repositoryNote = refusal?.taskId === task.id ? refusal.note : undefined;
+  const chooseRepository = (repository: string) => {
+    const { id: taskId } = task;
+    setRefusal(undefined);
+    tasks.onSetRepository(taskId, repository).then(
+      (note) => setRefusal(note === undefined ? undefined : { taskId, note }),
+      () => undefined,
+    );
   };
+  const menuRequest =
+    tasks.repositoryMenu?.taskId === task.id ? tasks.repositoryMenu.request : undefined;
+  // The panel holds the keys while the focus went into it last, or while it
+  // fills the window over this column; shut, it hands them back.
+  const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
+  // The agent a terminal command means from where the developer is: the one
+  // whose own tab, Changes tab, or Terminal tab holds the keys, if any.
+  const terminalHere = agentOfTab(
+    sideFocused && sidePanel.tab !== undefined ? sidePanel.tab : mainTabs.tab,
+  );
+  // Start and the task's ⋯ are the task's, not an agent's, so only the
+  // Call's tab, which anchors the column, draws them; the task's chords
+  // stand on every tab.
+  const onTaskTab = tab === MAIN_TAB.CALL;
+  const openTaskLink = (href: string) => {
+    if (!openHere(href)) openLink(href);
+  };
+  // Run opens the agent's run on this Mac in the side panel at once;
+  // the tab reads the agent's pushed branch and starts it (`mac-terminal-tab.tsx`).
+  const { repository } = task;
+  const openOnMac =
+    repository === null || !macTerminalOffered
+      ? undefined
+      : (agentId: string) => {
+          sidePanel.onChoose({ macTerminal: agentId, repository, asked: Date.now() });
+          showSide();
+        };
   // The plan's document and its Inbox stand in the side panel, drawn here,
   // where what they read is held, and handed to the panel to draw as tabs.
   // A summary row that opens a tab of the side panel hands the panel the
@@ -729,44 +854,19 @@ function PlanDocument({
         key={String(archived)}
         task={task}
         live={tasks.live}
-        reader={{ readerId: tasks.me }}
-        agents={{
-          control: agents,
-          onOpen: (agent) => openColumnTab({ agent }),
-        }}
-        onShowHistory={(save) => tasks.history.onOpen(task.id, save)}
-        {...(archived
-          ? {}
-          : {
-              onEdit: (request) => tasks.edit(task.id, request),
-              // The title renames as the chip's field does, so a refusal is said beside it.
-              onRename: (name) => rename.end(name),
-              onDraftName: (name) => tasks.onDraftName(task.id, name),
-            })}
+        reader={reader}
+        agents={editAgents}
+        onShowHistory={showHistory}
+        // None of the three stands on an archived plan, which is drawn read-only.
+        onEdit={editDoor}
+        // The title renames as the chip's field does, so a refusal is said beside it.
+        onRename={renameDoor}
+        onDraftName={draftNameDoor}
         looks={looks}
-        readMark={{
-          unread: reads.markedUnread(task.id),
-          onMark: (unread) => reads.mark(task, unread),
-        }}
-        sectionLinks={sectionLinksOf(task.id, workspace)}
-        standing={{
-          workspaceName: home?.name ?? "",
-          onSet: archived
-            ? undefined
-            : (standing) => {
-                void tasks.onSetTaskStanding(task.id, standing);
-              },
-        }}
-        underTitle={
-          <TaskIssueLinks
-            taskId={task.id}
-            workspaceId={task.workspaceId}
-            repository={task.repository}
-            archived={archived}
-            linearIn={tasks.newTask.linearIssuesIn}
-            githubIn={tasks.newTask.githubIssuesIn}
-          />
-        }
+        readMark={readMark}
+        sectionLinks={sectionLinks}
+        standing={standing}
+        underTitle={underTitle}
       />
     </section>
   );
@@ -917,13 +1017,13 @@ function PlanDocument({
                                 onRetry={tasks.transcript.onRetry}
                                 conversation={tasks.work.conversation}
                                 onLoadEarlier={tasks.work.onLoadEarlier}
-                                onOpenSubagent={(callId) => openPanelTab({ subagent: callId })}
-                                onOpenTarget={openTarget}
+                                onOpenSubagent={openSubagent}
+                                onOpenTarget={openTargetDoor}
                                 cards={cards.call}
                                 shown={tasks.shown && !sidePanel.fullScreen}
                                 models={agents.models}
                                 reveal={tasks.transcript.reveal ?? tasks.work.reveal}
-                                video={<CallTabVideo taskId={task.id} />}
+                                video={video}
                               />
                             </section>
                           ) : null}
@@ -944,24 +1044,13 @@ function PlanDocument({
                               agents={agents}
                               shown={tasks.shown && !sidePanel.fullScreen}
                               views={views}
-                              onOpenDelegation={openDelegation}
-                              onOpenPullRequest={openPullRequest}
-                              onOpenTarget={openTarget}
+                              onOpenDelegation={openDelegationDoor}
+                              onOpenPullRequest={openPullRequestDoor}
+                              onOpenTarget={openTargetDoor}
                               cards={cards}
                               chat={chat}
-                              onFork={
-                                archived
-                                  ? undefined
-                                  : (fork) => openColumnTab({ draft: agents.onForkDraft(fork) })
-                              }
-                              onContinue={
-                                archived
-                                  ? undefined
-                                  : (agentId, words, attachments) =>
-                                      openColumnTab({
-                                        draft: agents.onContinueDraft(agentId, words, attachments),
-                                      })
-                              }
+                              onFork={forkDoor}
+                              onContinue={continueDoor}
                             />
                           )}
                         </FindScope>
@@ -1034,7 +1123,14 @@ function PlanDocument({
   );
 }
 
-export function DesktopTasks({
+/**
+ * The Tasks tab's work column: the open task's page, or the home page.
+ *
+ * A memo boundary: the shell drawn again over the same tasks, as a setting
+ * that moves draws it, leaves the open plan, its transcripts, and its side
+ * panel as they were.
+ */
+export const DesktopTasks = memo(function DesktopTasks({
   tasks,
   looks,
   captions,
@@ -1090,4 +1186,4 @@ export function DesktopTasks({
         </>
       );
   }
-}
+});

@@ -1,9 +1,11 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
+  hasRepository,
   readCodingAgent,
   readCodingAgentPublished,
   recordCodingAgentPublished,
+  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import type { StoredPullRequest } from "@luke/database/schemas/coding-agent";
 import type {
@@ -110,7 +112,7 @@ function filesMoved(kept: StoredPullRequest, found: GitHubPullRequest): boolean 
  */
 function areasOf(
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
 ): Effect.Effect<readonly PullRequestArea[] | undefined, never, HttpClient.HttpClient> {
@@ -153,7 +155,7 @@ function wirePullRequestOf(
 /** The wire's pull request from GitHub's, with its head's checks read beside it, and the row's with its areas beside that. */
 function withChecks(
   token: Redacted.Redacted,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   found: GitHubPullRequest,
   kept: StoredPullRequest | null,
 ): Effect.Effect<Published, PullRequestReadFailure, HttpClient.HttpClient> {
@@ -196,7 +198,7 @@ function nothing(agent: CodingAgent): Published {
  */
 export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<GitHubRepositoryToken, PublishedReadFailure, PublishedServices> {
   const workspace = yield* agentWorkspace(userId, agent);
   const app = yield* GitHubApp;
@@ -220,6 +222,8 @@ const publishedOnGitHub = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<Published, PublishedReadFailure, PublishedServices> {
   // No branch on the row, no publication: no turn has ended in the sandbox, or its checkout stood detached.
   if (agent.branch === null) return nothing(agent);
+  // No repository, nothing to publish to.
+  if (!hasRepository(agent)) return nothing(agent);
   const reached = yield* agentPullRequestReach(userId, agent);
   // The default branch is the checkout's own, not a branch the agent cut: nothing published from it.
   if (agent.branch === reached.repository.defaultBranch) return nothing(agent);
@@ -267,6 +271,7 @@ export const agentPullRequestOfNumber = /* @__PURE__ */ Effect.fn("web/agentPull
     agent: CodingAgent,
     number: number,
   ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
+    if (!hasRepository(agent)) return nothing(agent).answer;
     const { token } = yield* agentPullRequestReach(userId, agent);
     const found = yield* pullRequestByNumber(token, agent.repository, number);
     if (Option.isNone(found)) return nothing(agent).answer;

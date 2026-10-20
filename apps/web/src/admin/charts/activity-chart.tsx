@@ -23,7 +23,7 @@ import {
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { barTopRadius } from "./bar-radius";
-import { ChartEmpty, ChartFrame, ChartTrend } from "./chart-frame";
+import { ChartEmpty, ChartFrame, ChartTrend, LEGEND, LEGEND_ENTRY } from "./chart-frame";
 
 const ACTIVITY_TITLE = "Activity by feature per day";
 
@@ -53,7 +53,7 @@ const FEATURES = Object.values(ACTIVITY_FEATURE);
 /** One band's swatch and name, in the legend under the plot. */
 function LegendEntry({ feature }: { feature: ActivityFeature }): React.JSX.Element {
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className={LEGEND_ENTRY}>
       <span
         aria-hidden="true"
         className="inline-block size-2.5 rounded-sm"
@@ -66,7 +66,7 @@ function LegendEntry({ feature }: { feature: ActivityFeature }): React.JSX.Eleme
 
 function ActivityLegend(): React.JSX.Element {
   return (
-    <span className="flex flex-wrap gap-x-4 gap-y-1">
+    <span className={LEGEND}>
       {FEATURES.map((feature) => (
         <LegendEntry key={feature} feature={feature} />
       ))}

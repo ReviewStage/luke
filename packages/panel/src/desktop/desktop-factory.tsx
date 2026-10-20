@@ -49,6 +49,7 @@ import {
   FactoryViewPicker,
   useFactoryViews,
 } from "../factory-world/world-picker.js";
+import { FadingWords } from "../fading-words.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { agentTabLabel } from "../tasks/coding-agent-model.js";
@@ -370,7 +371,9 @@ function FactoryRow({
           }
           meta={
             <span className="home-row-meta">
-              {context === undefined ? null : <span className="home-row-context">{context}</span>}
+              {context === undefined ? null : (
+                <FadingWords className="home-row-context" words={context} />
+              )}
               {actor === undefined ? null : <ActorMark actor={actor} size={ACTOR_SIZE.MARK} />}
               {end}
               {waiting ? (

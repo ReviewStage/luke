@@ -231,7 +231,8 @@ export function useFloatDismiss(float: FloatState): () => void {
     document.addEventListener("pointerdown", press);
     return () => document.removeEventListener("pointerdown", press);
   }, [floating, onState]);
-  return () => {
+  // The same handler across draws, so the panes handed it are not drawn again for a new one.
+  return useCallback(() => {
     within.current = true;
-  };
+  }, []);
 }

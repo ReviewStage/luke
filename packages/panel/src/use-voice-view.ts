@@ -1,16 +1,19 @@
 import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
+import { AVATAR_OFF, type AvatarState } from "@luke/voice/avatar";
 import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
+  type VoiceCallTranscript,
   type VoiceSpeakers,
   type VoiceView,
 } from "@luke/voice/voice-view";
+import * as Atom from "effect/reactivity/Atom";
 import { useCallback } from "react";
 import { useAct } from "./act.js";
 import { useCallCommands } from "./call-commands.js";
-import { useAppState } from "./use-app-state.js";
+import { APP_SLICE, useAppSlice } from "./use-app-state.js";
 
 /**
  * The conversation a capture run stages, since no voice window stands in one:
@@ -53,6 +56,38 @@ export const FIXTURE_SPEAKING_CAPTIONS: readonly string[] = [
 export function fixtureVoice(profile: string): FixtureVoice | undefined {
   return isRunProfile(profile) ? FIXTURE_VOICES.get(profile) : undefined;
 }
+
+/**
+ * The live conversation as the voice window last reported it, or an idle
+ * voice where none stands, which tells its readers only as the view moves,
+ * not as Luke's avatar or anything else beside it in the slice does.
+ */
+const voiceViewAtom: Atom.Atom<VoiceView> = Atom.map(
+  APP_SLICE.VOICE,
+  (voice) => voice?.view ?? IDLE_VOICE_VIEW,
+);
+
+/**
+ * What was said on the standing call so far, as the document holds it
+ * beside the view, which tells its one reader as a line grows and the view's
+ * readers not at all; none for no call.
+ */
+const callTranscriptAtom: Atom.Atom<VoiceCallTranscript | undefined> = Atom.map(
+  APP_SLICE.VOICE,
+  (voice) => voice?.callTranscript,
+);
+
+/** Luke's avatar on the call as main holds it, which tells its readers only as the avatar moves, not as the words do. */
+const voiceAvatarAtom: Atom.Atom<AvatarState> = Atom.map(
+  APP_SLICE.VOICE,
+  (voice) => voice?.avatar ?? AVATAR_OFF,
+);
+
+/** Whether the microphone is granted, which redraws its reader only as it turns. */
+const microphoneGrantedAtom: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.AUDIO,
+  (audio) => audio?.microphoneStatus === MICROPHONE_STATUS.GRANTED,
+);
 
 /**
  * The failure drawn in the same strip the captions use. A fault is worth
@@ -110,11 +145,10 @@ interface VoiceViewState {
  */
 export function useVoiceView(): VoiceViewState {
   const { tell } = useAct();
-  const state = useAppState();
   // A voice window that went away leaves no view behind, and an idle voice is
   // what every panel draws in its place.
-  const view = state?.voice.view ?? IDLE_VOICE_VIEW;
-  useCallCommands(view, state?.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED, (command) =>
+  const view = useAppSlice(voiceViewAtom);
+  useCallCommands(view, useAppSlice(microphoneGrantedAtom), (command) =>
     tell(ACT_KIND.VOICE_COMMAND, { command }),
   );
 
@@ -131,4 +165,14 @@ export function useVoiceView(): VoiceViewState {
     stopSpeaking,
     requestMicrophoneAccess,
   };
+}
+
+/** Luke's avatar on the standing call, or none, as main holds it for every window. */
+export function useVoiceAvatar(): AvatarState {
+  return useAppSlice(voiceAvatarAtom);
+}
+
+/** What was said on the standing call so far, which the Tasks tab's live transcript draws; none for no call. */
+export function useCallTranscript(): VoiceCallTranscript | undefined {
+  return useAppSlice(callTranscriptAtom);
 }

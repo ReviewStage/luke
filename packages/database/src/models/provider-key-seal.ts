@@ -1,5 +1,9 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import type { ProviderKeyProvider } from "@luke/features/provider-key-wire";
+import {
+  PROVIDER_KEY_KIND,
+  type ProviderKeyKind,
+  type ProviderKeyProvider,
+} from "@luke/features/provider-key-wire";
 import { Redacted, Result } from "effect";
 
 /**
@@ -13,9 +17,11 @@ import { Redacted, Result } from "effect";
  * environment, so a copy of the database alone opens nothing.
  *
  * Both seals bind the account and the provider as additional authenticated
- * data, and the wrap binds the version too, so a sealed key moved onto
- * another account's row, another provider's, or another version fails its
- * tag rather than opening as someone else's. Every failure to open is one
+ * data, and a subscription credential's its kind beside them, and the wrap
+ * binds the version too, so a sealed key moved onto another account's row,
+ * another provider's, another kind's, or another version fails its tag
+ * rather than opening as someone else's. An API key binds no kind, as every
+ * key sealed before kinds does, so those rows open as they always have. Every failure to open is one
  * answer, unreadable, which names no cause: a wrong key, a tampered byte,
  * and a version the environment no longer holds are all a key the service
  * must not use.
@@ -94,10 +100,11 @@ export interface SealedGitHubToken {
   readonly sealedToken: string;
 }
 
-/** Whose key a seal is, which both seals bind. */
+/** Whose key a seal is, and what kind of credential, which both seals bind. */
 export interface SealOwner {
   readonly userId: string;
   readonly provider: ProviderKeyProvider;
+  readonly kind: ProviderKeyKind;
 }
 
 /** A sealed key the service cannot open: it is used for nothing until it is replaced. */
@@ -228,7 +235,9 @@ function rewrapSecret(
 }
 
 function providerNames(owner: SealOwner): SealNames {
-  return [owner.userId, owner.provider];
+  return owner.kind === PROVIDER_KEY_KIND.API_KEY
+    ? [owner.userId, owner.provider]
+    : [owner.userId, owner.provider, owner.kind];
 }
 
 /** The ring the environment's value names, or which shape it breaks. */

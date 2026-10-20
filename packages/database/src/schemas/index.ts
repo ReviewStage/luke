@@ -35,6 +35,8 @@ export * from "./task.js";
 export * from "./task-issue.js";
 export * from "./task-pin.js";
 export * from "./task-section.js";
+export * from "./token-pull-request-poll.js";
 export * from "./usage.js";
 export * from "./voice.js";
 export * from "./workspace-integration.js";
+export * from "./workspace-token-repository.js";

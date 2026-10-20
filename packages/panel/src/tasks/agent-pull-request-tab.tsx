@@ -38,10 +38,11 @@ import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
-  Badge,
-  Button,
+  CHIP_LOOK,
   CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
+  Chip,
+  ChipName,
   ChoiceBar,
   type ChoiceItem,
   COUNT_TONE,
@@ -60,13 +61,17 @@ import {
   linesCount,
   PAGE_FRAME,
   ProviderMark,
+  SCROLL_FADE,
+  SCROLL_FADE_INSET,
+  SCROLL_GUTTER,
+  ScrollArea,
   Skeleton,
   SkeletonRegion,
-  Switch,
   TEXT_BUTTON_TONE,
   TextButton,
   useMenu,
 } from "@luke/ui";
+import { actorName } from "@luke/ui/actor-model";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   BookOpenIcon,
@@ -97,6 +102,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -115,11 +121,19 @@ import {
   useAgentRead,
   useChangesReads,
 } from "./agent-changes-tab.js";
+import {
+  ANNOTATION_TONE,
+  AnnotationCard,
+  AnnotationComment,
+  AnnotationComments,
+  type AnnotationState,
+} from "./annotation-card.js";
 import { threadPreview } from "./changes-model.js";
 import { type ChaptersRead, chaptersCount, useChaptersRead } from "./chapters-read.js";
-import { centreWithin, scrollerOf } from "./code-pane.js";
+import { scrollerOf } from "./code-pane.js";
 import { agentStillWriting, pullRequestNumberLabel } from "./coding-agent-model.js";
 import {
+  type ConversationFilters,
   type ConversationFiltersControl,
   type ConversationHidden,
   conversationHidden,
@@ -141,14 +155,21 @@ import {
   usePendingThread,
 } from "./pending-comments.js";
 import { ANCHOR_KIND, anchorIn } from "./pull-request-anchors.js";
+import { PullRequestBranches } from "./pull-request-branches.js";
 import {
   type PullRequestComment,
   PullRequestCommentBox,
   usePullRequestComment,
 } from "./pull-request-comment-box.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
-import { ofPullRequestTab, PullRequestNumberProvider } from "./pull-request-number.js";
-import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people.js";
+import { PullRequestNumberProvider, pullRequestOfTab } from "./pull-request-number.js";
+import {
+  HeaderReviewers,
+  OpenedLine,
+  PersonRef,
+  ReviewStanding,
+  useNamer,
+} from "./pull-request-people.js";
 import {
   LabelPicker,
   ReviewerPicker,
@@ -222,8 +243,8 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * wearing where each stands, the reviewer and label pickers, and its labels
  * in their GitHub colours (`pull-request-labels.tsx`) at the line's end, so
  * a pull request with no labels spends no line on them. Under it, a row of
- * tabs ending in Review while it is open or a draft
- * (`pull-request-review.tsx`), each tab its glyph, its name, and a quiet
+ * tabs ending in Review, merged or closed too, as GitHub takes a review
+ * then (`pull-request-review.tsx`), each tab its glyph, its name, and a quiet
  * count: Conversation, its description and its comments and
  * reviews in time order, as GitHub renders them (`body_html`), drawn
  * through the transcript's own markdown drawing (`GitHubWords`), with an
@@ -237,18 +258,21 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * each over its own hunks in Files changed's list, counted once they are
  * ready; and Files changed (`AgentChangesTab`), its own bar and
  * tree, counted by the lines it adds and removes. A review carries the
- * threads on lines it started, each headed by its file and lines over the
- * end of the hunk it was made on, drawn as Files changed draws a diff with
- * its own lines lit (`file-diff.tsx`), then its comments; one resolved or
- * outdated by a later push is folded closed under its head, which says
- * which, until opened. The description and every comment wear their
+ * threads on lines it started, each on the card every annotation on code
+ * stands on (`annotation-card.tsx`): its file and lines in the strip over
+ * its head, then the end of the hunk it was made on, drawn as Files changed
+ * draws a diff with its own lines lit (`file-diff.tsx`), and its comments;
+ * one resolved or outdated by a later push is folded closed under its head,
+ * which says which, until opened. The description and every comment wear their
  * reactions under their words, as GitHub draws them
  * (`pull-request-reactions.tsx`). A thread's file and lines take it to
  * Files changed, and its ⋯ to the other view or its link copied, each
  * through the window's route for the thread's link, which brings it into
- * view there (`thread-reveal.tsx`). Over the conversation, stage-cli's two filters,
- * Hide bots and Hide resolved, each counting what it leaves out and kept
- * across launches (`conversation-filters.ts`). Every name and word here is
+ * view there (`thread-reveal.tsx`). The Description and the Conversation
+ * each fold under a heading that sticks to the view's top while it is in
+ * view, the Conversation's ending in stage-cli's two filters, Hide resolved
+ * and Hide bots, each counting what it leaves out; the filters and the folds
+ * are kept across launches (`conversation-filters.ts`). Every name and word here is
  * the repository's, so the tab is left out of the screen recording
  * (`ph-no-capture`).
  */
@@ -257,7 +281,7 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * The Chapters view, loaded as a chunk of its own the first time it is
  * shown rather than with the window, as Settings is, because the renderer
  * bundle is parsed at every window open and the view, its rail, and the
- * chapter logic are opened seldom (`bundle-budget.json`). What stands while
+ * chapter logic are opened seldom. What stands while
  * the chunk loads is the view's own wait, for a frame.
  */
 const AgentChaptersTab = lazy(() =>
@@ -295,9 +319,9 @@ const PULL_REQUEST_WORDS = {
   commentCount: (count: number) => `${count} ${count === 1 ? "comment" : "comments"}`,
   RESOLVED: "Resolved",
   OUTDATED: "Outdated",
-  /** What the folded checks' control says while folded, by how many checks there are in all. */
-  showAll: (count: number) => `Show all ${count}`,
-  SHOW_LESS: "Show less",
+  /** What a review thread's card is called, and who it is by. */
+  THREAD: "Review thread",
+  BY: "by",
   /** What the Files changed tab's count says after the lines left to review. */
   LEFT: "left",
   /** What the Files changed tab's hint says of every line the pull request changes. */
@@ -313,14 +337,6 @@ function threadLines(
   const start = thread.line === null ? thread.originalStartLine : thread.startLine;
   if (line === null) return undefined;
   return start === null || start === line ? `line ${line}` : `lines ${start}–${line}`;
-}
-
-/** What a review thread's head says of it: that it was resolved, and that a later push outdated it. */
-function threadLabels(thread: ReviewThread): readonly string[] {
-  return [
-    ...(thread.resolved ? [PULL_REQUEST_WORDS.RESOLVED] : []),
-    ...(thread.outdated ? [PULL_REQUEST_WORDS.OUTDATED] : []),
-  ];
 }
 
 /** A read that threw rather than answered, drawn as any other failed read. */
@@ -405,9 +421,6 @@ const CHECK_ORDER: readonly CheckState[] = [
   CHECK_STATE.SKIPPED,
 ];
 
-/** How many checks stand before the list folds, as stage-cli folds its own; a check that failed or still runs never folds away. */
-const CHECKS_UNFOLDED = 5;
-
 /** The size, in CSS pixels, a check's avatar is drawn at (`AVATAR_SIZE.INLINE`), and the density GitHub is asked for it at. */
 const CHECK_AVATAR_PIXELS = 16;
 const CHECK_AVATAR_DENSITY = 2;
@@ -420,14 +433,6 @@ function durationOf(check: PullRequestCheck): string | undefined {
   if (check.startedAt === null || check.completedAt === null) return undefined;
   const ran = check.completedAt - check.startedAt;
   return ran < RAN_AT_LEAST_MS ? undefined : workingTime(ran);
-}
-
-/** How many of the checks, in the order the service ranks them, stand unfolded: the first five, and past them every one that failed or still runs. */
-function unfoldedCountOf(checks: readonly PullRequestCheck[]): number {
-  const asking = checks.filter(
-    (check) => check.state === CHECK_STATE.FAILED || check.state === CHECK_STATE.PENDING,
-  ).length;
-  return Math.max(CHECKS_UNFOLDED, asking);
 }
 
 /** What the side panel's toolbar ⋯ offers on the pull request: it opened on GitHub, and the page read again, dimmed while a read is out, which a refresh would only repeat. */
@@ -506,23 +511,64 @@ function reviewersOf(
   ].slice(0, CHANGES_BOUNDS.MAX_PEOPLE);
 }
 
-/** A section of the page: its heading, what it counts beside it, and what it holds. */
+/** Whether a section that folds stands open, and the press that opens or folds it. */
+interface SectionFold {
+  readonly open: boolean;
+  readonly onOpenChange: (open: boolean) => void;
+}
+
+/**
+ * A section of the page: its heading, what it counts beside it, and what it
+ * holds. One that folds (`fold`) heads itself with a press across its whole
+ * row, the chevron leading, which opens and folds it as the app's own
+ * disclosure does, its motion and its reduced motion the disclosure's; what
+ * stands at the row's end (`end`) keeps its own presses rather than folding
+ * it. That row sticks to the top of the Conversation's scroller while its
+ * section is in view, and the next section's pushes it off (tasks.css).
+ */
 function Section({
   title,
   count,
+  fold,
+  end,
   children,
 }: {
   title: string;
   count?: ReactNode;
+  fold?: SectionFold | undefined;
+  end?: ReactNode;
   children: ReactNode;
 }): React.JSX.Element {
+  const heading = (
+    <h3 className="pull-request-heading">
+      {title}
+      {count === undefined ? null : <span className="pull-request-count">{count}</span>}
+    </h3>
+  );
+  if (fold === undefined) {
+    return (
+      <section className="pull-request-section" aria-label={title}>
+        {heading}
+        {children}
+      </section>
+    );
+  }
   return (
     <section className="pull-request-section" aria-label={title}>
-      <h3 className="pull-request-heading">
-        {title}
-        {count === undefined ? null : <span className="pull-request-count">{count}</span>}
-      </h3>
-      {children}
+      <Fold open={fold.open} onOpenChange={fold.onOpenChange}>
+        <FoldSummary className="pull-request-section-head">
+          <DisclosureChevron />
+          {heading}
+          {end === undefined ? null : (
+            // biome-ignore lint/a11y/noStaticElementInteractions: the wrapper only keeps its controls' presses from folding the section whose head they stand in; the controls inside are the presses.
+            // biome-ignore lint/a11y/useKeyWithClickEvents: a key on a control inside reaches it as a click, which the wrapper keeps the same way.
+            <span className="pull-request-section-end" onClick={keptInHead}>
+              {end}
+            </span>
+          )}
+        </FoldSummary>
+        <FoldBody className="pull-request-section-body">{children}</FoldBody>
+      </Fold>
     </section>
   );
 }
@@ -655,16 +701,12 @@ function CheckRow({
       description={check.app ?? undefined}
       meta={running ? live ? <RunningTime startedAt={startedAt} /> : null : duration}
       onPress={url === null ? undefined : () => openLink(url)}
+      linkHref={url ?? undefined}
     />
   );
 }
 
-/**
- * Every check, in the order the service ranks them, failures first, under a
- * count of each standing. Past five the list folds, as stage-cli's does,
- * behind a control that shows them all and folds them again; a check that
- * failed or still runs stands above the fold however many there are.
- */
+/** Every check, in the order the service ranks them, failures first, then those still running, then the rest, under a count of each standing. */
 function Checks({
   agentId,
   checks,
@@ -674,38 +716,21 @@ function Checks({
   checks: readonly PullRequestCheck[];
   live: boolean;
 }): React.JSX.Element {
-  const [unfolded, setUnfolded] = useState(false);
-  const listId = useId();
   const counts = CHECK_ORDER.flatMap((state) => {
     const count = checks.filter((check) => check.state === state).length;
     return count === 0 ? [] : [`${count} ${CHECK_WORDS[state]}`];
   });
-  const folds = checks.length > unfoldedCountOf(checks);
-  const shown = folds && !unfolded ? checks.slice(0, unfoldedCountOf(checks)) : checks;
   return (
     <Section title="Checks" count={counts.length === 0 ? undefined : counts.join(", ")}>
       {checks.length === 0 ? (
         <p className="pull-request-quiet pull-request-none">{PULL_REQUEST_WORDS.NO_CHECKS}</p>
       ) : (
-        <>
-          <div id={listId}>
-            <List label="Check list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
-              {shown.map((check, at) => (
-                // Note that two checks may share a name across Apps, so a row is keyed by its place too.
-                <CheckRow key={`${at}`} agentId={agentId} check={check} live={live} />
-              ))}
-            </List>
-          </div>
-          {folds ? (
-            <Button
-              aria-expanded={unfolded}
-              aria-controls={listId}
-              onClick={() => setUnfolded((was) => !was)}
-            >
-              {unfolded ? PULL_REQUEST_WORDS.SHOW_LESS : PULL_REQUEST_WORDS.showAll(checks.length)}
-            </Button>
-          ) : null}
-        </>
+        <List label="Check list" variant={LIST_VARIANT.CARD} density={LIST_DENSITY.DENSE}>
+          {checks.map((check, at) => (
+            // Note that two checks may share a name across Apps, so a row is keyed by its place too.
+            <CheckRow key={`${at}`} agentId={agentId} check={check} live={live} />
+          ))}
+        </List>
       )}
     </Section>
   );
@@ -861,12 +886,105 @@ function ThreadMenu({
   );
 }
 
+/** A review thread's lines as its strip names them, GitHub's way: `L12–13`, or the one line; none for a thread on the whole file. */
+function lineSpan(
+  thread: Pick<ReviewThread, "line" | "startLine" | "originalLine" | "originalStartLine">,
+): string | undefined {
+  const line = thread.line ?? thread.originalLine;
+  const start = thread.line === null ? thread.originalStartLine : thread.startLine;
+  if (line === null) return undefined;
+  return start === null || start === line ? `L${line}` : `L${start}–${line}`;
+}
+
+/** The states a review thread's head wears: resolved, outdated by a later push, and pending, the member's own not yet submitted. */
+function threadStates(thread: ReviewThread, pending: boolean): readonly AnnotationState[] {
+  return [
+    ...(thread.resolved
+      ? [{ word: PULL_REQUEST_WORDS.RESOLVED, tone: ANNOTATION_TONE.COMPLETE }]
+      : []),
+    ...(thread.outdated
+      ? [{ word: PULL_REQUEST_WORDS.OUTDATED, tone: ANNOTATION_TONE.NEUTRAL }]
+      : []),
+    ...(pending ? [{ word: PENDING_WORDS.PENDING, tone: ANNOTATION_TONE.ATTENTION }] : []),
+  ];
+}
+
 /**
- * One review thread: its file and lines at its head, with whether it was
- * resolved or a later push outdated it, which folds it closed until opened;
- * then the lines it is on, as Files changed draws a diff, its own lines lit
- * (`threadPreview`), and its comments, oldest first, as the conversation
- * draws an entry, with the replies a read left on GitHub counted after them.
+ * The strip over a thread card whose place does not say where it is: its
+ * file's path, cut in the middle so its file's name stands, and its lines,
+ * which take the thread to them in Files changed where it can be found
+ * there; the lines alone for a thread above a diff, whose file is the one
+ * it stands in.
+ */
+function ThreadWhere({
+  path,
+  lines,
+  onPress,
+}: {
+  path: string | undefined;
+  lines: string | undefined;
+  onPress: (() => void) | undefined;
+}): React.JSX.Element {
+  const cut = path === undefined ? -1 : path.lastIndexOf("/");
+  const words = (
+    <span className="annotation-where">
+      {path === undefined ? null : (
+        <>
+          <span className="annotation-where-folder">
+            <bdi>{path.slice(0, cut + 1)}</bdi>
+          </span>
+          <span className="annotation-where-file">
+            <bdi>{path.slice(cut + 1)}</bdi>
+          </span>
+        </>
+      )}
+      {lines === undefined ? null : <span className="annotation-where-lines">{lines}</span>}
+    </span>
+  );
+  const named = [path, lines].filter((part) => part !== undefined).join(" ");
+  if (onPress === undefined) return <Tooltip label={named}>{words}</Tooltip>;
+  return (
+    <Tooltip label={THREAD_REVEAL_WORDS.VIEW_FILES}>
+      <TextButton
+        tone={TEXT_BUTTON_TONE.QUIET}
+        aria-label={`${THREAD_REVEAL_WORDS.VIEW_FILES}: ${named}`}
+        onClick={onPress}
+      >
+        {words}
+      </TextButton>
+    </Tooltip>
+  );
+}
+
+/** What a review thread's card heads it with: who wrote its first comment, when, the states it is in, and how many comments it holds. */
+function useThreadHead(thread: ReviewThread, now: number, pending: boolean) {
+  const name = useNamer();
+  const first = thread.comments[0];
+  const writer = first === undefined ? undefined : name(first.by);
+  return {
+    label:
+      writer === undefined
+        ? PULL_REQUEST_WORDS.THREAD
+        : `${PULL_REQUEST_WORDS.THREAD} ${PULL_REQUEST_WORDS.BY} ${actorName(writer)}`,
+    face: writer === undefined ? null : <ActorMark actor={writer} size={ACTOR_SIZE.ROW} />,
+    name: writer === undefined ? null : <ActorRef actor={writer} nameOnly />,
+    time:
+      first === undefined ? undefined : (
+        <RelativeTime className="annotation-card-time" at={first.at} now={now} />
+      ),
+    states: threadStates(thread, pending),
+    count: thread.comments.length + thread.more,
+  };
+}
+
+/**
+ * One review thread in the Conversation, on the shared card
+ * (`annotation-card.tsx`): its file and lines in the strip over its head,
+ * which take it to them in Files changed; its head, folded closed while it
+ * was resolved or a later push outdated it, until opened; then the lines it
+ * is on, as Files changed draws a diff, its own lines lit
+ * (`threadPreview`), and its comments, oldest first, with the replies a
+ * read left on GitHub counted after them, and Reply and Resolve at its foot.
  */
 function ThreadCard({
   thread,
@@ -880,58 +998,28 @@ function ThreadCard({
   // A preview is a hunk's end in a card, drawn unified with its lines tinted whole, as stage-cli draws one.
   const look = { ...useDiffLook(false), inlineDiff: INLINE_DIFF.NONE };
   const preview = threadPreview(thread);
-  const lines = threadLines(thread);
-  const labels = threadLabels(thread);
-  const landed = useLandedThread(thread, labels.length === 0);
+  const pending = usePendingThread(thread);
+  const head = useThreadHead(thread, now, pending);
+  const landed = useLandedThread(thread, !thread.resolved && !thread.outdated);
   const toFiles = useThreadJump(thread, PULL_REQUEST_THREAD_VIEW.FILES);
-  const where = (
-    <>
-      <span className="pull-request-thread-path">
-        <bdi>{thread.path}</bdi>
-      </span>
-      {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
-    </>
-  );
   return (
-    <li
-      ref={landed.ref}
-      className="pull-request-thread"
-      data-search-landed={landed.ringed ? "" : undefined}
-      onAnimationEnd={landed.onAnimationEnd}
-    >
-      <Fold open={landed.open} onOpenChange={landed.onOpenChange}>
-        <FoldSummary className="pull-request-thread-head">
-          {/* The file and lines take the thread to them in Files changed, where it can be found there. */}
-          <Tooltip label={toFiles === undefined ? thread.path : THREAD_REVEAL_WORDS.VIEW_FILES}>
-            {toFiles === undefined ? (
-              <span className="pull-request-thread-where">{where}</span>
-            ) : (
-              <TextButton
-                tone={TEXT_BUTTON_TONE.QUIET}
-                aria-label={`${THREAD_REVEAL_WORDS.VIEW_FILES}: ${thread.path}${lines === undefined ? "" : ` ${lines}`}`}
-                onClick={(event) => {
-                  keptInHead(event);
-                  toFiles();
-                }}
-              >
-                <span className="pull-request-thread-where">{where}</span>
-              </TextButton>
-            )}
-          </Tooltip>
-          {labels.map((label) => (
-            <Badge key={label}>{label}</Badge>
-          ))}
+    <li className="pull-request-thread-slot">
+      <AnnotationCard
+        {...head}
+        className="pull-request-thread"
+        open={landed.open}
+        onOpenChange={landed.onOpenChange}
+        landing={landed}
+        where={<ThreadWhere path={thread.path} lines={lineSpan(thread)} onPress={toFiles} />}
+        menu={
           <ThreadMenu
             thread={thread}
             here={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
             there={PULL_REQUEST_THREAD_VIEW.FILES}
           />
-          <span className="pull-request-thread-turn">
-            <DisclosureChevron />
-          </span>
-        </FoldSummary>
-        <FoldBody>
-          {preview === undefined ? null : (
+        }
+        lead={
+          preview === undefined ? undefined : (
             <PierreDiff
               patch={preview.patch}
               look={look}
@@ -939,47 +1027,61 @@ function ThreadCard({
               excerpt
               className="diff-view pull-request-thread-lines"
             />
-          )}
-          <ThreadComments thread={thread} now={now} picture={picture} />
-        </FoldBody>
-      </Fold>
+          )
+        }
+        footer={<ThreadActions thread={thread} />}
+      >
+        <ThreadComments thread={thread} now={now} picture={picture} />
+      </AnnotationCard>
     </li>
   );
 }
 
-/** One comment of a review thread: who and when, their words, and the reactions it wears; one of the member's own pending comments as such (`pending-comments.tsx`). */
+/**
+ * One comment of a review thread on its card: the first one's words alone,
+ * since the card's head names who and when; a reply's face, who and when
+ * beside it, Pending where it is the member's own, then its words. Under
+ * the words, the reactions it wears; one of the member's pending comments
+ * with Edit and Delete there instead (`pending-comments.tsx`).
+ */
 function ThreadComment({
   comment,
   now,
   picture,
-  marked,
+  first,
 }: {
   comment: ReviewThread["comments"][number];
   now: number;
   picture: GitHubPictureDrawer;
-  /** Whether a pending comment wears its own Pending mark; not the one a pending thread starts, whose head wears it. */
-  marked: boolean;
+  /** Whether it is the comment the card's head names. */
+  first: boolean;
 }): React.JSX.Element {
   const draft = usePendingComment(comment.url);
-  const head = (
-    <>
-      <PersonRef person={comment.by} />
-      <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
-    </>
-  );
+  const writer = useNamer()(comment.by);
   const words = <EntryWords entry={comment} picture={picture} />;
+  const reply = first
+    ? undefined
+    : {
+        face: <ActorMark actor={writer} size={ACTOR_SIZE.ROW} />,
+        meta: (
+          <>
+            <ActorRef actor={writer} nameOnly />
+            <RelativeTime className="annotation-card-time" at={comment.at} now={now} />
+            {draft === undefined ? null : <PendingBadge />}
+          </>
+        ),
+      };
   return (
-    <li className="pull-request-thread-comment">
+    <AnnotationComment reply={reply} className="pull-request-thread-comment">
       {draft === undefined ? (
         <>
-          <span className="changes-comment-head">{head}</span>
           {words}
           <Reactions reactions={comment.reactions} subject={comment.subject} />
         </>
       ) : (
-        <PendingComment draft={draft} head={head} words={words} marked={marked} />
+        <PendingComment draft={draft} words={words} marked={false} />
       )}
-    </li>
+    </AnnotationComment>
   );
 }
 
@@ -1019,7 +1121,7 @@ function PendingList({
   );
 }
 
-/** A review thread's comments, oldest first, as the conversation draws an entry, with the replies a read left on GitHub counted after them, then its Reply and Resolve (`pull-request-thread-actions.tsx`), wherever the thread is drawn. */
+/** A review thread's comments, oldest first, on its card, with the replies a read left on GitHub counted after them, wherever the thread is drawn. */
 function ThreadComments({
   thread,
   now,
@@ -1030,40 +1132,44 @@ function ThreadComments({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   const openLink = useOpenLink();
-  // A thread a pending comment starts wears Pending in its head, so its first comment does not again.
-  const startsPending = usePendingThread(thread);
   const last = thread.comments.at(-1);
   return (
     <>
-      <ol className="pull-request-thread-comments">
+      <AnnotationComments>
         {thread.comments.map((comment, at) => (
           <ThreadComment
             key={comment.url}
             comment={comment}
             now={now}
             picture={picture}
-            marked={!(startsPending && at === 0)}
+            first={at === 0}
           />
         ))}
-      </ol>
+      </AnnotationComments>
       {thread.more === 0 || last === undefined ? null : (
-        <p className="pull-request-more pull-request-thread-more">
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(last.url)}>
+        <p className="pull-request-more annotation-card-more">
+          <TextButton
+            tone={TEXT_BUTTON_TONE.LINK}
+            onClick={() => openLink(last.url)}
+            linkHref={last.url}
+          >
             {PULL_REQUEST_WORDS.moreReplies(thread.more)}
           </TextButton>
         </p>
       )}
-      <ThreadActions thread={thread} />
     </>
   );
 }
 
 /**
  * A review thread drawn on its line in Files changed, as GitHub's own diff
- * draws one: whether it was resolved or a later push outdated it, at its
- * head, which folds it closed until opened; then its comments. An outdated
- * one, whose line is gone, names the line it was made on. Minimize inline
- * comments draws a line's threads as a chip instead (`minimized-threads.tsx`).
+ * draws one, on the shared card (`annotation-card.tsx`): its head, folded
+ * closed while it was resolved or a later push outdated it, until opened;
+ * then its comments, and Reply and Resolve at its foot. Its line and the
+ * lines it lights say where it is, so it names none; one above the diff,
+ * whose line is gone, names the line it was made on in the strip over its
+ * head. Minimize inline comments draws a line's threads as a chip instead
+ * (`minimized-threads.tsx`).
  */
 function InlineThread({
   thread,
@@ -1077,48 +1183,36 @@ function InlineThread({
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
-  const labels = threadLabels(thread);
-  const lines = place === THREAD_PLACE.ABOVE ? threadLines(thread) : undefined;
-  const first = thread.comments[0];
-  const landed = useLandedThread(thread, labels.length === 0);
   // A thread the member's pending comment starts is theirs alone until they submit it, with no page to link or jump to.
   const pending = usePendingThread(thread);
+  const head = useThreadHead(thread, now, pending);
+  const landed = useLandedThread(thread, !thread.resolved && !thread.outdated);
+  const lines = place === THREAD_PLACE.ABOVE ? lineSpan(thread) : undefined;
   return (
-    <div
-      ref={landed.ref}
+    <AnnotationCard
+      {...head}
       className="diff-inline-thread"
-      data-search-landed={landed.ringed ? "" : undefined}
-      onAnimationEnd={landed.onAnimationEnd}
+      open={landed.open}
+      onOpenChange={landed.onOpenChange}
+      landing={landed}
+      where={
+        lines === undefined ? undefined : (
+          <ThreadWhere path={undefined} lines={lines} onPress={undefined} />
+        )
+      }
+      menu={
+        pending ? null : (
+          <ThreadMenu
+            thread={thread}
+            here={PULL_REQUEST_THREAD_VIEW.FILES}
+            there={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
+          />
+        )
+      }
+      footer={<ThreadActions thread={thread} />}
     >
-      <Fold open={landed.open} onOpenChange={landed.onOpenChange}>
-        <FoldSummary className="pull-request-thread-head">
-          {first === undefined ? null : <PersonRef person={first.by} />}
-          {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
-          {labels.map((label) => (
-            <span key={label} className="pull-request-thread-label">
-              {label}
-            </span>
-          ))}
-          {pending ? <PendingBadge /> : null}
-          <span className="pull-request-quiet">
-            {PULL_REQUEST_WORDS.commentCount(thread.comments.length + thread.more)}
-          </span>
-          {pending ? null : (
-            <ThreadMenu
-              thread={thread}
-              here={PULL_REQUEST_THREAD_VIEW.FILES}
-              there={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
-            />
-          )}
-          <span className="pull-request-thread-turn">
-            <DisclosureChevron />
-          </span>
-        </FoldSummary>
-        <FoldBody>
-          <ThreadComments thread={thread} now={now} picture={picture} />
-        </FoldBody>
-      </Fold>
-    </div>
+      <ThreadComments thread={thread} now={now} picture={picture} />
+    </AnnotationCard>
   );
 }
 
@@ -1217,21 +1311,18 @@ function PullRequestHead({
   return (
     <div className="changes-people pull-request-people">
       <span className="pull-request-branch-row">
-        <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
-          <span className="pull-request-branches">
-            <bdi>{pullRequest.base}</bdi>
-            {" ← "}
-            <bdi>{pullRequest.head}</bdi>
-          </span>
-        </Tooltip>
+        <PullRequestBranches
+          base={pullRequest.base}
+          head={pullRequest.head}
+          headOwner={pullRequest.headOwner}
+        />
         <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
       </span>
-      {author === undefined ? null : <OpenedBy person={author} />}
-      {/* Note that a merged one says when it merged, which is the moment that matters once it has. */}
-      <span className="pull-request-quiet">
-        {mergedAt === null ? null : "Merged "}
-        <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
-      </span>
+      <OpenedLine
+        person={author}
+        opened={<RelativeTime at={pullRequest.createdAt} now={now} ago />}
+        merged={mergedAt === null ? undefined : <RelativeTime at={mergedAt} now={now} ago />}
+      />
       <span className="pull-request-reviewers">
         {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
         {open ? (
@@ -1280,6 +1371,7 @@ function DeploymentRow({
         )
       }
       onPress={url === null ? undefined : () => openLink(url)}
+      linkHref={url ?? undefined}
     />
   );
 }
@@ -1344,16 +1436,18 @@ function DescriptionPart({
   reactions,
   subject,
   picture,
+  fold,
 }: {
   part: Part<CodingAgentOverviewPullRequest>;
   reactions: readonly ReactionGroup[] | undefined;
   /** The GraphQL id a reaction is given to the description by, which the conversation's read names. */
   subject: string | undefined;
   picture: GitHubPictureDrawer;
+  fold: SectionFold;
 }): React.JSX.Element | null {
   if (part.kind === PART.FAILED || part.kind === PART.NONE) return null;
   return (
-    <Section title="Description">
+    <Section title="Description" fold={fold}>
       {part.kind === PART.PENDING ? (
         <PartSkeleton
           label={PULL_REQUEST_WORDS.READING_DESCRIPTION}
@@ -1375,17 +1469,22 @@ function DescriptionPart({
   );
 }
 
-/** The conversation as its read stands: its entries once landed, as the filters leave them, the earlier ones counted first; a skeleton while out, its failure with Retry. */
+/** The conversation as its read stands, under its heading and its filters: its entries once landed, as the filters leave them, the earlier ones counted first; a skeleton while out, its failure with Retry. */
 function ConversationPart({
   parts,
   filters,
+  filterControls,
+  fold,
   kept,
   url,
   now,
   picture,
 }: {
   parts: OverviewParts;
-  filters: ConversationFiltersControl["filters"];
+  filters: ConversationFilters;
+  /** Hide resolved and Hide bots, at the end of the section's heading. */
+  filterControls: ReactNode;
+  fold: SectionFold;
   /** What was last brought into view here, a thread by its id and an entry by its page, which stands whatever the filters say. */
   kept: ReadonlySet<string>;
   /** The pull request's page, which the earlier entries left on GitHub open. */
@@ -1397,7 +1496,7 @@ function ConversationPart({
   const part = parts.conversation;
   if (part.kind !== PART.LANDED) {
     return (
-      <Section title="Conversation">
+      <Section title="Conversation" fold={fold} end={filterControls}>
         {part.kind === PART.PENDING ? (
           <PartSkeleton
             label={PULL_REQUEST_WORDS.READING_CONVERSATION}
@@ -1418,11 +1517,13 @@ function ConversationPart({
     <Section
       title="Conversation"
       count={earlier + conversation.length === 0 ? undefined : earlier + conversation.length}
+      fold={fold}
+      end={filterControls}
     >
       {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
       {earlier === 0 || url === undefined ? null : (
         <p className="pull-request-more pull-request-earlier">
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(url)}>
+          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(url)} linkHref={url}>
             {PULL_REQUEST_WORDS.earlier(earlier)}
           </TextButton>
         </p>
@@ -1635,7 +1736,7 @@ function tabsOf(
   ];
 }
 
-/** One of the conversation's filters: its word, how many it would leave out once the conversation is read, and its switch, the word and the count pressing it too. */
+/** One of the conversation's filters, drawn as the tasks board's view filter in its toolbar is (`tasks-board.tsx`): a filter chip pressed while it is on, its word and how many it would leave out once the conversation is read. */
 function ConversationFilter({
   label,
   count,
@@ -1650,27 +1751,24 @@ function ConversationFilter({
   on: boolean;
   onChange: (on: boolean) => void;
 }): React.JSX.Element {
-  const switchId = useId();
   const noteId = useId();
   const note = count === undefined ? undefined : describe(count);
   const filter = (
     <span className="pull-request-filter">
-      {/* Note that the word and the count label the switch, so a press on either turns it too. */}
-      <label htmlFor={switchId}>
-        {label}
+      <Chip
+        look={CHIP_LOOK.FILTER}
+        aria-label={label}
+        aria-pressed={on}
+        aria-describedby={note === undefined ? undefined : noteId}
+        onClick={() => onChange(!on)}
+      >
+        <ChipName>{label}</ChipName>
         {count === undefined ? null : (
-          <span className="pull-request-count" aria-hidden="true">
+          <span className="pull-request-filter-count" aria-hidden="true">
             {count.toLocaleString()}
           </span>
         )}
-      </label>
-      <Switch
-        id={switchId}
-        checked={on}
-        label={label}
-        describedBy={note === undefined ? undefined : noteId}
-        onChange={onChange}
-      />
+      </Chip>
       {note === undefined ? null : (
         <span id={noteId} hidden>
           {note}
@@ -1681,8 +1779,8 @@ function ConversationFilter({
   return note === undefined ? filter : <Tooltip label={note}>{filter}</Tooltip>;
 }
 
-/** The row over the conversation that stays put while it scrolls: Hide resolved and Hide bots, as stage-cli orders them, each counting what it leaves out once read. */
-function ConversationFilterRow({
+/** Hide resolved and Hide bots, as stage-cli orders them, at the end of the Conversation's heading, each counting what it leaves out once read. */
+function ConversationFilterChips({
   control,
   hidden,
 }: {
@@ -1691,7 +1789,7 @@ function ConversationFilterRow({
 }): React.JSX.Element {
   const { filters, change } = control;
   return (
-    <div className="pull-request-filters">
+    <>
       <ConversationFilter
         label={PULL_REQUEST_WORDS.HIDE_RESOLVED}
         count={hidden?.resolved}
@@ -1706,11 +1804,21 @@ function ConversationFilterRow({
         on={filters.hideBots}
         onChange={(hideBots) => change({ hideBots })}
       />
-    </div>
+    </>
   );
 }
 
-/** The Conversation tab: its filters, then the description, then the comments, reviews, and threads, in one scroll under them, and, once the conversation is read, the box a new comment is written in at its foot. */
+/**
+ * The Conversation tab: the description, then the comments, reviews, and
+ * threads, in one scroll, and, once the conversation is read, the box a new
+ * comment is written in at its foot. Each of the two sections folds under
+ * its heading, the choice kept for every pull request
+ * (`conversation-filters.ts`), and its heading sticks to the scroller's top
+ * while it is in view, what scrolls under it fading beneath it
+ * (`SCROLL_FADE_INSET.BAND`) rather than cut at its edge. A thread or an
+ * entry brought into view opens a folded Conversation, so its card is drawn
+ * to land on.
+ */
 function ConversationView({
   agentId,
   parts,
@@ -1731,38 +1839,58 @@ function ConversationView({
 }): React.JSX.Element {
   const now = useMinute();
   const picture = usePictureDrawer(agentId);
-  const filters = useConversationFilters();
+  const choices = useConversationFilters();
+  const { filters, change } = choices;
   const conversation = landed(parts.conversation)?.conversation;
+  const asked = landing?.ask;
+  const conversationOpen = filters.conversationOpen;
+  useEffect(() => {
+    if (asked !== undefined && !conversationOpen) change({ conversationOpen: true });
+  }, [asked, conversationOpen, change]);
   return (
-    <DetailPage
-      frame={PAGE_FRAME.TOOLBAR}
-      label="Pull request conversation"
-      inset={DETAIL_PAGE_INSET.READING}
-      toolbar={
-        <ConversationFilterRow
-          control={filters}
-          hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
-        />
-      }
+    // Note that it is in the tab order, because it scrolls on its own, and a column of words holds nothing else a keyboard could reach to scroll it by.
+    <ScrollArea
+      role="region"
+      aria-label="Pull request conversation"
+      tabIndex={0}
+      fade={SCROLL_FADE.START}
+      fadeInset={SCROLL_FADE_INSET.BAND}
+      gutter={SCROLL_GUTTER.STABLE}
     >
-      <DescriptionPart
-        part={parts.pullRequest}
-        reactions={landed(parts.conversation)?.descriptionReactions}
-        subject={landed(parts.conversation)?.descriptionSubject}
-        picture={picture}
-      />
-      <ThreadLandingProvider value={landing}>
-        <ConversationPart
-          parts={parts}
-          filters={filters.filters}
-          kept={kept}
-          url={url}
-          now={now}
+      <div className="pull-request-page">
+        <DescriptionPart
+          part={parts.pullRequest}
+          reactions={landed(parts.conversation)?.descriptionReactions}
+          subject={landed(parts.conversation)?.descriptionSubject}
           picture={picture}
+          fold={{
+            open: filters.descriptionOpen,
+            onOpenChange: (descriptionOpen) => change({ descriptionOpen }),
+          }}
         />
-      </ThreadLandingProvider>
-      {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
-    </DetailPage>
+        <ThreadLandingProvider value={landing}>
+          <ConversationPart
+            parts={parts}
+            filters={filters}
+            filterControls={
+              <ConversationFilterChips
+                control={choices}
+                hidden={conversation === undefined ? undefined : conversationHidden(conversation)}
+              />
+            }
+            fold={{
+              open: conversationOpen,
+              onOpenChange: (open) => change({ conversationOpen: open }),
+            }}
+            kept={kept}
+            url={url}
+            now={now}
+            picture={picture}
+          />
+        </ThreadLandingProvider>
+        {conversation === undefined ? null : <PullRequestCommentBox comment={comment} />}
+      </div>
+    </ScrollArea>
   );
 }
 
@@ -1785,10 +1913,24 @@ interface ThreadJump {
   readonly ask: number;
 }
 
-/** A card brought into sight in the Conversation's own scroller, never by `scrollIntoView`, which would scroll every box around it (panel AGENTS.md). */
+/**
+ * A card brought into sight in the Conversation's own scroller, never by
+ * `scrollIntoView`, which would scroll every box around it (panel
+ * AGENTS.md): centred in the room under the heading stuck at the scroller's
+ * top and the fade beneath it, which the scroller's own scroll padding
+ * clears, and, where it is taller than that room, its top standing just
+ * under them rather than behind the heading.
+ */
 function centreCard(card: HTMLElement): void {
   const scroller = scrollerOf(card);
-  if (scroller !== undefined) centreWithin(scroller, card);
+  if (scroller === undefined) return;
+  const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingTop);
+  const clear = Number.isNaN(padding) ? 0 : padding;
+  const box = scroller.getBoundingClientRect();
+  const at = card.getBoundingClientRect();
+  const top = box.top + clear;
+  const centred = at.top + at.height / 2 - (top + (box.height - clear) / 2);
+  scroller.scrollTop += Math.min(centred, at.top - top);
 }
 
 /**
@@ -1988,7 +2130,7 @@ interface AgentPullRequestTabProps {
   control: CodingAgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
-  /** The plan's repository, which the files' breadcrumbs name; none names the path plain. */
+  /** The plan's repository, whose files a gap between a diff's hunks is read from; none opens no gap. */
   repository: string | null;
   /** Whether the tree beside File tabs and the files is open, and its toggle. */
   tree: TreeShown;
@@ -2007,9 +2149,10 @@ const HEADER_FOLD = { AT: 48, BACK: 8 } as const;
 
 /**
  * The views' own scrollers, whose scroll alone folds the header: the
- * Conversation's and the Checks' page column, and the diff list's.
+ * Checks' page column, the Conversation's scroller, and the diff list's.
  */
-const VIEW_SCROLLER = ".luke-detail-page-main, .diff-list > .luke-scroll-area";
+const VIEW_SCROLLER =
+  ".luke-detail-page-main, .pull-request-view > .luke-scroll-area, .diff-list > .luke-scroll-area";
 
 /**
  * Whether `box` is the shown view's own scroller, drawn in the tab at
@@ -2173,9 +2316,8 @@ function PullRequestTabBody({
   );
   const overview = landed(parts.pullRequest);
   const title = overview ?? published;
-  // Review stands at the end of the tabs while the pull request is open or a draft, as the pill says it stands.
-  const reviewable =
-    held?.state === PULL_REQUEST_STATE.OPEN || held?.state === PULL_REQUEST_STATE.DRAFT;
+  // Review stands at the end of the tabs once the pull request is held, whatever it stands as, because GitHub takes a review of one merged or closed too; where GitHub refuses one, as on a locked conversation, the panel says why in GitHub's words.
+  const reviewable = held !== undefined;
   const now = useMinute();
   // A change is read back as Refresh reads: the tab, and what the agent published, which the plan's own marks draw.
   const written = refresh;
@@ -2252,7 +2394,11 @@ function PullRequestTabBody({
                   <div className="pull-request-title-row">
                     <HeaderTitle title={title} writes={writes} />
                     {held === undefined ? null : (
-                      <PullRequestStateMenu pullRequest={held} writes={writes} />
+                      <PullRequestStateMenu
+                        pullRequest={held}
+                        queued={overview?.merging?.queued}
+                        writes={writes}
+                      />
                     )}
                     <div className="pull-request-title-actions">
                       {overview === undefined ? null : (
@@ -2385,18 +2531,4 @@ function PullRequestTabBody({
   );
   // The member's own pending comments, told apart wherever a comment is drawn (`pending-comments.tsx`).
   return <PendingCommentsProvider value={pendingComments}>{page}</PendingCommentsProvider>;
-}
-
-/**
- * The pull request a Pull request tab shows, as the task's agents last read
- * it: the one it names by its number, kept apart (`numberedPullRequests`),
- * else its agent's own; none before it is read.
- */
-export function pullRequestOfTab(
-  control: Pick<CodingAgentsControl, "pullRequests" | "numberedPullRequests">,
-  tab: { readonly changes: string; readonly number?: number | undefined },
-): CodingAgentPullRequest | undefined {
-  return tab.number === undefined
-    ? control.pullRequests.get(tab.changes)
-    : ofPullRequestTab(control.numberedPullRequests, tab);
 }

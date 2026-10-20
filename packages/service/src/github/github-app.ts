@@ -86,6 +86,7 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import { account } from "@luke/database/schemas/auth";
 import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import {
+  GITHUB_SSO_URL_PATTERN,
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
@@ -395,6 +396,25 @@ type TokenUnreached =
   | typeof REPOSITORY_UNREACHED.TOKEN_NO_ACCESS
   | typeof REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH;
 
+/** The header GitHub answers a classic token not authorized for an organization's SAML SSO with. */
+const GITHUB_SSO_HEADER = "x-github-sso";
+
+/**
+ * The page that authorizes a classic token for an organization's SAML SSO,
+ * which GitHub names in the `X-GitHub-SSO` header of a 403
+ * (https://docs.github.com/en/rest/authentication/authenticating-to-the-rest-api#personal-access-tokens-and-saml-sso),
+ * as `required; url=<page>`; none where the header names none on GitHub's
+ * own site, as its `partial-results` form does.
+ */
+function ssoAuthorizeUrl(header: string | undefined): string | undefined {
+  const url = header
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("url="))
+    ?.slice("url=".length);
+  return url !== undefined && GITHUB_SSO_URL_PATTERN.test(url) ? url : undefined;
+}
+
 /** A repository reached through the workspace's installation, with the installation. */
 interface ReachedThroughApp {
   readonly access: typeof GITHUB_ACCESS.APP;
@@ -670,6 +690,14 @@ export interface GitHubAppService {
    * /users/<slug>[bot]`) since the App's JWT reaches no user endpoint.
    */
   readonly appBot: (
+    token: Redacted.Redacted,
+  ) => Effect.Effect<GitHubUser, GitHubReadFailure, HttpClient.HttpClient>;
+  /**
+   * The GitHub account a token belongs to, read on it (`GET /user`,
+   * https://docs.github.com/en/rest/users/users#get-the-authenticated-user):
+   * whose a member's own token is, as their commits name them.
+   */
+  readonly tokenUser: (
     token: Redacted.Redacted,
   ) => Effect.Effect<GitHubUser, GitHubReadFailure, HttpClient.HttpClient>;
   /**
@@ -1501,8 +1529,10 @@ function githubAppService(
    * deployment cannot open, no access to the repository, or no push; or
    * the installation's own why, `throughApp`, for a member who keeps no
    * token, since they never chose one. A 401 is GitHub refusing the token,
-   * which marks it invalid; the 403 and 404 that page lists are a
-   * repository the token does not reach.
+   * which marks it invalid; a 403 naming the page that authorizes the token
+   * for the organization's SAML SSO (`ssoAuthorizeUrl`) is that; any other
+   * 403 and the 404 that page lists are a repository the token does not
+   * reach.
    */
   const tokenReach = (member: string, fullName: string, throughApp: ReachResult) =>
     Effect.gen(function* () {
@@ -1521,6 +1551,17 @@ function githubAppService(
       if (response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED) {
         yield* held.success.markInvalid;
         return unreached(REPOSITORY_UNREACHED.TOKEN_INVALID);
+      }
+      if (response.status === GITHUB_HTTP_STATUS.FORBIDDEN) {
+        const authorizeUrl = ssoAuthorizeUrl(response.headers[GITHUB_SSO_HEADER]);
+        if (authorizeUrl !== undefined) {
+          const unauthorized: ReachResult = Result.fail({
+            reason: REPOSITORY_UNREACHED.TOKEN_SSO,
+            repository: fullName,
+            authorizeUrl,
+          });
+          return unauthorized;
+        }
       }
       if (
         response.status === GITHUB_HTTP_STATUS.NOT_FOUND ||
@@ -1895,6 +1936,11 @@ function githubAppService(
         Effect.gen(function* () {
           const app = yield* ready;
           const response = yield* send(githubRead(`/users/${app.slug}${BOT_LOGIN_SUFFIX}`, token));
+          return userOf(yield* readBody(response, UserSchema));
+        }).pipe(Effect.scoped),
+      tokenUser: (token) =>
+        Effect.gen(function* () {
+          const response = yield* send(githubRead("/user", token));
           return userOf(yield* readBody(response, UserSchema));
         }).pipe(Effect.scoped),
       userToken,

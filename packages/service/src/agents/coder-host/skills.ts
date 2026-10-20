@@ -6,7 +6,7 @@
  * led by the folder it stands in within the checkout.
  */
 
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import type { CodingAgent, WithRepository } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import type { Effect } from "effect";
 import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
@@ -24,7 +24,7 @@ function loadedMarkdown(skill: RepositorySkill): string {
 /** The skills the agent's repository keeps on its default branch, as eve is handed them (`repositorySkills`). */
 export function agentSkills(
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices> {
   return repositorySkills(
     target,

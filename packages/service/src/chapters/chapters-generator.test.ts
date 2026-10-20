@@ -15,7 +15,7 @@ import {
   type Chapter,
   LINE_REF_SIDE,
 } from "@luke/features/pull-request-chapters";
-import { jsonSchemaOf, settleJsonSchemaGolden } from "@luke/wire/testing";
+import { settleJsonSchemaGolden } from "@luke/wire/testing";
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { Effect, Fiber } from "effect";
@@ -517,10 +517,6 @@ it.effect(
 const GOLDEN_ROOT = path.join(fileURLToPath(import.meta.url), "../../../fixtures/json-schema");
 
 it("shows the provider the chapters and repair answers as recorded", async () => {
-  await settleJsonSchemaGolden(GOLDEN_ROOT, "chapters-answer", jsonSchemaOf(chaptersAnswerSchema));
-  await settleJsonSchemaGolden(
-    GOLDEN_ROOT,
-    "chapters-repair-answer",
-    jsonSchemaOf(repairAnswerSchema),
-  );
+  await settleJsonSchemaGolden(GOLDEN_ROOT, "chapters-answer", chaptersAnswerSchema);
+  await settleJsonSchemaGolden(GOLDEN_ROOT, "chapters-repair-answer", repairAnswerSchema);
 });
