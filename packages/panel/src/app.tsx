@@ -55,6 +55,7 @@ import { FeedbackDialog } from "./feedback-dialog.js";
 import { GitHubConnectProvider } from "./github-connect.js";
 import { useKeyboardModality } from "./keyboard-modality.js";
 import { useLastSignIn } from "./last-sign-in.js";
+import { LinkMenu } from "./link-menu.js";
 import { PageWorkspaceProvider, useCopyLink } from "./links-at-hand.js";
 import { throughHistory, useHistoryMouseButtons, useWindowHistory } from "./navigation-history.js";
 import { OpenFeedbackProvider } from "./open-feedback.js";
@@ -901,6 +902,8 @@ function AppWindow(): React.JSX.Element {
                         {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
                         <ToastHost />
+                        {/* The menu a right-click on any link in the window hangs. */}
+                        <LinkMenu />
                         <UpdatedToast />
                         <InboxToasts onView={openInbox} shownInbox={tasks.inboxShown} />
                         {/* The plans, the open plan's agents and files, every command the

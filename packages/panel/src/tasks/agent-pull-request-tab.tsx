@@ -691,6 +691,7 @@ function CheckRow({
       description={check.app ?? undefined}
       meta={running ? live ? <RunningTime startedAt={startedAt} /> : null : duration}
       onPress={url === null ? undefined : () => openLink(url)}
+      linkHref={url ?? undefined}
     />
   );
 }
@@ -1060,7 +1061,11 @@ function ThreadComments({
       </ol>
       {thread.more === 0 || last === undefined ? null : (
         <p className="pull-request-more pull-request-thread-more">
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(last.url)}>
+          <TextButton
+            tone={TEXT_BUTTON_TONE.LINK}
+            onClick={() => openLink(last.url)}
+            linkHref={last.url}
+          >
             {PULL_REQUEST_WORDS.moreReplies(thread.more)}
           </TextButton>
         </p>
@@ -1287,6 +1292,7 @@ function DeploymentRow({
         )
       }
       onPress={url === null ? undefined : () => openLink(url)}
+      linkHref={url ?? undefined}
     />
   );
 }
@@ -1438,7 +1444,7 @@ function ConversationPart({
       {/* The earlier entries a read left on GitHub are counted where they would stand, first. */}
       {earlier === 0 || url === undefined ? null : (
         <p className="pull-request-more pull-request-earlier">
-          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(url)}>
+          <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(url)} linkHref={url}>
             {PULL_REQUEST_WORDS.earlier(earlier)}
           </TextButton>
         </p>
