@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { and, eq, sql } from "drizzle-orm";
 import { Effect, Option } from "effect";
-import { liveSelection, liveStatementOf } from "../../core/live-statement.js";
+import { type LiveSelect, liveSelection, liveStatementOf } from "../../core/live-statement.js";
 import { queryBuilder } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
 import { mutableFunctionsOf } from "../live-immutability.js";
@@ -16,7 +16,7 @@ import { getTestDB } from "../sql-client.js";
  */
 
 /** The live statement a select renders to, which every probe here can carry. */
-function statementOf(select: { toSQL(): { readonly sql: string; readonly params: unknown[] } }) {
+function statementOf(select: LiveSelect) {
   return Option.getOrThrow(liveStatementOf(select));
 }
 
