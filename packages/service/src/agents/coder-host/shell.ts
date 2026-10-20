@@ -10,6 +10,7 @@ import type {
 import { defineTool, type ToolContext, type ToolDefinition } from "eve/tools";
 import { type BashToolInput, bash } from "eve/tools/bash";
 import { COMMAND_DESCRIPTION } from "../command-description.js";
+import { shellWithoutCapabilities } from "../sandbox-capabilities.js";
 
 /**
  * shell.ts -- the coding agent's shell: eve's own `bash`, with every command started in the checkout.
@@ -26,7 +27,10 @@ import { COMMAND_DESCRIPTION } from "../command-description.js";
  * the transcript shows what the model wrote and nothing of this. The input
  * takes the command's description beside it (`command-description.ts`),
  * which eve's own schema refuses as a key it does not know, and the shell
- * hands eve's `bash` the command alone.
+ * hands eve's `bash` the command alone. The command runs in a bash of its
+ * own with every capability dropped (`sandbox-capabilities.ts`), so what
+ * the model runs cannot read another process's environment or a file its
+ * mode keeps from the sandbox's user, nor reach root through sudo.
  *
  * eve reads a command's output and exit over calls to Vercel Sandbox's API
  * apart from the one that starts it, and Vercel at times answers one of
@@ -203,7 +207,7 @@ export function bashStartingIn(directory: string) {
     execute: (input, ctx) => {
       const start: CommandStart = { accepted: false };
       const answer = bash.execute(
-        { command: `cd ${quoted(directory)} || exit\n${input.command}` },
+        { command: shellWithoutCapabilities(`cd ${quoted(directory)} || exit\n${input.command}`) },
         watchingStart(ctx, start),
       );
       if (Symbol.asyncIterator in answer) return answer;

@@ -273,7 +273,7 @@ it.effect(
 
       const [start, resize] = texts(pty.sent);
       assert.equal(start.type, "start");
-      assert.equal(start.command, "sh", "tmux is installed where the sandbox lacks it, then run");
+      assert.equal(start.command, "setpriv", "the shell attaches with every capability dropped");
       assert.ok(
         start.args.includes(`=luke-${SHELL}`),
         "the start names the shell's session exactly",

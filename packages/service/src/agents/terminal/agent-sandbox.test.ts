@@ -81,13 +81,15 @@ function vercel(
         const body = JSON.parse(await new Response(init.body).text());
         const args: readonly string[] = body.args;
         asked.push({ method, url: parsed, args });
-        // Every command is `sh -c <script> sh <tmux args>`; the list is the one with none.
-        const tmuxArgs = args.slice(3);
+        // Every command is `setpriv <drop> -- sh -c <script> sh <tmux args>`; the list is the one with none.
+        const scriptAt = args.indexOf("-c") + 1;
+        const tmuxArgs = args.slice(scriptAt + 2);
         if (tmuxArgs.length === 0) return commandStream(listExit, shells.join("\n"));
         if (tmuxArgs[0] === "new-session") return commandStream(0);
         const named = tmuxArgs.some((arg) => arg.startsWith(`=luke-${SHELL}`));
-        // The shell check exits its own code for a session tmux does not hold, or what a failed install exits.
-        if (args[1]?.includes("has-session")) return commandStream(named ? 0 : shellCheckExit);
+        // The shell check exits its own code for a session tmux does not hold, or what a tmux that would not start exits.
+        if (args[scriptAt]?.includes("has-session"))
+          return commandStream(named ? 0 : shellCheckExit);
         return commandStream(named ? 0 : 1);
       }
       asked.push({ method, url: parsed });
