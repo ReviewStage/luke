@@ -1,5 +1,3 @@
-import { AGENT_TOOL } from "./agent-runtime/tools.js";
-
 /**
  * agent-line.ts -- the line a coding agent's `message_agent` call hands another agent, and the words a reader is shown of it.
  *
@@ -10,6 +8,8 @@ import { AGENT_TOOL } from "./agent-runtime/tools.js";
  * read back off the line by the same lead and close it was written with
  * here; a line not written in this shape is shown whole.
  */
+
+import { AGENT_TOOL } from "./agent-runtime/tools.js";
 
 /** What every agent's line opens with, before the sender's introduction. */
 const LEAD = "A message from another coding agent of your workspace, ";
