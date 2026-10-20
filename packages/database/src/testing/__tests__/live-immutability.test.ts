@@ -69,4 +69,26 @@ it.layer(getTestDB())("a live statement's immutability", (it) => {
         ]);
       }),
   );
+
+  it.effect(
+    "a cast through text is named by the stable input or output function it calls, an instant's either way, and a uuid's to text by none",
+    () =>
+      Effect.gen(function* () {
+        const statement = statementOf(
+          queryBuilder
+            .select({
+              latest:
+                sql`(select max(other.created_at)::text from ${user} as other)::timestamptz`.as(
+                  "latest",
+                ),
+              id: sql`${user.id}::uuid::text`.as("id"),
+            })
+            .from(user),
+        );
+        assert.deepEqual(yield* mutableFunctionsOf(statement), [
+          "timestamptz_in(cstring,oid,integer) s",
+          "timestamptz_out(timestamp with time zone) s",
+        ]);
+      }),
+  );
 });
