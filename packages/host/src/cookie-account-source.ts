@@ -251,8 +251,34 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   const moveGate = (move: Effect.Effect<void>): Effect.Effect<void> =>
     gateMoves.withPermits(1)(Effect.suspend(() => (closed ? Effect.void : move)));
 
-  /** A gate move forked into the session's own scope, so it ends with the session. */
-  const forkMove = (move: Effect.Effect<void>) => Effect.forkIn(moveGate(move), sessionScope);
+  /**
+   * The closings departures published and have not yet carried out. Note
+   * that a departure registers its closing as it is published, before its
+   * settings are dropped and its closing takes the gate, and an arrival waits
+   * for every closing registered before it, so no opening lands between a
+   * departure and its closing and the closing then resets the arrival's.
+   */
+  const closings = new Set<Deferred.Deferred<void>>();
+
+  /** A departure begun: the account moved on, and its closing registered to come. */
+  const depart: Effect.Effect<Deferred.Deferred<void>> = Effect.map(
+    Deferred.make<void>(),
+    (closing) => {
+      generation += 1;
+      closings.add(closing);
+      return closing;
+    },
+  );
+
+  /** A departure's closing, taken in turn, and carried out whatever becomes of it. */
+  const close = (closing: Deferred.Deferred<void>): Effect.Effect<void> =>
+    Effect.ensuring(
+      moveGate(host.stopCapabilities),
+      Effect.suspend(() => {
+        closings.delete(closing);
+        return Deferred.succeed(closing, undefined);
+      }),
+    );
 
   /** A settings step of an account change, whose failure is reported and never holds the change up. */
   const settingsStep = (step: Effect.Effect<unknown, Error>, what: string): Effect.Effect<void> =>
@@ -378,10 +404,10 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         const standing = signedInId(account);
         if (!read.signedIn) {
           if (standing === undefined) return yield* Effect.as(settleNobody, undefined);
-          generation += 1;
+          const closing = yield* depart;
           yield* settleOn(SIGNED_OUT);
           yield* forgetDeparted;
-          return yield* forkMove(host.stopCapabilities);
+          return yield* Effect.forkIn(close(closing), sessionScope);
         }
         // The same person, drawn anew where anything of them changed.
         if (standing !== undefined && standing === signedInId(read.account)) {
@@ -398,9 +424,13 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         }
         const shown = yield* Deferred.make<void>();
         arrival = { asOf, shown };
+        const departures = [...closings];
         return yield* Effect.forkIn(
           Effect.ensuring(
-            moveGate(arrive(asOf, read.account, standing !== undefined, shown)),
+            Effect.andThen(
+              Effect.forEach(departures, Deferred.await, { discard: true }),
+              moveGate(arrive(asOf, read.account, standing !== undefined, shown)),
+            ),
             Deferred.succeed(shown, undefined),
           ),
           sessionScope,
@@ -465,10 +495,10 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
    */
   const leave: Effect.Effect<void> = Effect.uninterruptible(
     Effect.gen(function* () {
-      generation += 1;
+      const closing = yield* depart;
       yield* settleOn(SIGNED_OUT);
       yield* forgetDeparted;
-      yield* moveGate(host.stopCapabilities);
+      yield* close(closing);
     }),
   );
 
