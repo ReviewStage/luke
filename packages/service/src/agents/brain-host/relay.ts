@@ -8,6 +8,7 @@ import {
 } from "@luke/database/models/ids";
 import type { ConversationTarget, StoreWriter } from "@luke/database/models/writer";
 import { CONNECTION_TOOL } from "@luke/features/agent-tools";
+import { redactCredentials } from "@luke/features/credential-redaction";
 import { Effect, Option, Result, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import {
@@ -39,7 +40,6 @@ import {
   userMetadataOf,
 } from "../../core.js";
 import { isRemoteToolName, storedRemoteCall } from "../../integrations/connection-tools.js";
-import { redactCredentials } from "../../observability/credentials.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../../tasks/board-look.js";
 import { LOOK_AT_PICTURE_TOOL, storedPictureLookOutput } from "../../tasks/picture-look.js";
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";

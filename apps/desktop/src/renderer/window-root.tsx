@@ -13,7 +13,8 @@
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import {
   eventWithoutAccessTokens,
-  transactionWithoutAccessTokens,
+  SPANS_NAMING_ACCESS_TOKENS,
+  spanWithoutAccessTokens,
   withoutAccessTokens,
 } from "@luke/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/features/sentry-tracing";
@@ -65,7 +66,8 @@ export function mountWindow(surface: ReactNode): void {
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
-    beforeSendTransaction: transactionWithoutAccessTokens,
+    ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
+    beforeSendSpan: Sentry.withStreamedSpan(spanWithoutAccessTokens),
   });
 
   const rootElement = document.getElementById("root");

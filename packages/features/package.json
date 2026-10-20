@@ -16,6 +16,8 @@
     "./automation-wire": "./src/automation-wire.js",
     "./automation-view": "./src/automation-view.js",
     "./avatar-grant": "./src/avatar-grant.js",
+    "./credential-redaction": "./src/credential-redaction.js",
+    "./sentry-addresses": "./src/sentry-addresses.js",
     "./sentry-breadcrumbs": "./src/sentry-breadcrumbs.js",
     "./sentry-reporting": "./src/sentry-reporting.js",
     "./sentry-tracing": "./src/sentry-tracing.js",
