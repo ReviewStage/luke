@@ -49,7 +49,6 @@ import type { ModelChoice } from "@luke/features/models-wire";
 import { CODING_AGENT_DEFAULT_CHOICE } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
-  PLAN_TEMPLATE_BOUNDS,
   type PlanTemplateAnswer,
   type PlanTemplateRevisionAnswer,
   type PlanTemplateRevisionsAnswer,
@@ -78,13 +77,10 @@ import {
 } from "../http/http-effect.js";
 import { revokeIntegrationGrants } from "../integrations/integration-connect.js";
 import { readIntegrationConnections } from "../integrations/integration-store.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import { acceptedModelChoice, type ModelCatalog } from "../providers/model-catalog.js";
 import { forgetPosthogPersonEffect } from "../providers/posthog.js";
 import { providerKeysProcedures } from "./provider-keys-procedures.js";
-
-/** A template write is the template at its bound with every character escaped, and the key around it. */
-const MAXIMUM_PLAN_TEMPLATE_BODY_BYTES = PLAN_TEMPLATE_BOUNDS.MAX_CHARS * 6 + 1_024;
 
 export interface AccountProcedureSeams extends EveReach {
   resolveUserId: UserIdResolver;
@@ -301,14 +297,12 @@ export function accountProcedures(seams: AccountProcedureSeams) {
      * stands. A body naming any other key, or a template past the bound, is
      * refused and nothing is written.
      */
-    writePlanTemplate: signedIn
-      .use(bodyLimit(MAXIMUM_PLAN_TEMPLATE_BODY_BYTES))
-      .writePlanTemplate.effect(function* ({ context, input }) {
-        const stored = yield* hostedStoreOrUnavailable(
-          seams.writePlanTemplate(context.userId, input.template),
-        );
-        return planTemplateAnswer(stored);
-      }),
+    writePlanTemplate: signedIn.writePlanTemplate.effect(function* ({ context, input }) {
+      const stored = yield* hostedStoreOrUnavailable(
+        seams.writePlanTemplate(context.userId, input.template),
+      );
+      return planTemplateAnswer(stored);
+    }),
 
     /** A page of the caller's template history, the newest first; an account with none answers an empty page. */
     planTemplateRevisions: signedIn.planTemplateRevisions.effect(function* ({ context, input }) {

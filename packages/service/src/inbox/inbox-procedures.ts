@@ -22,7 +22,6 @@ import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { ACCOUNT_INBOX_ARCHIVED } from "@luke/features/account-inbox-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import {
-  INBOX_BOUNDS,
   INBOX_CURSOR_START,
   INBOX_STATUS,
   type InboxAnswers,
@@ -43,7 +42,6 @@ import {
   agentInboxPast,
   taskInboxPast,
 } from "../agents/coder-host/inbox-page.js";
-import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../agents/coder-host/start.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { type EveReach, eveFor } from "../agents/coder-host/stop.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -55,7 +53,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   answerInboxAsk,
   answerInboxItem,
@@ -76,32 +74,6 @@ import {
 
 /** What the inbox asks of the deployment: who the caller is, and how eve is reached to hand an answer or a message to an agent. */
 export type InboxProcedureSeams = AccountResolving & EveReach;
-
-/** An answer is a note, a few short fields, and the files a message may carry: the note's bound at JSON's widest escape, the files, and room for the rest. */
-const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
-  6 *
-    (INBOX_BOUNDS.MAX_NOTE_CHARS +
-      INBOX_BOUNDS.MAX_FIELDS *
-        (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
-      INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
-  MAXIMUM_ATTACHMENTS_BODY_BYTES +
-  2_048;
-
-/** A close is a revision and a key, so a few hundred bytes hold it. */
-const MAXIMUM_INBOX_CLOSE_BODY_BYTES = 1_024;
-
-/** A message is its words, the files a message may carry, and the answer it may carry: the words' and the answer's picks and values at JSON's widest escape, the files, and room for the key, the ask, and the steps. */
-const MAXIMUM_INBOX_MESSAGE_BODY_BYTES =
-  6 *
-    (INBOX_BOUNDS.MAX_MESSAGE_CHARS +
-      INBOX_BOUNDS.MAX_FIELDS *
-        (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
-      INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
-  MAXIMUM_ATTACHMENTS_BODY_BYTES +
-  2_048;
-
-/** A request to mark every item read names at most a workspace, so a few hundred bytes hold it. */
-const MAXIMUM_INBOX_READ_ALL_BODY_BYTES = 1_024;
 
 /** The id a path named, where it is a UUID; any other names no row, and is not found. */
 const rowIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -495,39 +467,39 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
       const after = input.after ?? INBOX_CURSOR_START;
       return yield* hostedStoreOrUnavailable(agentInboxPast(context.userId, agent.value.id, after));
     }),
-    answer: hosted.inbox
-      .use(accountMiddleware(seams.resolveUserId))
-      .use(bodyLimit(MAXIMUM_INBOX_ANSWER_BODY_BYTES))
-      .answer.effect(function* ({ input, context }) {
-        const itemId = yield* rowIdOf(input.params.id);
-        const { revision, clientKey, attachments = [], ...reply } = input.body;
-        return yield* answered(seams, writer, context.request, context.userId, itemId, {
-          revision,
-          clientKey,
-          reply,
-          attachments,
-        });
-      }),
-    message: hosted.inbox
-      .use(accountMiddleware(seams.resolveUserId))
-      .use(bodyLimit(MAXIMUM_INBOX_MESSAGE_BODY_BYTES))
-      .message.effect(function* ({ input, context }) {
-        const itemId = yield* rowIdOf(input.params.id);
-        const { text, clientKey, attachments = [], answers } = input.body;
-        return yield* messaged(seams, writer, context.request, context.userId, itemId, {
-          text,
-          clientKey,
-          attachments,
-          answers,
-        });
-      }),
-    close: hosted.inbox
-      .use(accountMiddleware(seams.resolveUserId))
-      .use(bodyLimit(MAXIMUM_INBOX_CLOSE_BODY_BYTES))
-      .close.effect(function* ({ input, context }) {
-        const itemId = yield* rowIdOf(input.params.id);
-        return yield* closed(seams, writer, context.request, context.userId, itemId, input.body);
-      }),
+    answer: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).answer.effect(function* ({
+      input,
+      context,
+    }) {
+      const itemId = yield* rowIdOf(input.params.id);
+      const { revision, clientKey, attachments = [], ...reply } = input.body;
+      return yield* answered(seams, writer, context.request, context.userId, itemId, {
+        revision,
+        clientKey,
+        reply,
+        attachments,
+      });
+    }),
+    message: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).message.effect(function* ({
+      input,
+      context,
+    }) {
+      const itemId = yield* rowIdOf(input.params.id);
+      const { text, clientKey, attachments = [], answers } = input.body;
+      return yield* messaged(seams, writer, context.request, context.userId, itemId, {
+        text,
+        clientKey,
+        attachments,
+        answers,
+      });
+    }),
+    close: hosted.inbox.use(accountMiddleware(seams.resolveUserId)).close.effect(function* ({
+      input,
+      context,
+    }) {
+      const itemId = yield* rowIdOf(input.params.id);
+      return yield* closed(seams, writer, context.request, context.userId, itemId, input.body);
+    }),
     markItemRead: signedIn.markItemRead.effect(function* ({ input, context }) {
       const itemId = yield* rowIdOf(input.id);
       const found = yield* hostedStoreOrUnavailable(markInboxItemRead(context.userId, itemId));
@@ -542,7 +514,6 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }),
     markAllRead: hosted.inbox
       .use(accountMiddleware(seams.resolveUserId))
-      .use(bodyLimit(MAXIMUM_INBOX_READ_ALL_BODY_BYTES))
       .markAllRead.effect(function* ({ input, context }) {
         const marked = yield* hostedStoreOrUnavailable(
           markInboxRead(context.userId, input.workspaceId),

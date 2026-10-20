@@ -28,6 +28,7 @@ import {
   codingAgentReviewOptionsAnswerSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestSchema,
+  MAXIMUM_START_BODY_BYTES,
 } from "../coding-agent-wire.js";
 import { modelChoiceSchema } from "../models-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
@@ -38,7 +39,13 @@ import {
   terminalRenameRequestSchema,
   terminalsAnswerSchema,
 } from "../terminal-wire.js";
-import { exactBodyInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
+
+/** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
+const CHOICE_BODY_BYTES = 4_096;
+
+/** A shell's name and a few keys at JSON's widest escape, so a body past this names no shell. */
+const TERMINAL_BODY_BYTES = 1_024;
 
 /** One agent's path, its id the `{id}` segment. */
 const AGENT_PATH = `${HOSTED_SERVICE_PATH.AGENTS}/{id}` as const;
@@ -108,6 +115,7 @@ export const agentsContract = {
     .output(EffectSchema.flip(codingAgentListAnswerSchema)),
   /** An agent started on the task, or the one a retry under the same key already started. */
   start: hostedProcedure
+    .meta(bodyCap(MAXIMUM_START_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -125,6 +133,7 @@ export const agentsContract = {
     .output(EffectSchema.flip(codingAgentPageAnswerSchema)),
   /** One change of an agent, answering it as it then stands. */
   change: hostedProcedure
+    .meta(bodyCap(CHOICE_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.PATCH, path: AGENT_PATH, inputStructure: "detailed" }))
     .input(exactBodyInput(idParams, codingAgentChangeRequestSchema))
     .output(EffectSchema.flip(codingAgentAnswerSchema)),
@@ -160,6 +169,7 @@ export const agentsContract = {
     .output(EffectSchema.flip(terminalsAnswerSchema)),
   /** A shell started in one agent's sandbox. */
   openTerminal: hostedProcedure
+    .meta(bodyCap(TERMINAL_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,
@@ -172,6 +182,7 @@ export const agentsContract = {
     .output(EffectSchema.flip(terminalCreatedAnswerSchema)),
   /** One shell named anew, answering the shells as they stand after. */
   renameTerminal: hostedProcedure
+    .meta(bodyCap(TERMINAL_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.PATCH,

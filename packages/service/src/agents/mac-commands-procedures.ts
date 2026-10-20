@@ -18,11 +18,8 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { bearerOnlyMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { bearerOnlyMiddleware, hosted } from "../orpc/base.js";
 import { macCommandsFor } from "./mac-command.js";
-
-/** Two outputs at their bound, and room for the rest of the body. */
-const MAXIMUM_RESULT_BODY_BYTES = 256 * 1_024;
 
 export interface MacCommandsProcedureSeams {
   /**
@@ -42,10 +39,7 @@ export function macCommandsProcedures(seams: MacCommandsProcedureSeams) {
       const commands = yield* hostedStoreOrUnavailable(macCommandsFor(context.userId));
       return { commands };
     }),
-    settle: macCommands.use(bodyLimit(MAXIMUM_RESULT_BODY_BYTES)).settle.effect(function* ({
-      context,
-      input,
-    }) {
+    settle: macCommands.settle.effect(function* ({ context, input }) {
       const settled = yield* hostedStoreOrUnavailable(
         settleMacCommand(context.userId, input.id, input.result),
       );

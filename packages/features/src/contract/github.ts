@@ -44,7 +44,10 @@ import {
   taskTreeAnswerSchema,
   workspaceIdSchema,
 } from "../task-wire.js";
-import { exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+
+/** An intent's id is 43 base64url characters, so a claim past this carries no intent. */
+const CLAIM_BODY_BYTES = 1_024;
 
 /** The value a tree's `recursive` query carries when everything under the folder is asked. */
 export const GITHUB_REPOSITORY_TREE_RECURSIVE = "1";
@@ -76,6 +79,7 @@ export const githubContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_CONNECT }))
     .output(EffectSchema.flip(githubConnectAnswerSchema)),
   claim: hostedProcedure
+    .meta(bodyCap(CLAIM_BODY_BYTES))
     .meta(openapi({ method: HTTP_METHOD.POST, path: HOSTED_SERVICE_PATH.GITHUB_CONNECT_CLAIM }))
     .input(exactInput(githubConnectClaimRequestSchema))
     .output(EffectSchema.flip(githubConnectClaimAnswerSchema)),

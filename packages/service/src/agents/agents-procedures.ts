@@ -64,7 +64,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
 import { pathUuid, reachedAgentById } from "./agent-reach.js";
 import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
@@ -74,11 +74,7 @@ import {
   type PublishedReach,
 } from "./coder-host/published.js";
 import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
-import {
-  acceptedAgentChoice,
-  MAXIMUM_START_BODY_BYTES,
-  startRequestedAgent,
-} from "./coder-host/start.js";
+import { acceptedAgentChoice, startRequestedAgent } from "./coder-host/start.js";
 import {
   codingAgentPage,
   codingAgentSummary,
@@ -108,12 +104,6 @@ export interface AgentsProcedureSeams extends EveReach, PublishedReach {
 
 /** The most agents a workspace's list answers: enough to choose one an automation's runs go to. */
 const WORKSPACE_AGENTS_LIMIT = 50;
-
-/** A change names a model, an effort, and a window, a title, an archive, or a pin, at most, so a body past this is no change. */
-const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
-
-/** A shell's name and a few keys at JSON's widest escape, so a body past this names no shell. */
-const MAXIMUM_TERMINAL_BODY_BYTES = 1_024;
 
 /** A choice the catalog refused is an invalid request, on the wire. */
 const choiceOrInvalid = <A, E, R>(
@@ -264,10 +254,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * already started, on the one start path (`coder-host/start.ts`),
      * reaching eve as the developer.
      */
-    start: signedIn.use(bodyLimit(MAXIMUM_START_BODY_BYTES)).start.effect(function* ({
-      input,
-      context,
-    }) {
+    start: signedIn.start.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.params.id);
       const environment = yield* HostedEnvironment;
       const summaryModel: SummaryModelOf =
@@ -318,10 +305,7 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
      * naming no window puts it back on the model's whole one, and the
      * account's default is untouched.
      */
-    change: signedIn.use(bodyLimit(MAXIMUM_CHOICE_BODY_BYTES)).change.effect(function* ({
-      input,
-      context,
-    }) {
+    change: signedIn.change.effect(function* ({ input, context }) {
       const { userId, agent } = yield* reachedAgentById(context.userId, input.params.id);
       const { body } = input;
       if ("title" in body) {
@@ -446,38 +430,34 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       return yield* inSandbox(listedShells(sessionId));
     }),
     /** A shell started in the agent's running sandbox, under an id the service mints. */
-    openTerminal: signedIn
-      .use(bodyLimit(MAXIMUM_TERMINAL_BODY_BYTES))
-      .openTerminal.effect(function* ({ input, context }) {
-        const sessionId = yield* reachedSession(context.userId, input.params.id);
-        if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
-        const { title } = input.body;
-        return yield* inSandbox(
-          Effect.gen(function* () {
-            const sandbox = yield* AgentSandbox;
-            const started = yield* sandboxOrUpstream(sandbox.start(sessionId, randomUUID(), title));
-            if (Result.isFailure(started)) return yield* Effect.fail(shellRefusal(started.failure));
-            return { terminal: started.success };
-          }),
-        );
-      }),
+    openTerminal: signedIn.openTerminal.effect(function* ({ input, context }) {
+      const sessionId = yield* reachedSession(context.userId, input.params.id);
+      if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+      const { title } = input.body;
+      return yield* inSandbox(
+        Effect.gen(function* () {
+          const sandbox = yield* AgentSandbox;
+          const started = yield* sandboxOrUpstream(sandbox.start(sessionId, randomUUID(), title));
+          if (Result.isFailure(started)) return yield* Effect.fail(shellRefusal(started.failure));
+          return { terminal: started.success };
+        }),
+      );
+    }),
     /** One shell named anew, answering the shells as they stand after. */
-    renameTerminal: signedIn
-      .use(bodyLimit(MAXIMUM_TERMINAL_BODY_BYTES))
-      .renameTerminal.effect(function* ({ input, context }) {
-        const terminalId = yield* pathUuid(input.params.terminal);
-        const sessionId = yield* reachedSession(context.userId, input.params.id);
-        if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-        const { title } = input.body;
-        return yield* inSandbox(
-          Effect.gen(function* () {
-            const sandbox = yield* AgentSandbox;
-            const renamed = yield* sandboxOrUpstream(sandbox.rename(sessionId, terminalId, title));
-            if (Result.isFailure(renamed)) return yield* Effect.fail(shellRefusal(renamed.failure));
-            return yield* listedShells(sessionId);
-          }),
-        );
-      }),
+    renameTerminal: signedIn.renameTerminal.effect(function* ({ input, context }) {
+      const terminalId = yield* pathUuid(input.params.terminal);
+      const sessionId = yield* reachedSession(context.userId, input.params.id);
+      if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const { title } = input.body;
+      return yield* inSandbox(
+        Effect.gen(function* () {
+          const sandbox = yield* AgentSandbox;
+          const renamed = yield* sandboxOrUpstream(sandbox.rename(sessionId, terminalId, title));
+          if (Result.isFailure(renamed)) return yield* Effect.fail(shellRefusal(renamed.failure));
+          return yield* listedShells(sessionId);
+        }),
+      );
+    }),
     /** One shell ended, answering the shells as they stand after. */
     endTerminal: signedIn.endTerminal.effect(function* ({ input, context }) {
       const terminalId = yield* pathUuid(input.terminal);

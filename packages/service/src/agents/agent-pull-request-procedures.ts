@@ -40,7 +40,6 @@ import {
 } from "@luke/features/coding-agent-wire";
 import {
   PULL_REQUEST_ACTION,
-  PULL_REQUEST_WRITE_BOUNDS,
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestActionRequest,
   type PullRequestViewedAnswer,
@@ -86,7 +85,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import { reachedAgentById } from "./agent-reach.js";
 import {
   askedPublished,
@@ -110,14 +109,6 @@ import {
 export interface AgentPullRequestProcedureSeams extends PublishedReach {
   resolveUserId: UserIdResolver;
 }
-
-/**
- * A change to a pull request names the change and its few fields, a
- * review's words the longest of them, so a body past this is no change.
- * Note that each of those words' characters may take six bytes as JSON,
- * a control character escaped as `\u0000`.
- */
-const MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES = PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS * 6 + 4_096;
 
 /** The `number` a request names, as the query spelled it, read as the number it names. */
 const numberNamed = (number: string | undefined) =>
@@ -404,7 +395,6 @@ function actionWrite(
 export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams) {
   const published = seams.published ?? instancePublishedCache();
   const signedIn = hosted.agentPullRequests.use(accountMiddleware(seams.resolveUserId));
-  const changing = signedIn.use(bodyLimit(MAXIMUM_PULL_REQUEST_ACTION_BODY_BYTES));
   return {
     /** What the agent published, from the instance's kept answers; or, where the request names a number, that pull request of its repository. */
     pullRequest: signedIn.pullRequest.effect(function* ({ input, context }) {
@@ -419,7 +409,7 @@ export function agentPullRequestProcedures(seams: AgentPullRequestProcedureSeams
      * GitHub answered, the kept answer is let go, so the reads after it ask
      * GitHub afresh.
      */
-    action: changing.action.effect(function* ({ input, context }) {
+    action: signedIn.action.effect(function* ({ input, context }) {
       const { agent, pullRequest } = yield* askedOfAgent(
         published,
         context.userId,

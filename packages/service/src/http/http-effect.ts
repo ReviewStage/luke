@@ -199,10 +199,8 @@ export function hostedRefusing<R>(
   return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
-/** A refusal as the response an `HttpApp` answers with outside an `HttpApi` group. */
-export function hostedRefusalResponse(
-  refusal: HostedRefusal,
-): HttpServerResponse.HttpServerResponse {
+/** A refusal as the response a route group answers with. */
+function hostedRefusalResponse(refusal: HostedRefusal): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.jsonUnsafe(refusal, {
     status: HOSTED_REFUSAL_STATUS[refusal.error],
   });
@@ -275,15 +273,6 @@ export function hostedJsonResponse<Body extends object>(
     status,
     headers: { "cache-control": HOSTED_CACHE_CONTROL },
   });
-}
-
-/** Refuses a request whose method is not the one the endpoint documents. */
-export function hostedMethod(
-  method: string,
-): Effect.Effect<void, HostedRefusal, HttpServerRequest.HttpServerRequest> {
-  return Effect.flatMap(HttpServerRequest.HttpServerRequest, (request) =>
-    request.method === method ? Effect.void : Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED),
-  );
 }
 
 /**

@@ -28,7 +28,6 @@ import {
 } from "@luke/features/agent-replay";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
-  base64Chars,
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   CONTEXT_WINDOW,
@@ -177,15 +176,6 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 
 /** The heading the issues a task links stand under, after the plan and before any note. */
 export const ISSUE_LINKS_HEADING = "## The issues this task works on";
-
-/** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
-export const MAXIMUM_ATTACHMENTS_BODY_BYTES =
-  base64Chars(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) +
-  CODING_AGENT_BOUNDS.MAX_ATTACHMENTS * (6 * CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS + 128);
-
-/** A Start names a key, a choice, and a prompt with its files at most: the prompt's bound at JSON's widest escape, the files, and room for the rest. */
-export const MAXIMUM_START_BODY_BYTES =
-  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
 
 /** A run of whitespace, line breaks among it, which a line of the brief spells as one space. */
 const WHITESPACE_RUN = /\s+/gu;

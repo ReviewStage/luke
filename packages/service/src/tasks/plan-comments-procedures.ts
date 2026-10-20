@@ -13,7 +13,6 @@ import { askedInWords } from "@luke/features/mention-link";
 import {
   PLAN_COMMENT_ACTION,
   PLAN_COMMENT_ACTOR,
-  PLAN_COMMENT_BOUNDS,
   PLAN_COMMENT_ENTRY,
   PLAN_COMMENTS_CURSOR_START,
   type PlanCommentAsked,
@@ -21,7 +20,6 @@ import {
   type PlanCommentThread,
   type PlanCommentThreadAnswer,
 } from "@luke/features/plan-comment-wire";
-import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
@@ -35,7 +33,7 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   askableAgent,
   type CommentAskSeams,
@@ -63,17 +61,6 @@ import {
  * `heldUntilMoved` under the coding agents' hold, and nothing the handler
  * adds times it out first.
  */
-
-/** A start carries the plan's text its anchor is measured in, every character escaped, beside a comment and a quote at their bounds. */
-const MAXIMUM_START_BODY_BYTES =
-  (TASK_BOUNDS.MAX_BODY_CHARS +
-    PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS +
-    PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS) *
-    6 +
-  1_024;
-
-/** An action is a comment at its bound and an id or a key, every character escaped. */
-const MAXIMUM_ACTION_BODY_BYTES = PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 6 + 1_024;
 
 export interface PlanCommentsProcedureSeams extends CommentAskSeams {
   resolveUserId: UserIdResolver;
@@ -266,8 +253,6 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
 /** The plan comments resource: its held read, a start, and one thing done to a thread, each to a signed-in member. */
 export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
   const member = hosted.planComments.use(accountMiddleware(seams.resolveUserId));
-  const starting = member.use(bodyLimit(MAXIMUM_START_BODY_BYTES));
-  const acting = member.use(bodyLimit(MAXIMUM_ACTION_BODY_BYTES));
   return {
     read: member.read.effect(function* ({ input, context }) {
       const taskId = yield* idOf(input.id);
@@ -277,7 +262,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
       if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return read.value;
     }),
-    start: starting.start.effect(function* ({ input, context }) {
+    start: member.start.effect(function* ({ input, context }) {
       const start = input.body;
       const taskId = yield* idOf(input.params.id);
       const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: context.userId } as const;
@@ -295,7 +280,7 @@ export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
         body,
       };
     }),
-    act: acting.act.effect(function* ({ input, context }) {
+    act: member.act.effect(function* ({ input, context }) {
       const action = input.body;
       const taskId = yield* idOf(input.params.id);
       const threadId = yield* idOf(input.params.thread);

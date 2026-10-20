@@ -10,14 +10,29 @@
  *
  * A JSON body is read as the old routes read one (`readEither`): a key its
  * schema does not name is refused, where the extension would drop it.
+ *
+ * A procedure that takes a body may hold it to a cap of its own, in bytes
+ * (`bodyCap`), which the handler counts as the body is read and refuses past
+ * as too large before any of it is parsed; one that names none is held to
+ * the handler's own ceiling.
  */
 
 import "@orpc/experimental-effect/extensions/input-output";
-import { oc } from "@orpc/contract";
+import { defineMeta, oc } from "@orpc/contract";
 import { Schema as EffectSchema } from "effect";
 import { HOSTED_ERRORS } from "./errors.js";
 
 export const hostedProcedure = oc.errors(HOSTED_ERRORS);
+
+/**
+ * The most bytes a procedure's body may carry, and its reader: the cap is
+ * counted over the bytes actually read, whatever `content-length` says, and
+ * a later cap replaces an earlier one.
+ */
+export const [bodyCap, getBodyCap] = defineMeta(
+  "bodyCap",
+  (incoming: number, _current: number | undefined) => incoming,
+);
 
 /**
  * A JSON body's schema as a Standard Schema whose decode refuses a key it

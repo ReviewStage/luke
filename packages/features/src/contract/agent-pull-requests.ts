@@ -21,11 +21,20 @@ import {
   codingAgentPullRequestAnswerSchema,
 } from "../coding-agent-wire.js";
 import {
+  PULL_REQUEST_WRITE_BOUNDS,
   pullRequestActionRequestSchema,
   pullRequestViewedAnswerSchema,
   pullRequestWriteAnswerSchema,
 } from "../pull-request-write-wire.js";
-import { exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+
+/**
+ * A change to a pull request names the change and its few fields, a
+ * review's words the longest of them, so a body past this is no change.
+ * Note that each of those words' characters may take six bytes as JSON,
+ * a control character escaped as `\u0000`.
+ */
+const ACTION_BODY_BYTES = PULL_REQUEST_WRITE_BOUNDS.MAX_BODY_CHARS * 6 + 4_096;
 
 /** The public paths, each naming the agent under `{id}`. */
 const AGENT_PULL_REQUEST_PATH = {
@@ -72,6 +81,7 @@ export const agentPullRequestsContract = {
   ),
   /** One change to the pull request, made on GitHub as the asking member. */
   action: hostedProcedure
+    .meta(bodyCap(ACTION_BODY_BYTES))
     .meta(
       openapi({
         method: HTTP_METHOD.POST,

@@ -32,7 +32,9 @@ import { workspaceLinearContract } from "./workspace-linear.js";
 import { workspacesContract } from "./workspaces.js";
 
 export { AGENT_START_STATUS } from "./agents.js";
+export { bodyCap, getBodyCap } from "./base.js";
 export { HOSTED_ERRORS } from "./errors.js";
+export { EVENTS_MAXIMUM_BODY_BYTES } from "./events.js";
 export { integrationStatusesReadSchema } from "./integrations.js";
 export { TASK_START_STATUS } from "./tasks.js";
 

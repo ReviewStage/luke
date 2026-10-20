@@ -226,6 +226,15 @@ export function base64Chars(bytes: number): number {
   return 4 * Math.ceil(bytes / 3);
 }
 
+/** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
+export const MAXIMUM_ATTACHMENTS_BODY_BYTES =
+  base64Chars(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) +
+  CODING_AGENT_BOUNDS.MAX_ATTACHMENTS * (6 * CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS + 128);
+
+/** A Start names a key, a choice, and a prompt with its files at most: the prompt's bound at JSON's widest escape, the files, and room for the rest. */
+export const MAXIMUM_START_BODY_BYTES =
+  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
+
 /** The bytes standard padded base64 spells, as an attachment's data carries them. */
 export function base64Bytes(base64: string): number {
   const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;

@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { noDatabase } from "@luke/database/testing/no-database";
 import { PRODUCT_EVENT } from "@luke/features/analytics";
+import { EVENTS_MAXIMUM_BODY_BYTES } from "@luke/features/contract";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { type Context, Effect, Layer, Option, Redacted } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -24,7 +25,6 @@ import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
-import { EVENTS_MAXIMUM_BODY_BYTES } from "./events.js";
 import { eventsProcedures } from "./events-procedures.js";
 
 const EVENTS = "https://luke.test/api/events";

@@ -5,12 +5,7 @@ import { Database } from "@luke/database/core/query";
 import { createTask } from "@luke/database/models/task-store";
 import { attachment } from "@luke/database/schemas/attachment";
 import { user } from "@luke/database/schemas/auth";
-import {
-  fakeWorkspaceSeams,
-  getTestDB,
-  joinWorkspace,
-  openWorkspace,
-} from "@luke/database/testing";
+import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
 import { PICTURE_BOUNDS, PICTURE_TYPE } from "@luke/features/picture-wire";
 import {
   PLAN_ATTACHMENT_BOUNDS,
@@ -92,11 +87,7 @@ const ask = (request: Request) =>
         Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
       );
     const { handler, dispose } = HttpRouter.toWebHandler(
-      tasksApp({
-        resolveUserId,
-        workspaces: yield* fakeWorkspaceSeams,
-        eveOrigin: () => undefined,
-      }).pipe(HttpRouter.provideRequest(services)),
+      tasksApp({ resolveUserId }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
     const keep = hostedFetch({ taskFiles: taskFilesProcedures({ resolveUserId }) });

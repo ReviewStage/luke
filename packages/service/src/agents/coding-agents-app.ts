@@ -26,73 +26,16 @@ import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
 import { reachedAgent, resolvedUserId, uuidOf } from "./agent-reach.js";
 import { agentPullRequestReach } from "./coder-host/published.js";
-import type { SummaryModelOf } from "./coder-host/replay-summary.js";
-import type { EveReach } from "./coder-host/stop.js";
 
 /**
- * coding-agents-app.ts -- a task's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
+ * coding-agents-app.ts -- what a coding agent's window reads as bytes rather than JSON: an image its pull request's overview names, an inbox item's attachment, and a picture a tool answered it.
  *
- * The Start, both lists, an agent's own page and the PATCH that changes
- * it, a Stop, its changes, and its review options now answer through the
- * hosted oRPC router (`agents-procedures.ts`), on the terms said of them
- * here.
- *
- * Every endpoint resolves the bearer before it touches a row, and every row
- * it touches is one of a workspace the bearer's account is a member of: a
- * task or an agent of any other workspace answers exactly as one that names
- * nothing. A member reads, messages, renames, re-chooses, and stops an agent
- * a teammate started, its conversation read and written under that teammate,
- * whose conversation it is. A Start
- * (`POST /api/plans/{id}/agents`) takes the one path a start takes
- * (`packages/service/src/agents/coder-host/start.ts`), which the voice brain's tool shares: the
- * model and effort checked against the catalog, the account's default where
- * the request names none, the task's repository confirmed reachable through
- * the Luke GitHub App, the agent and its conversation made, and its eve
- * session opened with the task's document, or the prompt the request named in
- * its place, as the first message, here as the request's own caller so eve's
- * door admits it as the developer: over the developer's bearer, or, for a
- * browser's session cookie, as the deployment acting for the account the
- * cookie named (`coder-host/stop.ts`'s `eveFor`), which the coder channel
- * mints as the developer's own principal. A retry carrying the same key is
- * the same agent, and opens nothing again. The list (`GET /api/plans/{id}/agents`) reads each agent's
- * status from its newest turn. The transcript and a message to the agent
- * (`/api/agents/{id}/messages`), and a worker's transcript, are the hosted
- * oRPC router's (`messages-procedures.ts`). A change of model (`PATCH /api/agents/{id}`) writes the
- * choice on the agent's row, checked against the catalog as a Start checks
- * its own; the row is read at every step, so the change is the next step's
- * whether a turn runs or the next one is yet to open, and the account's
- * default stands as it was. The same PATCH carrying a title instead renames
- * the agent, the one write of the title that covers whatever stands, and an
- * empty title clears it so the tab falls back to the model's name; the
- * title generated from the agent's first exchange as a turn of its ends
- * lands only where none stands, so a rename is never undone. The same PATCH
- * carrying `archived` archives the agent or brings it back: an archive
- * stops a turn still running first, as a Stop does, and refuses where that
- * Stop could not reach eve, or where the agent works on with no turn a Stop
- * can name yet, still starting or with a line awaiting its turn, which the
- * desktop tries again; an archived agent takes no message; the list leaves an archived agent out unless
- * `archived=include` asks for it, while its transcript and what it
- * published still read by its id. The same PATCH carrying `pinned` pins
- * the agent for the asking member alone, or unpins it, as a plan's pin is
- * its reader's own (`agent-pin.ts`). A Stop
- * (`POST /api/agents/{id}/stop`) is eve's cancel
- * of the turn under way, named by eve's own id for it, and the row's stamp;
- * the service's hook stops the sandbox as the cancelled turn ends, and
- * anything the agent pushed stays.
- * What the agent published, its Pull request tab's overview, a change to
- * its pull request, and which files the member marked viewed are the hosted
- * oRPC router's (`agent-pull-request-procedures.ts`), and the pull request
- * those reads are about is decided once for both (`asked-pull-request.ts`).
- * The agent's changes (`GET /api/agents/{id}/changes`) are the files of
- * that pull request, read from GitHub afresh on each ask
- * (`github/pull-requests.ts`), each with its patch, or none where the
- * agent has opened none yet. What the
- * reviewer and label pickers offer (`GET /api/agents/{id}/review-options`),
- * the repository's labels, collaborators, and teams, is read on a token for
- * the agent's repository, as the overview is. An image the overview's
- * words name (`GET /api/agents/{id}/github-image`) is
- * read on a token for the agent's repository too, an upload re-signed by its
- * asset's id (`github/github-images.ts`), and answered as bytes.
+ * Everything else about an agent answers through the hosted oRPC router
+ * (`agents-procedures.ts`, `messages-procedures.ts`,
+ * `agent-pull-request-procedures.ts`). Every read here resolves the bearer
+ * before it touches a row, and every row it touches is one of a workspace
+ * the bearer's account is a member of: an agent or an item of any other
+ * workspace answers exactly as one that names nothing.
  */
 
 const AGENTS_PATH = {
@@ -106,24 +49,18 @@ const AGENTS_PATH = {
 
 const HTTP_METHOD = {
   GET: "GET",
-  POST: "POST",
-  PATCH: "PATCH",
 } as const;
 
 const QUERY = {
   ID: "id",
-  AFTER: "after",
   CALL: "call",
   ATTACHMENT: "attachment",
   PICTURE: "picture",
   SRC: "src",
-  NUMBER: "number",
 } as const;
 
-export interface CodingAgentsAppSeams extends EveReach {
+export interface CodingAgentsAppSeams {
   resolveUserId: UserIdResolver;
-  /** The model a Start from another agent summarizes the steps it cannot keep on; the deployment's own (`coder-host/replay-summary.ts`) where none is named. */
-  summaryModel?: SummaryModelOf;
 }
 
 /** What the routes may require of the function that stands them. */

@@ -98,16 +98,3 @@ export function sessionMiddleware(resolveSessionUserId: SessionUserIdResolver) {
     });
   });
 }
-
-/**
- * Refuses a body its `Content-Length` says is past the procedure's own
- * bound, as the old groups' `readJsonBodyEffect(maximumBytes)` refused one:
- * `request-too-large`.
- */
-export function bodyLimit(maximumBytes: number) {
-  return middlewareGen<HostedContext>(function* ({ context, next }) {
-    const length = Number(context.request.headers.get("content-length") ?? 0);
-    if (length > maximumBytes) return yield* Effect.fail(HOSTED_REFUSAL.REQUEST_TOO_LARGE);
-    return yield* next();
-  });
-}
