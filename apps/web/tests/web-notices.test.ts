@@ -108,26 +108,41 @@ function fakeNotifications(options: {
 /** The doors with toasts that go nowhere, each status the browser answered, and whether notifications were withdrawn. */
 function doorsAnswering() {
   const answered: NotificationsStatus[] = [];
-  const heard = { withdrawn: false };
+  /** What Settings would draw, written as the tab's host writes it: each answer, and off once withdrawn. */
+  const heard: { withdrawn: boolean; status?: NotificationsStatus } = { withdrawn: false };
   const ignore = () => undefined;
   const doors = webNoticeDoors({
     toasts: { toast: ignore, toastInbox: ignore, toastFailedRun: ignore, toastChat: ignore },
-    onAnswered: (status) => answered.push(status),
+    onAnswered: (status) => {
+      answered.push(status);
+      heard.status = status;
+    },
     onWithdrawn: () => {
       heard.withdrawn = true;
+      heard.status = NOTIFICATIONS_STATUS.OFF;
     },
   });
   return { doors, answered, heard };
 }
 
-/** Stands the browser's permission query, whose answer for notifications says each change as the returned function is called. */
-function fakePermissionQuery(): () => void {
+/**
+ * Stands the browser's permission query, whose answer for notifications says
+ * each change as `changed` is called; held, the query answers only on `answer`.
+ */
+function fakePermissionQuery(options: { readonly held?: boolean } = {}) {
   const status = new EventTarget();
+  let answer: () => void = () => undefined;
+  const answered = new Promise<EventTarget>((settle) => {
+    answer = () => {
+      settle(status);
+    };
+    if (options.held !== true) answer();
+  });
   vi.stubGlobal("navigator", {
     ...navigator,
-    permissions: { query: () => Promise.resolve(status) },
+    permissions: { query: () => answered },
   });
-  return () => status.dispatchEvent(new Event("change"));
+  return { changed: () => void status.dispatchEvent(new Event("change")), answer };
 }
 
 /** Stands the installed app's badge in the browser, recording each count it is set to, and the display mode the site runs in. */
@@ -181,7 +196,12 @@ test("a notice while the tab is hidden shows the browser's notification, in the 
   const { doors } = doorsAnswering();
   visibility = "hidden";
 
-  doors.post({ title: "Billing export", body: "Opus finished", onClick: () => undefined });
+  doors.post({
+    id: "agent:1",
+    title: "Billing export",
+    body: "Opus finished",
+    onClick: () => undefined,
+  });
 
   assert.deepEqual(
     browser.shown.map(({ title, body }) => ({ title, body })),
@@ -197,6 +217,7 @@ test("a click on the notification opens the place it names", () => {
   const opened: string[] = [];
 
   doors.post({
+    id: "agent:1",
     title: "Billing export",
     body: "Opus finished",
     onClick: () => opened.push("agent-1"),
@@ -211,7 +232,12 @@ test("a notice is never a reason to ask for permission: one posted before it was
   const { doors, answered } = doorsAnswering();
   visibility = "hidden";
 
-  doors.post({ title: "Billing export", body: "Opus finished", onClick: () => undefined });
+  doors.post({
+    id: "agent:1",
+    title: "Billing export",
+    body: "Opus finished",
+    onClick: () => undefined,
+  });
 
   assert.equal(browser.permissionAsks, 0);
   assert.deepEqual(browser.shown, []);
@@ -308,7 +334,12 @@ test("a notice posted after the permission was granted in the browser's own sett
   const { doors, answered } = doorsAnswering();
   visibility = "hidden";
 
-  doors.post({ title: "Billing export", body: "Opus finished", onClick: () => undefined });
+  doors.post({
+    id: "agent:1",
+    title: "Billing export",
+    body: "Opus finished",
+    onClick: () => undefined,
+  });
 
   assert.deepEqual(answered, [NOTIFICATIONS_STATUS.ON]);
   assert.equal(browser.shown.length, 1);
@@ -319,8 +350,18 @@ test("a browser that refuses to build a notification throws nothing back, and wi
   const { doors, answered, heard } = doorsAnswering();
   visibility = "hidden";
 
-  doors.post({ title: "Billing export", body: "Opus finished", onClick: () => undefined });
-  doors.post({ title: "Billing export", body: "Sonnet finished", onClick: () => undefined });
+  doors.post({
+    id: "agent:1",
+    title: "Billing export",
+    body: "Opus finished",
+    onClick: () => undefined,
+  });
+  doors.post({
+    id: "agent:2",
+    title: "Billing export",
+    body: "Sonnet finished",
+    onClick: () => undefined,
+  });
 
   assert.ok(heard.withdrawn);
   assert.deepEqual(browser.shown, []);
@@ -352,21 +393,18 @@ it.effect(
     ),
 );
 
-test("the same notice posted by every hidden tab of the site shows once", () => {
+test("the same notice posted by every hidden tab of the site shows once, and another event in the same words shows beside it", () => {
   browser = fakeNotifications({ permission: "granted" });
   const first = doorsAnswering();
   const second = doorsAnswering();
   visibility = "hidden";
-  const notice = { title: "Billing export", body: "Opus finished", onClick: () => undefined };
+  const words = { title: "Release", body: "Opus: Approve deploy?", onClick: () => undefined };
 
-  first.doors.post(notice);
-  second.doors.post(notice);
-  first.doors.post({ ...notice, body: "Sonnet finished" });
+  first.doors.post({ ...words, id: "inbox:item-a:1" });
+  second.doors.post({ ...words, id: "inbox:item-a:1" });
+  first.doors.post({ ...words, id: "inbox:item-b:1" });
 
-  assert.deepEqual(
-    [...browser.onScreen.values()].map(({ body }) => body),
-    ["Opus finished", "Sonnet finished"],
-  );
+  assert.equal(browser.onScreen.size, 2);
 });
 
 test("an uninstalled tab counts before its title, though the browser names an app badge", () => {
@@ -397,7 +435,7 @@ it.effect("a permission changed in the browser's own settings reaches Settings a
   Effect.scoped(
     Effect.gen(function* () {
       browser = fakeNotifications({ permission: "default" });
-      const changed = fakePermissionQuery();
+      const { changed } = fakePermissionQuery();
       const { bridge } = yield* standingHost(fakeService({ signedIn: true }));
       const loaded = yield* Effect.promise(() => bridge.requestAppState());
       assert.equal(loaded.notifications.status, NOTIFICATIONS_STATUS.UNKNOWN);
@@ -439,3 +477,35 @@ it.effect(
       }),
     ),
 );
+
+it.effect(
+  "a permission changed while the browser's query was on its way reaches Settings as the query answers",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        browser = fakeNotifications({ permission: "default" });
+        const query = fakePermissionQuery({ held: true });
+        const { bridge } = yield* standingHost(fakeService({ signedIn: true }));
+
+        browser.setPermission("granted");
+        query.answer();
+
+        yield* Effect.promise(() =>
+          vi.waitFor(async () => {
+            const after = await bridge.requestAppState();
+            assert.equal(after.notifications.status, NOTIFICATIONS_STATUS.ON);
+          }),
+        );
+      }),
+    ),
+);
+
+test("two tests pressed together in a browser that refuses to build one leave notifications off", async () => {
+  browser = fakeNotifications({ permission: "granted", refuses: true });
+  const { doors, heard } = doorsAnswering();
+
+  await Promise.all([doors.postTest(), doors.postTest()]);
+
+  assert.ok(heard.withdrawn);
+  assert.equal(heard.status, NOTIFICATIONS_STATUS.OFF);
+});

@@ -30,7 +30,8 @@
  * none, and nothing throws back into the notices that posted it.
  *
  * Every tab of the site hears the same notices, so a notification is tagged
- * by what it says, and the browser shows one for every hidden tab that posts
+ * by the event it tells of (`AgentNotice.id`), never by its words, which
+ * two events may share, and the browser shows one for every hidden tab that posts
  * it rather than one each.
  *
  * The badge is the installed app's own where it runs installed; elsewhere,
@@ -44,6 +45,7 @@ import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/sett
 
 /** What Settings' test notification says. */
 const TEST_NOTICE = {
+  id: "test",
   title: "Luke notifications are on",
   body: "",
 } as const;
@@ -97,9 +99,9 @@ export interface WebNoticeDoors extends AgentNoticeDoorsSurface {
 /** The ask for permission still waiting on the developer, which a second ask joins rather than makes again. */
 let asking: Promise<void> | undefined;
 
-/** The tag a notice's notification carries: its words, the same in every tab that posts it. */
-function tagOf(notice: Pick<AgentNotice, "title" | "body">): string {
-  return `${TAG_PREFIX}:${notice.title}\n${notice.body}`;
+/** The tag a notice's notification carries: what it tells of, the same in every tab that posts it and no other event's. */
+function tagOf(notice: Pick<AgentNotice, "id">): string {
+  return `${TAG_PREFIX}:${notice.id}`;
 }
 
 /**
@@ -141,6 +143,8 @@ function followPermission(heard: () => void): () => void {
       if (stopped) return;
       followed = status;
       status.addEventListener("change", heard);
+      // A change made while the query was on its way had no listener to hear it.
+      heard();
     },
     () => undefined,
   );
@@ -260,7 +264,7 @@ export function webNoticeDoors(dependencies: {
   let refused = false;
   const offered = () => notificationsOffered() && !refused;
   const posted = (notice: AgentNotice) => {
-    if (show(notice)) return;
+    if (show(notice) || refused) return;
     refused = true;
     onWithdrawn();
   };
@@ -283,6 +287,8 @@ export function webNoticeDoors(dependencies: {
         return;
       }
       await askNotificationsPermission();
+      // Note that another test may have been refused while this one waited.
+      if (!offered()) return;
       onAnswered(notificationsStatusNow());
       if (Notification.permission !== PERMISSION.GRANTED) return;
       posted({ ...TEST_NOTICE, onClick: () => undefined });

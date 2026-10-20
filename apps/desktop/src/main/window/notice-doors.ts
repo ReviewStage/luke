@@ -10,6 +10,7 @@ import { app, Notification } from "electron";
 
 /** What the notification Settings' test posts says. */
 const TEST_NOTICE = {
+  id: "test",
   title: "Luke notifications are on",
   body: "",
 } as const;

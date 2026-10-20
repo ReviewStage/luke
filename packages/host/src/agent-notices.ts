@@ -153,6 +153,13 @@ const ENDED_WORD = {
 
 /** The notification as the OS posts it: what it says, and what its click does. */
 export interface AgentNotice {
+  /**
+   * What the notice tells of: an agent's turn, an inbox item at its
+   * revision, a run, or a chat message. The same in every window that
+   * hears it, and different for every other event, whatever the words, so
+   * a browser's tabs can show it once (`apps/web/src/app/web-notices.ts`).
+   */
+  id: string;
   title: string;
   body: string;
   onClick: () => void;
@@ -723,7 +730,13 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         });
         return;
       }
-      if (dependencies.notifying()) doors.post({ ...text, onClick: () => open(place) });
+      if (dependencies.notifying()) {
+        doors.post({
+          ...text,
+          id: `agent:${end.agentId}:${end.agent.turnId ?? ""}:${end.agent.status}`,
+          onClick: () => open(place),
+        });
+      }
     });
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
@@ -768,6 +781,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         const text = tasklessNoticeText(item, models);
         doors.post({
           ...text,
+          id: `inbox:${item.id}:${item.revision}`,
           onClick: () =>
             dependencies.openTasklessItem({
               agentId: item.agentId,
@@ -788,6 +802,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       }
       if (dependencies.notifying()) {
         doors.post({
+          id: `run:${run.id}`,
           title: run.automationName,
           body: words,
           onClick: () => dependencies.openFailedRun(place),
@@ -813,7 +828,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         return;
       }
       if (dependencies.notifying()) {
-        doors.post({ ...text, onClick: () => dependencies.openChat(entry.workspaceId) });
+        doors.post({
+          ...text,
+          id: `chat:${entry.messageId}`,
+          onClick: () => dependencies.openChat(entry.workspaceId),
+        });
       }
     }
 
@@ -831,7 +850,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         return;
       }
       if (dependencies.notifying()) {
-        doors.post({ ...text, onClick: () => dependencies.openInbox(item.planId) });
+        doors.post({
+          ...text,
+          id: `inbox:${item.id}:${item.revision}`,
+          onClick: () => dependencies.openInbox(item.planId),
+        });
       }
     }
 
