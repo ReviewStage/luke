@@ -93,8 +93,8 @@ function clippedBy(element: Element): Element | undefined {
   return undefined;
 }
 
-/** The stage at a room's width, its sidebar folded and the drawer `overlay` (none, or open), its list a repository whose head carries visually hidden words, as a pinned one's does. */
-function stage(room: "narrow" | "wide", overlay: "none" | "open"): void {
+/** The stage at a room's width, its sidebar folded and the drawer `overlay` (closed, or open), its list a repository whose head carries visually hidden words, as a pinned one's does. */
+function stage(room: "narrow" | "wide", overlay: "closed" | "open"): void {
   document.documentElement.setAttribute("data-luke-profile", "web");
   laid = layContainersAt({}, { touch: room === "narrow" });
   built(document.body, {
@@ -112,7 +112,7 @@ function stage(room: "narrow" | "wide", overlay: "none" | "open"): void {
                 data: {
                   room,
                   sidebarCollapsed: "true",
-                  ...(overlay === "open" ? { sidebarOverlay: "open" } : {}),
+                  sidebarOverlay: overlay,
                 },
                 children: [
                   {
@@ -195,7 +195,7 @@ function stage(room: "narrow" | "wide", overlay: "none" | "open"): void {
 }
 
 test("a phone's put-away drawer adds no height to the page, however long its list", () => {
-  stage("narrow", "none");
+  stage("narrow", "closed");
   const words = the(".desktop-sidebar .luke-visually-hidden");
   assert.equal(getComputedStyle(words).position, "absolute", "the row's hidden words are placed");
   const clip = clippedBy(words);
@@ -217,6 +217,6 @@ test("a phone's open drawer adds no height to the page and still scrolls its own
 });
 
 test("the desktop's sidebar is clipped by its shell, as before", () => {
-  stage("wide", "none");
+  stage("wide", "closed");
   assert.equal(clippedBy(the(".desktop-sidebar .luke-visually-hidden")), the(".desktop-shell"));
 });
