@@ -1,9 +1,22 @@
-import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import {
+  CODING_AGENT_BOUNDS,
+  type CodingAgentStatus,
+  type CodingAgentSummary,
+} from "@luke/features/coding-agent-wire";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { EllipsisIcon, ERROR_STATE_PLACEMENT, ErrorState, IconButton, useMenu } from "@luke/ui";
+import {
+  EllipsisIcon,
+  ERROR_STATE_PLACEMENT,
+  ErrorState,
+  IconButton,
+  InlineEdit,
+  UnarchiveIcon,
+  useMenu,
+} from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
+import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -27,15 +40,16 @@ import {
   useMentionAgentsReader,
 } from "../tasks/task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import { useCodingAgents } from "../tasks/use-coding-agents.js";
+import { type CodingAgentsControl, useCodingAgents } from "../tasks/use-coding-agents.js";
 import { WordsWorkspace } from "../tasks/use-link-standing.js";
 import { OpenHereProvider, openPullRequestsHere } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
-import { ActionMenu } from "./action-menu.js";
-import { AgentPane } from "./main-tabs.js";
+import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { useAgentArchive } from "./agent-archive.js";
+import { AgentPane, agentTranscriptRead } from "./main-tabs.js";
 import {
   COLUMN,
   SIDE_PANEL_HOLDER,
@@ -45,7 +59,7 @@ import {
   useColumnFocus,
   useSidePanelDrawing,
 } from "./side-panel.js";
-import { useTabViews } from "./strip-tabs.js";
+import { contentActionGroups, useTabViews, useTranscriptCopier } from "./strip-tabs.js";
 
 /**
  * desktop-agent-page.tsx -- one agent's page: an agent an automation started with no plan, drawn in the plan's place as the task column draws an agent's tab.
@@ -70,8 +84,13 @@ import { useTabViews } from "./strip-tabs.js";
  * pull request's chip its pull request, as on a task, and its toggle,
  * its width, and its keys are the plan's own; ⌘T opens its "+", the page's
  * one, since the agent's own column opens no tab. Its title names the agent as
- * its tab would, and its ⋯ offers its Copy link. An archived agent takes no message, so its composer gives
- * way to its own Unarchive. An agent the service will not hand the reader,
+ * its tab would, and its ⋯ offers what a plan's agent's tab ⋯ offers on it
+ * (`strip-tabs.tsx`'s `contentActionGroups`): Rename, which turns the title
+ * into its name's field, Copy link, the transcript's two copies, and
+ * Archive, asked first while the agent works (`agent-archive.tsx`), so an
+ * agent with no task is put away as a task's is. An archived agent takes no
+ * message, so its composer gives way to its own Unarchive, which its ⋯
+ * offers in Archive's place, and it is not renamed. An agent the service will not hand the reader,
  * deleted or of a workspace they are not in, as a link may name, is not
  * found, and nothing of it is drawn. Whoever sent it a message is read against its
  * workspace's members, as on a plan, and the automation whose run started
@@ -98,30 +117,69 @@ const NO_CALLS = {
 /** What the page's ⋯ is called. */
 const ACTIONS_LABEL = "Agent actions";
 
-/** The page's ⋯, offering the agent's Copy link. */
+/** What the title's field is called for a reader. */
+const NAME_LABEL = "Agent name";
+
+/** What the ⋯ of an archived agent offers in Archive's place, as its composer does. */
+const UNARCHIVE_LABEL = "Unarchive";
+
+/**
+ * The page's ⋯, offering on the agent what a plan's agent's tab ⋯ does:
+ * Rename while it stands, Copy link, its transcript's two copies, and its
+ * Archive, or its Unarchive once archived.
+ */
 function AgentPageActions({
   agent,
+  agents,
+  label,
   shown,
+  onRename,
+  onUnarchive,
 }: {
-  agent: { readonly id: string; readonly planId: string | null };
+  agent: CodingAgentSummary;
+  agents: CodingAgentsControl;
+  /** The agent's name as its title says it, which a transcript copied is headed by. */
+  label: string;
   shown: boolean;
-}): React.JSX.Element | null {
+  /** Opens the title's field; none while the agent is archived. */
+  onRename: (() => void) | undefined;
+  /** Brings the archived agent back; none while it stands. */
+  onUnarchive: (() => void) | undefined;
+}): React.JSX.Element {
   const menu = useMenu(shown);
   const copyLink = useCopyLinkItem()(agentPlace(agent));
-  if (copyLink === undefined) return null;
+  const archive = useAgentArchive(agent, agents, shown);
+  const copied = useTranscriptCopier();
+  const read = agentTranscriptRead(
+    agents.readTranscript,
+    agent.id,
+    label,
+    agent.brief,
+    agents.chatOn,
+  );
+  const unarchive: MenuAction | undefined =
+    onUnarchive === undefined
+      ? undefined
+      : { label: UNARCHIVE_LABEL, icon: <UnarchiveIcon />, onSelect: onUnarchive };
+  const groups = contentActionGroups({
+    chosen: true,
+    onClose: undefined,
+    onCloseOthers: undefined,
+    pin: undefined,
+    onCopy: copied(read),
+    onRename,
+    archive: agent.archivedAt === undefined ? archive.action : unarchive,
+    copyLink,
+  });
   return (
     <>
       <Tooltip label={ACTIONS_LABEL}>
         <IconButton icon={<EllipsisIcon />} label={ACTIONS_LABEL} {...menu.trigger()} />
       </Tooltip>
       {menu.drawn === undefined ? null : (
-        <ActionMenu
-          label={ACTIONS_LABEL}
-          menu={menu.drawn}
-          groups={[[copyLink]]}
-          onClose={menu.close}
-        />
+        <ActionMenu label={ACTIONS_LABEL} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
+      {archive.dialog}
     </>
   );
 }
@@ -200,6 +258,7 @@ export function DesktopAgentPage({
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
   useTaskAgentsFollow(tasks, agentId, agent);
+  const rename = useInlineRename(agent?.id, agents.onRename);
   // Note that the models come from the open task's agents where this page has not read them, so
   // the agent is named alike in both; and that an archived agent, which takes no message, is
   // brought back by its own Unarchive, there being no task to bring back with it.
@@ -304,7 +363,19 @@ export function DesktopAgentPage({
   const toolbar = (
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">
-        {agent === undefined ? null : (
+        {agent === undefined ? null : rename.editing ? (
+          <h1 className="desktop-toolbar-title">
+            <InlineEdit
+              value={agentTabLabel(agent, control.models)}
+              label={NAME_LABEL}
+              maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+              editing
+              onEnd={(edit) => {
+                rename.end(edit.value);
+              }}
+            />
+          </h1>
+        ) : (
           <FadingWords
             as={FADING_ELEMENT.H1}
             className="desktop-toolbar-title"
@@ -314,7 +385,14 @@ export function DesktopAgentPage({
       </div>
       {agent === undefined ? null : (
         <div className="desktop-toolbar-actions">
-          <AgentPageActions agent={agent} shown={tasks.shown} />
+          <AgentPageActions
+            agent={agent}
+            agents={control}
+            label={agentTabLabel(agent, control.models)}
+            shown={tasks.shown}
+            onRename={agent.archivedAt === undefined ? rename.begin : undefined}
+            onUnarchive={control.onUnarchive}
+          />
         </div>
       )}
     </header>

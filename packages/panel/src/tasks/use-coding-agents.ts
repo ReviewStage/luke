@@ -495,6 +495,22 @@ function listRead(
   });
 }
 
+/**
+ * One agent read by its id as its own page reads it, wherever it stands,
+ * on a task or on none; nothing where it could not be read. A surface that
+ * holds no list of its own, such as the sidebar's row of an agent with no
+ * task, reads it so before it archives it unasked.
+ */
+export function readAgentById(
+  act: ActHandle["act"],
+  agentId: string,
+): Promise<CodingAgentSummary | undefined> {
+  return listRead(act, undefined, agentId).then(
+    (answer) => ("failure" in answer ? undefined : answer.agents[0]),
+    () => undefined,
+  );
+}
+
 /** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
 function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boolean {
   return (
@@ -1121,8 +1137,19 @@ export function useCodingAgents(input: {
       if (taskId === undefined && agentId === undefined) return undefined;
       const answer = await listRead(act, taskId, agentId).catch(() => undefined);
       if (answer === undefined || "failure" in answer) return undefined;
+      // Note that the page's workspace, repository, and run come with the read, as the list's own read takes them.
       setList((was) =>
-        ours(was) ? { taskId, agentId: listOf, agents: answer.agents, failed: false } : was,
+        ours(was)
+          ? {
+              taskId,
+              agentId: listOf,
+              agents: answer.agents,
+              failed: false,
+              workspaceId: answer.workspaceId,
+              repository: answer.repository,
+              origin: answer.origin,
+            }
+          : was,
       );
       return answer.agents.find((agent) => agent.id === named);
     },

@@ -223,14 +223,20 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
         archives.push(request.payload);
-        // The agent answered is the one the page read, brought back, which names no archive.
+        // The agent answered is the one the page read, archived or brought back as asked.
         const shown = pages[0] !== undefined && "agent" in pages[0] ? pages[0].agent : PAGE;
         const { archivedAt: _archived, ...back } = shown;
-        // Brought back, the agent is read so from then on.
-        if (!archiveRefused) pages = [{ agent: back }];
+        const answered = request.payload.archived ? { ...back, archivedAt: 3 } : back;
+        // Archived or brought back, the agent is read so from then on.
+        if (!archiveRefused) pages = [{ agent: answered }];
         const value = archiveRefused
           ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
-          : { agent: back };
+          : { agent: answered };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
+      if (request.kind === ACT_KIND.CODING_AGENTS_RENAME) {
+        const shown = pages[0] !== undefined && "agent" in pages[0] ? pages[0].agent : PAGE;
+        const value = { agent: { ...shown, title: request.payload.title } };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_MESSAGES && transcript !== undefined) {
@@ -1126,6 +1132,117 @@ test("the page's ⋯ copies the agent's link, under its workspace, and says Link
 
   assert.deepEqual(copied, [`https://tryluke.dev/acme/agent/${AGENT_ID}`]);
   assert.equal(newestToastSays(), "Link copied");
+});
+
+/** Opens the page's ⋯ and answers the item under `label`, or fails saying it is not offered. */
+function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
+  const more =
+    page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]') ??
+    assert.fail("the page's toolbar has a ⋯");
+  act(() => more.click());
+  return (
+    [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+      (each) => each.textContent === label,
+    ) ?? assert.fail(`the ⋯ offers ${label}`)
+  );
+}
+
+test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Copy link, the transcript's two copies, and Archive agent", async () => {
+  const page = mount();
+  await settle();
+  const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
+  assert.ok(more);
+  act(() => more.click());
+
+  const offered = [...document.querySelectorAll('[role="menuitem"]')].map(
+    (each) => each.textContent,
+  );
+  assert.deepEqual(offered, [
+    "Rename",
+    "Copy link",
+    "Copy concise transcript",
+    "Copy full transcript",
+    "Archive agent",
+  ]);
+});
+
+test("Archive agent on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
+  const page = mount();
+  await settle();
+  const archive = pageMenuItem(page, "Archive agent");
+  await act(async () => archive.click());
+  await settle();
+
+  assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: true }]);
+  assert.equal(document.querySelector('[role="alertdialog"]'), null, "nothing was asked");
+  assert.ok(
+    [...page.querySelectorAll("button")].some((each) => each.textContent === "Unarchive"),
+    "the archived agent offers Unarchive",
+  );
+});
+
+test("Archive agent on the page's ⋯ asks first while the agent works, and archives nothing until asked", async () => {
+  pages = [{ agent: { ...PAGE, status: CODING_AGENT_STATUS.RUNNING } }];
+  const page = mount();
+  await settle();
+  const archive = pageMenuItem(page, "Archive agent");
+  await act(async () => archive.click());
+  await settle();
+
+  assert.match(document.body.textContent ?? "", /Stop and archive Sweep the flaky tests\?/u);
+  assert.deepEqual(archives, []);
+});
+
+test("an archived agent's ⋯ offers Unarchive in Archive's place, and no Rename", async () => {
+  pages = [{ agent: { ...PAGE, archivedAt: 2 } }];
+  const page = mount();
+  await settle();
+  const unarchive = pageMenuItem(page, "Unarchive");
+  assert.ok(
+    ![...document.querySelectorAll('[role="menuitem"]')].some(
+      (each) => each.textContent === "Rename",
+    ),
+  );
+  await act(async () => unarchive.click());
+  await settle();
+
+  assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: false }]);
+});
+
+test("an archive the service refuses says why and leaves the automation's prompt standing over the agent's transcript", async () => {
+  pages = [{ agent: RUN_PAGE }];
+  transcript = handedTranscript();
+  archiveRefused = true;
+  const page = mount(tasksControl({ workspaces: [ACME] }));
+  await settle();
+  const archive = pageMenuItem(page, "Archive agent");
+  await act(async () => archive.click());
+  await settle();
+
+  assert.match(document.body.textContent ?? "", new RegExp(archiveWords(true).refused, "u"));
+  const { card } = origin(page);
+  assert.match(card.textContent ?? "", /Sweep the flaky tests\./u);
+});
+
+test("Rename on the page's ⋯ turns the title into its name's field, and the name typed renames the agent", async () => {
+  const page = mount();
+  await settle();
+  const rename = pageMenuItem(page, "Rename");
+  act(() => rename.click());
+  const field =
+    page.querySelector<HTMLInputElement>('h1 input[aria-label="Agent name"]') ??
+    assert.fail("the title is its name's field");
+  act(() => {
+    field.value = "Sweep the slow tests";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+
+  assert.deepEqual(
+    told.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_RENAME).map((each) => each.payload),
+    [{ agentId: AGENT_ID, title: "Sweep the slow tests" }],
+  );
+  assert.equal(page.querySelector("h1")?.textContent, "Sweep the slow tests");
 });
 
 test("an @ in the agent's box names an archived agent of an archived task by that task's name, read from the window's archived tasks", async () => {

@@ -309,6 +309,7 @@ function TaskRows({
           <SidebarAgent
             key={row.agent.id}
             agent={row.agent}
+            agents={context.tasks.agents}
             current={context.currentRow(row)}
             unread={context.unseenAgent(row.agent.id)}
             now={context.now}
@@ -502,6 +503,7 @@ function PinnedRows({
             <RowPlaced key={agent.id} place={placeOf(at)}>
               <SidebarAgent
                 agent={agent}
+                agents={context.tasks.agents}
                 current={context.currentRow(agentRow(agent))}
                 unread={context.unseenAgent(agent.id)}
                 now={context.now}
