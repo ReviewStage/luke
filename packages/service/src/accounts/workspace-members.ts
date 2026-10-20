@@ -1,5 +1,5 @@
 import { Database } from "@luke/database/core/query";
-import { roleOf, type WorkspaceStoreEffect } from "@luke/database/models/workspace-store";
+import type { WorkspaceStoreEffect } from "@luke/database/models/workspace-store";
 import { member, user } from "@luke/database/schemas/auth";
 import { automation } from "@luke/database/schemas/automation";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
@@ -9,7 +9,7 @@ import { task } from "@luke/database/schemas/task";
 import { pinnedPictureUrl } from "@luke/features/account-picture";
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
 import type { FormerMember, WorkspaceMember, WorkspaceRole } from "@luke/features/workspace-wire";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
+import { roleOf, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { and, asc, eq, inArray, isNotNull, notInArray, or } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";

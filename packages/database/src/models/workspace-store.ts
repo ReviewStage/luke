@@ -5,15 +5,17 @@ import { GITHUB_TOKEN_STATUS } from "@luke/features/github-token-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   RESERVED_WORKSPACE_SLUGS,
+  roleOf,
   type Workspace as WireWorkspace,
+  WORKSPACE_PHOTO_TYPE,
   WORKSPACE_ROLE,
   type WorkspacePhoto,
-  type WorkspaceRole,
   workspacePhotoOfDataUrl,
 } from "@luke/features/workspace-wire";
 import { and, asc, eq, exists, inArray, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 import { type Cause, DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
 import {
   Database,
   type DatabaseServices,
@@ -86,8 +88,6 @@ const PHOTO_VERSION_CHARS = 16;
  * first.
  */
 export type Workspace = WireWorkspace;
-
-const WORKSPACE_ROLES: readonly WorkspaceRole[] = Object.values(WORKSPACE_ROLE);
 
 /** What a workspace read answers: an effect over the ambient database. */
 /**
@@ -447,12 +447,6 @@ function slugOf(name: string): string {
   return own ? `workspace-${spelled}` : spelled;
 }
 
-/** The highest role the plugin's role text names, read as a member where it names none Luke knows. */
-export function roleOf(text: string): WorkspaceRole {
-  const named = text.split(",").map((part) => part.trim());
-  return WORKSPACE_ROLES.find((role) => named.includes(role)) ?? WORKSPACE_ROLE.MEMBER;
-}
-
 /** Whether an organization already stands for what a workspace is being made for, as the caller reads it. */
 type OrganizationLinked = (organizationId: string) => WorkspaceStoreEffect<boolean>;
 
@@ -642,6 +636,109 @@ export function listWorkspaces(userId: string): WorkspaceStoreEffect<readonly Wo
       ...rows.filter((row) => row.personalOf !== null),
       ...rows.filter((row) => row.personalOf === null),
     ].map((row) => workspaceOfRow(row, installations.get(row.id) ?? []));
+  });
+}
+
+/** The statements the account's workspaces are followed by live: the workspaces, and the installations connected to them. */
+export type WorkspacesLiveStatements = Readonly<
+  Record<"workspaces" | "installations", LiveStatement>
+>;
+
+/**
+ * A logo's text as its bytes, the ones the held read digests. Note that it
+ * is `decode(…, 'escape')` over the text with each backslash doubled, rather
+ * than `convert_to`, because Realtime refuses any function Postgres does not
+ * mark immutable, and `convert_to` and `textsend` are only stable.
+ */
+const LOGO_BYTES = sql`decode(replace(${organization.logo}, ${"\\"}, ${"\\\\"}), 'escape')`;
+
+/** The base64 a logo's `data:` URL carries, after its comma. */
+const LOGO_PAYLOAD = sql`substring(${organization.logo} from position(',' in ${organization.logo}) + 1)`;
+
+/** The first bytes of a logo's photo, which name its image type (`sniffImageType`). */
+const LOGO_HEAD = sql`decode(left(${LOGO_PAYLOAD}, 16), 'base64')`;
+
+/**
+ * A logo that holds a photo, as the held read reads one
+ * (`workspacePhotoOfDataUrl`): a `data:` URL of one of
+ * `WORKSPACE_PHOTO_TYPE` whose base64 reads whole, and whose bytes are the
+ * image its label names. Note that the base64 is only decoded once it is
+ * known to read, inside the outer case, so a logo of any other text answers
+ * false rather than failing the statement.
+ */
+const LOGO_IS_PHOTO = sql<boolean>`case when coalesce(${organization.logo} ~ ${`^data:(${Object.values(WORKSPACE_PHOTO_TYPE).join("|")});base64,[A-Za-z0-9+/]+={0,2}$`}, false) and length(${LOGO_PAYLOAD}) % 4 = 0 then case split_part(substring(${organization.logo} from 6), ';', 1)
+  when ${WORKSPACE_PHOTO_TYPE.PNG} then substring(${LOGO_HEAD} from 1 for 8) = '\\x89504e470d0a1a0a'::bytea
+  when ${WORKSPACE_PHOTO_TYPE.JPEG} then substring(${LOGO_HEAD} from 1 for 3) = '\\xffd8ff'::bytea
+  when ${WORKSPACE_PHOTO_TYPE.WEBP} then substring(${LOGO_HEAD} from 1 for 4) = '\\x52494646'::bytea and substring(${LOGO_HEAD} from 9 for 4) = '\\x57454250'::bytea
+  else false end else false end`;
+
+/**
+ * The account's workspaces written for Neon Realtime: the same rows, joins,
+ * and rule of who may read them as `listWorkspaces`, each column under the
+ * key `live-wire.ts` reads it by. What the held read works out from a row
+ * here is worked out in the statement, so a row carries no photo's bytes:
+ * its digest, the Linear connection's standing, and an installation's.
+ * Note that a photo is told by its `data:` label alone, where the held read
+ * also reads its bytes, because a photo is checked when it is set. The
+ * order is the reader's to keep, since Realtime keeps none. None where a
+ * statement names a value Realtime cannot carry.
+ */
+export function workspacesLiveStatements(userId: string): Option.Option<WorkspacesLiveStatements> {
+  const workspaces = queryBuilder
+    .select(
+      liveSelection({
+        id: organization.id,
+        name: WORKSPACE_NAME,
+        slug: organization.slug,
+        own: sql<boolean>`${personalWorkspace.userId} is not null`,
+        personal: sql<boolean>`exists(select 1 from ${personalWorkspace} as "first" where "first"."organization_id" = ${organization.id})`,
+        role: member.role,
+        linearActive: sql<
+          boolean | null
+        >`case ${workspaceIntegrationConnection.status} when ${INTEGRATION_ROW_STATUS.CONNECTED} then true when ${INTEGRATION_ROW_STATUS.EXPIRED} then false end`,
+        memberCount: sql<number>`(select count(*)::int from ${member} as "members" where "members"."organization_id" = ${organization.id})`,
+        photoVersion: sql<
+          string | null
+        >`case when ${LOGO_IS_PHOTO} then left(encode(sha256(${LOGO_BYTES}), 'hex'), ${PHOTO_VERSION_CHARS}) end`,
+        ownerImage: user.image,
+      }),
+    )
+    .from(member)
+    .innerJoin(organization, eq(organization.id, member.organizationId))
+    .leftJoin(
+      personalWorkspace,
+      and(
+        eq(personalWorkspace.organizationId, organization.id),
+        eq(personalWorkspace.userId, userId),
+      ),
+    )
+    .leftJoin(user, eq(user.id, personalWorkspace.userId))
+    .leftJoin(
+      workspaceIntegrationConnection,
+      and(
+        eq(workspaceIntegrationConnection.organizationId, organization.id),
+        eq(workspaceIntegrationConnection.provider, INTEGRATION_PROVIDER.LINEAR),
+      ),
+    )
+    .where(eq(member.userId, userId));
+  const installations = queryBuilder
+    .select(
+      liveSelection(
+        {
+          workspaceId: githubInstallation.organizationId,
+          installationId: sql<number>`${githubInstallation.installationId}::float8`,
+          login: githubInstallation.accountLogin,
+          active: sql<boolean>`${githubInstallation.status} = ${GITHUB_INSTALLATION_STATUS.ACTIVE}`,
+        },
+        { linkedAt: githubInstallation.createdAt },
+      ),
+    )
+    .from(githubInstallation)
+    .innerJoin(member, eq(member.organizationId, githubInstallation.organizationId))
+    .where(eq(member.userId, userId));
+  return Option.all({
+    workspaces: liveStatementOf(workspaces),
+    installations: liveStatementOf(installations),
   });
 }
 

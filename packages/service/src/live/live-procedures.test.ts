@@ -35,6 +35,7 @@ import {
 } from "@luke/features/live-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { taskListLiveAnswerSchema } from "@luke/features/task-list-live";
+import { workspacesLiveAnswerSchema } from "@luke/features/workspace-live";
 import { EXPERIMENT } from "@luke/settings";
 import { TURN_ORIGIN, type WireBoundaryInput, type WireRecord } from "@luke/wire";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
@@ -1366,3 +1367,36 @@ it.layer(getTestDB())("the workspace chat's live read", (it) => {
       }),
   );
 });
+
+it.effect(
+  "the account's workspaces are sealed as its workspaces and their installations for the bearer's own account",
+  () =>
+    Effect.gen(function* () {
+      const path = "/api/live/workspaces";
+      const sealed = yield* ask({ bearer: "user-dana", path, sealing: Option.some(SCRIPTED) });
+      assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+      const answer = Schema.decodeUnknownSync(workspacesLiveAnswerSchema)(sealed.body);
+      assert.equal(answer.url, REALTIME_URL);
+      assert.deepEqual(Object.keys(answer.queries).toSorted(), ["installations", "workspaces"]);
+      for (const query of Object.values(answer.queries)) {
+        assert.ok(query.capability.includes('"user-dana"'), "read for the bearer");
+      }
+      assert.deepEqual(yield* ask({ path, sealing: Option.some(SCRIPTED) }), {
+        status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+        body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+      });
+      // A read started for another account, as a page left open under a changed session asks, is signed out.
+      assert.deepEqual(
+        yield* ask({
+          bearer: "user-dana",
+          forUser: "user-erin",
+          path,
+          sealing: Option.some(SCRIPTED),
+        }),
+        {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+        },
+      );
+    }),
+);

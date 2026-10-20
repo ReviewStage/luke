@@ -11,11 +11,12 @@
  * pages are read from, and one task's planning worker's transcript, by the
  * task and the call that started the worker, on the same statements; and the
  * commands of the kinds `?kinds=` names that no Mac of the account has
- * claimed, as one statement; and
- * one plan's inbox, or one agent's, named by `?id=`, as its items, their
- * threads, and their files; and one workspace's chat, named by
- * `?workspaceId=`, as the statements the window's chat read is built from,
- * once the account has joined it. Each
+ * claimed, as one statement; and one plan's inbox, or one agent's, named by
+ * `?id=`, as its items, their threads, and their files; and one workspace's
+ * chat, named by `?workspaceId=`, as the statements the window's chat read
+ * is built from, once the account has joined it; and the account's
+ * workspaces, as the statements of the workspaces and of the GitHub
+ * installations connected to them. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. Each
@@ -44,6 +45,7 @@ import {
 } from "../live-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { taskListLiveAnswerSchema } from "../task-list-live.js";
+import { workspacesLiveAnswerSchema } from "../workspace-live.js";
 import { hostedProcedure } from "./base.js";
 
 /** Whether the reader asks for the rows inline, polling while Realtime fails it (`LIVE_POLL`). */
@@ -182,4 +184,8 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_CHAT }))
     .input(liveChatSchema)
     .output(EffectSchema.flip(workspaceChatLiveAnswerSchema)),
+  workspaces: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACES }))
+    .input(liveReadSchema)
+    .output(EffectSchema.flip(workspacesLiveAnswerSchema)),
 };

@@ -30,6 +30,10 @@
  * no Mac of the account has claimed, as one statement, for the Mac to claim
  * each by its id (`../agents/mac-commands-procedures.ts`).
  *
+ * `GET /api/live/workspaces` answers the account's workspaces the same way,
+ * as two statements: the workspaces, and the GitHub installations connected
+ * to them.
+ *
  * `GET /api/live/agent-transcript?id=` answers what one coding agent's
  * transcript is read from, or one of its workers' with `&call=` naming the
  * delegation call (`transcript-live.ts`), after the agent is read as the
@@ -59,6 +63,7 @@ import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
 import { readTask } from "@luke/database/models/task-store";
+import { workspacesLiveStatements } from "@luke/database/models/workspace-store";
 import { CODING_AGENT_STATUS, codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
 import {
   LIVE_POLL,
@@ -379,6 +384,12 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       const self = yield* hostedStoreOrUnavailable(joinedMember(reader, workspace));
       if (Option.isNone(self)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statements = workspaceChatLiveStatements(reader, self.value);
+      if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+      return yield* sealedParts(statements.value, input);
+    }),
+    workspaces: signedIn.workspaces.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
+      const statements = workspacesLiveStatements(context.userId);
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       return yield* sealedParts(statements.value, input);
     }),
