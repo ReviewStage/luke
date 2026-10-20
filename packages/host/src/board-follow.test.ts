@@ -118,14 +118,10 @@ it.effect(
     Effect.gen(function* () {
       const realtime = fakeRealtime();
       let board = [mark(1, 0, false)];
-      let polls = 0;
       const moves: unknown[] = [];
       const following = yield* Effect.forkChild(
         Stream.runForEach(
-          follow(realtime, () => {
-            polls += 1;
-            return polled(board);
-          }),
+          follow(realtime, () => polled(board)),
           (move) => Effect.sync(() => void moves.push(move)),
         ),
       );
@@ -137,7 +133,6 @@ it.effect(
       board = [mark(2, 1, true)];
       yield* TestClock.adjust(Duration.seconds(3));
       yield* settled;
-      assert.ok(polls >= 1, "polled while Realtime is out");
       assert.deepEqual(moves, [{ board: [mark(1, 0, false)] }, { board: [mark(2, 1, true)] }]);
 
       // Realtime is subscribed to again, and its first delivery stops the polling.
@@ -145,11 +140,10 @@ it.effect(
       yield* settled;
       realtime.deliver([mark(3, 2, true)]);
       yield* settled;
-      const settledPolls = polls;
+      board = [mark(9, 9, true)];
       yield* TestClock.adjust(Duration.seconds(30));
       yield* settled;
-      assert.equal(polls, settledPolls, "no polling once Realtime is back");
-      assert.deepEqual(moves.at(-1), { board: [mark(3, 2, true)] });
+      assert.deepEqual(moves.at(-1), { board: [mark(3, 2, true)] }, "no polling once back");
       yield* Fiber.interrupt(following);
     }),
 );

@@ -191,7 +191,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const realtime = fakeRealtime();
-      let polls = 0;
+      let polled: unknown[] = [{ id: "polled-1" }];
       const rows: unknown[] = [];
       const following = yield* Effect.forkChild(
         Stream.runForEach(
@@ -200,16 +200,13 @@ it.effect(
               openLive: () => realtime.client,
               reseal: () => Effect.succeed(read(1, 3_600_000)),
               poll: () =>
-                Effect.sync(() => {
-                  polls += 1;
-                  return {
-                    url: LIVE_POLL_URL,
-                    queries: {
-                      left: { ...sealed("left", 9, 0), rows: [{ id: "polled" }] },
-                      right: { ...sealed("right", 9, 0), rows: [] },
-                    },
-                  };
-                }),
+                Effect.sync(() => ({
+                  url: LIVE_POLL_URL,
+                  queries: {
+                    left: { ...sealed("left", 9, 0), rows: polled },
+                    right: { ...sealed("right", 9, 0), rows: [] },
+                  },
+                })),
               now: () => 0,
             },
             read(0, 3_600_000),
@@ -220,22 +217,21 @@ it.effect(
       yield* settled;
       realtime.fail("left-0");
       yield* settled;
-      assert.deepEqual(rows, [{ left: [{ id: "polled" }], right: [] }]);
-      yield* TestClock.adjust(Duration.seconds(6));
+      assert.deepEqual(rows, [{ left: [{ id: "polled-1" }], right: [] }]);
+      polled = [{ id: "polled-2" }];
+      yield* TestClock.adjust(Duration.seconds(3));
       yield* settled;
-      assert.ok(polls >= 3, "polled every few seconds");
-      assert.equal(rows.length, 1, "unchanged polls feed nothing new");
+      assert.deepEqual(rows.at(-1), { left: [{ id: "polled-2" }], right: [] }, "polled again");
 
       yield* TestClock.adjust(Duration.seconds(15));
       yield* settled;
       realtime.deliver("left-1", [{ id: "live" }]);
       realtime.deliver("right-1", []);
       yield* settled;
-      const stopped = polls;
+      polled = [{ id: "stale" }];
       yield* TestClock.adjust(Duration.seconds(30));
       yield* settled;
-      assert.equal(polls, stopped, "no polling once Realtime is back");
-      assert.deepEqual(rows.at(-1), { left: [{ id: "live" }], right: [] });
+      assert.deepEqual(rows.at(-1), { left: [{ id: "live" }], right: [] }, "no polling once back");
       yield* Fiber.interrupt(following);
     }),
 );

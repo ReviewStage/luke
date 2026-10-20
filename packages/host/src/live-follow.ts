@@ -1,5 +1,5 @@
 import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
-import { Cause, Data, Duration, Effect, Fiber, Queue, Stream } from "effect";
+import { Cause, Data, Duration, Effect, Fiber, Queue, Schedule, Stream } from "effect";
 
 /**
  * live-follow.ts -- a read the host follows over Neon Realtime, as Neon's guide says to: sealed statements subscribed to at the address the service names, and renewed before they expire.
@@ -167,6 +167,12 @@ function realtimeRows<Part extends string>(
           next = yield* dependencies.reseal();
         }
         const renewed = next;
+        // A renewal the service answered polled carries no capability Realtime renews with: the read is polled instead.
+        if (renewed.url === LIVE_POLL_URL) {
+          return yield* Effect.fail(
+            new LiveBroken({ reason: "Realtime could not seal a renewal" }),
+          );
+        }
         yield* Effect.forEach(
           subscriptions,
           ([part, subscription]) =>
@@ -237,7 +243,9 @@ export function liveRows<Part extends string>(
             Effect.annotateLogs(why.code === undefined ? {} : { code: why.code }),
           );
           polling = yield* Effect.forkScoped(
-            Effect.forever(Effect.andThen(pollOnce, Effect.sleep(LIVE_POLL_EVERY))),
+            Effect.repeat(pollOnce, Schedule.spaced(LIVE_POLL_EVERY)).pipe(
+              Effect.andThen(Effect.never),
+            ),
           );
         });
       const stopPolling = Effect.gen(function* () {
@@ -247,28 +255,49 @@ export function liveRows<Part extends string>(
         yield* Effect.logInfo("live-follow: Realtime is back; polling stopped");
       });
 
-      const follow = Effect.gen(function* () {
-        let sealed: SealedRead<Part> | { readonly failure: string; readonly gone?: boolean } =
-          first;
-        while (true) {
-          if ("failure" in sealed) {
-            if (sealed.gone === true) return gone();
-          } else if (sealed.url === LIVE_POLL_URL) {
-            yield* startPolling(new LiveBroken({ reason: "Realtime could not seal the read" }));
-          } else {
-            const broken = yield* Stream.runForEach(realtimeRows(dependencies, sealed), (rows) =>
-              Effect.andThen(
-                stopPolling,
-                Effect.sync(() => emit(rows)),
-              ),
-            ).pipe(Effect.flip);
-            if (broken.reason === GONE) return gone();
-            yield* startPolling(broken);
-          }
-          yield* Effect.sleep(RESUBSCRIBE_EVERY);
-          sealed = yield* dependencies.reseal();
+      /** The read as last sealed, the first the caller handed, then each resubscribe's. */
+      let sealed: SealedRead<Part> | { readonly failure: string; readonly gone?: boolean } = first;
+      /** One go at Realtime: followed until it breaks, polled from then on; false where the read is gone. */
+      const attempt = Effect.gen(function* () {
+        if ("failure" in sealed) {
+          if (sealed.gone === true) return false;
+        } else if (sealed.url === LIVE_POLL_URL) {
+          yield* startPolling(new LiveBroken({ reason: "Realtime could not seal the read" }));
+        } else {
+          const broken = yield* Stream.runForEach(realtimeRows(dependencies, sealed), (rows) =>
+            Effect.andThen(
+              stopPolling,
+              Effect.sync(() => emit(rows)),
+            ),
+          ).pipe(
+            Effect.match({
+              onFailure: (why) => why,
+              onSuccess: () => new LiveBroken({ reason: "the subscription ended" }),
+            }),
+          );
+          if (broken.reason === GONE) return false;
+          yield* startPolling(broken);
         }
+        return true;
       });
+      const resubscribe = Effect.andThen(
+        Effect.flatMap(dependencies.reseal(), (next) =>
+          Effect.sync(() => {
+            sealed = next;
+          }),
+        ),
+        attempt,
+      );
+      const follow = Effect.flatMap(attempt, (standing) =>
+        standing
+          ? Effect.asVoid(
+              Effect.repeat(resubscribe, {
+                schedule: Schedule.spaced(RESUBSCRIBE_EVERY),
+                while: (still) => still,
+              }),
+            )
+          : Effect.void,
+      ).pipe(Effect.andThen(Effect.sync(gone)));
       yield* Effect.forkScoped(follow);
     }),
   );
