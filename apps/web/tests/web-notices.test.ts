@@ -105,11 +105,16 @@ function fakeNotifications(options: {
   return seen;
 }
 
+/** What Settings would draw, written as the tab's host writes it: each answer, and off once withdrawn. */
+interface HeardSettings {
+  withdrawn: boolean;
+  status?: NotificationsStatus;
+}
+
 /** The doors with toasts that go nowhere, each status the browser answered, and whether notifications were withdrawn. */
 function doorsAnswering() {
   const answered: NotificationsStatus[] = [];
-  /** What Settings would draw, written as the tab's host writes it: each answer, and off once withdrawn. */
-  const heard: { withdrawn: boolean; status?: NotificationsStatus } = { withdrawn: false };
+  const heard: HeardSettings = { withdrawn: false };
   const ignore = () => undefined;
   const doors = webNoticeDoors({
     toasts: { toast: ignore, toastInbox: ignore, toastFailedRun: ignore, toastChat: ignore },
