@@ -733,6 +733,27 @@ test("a block a thread covers whole offers no button to start another, and one a
   assert.ok(bare.button(bare.paragraph), "a line with no count does");
 });
 
+test("a finger's arrival on a block shows no button, so iOS spends no tap on one, a link's in it among them, and its tap shows the button by that block", () => {
+  const { container } = wide(() => drawn("page", []));
+  const paragraph =
+    [...container.querySelectorAll("p")].find((p) =>
+      p.textContent?.startsWith("Admins can withdraw"),
+    ) ?? assert.fail("the paragraph");
+  const finger = (type: string) =>
+    act(() => {
+      paragraph.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerType: "touch" }));
+    });
+  const button = () => container.querySelector(".comment-block-button button");
+
+  finger("pointerover");
+  assert.ok(button() === null, "the arrival shows none");
+
+  finger("pointerdown");
+  finger("pointerup");
+  act(() => paragraph.click());
+  assert.ok(button() !== null, "the tap shows it");
+});
+
 test("a thread being started goes on a press away while empty, and stays holding a draft", () => {
   const { container } = wide(() => drawn("page", []));
   const startOn = () => {

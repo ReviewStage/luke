@@ -272,6 +272,20 @@ test("resting on one submenu's item after another's opens the second's submenu, 
   expect(openMenu("Order by")).not.toBeNull();
 });
 
+test("a finger's arrival on a submenu's item opens nothing, so iOS spends no tap on it, and the tap opens it with the keyboard in it", () => {
+  mount(createElement(Harness, { groups: viewGroups([]) }));
+  press(button("More"));
+  const item = button("Group by");
+  act(() => {
+    item.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, pointerType: "touch" }));
+  });
+  expect(openMenu("Group by")).toBeNull();
+
+  press(item);
+  expect(openMenu("Group by")).not.toBeNull();
+  expect(focused()).toBe("Repository");
+});
+
 /** A menu of one submenu whose choice its owner holds: Group by, `chosen` checked. */
 function GroupBy({ chosen }: { chosen: string }): React.JSX.Element {
   const menu = useMenu(true);

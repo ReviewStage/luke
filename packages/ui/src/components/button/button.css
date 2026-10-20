@@ -260,9 +260,14 @@
   }
 
   /* An ink fill is black or white, which a brightness does not move, so it
-     fades a little under the pointer and more under the press. */
-  .luke-button[data-variant="ink"]:hover:not(:disabled, [aria-disabled="true"]) {
-    opacity: 0.85;
+     fades a little under the pointer and more under the press. Note that
+     the pointer's fade stands only where there is a hover, because a tap
+     on iOS leaves the button hovered, and a change a hover draws there
+     can spend the tap. */
+  @media (hover: hover) {
+    .luke-button[data-variant="ink"]:hover:not(:disabled, [aria-disabled="true"]) {
+      opacity: 0.85;
+    }
   }
 
   .luke-button[data-variant="ink"]:active:not(:disabled, [aria-disabled="true"]) {

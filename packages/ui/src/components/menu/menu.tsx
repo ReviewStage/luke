@@ -593,7 +593,12 @@ function SubmenuItem({
       aria-haspopup="menu"
       aria-expanded={open}
       data-open={open ? "true" : undefined}
-      onPointerEnter={(event) => onOpen(event.currentTarget, false)}
+      onPointerEnter={(event) => {
+        // Note that a finger's arrival opens nothing, because iOS plays a
+        // tap's arrival as a hover and spends the tap on what comes in with
+        // it; the tap itself opens the submenu, the keyboard taken into it.
+        if (event.pointerType !== "touch") onOpen(event.currentTarget, false);
+      }}
       onClick={(event) => onOpen(event.currentTarget, true)}
       onKeyDown={(event) => {
         if (event.key !== "ArrowRight") return;
