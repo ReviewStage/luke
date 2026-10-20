@@ -6,8 +6,8 @@
  * build's own renderer asks; the voice and call windows, and a frame this
  * build does not trust, are refused in each kind's own words before the host
  * is asked; a panel's ask reaches the host with its payload as the panel
- * sent it, and what the host answers is the panel's, as it was on
- * `app:act`; and a host that fails answers the kind's own sentence.
+ * sent it, and what the host answers is the panel's; and a host that fails
+ * answers the kind's own sentence.
  */
 
 import assert from "node:assert/strict";
@@ -24,12 +24,12 @@ import {
 } from "@luke/features/inbox-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { AGENT_INBOX_ACT_KIND, type PortActKind } from "../contract/index.js";
 import {
   type AgentInboxProceduresDependencies,
   agentInboxProcedures,
 } from "./agent-inbox-procedures.js";
+import type { ActSender } from "./base.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
 // The platform's handle on the window that asked, which no procedure here reads.

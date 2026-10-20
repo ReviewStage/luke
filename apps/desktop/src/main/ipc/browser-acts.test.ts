@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { BROWSER_STEP, type BrowserBounds, type BrowserPage } from "@luke/features/browser-acts";
+import type { ActSender } from "@luke/host/act-port";
 import { type TestActPort, testActPort } from "@luke/host/act-port/testing";
-import type { ActSender } from "@luke/host/act-router";
 import { BROWSER_ACT_KIND } from "@luke/host/contract";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect } from "effect";

@@ -64,7 +64,7 @@ const surfacePort = actPortFor<WebContents>();
  * own act and refused from anywhere else: it is about the display one panel
  * stands on, and no other surface has one. A save is a panel's too, since
  * only a panel draws a File tab, and its dialog hangs over the panel that
- * asked. The rest read no window, as none did on `app:act`.
+ * asked. The rest read no window.
  */
 export function windowSurfaceProcedures(
   dependencies: WindowSurfaceDependencies,

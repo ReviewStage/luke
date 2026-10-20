@@ -13,7 +13,6 @@ import { type AvatarViewSignal, avatarViewSignalFromWire } from "@luke/voice/ava
 import { isVoiceView, type VoiceView } from "@luke/voice/voice-view";
 import { isWireBoolean, type UnparsedWireValue } from "@luke/wire";
 import { wireResult as result, type WireGuard } from "@luke/wire/wire-guard";
-import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./acts.js";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./app-state.js";
 import type { PUSH_METHOD, PushMethod, PushPayload } from "./contract/pushes.js";
 
@@ -71,20 +70,6 @@ type SurfaceEventArguments = {
 }[ProductSurfaceEventName];
 
 export const BRIDGE = {
-  /**
-   * Every effect a window asks for, on one channel. The argument is one
-   * `{kind, payload}` from `ACT_KIND`, parsed here by that kind's own schema
-   * before it leaves the window and again by the router that carries it, and
-   * the answer is that act's outcome — done with its kind's value, refused
-   * with a sentence, or a kind this build does not know. There is no second
-   * way to cause anything: an effect with no kind reaches nothing.
-   */
-  act: entry({
-    kind: "invoke",
-    channel: "app:act",
-    args: args<[Act]>((v) => v.length === 1 && parsedAct(v[0]) !== undefined),
-    result: result<ActOutcome>(isActOutcome),
-  }),
   /**
    * The document as this window stands: every slice, and this window's own
    * facts beside them. Read once at mount, before the subscription below has

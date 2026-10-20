@@ -4,12 +4,13 @@ import assert from "node:assert/strict";
 import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import type { TaskFileRequest } from "@luke/features/task-wire";
-import { ACT_KIND, type Act } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import {
+  type AnyAct,
   fakeActPort,
   fakeAppBridge,
   type OpenedLink,
@@ -82,7 +83,7 @@ beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
-const told: (Act | OpenedLink)[] = [];
+const told: (AnyAct | OpenedLink)[] = [];
 
 beforeEach(() => {
   told.length = 0;

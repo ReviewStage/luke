@@ -12,7 +12,7 @@ import {
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { type ChatPlace, FOR_YOU } from "@luke/ui/chat-model";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import { Effect } from "effect";
@@ -32,7 +32,7 @@ import {
   stagedPost,
 } from "../tasks/chat-fixture.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
-import { fakeActPort } from "../testing/app-bridge.js";
+import { FAKE_ANSWER, fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   composerEditor,
@@ -63,7 +63,7 @@ beforeEach(() => {
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+      act: () => Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not here." }),
     },
   });
 });
@@ -1084,6 +1084,6 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   assert.ok(tasks, "Tasks heads its group");
   act(() => tasks.click());
   const count = tasks.querySelector<HTMLElement>(".luke-nav-item-count");
-  assert.equal(count?.dataset["shown"], "always", "the folded group's count stands at rest");
+  assert.equal(count?.dataset.shown, "always", "the folded group's count stands at rest");
   assert.match(count?.textContent ?? "", /^1 unread/u);
 });

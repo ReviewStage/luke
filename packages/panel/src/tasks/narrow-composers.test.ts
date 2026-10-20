@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement, type ReactNode } from "react";
@@ -58,7 +57,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
-  fakeAppBridge({ act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }) });
+  fakeAppBridge({});
   fakeActPort({});
 });
 

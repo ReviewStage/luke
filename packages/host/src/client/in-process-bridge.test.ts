@@ -2,17 +2,14 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Context, Effect } from "effect";
-import { type ActRouter, createActRouter } from "../act-router/index.js";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "../acts.js";
 import type { AppStateSnapshot } from "../app-state.js";
 import { runModeFor } from "../run-mode.js";
 import { AppStateStore, createInProcessBridge, initialAppState } from "./index.js";
 
 /**
- * The bridge a shell installs when the host runs in its own page: an act
- * reaches the real router and comes back, answered unknown now that every
- * act rides the act port, the document is read and pushed from the store,
- * and a subscription ended hears nothing more.
+ * The bridge a shell installs when the host runs in its own page: the
+ * document is read and pushed from the store, and a subscription ended hears
+ * nothing more.
  */
 
 const RUN = {
@@ -23,22 +20,15 @@ const RUN = {
   platform: "web",
 } as const;
 
-const REPORTER = "reporter-1";
-
 const AGENT_PLACE = { taskId: "task-1", agentId: "agent-1" };
 
-/** A bridge over the real router and a fresh store, its acts run on the test's own services. */
+/** A bridge over a fresh store. */
 const bridgeFixture = Effect.gen(function* () {
-  const services = yield* Effect.context<never>();
   const state = new AppStateStore(initialAppState(RUN, false, []), Context.empty());
   const reported: string[] = [];
   const made = yield* createInProcessBridge({
-    sender: Symbol("page"),
-    routerFor: (): ActRouter<symbol> => createActRouter({}),
-    run: (effect) => Effect.runPromiseWith(services)(effect),
     state,
     windowFacts: () => ({ fullScreen: false }),
-    createId: () => REPORTER,
     reports: { notifyReady: () => {}, recordSurfaceEvent: () => {} },
     report: (message) => reported.push(message),
   });
@@ -46,20 +36,6 @@ const bridgeFixture = Effect.gen(function* () {
   yield* Effect.yieldNow;
   return { ...made, state, reported };
 });
-
-it.effect("an act the port answers comes back from the router unknown to app:act", () =>
-  Effect.gen(function* () {
-    const { bridge } = yield* bridgeFixture;
-    const outcome = yield* Effect.promise(() =>
-      // SAFETY: a forged act, as a page that kept the old channel would send it; `Act` describes none.
-      bridge.act({
-        kind: ACT_KIND.WINDOW_COPY_TEXT,
-        payload: { words: "copied" },
-      } as unknown as Act),
-    );
-    assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-  }).pipe(Effect.scoped),
-);
 
 it.effect("the document is read on request and every change of it reaches a subscription", () =>
   Effect.gen(function* () {

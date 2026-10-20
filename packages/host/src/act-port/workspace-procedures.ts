@@ -25,7 +25,6 @@ import type {
   TasksWorkspaceTransferParams,
 } from "@luke/features/tasks-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import {
   ALREADY_INVITED_REFUSAL,
   isGitHubAddress,
@@ -33,7 +32,7 @@ import {
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "../acts.js";
 import { WORKSPACE_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /**
  * workspace-procedures.ts -- the panel's asks of the host about the account's workspaces.

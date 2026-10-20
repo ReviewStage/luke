@@ -42,20 +42,18 @@ import {
  * context `ActPortContext` names.
  */
 
-export type { AccountAskProceduresDependencies } from "./account-ask-procedures.js";
+export { accountAskProcedures } from "./account-ask-procedures.js";
 export type { AccountProceduresDependencies } from "./account-procedures.js";
 export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
-export { type ActPortContext, actPortFor } from "./base.js";
+export { type ActPortContext, type ActSender, actPortFor } from "./base.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
-export type { IssueProceduresDependencies } from "./issue-procedures.js";
-export { WindowPushes } from "./push-procedures.js";
+export { issueProcedures } from "./issue-procedures.js";
+export { pushProcedures, WindowPushes } from "./push-procedures.js";
 export type {
   ClientSettingSideEffects,
   SettingsProceduresDependencies,
 } from "./settings-procedures.js";
-export type { TasksProceduresDependencies } from "./tasks-procedures.js";
-export type { WorkspaceProceduresDependencies } from "./workspace-procedures.js";
 
 /** The act port's server, which the bridge upgrades each window's port with. */
 export type ActPortHandler<Sender = unknown> = RPCHandler<ActPortContext<Sender>>;
@@ -73,8 +71,7 @@ export type PlatformActProcedures<Sender> = ContractedRouter<
 /**
  * Every platform kind refused in its own sentence, as a platform that can
  * carry none of them answers: a shell spreads these under the few it does
- * answer, so its table stays total and the window draws each refusal, as
- * `refusedRows` does for `app:act`.
+ * answer, so its table stays total and the window draws each refusal.
  */
 export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sender> {
   const port = actPortFor<Sender>();

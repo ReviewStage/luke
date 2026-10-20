@@ -7,9 +7,8 @@ import type {
   IssueView,
 } from "@luke/features/issue-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { ISSUE_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /**
  * issue-procedures.ts -- the Issues page's asks of the host about a workspace's issues.

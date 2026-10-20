@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { useConfirmDialog } from "@luke/ui";
 import {
   DIAGRAM_APPEARANCE,
@@ -82,10 +81,7 @@ beforeEach(() => {
         appearance.listeners.delete(listener),
     }),
   });
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

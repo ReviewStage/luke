@@ -11,9 +11,8 @@ import type {
   AutomationView,
 } from "@luke/features/automation-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { AUTOMATION_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /**
  * automation-procedures.ts -- the Automations pages' asks of the host about the account's automations.

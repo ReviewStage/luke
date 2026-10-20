@@ -7,7 +7,6 @@ import { once } from "node:events";
 import "@luke/panel/testing/match-media";
 import "@luke/panel/testing/resize-observer";
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { type AppStateSnapshot, RUN_PROFILE, type RunProfile } from "@luke/host/app-state";
 import { type AppBridge, bridgeEntries } from "@luke/host/bridge";
 import { initialAppState } from "@luke/host/client";
@@ -102,7 +101,6 @@ export function fixtureBridge(profile: RunProfile): AppBridge {
   return {
     ...quiet,
     requestAppState: () => Promise.resolve(state),
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "fixture" }),
   } as unknown as AppBridge;
 }
 

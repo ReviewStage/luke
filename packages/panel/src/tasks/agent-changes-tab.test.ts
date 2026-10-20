@@ -22,7 +22,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { ACT_ERROR, SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import {
@@ -45,7 +45,8 @@ import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contr
 import { findRanges, reveal } from "../find-matches.js";
 import {
   type AnyAct,
-  type AnyActOutcome,
+  FAKE_ANSWER,
+  type FakeActAnswer,
   fakeActPort,
   fakeActPortCalls,
   fakeActs,
@@ -1100,15 +1101,10 @@ function comeIntoView(): void {
   }
 }
 
-/** Every `app:act` this test does not answer, refused. */
-function refuseEveryAct(): Promise<ActOutcome> {
-  return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-}
-
 /** The images the service was asked for, by address, each answered with a picture of its own. */
 function answerImages(refusing: Set<string> = new Set()): string[] {
   const asked: string[] = [];
-  fakeAppBridge({ act: refuseEveryAct });
+  fakeAppBridge({});
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
@@ -1366,7 +1362,7 @@ const MARKED: CodingAgentPullRequestViewedAnswerView = {
 /** Every mark asked of the service, answered as `answer` says. */
 function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionRequest[] {
   const asked: PullRequestActionRequest[] = [];
-  fakeAppBridge({ act: refuseEveryAct });
+  fakeAppBridge({});
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
@@ -1541,7 +1537,7 @@ function holdMarks(): Array<{
     readonly request: PullRequestActionRequest;
     readonly answer: (answer: PullRequestWriteAnswer) => void;
   }> = [];
-  fakeAppBridge({ act: refuseEveryAct });
+  fakeAppBridge({});
   handSettings();
   fakeActPort({
     ...fakeActPortCalls(),
@@ -1905,8 +1901,8 @@ function answerFileReads(answer: (path: string) => TasksFileAnswer): AnyAct[] {
   fakeActs({
     act: (request: AnyAct) => {
       asked.push(request);
-      const outcome: AnyActOutcome = {
-        status: ACT_OUTCOME_STATUS.DONE,
+      const outcome: FakeActAnswer = {
+        status: FAKE_ANSWER.DONE,
         value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,
       };
       return Promise.resolve(outcome);
@@ -2162,7 +2158,7 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
               },
             }
           : undefined;
-      const outcome: AnyActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
+      const outcome: FakeActAnswer = { status: FAKE_ANSWER.DONE, value };
       // The first file's read is held until the test lets it land.
       if (request.kind === ACT_KIND.TASKS_FILE && request.payload.path === "src/seats.ts") {
         return new Promise((resolve) => held.push(() => resolve(outcome)));

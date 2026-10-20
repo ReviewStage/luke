@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import type { TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
@@ -39,9 +39,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installEditorLayout();
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.TASKS_TREE]: () =>
       Promise.resolve({

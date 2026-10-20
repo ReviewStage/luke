@@ -2,7 +2,7 @@
  * tasks.ts -- the Tasks tab's asks of the host about the task list, the open task, and what a task holds, as procedures.
  *
  * A kind that carries nothing takes `undefined` alone, so a window calls it
- * with no payload and one sent anything is refused, as `app:act` refused it.
+ * with no payload and one sent anything is refused.
  * Each output is its value's schema flipped, so oRPC's output check encodes
  * the row's value into what crosses the port; a write that answers whether
  * the service took it answers a boolean, and one the panel reads nothing of

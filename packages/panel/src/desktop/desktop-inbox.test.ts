@@ -47,7 +47,7 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { AppInboxTaskHolding, AppInboxTasklessItem } from "@luke/host/app-state";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { DocumentIcon } from "@luke/ui";
@@ -65,7 +65,8 @@ import { DRAFT_WORD } from "../draft-mark.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
-  type AnyActOutcome,
+  FAKE_ANSWER,
+  type FakeActAnswer,
   fakeActs,
   fakeActsAnswer,
 } from "../testing/app-bridge.js";
@@ -221,7 +222,7 @@ let agentListHeld = false;
 let holdAgentRead: ((respond: () => void) => void) | undefined;
 /** A read of a task's inbox as the act answers it: done, carrying the view the service answered. */
 interface ReadOutcome {
-  readonly status: typeof ACT_OUTCOME_STATUS.DONE;
+  readonly status: typeof FAKE_ANSWER.DONE;
   readonly value: CodingAgentInboxAnswerView;
 }
 
@@ -285,25 +286,25 @@ beforeEach(() => {
   readMarkRefused = false;
   members = [];
   fakeActs({
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automations } });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { automations } });
       }
       if (request.kind === ACT_KIND.WORKSPACE_FORMER_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: [] });
       }
       if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: members });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: members });
       }
       const done = (value: CodingAgentListAnswer | CodingAgentInboxAnswerView) =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
         return agentListHeld ? new Promise(() => undefined) : done({ agents: listedAgents });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
         const agent = pageAgents.get(request.payload.agentId);
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value:
             agent === undefined
               ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
@@ -326,7 +327,7 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.TASKS_TREE) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: {
             folder: {
               path: "",
@@ -340,7 +341,7 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.TASKS_PAGES) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: { pages: taskPages.get(request.payload.taskId) ?? [] },
         });
       }
@@ -348,7 +349,7 @@ beforeEach(() => {
         const { itemId, unread } = request.payload;
         readMarks.push(`${unread ? "unread" : "read"}:${itemId}`);
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: readMarkRefused
             ? { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }
             : { id: itemId, unread },
@@ -356,13 +357,13 @@ beforeEach(() => {
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_READ_ALL) {
         readMarks.push(`all:${request.payload.workspaceId ?? "every workspace"}`);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { marked: 2 } });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { marked: 2 } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) {
         return new Promise((resolve) =>
           imageReads.push(() =>
             resolve({
-              status: ACT_OUTCOME_STATUS.DONE,
+              status: FAKE_ANSWER.DONE,
               value: { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
             }),
           ),
@@ -377,7 +378,7 @@ beforeEach(() => {
         const hold = holdAgentRead;
         if (hold !== undefined) {
           return new Promise((resolve) =>
-            hold(() => resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { items, cursor: "1" } })),
+            hold(() => resolve({ status: FAKE_ANSWER.DONE, value: { items, cursor: "1" } })),
           );
         }
         return done({ items, cursor: "1" });
@@ -388,7 +389,7 @@ beforeEach(() => {
         if (after !== INBOX_CURSOR_START) return heldRead(taskId);
         return startRead?.(taskId) ?? done({ items: inboxes.get(taskId) ?? [], cursor: "1" });
       }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
   });
 });
@@ -908,7 +909,7 @@ test("an open item's Close asks first, then settles it without an answer at the 
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_CLOSE) return previous(request);
       sent.push(request.payload);
       const closed: InboxItem = {
@@ -920,7 +921,7 @@ test("an open item's Close asks first, then settles it without an answer at the 
         updatedAt: 6_000,
       };
       return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
+        status: FAKE_ANSWER.DONE,
         value: { item: closed, taken: true },
       });
     },
@@ -2643,7 +2644,7 @@ function heldAnswers(): CodingAgentInboxAnswerParams[] {
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return previous(request);
       sent.push(request.payload);
       return new Promise(() => undefined);
@@ -2802,7 +2803,7 @@ test("files read for an item its agent changed meanwhile land nowhere, and the b
   const revised = { ...THRESHOLD, revision: 2, title: "Alert at 85%?" };
   act(() =>
     deliver({
-      status: ACT_OUTCOME_STATUS.DONE,
+      status: FAKE_ANSWER.DONE,
       value: { items: [revised, RETRY], cursor: "2" },
     }),
   );
@@ -2839,10 +2840,10 @@ test("an answer file whose read failed says so under the files, and Retry reads 
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return previous(request);
       return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
+        status: FAKE_ANSWER.DONE,
         value: failing
           ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
           : { contentType: "application/pdf", base64: "JVBERg==" },
@@ -3041,9 +3042,9 @@ test("what an item's box said of a dictation that failed stays with that item, a
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
-    act: (request: AnyAct): Promise<AnyActOutcome> =>
+    act: (request: AnyAct): Promise<FakeActAnswer> =>
       request.kind === ACT_KIND.MICROPHONE_REQUEST
-        ? Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.DENIED })
+        ? Promise.resolve({ status: FAKE_ANSWER.DONE, value: MICROPHONE_STATUS.DENIED })
         : previous(request),
   });
   const { page } = mount();
@@ -3073,7 +3074,7 @@ function skillReads(): string[] {
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.TASKS_SKILLS) {
         const release = {
           name: "release",
@@ -3081,13 +3082,13 @@ function skillReads(): string[] {
           path: ".agents/skills/release/SKILL.md",
         };
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: { skills: { repository: "acme/relay", branch: "main", skills: [release] } },
         });
       }
       if (request.kind === ACT_KIND.GITHUB_OPEN) {
         opened.push(request.payload.url);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
       return previous(request);
     },
@@ -3251,13 +3252,13 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_LIST) listReads.push(request);
       if (request.kind === ACT_KIND.CODING_AGENTS_INBOX_ANSWER) {
         const asked = request.payload.itemId === noted.id ? noted : bare;
         const answered = { ...asked, status: INBOX_STATUS.ANSWERED, answeredBy: READER };
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: { item: answered, taken: true },
         });
       }
@@ -3283,7 +3284,7 @@ test("a note answered on an item that needs no reply reaches the agent, so the w
 
 /** An answer the act gives the renderer, the view it carries settled now. */
 function answered(value: CodingAgentInboxAnswerView): Promise<ReadOutcome> {
-  return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+  return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
 }
 
 /** A read the test answers when it chooses. */
@@ -3296,7 +3297,7 @@ interface PendingRead {
 function pending(): PendingRead {
   let settle: PendingRead["settle"] = () => undefined;
   const promise = new Promise<ReadOutcome>((resolve) => {
-    settle = (value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+    settle = (value) => resolve({ status: FAKE_ANSWER.DONE, value });
   });
   return { promise, settle };
 }
@@ -3741,7 +3742,7 @@ test("an item a link names is not found though another task's read failed, and i
   startRead = (taskId) =>
     taskId === BILLING.id
       ? Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
         })
       : undefined;
@@ -3852,7 +3853,7 @@ test("a link to an item newer than its task's last read waits for the read of it
       ? new Promise((resolve) => {
           land = () =>
             resolve({
-              status: ACT_OUTCOME_STATUS.DONE,
+              status: FAKE_ANSWER.DONE,
               value: { items: [EXPIRY, posted], cursor: "2" },
             });
         })
@@ -3881,7 +3882,7 @@ test("an item a link names under a task whose own read fails is kept asked for, 
   startRead = (taskId) =>
     taskId === quiet.id
       ? Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
         })
       : undefined;
@@ -3978,10 +3979,10 @@ function heldMessages(
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
       sent.push(request.payload);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer(request.payload) });
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: answer(request.payload) });
     },
   });
   return sent;
@@ -4354,7 +4355,7 @@ test("an answer left unsent on an item a teammate answers meanwhile is let go ra
     updatedAt: 3_500,
   };
   act(() =>
-    deliver({ status: ACT_OUTCOME_STATUS.DONE, value: { items: [answered, RETRY], cursor: "2" } }),
+    deliver({ status: FAKE_ANSWER.DONE, value: { items: [answered, RETRY], cursor: "2" } }),
   );
   await settle();
   assert.equal(composerEditor(pane).getAttribute("aria-label"), "Message Alerts…");
@@ -4363,7 +4364,7 @@ test("an answer left unsent on an item a teammate answers meanwhile is let go ra
   typeInComposer(pane, "Thanks, Charles.");
   await settle();
   act(() =>
-    deliver({ status: ACT_OUTCOME_STATUS.DONE, value: { items: [answered, RETRY], cursor: "3" } }),
+    deliver({ status: FAKE_ANSWER.DONE, value: { items: [answered, RETRY], cursor: "3" } }),
   );
   await settle();
   assert.equal(composerEditor(pane).textContent, "Thanks, Charles.");
@@ -4768,11 +4769,11 @@ function gatedAnswers(): GatedAnswers {
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ANSWER) return previous(request);
       sent.push(request.payload);
       return new Promise((resolve) =>
-        waiting.push((value) => resolve({ status: ACT_OUTCOME_STATUS.DONE, value })),
+        waiting.push((value) => resolve({ status: FAKE_ANSWER.DONE, value })),
       );
     },
   });

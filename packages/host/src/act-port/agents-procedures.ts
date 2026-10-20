@@ -48,10 +48,9 @@ import {
 } from "@luke/features/coding-agent-view";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import type { AgentNotices } from "../agent-notices.js";
 import { AGENT_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /** What the agent procedures reach: the host's asks of the service, and the notices. */
 export interface AgentProceduresDependencies {

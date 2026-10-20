@@ -312,10 +312,10 @@ import { Base64 } from "effect/encoding";
  * The desktop's client over the host's own vocabulary: the settings, account,
  * voice, task, and client-fact methods the runtime host answers, and the events it pushes. Every method answers an effect: it
  * composes one request and reads its answer, and nothing here runs it — the
- * act row that asked yields it, and the router runs it once on the launch's
+ * act procedure that asked yields it, and the act port runs it once on the launch's
  * own runtime. The host is this same process, so an answer that is not the
  * shape the method documents is a defect of the build rather than a reachable
- * host state, and dies where it is read; the act router words a defect as the
+ * host state, and dies where it is read; the act port words a defect as the
  * kind's own refusal. Nothing here holds host state beyond the last settings
  * snapshot a refusal is answered with.
  */

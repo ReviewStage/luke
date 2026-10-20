@@ -1,8 +1,7 @@
 /**
- * in-process-bridge.ts -- the window's bridge for a shell that runs the host in the page it draws: acts straight to the router, the document straight from the store, and the one-shot events from an emitter the shell drives.
+ * in-process-bridge.ts -- the window's bridge for a shell that runs the host in the page it draws: the document straight from the store, and the one-shot events from an emitter the shell drives.
  */
 import { Effect, type Scope } from "effect";
-import type { ActRouter, ActSender } from "../act-router/router.js";
 import type { AppStateSnapshot, AppWindowFacts } from "../app-state.js";
 import type { AppBridge, PushPayloadFor } from "../bridge.js";
 import type { PushMethod } from "../contract/pushes.js";
@@ -32,22 +31,11 @@ type InProcessEvents = {
   readonly [Method in InProcessEventMethod]: (payload: PushPayloadFor<Method>) => void;
 };
 
-interface InProcessBridgeDependencies<Sender = unknown> {
-  /** The shell's own handle on its page, which only the shell's platform rows read. */
-  sender: Sender;
-  /**
-   * The act table, built over the reporter this bridge minted, so a settings
-   * write from this page is named as its own and its echo skipped.
-   */
-  routerFor: (reporterOf: (sender: Sender) => string) => ActRouter<Sender>;
-  /** Every act's Effect, run on the shell's own runtime rather than a second one. */
-  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
+interface InProcessBridgeDependencies {
   /** The document the page is drawn from. */
   state: AppStateStore;
   /** The page's own facts beside the document, which the shell alone can read. */
   windowFacts: () => AppWindowFacts;
-  /** The id source the reporter is minted from. */
-  createId: () => string;
   /** The page's own reports that reach anything here: that it painted, and its surface events. */
   reports: Pick<AppBridge, "notifyReady" | "recordSurfaceEvent">;
   /** Where a page's listener that failed is said. */
@@ -117,22 +105,17 @@ function listeners<Payload>(report: (message: string) => void): Listeners<Payloa
 
 /**
  * The bridge for a page that runs the host in its own process. The page is
- * always a panel: the host's rows check that a panel asked, and no voice or
- * call window stands beside it. An act goes to the router on the shell's
- * runtime; the document is the store's, read on request and pushed on every
- * change; the one-shot events are what the shell says through `events`; every
+ * always a panel, and no voice or call window stands beside it. The document
+ * is the store's, read on request and pushed on every change; the one-shot events are what the shell says through `events`; every
  * subscription ends with the scope; and everything the voice, the avatar, the call window, a
  * Browser tab, the menu bar, or a global key would say is never said, its
  * subscription ending cleanly.
  */
-export function createInProcessBridge<Sender = unknown>(
-  dependencies: InProcessBridgeDependencies<Sender>,
+export function createInProcessBridge(
+  dependencies: InProcessBridgeDependencies,
 ): Effect.Effect<InProcessBridge, never, Scope.Scope> {
-  const { sender, routerFor, run, state, windowFacts, createId, reports, report } = dependencies;
+  const { state, windowFacts, reports, report } = dependencies;
   return Effect.gen(function* () {
-    const reporter = createId();
-    const router = routerFor(() => reporter);
-    const asking: ActSender<Sender> = { sender, panel: true, voice: false, call: false };
     const snapshot = (): AppStateSnapshot => ({ ...state.snapshot(), window: windowFacts() });
     const appState = listeners<AppStateSnapshot>(report);
     yield* publishAppStateChanges(
@@ -160,7 +143,6 @@ export function createInProcessBridge<Sender = unknown>(
       }),
     );
     const bridge: AppBridge = {
-      act: (act) => run(router.performAct(act, asking)),
       requestAppState: async () => snapshot(),
       onAppState: appState.subscribe,
       notifyReady: reports.notifyReady,

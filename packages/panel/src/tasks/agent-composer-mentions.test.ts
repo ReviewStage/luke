@@ -31,7 +31,7 @@ import {
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
@@ -42,7 +42,8 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
 import {
   type AnyAct,
-  type AnyActOutcome,
+  FAKE_ANSWER,
+  type FakeActAnswer,
   fakeActs,
   fakeAppBridge,
   fakeAppBridgeCalls,
@@ -216,20 +217,20 @@ const roots: Root[] = [];
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
-/** What main answers the box's acts with, on `app:act` or the act port, every one told. */
-function answer(request: AnyAct): Promise<AnyActOutcome> {
+/** What main answers the box's acts with on the act port, every one told. */
+function answer(request: AnyAct): Promise<FakeActAnswer> {
   told.push(request);
   return Promise.resolve(
     request.kind === ACT_KIND.INTEGRATIONS_STATUS
       ? {
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: {
             integrations: LINEAR_CONNECTED,
           },
         }
       : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
         ? {
-            status: ACT_OUTCOME_STATUS.DONE,
+            status: FAKE_ANSWER.DONE,
             value: {
               tools: [
                 { name: "list_issues", description: "List the team's issues." },
@@ -244,17 +245,17 @@ function answer(request: AnyAct): Promise<AnyActOutcome> {
             },
           }
         : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          ? { status: FAKE_ANSWER.DONE, value: MEMBERS }
           : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
             ? {
-                status: ACT_OUTCOME_STATUS.DONE,
+                status: FAKE_ANSWER.DONE,
                 value: {
                   agents: workspaceAnswer(request.payload),
                 },
               }
             : request.kind === ACT_KIND.TASKS_TREE
               ? {
-                  status: ACT_OUTCOME_STATUS.DONE,
+                  status: FAKE_ANSWER.DONE,
                   value: {
                     folder: {
                       path: "",
@@ -265,7 +266,7 @@ function answer(request: AnyAct): Promise<AnyActOutcome> {
                     },
                   },
                 }
-              : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+              : { status: FAKE_ANSWER.UNKNOWN_ACT },
   );
 }
 
@@ -1494,7 +1495,7 @@ async function issuesBox(on: boolean, standing: Issue[] = [REFRESH_ISSUE, LINK_I
     act: (request) => {
       if (request.kind !== ACT_KIND.ISSUES_LIST) return answer(request);
       issuesRead.push(request.payload.workspaceId);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { issues: [...standing] } });
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { issues: [...standing] } });
     },
   });
   handState({ [EXPERIMENT.ISSUES]: on });
