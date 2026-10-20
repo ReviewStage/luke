@@ -177,10 +177,14 @@ interface WebRoute {
   readonly continue?: true;
 }
 
-/** An answer's headers by their lower-cased names, and how many of the routes it passed named each. */
+/**
+ * An answer's headers by their lower-cased names, a later route's standing in
+ * for an earlier one's of the same name, and every value the routes it passed
+ * named for each.
+ */
 interface AnswerHeaders {
   readonly headers: ReadonlyMap<string, string>;
-  readonly namedBy: ReadonlyMap<string, number>;
+  readonly named: ReadonlyMap<string, readonly string[]>;
 }
 
 /**
@@ -205,22 +209,22 @@ const WEB_ROUTES = (vercel.services[SERVICE.WEB].routes ?? []) as readonly WebRo
  */
 function servedBy(path: string): Served {
   const headers = new Map<string, string>();
-  const namedBy = new Map<string, number>();
+  const named = new Map<string, string[]>();
   for (const route of WEB_ROUTES) {
     const pattern = new RegExp(`^${route.src}$`, "u");
     if (!pattern.test(path)) continue;
     for (const [name, value] of Object.entries(route.headers ?? {})) {
       const key = name.toLowerCase();
       headers.set(key, value);
-      namedBy.set(key, (namedBy.get(key) ?? 0) + 1);
+      named.set(key, [...(named.get(key) ?? []), value]);
     }
     if (route.continue) continue;
     if (route.dest !== undefined) {
-      return { file: path.replace(pattern, route.dest), headers, namedBy };
+      return { file: path.replace(pattern, route.dest), headers, named };
     }
     return { status: route.status ?? 0, location: route.headers?.Location ?? "" };
   }
-  return { file: undefined, headers, namedBy };
+  return { file: undefined, headers, named };
 }
 
 const servedFile = (path: string) => {
@@ -233,6 +237,17 @@ function answeredHeaders(path: string): AnswerHeaders {
   const served = servedBy(path);
   assert.ok("headers" in served, `${path} is answered, not redirected`);
   return served;
+}
+
+/**
+ * The policies a browser may be sent with an answer: every distinct value its
+ * routes named for its Content Security Policy. Vercel documents no
+ * precedence between two routes naming one header, so where they name one
+ * policy the browser enforces exactly it, whether the later stands in for the
+ * earlier or both are sent; where they name two, it may enforce both at once.
+ */
+function policiesSent(answer: AnswerHeaders): ReadonlySet<string> {
+  return new Set(answer.named.get("content-security-policy"));
 }
 
 /** A policy's directives by name, each with its sources. */
@@ -377,9 +392,10 @@ test("every path the web app is served at sends its own Content Security Policy 
     "/acme/inbox",
     "/acme/settings/coding-agents",
   ]) {
-    const { headers, namedBy } = answeredHeaders(path);
-    // One route names the policy, so the static pages' is never sent beside it to be enforced too.
-    assert.equal(namedBy.get("content-security-policy"), 1, path);
+    const answer = answeredHeaders(path);
+    const { headers } = answer;
+    // The app is sent its own policy alone, never the site's beside it to be enforced too.
+    assert.deepEqual([...policiesSent(answer)], [headers.get("content-security-policy")], path);
     const directives = directivesOf(headers.get("content-security-policy") ?? "");
     assert.deepEqual(directives.get("default-src"), ["'self'"], path);
     assert.deepEqual(directives.get("script-src"), ["'self'"], path);
@@ -495,9 +511,9 @@ test("every HTML page the build emits is served at every address under one Conte
   const answers = pageAnswers();
   assert.ok(answers.some(({ file }) => file.startsWith("changelog/page/")));
   for (const { file, address, answer } of answers) {
-    const { headers, namedBy } = answer;
-    // One route names the policy, so no page is ever sent two to be enforced together.
-    assert.equal(namedBy.get("content-security-policy"), 1, address);
+    const { headers } = answer;
+    // No page is sent two policies to be enforced together.
+    assert.equal(policiesSent(answer).size, 1, address);
     const directives = directivesOf(headers.get("content-security-policy") ?? "");
     const scripts = sourcesOf(directives, "script-src");
     assert.ok(scripts.length > 0, `${address} names where its scripts may come from`);
