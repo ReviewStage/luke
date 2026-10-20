@@ -1,3 +1,4 @@
+/** hidden-panel-pushes.test.ts -- what a panel no one can see is pushed, as its window hides and shows. */
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import type { RunMode } from "@luke/host";
 import type { AppStateSnapshot } from "@luke/host/app-state";
