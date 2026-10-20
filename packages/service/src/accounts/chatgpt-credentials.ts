@@ -26,8 +26,14 @@
  *
  * A sign-in is kept only once its ID token checks out against OpenAI's
  * published keys (`verifyChatGptIdToken`): signed by OpenAI for the issued
- * client, unexpired, and naming the account handed over. Its nonce is the
- * desktop's to check, since only the desktop that began the sign-in holds it.
+ * client, unexpired, and naming the account handed over; and only where
+ * its access token's own claims name the same issued client, OpenAI's API
+ * as its audience, and OpenAI as its issuer. Those claims are read unsigned,
+ * as a consistency check: OpenAI does not document which key signs the
+ * access token, so its signature is left to be settled by a live run, and the
+ * refresh token, which is opaque, is bound to the client by OpenAI itself at
+ * the first renewal. The nonce is the desktop's to check, since only the
+ * desktop that began the sign-in holds it.
  *
  * Removing the sign-in revokes its renewable session at OpenAI's revocation
  * endpoint, which must be on OpenAI's own authorization server, first, under the same lock, retrying a failure to connect or a
@@ -159,6 +165,19 @@ const IdTokenClaimsJson = Schema.fromJsonString(
     aud: Schema.Union([Schema.String, Schema.Array(Schema.String)]),
     exp: Schema.Number,
     sub: Schema.NonEmptyString,
+  }),
+);
+
+/**
+ * The access token's claims a save compares with the sign-in, unsigned:
+ * OpenAI documents them but not which key signs the access token, so they
+ * are checked for consistency and not trusted as proof.
+ */
+const AccessTokenClaimsJson = Schema.fromJsonString(
+  Schema.Struct({
+    iss: Schema.String,
+    aud: Schema.Union([Schema.String, Schema.Array(Schema.String)]),
+    client_id: Schema.String,
   }),
 );
 
@@ -349,7 +368,9 @@ function jwtPart(token: string, index: number): string | undefined {
 }
 
 /**
- * The sign-in's ID token checked as OpenAI's guide asks, all but its nonce,
+ * The sign-in checked before it is kept. Its access token's unsigned claims
+ * must name the issued client, OpenAI's API and OpenAI; its ID token is
+ * checked as OpenAI's guide asks, all but its nonce,
  * which only the desktop that began the sign-in holds: its RS256 signature
  * against OpenAI's published keys, its issuer, its audience as the issued
  * client, its expiry, and its subject as the account handed over. The keys
@@ -359,6 +380,15 @@ export const verifyChatGptIdToken = /* @__PURE__ */ Effect.fnUntraced(function* 
   request: ChatGptCredentialsSaveRequest,
   cache: ChatGptSigningKeys,
 ) {
+  const access = Schema.decodeUnknownOption(AccessTokenClaimsJson)(jwtPart(request.accessToken, 1));
+  if (
+    Option.isNone(access) ||
+    access.value.iss !== CHATGPT_OAUTH.ISSUER ||
+    access.value.client_id !== request.clientId ||
+    ![access.value.aud].flat().includes(CHATGPT_OAUTH.RESOURCE)
+  ) {
+    return CHATGPT_ID_TOKEN.UNVERIFIED;
+  }
   const header = Schema.decodeUnknownOption(IdTokenHeaderJson)(jwtPart(request.idToken, 0));
   const claims = Schema.decodeUnknownOption(IdTokenClaimsJson)(jwtPart(request.idToken, 1));
   if (Option.isNone(header) || Option.isNone(claims) || header.value.alg !== "RS256") {

@@ -279,11 +279,26 @@ const ID_CLAIMS = {
   exp: 4_000_000_000,
 } as const;
 
+/** An access token's claims as OpenAI documents them for this flow; no expiry, so the answered lifetime stands. */
+const ACCESS_CLAIMS = {
+  iss: AUTH_ORIGIN,
+  aud: "https://api.openai.com/v1",
+  client_id: ISSUED_CLIENT,
+  sub: "opaque-subject",
+} as const;
+
+/** A JWT of the claims with a signature nothing checks, as a save reads an access token's claims unsigned. */
+function unsignedJwt(claims: Record<string, WireBoundaryInput>) {
+  const part = (value: WireBoundaryInput) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${part({ alg: "RS256", typ: "JWT" })}.${part(claims)}.unchecked-signature`;
+}
+
 /** A ChatGPT sign-in as the desktop hands one over, synthetic throughout, its ID token signed by the fake OpenAI. */
 const SIGN_IN = {
   clientId: ISSUED_CLIENT,
   accountId: CHATGPT_SUBJECT,
-  accessToken: "test-access-token-000000000000000000acc",
+  accessToken: unsignedJwt(ACCESS_CLAIMS),
   refreshToken: "test-refresh-token-0000000000000000000ref",
   idToken: signedJwt(ID_CLAIMS, OPENAI_KEY),
   expiresInSeconds: 3600,
@@ -934,6 +949,42 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           ),
         );
         assert.equal(unreachable.rejected, PROVIDER_KEY_REJECTION.UNREACHABLE);
+      }),
+  );
+
+  it.effect(
+    "a sign-in whose access token names another client, audience or issuer, or is no JWT, keeps nothing and says it is unverified, though its claims are read unsigned",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
+        const withAccess = (overrides: Record<string, WireBoundaryInput>) =>
+          Effect.map(ask(saveSignIn(owner, overrides)), keysOf);
+
+        const refused = [
+          // An access token another client's, for another audience, from another issuer, or no JWT, is no part of this sign-in.
+          yield* withAccess({
+            accessToken: unsignedJwt({ ...ACCESS_CLAIMS, client_id: "oaiapp_another_client" }),
+          }),
+          yield* withAccess({
+            accessToken: unsignedJwt({ ...ACCESS_CLAIMS, aud: "https://elsewhere.test/v1" }),
+          }),
+          yield* withAccess({
+            accessToken: unsignedJwt({ ...ACCESS_CLAIMS, iss: "https://issuer.test" }),
+          }),
+          yield* withAccess({
+            accessToken: "opaque-access-token-00000000000000000000",
+          }),
+        ];
+
+        assert.deepEqual(
+          refused.map((answered) => [answered.rejected, answered.subscriptions]),
+          refused.map(() => [PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN, undefined]),
+        );
+        // An audience listing OpenAI's API among others is OpenAI's API's.
+        const listed = yield* withAccess({
+          accessToken: unsignedJwt({ ...ACCESS_CLAIMS, aud: ["https://api.openai.com/v1", "x"] }),
+        });
+        assert.equal(listed.rejected, undefined);
       }),
   );
 });
