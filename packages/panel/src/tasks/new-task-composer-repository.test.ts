@@ -145,3 +145,27 @@ test("a preset the workspace's GitHub does not reach is not started on while the
 
   assert.deepEqual(starts, [null]);
 });
+
+test("a preset a read does not list is let go, so a later read listing it does not bring it back", async () => {
+  let reads = 0;
+  const { container } = await mount(() => {
+    reads += 1;
+    return reads === 1
+      ? Promise.resolve({
+          repositories: {
+            installed: true,
+            repositories: [],
+            installationUrl: "https://github.com/apps/luke/installations/new",
+          },
+        })
+      : TOKEN_LISTING();
+  }, "octo/tools");
+  act(() => window.dispatchEvent(new Event("focus")));
+  await settle();
+  const chip =
+    container.querySelector<HTMLButtonElement>(".luke-chip") ??
+    assert.fail("the card draws the repository chip");
+
+  assert.equal(reads, 2);
+  assert.equal(chip.textContent?.includes("octo/tools"), false, chip.textContent ?? "");
+});

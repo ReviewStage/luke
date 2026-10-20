@@ -327,11 +327,11 @@ export function NewTaskComposer({
     linearIssuesIn(workspaceId) !== undefined || githubIssuesIn(workspaceId) !== undefined;
   const repositories = newTask.repositoriesIn(workspaceId);
   const workspace = newTask.workspaces.find((each) => each.id === workspaceId);
+  // The repositories the chip's last read listed, an App's and a member's token's alike.
+  const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
   // A repository or an issue picked in one workspace is none of another's,
   // so the owner's switch, as Home's, lets them go, in the render that brings it; the scope first
   // resolving keeps a pick made before the workspaces were read.
-  // The repositories the chip's last read listed, an App's and a member's token's alike.
-  const [listed, setListed] = useState<readonly string[] | undefined>(undefined);
   const [scope, setScope] = useState(repositories.scope);
   if (repositories.scope !== scope) {
     setListed(undefined);
@@ -341,14 +341,18 @@ export function NewTaskComposer({
     }
     setScope(repositories.scope);
   }
-  // Note that a pick the read does not list, or one the workspace's GitHub
-  // does not reach before the read lands, is not started on, because the
-  // service would refuse it.
+  // A pick a read does not list is let go, so a later read listing it does not bring it back.
+  const unlisted =
+    chosen != null &&
+    listed !== undefined &&
+    !listed.some((each) => each.toLowerCase() === chosen.toLowerCase());
+  if (unlisted) setChosen(null);
+  // Note that a pick is not started on before the read lands unless the
+  // workspace's GitHub reaches it, because the service would refuse it.
   const pick =
     chosen != null &&
-    !(listed === undefined
-      ? workspace === undefined || workspaceReaches(workspace, chosen)
-      : listed.some((each) => each.toLowerCase() === chosen.toLowerCase()))
+    (unlisted ||
+      (listed === undefined && workspace !== undefined && !workspaceReaches(workspace, chosen)))
       ? null
       : chosen;
   const repository = pick === undefined ? (repositories.recent[0] ?? null) : pick;
