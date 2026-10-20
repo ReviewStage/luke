@@ -867,12 +867,15 @@ function TaskSender({
   onOpen: (() => void) | undefined;
   starter: Actor | undefined;
 }): React.JSX.Element {
+  // The window hands the task anew on every draw, so a transcript's sender reads it live (`LiveDoors`), and the plan's card is not drawn again for it.
+  const live = useContext(LiveDoors);
+  const named = live === undefined ? task : live.cards?.task;
   return (
     <ActorLine>
-      {task === undefined ? null : <TaskRef task={task} onOpen={onOpen} />}
+      {named === undefined ? null : <TaskRef task={named} onOpen={onOpen} />}
       {starter === undefined ? null : (
         <ActorLine>
-          {task === undefined ? "Started by " : " · started by "}
+          {named === undefined ? "Started by " : " · started by "}
           <ActorRef actor={starter} sentence />
         </ActorLine>
       )}
@@ -1525,10 +1528,12 @@ function AgentTranscriptView({
 }): React.JSX.Element {
   const { members, former } = useMemberDirectory();
   const undelivered = useUndeliveredLines();
+  // Whether a replay opens the transcript is all its placing reads; the place itself is handed anew on every draw.
+  const replayed = replay !== undefined;
   // Read through once for the messages held, so a draw that brings no page reads none of them again.
   const placing = useMemo(
-    () => transcriptPlacing(messages, working, undelivered, replay !== undefined),
-    [messages, working, undelivered, replay],
+    () => transcriptPlacing(messages, working, undelivered, replayed),
+    [messages, working, undelivered, replayed],
   );
   // Each line that reached a turn, with who sent it, kept from draw to draw while neither moved.
   const arrivals = useMemo(
@@ -1787,8 +1792,10 @@ function AgentTabView({
   // An agent started from an automation's run opens on the run's prompt under the automation.
   const briefed = replay === undefined ? agent : briefAgent(agent, replay.agents);
   const { automationId, automationName, brief } = briefed;
+  // The task's line reads the task live (`TaskSender`), so whether there is one is all the card's sender hangs on here.
   const briefTask = cards?.task;
-  const originStarter = starter === undefined ? undefined : starterActor;
+  const tasked = briefTask !== undefined;
+  const originStarter = useKept(starter === undefined ? undefined : starterActor, sameFields);
   // The plan's card is drawn again only when who handed it, or what, changed, not with each page.
   const origin = useMemo(
     () =>
@@ -1801,7 +1808,7 @@ function AgentTabView({
         openGitHub: steadyGitHub,
       }),
     // Note that the agent is read for how it was briefed alone, which these name.
-    [automationId, automationName, brief, run, briefTask, openTarget, originStarter, steadyGitHub],
+    [automationId, automationName, brief, run, tasked, openTarget, originStarter, steadyGitHub],
   );
   return (
     <section
