@@ -5,15 +5,16 @@ import { afterEach, test } from "vitest";
 import { layContainersAt, shown } from "../testing/container-width.js";
 
 /**
- * narrow-tab-labels.test.ts -- a phone's tabs and crumbs say what they are. On the
- * desktop a tab other than the chosen one narrower than 72px turns to its
- * glyph, its hint naming it under the pointer; a phone has no pointer to
+ * narrow-labels.test.ts -- a phone's tabs, crumbs, and Start say what they
+ * are. On the desktop a tab other than the chosen one narrower than 72px
+ * turns to its glyph, its hint naming it under the pointer; a phone has no pointer to
  * hover, and two agents' glyphs look alike, so in a narrow room every tab
  * keeps its label and the strip scrolls instead. jsdom lays nothing out, so
  * the sheets are laid for a tab container that narrow
  * (`testing/container-width.ts`) and the strip is built in the markup
  * `tab-strip.tsx` draws. An Inbox item's crumbs, squeezed beside its bar's
- * buttons to a glyph and a letter, take a line of their own there.
+ * buttons to a glyph and a letter, take a line of their own there, and Start
+ * keeps its word rather than folding to ▶.
  */
 
 let laid: HTMLStyleElement | undefined;
@@ -42,13 +43,19 @@ function unchosenLabel(room: string): HTMLElement {
     const label = button.appendChild(document.createElement("span"));
     label.className = "tab-label";
     label.textContent = name;
+    tab.dataset.closable = "true";
+    tab.dataset.marked = "false";
+    tab.appendChild(document.createElement("span")).className = "tab-close";
     return label;
   });
   return labels[1] ?? assert.fail("the second tab's label");
 }
 
-test("in a narrow room a tab other than the chosen one keeps its label however narrow it stands", () => {
-  assert.ok(shown(unchosenLabel("narrow")));
+test("in a narrow room a tab other than the chosen one keeps its label however narrow it stands, its × giving the label its place", () => {
+  const label = unchosenLabel("narrow");
+  assert.ok(shown(label));
+  const close = label.closest(".tab")?.querySelector(".tab-close") ?? assert.fail("its ×");
+  assert.equal(getComputedStyle(close).visibility, "hidden");
 });
 
 test("on the desktop's width a tab other than the chosen one narrower than 72px stands as its glyph alone", () => {
@@ -80,4 +87,27 @@ test("in a narrow room an Inbox item's crumbs take a line of their own under the
 
 test("on the desktop's width an Inbox item's crumbs stand in its bar's one row, at any width the bar holds them", () => {
   assert.notEqual(getComputedStyle(itemCrumbs("wide")).flexBasis, "100%");
+});
+
+/** Start in a task's bar at a phone's width, in a shell of the room given, answering how it folds. */
+function startFold(room: string): string {
+  laid = layContainersAt({ "plan-toolbar": 300 }, { touch: room === "narrow" });
+  const shell = document.body.appendChild(document.createElement("div"));
+  shell.className = "desktop-shell";
+  shell.dataset.room = room;
+  const main = shell.appendChild(document.createElement("div"));
+  main.className = "desktop-task-main";
+  const bar = main.appendChild(document.createElement("header"));
+  bar.className = "desktop-toolbar";
+  const start = bar.appendChild(document.createElement("div"));
+  start.className = "start-agent";
+  return getComputedStyle(start).getPropertyValue("--luke-fold").trim();
+}
+
+test("in a narrow room Start keeps its word however narrow the task's bar, since a phone has no hover to name its glyph", () => {
+  assert.ok(!["folded", "bare"].includes(startFold("narrow")));
+});
+
+test("on the desktop's width Start folds to its glyph in a bar that narrow, as it did", () => {
+  assert.equal(startFold("wide"), "bare");
 });

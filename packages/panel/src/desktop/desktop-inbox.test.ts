@@ -5217,6 +5217,42 @@ async function mountThread(shown: InboxItem): Promise<HTMLElement> {
   return itemPane(page);
 }
 
+test("in a narrow room an item waiting on an answer opens on its ask, standing just over the box, and on the desktop's width at its thread's top", async () => {
+  for (const room of ["narrow", "wide"]) {
+    const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+    inboxes = new Map([
+      [BILLING.id, [RETRY, shown]],
+      [INVITES.id, [EXPIRY]],
+    ]);
+    // The shell the Inbox stands in says its room, as the window's does.
+    document.body.className = "desktop-shell";
+    document.body.dataset.room = room;
+    // The thread is taller than its board, its ask at its foot, under the box.
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: Element,
+    ) {
+      if (this.querySelector(":scope > .inbox-board") !== null) {
+        return DOMRect.fromRect({ y: 0, height: 400 });
+      }
+      if (this.matches(".inbox-ask")) return DOMRect.fromRect({ y: 900, height: 300 });
+      return DOMRect.fromRect();
+    });
+    const { page } = mount();
+    await settle();
+    act(() => rowNamed(page, shown.title).click());
+    await settle();
+    const board =
+      itemPane(page).querySelector<HTMLElement>(".inbox-board")?.parentElement ??
+      assert.fail("the thread");
+    assert.equal(board.scrollTop, room === "narrow" ? 800 : 0, room);
+    vi.restoreAllMocks();
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
+    document.body.removeAttribute("class");
+    delete document.body.dataset.room;
+  }
+});
+
 /** The thread's line under its title, a part a span. */
 function subjectLine(pane: HTMLElement): (string | null)[] {
   const line = pane.querySelector("[data-inbox-subject-line]") ?? assert.fail("the line is drawn");

@@ -928,11 +928,12 @@
     }
   }
 
-  /* A screen with no hover shows a sent message's actions at rest, in the
-     line they keep under its bubble; a floating bar stays hidden, so a
-     transcript is not a column of buttons. */
+  /* A screen with no hover shows a message's actions once the message is
+     tapped (`message.tsx`), in the line under its bubble or on their
+     floating card, and hides them at rest, so a transcript is not a column
+     of buttons. */
   @media (hover: none) {
-    .message-actions[data-placement="inline"] {
+    .transcript-message[data-actions-shown="true"] .message-actions {
       opacity: 1;
       pointer-events: auto;
     }
@@ -4502,6 +4503,22 @@ ol.transcript-list {
 
 .todos-dock-head:hover {
   background: var(--luke-color-fill-strong);
+}
+
+/* A finger's press is 44px tall, so on a coarse pointer a transcript's rows
+   that open something, a call's line, the docked to-do list's head, and the
+   agent's pull request's row, stand that tall, their words still centred;
+   a mouse keeps their compact heights. */
+@media (pointer: coarse) {
+  .tool-line,
+  .todos-dock-head {
+    height: auto;
+    min-height: 44px;
+  }
+
+  .agent-published-dock .luke-list-row-main {
+    min-height: 44px;
+  }
 }
 
 .todos-dock[open] > .todos-dock-head {

@@ -67,6 +67,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
+import { SHELL_ROOM } from "../shell-room.js";
 import { TextLink } from "../text-link.js";
 import { Tooltip } from "../tooltip.js";
 import {
@@ -2178,8 +2179,22 @@ export function InboxPane({
   const board = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLElement>(null);
   // Note that the pane stands for every item in turn, so another item opens at its thread's top rather than where the last was scrolled.
+  // A narrow room leaves the thread little room over the box docked under it, so there an item
+  // waiting on an answer opens on its ask, standing just over the box, rather than at the top,
+  // where its options would wait out of sight under the box.
   useLayoutEffect(() => {
-    if (board.current !== null) board.current.scrollTop = 0;
+    const scroller = board.current;
+    if (scroller === null) return;
+    scroller.scrollTop = 0;
+    const narrow =
+      pane.current?.closest(".desktop-shell")?.getAttribute("data-room") === SHELL_ROOM.NARROW;
+    const ask = narrow ? scroller.querySelector(".inbox-ask-body")?.closest(".inbox-ask") : null;
+    if (ask == null) return;
+    const room = scroller.getBoundingClientRect();
+    const box = ask.getBoundingClientRect();
+    const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom) || 0;
+    const under = box.bottom - (room.bottom - padding);
+    if (under > 0) scroller.scrollTop += Math.min(under, box.top - room.top);
   }, [item.id]);
   const directory = useMemberDirectory();
   const readerId = directory.readerId ?? agents.me;

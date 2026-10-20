@@ -11,7 +11,15 @@ import {
 } from "@luke/ui";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
+import {
+  MESSAGE_ACTIONS_PLACEMENT,
+  Message,
+  MessageAction,
+  MessageActions,
+  type MessageActionsPlacement,
+  MessageContent,
+} from "../ai-elements/message.js";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
@@ -21,8 +29,8 @@ import { layContainersAt } from "../testing/container-width.js";
  * row offering its acts to the row in hand keeps its metadata on a touch
  * screen, its acts in its menu, but for the open row, which shows them as
  * the hovered row does. A failed agent's tab keeps its mark rather than its
- * ×, a thread's event line keeps its time, and a transcript's floating bar
- * stays hidden. jsdom answers no media
+ * ×, a thread's event line keeps its time, and a transcript message's
+ * actions stay hidden until the message is tapped. jsdom answers no media
  * query, so the sheets are laid for a touch screen or a mouse
  * (`testing/container-width.ts`), and each group is drawn in the markup its
  * component draws.
@@ -40,6 +48,7 @@ const roots: Root[] = [];
 let laid: HTMLStyleElement | undefined;
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   for (const root of roots.splice(0)) act(() => root.unmount());
   laid?.remove();
   laid = undefined;
@@ -180,14 +189,6 @@ const HOVER_ONLY: readonly {
     },
     control: ".toast-dismiss",
   },
-  {
-    name: "a sent message's actions",
-    piece: {
-      className: "transcript-message is-user",
-      children: [{ className: "message-actions", data: { placement: "inline" } }],
-    },
-    control: ".message-actions",
-  },
 ];
 
 for (const { name, piece, control, press } of HOVER_ONLY) {
@@ -266,19 +267,49 @@ test("on a touch screen a failed agent's tab keeps its mark rather than its ×",
   assert.ok(faded(close));
 });
 
-test("on a touch screen a transcript's floating actions stay hidden, so the transcript is not a column of buttons", () => {
+/** A message drawn as the transcript draws it, its words and its actions set where `placement` says, worked by a finger. */
+function tappableMessage(placement: MessageActionsPlacement) {
   layFor(true);
-  const bar = drawn(
-    {
-      className: "transcript-message",
-      children: [{ className: "message-actions", data: { placement: "floating" } }],
-    },
-    ".message-actions",
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(pointer: coarse)" }));
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        Message,
+        { from: "assistant" },
+        createElement(MessageContent, null, "Rerunning the spec on WebKit."),
+        createElement(
+          MessageActions,
+          { placement },
+          createElement(MessageAction, { label: "Copy", onClick: () => undefined, children: "⧉" }),
+        ),
+      ),
+    ),
   );
+  const part = (selector: string) =>
+    container.querySelector<HTMLElement>(selector) ?? assert.fail(selector);
+  return {
+    actions: () => part(".message-actions"),
+    tap: (selector: string) => act(() => part(selector).click()),
+  };
+}
 
-  assert.ok(faded(bar));
-  assert.equal(getComputedStyle(bar).pointerEvents, "none");
-});
+for (const placement of Object.values(MESSAGE_ACTIONS_PLACEMENT)) {
+  test(`on a touch screen a message's ${placement} actions stay hidden at rest, so the transcript is not a column of buttons, stand once the message is tapped, and go with another tap`, () => {
+    const message = tappableMessage(placement);
+    assert.ok(faded(message.actions()));
+    assert.equal(getComputedStyle(message.actions()).pointerEvents, "none");
+
+    message.tap(".message-content");
+    assert.ok(standing(message.actions()), "a tap on the message shows them");
+    message.tap("button");
+    assert.ok(standing(message.actions()), "a tap on one of them keeps them");
+    message.tap(".message-content");
+    assert.ok(faded(message.actions()), "another tap on the message hides them");
+  });
+}
 
 /** An archived agent's row, whose menu a long press opens. */
 function archivedAgent(): HTMLElement {
