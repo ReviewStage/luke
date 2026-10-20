@@ -192,6 +192,7 @@ import {
   invitationsMoves,
   type LiveReadDependencies,
   peopleMoves,
+  sidebarMoves,
   workspacesMoves,
 } from "./workspaces-follow.js";
 
@@ -437,9 +438,8 @@ export type TasksClient = Pick<
   | "delete"
   | "rename"
   | "mark"
-  | "repositoryPins"
   | "pinRepository"
-  | "taskSections"
+  | "sidebarLive"
   | "writeTaskSection"
   | "readBoard"
   | "boardLive"
@@ -1087,16 +1087,50 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     if (!fresh) yield* readGithub;
   });
 
-  // A failed read keeps the pins it last read, as a failed list read keeps the tasks.
-  const readRepositoryPins = Effect.gen(function* () {
-    const pins = yield* served(client.repositoryPins());
-    if (pins !== undefined) write({ repositoryPins: pins });
-  });
+  /** The one follow of the account's sidebar sections and pinned repositories, from the first refresh after a launch or a sign-in until a sign-out. */
+  const sidebarFollow = yield* FiberHandle.make<void>();
 
-  // A failed read keeps the sections it last read, as the pins' does.
-  const readTaskSections = Effect.gen(function* () {
-    const sections = yield* served(client.taskSections());
-    if (sections !== undefined) write({ taskSections: sections });
+  /**
+   * Follows the account's sidebar over Realtime where nothing follows it
+   * yet (`workspaces-follow.ts`), polled while Realtime fails it, drawing
+   * each change as it lands, a section or a pin made on another Mac among
+   * them; nothing else reads it. A seal the service did not answer, or a
+   * follow that stopped, is sealed again on the board's backoff, and what was
+   * drawn stays meanwhile.
+   */
+  const followSidebar = Effect.gen(function* () {
+    // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
+    const userId = dependencies.accountId();
+    const seal = (poll: boolean, after?: string) =>
+      userId === undefined
+        ? Effect.succeed(LIVE_SIGNED_OUT)
+        : Effect.map(served(client.sidebarLive(userId, poll, after)), (sealed) =>
+            sealed.ok ? sealed.answer : { failure: sealed.failure },
+          );
+    /** One seal followed until it stops, which fails it so the backoff seals it again. */
+    const attempt = Effect.gen(function* () {
+      const sealed = yield* seal(false);
+      if ("failure" in sealed) return yield* Effect.fail(sealed.failure);
+      const moves = sidebarMoves(
+        {
+          seal: () => seal(false),
+          poll: (after) => seal(true, after),
+          openLive: dependencies.openLive ?? openRealtimeClient,
+          now: kernel.now,
+        },
+        sealed,
+      );
+      yield* Stream.runForEach(moves, (read) => Effect.sync(() => write(read))).pipe(Effect.ignore);
+      return yield* Effect.fail(TASK_CALL_FAILURE.UNANSWERED);
+    });
+    const followed = attempt.pipe(
+      Effect.retry({
+        schedule: BOARD_BACKOFF,
+        while: (why) => why !== LIVE_SIGNED_OUT.failure && gate(),
+      }),
+      Effect.ignore,
+    );
+    yield* FiberHandle.run(sidebarFollow, followed, { onlyIfMissing: true });
   });
 
   /**
@@ -1902,8 +1936,6 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (open !== undefined) yield* openRecord(open, { onlyIfMissing: true });
         const tasks = serial(
           Effect.gen(function* () {
-            yield* readRepositoryPins;
-            yield* readTaskSections;
             const taskId = view.activeTaskId;
             if (taskId !== undefined) yield* readDocument(taskId);
             if (taskId !== undefined) yield* readBoard(taskId);
@@ -1913,6 +1945,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           }),
         );
         yield* followWorkspaces;
+        yield* followSidebar;
         yield* Effect.all([tasks, readGithubWhenStale], { concurrency: "unbounded" });
         return {};
       }),
@@ -3026,6 +3059,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* FiberHandle.clear(recordFollow);
       yield* FiberHandle.clear(listFollow);
       yield* FiberHandle.clear(workspacesFollow);
+      yield* FiberHandle.clear(sidebarFollow);
       yield* FiberMap.clear(peopleFollows);
       yield* FiberMap.clear(invitationFollows);
       yield* serial(

@@ -5,6 +5,8 @@ import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-sto
 import { boardLiveStatement } from "@luke/database/models/board-store";
 import { workspaceChatLiveStatements } from "@luke/database/models/chat-store";
 import { macCommandsLiveStatement } from "@luke/database/models/mac-command-store";
+import { repositoryPinsLiveStatement } from "@luke/database/models/repository-pin-store";
+import { taskSectionsLiveStatements } from "@luke/database/models/task-section-store";
 import { workspacesLiveStatements } from "@luke/database/models/workspace-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
@@ -124,6 +126,12 @@ function liveStatements() {
     "workspace-invitations.invitations": Option.getOrThrow(
       workspaceInvitationsLiveStatement(USER_ID, randomUUID()),
     ),
+    ...Object.fromEntries(
+      Object.entries(Option.getOrThrow(taskSectionsLiveStatements(USER_ID))).map(
+        ([part, query]) => [`sidebar.${part}`, query],
+      ),
+    ),
+    "sidebar.pins": Option.getOrThrow(repositoryPinsLiveStatement(USER_ID)),
   };
 }
 

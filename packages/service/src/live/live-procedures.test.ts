@@ -34,6 +34,7 @@ import {
   workspaceChatLiveAnswerSchema,
 } from "@luke/features/live-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
+import { sidebarLiveAnswerSchema } from "@luke/features/sidebar-live";
 import { taskListLiveAnswerSchema } from "@luke/features/task-list-live";
 import {
   workspaceInvitationsLiveAnswerSchema,
@@ -1475,3 +1476,27 @@ it.layer(getTestDB())("a workspace's people's live read", (it) => {
       }),
   );
 });
+
+it.effect(
+  "the account's sidebar is sealed as its sections, the tasks in them, and its pins, for the bearer's own account",
+  () =>
+    Effect.gen(function* () {
+      const path = "/api/live/sidebar";
+      const sealed = yield* ask({ bearer: "user-dana", path, sealing: Option.some(SCRIPTED) });
+      assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+      const answer = Schema.decodeUnknownSync(sidebarLiveAnswerSchema)(sealed.body);
+      assert.deepEqual(Object.keys(answer.queries).toSorted(), ["entries", "pins", "sections"]);
+      for (const query of Object.values(answer.queries)) {
+        assert.ok(query.capability.includes('"user-dana"'), "read for the bearer");
+      }
+      assert.equal(
+        (yield* ask({
+          bearer: "user-dana",
+          forUser: "user-erin",
+          path,
+          sealing: Option.some(SCRIPTED),
+        })).status,
+        HOSTED_HTTP_STATUS.UNAUTHORIZED,
+      );
+    }),
+);

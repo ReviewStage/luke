@@ -47,6 +47,7 @@ import {
   workspaceChatLiveAnswerSchema,
 } from "../live-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
+import { sidebarLiveAnswerSchema } from "../sidebar-live.js";
 import { taskListLiveAnswerSchema } from "../task-list-live.js";
 import {
   workspaceInvitationsLiveAnswerSchema,
@@ -199,6 +200,10 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_CHAT }))
     .input(liveChatSchema)
     .output(EffectSchema.flip(workspaceChatLiveAnswerSchema)),
+  sidebar: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_SIDEBAR }))
+    .input(liveReadSchema)
+    .output(EffectSchema.flip(sidebarLiveAnswerSchema)),
   workspaces: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACES }))
     .input(liveReadSchema)
