@@ -16,7 +16,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { actPort } from "../app-bridge.js";
+import { askAct } from "../act.js";
 import { type AgentRun, agentStillWriting } from "./coding-agent-model.js";
 
 /**
@@ -51,17 +51,19 @@ export type TranscriptFollower = (
   hear: (page: CodingAgentMessagesAnswerView) => void,
 ) => () => void;
 
-/** The window's own follower: the transcript's stream on the act port. */
+/** The window's own follower: the transcript's stream, opened through the act door. */
 export const windowTranscriptFollower: TranscriptFollower = (transcript, hear) => {
   let stopped = false;
   let stream: AsyncIteratorObject<CodingAgentMessagesAnswerView> | undefined;
-  const following = actPort()
-    [ACT_KIND.CODING_AGENTS_TRANSCRIPT](transcript)
-    .then(async (opened) => {
-      stream = opened;
-      if (stopped) return;
-      for await (const page of opened) hear(page);
-    });
+  const following = askAct(ACT_KIND.CODING_AGENTS_TRANSCRIPT, transcript).then(async (opened) => {
+    stream = opened;
+    // A stream that opened only after the tab let it go is closed at once.
+    if (stopped) {
+      await opened.return?.(undefined);
+      return;
+    }
+    for await (const page of opened) hear(page);
+  });
   following.catch(() => {
     if (!stopped) hear({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   });

@@ -8,13 +8,16 @@ import {
   TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import { ACT_KIND } from "@luke/host/acts";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { fakeActPort } from "../testing/app-bridge.js";
 import {
   type AgentTranscriptControl,
   type TranscriptFollower,
   useAgentTranscript,
+  windowTranscriptFollower,
 } from "./use-agent-transcript.js";
 
 /**
@@ -169,4 +172,31 @@ test("a page that says the agent's workers as they stood keeps what the tab hold
 
   push(AGENT, workerPage(CODING_AGENT_STATUS.COMPLETED));
   assert.equal(seen.current?.subagents.get("call-1")?.status, CODING_AGENT_STATUS.COMPLETED);
+});
+
+test("a stream that opens only after its tab let it go is closed at once", async () => {
+  let open: (stream: AsyncIteratorObject<CodingAgentMessagesAnswerView>) => void = () => undefined;
+  let closed = false;
+  const stream: AsyncIteratorObject<CodingAgentMessagesAnswerView> = {
+    next: () => new Promise(() => undefined),
+    return: () => {
+      closed = true;
+      return Promise.resolve({ done: true, value: undefined });
+    },
+    [Symbol.asyncIterator]: () => stream,
+    [Symbol.asyncDispose]: () => Promise.resolve(),
+  };
+  // SAFETY: the follower calls this one procedure, and reads what it answers as an async iterator alone.
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: () =>
+      new Promise((resolve) => {
+        open = resolve;
+      }),
+  } as unknown as Parameters<typeof fakeActPort>[0]);
+
+  const stop = windowTranscriptFollower(AGENT, () => undefined);
+  stop();
+  open(stream);
+  for (let tick = 0; tick < 12 && !closed; tick += 1) await Promise.resolve();
+  assert.equal(closed, true);
 });
