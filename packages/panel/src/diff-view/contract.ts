@@ -111,6 +111,13 @@ export interface DiffViewProps {
   readonly annotations?: readonly DiffAnnotation[] | undefined;
   /** The element each note is drawn in, by its key, which the view keeps and fills; asked only for a note `annotations` names. */
   readonly renderAnnotation?: ((key: string) => HTMLElement) | undefined;
+  /**
+   * Whether the patch is coloured in the kept pool's workers, off the
+   * window's thread, as a list's files are, where many patches are drawn at
+   * once, a Code tab's cards; on the window's thread where absent. Read once,
+   * as the patch is mounted.
+   */
+  readonly pooled?: boolean | undefined;
 }
 
 /**

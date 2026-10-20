@@ -149,7 +149,9 @@ import { wholeOf } from "./whole-diff.js";
  * and each note under its line drawn in the element the view keeps for it,
  * as a list's are. Pierre numbers a file from its first line, so the file
  * is handed whole. One patch alone takes notes under its lines the same way
- * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries Luke's.
+ * (\`mount\`), as a Code card's snippet, an excerpt of a file, carries Luke's;
+ * a feed of such cards colours each in the same pool (\`pooled\`), so many
+ * landing at once never hold the window's thread.
  *
  * Where the view comments on lines, code selected as text is read once the
  * drag that began in a file lets go (`watchTextSelection`): the lines it
@@ -577,9 +579,13 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
   const root = container.shadowRoot ?? container.attachShadow({ mode: "open" });
   const release = adoptShadowStyles(root, lookSheets().fill);
   typeset(container, props.look);
-  const view = new PierreFileDiff<string, undefined>(optionsOf(props));
+  // A pooled patch is read under a name of its own, so the pool's cache never hands it another's colours.
+  const highlighting = props.pooled === true ? listHighlighting(props.look) : undefined;
+  const read = highlighting === undefined ? getSingularPatch : readPatch;
+  const view = new PierreFileDiff<string, undefined>(optionsOf(props), highlighting?.pool);
   let patch = props.patch;
-  let fileDiff = getSingularPatch(patch);
+  let look = props.look;
+  let fileDiff = read(patch);
   view.render({
     fileDiff,
     fileContainer: container,
@@ -590,8 +596,12 @@ function mount(host: HTMLElement, props: DiffViewProps): DiffViewHandle {
     update: (next) => {
       if (next.patch !== patch) {
         patch = next.patch;
-        fileDiff = getSingularPatch(patch);
+        fileDiff = read(patch);
       }
+      // A look the pool's workers do not hold yet is handed them first, since the pool's colours stand over the patch's own.
+      if (highlighting !== undefined && !sameLook(next.look, look))
+        void highlighting.follow(next.look);
+      look = next.look;
       typeset(container, next.look);
       view.setOptions(optionsOf(next));
       view.render({

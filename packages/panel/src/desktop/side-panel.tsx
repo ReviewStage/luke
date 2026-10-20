@@ -1651,6 +1651,7 @@ function TabContent({
         <CodePane
           shown={shownCode}
           calls={transcript.region.kind === TRANSCRIPT_REGION.READY ? transcript.region.calls : []}
+          taskId={taskId}
           onOpenFile={onOpenFile}
         />
       );

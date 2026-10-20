@@ -3,7 +3,6 @@ import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@luke/features/board-vocabular
 import type { Board, DrawingElement } from "@luke/features/board-wire";
 import { TASK_PRIORITY, TASK_STATUS, type Task, type TaskSummary } from "@luke/features/task-wire";
 import {
-  type CodeToken,
   TASK_WORK_STATE,
   TASKS_READ,
   type TaskCode,
@@ -202,30 +201,10 @@ const FIXTURE_TASK_LIST: TasksView = {
   document: { status: TASKS_READ.IDLE },
 };
 
-/** The fixture's colours as the host's highlighter gives them, in GitHub's dark and light themes. */
-const KEYWORD = { color: "#ff7b72", lightColor: "#cf222e" } as const;
-const FUNCTION = { color: "#d2a8ff", lightColor: "#8250df" } as const;
-const STRING = { color: "#a5d6ff", lightColor: "#0a3069" } as const;
-const COMMENT = { color: "#8b949e", lightColor: "#6e7781" } as const;
-const TYPE = { color: "#ffa657", lightColor: "#953800" } as const;
-
-/** One run of a fixture line in the colours it is drawn in. */
-function run(
-  text: string,
-  colours: { readonly color: string; readonly lightColor: string },
-): CodeToken {
-  return { text, ...colours };
-}
-
-/** One fixture line from its runs, a bare word drawn in the theme's own foreground. */
-function fixtureLine(...runs: readonly (string | CodeToken)[]): CodeToken[] {
-  return runs.map((part) => (part instanceof Object ? part : { text: part }));
-}
-
 /**
  * The code on screen in the fixture's call: Luke pointing at the invite
- * check he is asking about, lines 6 to 9 of an invented file, coloured as
- * the host's highlighter colours TypeScript.
+ * check he is asking about, lines 6 to 9 of an invented file, which the
+ * Code tab colours as it draws it.
  */
 const FIXTURE_CODE: TaskCode = {
   ref: { path: "src/members/invite.ts", startLine: 6, endLine: 9 },
@@ -233,82 +212,20 @@ const FIXTURE_CODE: TaskCode = {
   firstLine: 1,
   lineCount: 14,
   lines: [
-    fixtureLine(
-      run("import", KEYWORD),
-      " { db } ",
-      run("from", KEYWORD),
-      " ",
-      run('"../db"', STRING),
-      ";",
-    ),
-    [],
-    fixtureLine(run("// An invite link is good once, and for seven days.", COMMENT)),
-    fixtureLine(
-      run("export", KEYWORD),
-      " ",
-      run("async", KEYWORD),
-      " ",
-      run("function", KEYWORD),
-      " ",
-      run("acceptInvite", FUNCTION),
-      "(token: ",
-      run("string", TYPE),
-      ") {",
-    ),
-    fixtureLine(
-      "  ",
-      run("const", KEYWORD),
-      " invite = ",
-      run("await", KEYWORD),
-      " db.invites.",
-      run("find", FUNCTION),
-      "(token);",
-    ),
-    fixtureLine("  ", run("if", KEYWORD), " (!invite || invite.acceptedAt) {"),
-    fixtureLine(
-      "    ",
-      run("throw", KEYWORD),
-      " ",
-      run("new", KEYWORD),
-      " ",
-      run("InviteError", FUNCTION),
-      "(",
-      run('"no-longer-valid"', STRING),
-      ");",
-    ),
-    fixtureLine("  }"),
-    fixtureLine(
-      "  ",
-      run("if", KEYWORD),
-      " (",
-      run("expired", FUNCTION),
-      "(invite)) ",
-      run("throw", KEYWORD),
-      " ",
-      run("new", KEYWORD),
-      " ",
-      run("InviteError", FUNCTION),
-      "(",
-      run('"expired"', STRING),
-      ");",
-    ),
-    fixtureLine(
-      "  ",
-      run("await", KEYWORD),
-      " db.members.",
-      run("add", FUNCTION),
-      "(invite.workspaceId, invite.email);",
-    ),
-    fixtureLine(
-      "  ",
-      run("await", KEYWORD),
-      " db.invites.",
-      run("accept", FUNCTION),
-      "(invite.id);",
-    ),
-    fixtureLine("}"),
-    [],
-    fixtureLine(run("export", KEYWORD), " { acceptInvite };"),
+    'import { db } from "../db";',
+    "",
+    "// An invite link is good once, and for seven days.",
+    "export async function acceptInvite(token: string) {",
+    "  const invite = await db.invites.find(token);",
+    "  if (!invite || invite.acceptedAt) {",
+    '    throw new InviteError("no-longer-valid");',
+    "  }",
+    '  if (expired(invite)) throw new InviteError("expired");',
+    "  await db.members.add(invite.workspaceId, invite.email);",
+    "  await db.invites.accept(invite.id);",
+    "}",
+    "",
+    "export { acceptInvite };",
   ],
 };
 

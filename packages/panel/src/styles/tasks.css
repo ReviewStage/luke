@@ -4352,26 +4352,19 @@
   overflow-wrap: anywhere;
 }
 
-/* Luke's note reads as the step's words, so the path above it steps back. */
-.code-card:has(> .code-card-note) [data-file-ref] {
-  color: var(--luke-color-text-muted);
-}
-
-.code-card-note {
+/* Luke's note under a snippet's lines (code-snippet.tsx) stands in the
+   element Pierre keeps for it, which insets it as a review thread is
+   (`.diff-note`), so the card keeps no margin of its own; a note a chip
+   shows stands under the chip the same way. */
+.diff-note > .file-note,
+.diff-note .diff-thread-chip-threads > .file-note {
   margin: 0;
-  padding: var(--luke-space-8) var(--luke-space-12);
-  border-bottom: 1px solid var(--luke-color-border);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  font-size: var(--luke-type-body-size);
-  line-height: var(--luke-type-body-leading);
-  overflow-wrap: anywhere;
-  -webkit-user-select: text;
-  user-select: text;
 }
 
-.code-card-header:has(+ .code-card-note) {
-  border-bottom: 0;
+/* A snippet not yet near the view stands at about the height its lines
+   will take (code-snippet.tsx), so the feed does not jump as cards mount. */
+.code-snippet-pending {
+  height: calc(var(--snippet-rows) * var(--snippet-row));
 }
 
 /* Lines wrap rather than scroll sideways, so no card takes a swipe from the

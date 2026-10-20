@@ -144,6 +144,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ActHandle } from "../act.js";
 import { appPlatform } from "../app-platform.js";
+import { usePrefetchDiffBundle } from "../bundle-loader.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { useChosenWorkspace } from "../desktop/chosen-workspace.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -2322,6 +2323,8 @@ export function useTasksTab(input: {
     }
   };
 
+  // Code shown on a call lands as a card the diff bundle draws, so the bundle loads as the call stands.
+  usePrefetchDiffBundle(live);
   // A fixture's staged task has nothing arriving on it, and code arrives
   // only on a call, since what a task opens with it already held.
   const arrivedTabs = usePanelArrivals({

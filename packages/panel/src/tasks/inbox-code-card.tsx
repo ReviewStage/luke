@@ -4,7 +4,8 @@ import { ErrorState } from "@luke/ui";
 import { copiedLines, fileRefText } from "@luke/voice/code-pane-model";
 import { useEffect, useRef, useState } from "react";
 import { SpinnerRegion } from "../spinner.js";
-import { CodeCardHeader, CodeLines } from "./code-pane.js";
+import { CodeCardHeader } from "./code-pane.js";
+import { CodeSnippet } from "./code-snippet.js";
 import type { ReadFileWindow } from "./file-tab.js";
 import {
   CODE_READ,
@@ -21,7 +22,7 @@ import {
  * The card is headed by the path and the lines, the file opened in the
  * File tab at the commit from either, and the lines read from GitHub at
  * that commit through the File tab's own read, with a few around them, the
- * named ones lit. Lines the task cannot read, another repository's or a
+ * named ones lit, drawn as a Code tab card's are (`code-snippet.tsx`). Lines the task cannot read, another repository's or a
  * range past the bound, say why and open nothing. The card shows the
  * repository's lines, so it is out of the session recording
  * (`ph-no-capture`).
@@ -95,7 +96,7 @@ export function InboxCodeCard({
         onOpen={unread === undefined ? () => code.onOpenFile(codeRef, sha) : undefined}
       />
       {shown.kind === CODE_READ.READY ? (
-        <CodeLines code={shown.code} />
+        <CodeSnippet code={shown.code} />
       ) : shown.kind === CODE_READ.READING ? (
         <SpinnerRegion label="Loading lines" />
       ) : (

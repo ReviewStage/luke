@@ -45,10 +45,11 @@ import {
 import { LINK_PLACE, readLink } from "@luke/features/luke-link";
 import { insideCode, linksIn } from "@luke/features/mention-link";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
-import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
+import type { TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header.js";
+import type { SnippetLines } from "./code-snippet-model.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
 import { plainWords } from "./tool-call-model.js";
 
@@ -2171,7 +2172,7 @@ export const CODE_READ = {
 
 export type CodeRead =
   | { readonly kind: typeof CODE_READ.READING }
-  | { readonly kind: typeof CODE_READ.READY; readonly code: TaskCode }
+  | { readonly kind: typeof CODE_READ.READY; readonly code: SnippetLines }
   | {
       readonly kind: typeof CODE_READ.NOTICE;
       readonly line: string;
@@ -2241,10 +2242,9 @@ export function codeReadOf(block: InboxCodeBlock, answer: TasksFileAnswer): Code
     kind: CODE_READ.READY,
     code: {
       ref: { path: block.path, startLine: block.startLine, endLine: block.endLine },
-      repository: file.repository,
       firstLine: file.firstLine,
-      lineCount: file.lineCount,
-      lines: file.lines,
+      // Note that the card colours its lines itself, so only their words are kept.
+      lines: file.lines.map((line) => line.map((run) => run.text).join("")),
     },
   };
 }

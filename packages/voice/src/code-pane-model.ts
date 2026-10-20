@@ -67,11 +67,11 @@ export function isPointed(ref: CodeRef, line: number): boolean {
 }
 
 /** What a card's copy carries: the lines pointed at as plain text, or every line the card draws for a whole file. */
-export function copiedLines(code: TaskCode): string {
+export function copiedLines(code: Pick<TaskCode, "ref" | "firstLine" | "lines">): string {
   const kept = code.lines.filter(
     (_line, at) => code.ref.startLine === undefined || isPointed(code.ref, code.firstLine + at),
   );
-  return kept.map((tokens) => tokens.map((token) => token.text).join("")).join("\n");
+  return kept.join("\n");
 }
 
 /**

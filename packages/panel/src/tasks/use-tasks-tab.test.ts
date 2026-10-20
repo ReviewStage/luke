@@ -633,7 +633,7 @@ const CODE: TaskCode = {
   repository: "acme/relay",
   firstLine: 1,
   lineCount: 1,
-  lines: [[{ text: "export function accept() {}" }]],
+  lines: ["export function accept() {}"],
 };
 
 /** The code shown on the open task: one snippet, then a second of the same file. */
