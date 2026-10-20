@@ -30,7 +30,7 @@ import type * as HttpClient from "effect/http/HttpClient";
 import { createRoot } from "react-dom/client";
 import { type BrowserHistory, browserHistory } from "./browser-history";
 import { withLoadLink } from "./load-link";
-import { browserLinkPlatform, handOffToMacApp } from "./mac-app-handoff";
+import { browserLinkPlatform, browserLoadedFresh, handOffToMacApp } from "./mac-app-handoff";
 import { WebAppearance } from "./web-appearance";
 import { composeWeb, WebHostTag } from "./web-host";
 import { WEB_BUNDLES } from "./web-platform";
@@ -40,7 +40,7 @@ import { startWebSentry, type WebSentryBuild, webSentryBuild } from "./web-sentr
 export interface WebAppOptions {
   /** The client every service call goes out on; the tab's same-origin fetch where none is given. */
   readonly httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  /** The platform the tab says it runs on; the browser's own word where none is given. */
+  /** The platform the tab says it runs on, which decides whether the Mac app is offered and handed links; the browser's own word where none is given. */
   readonly linkPlatform?: LinkPlatform;
   /** How the loaded link is handed to the Mac app; a navigation to the desktop's scheme where none is given. */
   readonly openMacApp?: (appLink: string) => void;
@@ -75,8 +75,10 @@ export async function mountWebApp(
   rootElement: HTMLElement,
   options: WebAppOptions = {},
 ): Promise<WebApp | undefined> {
-  // The address the tab loaded at, read before the panel's history writes its own steps into it.
+  // The address the tab loaded at, and whether it came there fresh, read before the panel's history writes its own steps into it.
   const loadedAt = location.href;
+  const loadedFresh = browserLoadedFresh();
+  const linkPlatform = options.linkPlatform ?? browserLinkPlatform();
   // Never awaited: the SDK is a chunk of its own, and what is reported before it lands waits for it.
   const sentry = startWebSentry(options.sentry ?? webSentryBuild());
   const httpClient = options.httpClient ?? FetchHttpClient.layer;
@@ -87,7 +89,7 @@ export async function mountWebApp(
     runtime.runPromise(Effect.withErrorReporting(effect, { defectsOnly: true }));
   // Sentry's reporter stands beneath the host, so every fiber it forks and every act reports through it.
   runtime = ManagedRuntime.make(
-    Layer.provideMerge(composeWeb({ httpClient, run }), sentry.errorReporting),
+    Layer.provideMerge(composeWeb({ httpClient, run, linkPlatform }), sentry.errorReporting),
   );
   // What the tab installed, taken down again in the reverse order as it closes.
   const installed: (() => void)[] = [];
@@ -119,13 +121,14 @@ export async function mountWebApp(
       <App />
     </RegistryContext.Provider>,
   );
-  // The account's choice of the Mac app is read after the first paint, once per load, and never awaited.
+  // The account's choice of the Mac app is read after the first paint, once per fresh load, and never awaited.
   runtime.runFork(
     Effect.provide(
       handOffToMacApp(
         {
           address: loadedAt,
-          platform: options.linkPlatform ?? browserLinkPlatform(),
+          fresh: loadedFresh,
+          platform: linkPlatform,
           open: options.openMacApp ?? ((appLink) => location.assign(appLink)),
         },
         location.origin,

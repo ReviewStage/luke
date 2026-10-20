@@ -1358,7 +1358,10 @@ signed in by the site's session cookie, which only the browser holds. Its
 screen recording keeps, in that browser's storage for the site, the
 anonymous id it records under, the account id it files under once you sign
 in, and whether it may send, under `luke_app_replay` and
-`luke_app_replay_consent`, apart from the site's own counting. Our service
+`luke_app_replay_consent`, apart from the site's own counting. A connect
+started there, such as connecting GitHub, keeps in its tab's session storage a
+random id naming the connect, or the address it left from, until the page it
+lands on, or the app opened again in that tab, lets go of it. Our service
 keeps your account and, unsealed, your conversation in our database, which
 Neon hosts, beside what earlier versions left there; a
 task's checkout and a coding agent's changes are held in a Vercel Sandbox and

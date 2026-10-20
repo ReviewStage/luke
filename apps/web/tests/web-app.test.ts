@@ -2,14 +2,15 @@
 import assert from "node:assert/strict";
 import "@luke/panel/testing/match-media";
 import "@luke/panel/testing/resize-observer";
+import { LINK_PLATFORM } from "@luke/features/link-open";
 import { afterEach, test, vi } from "vitest";
 import { mountWebApp, type WebApp } from "../src/app/web-root";
 import { type FakeService, fakeService, LISTED_TASK } from "./support/fake-service";
 
 /**
- * The web app's root signed out: the shared host in the tab reads the
- * cookie session, finds none, and the panel draws its own sign-in with the
- * way to the Mac app beside it; and a return to the tab after the cookie
+ * The web app's root signed out, on a Mac: the shared host in the tab reads
+ * the cookie session, finds none, and the panel draws its own sign-in with
+ * the way to the Mac app beside it; and a return to the tab after the cookie
  * changed, another tab having signed in, reads the session again and opens
  * Home on the account's tasks. One mount per file, because the panel's
  * state read is the tab's once.
@@ -32,7 +33,7 @@ test("signed out, the panel draws its sign-in; a return after another tab signed
   const root = document.createElement("div");
   document.body.append(root);
 
-  app = await mountWebApp(root, { httpClient: service.layer });
+  app = await mountWebApp(root, { httpClient: service.layer, linkPlatform: LINK_PLATFORM.MAC });
 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() =>

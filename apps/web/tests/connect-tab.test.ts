@@ -12,12 +12,20 @@ import { CONNECT_RETURN, connectReturn } from "../src/connect-return";
  * their place; where the browser refused that tab, it opens in this one,
  * leaving the address it stood at for the landing page's way back; a press
  * whose act opened nothing leaves no empty tab behind, even where another
- * press's act answered first; and a page holding unsaved work is asked
- * about before a refused tab sends this one on.
+ * press's act answered first; a page holding unsaved work is asked about
+ * before a refused tab sends this one on. An address off the web opens
+ * nowhere, through any of those doors; and a page the browser brings back
+ * from its cache lets go of the way back a same-tab connect left.
  */
 
 /** The address the service answers a connect with. */
 const PROVIDER_ADDRESS = "https://provider.example/oauth/authorize";
+
+/** Addresses no page opens: script run on this origin, and a document made of script. */
+const OFF_THE_WEB = [
+  "javascript:alert(document.cookie)",
+  "data:text/html,<script>alert(document.cookie)</script>",
+] as const;
 
 /** A tab the browser opened: where it was sent, and whether it closed. */
 interface OpenedTab {
@@ -41,6 +49,7 @@ function openedTab(): OpenedTab {
         sentTo = url;
       },
     },
+    sessionStorage: { setItem: () => undefined },
   };
   return { window, sentTo: () => sentTo, closed: () => closed };
 }
@@ -74,14 +83,18 @@ function fakeBrowser(options: {
 
 /**
  * The host behind the act port: the account's GitHub connect and a web link
- * each answer once the service has, opening the address it answered where
- * it opens one.
+ * each answer once the service has, opening the address it answered, the
+ * provider's unless another is given, where it opens one.
  */
-function hostPort(open: (url: string) => void, opens: boolean): ActPortClient {
+function hostPort(
+  open: (url: string) => void,
+  opens: boolean,
+  address: string = PROVIDER_ADDRESS,
+): ActPortClient {
   const host: Partial<ActPortClient> = {
     [ACT_KIND.GITHUB_CONNECT]: async () => {
       await Promise.resolve();
-      if (opens) open(PROVIDER_ADDRESS);
+      if (opens) open(address);
     },
     [ACT_KIND.WEB_OPEN]: async ({ url }) => {
       await Promise.resolve();
@@ -185,4 +198,52 @@ test("connects answered out of order each open in a tab, and the one that opened
 
   const open = tabs.filter((tab) => !tab.closed());
   expect(open.map((tab) => tab.sentTo())).toEqual([PROVIDER_ADDRESS]);
+});
+
+test("a connect's address off the web lands in no tab, and its press's tab closes as its act ends", async () => {
+  for (const address of OFF_THE_WEB) {
+    const { browser, tabs, navigated } = fakeBrowser({ refusesTabs: false });
+    const connect = connectTabs(browser);
+
+    await connect.portClient(hostPort(connect.open, true, address))[ACT_KIND.GITHUB_CONNECT]();
+
+    expect(tabs.map((tab) => [tab.sentTo(), tab.closed()])).toEqual([[undefined, true]]);
+    expect(navigated).toEqual([]);
+  }
+});
+
+test("where the browser refused the press's tab, an address off the web never sends this tab on, and leaves no way back", async () => {
+  for (const address of OFF_THE_WEB) {
+    const { browser, navigated } = fakeBrowser({ refusesTabs: true });
+    const connect = connectTabs(browser);
+
+    await connect.portClient(hostPort(connect.open, true, address))[ACT_KIND.GITHUB_CONNECT]();
+
+    expect(navigated).toEqual([]);
+    expect(connectReturn()).toEqual({ kind: CONNECT_RETURN.ELSEWHERE });
+  }
+});
+
+test("an address off the web the host opens as a link opens nothing", async () => {
+  const { browser, links } = fakeBrowser({ refusesTabs: false });
+  const connect = connectTabs(browser);
+  const port = connect.portClient(hostPort(connect.open, true));
+
+  for (const address of OFF_THE_WEB) await port[ACT_KIND.WEB_OPEN]({ url: address });
+
+  expect(links).toEqual([]);
+});
+
+test("a page the browser brings back from its cache lets go of the way back a same-tab connect left from it", async () => {
+  const { browser, navigated } = fakeBrowser({ refusesTabs: true });
+  const connect = connectTabs(browser);
+  const stop = connect.listen();
+  await connect.portClient(hostPort(connect.open, true))[ACT_KIND.GITHUB_CONNECT]();
+  expect(navigated).toEqual([PROVIDER_ADDRESS]);
+
+  // The developer steps Back from the provider, and the browser shows the page from its cache, running none of it again.
+  window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+
+  expect(connectReturn()).toEqual({ kind: CONNECT_RETURN.ELSEWHERE });
+  stop();
 });
