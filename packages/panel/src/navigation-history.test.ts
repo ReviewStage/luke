@@ -524,6 +524,30 @@ test("the Issues page is its workspace's, so once another is listed Back passes 
   assert.equal(reopened, 0);
 });
 
+/** The window with the Board standing or not, in the workspace given, each time the Board is asked to open counted in `opened`. */
+function onBoard(open: boolean, opened: string[], workspaceId = "workspace-acme"): TasksControl {
+  const base = tasksControl();
+  return tasksControl({
+    workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
+    boardView: { ...base.boardView, open, onOpen: () => opened.push(workspaceId) },
+  });
+}
+
+test("the Board is its workspace's tasks, so Back returns to it in that workspace and passes over it once another is listed", async () => {
+  const opened: string[] = [];
+  const same = mount(onBoard(true, opened));
+  await settle();
+  same.stand(onBoard(false, opened));
+  assert.equal(same.history().canGoBack, true);
+  act(() => same.history().onBack());
+  assert.deepEqual(opened, ["workspace-acme"]);
+
+  const other = mount(onBoard(true, opened));
+  await settle();
+  other.stand(onBoard(false, opened, "workspace-platform"));
+  assert.equal(other.history().canGoBack, false, "the Board of another workspace is no step back");
+});
+
 test("an issue's page is a step of its own beside the Issues list, so Back from it opens the list and Forward the issue again", async () => {
   handState(experimentsOn(EXPERIMENT.ISSUES));
   const opened: (IssuesPlace | undefined)[] = [];

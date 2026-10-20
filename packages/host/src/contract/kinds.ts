@@ -201,6 +201,53 @@ export const SETTINGS_ACT_KIND = {
 } as const;
 
 /**
+ * The panel's Tasks tab asking the host: the task list and the active
+ * document read as the tab shows, one task made the active one, the open
+ * task left, a task started on a repository, and a task renamed, given its
+ * repository, pinned or unpinned, archived or brought back, or deleted. The view arrives on the document rather than as
+ * an answer. The one write of a task's document from here is the
+ * developer's edit of a field, `TASKS_EDIT`, which answers whether it
+ * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
+ * a page of GitHub's or the web's opened in the browser, the account's own
+ * GitHub connected or disconnected, a call about the open task, and its
+ * whiteboard saved.
+ */
+export const TASKS_ACT_KIND = {
+  TASKS_REFRESH: "tasks.refresh",
+  TASKS_SELECT: "tasks.select",
+  TASKS_CLOSE: "tasks.close",
+  TASKS_START: "tasks.start",
+  TASKS_DELETE: "tasks.delete",
+  TASKS_RENAME: "tasks.rename",
+  TASKS_PIN: "tasks.pin",
+  /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
+  TASKS_PIN_REPOSITORY: "tasks.pinRepository",
+  /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
+  TASKS_WRITE_SECTION: "tasks.writeSection",
+  TASKS_ARCHIVE: "tasks.archive",
+  /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
+  TASKS_REPOSITORIES: "tasks.repositories",
+  /** A task given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
+  TASKS_SET_REPOSITORY: "tasks.setRepository",
+  /** A task moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
+  TASKS_MOVE: "tasks.move",
+  /** The developer's edit of the open task's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
+  TASKS_EDIT: "tasks.edit",
+  /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
+  GITHUB_OPEN: "github.open",
+  /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
+  WEB_OPEN: "web.open",
+  /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
+  GITHUB_CONNECT: "github.connect",
+  /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
+  GITHUB_DISCONNECT: "github.disconnect",
+  /** The Tasks tab's microphone button: a call about the task the panel has open, opened, or its microphone toggled. */
+  TASKS_TALK: "tasks.talk",
+  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
+  TASKS_BOARD_SAVE: "tasks.boardSave",
+} as const;
+
+/**
  * A coding agent's branch run on this Mac (`@luke/features/mac-terminal-wire`):
  * each repository's run command read and set; a run of the agent's branch
  * started for the asking panel, stopped with Stop, and closed with its tab;
@@ -307,6 +354,7 @@ export const PORT_ACT_KIND = {
   ...ISSUE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
+  ...TASKS_ACT_KIND,
   ...TERMINAL_ACT_KIND,
   ...VOICE_RUNTIME_ACT_KIND,
   ...WORKSPACE_ACT_KIND,

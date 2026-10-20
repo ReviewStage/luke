@@ -40,6 +40,7 @@
     "@luke/ui": "workspace:*",
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
+    "@sentry/browser": "11.7.0",
     "@tailwindcss/vite": "4.3.3",
     "@vercel/functions": "3.10.1",
     "ai": "catalog:",

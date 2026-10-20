@@ -549,7 +549,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "an answer taken back, or a post that opens the item again, deletes the answer's files and keeps the item's pictures",
+    "an answer taken back deletes the answer's files and keeps the item's pictures, and a post that opens the item again clears its answer's files while the message that answered keeps them on the thread",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -588,7 +588,13 @@ it.layer(getTestDB())("the inbox store", (it) => {
         const askedAgain = yield* postInboxItem(agent, SETTINGS);
         assert.ok(Result.isSuccess(askedAgain));
         assert.equal(askedAgain.success.answerFiles, undefined);
-        assert.ok(Option.isNone(yield* readInboxAttachment(agent.userId, id, fileOf(second))));
+        const answering = askedAgain.success.thread?.find((message) => message.answers);
+        assert.deepEqual(
+          answering?.files?.map((file) => file.attachmentId),
+          [fileOf(second)],
+          "the message that answered keeps its files on the thread",
+        );
+        assert.ok(Option.isSome(yield* readInboxAttachment(agent.userId, id, fileOf(second))));
       }),
   );
 

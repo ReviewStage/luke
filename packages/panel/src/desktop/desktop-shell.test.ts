@@ -14,6 +14,7 @@ import {
   FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
   SETTINGS_ACT_KIND,
+  TASKS_ACT_KIND,
 } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -50,7 +51,6 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-
 /** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
   account: {
@@ -802,6 +802,7 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...SETTINGS_ACT_KIND,
+  ...TASKS_ACT_KIND,
 }).filter((kind) => kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN);
 
 /**
@@ -823,7 +824,7 @@ async function handBridge(): Promise<void> {
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    // A read of the account's automations, integrations, a Factory world, or its coding agents, their Inbox, or the chat, and an account or settings act, is refused, as `app:act` refused it before it moved onto the port.
+    // A read of the account's automations, integrations, a Factory world, or its coding agents, their Inbox, or the chat, an account or settings act, and a task kind are refused, as `app:act` refused them before they moved onto the port.
     if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });

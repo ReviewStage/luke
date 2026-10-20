@@ -27,6 +27,7 @@ import {
 } from "./integration-procedures.js";
 import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
+import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import {
   type WorkspaceProceduresDependencies,
   workspaceProcedures,
@@ -51,6 +52,7 @@ export type {
   ClientSettingSideEffects,
   SettingsProceduresDependencies,
 } from "./settings-procedures.js";
+export type { TasksProceduresDependencies } from "./tasks-procedures.js";
 export type { WorkspaceProceduresDependencies } from "./workspace-procedures.js";
 
 /** The act port's server, which the bridge upgrades each window's port with. */
@@ -98,6 +100,7 @@ export interface ActPortDependencies {
   readonly integrations: IntegrationProceduresDependencies;
   readonly issues: IssueProceduresDependencies;
   readonly settings: SettingsProceduresDependencies;
+  readonly tasks: TasksProceduresDependencies;
   readonly workspaces: WorkspaceProceduresDependencies;
 }
 
@@ -127,6 +130,7 @@ export function createActPortHandler<Sender>(
     ...integrationProcedures(dependencies.integrations),
     ...issueProcedures(dependencies.issues),
     ...settingsProcedures(dependencies.settings),
+    ...tasksProcedures(dependencies.tasks),
     ...workspaceProcedures(dependencies.workspaces),
   } satisfies ContractedRouter<typeof actContract, ActPortContext<Sender>>;
   return actPortHandlerOf(router);

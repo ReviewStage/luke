@@ -21,7 +21,7 @@ import {
 } from "@luke/features/inbox-wire";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -765,9 +765,12 @@ test("a chip in the plan naming a pull request one of the task's agents opened o
   const onGitHub: string[] = [];
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
   fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.GITHUB_OPEN) onGitHub.push(request.payload.url);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." }),
+  });
+  fakeActPort({
+    [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
+      onGitHub.push(url);
+      return Promise.resolve();
     },
   });
   const task: Task = {

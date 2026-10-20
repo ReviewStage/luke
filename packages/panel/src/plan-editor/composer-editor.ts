@@ -33,6 +33,7 @@ import {
   type ComposerMark,
   type ComposerQuote,
   type ComposerTrigger,
+  type MentionDrawer,
   type MentionNode,
 } from "./contract.js";
 import {
@@ -547,7 +548,7 @@ function quoteNode(drawQuote: ComposerEditorProps["drawQuote"]) {
 function composerExtensions(
   drawChip: ComposerEditorProps["drawChip"],
   known: (name: string) => boolean,
-  drawMention: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
+  drawMention: MentionDrawer | undefined,
   drawQuote: ComposerEditorProps["drawQuote"],
 ): AnyExtension[] {
   const kit = StarterKit.configure({

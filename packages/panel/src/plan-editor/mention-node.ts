@@ -1,6 +1,7 @@
-import { type JSONContent, Node } from "@tiptap/core";
+import { type Editor, type JSONContent, Node } from "@tiptap/core";
+import { TextSelection, type Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
-import type { MentionNode } from "./contract.js";
+import type { MentionDrawer, MentionNode, MentionNodeDoors } from "./contract.js";
 
 /**
  * mention-node.ts -- a mention in the editors' words: an atom holding the name it was written with and its link's target, drawn by the panel, written back as the link it was read from.
@@ -10,7 +11,8 @@ import type { MentionNode } from "./contract.js";
  * holds it as one node, an atom one Backspace takes out whole, its name and
  * target in the node and never in the DOM's attributes, since the recording
  * masks words and not every attribute: the chip inside the node's element
- * is the panel's (`drawMention`). Read from markdown, a link whose words
+ * is the panel's (`drawMention`), handed the doors that name the node anew
+ * or take it out (a date's picker). Read from markdown, a link whose words
  * start with `@` becomes the node, its formatting, if its label had any,
  * left behind; written back, it is the link again, `[@name](target)`, its
  * label's brackets and backslashes escaped. Nothing here knows what a
@@ -37,10 +39,45 @@ export function mentionLink(mention: MentionNode): string {
   return `[${label}](${mention.target})`;
 }
 
+/**
+ * The doors to the mention node `getPos` finds, each acting only while the
+ * editor takes changes. Note that a rename sets the node's attributes in
+ * place, so undo takes back the one change, and the text written from the
+ * node is the new link.
+ */
+function nodeDoors(editor: Editor, getPos: () => number | undefined): MentionNodeDoors {
+  const at = () => (editor.isEditable ? getPos() : undefined);
+  const after = (pos: number, tr: Transaction) =>
+    tr.setSelection(TextSelection.create(tr.doc, pos + (tr.doc.nodeAt(pos)?.nodeSize ?? 1)));
+  return {
+    rename: (mention, focus) => {
+      const pos = at();
+      if (pos === undefined) return;
+      const tr = editor.state.tr.setNodeMarkup(pos, undefined, {
+        name: mention.name,
+        target: mention.target,
+      });
+      editor.view.dispatch(focus ? after(pos, tr) : tr);
+      if (focus) editor.view.focus();
+    },
+    remove: () => {
+      const pos = at();
+      if (pos === undefined) return;
+      const tr = editor.state.tr.delete(pos, pos + (editor.state.doc.nodeAt(pos)?.nodeSize ?? 1));
+      editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc, pos)));
+      editor.view.focus();
+    },
+    focusAfter: () => {
+      const pos = at();
+      if (pos === undefined) return;
+      editor.view.dispatch(after(pos, editor.state.tr));
+      editor.view.focus();
+    },
+  };
+}
+
 /** The mention node: an atom drawn into its own element by the panel where it can draw one, and as its words where it cannot. */
-export function mentionNode(
-  drawMention: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
-) {
+export function mentionNode(drawMention: MentionDrawer | undefined) {
   const node = Node.create({
     name: MENTION_NODE,
     group: "inline",
@@ -65,14 +102,15 @@ export function mentionNode(
   if (drawMention === undefined) return node;
   return node.extend({
     addNodeView() {
-      return ({ node: held }) => {
+      return ({ node: held, editor, getPos }) => {
         const dom = document.createElement("span");
         dom.contentEditable = "false";
         dom.dataset.chip = MENTION_NODE;
-        const undraw = drawMention(dom, {
-          name: String(held.attrs.name),
-          target: String(held.attrs.target),
-        });
+        const undraw = drawMention(
+          dom,
+          { name: String(held.attrs.name), target: String(held.attrs.target) },
+          nodeDoors(editor, getPos),
+        );
         return { dom, ignoreMutation: () => true, destroy: undraw };
       };
     },

@@ -1,56 +1,27 @@
-import type { SessionReplayBootstrap } from "@luke/gateway/window-session";
+/**
+ * session-replay.ts -- the desktop panel window's answer to session replay: the masked recording `@luke/panel/session-replay` runs, filed under the release build's project and an address that names no one's disk.
+ *
+ * What is recorded, and what is masked, is the shared controller's
+ * (`packages/panel/src/session-replay.ts`), which every shell records
+ * through, so the rule is stated once. What this file decides on its own is
+ * what only the desktop has: the project key a release build carries, the
+ * address this `file://` page says it has, and the recorder's bundle, which
+ * the desktop's build emits as an entry of its own. Whether to record at all
+ * is the main process's word: an ordinary packaged run records, a
+ * development, fixture, or capture run does not, and a run whose account was
+ * deleted stops. There is no switch — `PRIVACY.md` is where a user learns
+ * this happens, so that file carries the whole of the disclosure and has to
+ * keep doing it.
+ */
+
 import type { BundleImporter } from "@luke/panel/bundle-loader";
-import { sessionRecorderLoaded } from "@luke/panel/session-recorder/contract";
-import { isRecord, text, type UnparsedWireValue, type WireValue } from "@luke/wire";
-import type { PostHog, Properties } from "posthog-js/dist/module.no-external";
-
-/**
- * Recording the shape of what Luke's own panel draws, and none of its words.
- *
- * This is not the counted-event stream and does not share its guarantee. A
- * counted event can only say what `packages/features/src/analytics/product-events.ts`
- * declared; this client is the analytics library posting straight to the
- * processor, and a recording is the rendered panel. What keeps a session
- * title, a branch, an error line, a caption, or the account's own name out of
- * it is `SESSION_REPLAY_MASKING` below, not an allowlist: every text node and
- * every input is masked, the attributes that carry words or an image are
- * asterisked, and autocapture is off. What leaves is layout, pointer
- * positions, and asterisks of the right length. The surfaces that hold the
- * most of a person's words also block their whole subtree with the library's
- * fixed `ph-no-capture` class as a second line, each named where it is drawn
- * and listed in `PRIVACY.md`: the feedback dialog, whose screenshots are
- * pictures of the person's screen, a task's title and the editor its document
- * is edited in, whose masked value would still record the rhythm of the
- * typing, and its whiteboard, transcript, Work, Code, File, and page tabs,
- * version history, Inbox, Chat, and coding agents' tabs and their Terminal tabs,
- * and Browser tabs with the still of a page they draw, among others. The whiteboard and a Terminal tab are the surfaces that draw
- * their words on a canvas, which the text masking cannot reach, so their
- * block is their only line, and canvas recording is held off by name rather
- * than by the library's default.
- *
- * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
- * masking and those blocks are the whole of what decides it.
- *
- * What this file decides on its own is only whether to record at all, and the
- * main process is the whole of that answer: an ordinary packaged run records,
- * a development, fixture, or capture run does not, and a run whose account was deleted stops.
- * There is no switch — `PRIVACY.md` is where a user learns this happens, so
- * that file carries the whole of the disclosure and has to keep doing it. No
- * account is among the reasons either. Recording begins at the first paint of
- * an ordinary launch, as soon as the recorder's bundle and the client have
- * loaded beside it, before anyone has signed in, because the launch is where what goes wrong goes wrong and a
- * recording that waited for a sign-in never saw it. A session that reaches
- * one is joined to the person there; a session that never does stays
- * anonymous, which is the part `PRIVACY.md` has to say plainly, because such
- * a recording cannot be erased with an account.
- */
-
-/**
- * Where everything here posts. The processor's own address rather than Luke's
- * origin: nothing forwards on the user's behalf any more, so the processor
- * sees the address a request arrives from.
- */
-const POSTHOG_HOST = "https://us.i.posthog.com";
+import {
+  type ApplySessionReplay,
+  SESSION_REPLAY_APP,
+  sessionReplay,
+  withoutOwnAddress,
+} from "@luke/panel/session-replay";
+import type { UnparsedWireValue } from "@luke/wire";
 
 /**
  * What this window says its address is, in place of the one it has.
@@ -98,7 +69,9 @@ function loadedFrom(): string | undefined {
  * document. The library also reports a bare path beside the address, an
  * exception names the script each frame came from, and either can be spelled
  * differently from `location.pathname` — encoded, or simply a sibling file —
- * and still name the same person.
+ * and still name the same person. The referrer properties come through
+ * untouched of their own accord: a page opened as a file has no referrer, so
+ * the library records the same `$direct` any unreferred visit gets.
  */
 function namesThisMachine(value: string): boolean {
   if (value.startsWith("file://") || value.startsWith(ACCOUNTS_DIRECTORY)) return true;
@@ -106,58 +79,12 @@ function namesThisMachine(value: string): boolean {
   return directory !== undefined && value.startsWith(directory);
 }
 
-/**
- * Takes this machine's path out of anything on its way to the processor.
- *
- * Switching pageviews off withholds the address from one event and no others.
- * The library puts it on every event as `$current_url` and `$pathname`, onto
- * the person as the first-seen twins of those, inside a captured exception as
- * the file each stack frame came from, and inside a recording as the frame
- * rrweb opens with. Naming those one by one is a list somebody has to keep in
- * step with the library, and three rounds of finding another one is the
- * argument against it: this matches the address itself, wherever it sits.
- *
- * Written against the wire vocabulary because that is what these values are —
- * built by the library rather than declared by this build, so they are parsed
- * here rather than trusted. Anything that is not this address is passed back
- * exactly as it came.
- *
- * The referrer properties come through untouched of their own accord. A page
- * opened as a file has no referrer, so the library records the same `$direct`
- * any unreferred visit gets, and that says nothing about the machine.
- */
+/** The address scrub this window records under, by itself, for what reads it without a recording. */
+const ADDRESS = { address: RENDERER_ADDRESS, namesOwnAddress: namesThisMachine } as const;
+
+/** Takes this machine's path out of anything on its way to the processor, wherever it sits. */
 export function withoutLocalAddress(value: UnparsedWireValue): UnparsedWireValue {
-  return value === undefined ? undefined : addressless(value);
-}
-
-/**
- * The walk itself, over a value that is present. Split from the entry point so
- * that a missing property stays missing rather than becoming one of the nulls
- * a nested array would otherwise need to carry it.
- */
-function addressless(value: WireValue): WireValue {
-  const asText = text(value);
-  if (asText !== undefined) return namesThisMachine(asText) ? RENDERER_ADDRESS : value;
-  if (Array.isArray(value)) return value.map(addressless);
-  if (!isRecord(value)) return value;
-  const scrubbed: Record<string, WireValue> = {};
-  for (const [key, entry] of Object.entries(value)) scrubbed[key] = addressless(entry);
-  return scrubbed;
-}
-
-/**
- * The bridge between the library's own property bag and the parser above.
- * `Properties` types its values as `any`, which is what an unvalidated wire
- * value is; this is the one place that is said out loud.
- */
-function scrubbedProperties(properties: Properties): Properties {
-  const scrubbed: Properties = {};
-  for (const [key, value] of Object.entries(properties)) {
-    // SAFETY: the library built this bag, so its values are unvalidated wire
-    // values by construction; the parser establishes any shape it acts on.
-    scrubbed[key] = withoutLocalAddress(value as UnparsedWireValue);
-  }
-  return scrubbed;
+  return withoutOwnAddress(value, ADDRESS);
 }
 
 /**
@@ -180,306 +107,13 @@ function projectApiKey(): string {
   }
 }
 
-/**
- * The library's own preloaded-configuration global, which its
- * `RemoteConfigLoader` reads before it fetches anything: a config found here
- * is used as it stands, and the fetch never happens.
- *
- * Declared here because posthog-js does not declare it — it is assigned by
- * the hosted `/array/<token>/config.js` bundle rather than by anything in the
- * package's own types, so the shape is documented by what the loader reads
- * and nothing in the type system holds it still. `session-replay.test.ts`
- * asserts the name against the installed bundle.
- */
-declare global {
-  interface Window {
-    _POSTHOG_REMOTE_CONFIG?: Record<
-      string,
-      { config: { sessionRecording: object; hasFeatureFlags: boolean } }
-    >;
-  }
-}
-
-/**
- * Says recording is on, without asking.
- *
- * The library splits its traffic by kind: what it captures goes to the
- * ingestion host, and the configuration deciding whether to record at all
- * comes from its assets host, which it derives from the region rather
- * than taking as configuration. A renderer policy naming only the first
- * refuses that read, and the refusal is silent — recording is gated on a
- * property only that response writes, so a blocked config reads exactly like
- * a project with recording switched off. It was, for every build until this
- * one.
- *
- * Preloading answers it here instead. `sessionRecording` decides the gate by
- * truthiness alone, so an empty object turns recording on and supplies no
- * masking: `init`'s `session_recording` is read first and this response
- * second, so `SESSION_REPLAY_MASKING` stands. `hasFeatureFlags: false`
- * declines the flag fetch Luke has no use for.
- */
-function preloadRemoteConfig(key: string): void {
-  window._POSTHOG_REMOTE_CONFIG = {
-    [key]: { config: { sessionRecording: {}, hasFeatureFlags: false } },
-  };
-}
-
-/**
- * What keeps the words out of the recording: every text node masked (there is
- * no `maskAllText` for recordings, and the recorder drops an option it does
- * not know without a word, so the names are asserted against the installed
- * bundle), inputs masked by the library's default, the attributes that carry
- * words or an image asterisked while `class` and `style` still lay out, every
- * `href` among them but the two the replay lays out by (a stylesheet's and an
- * icon's symbol), because a link in a transcript or an Inbox item may go to
- * any page and its address can carry a token, autocapture off, since a click event carries the text of what was clicked,
- * and canvas recording off, since a canvas carries its words as pixels. Note
- * that the canvas option is set here rather than left to the library's
- * default, because the library reads it before the remote configuration and a
- * project that switched canvas recording on would otherwise turn it on here.
- * The console and the network are kept out on the same terms, because this
- * page runs Luke's avatar, whose LiveKit room names its session token in a
- * refused join's address and in the console line that reports it.
- */
-const WORDS = new Set([
-  "title",
-  "aria-label",
-  "aria-description",
-  "aria-placeholder",
-  "alt",
-  "placeholder",
-  "src",
-]);
-const LAYOUT_HREFS = new Set(["link", "use"]);
-const SESSION_REPLAY_MASKING = {
-  autocapture: false,
-  capture_dead_clicks: false,
-  capture_performance: false,
-  enable_recording_console_log: false,
-  mask_all_text: true,
-  session_recording: {
-    captureCanvas: { recordCanvas: false },
-    maskTextSelector: "*",
-    maskAttributeFn: (name: string, value: string, element?: Element): string =>
-      WORDS.has(name) || (name === "href" && !LAYOUT_HREFS.has(element?.localName ?? ""))
-        ? "*".repeat(value.length)
-        : value,
-  },
-} as const;
-
-let started = false;
-let initialized = false;
-let loading = false;
-/** The client, once its module has landed after the recorder. */
-let client: PostHog | undefined;
-/** The run's latest word on recording, which a recorder that finishes loading starts under. */
-let latest: SessionReplayBootstrap | undefined;
-/** The account the running recording is filed under, cleared with the person on a stop. */
-let identified: string | undefined;
-
 /** The recorder's bundle, imported where the bundler put it; it registers itself as it runs. */
 const importSessionRecorder: BundleImporter<unknown> = () => import("./session-recorder/index");
 
-/**
- * Brings recording into line with what the run allows, in either direction.
- * Called at bootstrap and again on every account transition, so a deletion
- * stops the recording where it stands rather than at the next launch, and a
- * sign-in that lands while a recording runs files it under the account then
- * rather than at the next launch: being signed out is no reason to stop, so a
- * sign-in leaves the answer where it was and only the account moves. The
- * recorder's bundle is reached through `importRecorder`, its own entry
- * unless a test stands one in.
- */
-export function applySessionReplay(
-  bootstrap: SessionReplayBootstrap,
-  importRecorder: BundleImporter<unknown> = importSessionRecorder,
-): void {
-  latest = bootstrap;
-  const wanted = sessionReplayWanted(bootstrap);
-  if (wanted !== started) {
-    if (wanted) startSessionReplay(bootstrap, importRecorder);
-    else stopSessionReplay();
-    return;
-  }
-  // A client still loading starts under `latest`, which already names the account.
-  if (started && initialized && client !== undefined) identifyAccount(client, bootstrap);
-}
-
-/**
- * Whether recording should be running. Named and exported so the one reason
- * can be asserted on its own: this decides whether the one thing Luke sends
- * that no vocabulary bounds happens at all.
- */
-function sessionReplayWanted(bootstrap: SessionReplayBootstrap): boolean {
-  return bootstrap.permitted;
-}
-
-function startSessionReplay(
-  bootstrap: SessionReplayBootstrap,
-  importRecorder: BundleImporter<unknown>,
-): void {
-  const key = projectApiKey();
-  if (!key) return;
-  started = true;
-  if (client !== undefined) record(client, key, bootstrap);
-  else loadRecording(key, importRecorder);
-}
-
-/**
- * Loads what recording needs, the recorder's bundle
- * (`session-recorder/contract.ts`) and then the client, a chunk of the
- * panel's own that the bundle every window parses leaves out, and starts the
- * client under the run's word as it stands by then, unless a stop arrived
- * while they loaded. Note that the client is loaded only once the recorder
- * is there, because the "no-external" client never fetches a recorder of its
- * own: started first, it would find none and silently record nothing. Either
- * failing to load, or a recorder that loaded and registered nothing, records
- * nothing and stands recording down, so the run's next word on it tries
- * again.
- */
-function loadRecording(key: string, importRecorder: BundleImporter<unknown>): void {
-  if (loading) return;
-  loading = true;
-  const failed = () => {
-    loading = false;
-    started = false;
-  };
-  const loadClient = () => {
-    if (!sessionRecorderLoaded()) {
-      failed();
-      return;
-    }
-    // The "no-external" client: the full build without the surveys, product
-    // tours, web vitals, and the rest Luke never turns on, and without the
-    // recorder, which is a bundle of its own.
-    void import("posthog-js/dist/module.no-external").then((module) => {
-      loading = false;
-      client = module.default;
-      if (started && latest) record(client, key, latest);
-    }, failed);
-  };
-  void importRecorder().then(loadClient, failed);
-}
-
-/** Starts the client over a recorder already loaded: built once per window, resumed after that. */
-function record(posthog: PostHog, key: string, bootstrap: SessionReplayBootstrap): void {
-  if (initialized) {
-    // The client is built once per window. A second `init` would not rebuild
-    // it, so a recording resumed after an account change is started rather
-    // than re-configured — but it must still be told whose recording it is,
-    // because the person may have changed since the last one.
-    optIn(posthog);
-    registerBuild(posthog, bootstrap);
-    identifyAccount(posthog, bootstrap);
-    posthog.startSessionRecording();
-    return;
-  }
-  initialized = true;
-  preloadRemoteConfig(key);
-  posthog.init(key, {
-    api_host: POSTHOG_HOST,
-    defaults: "2025-11-30",
-    // The one place the library's defaults cannot stand: both of these carry
-    // the page's own address, and this page is a `file://` one, so its address
-    // names a path on the developer's own disk rather than anything about
-    // Luke. Switching them off is only half of it — see `before_send`, which
-    // is what takes that path off everything else.
-    capture_pageview: false,
-    capture_pageleave: false,
-    capture_exceptions: false,
-    ...SESSION_REPLAY_MASKING,
-    person_profiles: "always",
-    persistence: "localStorage",
-    debug: false,
-    get_current_url: () => RENDERER_ADDRESS,
-    before_send: (event) => {
-      if (!event) return event;
-      // `$set` and `$set_once` carry the address too, as the person's
-      // first-seen properties, where it would outlive every event holding it.
-      // SAFETY: `Properties` types its values as `any`; each is handed to the
-      // parser above as the unvalidated wire value it actually is, and comes
-      // back either replaced or exactly as it came.
-      return {
-        ...event,
-        properties: scrubbedProperties(event.properties),
-        ...(event.$set ? { $set: scrubbedProperties(event.$set) } : undefined),
-        ...(event.$set_once ? { $set_once: scrubbedProperties(event.$set_once) } : undefined),
-      };
-    },
-  });
-  // Stopping opts out, and that is written into the same storage this client
-  // reads at launch — so without opting back in here, a run that had ever
-  // been stopped would come up recording nothing for the rest of the install.
-  optIn(posthog);
-  registerBuild(posthog, bootstrap);
-  identifyAccount(posthog, bootstrap);
-}
-
-/**
- * Files what is being recorded under the account, when there is one.
- *
- * The id is the same opaque one the counted events resolve to, so a recording
- * and the counts around it belong to one person — which is what makes
- * deleting the account erase the recordings with it.
- *
- * Signed out there is no id and none is invented: the recording runs under
- * the anonymous id the library made for itself, and a sign-in that lands
- * later calls this, which is where the library joins that anonymous session
- * to the person. What never reaches a sign-in stays anonymous, and so cannot
- * be erased with an account — `PRIVACY.md` says so, because it is now true.
- * Note that an account already identified is not identified again, because
- * every account transition re-answers recording, most of them for nothing
- * that moved. The build registered at the start stands: `identify` keeps the
- * registered properties, and only the stop's `reset` clears them.
- */
-function identifyAccount(posthog: PostHog, bootstrap: SessionReplayBootstrap): void {
-  const accountId = bootstrap.accountId;
-  if (!accountId || accountId === identified) return;
-  identified = accountId;
-  posthog.identify(accountId);
-}
-
-/**
- * Opting in and out rather than only starting and stopping the recorder,
- * because this client sends more than recordings: the registered build and
- * the identified person travel on their own, and neither answers to
- * `stopSessionRecording`. A stop has to reach all of it — a deleted account
- * whose client kept talking would be the erasure failing to erase.
- *
- * The opt-in names no event: `$opt_in` counts a consent moving, and nothing
- * here moves one.
- */
-function optIn(posthog: PostHog): void {
-  posthog.opt_in_capturing({ captureEventName: false });
-}
-
-/**
- * Which build these came from, registered on every start rather than once at
- * init: stopping calls `reset`, which clears the registered properties along
- * with the person, so a recording resumed afterwards would otherwise say
- * nothing about the version it came from. `app_version` and `packaged` are
- * the names the counted events are stamped with, so one filter separates
- * both.
- */
-function registerBuild(posthog: PostHog, bootstrap: SessionReplayBootstrap): void {
-  posthog.register({
-    app_name: "desktop",
-    app_version: bootstrap.appVersion,
-    packaged: bootstrap.packaged,
-    platform: navigator.platform,
-  });
-}
-
-function stopSessionReplay(): void {
-  started = false;
-  identified = undefined;
-  const posthog = initialized ? client : undefined;
-  if (posthog === undefined) return;
-  posthog.stopSessionRecording();
-  // The person goes with the recording. Without this the client keeps the
-  // previous account's id and its anonymous session, so signing in as someone
-  // else would file their recordings under the person who signed out — which
-  // is the one thing filing under an account is supposed to prevent.
-  posthog.reset();
-  posthog.opt_out_capturing();
-}
+/** The panel window's recording, which `desktop-platform.ts` answers the panel's platform with. */
+export const applySessionReplay: ApplySessionReplay = sessionReplay({
+  appName: SESSION_REPLAY_APP.DESKTOP,
+  projectApiKey,
+  ...ADDRESS,
+  importRecorder: importSessionRecorder,
+});

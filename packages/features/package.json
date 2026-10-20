@@ -17,6 +17,7 @@
     "./issue-wire": "./src/issue-wire.js",
     "./issue-view": "./src/issue-view.js",
     "./avatar-grant": "./src/avatar-grant.js",
+    "./sentry-breadcrumbs": "./src/sentry-breadcrumbs.js",
     "./sentry-reporting": "./src/sentry-reporting.js",
     "./sentry-tracing": "./src/sentry-tracing.js",
     "./live-wire": "./src/live-wire.js",

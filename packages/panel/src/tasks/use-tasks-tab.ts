@@ -23,6 +23,7 @@ import {
   type CodeRef,
   type Task,
   type TaskStanding,
+  type TaskStatus,
   UNTITLED_TASK_NAME,
 } from "@luke/features/task-wire";
 import {
@@ -320,9 +321,10 @@ const STAND_IN = {
   AUTOMATIONS: "automations",
   CHAT: "chat",
   ISSUES: "issues",
+  BOARD: "board",
 } as const;
 
-/** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, Chat with the place shown in it, or the Issues page. */
+/** The window's Inbox with the item chosen in it, one agent's page, Factory, the Automations page, Chat with the place shown in it, the Issues page, or the Board. */
 type StandIn =
   | {
       readonly kind: typeof STAND_IN.INBOX;
@@ -346,10 +348,18 @@ type StandIn =
       /** Whether the rail stands rather than the place, which only a narrow room draws apart. */
       readonly listed: boolean;
     }
-  | { readonly kind: typeof STAND_IN.ISSUES; readonly place: IssuesPlace };
+  | { readonly kind: typeof STAND_IN.ISSUES; readonly place: IssuesPlace }
+  | { readonly kind: typeof STAND_IN.BOARD };
 
 /** The window's Factory: whether it stands in the task's place, and the presses that open and leave it. */
 interface FactoryViewControl {
+  readonly open: boolean;
+  readonly onOpen: () => void;
+  readonly onClose: () => void;
+}
+
+/** The window's Board: whether it stands in the task's place, and the presses that open and leave it. */
+interface BoardViewControl {
   readonly open: boolean;
   readonly onOpen: () => void;
   readonly onClose: () => void;
@@ -491,8 +501,8 @@ export interface NewTaskPreset {
  * planning: a Linear issue, one of the workspace's own issues, whether an
  * agent starts on the task's plan once the task opens (`agent`), the
  * agent New task's composer starts on its words in the task's own start
- * (`handed`), and the words Plan mode hands Luke as the task's brief
- * (`brief`), trimmed and none where blank.
+ * (`handed`), the words Plan mode hands Luke as the task's brief
+ * (`brief`), trimmed and none where blank, and where it starts (`status`).
  */
 export interface NewTaskStart {
   readonly linearIssueId?: string;
@@ -500,6 +510,8 @@ export interface NewTaskStart {
   readonly agent?: boolean;
   readonly handed?: NewTaskAgent;
   readonly brief?: string;
+  /** Where the task starts: to do where none is named, or the backlog for one New task files for later. */
+  readonly status?: TaskStatus;
 }
 
 /** Which Issues page stands: the list, or one issue's. */
@@ -717,6 +729,8 @@ export interface TasksControl {
   automationsView: AutomationsViewControl;
   /** The window's Issues page: whether it stands in the plan's place, which, and its presses (`issues-page.tsx`). */
   issuesView: IssuesViewControl;
+  /** The window's Board of the listed workspace's tasks by status: whether it stands in the plan's place, and its presses (`tasks-board.tsx`). */
+  boardView: BoardViewControl;
   /** The task the call in progress on this Mac is about, or none: what Factory marks as being planned. */
   callTaskId: string | undefined;
   /** The window's Chat: whether it stands in the plan's place, the chat it reads, the place shown in it, and its presses. */
@@ -2523,6 +2537,7 @@ export function useTasksTab(input: {
       ...(from.linearIssueId === undefined ? undefined : { linearIssueId: from.linearIssueId }),
       ...(from.issueId === undefined ? undefined : { issueId: from.issueId }),
       ...(from.brief === undefined || from.brief.trim() === "" ? undefined : { brief: from.brief }),
+      ...(from.status === undefined ? undefined : { status: from.status }),
       ...(planning ? undefined : { planning }),
       ...(from.handed === undefined ? undefined : { agent: agentRequest(from.handed) }),
     }).then(
@@ -3295,6 +3310,15 @@ export function useTasksTab(input: {
       onClose: guard(() => setStandIn(undefined)),
       peeked: issuePeek,
       onPeek: setIssuePeek,
+    },
+    // The Board stands over the plan's place as Factory does, each giving way to the others.
+    boardView: {
+      open: standIn?.kind === STAND_IN.BOARD,
+      onOpen: guard(() => {
+        setHistoryFor(undefined);
+        setStandIn({ kind: STAND_IN.BOARD });
+      }),
+      onClose: guard(() => setStandIn(undefined)),
     },
     callTaskId: callInProgress(reported) ? reported.callTaskId : undefined,
     onShowFile: showFile,

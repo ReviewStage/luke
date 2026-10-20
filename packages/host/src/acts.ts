@@ -22,38 +22,27 @@ import {
   codeLinesSchema,
   type TasksCommentAnswer,
   type TasksCommentsAnswer,
-  type TasksEditAnswer,
   type TasksFileAnswer,
   type TasksIssue,
-  type TasksMoveAnswer,
   type TasksPageSourceAnswer,
   type TasksPagesAnswer,
   type TasksPictureAnswer,
   type TasksPictureKeepAnswer,
   type TasksPullRequest,
-  type TasksRepositoriesAnswer,
   type TasksRevisionAnswer,
   type TasksRevisionsAnswer,
-  type TasksSetRepositoryAnswer,
   type TasksSkillsAnswer,
-  type TasksStartAnswer,
   type TasksTreeAnswer,
-  tasksArchiveParamsSchema,
-  tasksBoardSaveParamsSchema,
   tasksCommentActParamsSchema,
   tasksCommentAnswerSchema,
   tasksCommentStartParamsSchema,
   tasksCommentsAnswerSchema,
   tasksCommentsParamsSchema,
-  tasksEditAnswerSchema,
-  tasksEditParamsSchema,
   tasksFileAnswerSchema,
   tasksFileParamsSchema,
   tasksIssueParamsSchema,
   tasksIssueSchema,
   tasksMessagesParamsSchema,
-  tasksMoveAnswerSchema,
-  tasksMoveParamsSchema,
   tasksPageParamsSchema,
   tasksPageSourceAnswerSchema,
   tasksPagesAnswerSchema,
@@ -62,27 +51,17 @@ import {
   tasksPictureKeepAnswerSchema,
   tasksPictureKeepParamsSchema,
   tasksPictureParamsSchema,
-  tasksPinParamsSchema,
-  tasksPinRepositoryParamsSchema,
   tasksPullRequestParamsSchema,
   tasksPullRequestSchema,
-  tasksRenameParamsSchema,
-  tasksRepositoriesAnswerSchema,
-  tasksRepositoriesParamsSchema,
   tasksRevisionAnswerSchema,
   tasksRevisionParamsSchema,
   tasksRevisionsAnswerSchema,
   tasksRevisionsParamsSchema,
-  tasksSetRepositoryAnswerSchema,
-  tasksSetRepositoryParamsSchema,
   tasksSetStandingParamsSchema,
   tasksSkillsAnswerSchema,
   tasksSkillsParamsSchema,
-  tasksStartAnswerSchema,
-  tasksStartRequestSchema,
   tasksTreeAnswerSchema,
   tasksTreeParamsSchema,
-  tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
 import { workspaceInvitationSchema } from "@luke/features/workspace-invitation-wire";
 import { formerMemberSchema, workspaceMemberSchema } from "@luke/features/workspace-wire";
@@ -127,47 +106,11 @@ export const ACT_KIND = {
   UPDATE_OPEN_RELEASE: "update.openRelease",
   UPDATE_OPEN_CHANGELOG: "update.openChangelog",
   /**
-   * The panel's Tasks tab asking the host: the task list and the active
-   * document read as the tab shows, one task made the active one, the open
-   * task left, a task started on a repository, and a task renamed, given its
-   * repository, pinned or unpinned, archived or brought back, or deleted. The view arrives on the document rather than as
-   * an answer. The one write of a task's document from here is the
-   * developer's edit of a field, `TASKS_EDIT`, which answers whether it
-   * saved, conflicted with what Luke wrote meanwhile, or failed.
+   * The panel's Tasks tab giving a task its status and priority on the
+   * service; answers whether it saved. The task list and lifecycle acts ride
+   * the act port (`contract/kinds.ts`'s `TASKS_ACT_KIND`).
    */
-  TASKS_REFRESH: "tasks.refresh",
-  TASKS_SELECT: "tasks.select",
-  TASKS_CLOSE: "tasks.close",
-  TASKS_START: "tasks.start",
-  TASKS_DELETE: "tasks.delete",
-  TASKS_RENAME: "tasks.rename",
-  TASKS_PIN: "tasks.pin",
-  /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
-  TASKS_PIN_REPOSITORY: "tasks.pinRepository",
-  /** One change to the sidebar's sections, kept on the account; answers whether the service took it. */
-  TASKS_WRITE_SECTION: "tasks.writeSection",
-  TASKS_ARCHIVE: "tasks.archive",
-  /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
-  TASKS_REPOSITORIES: "tasks.repositories",
-  /** A task given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
-  TASKS_SET_REPOSITORY: "tasks.setRepository",
   TASKS_SET_STANDING: "tasks.setStanding",
-  /** A task moved on the service to another of the account's workspaces, its owner's alone; answers the workspace it now belongs to, or why it stands where it was. */
-  TASKS_MOVE: "tasks.move",
-  /** The developer's edit of the open task's document, saved on the service; answers saved, a conflict with the text as it stands now, or why nothing was saved. */
-  TASKS_EDIT: "tasks.edit",
-  /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
-  GITHUB_OPEN: "github.open",
-  /** A web page opened in the default browser: a link a transcript's or an Inbox item's words hold, off GitHub. No address but an http or https one opens through it. */
-  WEB_OPEN: "web.open",
-  /** The page that connects the account's GitHub, asked of the service and opened in the browser; the connection arrives on the document once the panel comes forward again. */
-  GITHUB_CONNECT: "github.connect",
-  /** The account's GitHub disconnected on the service under the Mac's session; the connection arrives on the document at once. */
-  GITHUB_DISCONNECT: "github.disconnect",
-  /** The Tasks tab's microphone button: a call about the task the panel has open, opened, or its microphone toggled. */
-  TASKS_TALK: "tasks.talk",
-  /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
-  TASKS_BOARD_SAVE: "tasks.boardSave",
   /** The Work tab scrolled back to its oldest turn: the open task's page of work before it, read from the service; the view arrives on the document. */
   TASKS_WORK_EARLIER: "tasks.workEarlier",
   /** The Call tab scrolled back to its oldest turn: the open task's page of conversation before it, read from the service; the view arrives on the document. */
@@ -388,7 +331,7 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
  * account — so its ends are admitted as written rather than trimmed into a
  * value the host would not hold.
  */
-const exactId = exactText(512);
+export const exactId = exactText(512);
 
 /**
  * The longest fenced block a transcript asks main to colour. Note that a
@@ -414,7 +357,7 @@ export const FENCE_LANGUAGE_MAX_CHARS = 32;
 const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
 
 /** An address on GitHub, and nowhere else: what a repository link, the installation link, or Luke's own issues open. */
-const githubAddress = EffectSchema.String.check(
+export const githubAddress = EffectSchema.String.check(
   EffectSchema.isMaxLength(2_048),
   EffectSchema.isPattern(GITHUB_ADDRESS),
 );
@@ -432,7 +375,7 @@ const WEB_ADDRESS = /^https?:\/\//iu;
  * `javascript:`, or another app's scheme would hand the address to
  * something else.
  */
-const webAddress = EffectSchema.String.check(
+export const webAddress = EffectSchema.String.check(
   EffectSchema.isMaxLength(2_048),
   EffectSchema.isPattern(WEB_ADDRESS),
   EffectSchema.makeFilter((address) => URL.canParse(address)),
@@ -452,9 +395,6 @@ const press = (refusal: string): ActDeclaration<undefined, void> => ({
   result: answersNothing,
   refusal,
 });
-
-/** Connect GitHub and Disconnect, which open one page of the service's and are refused alike. */
-const GITHUB_PAGE_PRESS = press("Could not open GitHub's connection page on this system.");
 
 /**
  * Every act, one row per kind, and everything this build says about a kind in
@@ -483,90 +423,10 @@ export const ACT = {
   [ACT_KIND.UPDATE_INSTALL]: press("Could not install that update on this system."),
   [ACT_KIND.UPDATE_OPEN_RELEASE]: press("Could not open the releases page."),
   [ACT_KIND.UPDATE_OPEN_CHANGELOG]: press("Could not open the changelog."),
-  [ACT_KIND.TASKS_REFRESH]: press("Could not read your tasks on this system."),
-  [ACT_KIND.TASKS_SELECT]: {
-    payload: record({ taskId: exactId }),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not open that task on this system.",
-  },
-  [ACT_KIND.TASKS_CLOSE]: press("Could not leave that task on this system."),
-  [ACT_KIND.TASKS_START]: {
-    payload: actSchema(tasksStartRequestSchema),
-    result: wireResult<TasksStartAnswer>(isReadable(tasksStartAnswerSchema)),
-    refusal: "Could not start that task on this system.",
-  },
-  [ACT_KIND.TASKS_DELETE]: {
-    payload: record({ taskId: exactId }),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not delete that task on this system.",
-  },
-  [ACT_KIND.TASKS_RENAME]: {
-    payload: actSchema(tasksRenameParamsSchema),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not rename that task on this system.",
-  },
-  [ACT_KIND.TASKS_PIN]: {
-    payload: actSchema(tasksPinParamsSchema),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not pin that task on this system.",
-  },
-  [ACT_KIND.TASKS_PIN_REPOSITORY]: {
-    payload: actSchema(tasksPinRepositoryParamsSchema),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not pin that repository on this system.",
-  },
-  [ACT_KIND.TASKS_WRITE_SECTION]: {
-    payload: actSchema(tasksWriteSectionParamsSchema),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not change that section on this system.",
-  },
-  [ACT_KIND.TASKS_ARCHIVE]: {
-    payload: actSchema(tasksArchiveParamsSchema),
-    result: wireResult<boolean>(isWireBoolean),
-    refusal: "Could not archive that task on this system.",
-  },
-  [ACT_KIND.TASKS_REPOSITORIES]: {
-    payload: actSchema(tasksRepositoriesParamsSchema),
-    result: wireResult<TasksRepositoriesAnswer>(isReadable(tasksRepositoriesAnswerSchema)),
-    refusal: "Could not read your GitHub repositories on this system.",
-  },
   [ACT_KIND.TASKS_SET_STANDING]: {
     payload: actSchema(tasksSetStandingParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not change where that task stands on this system.",
-  },
-  [ACT_KIND.TASKS_SET_REPOSITORY]: {
-    payload: actSchema(tasksSetRepositoryParamsSchema),
-    result: wireResult<TasksSetRepositoryAnswer>(isReadable(tasksSetRepositoryAnswerSchema)),
-    refusal: "Could not change that task's repository on this system.",
-  },
-  [ACT_KIND.TASKS_MOVE]: {
-    payload: actSchema(tasksMoveParamsSchema),
-    result: wireResult<TasksMoveAnswer>(isReadable(tasksMoveAnswerSchema)),
-    refusal: "Could not move that task on this system.",
-  },
-  [ACT_KIND.TASKS_EDIT]: {
-    payload: actSchema(tasksEditParamsSchema),
-    result: wireResult<TasksEditAnswer>(isReadable(tasksEditAnswerSchema)),
-    refusal: "Could not save that edit on this system.",
-  },
-  [ACT_KIND.GITHUB_OPEN]: {
-    payload: record({ url: githubAddress }),
-    result: answersNothing,
-    refusal: "Could not open GitHub on this system.",
-  },
-  [ACT_KIND.WEB_OPEN]: {
-    payload: record({ url: webAddress }),
-    result: answersNothing,
-    refusal: "Could not open that link on this system.",
-  },
-  [ACT_KIND.GITHUB_CONNECT]: GITHUB_PAGE_PRESS,
-  [ACT_KIND.GITHUB_DISCONNECT]: press("Could not disconnect GitHub on this system."),
-  [ACT_KIND.TASKS_TALK]: press("Could not talk about that task on this system."),
-  [ACT_KIND.TASKS_BOARD_SAVE]: {
-    payload: actSchema(tasksBoardSaveParamsSchema),
-    result: answersNothing,
-    refusal: "Could not save the board on this system.",
   },
   [ACT_KIND.TASKS_FILE]: {
     payload: actSchema(tasksFileParamsSchema),

@@ -4,11 +4,12 @@ import assert from "node:assert/strict";
 import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import type { PortActKind } from "@luke/host/contract";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
 import { ToastHost } from "../toast.js";
 import { type AgentPictureDoor, AgentPicturesProvider } from "./agent-pictures.js";
@@ -36,7 +37,8 @@ const PAGE_TEXT = "## Approach\n\nThe invite email follows the mock.\n";
 
 /** The plan's text as the service holds it. */
 let held = PAGE_TEXT;
-let sent: Act[] = [];
+/** The kind of every act the plan was sent, whichever side carried it, in order. */
+let sent: (Act["kind"] | PortActKind)[] = [];
 const roots: Root[] = [];
 
 beforeEach(() => {
@@ -44,22 +46,22 @@ beforeEach(() => {
   sent = [];
   fakeAppBridge({
     act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request);
+      sent.push(request.kind);
       if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: KEPT_ID } });
       }
-      if (request.kind === ACT_KIND.TASKS_EDIT) {
-        const { base, value } = request.payload.edit.document;
-        if (base !== held) {
-          return Promise.resolve({
-            status: ACT_OUTCOME_STATUS.DONE,
-            value: { conflict: { current: held } },
-          });
-        }
-        held = value;
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { saved: true } });
-      }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+    },
+  });
+  fakeActPort({
+    [ACT_KIND.TASKS_EDIT]: ({ edit }) => {
+      sent.push(ACT_KIND.TASKS_EDIT);
+      // The one edit this page sends is the document's whole text.
+      assert.ok("document" in edit);
+      const { base, value } = edit.document;
+      if (base !== held) return Promise.resolve({ conflict: { current: held } });
+      held = value;
+      return Promise.resolve({ saved: true });
     },
   });
 });
@@ -177,10 +179,7 @@ test("Add to plan keeps the picture on the plan and writes its line at the plan'
   await act(async () => add.click());
   await settled(() => newestToastSays() !== undefined);
 
-  assert.deepEqual(
-    sent.map((request) => request.kind),
-    [ACT_KIND.TASKS_PICTURE_KEEP, ACT_KIND.TASKS_EDIT],
-  );
+  assert.deepEqual(sent, [ACT_KIND.TASKS_PICTURE_KEEP, ACT_KIND.TASKS_EDIT]);
   assert.equal(held, `${PAGE_TEXT}\n${LINE}\n`);
   assert.equal(newestToastSays(), "Added to the planUndo");
 
@@ -201,7 +200,7 @@ test("a plan that moved on under the page is written on as it stands", async () 
   await settled(() => held.includes(LINE));
 
   assert.equal(held, `${PAGE_TEXT}\nA teammate's newer line.\n\n${LINE}\n`);
-  assert.equal(sent.filter((request) => request.kind === ACT_KIND.TASKS_EDIT).length, 2);
+  assert.equal(sent.filter((kind) => kind === ACT_KIND.TASKS_EDIT).length, 2);
 });
 
 test("a transcript off a plan's page offers no Add to plan", async () => {

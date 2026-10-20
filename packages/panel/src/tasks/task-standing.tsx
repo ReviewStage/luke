@@ -36,8 +36,8 @@ import { PICKER_ALIGN, Picker } from "../settings/picker-row.js";
  * A task from a service before statuses has no key and no chips.
  */
 
-/** Each status as its chip and its menu's row say it. */
-const TASK_STATUS_WORDS = {
+/** Each status as its chip, its menu's row, the Board's column, and the sidebar's filter say it. */
+export const TASK_STATUS_WORDS = {
   [TASK_STATUS.BACKLOG]: "Backlog",
   [TASK_STATUS.TODO]: "Todo",
   [TASK_STATUS.IN_PROGRESS]: "In progress",

@@ -59,19 +59,19 @@
         },
         {
           "src": "/api/plans/([^/]+)/code",
-          "dest": "/api/default.js?route=plans/code&id=$1"
+          "dest": "/api/default.js?route=plans/code&route-path=plans/$1/code&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/file",
-          "dest": "/api/default.js?route=plans/file&id=$1"
+          "dest": "/api/default.js?route=plans/file&route-path=plans/$1/file&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/tree",
-          "dest": "/api/default.js?route=plans/tree&id=$1"
+          "dest": "/api/default.js?route=plans/tree&route-path=plans/$1/tree&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/skills",
-          "dest": "/api/default.js?route=plans/skills&id=$1"
+          "dest": "/api/default.js?route=plans/skills&route-path=plans/$1/skills&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/edit",
@@ -95,7 +95,7 @@
         },
         {
           "src": "/api/plans/([^/]+)/attachments",
-          "dest": "/api/default.js?route=plans/attachments&id=$1"
+          "dest": "/api/default.js?route=plans/attachments&route-path=plans/$1/attachments&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/agents",
@@ -119,11 +119,11 @@
         },
         {
           "src": "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
-          "dest": "/api/default.js?route=plans/page&id=$1&page=$2&version=$3"
+          "dest": "/api/default.js?route=plans/page&route-path=plans/$1/pages/$2/versions/$3&id=$1&page=$2&version=$3"
         },
         {
           "src": "/api/plans/([^/]+)/pages",
-          "dest": "/api/default.js?route=plans/pages&id=$1"
+          "dest": "/api/default.js?route=plans/pages&route-path=plans/$1/pages&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)",
@@ -552,7 +552,7 @@
           "src": "/app/?",
           "dest": "/app.html",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin"
           }
@@ -561,7 +561,7 @@
           "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person|issue)(?:/[^/]+)*/?",
           "dest": "/app.html",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self'; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin"
           }

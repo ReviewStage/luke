@@ -7,7 +7,12 @@ import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeAppBridge,
+  type OpenedLink,
+  openingLinks,
+} from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -39,7 +44,7 @@ const WORDS = [
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
 const roots: Root[] = [];
-let sent: Act[] = [];
+let sent: (Act | OpenedLink)[] = [];
 
 beforeEach(() => {
   sent = [];
@@ -50,6 +55,7 @@ beforeEach(() => {
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
     },
   });
+  fakeActPort(openingLinks((link) => sent.push(link)));
 });
 
 afterEach(() => {

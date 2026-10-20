@@ -5,18 +5,11 @@ import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { PLAN_COMMENT_ACTION, PLAN_COMMENT_REFUSAL } from "@luke/features/plan-comment-wire";
-import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
-import {
-  GITHUB_DISCONNECT_FAILURE,
-  TASK_CALL_FAILURE,
-  type TasksGitHubDisconnectAnswer,
-  type TasksGitHubPageAnswer,
-  type TasksStartAnswer,
-} from "@luke/features/tasks-view";
+import { TASK_CALL_FAILURE } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { Effect } from "effect";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "../acts.js";
 import { highlightSnippet } from "../task-code.js";
 import { type ActRows, type ActSender, createActRouter } from "./router.js";
 import { tasksActRows } from "./tasks-acts.js";
@@ -34,7 +27,6 @@ const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: fals
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const SERVICE = "https://luke.test";
 const ACME = {
   id: "workspace-acme",
   name: "acme",
@@ -42,7 +34,6 @@ const ACME = {
   role: WORKSPACE_ROLE.MEMBER,
   github: { login: "acme", active: true },
 };
-const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
 /** The one pull request the fake host's service holds; it holds none numbered `PULL_REQUEST_NONE`, and answers nothing for any other number. */
 const PULL_REQUEST = {
   number: 42,
@@ -60,19 +51,6 @@ const ISSUE = {
 };
 const ISSUE_NONE = 8;
 
-/** The task the host has open, as the fixture's main process reads it. */
-interface OpenTask {
-  activeTaskId: string | undefined;
-}
-
-/** What the host answers a start with, and whether voice could open a call now. */
-interface StartScript {
-  answer: TasksStartAnswer;
-  voiceReady: boolean;
-  /** Whether a call is already in progress, about whichever task. */
-  callStanding: boolean;
-}
-
 /** The HTML the service answers for a page's version, none where it does not answer. */
 interface PageScript {
   html: string | undefined;
@@ -81,27 +59,13 @@ interface PageScript {
 function fixture() {
   const asked: string[] = [];
   const page: PageScript = { html: undefined };
-  const talked: string[] = [];
-  const opened: string[] = [];
-  const view: OpenTask = { activeTaskId: TASK_ID };
-  /**
-   * Whether GitHub is the account's only way to sign in, whether the host
-   * names no page to connect the account's own GitHub, and the page it
-   * names to connect it.
-   */
-  const host = {
-    lastSignIn: false,
-    githubUnanswered: false,
-    connectPage: CONNECT_PAGE,
-  };
-  const start: StartScript = {
-    answer: { failure: TASK_CALL_FAILURE.UNANSWERED },
-    voiceReady: true,
-    callStanding: false,
-  };
   const rows = tasksActRows({
     host: {
-      tasksRefresh: () => Effect.sync(() => void asked.push("refresh")),
+      tasksSetStanding: (params) =>
+        Effect.sync(() => {
+          asked.push(`standing:${params.taskId}`);
+          return true;
+        }),
       tasksWorkEarlier: () => Effect.sync(() => void asked.push("earlier")),
       tasksConversationEarlier: () => Effect.sync(() => void asked.push("conversation-earlier")),
       tasksMessages: (params) =>
@@ -109,75 +73,6 @@ function fixture() {
           asked.push(`messages:${params.taskId}:${params.callId}:${params.after}`);
           return { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
         }),
-      tasksClose: () => Effect.sync(() => void asked.push("close")),
-      tasksOpen: (taskId) =>
-        Effect.sync(() => {
-          asked.push(`open:${taskId}`);
-          return true;
-        }),
-      tasksDelete: (taskId) =>
-        Effect.sync(() => {
-          asked.push(`delete:${taskId}`);
-          return true;
-        }),
-      tasksRename: (params) =>
-        Effect.sync(() => {
-          asked.push(`rename:${params.taskId}:${params.name}`);
-          return true;
-        }),
-      tasksSetStanding: (params) =>
-        Effect.sync(() => {
-          asked.push(`standing:${params.taskId}`);
-          return true;
-        }),
-      tasksPin: (params) =>
-        Effect.sync(() => {
-          asked.push(`pin:${params.taskId}:${params.pinned}`);
-          return true;
-        }),
-      tasksPinRepository: (params) =>
-        Effect.sync(() => {
-          asked.push(`pin-repository:${params.repository}:${params.pinned}`);
-          return true;
-        }),
-      tasksWriteSection: (params) =>
-        Effect.sync(() => {
-          asked.push(`section:${params.kind}`);
-          return true;
-        }),
-      tasksArchive: (params) =>
-        Effect.sync(() => {
-          asked.push(`archive:${params.taskId}:${params.archived}`);
-          return false;
-        }),
-      tasksStart: (request) =>
-        Effect.sync(() => {
-          asked.push(`start:${request.repository}`);
-          return start.answer;
-        }),
-      tasksRepositories: (params) =>
-        Effect.sync(() => {
-          asked.push(`repositories:${params.workspaceId}`);
-          return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
-        }),
-      tasksSetRepository: (params) =>
-        Effect.sync(() => {
-          asked.push(`repository:${params.taskId}:${params.repository}`);
-          return { repository: params.repository };
-        }),
-      tasksMove: (params) =>
-        Effect.sync(() => {
-          asked.push(`move:${params.taskId}:${params.workspaceId}`);
-          return { workspaceId: params.workspaceId };
-        }),
-      tasksEdit: (params) =>
-        Effect.sync(() => {
-          const value = "document" in params.edit ? params.edit.document.value : "";
-          asked.push(`edit:${params.taskId}:${value}`);
-          return { saved: true } as const;
-        }),
-      tasksBoardSave: (params) =>
-        Effect.sync(() => void asked.push(`board:${params.taskId}:${params.appliedDrawing}`)),
       tasksFile: (params) =>
         Effect.sync(() => {
           asked.push(`file:${params.path}:${params.firstLine}-${params.lastLine}`);
@@ -261,176 +156,14 @@ function fixture() {
           asked.push(`pages:${params.taskId}`);
           return { pages: [{ id: "page-1", title: "Invite funnel", version: 2, at: 0 }] };
         }),
-      githubConnect: () =>
-        Effect.sync((): TasksGitHubPageAnswer => {
-          asked.push("github-connect");
-          return host.githubUnanswered
-            ? { failure: TASK_CALL_FAILURE.UNANSWERED }
-            : { url: host.connectPage };
-        }),
-      githubDisconnect: () =>
-        Effect.sync((): TasksGitHubDisconnectAnswer => {
-          asked.push("github-disconnect");
-          return host.lastSignIn
-            ? { failure: GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED }
-            : { connection: { connected: false, login: null } };
-        }),
     },
-    openExternal: (url) => {
-      opened.push(url);
-      return Promise.resolve();
-    },
-    serviceBaseUrl: SERVICE,
-    activeTaskId: () => view.activeTaskId,
-    talkAboutTask: (taskId) => {
-      talked.push(taskId);
-    },
-    voiceReady: () => start.voiceReady,
-    callStanding: () => start.callStanding,
     colourCode: highlightSnippet,
   });
   // SAFETY: only the task rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, opened, view, start, page, host };
+  return { router, asked, page };
 }
-it.effect(
-  "the developer's edit of the text reaches the host from a panel, and not from the voice window",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const edit = {
-        kind: ACT_KIND.TASKS_EDIT,
-        payload: {
-          taskId: TASK_ID,
-          edit: { document: { base: "", value: "Invites expire." } },
-        },
-      } as const;
-
-      const saved = yield* f.router.performAct(edit, PANEL);
-      const fromVoice = yield* f.router.performAct(edit, VOICE);
-
-      assert.deepEqual(saved, { status: ACT_OUTCOME_STATUS.DONE, value: { saved: true } });
-      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(f.asked, [`edit:${TASK_ID}:Invites expire.`]);
-    }),
-);
-it.effect(
-  "a web link opens an http or https address in the browser, and no other scheme nor an address past the cap",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const refused = [
-        "javascript:alert(1)",
-        "file:///etc/passwd",
-        "luke://plan/7",
-        "mailto:dean@example.com",
-        "//example.com/docs",
-        "https://",
-        `https://example.com/docs?q=${"a".repeat(2_048)}`,
-      ];
-
-      const opened = yield* f.router.performAct(
-        { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
-        PANEL,
-      );
-      const plain = yield* f.router.performAct(
-        { kind: ACT_KIND.WEB_OPEN, payload: { url: "http://localhost:3000/" } },
-        PANEL,
-      );
-      const fromVoice = yield* f.router.performAct(
-        { kind: ACT_KIND.WEB_OPEN, payload: { url: "https://example.com/docs" } },
-        VOICE,
-      );
-      const outcomes = yield* Effect.forEach(refused, (url) =>
-        f.router.performAct(
-          // SAFETY: an address the schema refuses is sent as the shape it would arrive in.
-          { kind: ACT_KIND.WEB_OPEN, payload: { url } } as never,
-          PANEL,
-        ),
-      );
-
-      assert.equal(opened.status, ACT_OUTCOME_STATUS.DONE);
-      assert.equal(plain.status, ACT_OUTCOME_STATUS.DONE);
-      assert.notEqual(fromVoice.status, ACT_OUTCOME_STATUS.DONE);
-      assert.deepEqual(
-        outcomes.map((outcome) => outcome.status === ACT_OUTCOME_STATUS.DONE),
-        refused.map(() => false),
-      );
-      assert.deepEqual(f.opened, ["https://example.com/docs", "http://localhost:3000/"]);
-    }),
-);
-
-it.effect(
-  "a started task opens its call, and one started without planning or with an agent opens none",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      f.start.answer = { planId: TASK_ID };
-
-      const planned = yield* f.router.performAct(
-        { kind: ACT_KIND.TASKS_START, payload: { name: "Invitations" } },
-        PANEL,
-      );
-      const unplanned = yield* f.router.performAct(
-        { kind: ACT_KIND.TASKS_START, payload: { name: "Typo", planning: false } },
-        PANEL,
-      );
-      const withAgent = yield* f.router.performAct(
-        {
-          kind: ACT_KIND.TASKS_START,
-          payload: {
-            name: "Expiry",
-            repository: "acme/relay",
-            agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
-          },
-        },
-        PANEL,
-      );
-
-      assert.deepEqual(planned, { status: ACT_OUTCOME_STATUS.DONE, value: { planId: TASK_ID } });
-      assert.deepEqual(unplanned, planned);
-      assert.deepEqual(withAgent, planned);
-      assert.deepEqual(f.talked, [TASK_ID]);
-    }),
-);
-
-it.effect("the voice window does not reach the plans", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    const board = { taskId: TASK_ID, elements: [], appliedDrawing: 0 };
-
-    const selected = yield* f.router.performAct(
-      { kind: ACT_KIND.TASKS_SELECT, payload: { taskId: TASK_ID } },
-      VOICE,
-    );
-    const saved = yield* f.router.performAct(
-      { kind: ACT_KIND.TASKS_BOARD_SAVE, payload: board },
-      VOICE,
-    );
-    assert.deepEqual(selected, {
-      status: ACT_OUTCOME_STATUS.REFUSED,
-      reason: ACT[ACT_KIND.TASKS_SELECT].refusal,
-    });
-    const sectioned = yield* f.router.performAct(
-      {
-        kind: ACT_KIND.TASKS_WRITE_SECTION,
-        payload: { kind: TASK_SECTION_WRITE.PLACE, taskId: TASK_ID, sectionId: null },
-      },
-      VOICE,
-    );
-    assert.deepEqual(saved, {
-      status: ACT_OUTCOME_STATUS.REFUSED,
-      reason: ACT[ACT_KIND.TASKS_BOARD_SAVE].refusal,
-    });
-    assert.deepEqual(sectioned, {
-      status: ACT_OUTCOME_STATUS.REFUSED,
-      reason: ACT[ACT_KIND.TASKS_WRITE_SECTION].refusal,
-    });
-    assert.deepEqual(f.asked, []);
-  }),
-);
-
 it.effect(
   "a page's source is read through the host and coloured as HTML for a panel, plain past the bound, and not for the voice window",
   () =>
@@ -632,61 +365,5 @@ it.effect(
         `issue:acme/relay:${ISSUE_NONE}`,
         "issue:acme/relay:9",
       ]);
-    }),
-);
-
-it.effect(
-  "Connect GitHub opens the page the host named in the browser, Disconnect asks the host and opens nothing, and neither from the voice window",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-
-      const connected = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, PANEL);
-      const disconnected = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_DISCONNECT }, PANEL);
-      const fromVoice = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, VOICE);
-      f.host.githubUnanswered = true;
-      const unanswered = yield* f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, PANEL);
-
-      assert.equal(connected.status, ACT_OUTCOME_STATUS.DONE);
-      assert.equal(disconnected.status, ACT_OUTCOME_STATUS.DONE);
-      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(unanswered, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.GITHUB_CONNECT].refusal,
-      });
-      assert.deepEqual(f.opened, [CONNECT_PAGE]);
-      assert.equal(f.asked.includes("github-disconnect"), true);
-      f.host.lastSignIn = true;
-      assert.deepEqual(yield* f.router.performAct({ kind: ACT_KIND.GITHUB_DISCONNECT }, PANEL), {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: GITHUB_LAST_SIGN_IN_REFUSAL,
-      });
-    }),
-);
-
-it.effect(
-  "a GitHub page the host names off the service's own origin is refused and nothing opens",
-  () =>
-    Effect.gen(function* () {
-      const f = fixture();
-      const pages = [
-        "file:///etc/passwd",
-        "luke-evil://connect",
-        "https://evil.test/connect-github.html",
-      ];
-
-      const refused = yield* Effect.forEach(pages, (page) => {
-        f.host.connectPage = page;
-        return f.router.performAct({ kind: ACT_KIND.GITHUB_CONNECT }, PANEL);
-      });
-
-      assert.deepEqual(
-        refused,
-        pages.map(() => ({
-          status: ACT_OUTCOME_STATUS.REFUSED,
-          reason: ACT[ACT_KIND.GITHUB_CONNECT].refusal,
-        })),
-      );
-      assert.deepEqual(f.opened, []);
     }),
 );

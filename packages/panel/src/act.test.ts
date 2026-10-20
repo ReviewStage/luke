@@ -5,6 +5,7 @@ import {
   type ActPortDependencies,
   createActPortHandler,
   type PlatformActProcedures,
+  type TasksProceduresDependencies,
   type WorkspaceProceduresDependencies,
 } from "@luke/host/act-port";
 import type { ActSender } from "@luke/host/act-router";
@@ -80,6 +81,8 @@ function openActPort(actor: ActSender): void {
           issueChange: unanswered,
         },
       },
+      // SAFETY: no test here calls a task kind, so no method of this host nor door of its own is ever read.
+      tasks: { host: {} } as TasksProceduresDependencies,
       // SAFETY: no test here calls a workspace kind, so no method of this host is ever read.
       workspaces: {
         host: {} as WorkspaceProceduresDependencies["host"],

@@ -20,7 +20,8 @@ import { cloneFolder, openOnMacScript, worktreeFolder, worktreesRoot } from "./o
  * deleted once its pull request merged opens at that pull request's last
  * head; a worktree folder deleted by hand is made again; one an earlier
  * Luke kept under its application data is left there and said; two opens of
- * the shared clone at once each bring in their own branch; one waits on a
+ * the shared clone at once each bring in their own branch, none taking the
+ * lock from an open that took it after the holder it read let go; one waits on a
  * clone another holds while it lives, and takes the lock over once it is
  * gone; and no two
  * branches share a worktree or reach outside its repository's folder.
@@ -547,6 +548,82 @@ test(
 
     assert.equal(git(worktree, ["rev-parse", "HEAD"]), head);
     assert.equal(existsSync(`${clone}.lock`), false);
+  },
+  GIT_DEADLINE,
+);
+
+test(
+  "an open that finds the holder it read gone leaves the lock to the open that took it since",
+  async (t) => {
+    const { scratch, origin, push, shell, state } = await fixture(t);
+    const head = push("first\n");
+    const root = path.join(state, ".luke");
+    const clone = cloneFolder(root, "acme/app");
+    const worktree = worktreeFolder(root, "acme/app", "luke/fix-relay");
+    const lock = `${clone}.lock`;
+    // The holder the open first reads, which has let go and ended, and the open that took the lock after it, alive.
+    const gone = spawnSync("true").pid;
+    const next = spawn("sleep", ["60"]);
+    t.onTestFinished(() => void next.kill());
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(path.join(lock, "pid"), String(next.pid));
+    // Note that the open's first read of the lock answers the holder before, as a read made just before that holder let go would; every later read is the file's own.
+    const tools = path.join(scratch, "tools");
+    mkdirSync(tools);
+    writeFileSync(
+      path.join(tools, "cat"),
+      [
+        "#!/bin/sh",
+        'if [ "$1" = "$LOCK_PID" ] && [ ! -e "$LOCK_PID_READ" ]; then',
+        '  : > "$LOCK_PID_READ"',
+        '  printf %s "$GONE"',
+        "  exit 0",
+        "fi",
+        'exec /bin/cat "$@"',
+        "",
+      ].join("\n"),
+      { mode: 0o700 },
+    );
+    const file = path.join(scratch, "open.sh");
+    writeFileSync(
+      file,
+      openOnMacScript({
+        repository: "acme/app",
+        clone,
+        worktree,
+        branch: "luke/fix-relay",
+        remotes: { https: origin, ssh: origin },
+      }),
+      { mode: 0o700 },
+    );
+    const ended = new Promise<void>((resolve) =>
+      execFile(
+        "/bin/bash",
+        [file],
+        {
+          env: {
+            ...GIT_ENVIRONMENT,
+            PATH: `${tools}:${GIT_ENVIRONMENT.PATH}`,
+            HOME: scratch,
+            SHELL: shell,
+            LOCK_PID: path.join(lock, "pid"),
+            LOCK_PID_READ: path.join(scratch, "lock-pid-read"),
+            GONE: String(gone),
+          },
+        },
+        () => resolve(),
+      ),
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    assert.equal(existsSync(path.join(scratch, "lock-pid-read")), true);
+    assert.equal(existsSync(path.join(clone, ".git")), false);
+    assert.equal(readFileSync(path.join(lock, "pid"), "utf8"), String(next.pid));
+    next.kill();
+    await ended;
+
+    assert.equal(git(worktree, ["rev-parse", "HEAD"]), head);
+    assert.equal(existsSync(lock), false);
   },
   GIT_DEADLINE,
 );

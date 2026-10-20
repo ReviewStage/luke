@@ -184,6 +184,7 @@
     "./tasks/comment-tools": "./src/tasks/comment-tools.js",
     "./tasks/page-tool": "./src/tasks/page-tool.js",
     "./tasks/plan-comments-app": "./src/tasks/plan-comments-app.js",
+    "./tasks/task-files-procedures": "./src/tasks/task-files-procedures.js",
     "./tasks/picture-look": "./src/tasks/picture-look.js",
     "./tasks/task-file": "./src/tasks/task-file.js",
     "./tasks/plan-notes": "./src/tasks/plan-notes.js",

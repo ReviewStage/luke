@@ -27,6 +27,7 @@ import {
   createActPortHandler,
   type IssueProceduresDependencies,
   type PlatformActProcedures,
+  type TasksProceduresDependencies,
   type WorkspaceProceduresDependencies,
 } from "./index.js";
 
@@ -288,6 +289,8 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
   const accountAsks = { host: {} } as AccountAskProceduresDependencies;
   // SAFETY: no platform act is called here, so no platform procedure is reached.
   const NO_PLATFORM = {} as PlatformActProcedures<unknown>;
+  // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
+  const tasks = { host: {} } as TasksProceduresDependencies;
   // SAFETY: no account or settings act is called here, so neither's dependencies are reached.
   const unreached = { account: {}, settings: {} } as unknown as Pick<
     ActPortDependencies,
@@ -310,6 +313,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ...elsewhere,
       accountAsks,
       issues: NO_ISSUES,
+      tasks,
       workspaces: {
         host,
         openExternal: (url) => {

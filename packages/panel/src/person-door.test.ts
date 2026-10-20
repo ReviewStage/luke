@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { ACTOR_KIND, type Actor, SOMEONE_REASON } from "@luke/ui/actor-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
@@ -10,7 +10,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { ActorRef } from "./actor-ref.js";
 import { MemberDirectory } from "./member-directory.js";
 import { githubPageOf, OpenPersonProvider } from "./person-door.js";
-import { fakeAppBridge } from "./testing/app-bridge.js";
+import { fakeActPort } from "./testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "./testing/app-platform.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 
@@ -52,10 +52,10 @@ beforeEach(() => {
   workspaces = [];
   github = [];
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.GITHUB_OPEN) github.push(request.payload.url);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+  fakeActPort({
+    [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
+      github.push(url);
+      return Promise.resolve();
     },
   });
 });

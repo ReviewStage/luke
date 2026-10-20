@@ -11,6 +11,11 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import {
+  eventWithoutAccessTokens,
+  transactionWithoutAccessTokens,
+  withoutAccessTokens,
+} from "@luke/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/features/sentry-tracing";
 import { ACT_PORT, type AppBridge } from "@luke/host/bridge";
 import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
@@ -21,11 +26,6 @@ import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  eventWithoutAccessTokens,
-  transactionWithoutAccessTokens,
-  withoutAccessTokens,
-} from "#shared/sentry-breadcrumbs";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
 
 /**

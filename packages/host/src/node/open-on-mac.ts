@@ -132,7 +132,11 @@ export function openOnMacScript(input: {
     '    holder="$(cat "$lock/pid" 2>/dev/null)"',
     // Note that a lock is taken over only from a holder that is gone, or from one that never wrote its id in half a minute; never from one alive, however long it takes.
     '    if [ -n "$holder" ]; then',
-    '      if ! kill -0 "$holder" 2>/dev/null; then rm -rf "$lock"; continue; fi',
+    // Note that the id is read again once its holder is found gone, since a holder lets go as it ends, and another open may have taken the lock since the first read; only a lock still naming the one gone is deleted.
+    '      if ! kill -0 "$holder" 2>/dev/null; then',
+    '        [ "$(cat "$lock/pid" 2>/dev/null)" = "$holder" ] && rm -rf "$lock"',
+    "        continue",
+    "      fi",
     "      waited=0",
     '    elif [ "$waited" -ge 30 ]; then',
     '      rm -rf "$lock"',

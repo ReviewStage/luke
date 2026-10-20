@@ -496,6 +496,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire
+      '@sentry/browser':
+        specifier: 11.7.0
+        version: 11.7.0
       '@tailwindcss/vite':
         specifier: 4.3.3
         version: 4.3.3(vite@7.3.1)
@@ -989,6 +992,9 @@ importers:
       micromark-extension-gfm:
         specifier: 3.0.0
         version: 3.0.0
+      posthog-js:
+        specifier: 1.418.3
+        version: 1.418.3(preact-render-to-string@6.6.5)
       react:
         specifier: 'catalog:'
         version: 19.2.8

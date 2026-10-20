@@ -21,6 +21,7 @@ import {
   ListRow,
   PinIcon,
   ProviderMark,
+  TaskStatusMark as TaskStandingMark,
   TrashIcon,
   UnarchiveIcon,
   UnpinIcon,
@@ -480,7 +481,8 @@ export function TaskActions({
 }
 
 /**
- * A task in the sidebar, pinned, listed, or archived alike: its name, in the
+ * A task in the sidebar, pinned, listed, or archived alike: led by its
+ * status's mark (`task-marks.tsx`), where its service gives it one; its name, in the
  * body's weight unless the task is unread, and at the row's end how long ago
  * it was last updated, led by one mark for a repository that belongs to
  * another workspace, an agent at work, or a pull request (`task-card.tsx`),
@@ -561,6 +563,9 @@ export function SidebarTask({
           ref={hold}
           density={LIST_DENSITY.DENSE}
           ink={LIST_ROW_INK.SIDEBAR}
+          leading={
+            task.status === undefined ? undefined : <TaskStandingMark status={task.status} />
+          }
           title={
             rename.editing ? (
               <InlineEdit
