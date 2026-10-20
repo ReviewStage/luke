@@ -1072,7 +1072,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     },
 
     relaysQuietly: (event, state) =>
-      event.type !== "compaction.completed" && foldedQuietly(event, state),
+      event.type !== "compaction.completed" && foldedQuietly(event, state, seams.now()),
 
     relay: (event, admitted, session, state, prompt) =>
       Effect.gen(function* () {
