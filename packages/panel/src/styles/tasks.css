@@ -2398,8 +2398,12 @@
   background: var(--luke-color-well);
 }
 
-.chapters-view[data-rail-beside="false"] .chapter-rail:not([data-leaving]) {
-  display: none;
+/* Note that the rail hidden beside the chapter is hidden only where it can
+   stand beside it, so a panel narrowed since still floats it when asked. */
+@container side-panel (min-width: 640px) {
+  .chapters-view[data-rail-beside="false"] .chapter-rail:not([data-leaving]) {
+    display: none;
+  }
 }
 
 .chapter-rail-list {
