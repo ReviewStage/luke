@@ -6,6 +6,7 @@ import {
 import { ACT_KIND } from "@luke/host/acts";
 import { BUTTON_SIZE, BUTTON_VARIANT, Button } from "@luke/ui";
 import type { MacTerminalStripTab } from "@luke/ui/tab-strip-model";
+import { useClipped } from "@luke/ui/use-clipped";
 import { Option, Schema } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { PlayIcon, SquareIcon, TerminalIcon } from "lucide-react";
@@ -98,6 +99,7 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
   const port = useRef<MessagePort | undefined>(undefined);
   // Note that a Stop press is kept with the run it stopped, so the tab drawn again says Stopped rather than how the stop made it exit.
   const stopAsked = useRef(false);
+  const [repositoryBox, repositoryClipped] = useClipped(repository);
   const tellOnScreen = useRef<(words: string) => void>(() => undefined);
 
   useEffect(() => {
@@ -201,7 +203,13 @@ export function MacTerminalTab({ tab }: { tab: MacTerminalStripTab }): React.JSX
     <div className="terminal-tab file-view ph-no-capture">
       <header className="file-view-bar">
         <span className="terminal-tab-title">
-          <span className="terminal-tab-agent">{repository}</span>
+          <span
+            ref={repositoryBox}
+            className="terminal-tab-agent"
+            data-overflow={String(repositoryClipped)}
+          >
+            {repository}
+          </span>
           <span className="terminal-tab-standing">
             {branch === undefined ? "" : ` · ${branch}`} · this Mac · {standingWords(standing)}
           </span>

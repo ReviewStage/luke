@@ -22,6 +22,7 @@ import {
 } from "@luke/ui";
 import { ACTOR_KIND, ACTOR_STATE, type Actor, actorName } from "@luke/ui/actor-model";
 import { TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { useClipped } from "@luke/ui/use-clipped";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { ChevronsUpIcon, SplitIcon, TextQuoteIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -463,6 +464,8 @@ export function ReplayCard({
       : openSource;
   const left = leftOutLine(replay);
   const summary = summaryLine(replay);
+  // Note that the head's words are a tree, the source's chip among them, so they are watched rather than handed in.
+  const [titleBox, titleClipped] = useClipped();
   return (
     <Message from={MESSAGE_ROLE.USER} className="agent-origin">
       <Plan data-replay-card="" aria-label={replayVerb(replay)}>
@@ -470,7 +473,7 @@ export function ReplayCard({
           <PlanIcon>
             <SplitIcon />
           </PlanIcon>
-          <span className="replay-card-title">
+          <span ref={titleBox} className="replay-card-title" data-overflow={String(titleClipped)}>
             <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.MUTED}>
               {replayVerb(replay)}{" "}
             </Text>

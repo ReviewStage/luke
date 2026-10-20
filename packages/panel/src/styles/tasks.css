@@ -1047,7 +1047,6 @@
   align-items: center;
   gap: var(--luke-space-4);
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1670,7 +1669,6 @@
   min-width: 0;
   overflow: hidden;
   color: var(--luke-color-text);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -2851,8 +2849,19 @@
 
 .desktop-shell[data-room="narrow"] .pull-request-header[data-folded] .pull-request-title {
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The folded title cut short fades out at its end, as a cut label does
+   (below). Note that the fade is laid over its content box alone, because
+   the pencil's room after the words would otherwise take the whole fade,
+   and the words would stop at a hard edge before it. */
+.desktop-shell[data-room="narrow"]
+  .pull-request-header[data-folded]
+  .pull-request-title[data-overflow="true"] {
+  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+  mask-origin: content-box;
+  mask-repeat: no-repeat;
 }
 
 /* A phone names each of the tabs in words, never their glyphs alone, which
@@ -3090,8 +3099,14 @@
   font-size: var(--luke-type-caption-size);
   font-weight: var(--luke-weight-medium);
   line-height: var(--luke-type-caption-leading);
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A label's name is cut by a box of its own inside the pill, so its fade
+   (below) leaves the pill's edge and fill whole. */
+.pull-request-label-name {
+  display: block;
+  overflow: hidden;
 }
 
 /* The labels at the end of the header's line of people, after the
@@ -4183,7 +4198,6 @@ ol.transcript-list {
   min-width: 0;
   overflow: hidden;
   color: var(--luke-color-text);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -4209,6 +4223,33 @@ ol.transcript-list {
   flex: 1 1 0;
   overflow: hidden;
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+  white-space: nowrap;
+}
+
+/* A label of the task's views cut short fades out over its last
+   `--label-fade` rather than ending in an ellipsis, as a tab's does
+   (desktop.css). Only one measured cut short (`use-clipped.ts`) fades,
+   because each box ends where its words do, so a fade always on would eat
+   a short label's last letters. */
+.tool-label[data-overflow="true"],
+.plan-card-title[data-overflow="true"],
+.replay-card-title[data-overflow="true"],
+.page-view-title[data-overflow="true"],
+.terminal-tab-agent[data-overflow="true"],
+.agent-servers-name[data-overflow="true"],
+.agent-servers-page-title[data-overflow="true"],
+.pull-request-label-name[data-overflow="true"],
+.attachment-viewer-title[data-overflow="true"],
+.chat-head-title[data-overflow="true"] {
+  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+}
+
+/* A place's name heads the chat (`chat-pane.tsx`) in a box of its own
+   inside the heading, so the heading's ellipsis never draws and the box's
+   fade (above) ends it. */
+.chat-head-title {
+  display: block;
+  overflow: hidden;
   white-space: nowrap;
 }
 
@@ -4343,7 +4384,6 @@ ol.transcript-list {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -5640,7 +5680,6 @@ ol.transcript-list {
   font-size: var(--luke-type-section-size);
   line-height: var(--luke-type-section-leading);
   font-weight: var(--luke-weight-semibold);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -5801,7 +5840,6 @@ ol.transcript-list {
 
 .terminal-tab-agent {
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .terminal-tab-standing {
@@ -6104,7 +6142,6 @@ ol.transcript-list {
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -6171,7 +6208,6 @@ ol.transcript-list {
   color: var(--luke-color-text);
   font-size: var(--luke-type-section-size);
   font-weight: var(--luke-weight-semibold);
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

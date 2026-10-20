@@ -246,7 +246,7 @@ export function PagePane({
       <div className="page-view file-view ph-no-capture">
         <header className="file-view-bar">
           <Tooltip label={titleClipped ? page.title : undefined}>
-            <span ref={titleBox} className="page-view-title">
+            <span ref={titleBox} className="page-view-title" data-overflow={String(titleClipped)}>
               {page.title}
             </span>
           </Tooltip>

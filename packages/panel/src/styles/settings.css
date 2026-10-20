@@ -655,8 +655,13 @@
   overflow: hidden;
   max-width: 100%;
   font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A name cut short fades out at its end, as a tab's title does
+   (desktop.css), only once it is measured cut (`use-clipped.ts`). */
+.picture-choice-name[data-overflow="true"] {
+  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
 .picture-choice-face:has(> :checked) .picture-choice-name {
