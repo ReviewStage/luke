@@ -60,7 +60,12 @@ test("the Call tab's tile is square at its width, held to two fifths of the stag
   const { tab } = surfaces();
   const drawn = getComputedStyle(tab.tile);
   assert.equal(drawn.aspectRatio, "1 / 1");
-  assert.match(drawn.maxHeight, /--luke-stage-height\) \* 0\.4\)$/u);
+  assert.match(drawn.maxHeight, /--luke-stage-height\) \* 0\.4\)\)$/u);
+  assert.match(
+    drawn.maxHeight,
+    /^max\(135px, /u,
+    "a stage too short for the narrowest tile's 16:9 keeps that height rather than flattening it",
+  );
   assert.match(
     drawn.width,
     /^min\(/u,

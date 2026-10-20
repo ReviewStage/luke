@@ -238,7 +238,9 @@ html.call-window[data-pointer-stale="true"]
    stock avatars' own resolution, past which a larger tile only draws a
    softer face), and stands no taller than two fifths of the stage; it is
    never wider than 16:9 at that height, and 240px is as narrow as its
-   still frame stays readable.
+   still frame stays readable, so on a stage too short for that (a phone
+   with its keyboard up) it keeps 240px's 16:9 height, 135px, rather than
+   flattening into a band.
    The strip shares the width, so the toggle stays put when video goes off. */
 .call-video-tile,
 .call-video-strip {
@@ -264,7 +266,7 @@ html.call-window[data-pointer-stale="true"]
   overflow: clip;
   box-sizing: border-box;
   min-height: 0;
-  max-height: calc(var(--luke-stage-height) * 0.4);
+  max-height: max(135px, calc(var(--luke-stage-height) * 0.4));
   aspect-ratio: 1;
   isolation: isolate;
   border: 1px solid var(--luke-color-border-strong);
