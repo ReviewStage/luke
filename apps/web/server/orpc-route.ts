@@ -14,10 +14,12 @@ import {
   integrationsAppSeams,
   workspaceLinearProcedureSeams,
 } from "@luke/service/integrations/integration-seams";
+import { sentryReportedFetch } from "@luke/service/observability/sentry";
 import { type HostedFetch, hostedFetch } from "@luke/service/orpc/handler";
 import { type HostedRouterSeams, hostedRouter } from "@luke/service/orpc/router";
 import type { Route } from "@luke/service/route";
 import type { WebServices } from "@luke/service/runtime";
+import { waitUntil } from "@vercel/functions";
 import { type Context, Effect } from "effect";
 import { runWeb } from "./runtime.js";
 
@@ -34,12 +36,17 @@ import { runWeb } from "./runtime.js";
  * `effect/context`, as `route-effect.ts` hands them to a route layer; a read
  * that failed is not held, so the next invocation tries again. Every request
  * meets the cookie origin guard first (`packages/service/src/http/origin-guard.ts`).
+ *
+ * Sentry watches the whole of it, as it watches `route-effect.ts`'s routes
+ * (`sentryReportedFetch`): a runtime that could not be built, or anything
+ * else thrown on to the platform, is captured as it is thrown, and what a
+ * request queued is sent under Vercel's `waitUntil` after the answer has left.
  */
 export function routeFromHostedFetch(answer: HostedFetch): Route {
   const refuseCrossSite = cookieOriginGuard(process.env);
   let reading: Promise<Context.Context<WebServices>> | undefined;
   return {
-    async fetch(request: Request): Promise<Response> {
+    fetch: sentryReportedFetch(async (request) => {
       const refusal = refuseCrossSite(request);
       if (refusal !== undefined) return refusal;
       reading ??= runWeb(Effect.context<WebServices>());
@@ -52,7 +59,7 @@ export function routeFromHostedFetch(answer: HostedFetch): Route {
         throw failure;
       }
       return answer(request, services);
-    },
+    }, waitUntil),
   };
 }
 

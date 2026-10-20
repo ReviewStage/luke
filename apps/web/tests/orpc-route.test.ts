@@ -14,15 +14,17 @@
  */
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { HOSTED_ERRORS } from "@luke/features/contract";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "@luke/service/http/http";
 import type { HostedContext } from "@luke/service/orpc/base";
 import { hostedFetch } from "@luke/service/orpc/handler";
+import { recordingSentry } from "@luke/service/testing/sentry-transport";
 import { HTTP_METHOD } from "@luke/wire";
 import { oc } from "@orpc/contract";
 import { openapi } from "@orpc/openapi";
 import { implement } from "@orpc/server";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { apiRewrites, type SegmentRewrite } from "../server/function-rewrites.js";
 import { orpcRoute, routeFromHostedFetch } from "../server/orpc-route.js";
@@ -365,3 +367,34 @@ test("the inbox's parameterized paths reach their procedures through the committ
   assert.deepEqual(await answer(HTTP_METHOD.GET, `/api/inbox/${id}/close`), otherMethod);
   assert.deepEqual(await answer(HTTP_METHOD.DELETE, "/api/inbox/read"), otherMethod);
 });
+
+it.effect(
+  "what an oRPC route throws on to the platform is captured by Sentry, and thrown on as it was",
+  () =>
+    Effect.gen(function* () {
+      const route = routeFromHostedFetch(async (request) => {
+        if (new URL(request.url).pathname === "/api/throws") throw new RangeError("no runtime");
+        return new Response(null, { status: 204 });
+      });
+      // Note that the web runtime is built first, because building it starts the deployment's own Sentry, which the recording one then stands in for.
+      const answered = yield* Effect.promise(() =>
+        route.fetch(new Request(`${ORIGIN}/api/answers`)),
+      );
+      const sentry = recordingSentry();
+
+      yield* Effect.promise(() =>
+        assert.rejects(route.fetch(new Request(`${ORIGIN}/api/throws`)), {
+          name: "RangeError",
+          message: "no runtime",
+        }),
+      ).pipe(Effect.provide(sentry.layer));
+
+      assert.equal(answered.status, 204);
+      assert.deepEqual(
+        sentry.sent
+          .filter((item) => item.type === "event")
+          .flatMap((item) => (item.payload.exception?.values ?? []).map((value) => value.type)),
+        ["RangeError"],
+      );
+    }),
+);
