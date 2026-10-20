@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
 import { openHostedStoreTestDatabase, startTask } from "@luke/database/testing";
@@ -19,7 +18,7 @@ import {
 import type { AttachedSession } from "@luke/service/voice/live-exchange";
 import { listening, VoiceService, voiceServer } from "@luke/service/voice/service";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import { Cause, Effect, Exit, Scope } from "effect";
+import { Cause, Deferred, Effect, Exit, Scope } from "effect";
 import { afterAll, afterEach, test, vi } from "vitest";
 import { voiceFunctionOptions } from "../server/voice/function";
 
@@ -59,6 +58,14 @@ const EVE_ORIGIN = "https://eve.test";
 const UNCONFIGURED = "the deployment secret is not configured";
 const SDP_OFFER =
   "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
+
+/** One request eve received: its route, its method, its bearer, and the account it named. */
+interface AskedOfEve {
+  readonly url: string;
+  readonly method: string | undefined;
+  readonly authorization: string | null;
+  readonly account: string | null;
+}
 
 // SAFETY: the exchange reads nothing of a session before its own configuration stands, which is
 // as far as the refusals below go, so no field beyond these is read.
@@ -113,82 +120,88 @@ it.effect(
 it.effect(
   "a call's exchange, as the voice function composes it, asks eve under EVE_DEPLOYMENT_SECRET for the calling account, never under the cron's secret beside it",
   () =>
-    Effect.promise(async () => {
-      stubSecrets({ cron: CRON_SECRET, eve: EVE_DEPLOYMENT_SECRET });
-      const userId = await database.createUser();
-      const task = await database.run(startTask(userId, { name: "Teammate invitations" }));
-      const openAi = await startFakeOpenAi();
-      const asked: {
-        readonly url: string;
-        readonly method: string | undefined;
-        readonly headers: Headers;
-      }[] = [];
-      // eve declines the explore, so nothing follows the one request it writes down.
-      const httpClient = fakeHttpClientLayer((url, init) => {
-        asked.push({ url, method: init.method, headers: new Headers(init.headers) });
-        return new Response(null, { status: 502 });
-      });
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* Effect.sync(() => stubSecrets({ cron: CRON_SECRET, eve: EVE_DEPLOYMENT_SECRET }));
+        const userId = yield* Effect.promise(() => database.createUser());
+        const task = yield* Effect.promise(() =>
+          database.run(startTask(userId, { name: "Teammate invitations" })),
+        );
+        const openAi = yield* Effect.acquireRelease(
+          Effect.promise(() => startFakeOpenAi()),
+          (fake) => Effect.promise(() => fake.close()),
+        );
+        // The first request eve receives, which the test waits on rather than polling for; eve
+        // declines the explore, so nothing follows it.
+        const firstAsk = Deferred.makeUnsafe<AskedOfEve>();
+        const httpClient = fakeHttpClientLayer((url, init) => {
+          const headers = new Headers(init.headers);
+          Deferred.doneUnsafe(
+            firstAsk,
+            Effect.succeed({
+              url,
+              method: init.method,
+              authorization: headers.get("authorization"),
+              account: headers.get(BRAIN_HOST_HEADER.ACCOUNT),
+            }),
+          );
+          return new Response(null, { status: 502 });
+        });
 
-      const voice = voiceServer();
-      const scope = await database.run(Scope.make());
-      const port = await database.run(
-        Scope.provide(
-          Effect.gen(function* () {
-            const listener = yield* listening(voice, 0, "127.0.0.1");
-            yield* VoiceService.make({
-              ...voiceFunctionOptions(voice, { httpClient }),
-              apiKey: "sk-test-project-key",
-              accounts: { ...fakeAccounts(), resolveUserId: () => Effect.succeedSome(userId) },
-              record: voiceSessionRecord(),
-              avatar: undefined,
-              openAiBaseUrl: openAi.baseUrl,
-              log: () => undefined,
-            });
-            return listener;
+        const voice = voiceServer();
+        const scope = yield* Effect.acquireRelease(
+          Effect.promise(() => database.run(Scope.make())),
+          (made) => Effect.promise(() => database.run(Scope.close(made, Exit.void))),
+        );
+        const port = yield* Effect.promise(() =>
+          database.run(
+            Scope.provide(
+              Effect.gen(function* () {
+                const listener = yield* listening(voice, 0, "127.0.0.1");
+                yield* VoiceService.make({
+                  ...voiceFunctionOptions(voice, { httpClient }),
+                  apiKey: "sk-test-project-key",
+                  accounts: { ...fakeAccounts(), resolveUserId: () => Effect.succeedSome(userId) },
+                  record: voiceSessionRecord(),
+                  avatar: undefined,
+                  openAiBaseUrl: openAi.baseUrl,
+                  log: () => undefined,
+                });
+                return listener;
+              }),
+              scope,
+            ),
+          ),
+        );
+        const opened = yield* Effect.promise(() =>
+          connect(`ws://127.0.0.1:${port}${VOICE_SERVICE_PATH.SESSIONS}`, {
+            authorization: "Bearer account-token-1",
           }),
-          scope,
-        ),
-      );
-      try {
-        const opened = await connect(`ws://127.0.0.1:${port}${VOICE_SERVICE_PATH.SESSIONS}`, {
-          authorization: "Bearer account-token-1",
-        });
+        );
         assert.ok("reader" in opened);
-        await send(opened.reader.socket, {
-          type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-          sdp: SDP_OFFER,
-          voice: LIVE_VOICE.MARIN,
-          input: [],
-          planId: task.id,
-        });
-        const attach = await openAi.nextAttach();
-        assert.equal(
-          JSON.parse(await opened.reader.next()).type,
-          VOICE_SERVICE_FRAME.SESSION_CREATED,
+        yield* Effect.promise(() =>
+          send(opened.reader.socket, {
+            type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+            sdp: SDP_OFFER,
+            voice: LIVE_VOICE.MARIN,
+            input: [],
+            planId: task.id,
+          }),
         );
+        const attach = yield* Effect.promise(() => openAi.nextAttach());
+        const created = yield* Effect.promise(() => opened.reader.next());
+        assert.equal(JSON.parse(created).type, VOICE_SERVICE_FRAME.SESSION_CREATED);
         // The session starting sets the plan's first call exploring, which the exchange opens at eve.
-        await sendText(attach.socket, JSON.stringify(sessionStarted(attach.sessionId)));
-        for (let attempt = 0; attempt < 600 && asked.length === 0; attempt += 1) await sleep(5);
-
-        assert.deepEqual(
-          asked.slice(0, 1).map(({ url, method, headers }) => ({
-            url,
-            method,
-            authorization: headers.get("authorization"),
-            account: headers.get(BRAIN_HOST_HEADER.ACCOUNT),
-          })),
-          [
-            {
-              url: `${EVE_ORIGIN}/eve/v1/session`,
-              method: "POST",
-              authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
-              account: userId,
-            },
-          ],
+        yield* Effect.promise(() =>
+          sendText(attach.socket, JSON.stringify(sessionStarted(attach.sessionId))),
         );
-      } finally {
-        await database.run(Scope.close(scope, Exit.void));
-        await openAi.close();
-      }
-    }),
+
+        assert.deepEqual(yield* Deferred.await(firstAsk), {
+          url: `${EVE_ORIGIN}/eve/v1/session`,
+          method: "POST",
+          authorization: `Bearer ${EVE_DEPLOYMENT_SECRET}`,
+          account: userId,
+        });
+      }),
+    ),
 );
