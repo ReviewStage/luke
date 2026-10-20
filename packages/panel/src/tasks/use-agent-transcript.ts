@@ -62,7 +62,10 @@ export const windowTranscriptFollower: TranscriptFollower = (transcript, hear) =
       await opened.return?.(undefined);
       return;
     }
-    for await (const page of opened) hear(page);
+    // A page a read already out hands over after the tab let go is heard by no one.
+    for await (const page of opened) {
+      if (!stopped) hear(page);
+    }
   });
   following.catch(() => {
     if (!stopped) hear({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });

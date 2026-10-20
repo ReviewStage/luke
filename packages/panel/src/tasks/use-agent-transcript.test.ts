@@ -200,3 +200,28 @@ test("a stream that opens only after its tab let it go is closed at once", async
   for (let tick = 0; tick < 12 && !closed; tick += 1) await Promise.resolve();
   assert.equal(closed, true);
 });
+
+test("a page a read already out hands over after the tab let go of its stream is heard by no one", async () => {
+  let hand: (read: IteratorResult<CodingAgentMessagesAnswerView>) => void = () => undefined;
+  const stream: AsyncIteratorObject<CodingAgentMessagesAnswerView> = {
+    next: () =>
+      new Promise((resolve) => {
+        hand = resolve;
+      }),
+    return: () => Promise.resolve({ done: true, value: undefined }),
+    [Symbol.asyncIterator]: () => stream,
+    [Symbol.asyncDispose]: () => Promise.resolve(),
+  };
+  // SAFETY: the follower calls this one procedure, and reads what it answers as an async iterator alone.
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_TRANSCRIPT]: () => Promise.resolve(stream),
+  } as unknown as Parameters<typeof fakeActPort>[0]);
+  const heard: CodingAgentMessagesAnswerView[] = [];
+
+  const stop = windowTranscriptFollower(AGENT, (page) => heard.push(page));
+  for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  stop();
+  hand({ done: false, value: pageOf("m-1", "Too late.") });
+  for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  assert.deepEqual(heard, []);
+});
