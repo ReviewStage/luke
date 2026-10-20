@@ -46,10 +46,14 @@ function refusal(effectiveDirective: string, blockedURI: string): Event {
   return Object.assign(new Event("securitypolicyviolation"), { effectiveDirective, blockedURI });
 }
 
-test("each kind of request the page's policy refuses is sent once as a warning, by its directive and origin alone", async () => {
+test("each kind of request the page's policy refuses is sent once as a warning, by its directive and origin alone, however often the SDK starts", async () => {
+  // A tab whose app mounted, closed, and mounted again starts the SDK twice.
+  await startWebSentry({ dsn: DSN, environment: "production", release: "abc123" });
+  await Sentry.getClient()?.close();
   await startWebSentry({ dsn: DSN, environment: "production", release: "abc123" });
   const sent: { message: string | undefined; level: string | undefined }[] = [];
-  Sentry.getClient()?.on("beforeSendEvent", (event) => {
+  // Read before Sentry's own deduplication, which would hide a second listener's copy.
+  Sentry.getClient()?.on("preprocessEvent", (event) => {
     sent.push({ message: event.message, level: event.level });
   });
 
@@ -57,6 +61,7 @@ test("each kind of request the page's policy refuses is sent once as a warning, 
   document.dispatchEvent(refusal("connect-src", socket));
   document.dispatchEvent(refusal("connect-src", socket));
   document.dispatchEvent(refusal("script-src-elem", "inline"));
+  document.dispatchEvent(refusal("img-src", "not a url?token=t"));
   await Sentry.flush(1_000);
 
   assert.deepEqual(sent, [
@@ -66,5 +71,9 @@ test("each kind of request the page's policy refuses is sent once as a warning, 
       level: "warning",
     },
     { message: "Content-Security-Policy refused script-src-elem to inline", level: "warning" },
+    {
+      message: "Content-Security-Policy refused img-src to an unreadable address",
+      level: "warning",
+    },
   ]);
 });

@@ -18,26 +18,49 @@ import type { WebSentry, WebSentryBuild } from "./web-sentry";
 /** The mechanism a blank tab's report names, so Sentry's issue says which path caught it, as the desktop's first read does. */
 const BLANK_TAB_MECHANISM = { type: "auto.browser.web_root.first_read", handled: false } as const;
 
+/** The browser's own words for what it refused that names no address, said as they are. */
+const REFUSAL_KEYWORDS: ReadonlySet<string> = new Set([
+  "inline",
+  "eval",
+  "wasm-eval",
+  "data",
+  "blob",
+  "trusted-types-policy",
+  "trusted-types-sink",
+]);
+
+/** What a refusal says of an address it could not read, in place of the address. */
+const UNREADABLE_ADDRESS = "an unreadable address";
+
 /**
  * Where a refused address is said by no more than its origin, or by the
  * browser's own word for what it refused (`inline`, `eval`), so a path or a
- * query, which may carry a token, never leaves the tab.
+ * query, which may carry a token, never leaves the tab; anything else is
+ * said as unreadable rather than as it came.
  */
 function refusedOrigin(blockedURI: string): string {
+  if (REFUSAL_KEYWORDS.has(blockedURI)) return blockedURI;
   try {
-    return new URL(blockedURI).origin;
+    const { origin } = new URL(blockedURI);
+    return origin === "null" ? UNREADABLE_ADDRESS : origin;
   } catch {
-    return blockedURI;
+    return UNREADABLE_ADDRESS;
   }
 }
 
+/** Whether this document already listens for refusals, so a second start of the SDK in the same tab adds no second listener. */
+let listeningForRefusals = false;
+
 /**
  * Each kind of request the page's `Content-Security-Policy` refused, sent to
- * Sentry once per directive and origin as a warning. A refusal says nothing
- * in the page, so a connection the policy forgot (the account inbox's
- * Realtime socket was one) would otherwise fail in silence.
+ * Sentry once per directive and origin as a warning, from one listener per
+ * document however often the SDK starts. A refusal says nothing in the page,
+ * so a connection the policy forgot (the account inbox's Realtime socket was
+ * one) would otherwise fail in silence.
  */
 function reportPolicyRefusals(): void {
+  if (listeningForRefusals) return;
+  listeningForRefusals = true;
   const said = new Set<string>();
   document.addEventListener("securitypolicyviolation", (event) => {
     const refused = `${event.effectiveDirective} to ${refusedOrigin(event.blockedURI)}`;
