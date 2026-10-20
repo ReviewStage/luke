@@ -34,7 +34,7 @@ import {
   CONVERSATION_RUNTIME,
   MESSAGE_SENDER,
 } from "../../storage-vocabulary.js";
-import { getTestDB, joinWorkspace, linearIssueLink } from "../../testing/index.js";
+import { getTestDB, joinWorkspace, leaveWorkspace, linearIssueLink } from "../../testing/index.js";
 import { VOICE_DELEGATION_MODE } from "../../voice-vocabulary.js";
 import {
   archiveCodingAgent,
@@ -1717,6 +1717,24 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         });
         assert.ok(Option.isNone(other));
         assert.ok(Option.isNone(retired));
+      }),
+  );
+
+  it.effect(
+    "a runner's bearer digest finds nothing once its starter left the agent's workspace",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const agent = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        });
+        yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-departed");
+
+        yield* leaveWorkspace(workspace, starter);
+
+        assert.ok(Option.isNone(yield* readRunnerTokenConversation("digest-departed")));
       }),
   );
 

@@ -2236,13 +2236,21 @@ export interface RunnerTokenConversation {
 
 /**
  * The coding agent's conversation whose runner was handed the bearer of this
- * digest (`recordCodingAgentRunnerToken`); nothing for a digest no standing
- * conversation holds, a retired bearer's among them.
+ * digest (`recordCodingAgentRunnerToken`), where its starter still reaches the
+ * agent; nothing for a digest no standing conversation holds, a retired
+ * bearer's among them, and nothing once the starter left the agent's
+ * workspace, since the runner acts as them.
  */
 export function readRunnerTokenConversation(
   runnerTokenHash: string,
 ): CodingAgentStoreEffect<Option.Option<RunnerTokenConversation>> {
-  return findRunnerTokenConversation({ runnerTokenHash });
+  return Effect.gen(function* () {
+    const found = yield* findRunnerTokenConversation({ runnerTokenHash });
+    if (Option.isNone(found)) return found;
+    const { userId, conversationId } = found.value;
+    const agent = yield* findAgentOfConversation({ userId, conversationId });
+    return Option.isSome(agent) ? found : Option.none();
+  });
 }
 
 /** The agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for an agent of a workspace the account is not in, or no agent's. */
