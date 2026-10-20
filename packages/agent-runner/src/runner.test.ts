@@ -33,7 +33,8 @@ import {
 } from "./testing/recorded-stream.js";
 
 const BEARER = "runner-bearer-for-tests";
-const CLAUDE_TOKEN = "plan-token-for-tests";
+/** Note the quote and the backslash, which a token's JSON spells escaped. */
+const CLAUDE_TOKEN = 'plan-token-"for\\tests';
 const EVENTS_URL = "https://luke.test/runner/events";
 const FIRST_SEQUENCE = 7;
 
@@ -308,10 +309,15 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
     yield* write(FIRST_MESSAGE);
     yield* Fiber.join(run);
 
+    assert.deepEqual(luke.applied[0]?.message, {
+      type: "assistant",
+      message: { content: [{ type: "text", text: "[redacted] [redacted]" }] },
+      parent_tool_use_id: null,
+    });
     const posted = JSON.stringify(luke.applied);
-    assert.ok(posted.includes("[redacted] [redacted]"));
-    assert.ok(!posted.includes(CLAUDE_TOKEN));
-    assert.ok(!posted.includes(BEARER));
+    for (const secret of [CLAUDE_TOKEN, BEARER]) {
+      assert.ok(!posted.includes(JSON.stringify(secret).slice(1, -1)));
+    }
   }),
 );
 

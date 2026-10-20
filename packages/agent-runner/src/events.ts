@@ -82,7 +82,11 @@ const REDACTED = "[redacted]";
 function batchText(batch: RunnerEventBatch, secrets: readonly Redacted.Redacted[]): string {
   return secrets.reduce<string>((text, secret) => {
     const value = Redacted.value(secret);
-    return value === "" ? text : text.replaceAll(value, REDACTED);
+    if (value === "") return text;
+    // Note that we replace the secret as the batch's JSON spells it, escapes
+    // and all, since that is how it stands in the text.
+    const spelled = JSON.stringify(value).slice(1, -1);
+    return text.replaceAll(spelled, JSON.stringify(REDACTED).slice(1, -1));
   }, JSON.stringify(batch));
 }
 
