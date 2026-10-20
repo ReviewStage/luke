@@ -49,6 +49,9 @@
  * title, page, and state and nothing more of it. A repository the
  * installation does not reach and a number the repository holds no pull
  * request under both answer none, since a link to either draws the same.
+ * The answer is kept on the instance a minute, and GitHub's refusal of it
+ * as long as GitHub asked (`pull-request-links.ts`), since a screen of
+ * links asks for the same pull request in bursts.
  * One issue is read the same way, `GET /api/github/repositories/issue`, on
  * a token minted for the one repository with issues read alone
  * (`issues.ts`); an installation that does not grant the App issues
@@ -77,7 +80,7 @@ import {
   openGitHubConnectIntent,
 } from "@luke/database/models/github-connection-store";
 import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/workspace-store";
-import type { GitHubIssueSummary, GitHubPullRequestSummary } from "@luke/features";
+import type { GitHubIssueSummary } from "@luke/features";
 import { GITHUB_CONNECT_PAGE } from "@luke/features/github-connection-wire";
 import {
   GITHUB_ACCESS,
@@ -107,7 +110,7 @@ import {
 import { githubReadOrRefusal } from "./github-refusal.js";
 import type { GitHubUnlink } from "./github-unlink.js";
 import { issueByNumber, issuePick, openIssues, searchIssues } from "./issues.js";
-import { pullRequestByNumber } from "./pull-requests.js";
+import { PullRequestLinkKey, PullRequestLinks } from "./pull-request-links.js";
 
 /**
  * Better Auth's codes for an unlink it refused that Luke reads: a session
@@ -178,56 +181,7 @@ const listedWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.some(named);
 });
 
-/**
- * The pull request of the number given, of a repository the workspace's
- * installation reaches, as much of it as a link draws; none where the
- * installation does not reach the repository or the repository holds none
- * of that number. Note that the token is minted for the one repository and
- * dropped with the answer, because a link is read again rather than held.
- */
-const pullRequestOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
-  place: RepositoryPlace,
-  number: number,
-): Effect.fn.Return<
-  GitHubPullRequestSummary | null,
-  GitHubWorkspaceReadFailure,
-  GitHubRepositoriesServices
-> {
-  const app = yield* GitHubApp;
-  const reached = yield* app.repositoryPullRequestToken(
-    place.workspaceId,
-    place.repository,
-    place.member,
-  );
-  if (Option.isNone(reached)) return null;
-  const found = yield* pullRequestByNumber(reached.value.token, place.repository, number).pipe(
-    markRefusedToken(reached.value.access),
-  );
-  if (Option.isNone(found)) return null;
-  const pull = found.value;
-  return {
-    number: pull.number,
-    title: pull.title,
-    url: pull.url,
-    state: pull.state,
-    additions: pull.additions,
-    deletions: pull.deletions,
-    changedFiles: pull.changedFiles,
-    headRef: pull.headRef,
-    ...(pull.author === undefined ? undefined : { author: pull.author }),
-    ...(pull.authorAvatarUrl === undefined ? undefined : { authorAvatarUrl: pull.authorAvatarUrl }),
-    ...(pull.authorBot === undefined ? undefined : { authorBot: pull.authorBot }),
-    ...(pull.openedAt === undefined ? undefined : { openedAt: pull.openedAt }),
-    ...(pull.mergedAt === undefined ? undefined : { mergedAt: pull.mergedAt }),
-    ...(pull.closedAt === undefined ? undefined : { closedAt: pull.closedAt }),
-    ...(pull.baseRef === undefined ? undefined : { baseRef: pull.baseRef }),
-    ...(pull.labels === undefined ? undefined : { labels: pull.labels }),
-    ...(pull.comments === undefined ? undefined : { comments: pull.comments }),
-    ...(pull.commits === undefined ? undefined : { commits: pull.commits }),
-  };
-});
-
-/** The issue of the number given, of a repository the workspace's installation reaches, as a link draws it; none where there is none to draw, as `pullRequestOfPlace` answers. */
+/** The issue of the number given, of a repository the workspace's installation reaches, as a link draws it; none where there is none to draw, as a pull request's link answers (`pull-request-links.ts`). */
 const issueOfPlace = /* @__PURE__ */ Effect.fnUntraced(function* (
   place: RepositoryPlace,
   number: number,
@@ -377,7 +331,12 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
     }),
     repositoryPullRequest: signedIn.repositoryPullRequest.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);
-      return { pullRequest: yield* githubReadOrRefusal(pullRequestOfPlace(place, input.number)) };
+      const links = yield* PullRequestLinks;
+      const pullRequest = yield* links
+        .read(new PullRequestLinkKey({ ...place, number: input.number }))
+        // Note that the failure is not logged here, because a refusal held from an earlier read was logged when it was read.
+        .pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
+      return { pullRequest };
     }),
     repositoryIssue: signedIn.repositoryIssue.effect(function* ({ context, input }) {
       const place = yield* memberPlace(context.userId, input);
