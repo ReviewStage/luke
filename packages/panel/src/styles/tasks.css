@@ -997,12 +997,12 @@
     white-space: nowrap;
   }
 
-  /* The Inbox's thread, inside the `ScrollArea` that scrolls it in the room
-     its pane leaves it. */
+  /* The Inbox's thread, the block a log's lines stand in (`.conversation-log`),
+     which scrolls in the room its pane leaves it; its parts stand the log's
+     step apart. */
   .inbox-board {
     display: flex;
     flex-direction: column;
-    gap: var(--luke-space-12);
     padding-top: var(--luke-section-gap);
   }
 
