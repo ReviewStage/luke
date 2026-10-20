@@ -63,8 +63,7 @@ import { OpenSettingsProvider } from "./open-settings.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
 import { testNotifications } from "./settings/notifications-press.js";
-import { shownSettingsView } from "./settings/pages.js";
-import { settingsRowsInput } from "./settings/settings-panel.js";
+import { settingsRowsInput, shownSettingsView } from "./settings/settings-rows.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
 import { useStageRoom } from "./stage-room.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
@@ -74,6 +73,7 @@ import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { useInboxToasts } from "./tasks/inbox-toast.js";
 import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
+import { useTasksFixtureLanded } from "./tasks/tasks-fixture-loader.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "./tasks/use-open-link.js";
 import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
@@ -106,7 +106,19 @@ const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
   appPlatform().unsavedWork?.(ask);
 };
 
+/**
+ * The window, drawn once a fixture run's synthetic tasks have landed. They are
+ * imported apart from the bundle every launch parses, and drawn from the first
+ * frame so that a capture, and the history entry the window's first place
+ * writes, never see the tasks arrive after the rest.
+ */
 export function App(): React.JSX.Element {
+  const fixtureMode = useAppState()?.run.fixtureMode === true;
+  const landed = useTasksFixtureLanded(fixtureMode);
+  return landed ? <AppWindow /> : <></>;
+}
+
+function AppWindow(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
   // Everything main holds, on the one channel it holds it on, and this
   // window's own facts beside it. There is no second reading to reconcile

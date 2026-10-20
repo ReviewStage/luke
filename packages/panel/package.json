@@ -38,6 +38,7 @@
     "./styles/tasks.css": "./src/styles/tasks.css",
     "./styles/theme.css": "./src/styles/theme.css",
     "./styles/tooltip.css": "./src/styles/tooltip.css",
+    "./tasks/tasks-fixture-loader": "./src/tasks/tasks-fixture-loader.js",
     "./testing/action-label": "./src/testing/action-label.js",
     "./testing/app-bridge": "./src/testing/app-bridge.js",
     "./testing/app-state": "./src/testing/app-state.js",
