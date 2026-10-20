@@ -503,8 +503,8 @@ export function workspaceReachableBy(userId: string, organizationId: string | SQ
   return memberOfWorkspace(userId, organizationId);
 }
 
-/** A coding agent row's workspace: its own, or its task's on a row the backfill has not reached yet. */
-export const AGENT_WORKSPACE = sql<string>`coalesce(${codingAgent.organizationId}, (select ${task.organizationId} from ${task} where ${task.id} = ${codingAgent.taskId}))`;
+/** A coding agent row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
+export const AGENT_WORKSPACE = sql<string>`${codingAgent.organizationId}`;
 
 /** The condition that the account may read and write the coding agent row a statement reads: it is a member of the agent's workspace, an agent with no task as much as one on a task. */
 export function agentReachableBy(userId: string): SQL {
