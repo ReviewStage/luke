@@ -816,7 +816,7 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
 
   float(SIDEBAR_OVERLAY.CLOSED);
 
-  assert.equal(opened, 3);
+  assert.equal(opened, 4);
   assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });
 
@@ -852,7 +852,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   assert.ok(taskRows(sidebar).some((row) => row.name === "Sweep flaky tests"));
 });
 
-test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and Archive agent last, and an archived one offers no pin but Unarchive", async () => {
+test("a one-off agent's row offers Pin after Copy link, Rename beside it, Unpin once pinned, and Archive agent last, and an archived one offers no pin nor Rename but Unarchive", async () => {
   const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [
     TRIAGE,
@@ -862,12 +862,14 @@ test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and A
 
   assert.deepEqual(agentMenu(sidebar, "Triage overnight issues"), [
     "Copy link",
+    "Rename",
     "Pin",
     "Archive agent",
   ]);
   await act(async () => menuItem("Pin").click());
   assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
     "Copy link",
+    "Rename",
     "Unpin",
     "Archive agent",
   ]);
@@ -876,6 +878,37 @@ test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and A
 
   toggleArchived(sidebar);
   assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), ["Copy link", "Unarchive"]);
+});
+
+/** The buttons a sidebar row named `title` draws at its end, by their names. */
+function rowMarks(sidebar: HTMLElement, title: string): string[] {
+  const item = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li")].find(
+    (each) => each.querySelector("button")?.textContent?.includes(title) === true,
+  );
+  assert.ok(item, `the row of ${title} stands`);
+  return [...item.querySelectorAll(".luke-list-row-actions button")].map(
+    (button) => button.getAttribute("aria-label") ?? "",
+  );
+}
+
+test("a one-off agent's row draws Pin and Archive at its end as a task's row does, Unpin once pinned and Unarchive once archived, and its Pin pins it", async () => {
+  const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
+  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [TRIAGE, shelved]);
+  const task = TASKS[0] ?? assert.fail("a task stands");
+
+  assert.deepEqual(rowMarks(sidebar, "Triage overnight issues"), rowMarks(sidebar, task.name));
+  assert.deepEqual(rowMarks(sidebar, "Triage overnight issues"), ["Pin", "Archive"]);
+  const pin = [
+    ...(sidebar.querySelectorAll<HTMLButtonElement>(
+      '.luke-list-row-actions button[aria-label="Pin"]',
+    ) ?? []),
+  ].find((button) => button.closest("li")?.textContent?.includes("Triage overnight issues"));
+  assert.ok(pin);
+  await act(async () => pin.click());
+  assert.deepEqual(pinsAsked, ["a-1:true"]);
+
+  toggleArchived(sidebar);
+  assert.deepEqual(rowMarks(sidebar, "Digest of open pull requests"), ["Unarchive"]);
 });
 
 /** A task of the workspace's standing in `status`. */

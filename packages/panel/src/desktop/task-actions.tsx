@@ -1,7 +1,7 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
-import { APP_COMMAND } from "@luke/settings/shortcuts";
+import { APP_COMMAND, type KeyedCommand } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   BUTTON_SIZE,
@@ -148,16 +148,54 @@ function placeActions(
   }));
 }
 
+/** One of a sidebar row's buttons at its end: what it says and runs, and the chord its tooltip names, where it has one. */
+export interface RowMark {
+  readonly key: string;
+  readonly label: string;
+  readonly icon: React.JSX.Element;
+  readonly onSelect: () => void;
+  readonly command?: KeyedCommand | undefined;
+}
+
 /**
- * Pin and Archive at a sidebar row's end, standing in the time's place while
- * the row is hovered or reached from the keyboard. Rested on, the row hangs
- * the task's card beside it (`task-card.tsx`): its name in full, its
- * repository, and its agents and pull requests, read from the list's row. Each runs what its menu
- * item runs, and only the open task's Archive names ⇧⌘A, because the chord
- * archives the open task rather than the row under the pointer. They are the
- * row's siblings rather than inside it, so a press on one opens nothing, but
- * part of the row to its card, which stands while the pointer is on them and
- * goes as one is pressed (`Tooltip`'s `cardRegion`).
+ * A sidebar row's buttons at its end, standing in the time's place while
+ * the row is hovered or reached from the keyboard: a task's and an agent's
+ * row alike draw their Pin and Archive here. They are the row's siblings
+ * rather than inside it, so a press on one opens nothing, but part of the
+ * row to its card, which stands while the pointer is on them and goes as
+ * one is pressed (`Tooltip`'s `cardRegion`).
+ */
+export function RowMarks({
+  marks,
+  disabled = false,
+}: {
+  marks: readonly RowMark[];
+  disabled?: boolean;
+}): React.JSX.Element {
+  return (
+    <>
+      {marks.map(({ key, label, icon, onSelect, command }) => (
+        <Tooltip key={key} label={label} {...(command === undefined ? undefined : { command })}>
+          <IconButton
+            icon={icon}
+            label={label}
+            size={BUTTON_SIZE.COMPACT}
+            disabled={disabled}
+            onClick={onSelect}
+          />
+        </Tooltip>
+      ))}
+    </>
+  );
+}
+
+/**
+ * Pin and Archive at a task's sidebar row's end (`RowMarks`). Rested on,
+ * the row hangs the task's card beside it (`task-card.tsx`): its name in
+ * full, its repository, and its agents and pull requests, read from the
+ * list's row. Each runs what its menu item runs, and only the open task's
+ * Archive names ⇧⌘A, because the chord archives the open task rather than
+ * the row under the pointer.
  */
 function SidebarTaskMarks({
   tasks,
@@ -173,25 +211,16 @@ function SidebarTaskMarks({
   /** Archives the task as its menu's Archive does, asking first where it must. */
   onArchive: () => void;
 }): React.JSX.Element {
-  return (
-    <>
-      {placeMarks(task).map(({ mark, label, icon }) => (
-        <Tooltip
-          key={mark}
-          label={label}
-          {...(current && mark === TASK_MARK.ARCHIVE ? { command: APP_COMMAND.ARCHIVE_TASK } : {})}
-        >
-          <IconButton
-            icon={icon}
-            label={label}
-            size={BUTTON_SIZE.COMPACT}
-            disabled={disabled}
-            onClick={mark === TASK_MARK.ARCHIVE ? onArchive : () => tasks.onMarkTask(task.id, mark)}
-          />
-        </Tooltip>
-      ))}
-    </>
+  const marks = placeMarks(task).map(
+    ({ mark, label, icon }): RowMark => ({
+      key: mark,
+      label,
+      icon,
+      onSelect: mark === TASK_MARK.ARCHIVE ? onArchive : () => tasks.onMarkTask(task.id, mark),
+      command: current && mark === TASK_MARK.ARCHIVE ? APP_COMMAND.ARCHIVE_TASK : undefined,
+    }),
   );
+  return <RowMarks marks={marks} disabled={disabled} />;
 }
 
 /**

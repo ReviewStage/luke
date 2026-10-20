@@ -5,16 +5,17 @@ import { CODING_AGENT_STATUS, type TasklessAgent } from "@luke/features/coding-a
 import { ACT_KIND } from "@luke/host/acts";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, Fragment, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { DRAFT_PLACE, EMPTY_DRAFT, useDraftWriter } from "../composer-drafts.js";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 
 /**
- * sidebar-agent.test.ts -- an agent with no task, as a row among the sidebar's tasks, is archived from its right-click as a task's agent is from its tab: at once while it rests, read again by its own id first, asked first while it works, and brought back by Unarchive once archived.
+ * sidebar-agent.test.ts -- an agent with no task, as a row among the sidebar's tasks, is acted on as a task's row is: archived from its right-click at once while it rests, read again by its own id first, asked first while it works, and brought back by Unarchive once archived; renamed in place; and hanging its card while rested on.
  *
  * The service is a script at the act boundary; synthetic agents throughout.
  */
@@ -42,11 +43,14 @@ const RUN: TasklessAgent = {
 let standing: TasklessAgent = RUN;
 /** Every archive or Unarchive asked, in order. */
 let archives: { agentId: string; archived: boolean }[] = [];
+/** Every rename asked, in order. */
+let renames: { agentId: string; title: string }[] = [];
 let root: Root | undefined;
 
 beforeEach(() => {
   standing = RUN;
   archives = [];
+  renames = [];
   fakeActs({
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
@@ -71,6 +75,10 @@ function mount(agent: TasklessAgent): HTMLElement {
     onArchive: (agentId, archived) => {
       archives.push({ agentId, archived });
       return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+    onRename: (agentId, title) => {
+      renames.push({ agentId, title });
+      return Promise.resolve(true);
     },
   });
   const container = document.createElement("div");
@@ -156,4 +164,81 @@ test("an archived agent's row offers Unarchive in Archive's place and no pin, an
   await settle();
 
   assert.deepEqual(archives, [{ agentId: AGENT_ID, archived: false }]);
+});
+
+test("Rename on the row's right-click turns the row into its name's field, and the name typed renames the agent, as a task's row does", async () => {
+  const row = mount(RUN);
+  const offered = rightClick(row);
+  act(() => item(offered, "Rename").click());
+  const field =
+    row.querySelector<HTMLInputElement>('input[aria-label="Agent name"]') ??
+    assert.fail("the row is its name's field");
+  act(() => {
+    field.value = "Remove the stale banners";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+
+  assert.deepEqual(renames, [{ agentId: AGENT_ID, title: "Remove the stale banners" }]);
+});
+
+test("rested on, the row hangs the agent's card beside it, naming it as its tab's card does", () => {
+  const row = mount(RUN);
+  const press = row.querySelector<HTMLElement>("button") ?? assert.fail("the row is drawn");
+  act(() => {
+    press.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+
+  const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Remove the stale copy");
+});
+
+/** Writes words into the agent's box's draft, as typing on its page would. */
+function DraftInBox({ words }: { words: string }): null {
+  const writer = useDraftWriter();
+  useEffect(() => {
+    writer.update({ kind: DRAFT_PLACE.AGENT, planId: null, agentId: AGENT_ID }, () => ({
+      ...EMPTY_DRAFT,
+      text: words,
+    }));
+  }, [writer, words]);
+  return null;
+}
+
+test("a draft waiting in the agent's box marks its row with the Draft pencil while its page is not the one open, as a task's row", () => {
+  const drawn = (current: boolean): boolean => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const held = createRoot(container);
+    const agents = codingAgentsControl({});
+    act(() =>
+      held.render(
+        onRegistry(
+          AtomRegistry.make(),
+          createElement(
+            Fragment,
+            null,
+            createElement(DraftInBox, { words: "Also sweep the footer" }),
+            createElement(SidebarAgent, {
+              agent: RUN,
+              agents,
+              current,
+              unread: false,
+              now: 3,
+              at: RUN.activityAt,
+              shown: true,
+              onOpen: () => undefined,
+            }),
+          ),
+        ),
+      ),
+    );
+    const marked = container.querySelector('.draft-mark[aria-label="Draft"]') !== null;
+    act(() => held.unmount());
+    container.remove();
+    return marked;
+  };
+
+  assert.equal(drawn(false), true);
+  assert.equal(drawn(true), false);
 });
