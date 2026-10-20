@@ -476,6 +476,70 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
+    "a Luke tool's pictures stay out of its stored answer, and a CLI tool's stand in for theirs",
+    () =>
+      Effect.gen(function* () {
+        const post = yield* standing;
+        const agent = yield* agentWithBearer;
+        const top = { parent_tool_use_id: null, session_id: SESSION };
+        const image = {
+          type: "image",
+          source: { type: "base64", media_type: "image/png", data: "iVBORw0KGgo=" },
+        };
+        const messagesOfTurn = [
+          { type: RUNNER_EVENT.ACCEPTED, uuid: agent.lineId },
+          {
+            type: "assistant",
+            message: {
+              id: "msg_1",
+              content: [
+                { type: "tool_use", id: "toolu_read", name: "Read", input: {} },
+                {
+                  type: "tool_use",
+                  id: "toolu_look",
+                  name: "mcp__luke__look_at_picture",
+                  input: {},
+                },
+              ],
+            },
+            ...top,
+          },
+          {
+            type: "user",
+            message: {
+              content: [
+                {
+                  type: "tool_result",
+                  tool_use_id: "toolu_read",
+                  content: [{ type: "text", text: "shot.png" }, image],
+                },
+                {
+                  type: "tool_result",
+                  tool_use_id: "toolu_look",
+                  content: [{ type: "text", text: '{"status":"looked"}' }, image],
+                },
+              ],
+            },
+            ...top,
+          },
+        ];
+        // SAFETY: each message above is one the pinned SDK or the runner emits, written in its JSON shape.
+        const events = messagesOfTurn.map(
+          (message, sequence) => ({ sequence, message }) as RunnerEvent,
+        );
+
+        yield* post(agent.bearer, events);
+        const { rows } = yield* transcriptOf(agent.target.conversationId);
+
+        assert.deepEqual(rows.at(-1)?.parts.map(drawn), [
+          ["step-start"],
+          ["tool-Read", "output-available", "shot.png\n[image]"],
+          ["tool-look_at_picture", "output-available", { status: "looked" }],
+        ]);
+      }),
+  );
+
+  it.effect(
     "the last event applied is kept on the conversation, for a relaunch to number after",
     () =>
       Effect.gen(function* () {
