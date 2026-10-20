@@ -1,7 +1,4 @@
-import {
-  GITHUB_ACCESS,
-  type WorkspaceTokenRepository,
-} from "@luke/features/github-repositories-wire";
+import type { WorkspaceTokenRepository } from "@luke/features/github-repositories-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { Badge, BUTTON_VARIANT, Button, SETTINGS_ROW_INDENT, SettingsRow } from "@luke/ui";
 import { githubAccountPictureUrl } from "@luke/ui/tasks-model";
@@ -22,8 +19,9 @@ import { PICKER_ALIGN, usePickerPlacement } from "./picker-row.js";
  * left out by the service, since the App wins. Add repository drops the
  * app's searched menu over the repositories the reader's own token may
  * push to that neither the App nor the workspace's list already holds, read
- * from the repository picker's own listing as the menu opens; a pick adds
- * it, and the service answers the list as it then stands.
+ * as the menu opens from the addable the repository picker's listing
+ * answers beside its own; a pick adds it, and the service answers the list
+ * as it then stands.
  */
 
 /** The words the rows and the menu say: labels and facts alone. */
@@ -121,10 +119,8 @@ export function AddTokenRepository({
           setCandidates({ kind: "failed" });
           return;
         }
-        const rows = answer.repositories.repositories
-          .filter(
-            (one) => one.access === GITHUB_ACCESS.TOKEN && !added.has(one.fullName.toLowerCase()),
-          )
+        const rows = (answer.repositories.addable ?? [])
+          .filter((one) => !added.has(one.fullName.toLowerCase()))
           .map((one): MenuRow => ({ id: one.fullName, label: one.fullName }));
         setCandidates({ kind: "read", rows });
       },

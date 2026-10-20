@@ -25,13 +25,13 @@
  * `workspaceId` query, or to the account's first workspace where none is
  * named, most recently updated first, to a member of it, and whether one is
  * connected at all; a workspace the account is not in is not found. A
- * workspace with nothing connected has no repositories. A member who saved
- * their own GitHub token is listed, beside them, the repositories it may
- * push to that no installation lists, each entry marked with which of the
- * two reaches it, and so are the repositories members added to the
- * workspace on their own tokens, marked the token's, which a member whose
- * own token cannot push to one still sees. A GitHub or a store the service
- * could not reach is unavailable.
+ * workspace with nothing connected has no repositories. Beside them are
+ * listed the repositories members added to the workspace on their own
+ * tokens, each entry marked with which of the two reaches it, which a member
+ * whose own token cannot push to one still sees. A member who saved their
+ * own GitHub token is answered apart, as addable, the repositories it may
+ * push to that neither lists, which only Add repository offers. A GitHub or
+ * a store the service could not reach is unavailable.
  *
  * Those added repositories are their own resource,
  * `/api/github/token-repositories`: a member of the workspace reads them
@@ -199,27 +199,41 @@ function addedEntry(row: WorkspaceTokenRepositoryRow): GitHubRepository {
   };
 }
 
+/** The picker's repositories, and those Add repository offers. */
+interface PickedRepositories {
+  readonly repositories: GitHubRepository[];
+  readonly addable: GitHubRepository[];
+}
+
 /**
- * The picker's repositories: the installation's, each marked the App's;
- * the member's own token's that no installation lists, each marked the
- * token's; and those members added to the workspace on their tokens that
- * neither lists, marked the token's too, so a member whose token cannot
- * reach one still sees it and hears the reach's refusal at a start. One
- * list, most recently updated first.
+ * The picker's repositories: the installation's, each marked the App's,
+ * and those members added to the workspace on their tokens that it does not
+ * list, marked the token's, so a member whose token cannot reach one still
+ * sees it and hears the reach's refusal at a start. One list, most recently
+ * updated first. Beside it, the member's own token's that neither lists,
+ * marked the token's, which Add repository offers and the picker does not,
+ * since a token reaches a repository for a task only once it is added.
  */
 function pickedRepositories(
   throughApp: readonly GitHubRepository[],
   onToken: readonly GitHubRepository[],
   added: readonly WorkspaceTokenRepositoryRow[],
-): GitHubRepository[] {
+): PickedRepositories {
   const listed = new Set(throughApp.map((one) => nameKey(one.fullName)));
-  const tokenOnly = onToken.filter((one) => !listed.has(nameKey(one.fullName)));
-  for (const one of tokenOnly) listed.add(nameKey(one.fullName));
   const addedOnly = added.filter((row) => !listed.has(nameKey(row.repository))).map(addedEntry);
-  return [
-    ...throughApp.map((one) => ({ ...one, access: GITHUB_ACCESS.APP })),
-    ...[...tokenOnly, ...addedOnly].map((one) => ({ ...one, access: GITHUB_ACCESS.TOKEN })),
-  ].sort((left, right) => right.updatedAt - left.updatedAt);
+  for (const one of addedOnly) listed.add(nameKey(one.fullName));
+  const byRecent = (left: GitHubRepository, right: GitHubRepository) =>
+    right.updatedAt - left.updatedAt;
+  return {
+    repositories: [
+      ...throughApp.map((one) => ({ ...one, access: GITHUB_ACCESS.APP })),
+      ...addedOnly.map((one) => ({ ...one, access: GITHUB_ACCESS.TOKEN })),
+    ].sort(byRecent),
+    addable: onToken
+      .filter((one) => !listed.has(nameKey(one.fullName)))
+      .map((one) => ({ ...one, access: GITHUB_ACCESS.TOKEN }))
+      .sort(byRecent),
+  };
 }
 
 /**
@@ -456,7 +470,7 @@ export function githubProcedures(seams: GitHubProcedureSeams) {
           );
       return {
         installed: Option.isSome(listed),
-        repositories: pickedRepositories(
+        ...pickedRepositories(
           Option.getOrElse(listed, () => []),
           Option.getOrElse(own, () => []),
           added,
