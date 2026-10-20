@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "797d241c-0d9e-4b23-81f3-1a2d782d757d",
-  "prevIds": ["300fd605-9520-4466-8801-84b83621a2bd", "410a9d0e-1294-4b25-944f-7875bf895a14"],
+  "id": "9eac810c-3385-45ab-8eac-e63c88defb11",
+  "prevIds": ["741d6d59-979f-49ac-8225-8f05e2dbfa8e"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -379,6 +379,12 @@
     {
       "isRlsEnabled": false,
       "name": "task_section_entry",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "token_pull_request_poll",
       "entityType": "tables",
       "schema": "public"
     },
@@ -8674,6 +8680,110 @@
       "table": "task_section_entry"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "agent_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "pull_request",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'{}'",
+      "generated": null,
+      "identity": null,
+      "name": "etags",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_review_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "last_comment_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "head_sha",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "check_conclusion",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "next_poll_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -13746,6 +13856,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["agent_id"],
+      "schemaTo": "public",
+      "tableTo": "coding_agent",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "token_pull_request_poll_agent_id_coding_agent_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "token_pull_request_poll"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["user_id"],
       "schemaTo": "public",
       "tableTo": "user",
@@ -14387,6 +14510,14 @@
       "name": "task_section_pkey",
       "schema": "public",
       "table": "task_section",
+      "entityType": "pks"
+    },
+    {
+      "columns": ["agent_id"],
+      "nameExplicit": false,
+      "name": "token_pull_request_poll_pkey",
+      "schema": "public",
+      "table": "token_pull_request_poll",
       "entityType": "pks"
     },
     {
