@@ -202,7 +202,7 @@ export function PublishedRow({
     <MentionChipCard
       mention={mention}
       target={pullRequest.url}
-      name={pullRequestNumberLabel(pullRequest)}
+      name={pullRequest.title}
       doors={mentionDoors}
       standing={standing}
     />
@@ -211,7 +211,7 @@ export function PublishedRow({
     <>
       <div className="agent-published">
         <List label="Pull request" variant={LIST_VARIANT.CARD}>
-          {/* Note that the card stands in the pill's place whatever the title's width, since it says more than the title. */}
+          {/* Note that the card stands in the pill's place whatever the title's width, since it names the title whole, the published one where GitHub answered nothing. */}
           <RowHintOptions card={card}>
             <ListRow
               leading={<PullRequestMark pullRequest={pullRequest} />}

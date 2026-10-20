@@ -464,6 +464,24 @@ test("a pull request's link standing alone in words drawn as a document is a row
   ]);
 });
 
+/** An agent's merged pull request's row pinned over its box. */
+function publishedRow(): ReactNode {
+  return createElement(PublishedRow, {
+    pullRequest: {
+      number: 42,
+      title: "Expire old invitations",
+      url: MERGED,
+      state: PULL_REQUEST_STATE.MERGED,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 120,
+      deletions: 30,
+      changedFiles: 4,
+    },
+    branch: "invite-expiry",
+    doors: { openGitHub: () => undefined, copy: () => undefined },
+  });
+}
+
 test("an agent's pull request's row pinned over its box hangs the card its chip hangs", async () => {
   const chip = await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
   const chipNotes = cardNotes(chip.container.querySelector("[data-mention-ref]") ?? undefined);
@@ -471,26 +489,22 @@ test("an agent's pull request's row pinned over its box hangs the card its chip 
   root = undefined;
   document.body.innerHTML = "";
 
-  const { container } = await drawnOnPage(
-    createElement(PublishedRow, {
-      pullRequest: {
-        number: 42,
-        title: "Expire old invitations",
-        url: MERGED,
-        state: PULL_REQUEST_STATE.MERGED,
-        checks: CHECK_SUMMARY.PASSING,
-        additions: 120,
-        deletions: 30,
-        changedFiles: 4,
-      },
-      branch: "invite-expiry",
-      doors: { openGitHub: () => undefined, copy: () => undefined },
-    }),
-    ACME_WITH_GITHUB,
-  );
+  const { container } = await drawnOnPage(publishedRow(), ACME_WITH_GITHUB);
 
   assert.deepEqual(
     cardNotes(container.querySelector(".agent-published button") ?? undefined),
     chipNotes,
   );
+});
+
+test("where GitHub answers nothing, an agent's pull request's row hangs a card naming its published title whole", async () => {
+  const { container } = await drawnOnPage(publishedRow(), ACME);
+  const row = container.querySelector(".agent-published button");
+  assert.ok(row, "the pull request's row stands");
+
+  act(() => {
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Expire old invitations");
 });
