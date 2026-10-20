@@ -793,6 +793,54 @@ describe("the cookie account source", () => {
       }).pipe(Effect.scoped),
   );
 
+  it.effect(
+    "closes the gate for a session that ended elsewhere though its settings step died",
+    () =>
+      Effect.gen(function* () {
+        const { open, state, gate, holdForgetting } = scene();
+        const session = yield* open;
+        yield* session.initialize;
+
+        // The session ends elsewhere, and dropping the departing person's settings dies outright.
+        holdForgetting(Effect.die("the settings store broke"));
+        state.user = undefined;
+        yield* Effect.exit(session.token.refreshAccount());
+        yield* turns(10);
+        holdForgetting(Effect.void);
+        assert.deepEqual(session.snapshot(), { status: ACCOUNT_STATUS.SIGNED_OUT });
+        assert.equal(gate.at(-1), "close");
+
+        // Someone else's session is read next, and their gate opens.
+        state.user = { ...USER, id: "user-2", email: "other@example.com" };
+        yield* session.token.refreshAccount();
+        yield* turns(10);
+        assert.equal(signedInEmail(session.snapshot()), "other@example.com");
+        assert.deepEqual(gate.slice(1), ["close", "settle other@example.com", "open"]);
+      }).pipe(Effect.scoped),
+  );
+
+  it.effect("lets the next person arrive after a sign-out whose settings step died", () =>
+    Effect.gen(function* () {
+      const { open, state, gate, holdForgetting } = scene();
+      const session = yield* open;
+      yield* session.initialize;
+
+      // Dropping the departing person's settings dies outright.
+      holdForgetting(Effect.die("the settings store broke"));
+      const signedOut = yield* Effect.exit(session.signOut({ revokeRemote: true }));
+      assert.equal(signedOut._tag, "Failure");
+      holdForgetting(Effect.void);
+
+      // Someone else's session is read next, and their gate opens after the closing.
+      state.user = { ...USER, id: "user-2", email: "other@example.com" };
+      yield* session.token.refreshAccount();
+      yield* turns(10);
+
+      assert.equal(signedInEmail(session.snapshot()), "other@example.com");
+      assert.deepEqual(gate.slice(1), ["close", "settle other@example.com", "open"]);
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("settles on one read for returns to the tab that come together", () =>
     Effect.gen(function* () {
       const { open, state, revisit } = scene();
