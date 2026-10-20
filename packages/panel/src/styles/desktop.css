@@ -3726,6 +3726,191 @@ ul.actor-stack {
   overflow-wrap: anywhere;
 }
 
+/* A thread from version 5 leads with its title over one muted line: how
+   many messages, who wrote them, and, while an ask waits, "Waiting on you"
+   in the attention ink after its dot, the only colour the line spends. */
+.inbox-subject-line {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.inbox-subject-line > * + *::before {
+  order: -2;
+  padding-inline: var(--luke-space-6);
+  color: var(--luke-color-text-subtle);
+  content: "·";
+}
+
+.inbox-waiting {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-6);
+  color: var(--luke-color-attention);
+}
+
+.inbox-waiting::after {
+  order: -1;
+  width: 6px; /* off-scale: the attention dot */
+  height: 6px; /* off-scale: the attention dot */
+  border-radius: var(--luke-radius-full);
+  background: currentColor;
+  content: "";
+}
+
+/* A teammate's open ask names who it waits on in the line's own muted ink,
+   as the list's Waiting on others does. */
+.inbox-waiting-on {
+  color: var(--luke-color-text-muted);
+}
+
+/* An agent's message names it, then a quiet "agent" after the name. */
+.inbox-comment-tag {
+  color: var(--luke-color-text-subtle);
+}
+
+/* A message is a Markdown document, set at the reading leading. */
+.inbox-message-words {
+  line-height: var(--luke-type-reading-leading);
+}
+
+/* An answer as a stamp (`inbox-stamp.tsx`), at the head of the reply that
+   sent it or over the box it is attached to: a chip of the strong fill in
+   the thread's ink, its glyph green going ahead and red holding back. */
+.inbox-stamp {
+  display: inline-flex;
+  max-width: 100%;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--luke-space-4);
+  min-height: var(--luke-space-24);
+  padding-inline: var(--luke-space-6);
+  border-radius: var(--luke-radius-6);
+  background: var(--luke-color-fill-strong);
+  color: var(--luke-color-text);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-medium);
+}
+
+.inbox-stamp-words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.inbox-stamp > svg,
+.inbox-ask-standing > svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.inbox-stamp[data-tone="ahead"] > svg,
+.inbox-ask-standing[data-tone="ahead"] > svg {
+  color: var(--luke-color-complete);
+}
+
+.inbox-stamp[data-tone="back"] > svg,
+.inbox-ask-standing[data-tone="back"] > svg {
+  color: var(--luke-color-danger-text);
+}
+
+/* The ask closing the message that asks it: a bordered card, its head the
+   ask's kind and where it stands, its controls under a hairline while it
+   waits. A settled ask is its head alone; a replaced one is struck through. */
+.inbox-ask {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-overlay);
+}
+
+.inbox-ask-head {
+  display: flex;
+  min-width: 0;
+  min-height: var(--luke-control-height);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--luke-space-4) var(--luke-space-8);
+  padding: var(--luke-space-4) var(--luke-space-12);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.inbox-ask-kind {
+  color: var(--luke-color-text);
+  font-weight: var(--luke-weight-medium);
+}
+
+.inbox-ask[data-inbox-ask="replaced"] .inbox-ask-kind {
+  color: var(--luke-color-text-muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--luke-color-text-subtle);
+}
+
+.inbox-ask-standing {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+.inbox-ask-body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.inbox-ask-presses {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--luke-control-gap);
+}
+
+.inbox-ask-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The answer attached to the box stands over its words, a muted line
+   beside it saying the send answers the ask. */
+.inbox-reply-stamp {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-8) var(--luke-space-12) 0;
+}
+
+.inbox-reply-stamp-line {
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+}
+
+/* A thread's Reply names its chord after its words, in its own ink a step
+   quieter, since the button's fill is the text's own colour. */
+.inbox-answer-actions .luke-button .shortcut {
+  margin-left: var(--luke-space-6);
+
+  --shortcut-ink: color-mix(in srgb, currentColor 60%, transparent);
+}
+
 /* The pane's path (`@luke/ui`'s Breadcrumbs) takes what the bar's way back
    and pager leave it, its crumbs giving way by their share. */
 .inbox-crumbs {

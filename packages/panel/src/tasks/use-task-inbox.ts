@@ -19,6 +19,7 @@ import {
   type InboxItem,
   type InboxReplyKind,
   inboxAnswerHeard,
+  inboxAnswersReply,
   knownBlock,
 } from "@luke/features/inbox-wire";
 import { Equal } from "effect";
@@ -35,9 +36,12 @@ import {
   EMPTY_INBOX_DRAFT,
   type InboxBoardView,
   type InboxDraft,
+  type InboxThreadSend,
   inboxBoard,
   inboxMessageOf,
   inboxReply,
+  inboxThreadOf,
+  inboxThreadSend,
 } from "./inbox-model.js";
 import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
 
@@ -73,7 +77,10 @@ import { useInboxSettler, useSettledItems } from "./inbox-settling.js";
  * window's other reads of the item until they hold it. It reaches the agent as one of the
  * developer's messages, which may wake it, so the agents are read again
  * too. A message refused leaves nothing on the thread, and the box says
- * why.
+ * why. On a thread from version 5 the message may carry the answer to its
+ * open ask, which the reader pressed and attached: such a reply settles
+ * the ask, so it stands over every read from the moment it is sent, as an
+ * answer does, and a refusal brings the item back as it stood.
  *
  * An image block names an attachment the service keeps, and so does each
  * file an answer carried and each picture of the item's own its Markdown
@@ -155,7 +162,7 @@ export interface TaskInboxControl {
   readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
   /** Closes an open item without an answer, its draft let go once taken; nothing where it is settled or a send is out. */
   readonly onClose: (item: InboxItem) => void;
-  /** Sends the box's words and files as a message on the item's thread, open or settled; nothing where it holds neither or a send is out. */
+  /** Sends the box's words and files as a message on the item's thread, open or settled, with the answer attached to the thread's open ask where one is; nothing where it holds nothing the service takes or a send is out. */
   readonly onMessage: (item: InboxItem, draft: InboxDraft) => void;
   /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
   readonly images: ReadonlyMap<string, InboxImage>;
@@ -216,8 +223,9 @@ const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 /**
  * Every attachment the items name: their blocks' pictures, the files their
  * answers and their threads' messages carried, and the item's own pictures
- * their Markdown draws, in its blocks, its thread's messages, and its
- * answer's note (`inbox-attachment-link`).
+ * their Markdown draws, in its blocks, its thread's messages, a read before
+ * version 5's and its whole thread alike, and its answer's note
+ * (`inbox-attachment-link`).
  */
 function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
   const named = new Set<string>();
@@ -233,7 +241,7 @@ function attachmentsNamed(items: readonly InboxItem[]): ReadonlySet<string> {
     }
     for (const file of item.answerFiles ?? []) named.add(file.attachmentId);
     drawn(item.answer?.note);
-    for (const message of item.messages ?? []) {
+    for (const message of [...(item.messages ?? []), ...(item.thread ?? [])]) {
       for (const file of message.files ?? []) named.add(file.attachmentId);
       drawn(message.text);
     }
@@ -469,21 +477,27 @@ export function useTaskInbox(input: {
 
   const onMessage = useCallback(
     (item: InboxItem, draft: InboxDraft) => {
-      const message = inboxMessageOf(draft);
+      const thread = inboxThreadOf(item);
+      const message: InboxThreadSend | undefined =
+        thread === undefined ? inboxMessageOf(draft) : inboxThreadSend(thread, draft);
       if (message === undefined || sending.has(item.id)) return;
-      const { text, attachments } = message;
-      const words = JSON.stringify([text, attachments]);
+      const { text, attachments, answers } = message;
+      const words = JSON.stringify([text, attachments, answers]);
       const was = attempts.current.get(item.id);
       const key = was?.words === words ? was.key : crypto.randomUUID();
       attempts.current.set(item.id, { key, words });
       setSending((standing) => new Set(standing).add(item.id));
       note(item.id, undefined);
+      // Note that a reply carrying an answer settles the ask, so it stands over every read the moment it is sent, as an answer does.
+      const sent =
+        answers === undefined ? undefined : settler.answer(item, inboxAnswersReply(answers, text));
       const askedOn = taskId;
       latest.current
         .messageInbox({
           itemId: item.id,
           text,
           ...(attachments.length === 0 ? undefined : { attachments }),
+          ...(answers === undefined ? undefined : { answers }),
           clientKey: key,
         })
         .catch((): CodingAgentInboxMessagedView => UNANSWERED)
@@ -494,6 +508,7 @@ export function useTaskInbox(input: {
             return next;
           });
           if ("failure" in answer) {
+            if (sent !== undefined) settler.refuse(sent);
             note(item.id, messageFailureWords(answer.failure));
             return;
           }
@@ -503,7 +518,8 @@ export function useTaskInbox(input: {
               : standing,
           );
           // Note that the message stands over every other read until it holds it, so none draws the thread without it meanwhile.
-          settler.message(answer.item);
+          if (sent === undefined) settler.message(answer.item);
+          else settler.take(sent, answer.item);
           writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
           // Note that the key is let go with the words, because the same words written again are a new message, which the service refuses under a key already spent.
           attempts.current.delete(item.id);
@@ -594,6 +610,8 @@ export function useTaskInbox(input: {
             values: kept.values,
             note: kept.text,
             attachments: kept.attachments,
+            steps: kept.steps,
+            press: kept.press,
           };
     },
     [drafts],
@@ -606,6 +624,8 @@ export function useTaskInbox(input: {
         choices: draft.choices,
         values: draft.values,
         attachments: draft.attachments,
+        steps: draft.steps,
+        press: draft.press,
       })),
     [writer, draftsOn],
   );
