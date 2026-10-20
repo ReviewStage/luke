@@ -466,6 +466,9 @@ importers:
       '@luke/brand':
         specifier: workspace:*
         version: link:../../packages/brand
+      '@luke/credentials':
+        specifier: workspace:*
+        version: link:../../packages/credentials
       '@luke/database':
         specifier: workspace:*
         version: link:../../packages/database

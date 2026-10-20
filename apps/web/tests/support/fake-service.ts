@@ -7,7 +7,7 @@
  * every client reads as unanswered, so a test states only what it reads.
  * The session is the browser's cookie in a real tab: here it is whatever the
  * test last set, read on every `get-session`, so "the cookie changed" is
- * one call.
+ * one call; a test that holds the session read answers it when it lets go.
  */
 
 import type { LinkOpen } from "@luke/features/link-open";
@@ -82,6 +82,8 @@ export const GITHUB_REPOSITORIES = {
 interface FakeServiceOptions {
   readonly signedIn: boolean;
   readonly linkOpen?: LinkOpen;
+  /** What every session read waits on before it answers, as a slow service keeps the tab waiting; answered at once where none is given. */
+  readonly sessionHeld?: Promise<void>;
 }
 
 /** The fake service, signed in or not as it starts. */
@@ -93,6 +95,7 @@ export function fakeService(options: FakeServiceOptions): FakeService {
     const method = init.method ?? "GET";
     seen.push({ method, path: pathname });
     if (pathname === "/api/auth/get-session") {
+      await options.sessionHeld;
       return json(signedIn ? { user: SIGNED_IN_USER } : null);
     }
     if (pathname === "/api/auth/sign-out" && method === "POST") {
