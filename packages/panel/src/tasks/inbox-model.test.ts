@@ -731,20 +731,24 @@ test("only an open item the reader's own agent asks needs them, or one whose sta
   assert.equal(needingYou(undefined), 1, "a reader not known yet is asked everything");
 });
 
-test("an archived task's open item needs nobody, as a plan's own Inbox lists it: To do neither lists nor counts it, nor is it the next one, while All still lists it", () => {
+test("an archived task's items, open or unread, need nobody, as a plan's own Inbox lists them: To do neither lists nor counts them, nor is one the next, while All still lists them", () => {
   const archived = [
     {
       holder: taskHolder({ ...BILLING, archivedAt: 9 }),
-      items: [item({ id: "put-away", updatedAt: 20 }), item({ id: "also", updatedAt: 10 })],
+      items: [
+        item({ id: "put-away", updatedAt: 20 }),
+        item({ id: "also", updatedAt: 10 }),
+        item({ id: "unread", status: INBOX_STATUS.ANSWERED, updatedAt: 5, unread: true }),
+      ],
     },
   ];
   const counts = inboxCounts(archived, undefined);
   assert.equal(counts[INBOX_SHOW.TO_DO], 0);
-  assert.equal(counts[INBOX_SHOW.ALL], 2);
+  assert.equal(counts[INBOX_SHOW.ALL], 3);
   const view = { grouping: INBOX_GROUPING.NONE, readerId: undefined, chosen: undefined } as const;
   assert.deepEqual(drawn(inboxList(archived, { ...view, show: INBOX_SHOW.TO_DO })), []);
   const open = inboxList(archived, { ...view, show: INBOX_SHOW.ALL });
-  assert.deepEqual(drawn(open), ["put-away", "also"]);
+  assert.deepEqual(drawn(open), ["put-away", "also", "unread"]);
   assert.equal(
     nextNeedingYou(open, "put-away", () => false),
     undefined,

@@ -1634,9 +1634,11 @@ export function needsYou(listed: InboxListed, readerId: string | undefined): boo
 /**
  * Whether a listed item is one the reader is not done with, as To do lists
  * it: one that needs them (`needsYou`), or one of theirs (`readersItem`)
- * still unread, such as a settled thread its agent wrote on again.
+ * still unread, such as a settled thread its agent wrote on again; never
+ * on a task put away in the archive, as `needsYou` reads it.
  */
-export function toDo(listed: InboxListed, readerId: string | undefined): boolean {
+function toDo(listed: InboxListed, readerId: string | undefined): boolean {
+  if (archivedHolder(listed.holder)) return false;
   return (
     needsYou(listed, readerId) || (readersItem(listed.item, readerId) && isUnread(listed.item))
   );
