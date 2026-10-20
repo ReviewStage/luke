@@ -22,7 +22,12 @@ import {
 } from "../brain-host/bounds.js";
 import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
 import { CODER } from "./bounds.js";
-import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
+import {
+  CODER_DEPLOYMENT_PRESENCE,
+  CODER_DEPLOYMENT_STREAMS,
+  CODER_DEPLOYMENT_TURNS,
+  coderChannelInput,
+} from "./channel.js";
 import { CHAT_TOOLS } from "./chat.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
@@ -82,27 +87,28 @@ function coderChannel() {
       secret: Redacted.make(SECRET),
       admits: CODER_DEPLOYMENT_TURNS,
       presents: CODER_DEPLOYMENT_PRESENCE,
+      streams: CODER_DEPLOYMENT_STREAMS,
     },
     async () => undefined,
   );
 }
 
-/** The deployment's own principal acting for the account, as a spoken ask, a cancel, or a retire is admitted under. */
-function asDeployment(admitted: SessionAuthContext | undefined) {
+/** The developer's own principal as the deployment carries it, as a spoken ask, a stream read, a cancel, or a retire is admitted under. */
+function asCarriedAccount(admitted: SessionAuthContext | undefined) {
   assert.ok(admitted);
   return [
     admitted.authenticator,
     admitted.principalType,
     admitted.principalId,
-    admitted.attributes[BRAIN_HOST_ATTRIBUTE.ACCOUNT],
+    admitted.attributes[BRAIN_HOST_ATTRIBUTE.CARRIER],
   ];
 }
 
-const DEPLOYMENT_FOR_ACCOUNT = [
-  BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
-  BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
-  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+const CARRIED_ACCOUNT = [
+  BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
+  BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
   ACCOUNT,
+  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
 ];
 
 /** The channel's door as a request meets it: the principal admitted, or the word refused with. */
@@ -116,7 +122,7 @@ function doorOf(channel: ReturnType<typeof coderChannelInput>) {
   };
 }
 
-test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session, and its typed opening of the account's own conversation, are minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; its spoken ask, opening or following up, and its read of the session's stream are admitted as the deployment's own principal, which eve never steers into a typed turn; another account's session is refused", async () => {
+test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session, its typed opening of the account's own conversation, its spoken ask, opening or following up, and its read of the session's stream are all minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier, so a call's ask joins the agent's typed turn under way; another account's session is refused", async () => {
   const channel = coderChannel();
   assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
   const door = doorOf(channel);
@@ -152,27 +158,50 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
     [developer.authenticator, developer.principalType, developer.principalId, carried.attributes],
   );
 
-  // A call speaking into the agent: the voice's asks, presented as the deployment rather than the
-  // developer, so eve holds each behind a typed turn under way rather than steering it in.
+  // A call speaking into the agent: the voice's asks, presented as the developer, so eve steers
+  // each into a typed turn under way rather than holding it behind that turn.
   const spoken = await door(deploymentRequest(OWN_SESSION, BRAIN_HOST_TURN.SPOKEN));
-  assert.deepEqual(asDeployment(spoken.admitted), DEPLOYMENT_FOR_ACCOUNT);
+  assert.deepEqual(asCarriedAccount(spoken.admitted), CARRIED_ACCOUNT);
   assert.equal(spoken.admitted?.attributes[BRAIN_HOST_ATTRIBUTE.TURN], BRAIN_HOST_TURN.SPOKEN);
-  assert.notDeepEqual(
-    [spoken.admitted?.authenticator, spoken.admitted?.principalType, spoken.admitted?.principalId],
-    [developer.authenticator, developer.principalType, developer.principalId],
-  );
   const spokenOpening = await door(deploymentOpening(BRAIN_HOST_TURN.SPOKEN));
-  assert.deepEqual(asDeployment(spokenOpening.admitted), DEPLOYMENT_FOR_ACCOUNT);
+  assert.deepEqual(asCarriedAccount(spokenOpening.admitted), CARRIED_ACCOUNT);
   const stream = await door(
     deploymentRequest(`${OWN_SESSION}/stream`, BRAIN_HOST_TURN.SPOKEN, "GET"),
   );
-  assert.deepEqual(asDeployment(stream.admitted), DEPLOYMENT_FOR_ACCOUNT);
+  assert.deepEqual(asCarriedAccount(stream.admitted), CARRIED_ACCOUNT);
   assert.deepEqual(await door(deploymentRequest(OTHER_SESSION, BRAIN_HOST_TURN.TYPED)), {
     refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
   });
+  assert.deepEqual(
+    await door(deploymentRequest(`${OTHER_SESSION}/stream`, BRAIN_HOST_TURN.SPOKEN, "GET")),
+    { refused: BRAIN_HOST_REFUSAL.NOT_OWNER },
+  );
 });
 
-test("the deployment's cancel of a turn, which a continue started through start_agent stops its source with, is admitted on the named account's own session as the deployment acting for the account, with no row of the table, and refused on a session the account does not reach", async () => {
+test("a call's spoken line carries ahead of it into the agent's history the note that its answer is heard, short, and never waits, since eve may steer it into a typed turn under way that keeps that turn's words; a typed line carries none", async () => {
+  const channel = coderChannel();
+  const { onMessage } = channel;
+  assert.ok(onMessage !== undefined);
+  const door = doorOf(channel);
+  const contextOf = async (turn: string) => {
+    const request = deploymentRequest(OWN_SESSION, turn);
+    const { admitted } = await door(request);
+    assert.ok(admitted);
+    const result = await onMessage({ eve: { caller: admitted, request } }, "words");
+    assert.equal(result.auth?.attributes[BRAIN_HOST_ATTRIBUTE.TURN], turn);
+    return result.context;
+  };
+
+  const spoken = await contextOf(BRAIN_HOST_TURN.SPOKEN);
+  assert.equal(spoken?.length, 1);
+  const [note] = spoken ?? [];
+  assert.ok(note !== undefined);
+  assert.ok(note.includes("voice call") && note.includes("aloud"), note);
+  assert.ok(note.includes(`\`${CODER_TOOL.SLEEP}\``), note);
+  assert.equal(await contextOf(BRAIN_HOST_TURN.TYPED), undefined);
+});
+
+test("the deployment's cancel of a turn, which a continue started through start_agent stops its source with, is admitted on the named account's own session as the developer's own principal, with no row of the table, and refused on a session the account does not reach", async () => {
   const door = doorOf(coderChannel());
   const cancel = (sessionId: string) =>
     new Request(`https://luke.test/eve/v1/session/${sessionId}/cancel`, {
@@ -181,11 +210,11 @@ test("the deployment's cancel of a turn, which a continue started through start_
     });
 
   const { admitted } = await door(cancel(OWN_SESSION));
-  assert.deepEqual(asDeployment(admitted), DEPLOYMENT_FOR_ACCOUNT);
+  assert.deepEqual(asCarriedAccount(admitted), CARRIED_ACCOUNT);
   assert.deepEqual(await door(cancel(OTHER_SESSION)), { refused: BRAIN_HOST_REFUSAL.NOT_OWNER });
 });
 
-test("the deployment's retire of a session, which a delete a browser asked for ends an agent's session with, is admitted on the named account's own session as the deployment acting for the account, with no row of the table; another account's session, a read, and eve's other session controls are refused", async () => {
+test("the deployment's retire of a session, which a delete a browser asked for ends an agent's session with, is admitted on the named account's own session as the developer's own principal, with no row of the table; another account's session, a read, and eve's other session controls are refused", async () => {
   const door = doorOf(coderChannel());
   const control = (sessionId: string, route: string, method = "POST") =>
     new Request(`https://luke.test/eve/v1/session/${sessionId}/${route}`, {
@@ -194,7 +223,7 @@ test("the deployment's retire of a session, which a delete a browser asked for e
     });
 
   const { admitted } = await door(control(OWN_SESSION, "reset"));
-  assert.deepEqual(asDeployment(admitted), DEPLOYMENT_FOR_ACCOUNT);
+  assert.deepEqual(asCarriedAccount(admitted), CARRIED_ACCOUNT);
   assert.deepEqual(await door(control(OTHER_SESSION, "reset")), {
     refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
   });

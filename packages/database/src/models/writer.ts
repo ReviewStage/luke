@@ -423,7 +423,11 @@ export interface StoreWriter {
    * taken moves to a fresh place in the conversation's sequence, ahead of
    * everything the turn will write and of anything it already wrote, which
    * moves behind it, so a device that already passed its old place reads it
-   * again where it now stands. Under the conversation's lock,
+   * again where it now stands. A row of a spoken ask that joined a typed
+   * turn under way is the exception: it is given the turn where it stands,
+   * at a bumped revision, keeping how many of the turn's steps had begun
+   * before it, as a steered typed line is (`takeAwaitingLine`), and nothing
+   * of the turn moves. Under the conversation's lock,
    * so a row being written meanwhile is seen once it lands, never missed.
    */
   attachAskLines(target: ConversationTarget, turnId: string): Write<AskLinesAttached>;
@@ -433,7 +437,8 @@ export interface StoreWriter {
    * takes the delegation's id into its metadata in place, at a bumped
    * revision, so a device reading from its revision sees the row again where
    * it stands; and where the ask has already learned its turn, the rows are
-   * taken into it in the order they stand, ahead of the turn's work, as
+   * taken into it in the order they stand, ahead of the turn's work, or, for
+   * an ask that joined a typed turn under way, where they stand, as
    * `attachAskLines` takes them at the received message otherwise. Nothing is
    * re-keyed: a row's client id stays the ledger's for life, and a row a
    * delegation already owns keeps that one. A delegation told twice attaches
@@ -1936,18 +1941,37 @@ function askTurnOf(key: {
   readonly conversationId: string;
   readonly clientId: string;
 }): Effect.Effect<string | undefined, QueryError | Schema.SchemaError, DatabaseServices> {
+  return Effect.map(askBindingOf(key), (bound) => bound?.turnId);
+}
+
+/** The turn an ask has learned, as `askTurnOf` reads it, and the place it joined that turn at where it joined a typed turn under way (`asks.joined_after_step`). */
+function askBindingOf(key: {
+  readonly conversationId: string;
+  readonly clientId: string;
+}): Effect.Effect<
+  { readonly turnId: string; readonly joinedAfterStep: number | null } | undefined,
+  QueryError | Schema.SchemaError,
+  DatabaseServices
+> {
   return Effect.map(findAskTurn(key), (found) =>
-    Option.match(found, { onNone: () => undefined, onSome: (row) => row.turnId ?? undefined }),
+    Option.match(found, {
+      onNone: () => undefined,
+      onSome: ({ turnId, joinedAfterStep }) =>
+        turnId === null ? undefined : { turnId, joinedAfterStep },
+    }),
   );
 }
 
 const findAskTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
-  Result: Schema.Struct({ turnId: Schema.NullOr(Schema.String) }),
+  Result: Schema.Struct({
+    turnId: Schema.NullOr(Schema.String),
+    joinedAfterStep: Schema.NullOr(Schema.Int),
+  }),
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({ turnId: asks.turnId })
+        .select({ turnId: asks.turnId, joinedAfterStep: asks.joinedAfterStep })
         .from(asks)
         .innerJoin(turns, eq(turns.id, asks.turnId))
         .where(and(eq(asks.conversationId, key.conversationId), eq(asks.clientId, key.clientId))),
@@ -1963,11 +1987,15 @@ const findAskTurn = SqlSchema.findOneOption({
  */
 const findUnattachedAskRows = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, role: MessageRoleSchema }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    role: MessageRoleSchema,
+    joinedAfterStep: Schema.NullOr(Schema.Int),
+  }),
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({ id: messages.id, role: messages.role })
+        .select({ id: messages.id, role: messages.role, joinedAfterStep: asks.joinedAfterStep })
         .from(messages)
         .innerJoin(
           asks,
@@ -2096,6 +2124,18 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function*
   });
   const attached: string[] = [];
   for (const row of standing) {
+    // A spoken ask that joined a typed turn under way is drawn where it arrived, among that
+    // turn's work, as a steered typed line is, and moves nothing of an hour's work behind it.
+    if (row.joinedAfterStep !== null) {
+      yield* giveLineToTurn({
+        id: row.id,
+        conversationId: context.target.conversationId,
+        turnId,
+        takenAfterStep: row.joinedAfterStep,
+      });
+      attached.push(row.id);
+      continue;
+    }
     const seq = yield* takeLineIntoTurn(context, turnId, row.id);
     // The received message ordinarily precedes the first step, so nothing of
     // the turn's stands yet; where one does — a received message eve told
@@ -2336,10 +2376,11 @@ const attachSpokenAsk = /* @__PURE__ */ Effect.fn("web/attachSpokenAsk")(functio
     delegationId: attach.delegationId,
     clientIds: attach.rowIds,
   });
-  const turnId = yield* askTurnOf({
+  const bound = yield* askBindingOf({
     conversationId: context.target.conversationId,
     clientId: attach.delegationId,
   });
+  const turnId = bound?.turnId;
   const attached: string[] = [];
   let lastSeq: number | undefined;
   for (const row of rows) {
@@ -2360,8 +2401,16 @@ const attachSpokenAsk = /* @__PURE__ */ Effect.fn("web/attachSpokenAsk")(functio
       });
     }
     // Where the ask has learned its turn, a row still outside it moves in at a fresh place, as at
-    // the received message; a row already in a turn keeps its place.
-    if (turnId !== undefined && row.turnId === null) {
+    // the received message, or, for an ask that joined a typed turn under way, is given the turn
+    // where it stands, at the place it joined; a row already in a turn keeps its place.
+    if (bound !== undefined && row.turnId === null && bound.joinedAfterStep !== null) {
+      yield* giveLineToTurn({
+        id: row.id,
+        conversationId: context.target.conversationId,
+        turnId: bound.turnId,
+        takenAfterStep: bound.joinedAfterStep,
+      });
+    } else if (turnId !== undefined && row.turnId === null) {
       lastSeq = yield* takeLineIntoTurn(context, turnId, row.id);
     }
     attached.push(row.id);

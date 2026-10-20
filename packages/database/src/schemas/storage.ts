@@ -329,6 +329,13 @@ export const asks = pgTable(
     toldSeq: integer("told_seq").notNull().default(0),
     /** When the run's end was told to the voice under this ask, written before it is told. */
     endToldAt: timestamptz("end_told_at"),
+    /**
+     * For a spoken ask bound to a typed turn, which it joined under way: how
+     * many of that turn's steps had begun before it, from which its answer
+     * is read and its line placed. Null for every other ask, which opened its
+     * turn or joined one of its own kind, and is the whole turn's.
+     */
+    joinedAfterStep: integer("joined_after_step"),
   },
   (table) => [
     uniqueIndex("asks_conversation_client").on(table.conversationId, table.clientId),

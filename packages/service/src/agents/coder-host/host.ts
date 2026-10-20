@@ -94,6 +94,7 @@ import {
   type RelayAskSeams,
   type RelayStanding,
   type RelayStateStore,
+  relayedTurnKind,
   StreamRelay,
 } from "../brain-host/relay.js";
 import { rotationSeedText } from "../brain-host/seed.js";
@@ -856,18 +857,19 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     );
 
   /**
-   * The ask record a spoken turn binds the voice's asks to, as the brain's
+   * The ask record every turn binds the voice's asks to, as the brain's
    * relay does (`../brain-host/host.ts`): each ask eve delivered into the
    * turn learns the turn it ran in, which is what ties the transcript's line
    * to it and what the voice follows the answer by, and a Stop the ask took
    * while it waited is carried the moment its turn starts, by the deployment
    * acting for the agent's starter on the coder's mount, since the hook that
    * sees the start holds no bearer; a deployment with no secret or no origin
-   * for eve reports the Stop it could not carry. A typed turn takes none:
-   * its line is the developer's awaiting row, and a spoken ask never joins
-   * it (`channel.ts`'s `CODER_DEPLOYMENT_PRESENCE`).
+   * for eve reports the Stop it could not carry. A typed turn takes it too,
+   * since a call's ask joins one under way (`channel.ts`'s
+   * `CODER_DEPLOYMENT_PRESENCE`): at its start that costs a binding of its
+   * delivery and a read of the Stops on it, two statements.
    */
-  const spokenAsks = (writer: StoreWriter, compose: EveSessionsComposer): RelayAskSeams => ({
+  const turnAsks = (writer: StoreWriter, compose: EveSessionsComposer): RelayAskSeams => ({
     binding: askRecord(),
     stopTurn: (target, sessionId, eveTurnId, turnId) =>
       Effect.suspend(() => {
@@ -898,16 +900,14 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }),
   });
 
-  /** One event relayed through the shared relay, with the ask record beside it on a spoken turn alone. */
+  /** One event relayed through the shared relay, with the ask record beside it on the agent's own turns, which a call may join, and none on a worker's. */
   const relayEvent = (event: MessageStreamEvent, standing: RelayStanding) =>
     Effect.gen(function* () {
       const writer = yield* seams.writer();
       const compose = yield* eveSessionsComposer;
       const relay = new StreamRelay({
         writer,
-        ...(standing.turn === BRAIN_HOST_TURN.SPOKEN
-          ? { asks: spokenAsks(writer, compose) }
-          : undefined),
+        ...(standing.turn === RELAY_TURN.CHILD ? undefined : { asks: turnAsks(writer, compose) }),
         now: seams.now,
         report: (message) => console.warn(message),
       });
@@ -1339,17 +1339,20 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // id under the scripted model; a conversation that is no agent's records no model.
         const agent = Result.getOrUndefined(found);
         const model = seams.scriptedModel() ? CODER_MODEL_FIXTURE.SCRIPTED_MODEL_ID : agent?.model;
-        const turn = turnKindOf(session.auth.current);
+        // Note that eve moves the session's current auth to a line's that joins a turn under way,
+        // so the kind the turn opened as is the relay's to keep and answer, past its start.
+        const opened = turnKindOf(session.auth.current);
         yield* relayEvent(event, {
           sessionId: session.id,
           target: admitted.target,
-          turn,
+          turn: opened,
           ...(model !== undefined ? { model } : undefined),
           ...(agent !== undefined ? { reasoningEffort: agent.effort } : undefined),
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
           state,
         });
         if (agent === undefined) return;
+        const turn = relayedTurnKind(event, state) ?? opened;
         yield* recordContext(event, admitted.target.userId, agent, prompt, turn);
         const titleModel = seams.titleModel(admitted.target.userId);
         if (titleModel === undefined || !asksTitle(event)) return;
