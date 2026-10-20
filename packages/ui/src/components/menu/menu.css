@@ -14,9 +14,19 @@
     -webkit-touch-callout: none;
   }
 
+  /* Under a finger, nor a selection of its words, which iOS starts on a
+     hold of its own that races the menu's; a mouse still drags across a
+     row's words to copy them. */
+  @media (pointer: coarse) {
+    [data-long-press] {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+  }
+
   .luke-menu {
     position: fixed;
-    z-index: 20;
+    z-index: var(--luke-z-menu);
     display: flex;
     flex-direction: column;
     min-width: 196px;
