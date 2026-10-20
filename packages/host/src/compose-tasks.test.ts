@@ -98,7 +98,7 @@ import {
 import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
-import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
+import { Deferred, Duration, Effect, Equal, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
 
@@ -182,6 +182,9 @@ interface FakeService extends TasksClient {
   >;
   /** What the service answers for a repository's pull requests, by workspace id, then repository, then number; one with none answers nothing, as a service that did not answer. */
   pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
+  /** Every pull request read that reached the service, as `repository#number`, and the gate it waits on before it answers, where one is set. */
+  pullRequestReads: string[];
+  pullRequestGate: Deferred.Deferred<void> | undefined;
   /** What the service answers for a repository's issues, kept as its pull requests are. */
   issues: Record<string, Record<string, Map<number, GitHubRepositoryIssueAnswer>>>;
   /** What a repository's issues read answers, by workspace and repository, and each ask it heard. */
@@ -352,6 +355,8 @@ function fakeService(tasks: Task[]): FakeService {
     skills: {},
     places: {},
     pullRequests: {},
+    pullRequestReads: [],
+    pullRequestGate: undefined,
     issues: {},
     repositoryIssues: {},
     issueAsks: [],
@@ -689,7 +694,11 @@ function fakeService(tasks: Task[]): FakeService {
     readRepositorySkills: (place) =>
       Effect.sync(() => service.places[place.workspaceId]?.[place.repository]?.skills),
     readRepositoryPullRequest: (place, number) =>
-      Effect.sync(() => service.pullRequests[place.workspaceId]?.[place.repository]?.get(number)),
+      Effect.gen(function* () {
+        service.pullRequestReads.push(`${place.repository}#${number}`);
+        if (service.pullRequestGate !== undefined) yield* Deferred.await(service.pullRequestGate);
+        return service.pullRequests[place.workspaceId]?.[place.repository]?.get(number);
+      }),
     readRepositoryIssue: (place, number) =>
       Effect.sync(() => service.issues[place.workspaceId]?.[place.repository]?.get(number)),
     readRepositoryIssues: (place, ask) =>
@@ -2741,6 +2750,89 @@ it.effect(
       assert.deepEqual(unanswered, { failure: TASK_CALL_FAILURE.UNANSWERED });
       assert.ok(Exit.isFailure(offTheWire), "a pull request is numbered from one");
       assert.equal(told.length, 0, "a pull request is never told in the view");
+    }),
+);
+
+it.effect(
+  "a pull request's read is kept for every link: many links asking at once reach the service once, and a change on GitHub is answered once the minute it was kept for passes",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const answered = (title: string): GitHubRepositoryPullRequestAnswer => ({
+        pullRequest: {
+          number: 42,
+          title,
+          url: "https://github.com/acme/relay/pull/42",
+          state: PULL_REQUEST_STATE.OPEN,
+        },
+      });
+      service.pullRequests[ACME.id] = { "acme/relay": new Map([[42, answered("Batch invites")]]) };
+      service.pullRequestGate = yield* Deferred.make<void>();
+      const { call } = yield* subject(service);
+      const asked = call(GATEWAY_METHOD.TASKS_PULL_REQUEST, {
+        workspaceId: ACME.id,
+        repository: "acme/relay",
+        number: 42,
+      });
+
+      const links = yield* Effect.forkChild(
+        Effect.all(
+          Array.from({ length: 40 }, () => asked),
+          { concurrency: "unbounded" },
+        ),
+      );
+      yield* Effect.yieldNow;
+      yield* Deferred.succeed(service.pullRequestGate, undefined);
+      const first = yield* Fiber.join(links);
+      service.pullRequests[ACME.id] = {
+        "acme/relay": new Map([[42, answered("Send invites in batches")]]),
+      };
+      const withinTheMinute = yield* asked;
+      yield* TestClock.adjust(Duration.minutes(1));
+      const afterIt = yield* asked;
+
+      assert.deepEqual(service.pullRequestReads, ["acme/relay#42", "acme/relay#42"]);
+      assert.ok(first.every((one) => Equal.equals(one, first[0])));
+      assert.deepEqual(first[0], answered("Batch invites"));
+      assert.deepEqual(withinTheMinute, answered("Batch invites"));
+      assert.deepEqual(afterIt, answered("Send invites in batches"));
+    }),
+);
+
+it.effect(
+  "a pull request the service did not answer is answered unanswered again, without asking it, until two minutes pass, and a sign-out forgets every kept read",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const merged: GitHubRepositoryPullRequestAnswer = {
+        pullRequest: {
+          number: 7,
+          title: "Batch invites",
+          url: "https://github.com/acme/relay/pull/7",
+          state: PULL_REQUEST_STATE.MERGED,
+        },
+      };
+      const { call, tasks } = yield* subject(service);
+      const asked = call(GATEWAY_METHOD.TASKS_PULL_REQUEST, {
+        workspaceId: ACME.id,
+        repository: "acme/relay",
+        number: 7,
+      });
+
+      const refused = yield* asked;
+      service.pullRequests[ACME.id] = { "acme/relay": new Map([[7, merged]]) };
+      yield* TestClock.adjust(Duration.seconds(90));
+      const stillRefused = yield* asked;
+      yield* TestClock.adjust(Duration.seconds(30));
+      const read = yield* asked;
+      service.pullRequests[ACME.id] = { "acme/relay": new Map([[7, { pullRequest: null }]]) };
+      yield* tasks.reset;
+      const afterSignOut = yield* asked;
+
+      assert.deepEqual(refused, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(stillRefused, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(read, merged);
+      assert.deepEqual(afterSignOut, { pullRequest: null });
     }),
 );
 
