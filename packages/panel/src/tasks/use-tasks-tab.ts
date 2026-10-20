@@ -875,10 +875,17 @@ export interface LeaveGuard {
  * tab switch is guarded as the plans tab's own doors are. Note that the ask
  * standing is read through a ref, because a door is called from a closure a
  * render handed out earlier.
+ *
+ * `onStanding` hears the ask each time one is stood, and nothing each time
+ * the standing one is taken down, so a shell that can leave the page by
+ * ways of its own (a browser tab closed, reloaded, or sent elsewhere) asks
+ * first only while a page holds unsaved work.
  */
-export function useLeaveGuard(): LeaveGuard {
+export function useLeaveGuard(onStanding?: (ask: LeaveAsk | undefined) => void): LeaveGuard {
   const standing = useRef<LeaveAsk | undefined>(undefined);
   const passing = useRef(false);
+  const heard = useRef(onStanding);
+  heard.current = onStanding;
   return useMemo<LeaveGuard>(() => {
     const pass = (leave: () => void) => {
       passing.current = true;
@@ -891,8 +898,11 @@ export function useLeaveGuard(): LeaveGuard {
     return {
       stand: (ask) => {
         standing.current = ask;
+        heard.current?.(ask);
         return () => {
-          if (standing.current === ask) standing.current = undefined;
+          if (standing.current !== ask) return;
+          standing.current = undefined;
+          heard.current?.(undefined);
         };
       },
       pass,

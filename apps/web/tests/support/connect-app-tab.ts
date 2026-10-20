@@ -14,6 +14,7 @@ function emptyTab(): ConnectTab {
 const BROWSER: ConnectBrowser = {
   openEmptyTab: emptyTab,
   navigate: () => undefined,
+  leave: (go) => go(),
   address: () => "/app",
   openLink: () => undefined,
 };

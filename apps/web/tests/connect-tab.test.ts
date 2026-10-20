@@ -3,6 +3,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { ActPortClient } from "@luke/host/contract";
 import { afterEach, expect, test } from "vitest";
 import { type ConnectBrowser, type ConnectTab, connectTabs } from "../src/app/connect-tab";
+import { pageLeave } from "../src/app/page-leave";
 import { CONNECT_RETURN, connectReturn } from "../src/connect-return";
 
 /**
@@ -11,7 +12,8 @@ import { CONNECT_RETURN, connectReturn } from "../src/connect-return";
  * their place; where the browser refused that tab, it opens in this one,
  * leaving the address it stood at for the landing page's way back; a press
  * whose act opened nothing leaves no empty tab behind, even where another
- * press's act answered first.
+ * press's act answered first; and a page holding unsaved work is asked
+ * about before a refused tab sends this one on.
  */
 
 /** The address the service answers a connect with. */
@@ -43,8 +45,15 @@ function openedTab(): OpenedTab {
   return { window, sentTo: () => sentTo, closed: () => closed };
 }
 
-/** The browser as a connect meets it: tabs it opens or refuses, and where this tab and each link were sent. */
-function fakeBrowser(options: { readonly refusesTabs: boolean }) {
+/**
+ * The browser as a connect meets it: tabs it opens or refuses, and where
+ * this tab and each link were sent, this tab's ways out taken through
+ * `leave`, at once where none is given.
+ */
+function fakeBrowser(options: {
+  readonly refusesTabs: boolean;
+  readonly leave?: (go: () => void) => void;
+}) {
   const tabs: OpenedTab[] = [];
   const navigated: string[] = [];
   const links: string[] = [];
@@ -56,6 +65,7 @@ function fakeBrowser(options: { readonly refusesTabs: boolean }) {
       return tab.window;
     },
     navigate: (url) => navigated.push(url),
+    leave: options.leave ?? ((go) => go()),
     address: () => "/plan/4f0b6a0e?tab=agents#settings",
     openLink: (url) => links.push(url),
   };
@@ -105,6 +115,27 @@ test("a refused tab sends this tab on, leaving its address for the landing page'
 
   await port[ACT_KIND.GITHUB_CONNECT]();
 
+  expect(navigated).toEqual([PROVIDER_ADDRESS]);
+  expect(connectReturn()).toEqual({
+    kind: CONNECT_RETURN.ADDRESS,
+    href: "/plan/4f0b6a0e?tab=agents#settings",
+  });
+});
+
+test("a refused tab asks first while the page holds unsaved work, and sends this tab on only once told to leave", async () => {
+  const tab = pageLeave(new EventTarget());
+  const asked: (() => void)[] = [];
+  tab.unsavedWork((leave) => asked.push(leave));
+  const { browser, navigated } = fakeBrowser({ refusesTabs: true, leave: tab.leave });
+  const connect = connectTabs(browser);
+  const port = connect.portClient(hostPort(connect.open, true));
+
+  await port[ACT_KIND.GITHUB_CONNECT]();
+  expect(asked).toHaveLength(1);
+  expect(navigated).toEqual([]);
+  expect(connectReturn()).toEqual({ kind: CONNECT_RETURN.ELSEWHERE });
+
+  asked[0]?.();
   expect(navigated).toEqual([PROVIDER_ADDRESS]);
   expect(connectReturn()).toEqual({
     kind: CONNECT_RETURN.ADDRESS,
