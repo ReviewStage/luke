@@ -140,3 +140,21 @@ test("in a narrow room a sent message's byline keeps its buttons and its time in
   assert.equal(actions.flexShrink, "0", "the buttons keep their width");
   assert.equal(sentAt.flexShrink, "0", "the time keeps its width");
 });
+
+test("in a narrow room a sender named in plain words, one the window cannot place, ends in an ellipsis rather than running past its byline", () => {
+  laid = layContainersAt({}, { touch: true });
+  const shell = document.body.appendChild(document.createElement("div"));
+  shell.className = "desktop-shell";
+  shell.dataset.room = "narrow";
+  const words = shell
+    .appendChild(document.createElement("div"))
+    .appendChild(document.createElement("span"))
+    .appendChild(document.createElement("span"));
+  words.className = "message-sender-words";
+  words.textContent = "a-sender-name-too-long-to-stand-beside-anything-on-a-phone";
+  const style = getComputedStyle(words);
+  assert.deepEqual(
+    [style.overflow, style.textOverflow, style.whiteSpace, style.minWidth],
+    ["hidden", "ellipsis", "nowrap", "0px"],
+  );
+});

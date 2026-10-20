@@ -2319,6 +2319,15 @@ ul.actor-stack {
   min-width: 0;
 }
 
+/* A sender the window cannot place is named in plain words, cut short there
+   as an inline ref's name is. */
+.desktop-shell[data-room="narrow"] .message-sender-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .desktop-shell[data-room="narrow"] .message-meta > :is(.message-actions, .message-sent-at) {
   flex: none;
 }
