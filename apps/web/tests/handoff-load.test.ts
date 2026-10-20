@@ -12,7 +12,7 @@ import { pageLoadedBy } from "./support/page-load";
  * taken as not.
  */
 
-const PLAN_ADDRESS = "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
+const TASK_ADDRESS = "/acme/plan/3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -20,14 +20,14 @@ afterEach(() => {
 });
 
 test("a navigation to the address is fresh", () => {
-  window.history.replaceState(null, "", PLAN_ADDRESS);
+  window.history.replaceState(null, "", TASK_ADDRESS);
   pageLoadedBy("navigate");
 
   assert.equal(browserLoadedFresh(), true);
 });
 
 test("a reload, or a Back or Forward into the tab, is not", () => {
-  window.history.replaceState(null, "", PLAN_ADDRESS);
+  window.history.replaceState(null, "", TASK_ADDRESS);
   for (const type of ["reload", "back_forward"] as const) {
     pageLoadedBy(type);
     assert.equal(browserLoadedFresh(), false, type);
@@ -35,14 +35,14 @@ test("a reload, or a Back or Forward into the tab, is not", () => {
 });
 
 test("a navigation onto an entry holding a place the panel saved is not", () => {
-  window.history.replaceState({ state: { place: "plan" }, idx: 3 }, "", PLAN_ADDRESS);
+  window.history.replaceState({ state: { place: "plan" }, idx: 3 }, "", TASK_ADDRESS);
   pageLoadedBy("navigate");
 
   assert.equal(browserLoadedFresh(), false);
 });
 
 test("a browser that does not say how it loaded the page is taken as not", () => {
-  window.history.replaceState(null, "", PLAN_ADDRESS);
+  window.history.replaceState(null, "", TASK_ADDRESS);
   pageLoadedBy(undefined);
 
   assert.equal(browserLoadedFresh(), false);
