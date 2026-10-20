@@ -16,8 +16,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
-import { useShellRoom } from "../shell-room.js";
-import { useStageWidth } from "../stage-width.js";
+import { useStageRoom } from "../stage-room.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -125,8 +124,8 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
   document.body.append(container);
   root = createRoot(container);
   function Window() {
-    const stage = useStageWidth();
-    const sidebar = useSidebarCollapse(false, stage.width);
+    const stage = useStageRoom();
+    const sidebar = useSidebarCollapse(false, stage.compact);
     const [tab, setTab] = useState<PanelTab>(PANEL_TAB.TASKS);
     const shell = createElement(DesktopShell, {
       gates: {
@@ -145,7 +144,7 @@ function mount(width: number, onGoHome: () => void = ignore): HTMLElement {
         onLeaveVersionHistory: ignore,
       },
       sidebar,
-      room: useShellRoom(stage.width),
+      room: stage.room,
       settingsStep: { listed: true, onList: ignore },
       call: undefined,
       captions: {

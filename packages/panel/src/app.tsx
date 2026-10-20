@@ -68,8 +68,7 @@ import { OpenPersonProvider } from "./person-door.js";
 import { shownSettingsView } from "./settings/pages.js";
 import { settingsRowsInput } from "./settings/settings-panel.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
-import { useShellRoom } from "./shell-room.js";
-import { useStageWidth } from "./stage-width.js";
+import { useStageRoom } from "./stage-room.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
 import { useChatToasts } from "./tasks/chat-toast.js";
 import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
@@ -286,10 +285,11 @@ export function App(): React.JSX.Element {
   const volumeHintWanted =
     fixtureMuted ||
     (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
-  // The stage's width, on the desktop the window's, which the sidebar folds
-  // by and which says whether the panel stands as one pane (`shell-room.ts`).
-  const stage = useStageWidth();
-  const room = useShellRoom(stage.width);
+  // The room the stage's width gives, on the desktop the window's: whether
+  // the panel stands as one pane (`shell-room.ts`), and whether the sidebar
+  // folds. Only crossing a line draws the shell again, never a pixel's drag.
+  const stage = useStageRoom();
+  const room = stage.room;
   // The Tasks tab, drawn from the same voice report the strip reads, so a
   // task call's words and levels are the shape's as any call's are.
   const tasks = useTasksTab({
@@ -518,7 +518,7 @@ export function App(): React.JSX.Element {
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all. It folds by the room the
   // stage has, which on the desktop is the window's.
-  const sidebar = useSidebarCollapse(state?.run.fixtureMode === true, stage.width);
+  const sidebar = useSidebarCollapse(state?.run.fixtureMode === true, stage.compact);
 
   const caption = useCaptionPresentation({
     lukeCaptions,

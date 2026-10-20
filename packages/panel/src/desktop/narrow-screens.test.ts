@@ -21,8 +21,7 @@ import { runAppCommand } from "../app-commands.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import { followSettingsLink, useSettingsPlace } from "../settings-link.js";
-import { useShellRoom } from "../shell-room.js";
-import { useStageWidth } from "../stage-width.js";
+import { useStageRoom } from "../stage-room.js";
 import { fixtureChat } from "../tasks/chat-fixture.js";
 import {
   type HistorySpot,
@@ -176,9 +175,9 @@ function Shell({
   settings?: SettingsPanelProps;
   settingsStep?: { listed: boolean; onList: () => void };
 }): React.JSX.Element {
-  const stage = useStageWidth();
-  const room = useShellRoom(stage.width);
-  const sidebar = useSidebarCollapse(false, stage.width);
+  const stage = useStageRoom();
+  const room = stage.room;
+  const sidebar = useSidebarCollapse(false, stage.compact);
   const shell = createElement(DesktopShell, {
     gates: { accountRequired: false, onBeginSignIn: ignore, onCancelSignIn: ignore },
     tab,
