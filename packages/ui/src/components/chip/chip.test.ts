@@ -4,13 +4,14 @@ import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../../index.js";
+import { CHIP_CUT, CHIP_LOOK, CHIP_SIZE, Chip, ChipName } from "../../index.js";
 
 /**
  * chip.test.ts -- a row of filter chips announces the one pressed, and a
  * press moves it there; a chip drawn as its mark alone keeps its words as
  * its name; a removable chip's × alone is a press, which lifts it; and a
- * compact count says it is busy while the change it made is out.
+ * compact count says it is busy while the change it made is out; and a long
+ * name cut in its middle keeps its end.
  */
 
 declare global {
@@ -155,4 +156,24 @@ test("a compact chip pressed says it is busy until its change is answered, then 
   act(() => chip("Answer").click());
   assert.equal(reaction.getAttribute("aria-busy"), null);
   assert.deepEqual(pressed(), ["👍2"]);
+});
+
+test("a long name cut in its middle keeps its words whole and its end, after a join, apart; a short one is not cut in two", () => {
+  render(
+    createElement(
+      "div",
+      null,
+      createElement(ChipName, {
+        mono: true,
+        cut: CHIP_CUT.MIDDLE,
+        children: "luke/pull-request-header-menu-and-pill",
+      }),
+      createElement(ChipName, { mono: true, cut: CHIP_CUT.MIDDLE, children: "main" }),
+    ),
+  );
+  const [long, short] = [...document.querySelectorAll(".luke-chip-name")];
+  assert.equal(long?.textContent, "luke/pull-request-header-menu-and-pill");
+  assert.equal(long?.querySelector(".luke-chip-name-end")?.textContent, "and-pill");
+  assert.equal(short?.textContent, "main");
+  assert.equal(short?.querySelector(".luke-chip-name-end"), null);
 });

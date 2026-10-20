@@ -141,6 +141,7 @@ import {
   usePendingThread,
 } from "./pending-comments.js";
 import { ANCHOR_KIND, anchorIn } from "./pull-request-anchors.js";
+import { PullRequestBranches } from "./pull-request-branches.js";
 import {
   type PullRequestComment,
   PullRequestCommentBox,
@@ -148,7 +149,7 @@ import {
 } from "./pull-request-comment-box.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
 import { PullRequestNumberProvider, pullRequestOfTab } from "./pull-request-number.js";
-import { HeaderReviewers, OpenedBy, PersonRef, ReviewStanding } from "./pull-request-people.js";
+import { HeaderReviewers, OpenedLine, PersonRef, ReviewStanding } from "./pull-request-people.js";
 import {
   LabelPicker,
   ReviewerPicker,
@@ -1217,21 +1218,14 @@ function PullRequestHead({
   return (
     <div className="changes-people pull-request-people">
       <span className="pull-request-branch-row">
-        <Tooltip label={`${pullRequest.head} into ${pullRequest.base}`}>
-          <span className="pull-request-branches">
-            <bdi>{pullRequest.base}</bdi>
-            {" ← "}
-            <bdi>{pullRequest.head}</bdi>
-          </span>
-        </Tooltip>
+        <PullRequestBranches base={pullRequest.base} head={pullRequest.head} />
         <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
       </span>
-      {author === undefined ? null : <OpenedBy person={author} />}
-      {/* Note that a merged one says when it merged, which is the moment that matters once it has. */}
-      <span className="pull-request-quiet">
-        {mergedAt === null ? null : "Merged "}
-        <RelativeTime at={mergedAt ?? pullRequest.createdAt} now={now} ago />
-      </span>
+      <OpenedLine
+        person={author}
+        opened={<RelativeTime at={pullRequest.createdAt} now={now} ago />}
+        merged={mergedAt === null ? undefined : <RelativeTime at={mergedAt} now={now} ago />}
+      />
       <span className="pull-request-reviewers">
         {reviewers.length === 0 ? null : <HeaderReviewers reviewers={reviewers} />}
         {open ? (

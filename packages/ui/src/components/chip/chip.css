@@ -45,6 +45,27 @@
     white-space: nowrap;
   }
 
+  /* Words cut in their middle keep their end whole and give way from the
+     end of their start, so the ellipsis stands between the two. */
+  .luke-chip-name[data-cut="middle"] {
+    display: inline-flex;
+    min-width: 0;
+  }
+
+  /* Note that each part keeps its spaces, because a flex item drops one
+     at its edge, which would close up the words either side of the cut. */
+  .luke-chip-name-start {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+  }
+
+  .luke-chip-name-end {
+    flex: none;
+    white-space: pre;
+  }
+
   /* Words naming code, a branch, read in the code face at a caption's
      size, as a terminal would print them. */
   .luke-chip-name[data-mono="true"] {

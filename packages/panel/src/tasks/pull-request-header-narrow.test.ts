@@ -72,6 +72,14 @@ test("a header wider than 520px keeps the pill, the title, and the controls in o
   assert.equal(style.titleFullWidth, false);
 }, 30_000);
 
+test("the pill and the controls stand level with the title's first line, not centred on a title wrapped to two", () => {
+  for (const width of [400, 900]) {
+    titleRowAt(width);
+    const row = document.querySelector(".pull-request-title-row") ?? assert.fail("the row stands");
+    assert.equal(getComputedStyle(row).alignItems, "flex-start", `at ${width}px`);
+  }
+}, 30_000);
+
 /** How a header folded as its view scrolled is drawn in the room given, on a phone's touch screen. */
 function foldedAt(room: "narrow" | "wide") {
   laid?.remove();

@@ -2310,6 +2310,29 @@
   color: var(--review-tone);
 }
 
+/* At a face's corner the standing is a disc of its tone, its glyph cut from
+   it in the ground's colour, so a check reads apart from a cross at a
+   face's size; a review asked for is the disc alone, smaller, as GitHub's
+   waiting dot. The badge's own ground rings it off the face. */
+.review-face-badge {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--review-tone);
+  color: var(--luke-color-ground);
+}
+
+.review-face-badge[data-review-state="requested"] {
+  width: 7px;
+  height: 7px;
+}
+
+.actor-stack-badge > .review-face-badge > svg {
+  width: 7px;
+  height: 7px;
+  stroke-width: 4;
+}
+
 .changes-comment-head {
   display: flex;
   min-width: 0;
@@ -2774,13 +2797,13 @@
 
 /* The title's row: the pill at the row's inset, the title taking the room
    between, wrapping beside the controls rather than under them, and the
-   controls at the row's end, each centred on the row. The title stands at
-   least the controls' height, so one of a single line reads level with
-   them. */
+   controls at the row's end, each level with the title's first line rather
+   than centred on a title wrapped to two. The title's first line stands the
+   controls' height, so one of a single line reads level with them. */
 .pull-request-title-row {
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--luke-space-8);
   /* Note that Tab walks a roomy row as it is drawn, the pill before the
      title's pencil, where the browser reads `reading-flow`, as the
@@ -2794,6 +2817,9 @@
   /* Note that the pill is drawn ahead of the title it follows in the
      markup, where a screen reader names the title first. */
   order: -1;
+  /* The pill, a badge's height, stands centred in a control's height, the
+     height of the title's first line and of the controls. */
+  margin-block: calc((var(--luke-control-height) - var(--luke-space-20)) / 2);
 }
 
 .pull-request-title-row > .pull-request-title,
@@ -3027,16 +3053,82 @@
   gap: var(--luke-control-gap);
 }
 
-/* The branches it merges, quiet in the code face under the title. */
+/* The branches it merges, each a compact pill in the code face that
+   copies its name (`pull-request-branches.tsx`), the arrow quiet between
+   them. A long name gives way, cut in its middle, before the row wraps
+   the arrow away from it; the branch it merges from gives way first. */
 .pull-request-branches {
-  margin: 0;
+  display: inline-flex;
   min-width: 0;
-  overflow: hidden;
-  color: var(--luke-color-text-subtle);
-  font-family: var(--luke-font-mono);
-  font-size: var(--luke-type-caption-size);
-  text-overflow: ellipsis;
+  max-width: 100%;
+  align-items: center;
+  gap: var(--luke-space-4);
   white-space: nowrap;
+}
+
+.pull-request-branch {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 22rem;
+  flex: 0 4 auto;
+}
+
+.pull-request-branch:first-child {
+  flex-shrink: 1;
+}
+
+.pull-request-branches-arrow {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+}
+
+/* A branch's glyph: the branch at rest, the copy glyph under the pointer
+   or the keyboard, saying what a press does, then the copy's own answer
+   for its moment, each in the one square so the chip never moves. */
+.pull-request-branch-glyph {
+  display: inline-grid;
+  flex: none;
+  width: 12px;
+  height: 12px;
+  color: var(--luke-color-text-subtle);
+}
+
+.pull-request-branch-glyph > *,
+.pull-request-branch-glyph svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pull-request-branch-glyph > * {
+  grid-area: 1 / 1;
+  transition: opacity var(--duration-quick) var(--motion-exit);
+}
+
+.pull-request-branch-glyph > .copy-glyph {
+  opacity: 0;
+}
+
+.pull-request-branch:has(:focus-visible) .pull-request-branch-glyph > svg,
+.pull-request-branch-glyph:not([data-state="idle"]) > svg {
+  opacity: 0;
+}
+
+.pull-request-branch:has(:focus-visible) .pull-request-branch-glyph > .copy-glyph,
+.pull-request-branch-glyph:not([data-state="idle"]) > .copy-glyph {
+  opacity: 1;
+}
+
+/* Note that the pointer's swap is a mouse's alone, because a touch
+   screen spends a first tap on a hover that changes what is shown; there
+   the branch's glyph stands until the copy's answer. */
+@media (hover: hover) {
+  .pull-request-branch:hover .pull-request-branch-glyph > svg {
+    opacity: 0;
+  }
+
+  .pull-request-branch:hover .pull-request-branch-glyph > .copy-glyph {
+    opacity: 1;
+  }
 }
 
 /* The branches and, beside them, the stack it stands in
@@ -3047,6 +3139,15 @@
   max-width: 100%;
   align-items: center;
   gap: var(--luke-space-8);
+}
+
+/* Who opened it and when, one phrase after their face. */
+.pull-request-opened {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-4);
+  white-space: nowrap;
 }
 
 .pull-request-branch-row > .pull-request-branches {
@@ -3103,11 +3204,12 @@
   padding: 0;
 }
 
-/* The reviewers' faces and, beside them, the reviewer picker. */
+/* The reviewers' faces and, beside them, the two pickers, whose own side
+   room spaces them. */
 .pull-request-reviewers {
   display: inline-flex;
   align-items: center;
-  gap: var(--luke-space-4);
+  gap: var(--luke-space-2);
 }
 
 /* A label's colour, leading its item in the label picker. */
@@ -3120,17 +3222,9 @@
   background: var(--label-dot, transparent);
 }
 
-/* The reviewers' glyph, standing for the word in the header's one line. */
-.pull-request-reviewers-glyph {
-  width: 14px;
-  height: 14px;
-  color: var(--luke-color-text-subtle);
-}
-
 /* The words that stand on the page rather than in a box, at the content
    inset. */
 .pull-request-title,
-.pull-request-view .pull-request-branches,
 .changes-people.pull-request-people,
 .pull-request-heading,
 .pull-request-none,
@@ -3213,12 +3307,35 @@
   font-weight: var(--luke-weight-regular);
 }
 
-/* Its branches, who opened it and its reviewers, one line standing on the
-   page rather than across it, wrapping under the title row. */
+/* Its branches, who opened it, its reviewers and its labels, one line
+   standing on the page rather than across it, wrapping under the title
+   row, its edge the pill's. A hairline stands in the gap between each two
+   groups; one that would lead a wrapped line falls outside the row's box,
+   which clips it, while a focus ring or a face's badge at a line's start
+   stays within the room the clip leaves. */
 .changes-people.pull-request-people {
-  gap: var(--luke-space-4) var(--luke-space-12);
-  padding-block: var(--luke-space-4) 0;
+  --people-gap: var(--luke-space-16);
+  gap: var(--luke-space-6) var(--people-gap);
+  padding-block: var(--luke-space-6) 0;
+  padding-inline: 0;
   border-bottom: 0;
+  overflow: clip;
+  overflow-clip-margin: var(--luke-space-4);
+}
+
+.changes-people.pull-request-people > * {
+  position: relative;
+}
+
+.changes-people.pull-request-people > * + *::before {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: calc(var(--people-gap) / -2);
+  width: 1px;
+  height: var(--luke-space-12);
+  translate: -50% -50%;
+  background: var(--luke-color-border-strong);
+  content: "";
 }
 
 .pull-request-quiet {
