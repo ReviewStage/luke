@@ -43,8 +43,29 @@ export type ContinueDoor = (words: string, attachments: readonly CodingAgentAtta
 
 const ForkContext = createContext<ForkDoors | undefined>(undefined);
 
+/**
+ * Whether the tab offers to fork, apart from the doors themselves, which
+ * the window hands anew on every draw: every message reads it, and a
+ * message kept as it was is not drawn again for a new set of doors.
+ */
+const ForkOfferedContext = createContext(false);
+
 /** Hands an agent's messages what forking takes. */
-export const ForkProvider = ForkContext.Provider;
+export function ForkProvider({
+  value,
+  children,
+}: {
+  value: ForkDoors | undefined;
+  children?: ReactNode;
+}): React.JSX.Element {
+  return (
+    <ForkContext.Provider value={value}>
+      <ForkOfferedContext.Provider value={value?.onFork !== undefined}>
+        {children}
+      </ForkOfferedContext.Provider>
+    </ForkContext.Provider>
+  );
+}
 
 /** The press that opens the agent's continue as the task's draft, where its tab hands one. */
 export function useContinueDoor(): ContinueDoor | undefined {
@@ -133,7 +154,7 @@ export function agentForkDoors(input: {
 
 /** Whether the tab a message is drawn in offers to fork it. */
 export function useForkOffered(): boolean {
-  return useContext(ForkContext)?.onFork !== undefined;
+  return useContext(ForkOfferedContext);
 }
 
 /** A message's Fork to new agent, after its Copy and Copy link; nothing where its tab offers no fork. */
