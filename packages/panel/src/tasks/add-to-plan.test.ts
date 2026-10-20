@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import type { CodingAgentMessage } from "@luke/features/coding-agent-wire";
 import { INBOX_IMAGE_TYPE } from "@luke/features/inbox-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, type Act } from "@luke/host/acts";
 import type { PortActKind } from "@luke/host/contract";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement, type ReactNode } from "react";
@@ -44,16 +44,12 @@ const roots: Root[] = [];
 beforeEach(() => {
   held = PAGE_TEXT;
   sent = [];
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request.kind);
-      if (request.kind === ACT_KIND.TASKS_PICTURE_KEEP) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { id: KEPT_ID } });
-      }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-    },
-  });
+  fakeAppBridge({});
   fakeActPort({
+    [ACT_KIND.TASKS_PICTURE_KEEP]: () => {
+      sent.push(ACT_KIND.TASKS_PICTURE_KEEP);
+      return Promise.resolve({ id: KEPT_ID });
+    },
     [ACT_KIND.TASKS_EDIT]: ({ edit }) => {
       sent.push(ACT_KIND.TASKS_EDIT);
       // The one edit this page sends is the document's whole text.

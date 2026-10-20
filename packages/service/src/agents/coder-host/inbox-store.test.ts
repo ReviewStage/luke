@@ -212,6 +212,62 @@ const liveAnswerOf = (userId: string, readAt: number) =>
 
 it.layer(getTestDB())("the inbox store", (it) => {
   it.effect(
+    "a message that waits names its author by what they are called, a person by their account's name and a task's Luke as Luke, alike in the live read and the held read",
+    () =>
+      Effect.gen(function* () {
+        const { agent, workspaceId } = yield* openAgentIn;
+        const owner = agent.userId;
+        const teammate = yield* openUser;
+        yield* Database.use((db) =>
+          db.update(user).set({ name: "Grace Hopper" }).where(eq(user.id, teammate)),
+        );
+        yield* joinWorkspace(workspaceId, teammate);
+        for (const each of [owner, teammate]) {
+          yield* writeAccountPreferences(each, { experiments: { [EXPERIMENT.CHAT]: true } });
+        }
+        const channel = Option.getOrThrow(yield* ensureTaskChannel(owner, agent.taskId));
+        const grace = Option.getOrThrow(
+          yield* ensureMember(owner, workspaceId, { kind: MEMBER_KIND.HUMAN, userId: teammate }),
+        );
+        const luke = Option.getOrThrow(
+          yield* ensureMember(owner, workspaceId, { kind: MEMBER_KIND.LUKE, taskId: agent.taskId }),
+        );
+        const ask = (authorMemberId: string, key: string) =>
+          Effect.map(
+            postAsk(owner, workspaceId, {
+              authorMemberId,
+              to: { channelId: channel.id },
+              blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Ship it?" }],
+              clientKey: randomUUID(),
+              key,
+              ask: { response: { type: CHAT_ASK.APPROVAL } },
+            }),
+            Result.getOrThrow,
+          );
+        // A person posts as themselves, so Grace's ask is hers; Luke's is the owner's to post.
+        const fromGrace = Result.getOrThrow(
+          yield* postAsk(teammate, workspaceId, {
+            authorMemberId: grace.id,
+            to: { channelId: channel.id },
+            blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Ship it?" }],
+            clientKey: randomUUID(),
+            key: "ship",
+            ask: { response: { type: CHAT_ASK.APPROVAL } },
+          }),
+        );
+        const fromLuke = yield* ask(luke.id, "ship-luke");
+        const held = yield* accountInboxPast(owner, INBOX_CURSOR_START, { archived: true });
+        const live = yield* liveAnswerOf(owner, held.readAt);
+        assert.deepEqual({ ...live, cursor: held.cursor }, held);
+        const fromOf = new Map(held.chat?.map((entry) => [entry.messageId, entry.from]));
+        assert.deepEqual(
+          [fromOf.get(fromGrace.message.id), fromOf.get(fromLuke.message.id)],
+          ["Grace Hopper", "Luke"],
+        );
+      }),
+  );
+
+  it.effect(
     "the live statements of the account's read deliver the rows its held read answers, under the keys the wire reads them by, to every member it answers and to no one else",
     () =>
       Effect.gen(function* () {
@@ -283,7 +339,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
             authorMemberId: agentMember.id,
             to: { channelId: channel.id },
             blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Which expiry?" }],
-            mentions: [],
             clientKey: randomUUID(),
             key: "invite-expiry",
             ask: {
@@ -303,7 +358,6 @@ it.layer(getTestDB())("the inbox store", (it) => {
             authorMemberId: agentMember.id,
             to: { channelId: dm.id },
             blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Can I take the invite file too?" }],
-            mentions: [],
             clientKey: randomUUID(),
           }),
         );
@@ -340,8 +394,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(
           read.chat?.map((entry) => [entry.messageId, entry.reason, entry.from]),
           [
-            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, agentMember.handle],
-            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, agentMember.handle],
+            [asked.message.id, ACCOUNT_CHAT_REASON.ASK, "anthropic/claude-opus-5.5"],
+            [direct.message.id, ACCOUNT_CHAT_REASON.DIRECT, "anthropic/claude-opus-5.5"],
           ],
         );
         assert.deepEqual(
@@ -685,7 +739,7 @@ it.layer(getTestDB())("the inbox store", (it) => {
   );
 
   it.effect(
-    "a member closes an open item without an answer only at the revision they saw, the item naming them and taking no answer since, a close withdrawn only under its own key, and the agent's post under the key opens it again",
+    "a member closes an open item without an answer only at the revision they saw, the item naming them and taking no answer since, a close withdrawn only under its own key, the agent withdrawing nothing a member's close withdrew already, and the agent's post under the key opens it again",
     () =>
       Effect.gen(function* () {
         const { agent, workspaceId } = yield* openAgentIn;
@@ -717,11 +771,15 @@ it.layer(getTestDB())("the inbox store", (it) => {
 
         const later = randomUUID();
         assert.ok(Option.isSome(yield* closeInboxItemAsMember(teammate, id, 1, later)));
-        yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.");
         assert.ok(
-          Option.isNone(yield* withdrawInboxClose(teammate, id, later)),
-          "taking the member's close back never opens the agent's own close since",
+          Option.isNone(yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.")),
+          "the agent withdraws no ask a member's close withdrew already",
         );
+        assert.equal(
+          Option.getOrUndefined(yield* withdrawInboxClose(teammate, id, later))?.status,
+          INBOX_STATUS.OPEN,
+        );
+        yield* closeInboxItem(agent, SETTINGS.key, "Did it myself.");
         const again = yield* postInboxItem(agent, { ...SETTINGS, title: "Require two reviews" });
         assert.ok(Result.isSuccess(again));
         assert.equal(again.success.status, INBOX_STATUS.OPEN);

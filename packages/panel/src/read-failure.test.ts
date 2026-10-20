@@ -8,14 +8,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import { INBOX_CURSOR_START } from "@luke/features/inbox-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
-import {
-  ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  type Act,
-  type ActKind,
-  type ActOutcome,
-  type ActResultFor,
-} from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -56,18 +49,9 @@ const TASK: TaskSummary = {
 /** Whether the service answers a read, rather than failing it, as a Retry finds it once it is back. */
 let answering = false;
 
-/** The bridge: every read fails until the service answers again, then answers with nothing in it. */
-function answer(request: Act): Promise<ActOutcome> {
-  const done = (value: ActResultFor<ActKind>): Promise<ActOutcome> =>
-    Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-  switch (request.kind) {
-    case ACT_KIND.CODING_AGENTS_INBOX:
-      // A read past the cursor is held open while nothing changes, as the service holds it.
-      if (request.payload.after !== INBOX_CURSOR_START) return new Promise(() => undefined);
-      return done(answering ? { items: [], cursor: "1" } : UNANSWERED);
-    default:
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-  }
+/** The bridge, which no read here reaches: every one rides the act port. */
+function answer(_request: Act): Promise<ActOutcome> {
+  return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
 }
 
 beforeEach(() => {
@@ -81,6 +65,11 @@ beforeEach(() => {
   });
   fakeAppBridge({ act: answer });
   fakeActPort({
+    // A read past the cursor is held open while nothing changes, as the service holds it; every read fails until the service answers again, then answers with nothing in it.
+    [ACT_KIND.CODING_AGENTS_INBOX]: ({ after }) =>
+      after !== INBOX_CURSOR_START
+        ? new Promise(() => undefined)
+        : Promise.resolve(answering ? { items: [], cursor: "1" } : UNANSWERED),
     [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
     [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve(answering ? { keys: [] } : UNANSWERED),
   });

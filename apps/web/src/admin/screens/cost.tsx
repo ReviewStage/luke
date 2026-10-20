@@ -75,9 +75,7 @@ function ListPriceNote(): React.JSX.Element {
   return (
     <div className="mt-3">
       <Text tone={TEXT_TONE.MUTED}>
-        Figures are public list prices, used to compare accounts, models, and sources and to show
-        trends. They are not what Luke pays: discounts, credits, plan fees, and which key paid
-        aren't reflected.
+        List prices leave out discounts, credits, plan fees, and which key paid.
       </Text>
     </div>
   );

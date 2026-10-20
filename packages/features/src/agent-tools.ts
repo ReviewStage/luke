@@ -68,9 +68,8 @@ export const AGENT_TOOL = {
   EDIT_PLAN: "edit_plan",
   WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
   POST_TO_INBOX: INBOX_TOOL.POST,
-  CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
+  WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_INBOX: INBOX_TOOL.READ,
-  REPLY_INBOX: INBOX_TOOL.REPLY,
   OPEN_PULL_REQUEST: "open_pull_request",
   // The workspace's chat, the planner's and every coding agent's.
   POST_CHAT: CHAT_TOOL.POST,
@@ -136,4 +135,7 @@ export const RETIRED_TOOL = {
   ARCHIVE_AGENT: "archive_agent",
   UNARCHIVE_AGENT: "unarchive_agent",
   MOVE_TASK: "move_task",
+  // Folded into `post_to_inbox` (a post that asks nothing) and `withdraw_ask`.
+  CLOSE_INBOX_ITEM: "close_inbox_item",
+  REPLY_INBOX: "reply_inbox",
 } as const;

@@ -10,10 +10,11 @@
  * which no code here reads or keeps. The voice socket refuses, since the web
  * client runs no voice yet.
  *
- * The panel's acts reach the host's own rows in this process; the few a
- * platform answers itself (a copy, a download, focus, the contact mail,
- * feedback, and Settings' test notification) are the tab's, and every other
- * platform kind is refused in its own words, so the table stays total. A
+ * The panel's acts reach the host's own procedures on the act port in this
+ * process; the few a platform answers itself (a copy, a download, focus, the
+ * contact mail, feedback, and Settings' test notification) are the tab's, and
+ * every other platform kind is refused in its own words, so the table stays
+ * total. A
  * notice is the panel's toast while the tab is shown and the browser's
  * notification while it is hidden (`web-notices.ts`). The composition is a
  * `Layer`, built by the tab's one runtime edge (`web-root.tsx`), whose close
@@ -26,16 +27,12 @@ import { highlightSnippet, runModeFor } from "@luke/host";
 import {
   type ActPortDependencies,
   type AgentProceduresDependencies,
+  actPortFor,
   createActPortHandler,
+  type PlatformActProcedures,
   refusedPlatformProcedures,
 } from "@luke/host/act-port";
-import {
-  createHostActRouter,
-  type HostActDependencies,
-  type PlatformActRows,
-  refusedRows,
-} from "@luke/host/act-router";
-import { ACT_KIND } from "@luke/host/acts";
+import { createActRouter } from "@luke/host/act-router";
 import { AgentNoticeDoors } from "@luke/host/agent-notices";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import type { AppBridge } from "@luke/host/bridge";
@@ -48,7 +45,7 @@ import {
   linkNetworkWatch,
   type OperatorClient,
 } from "@luke/host/client";
-import type { ActPortClient } from "@luke/host/contract";
+import { type ActPortClient, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
 import {
   AppIdentity,
   type CookieSessionDoor,
@@ -100,29 +97,6 @@ const CONTACT_MAILTO = "mailto:founders@stagereview.app";
 
 /** The path feedback is posted to on the tab's own origin, which takes no credential (`server/feedback.mjs`). */
 const FEEDBACK_PATH = "/api/feedback";
-
-/**
- * Every `app:act` kind a platform answers that a browser tab cannot carry
- * yet: the updater, Browser tabs, the microphone, and the system's
- * notification settings, which a page cannot open. The terminals and the
- * Mac's own, the voice, the call window, and the avatar ride the act port,
- * where `refusedPlatformProcedures` refuses them.
- */
-const REFUSED_KINDS = [
-  ACT_KIND.UPDATE_CHECK,
-  ACT_KIND.UPDATE_INSTALL,
-  ACT_KIND.UPDATE_OPEN_RELEASE,
-  ACT_KIND.UPDATE_OPEN_CHANGELOG,
-  ACT_KIND.BROWSER_OPEN,
-  ACT_KIND.BROWSER_NAVIGATE,
-  ACT_KIND.BROWSER_STEP,
-  ACT_KIND.BROWSER_PLACE,
-  ACT_KIND.BROWSER_CAPTURE,
-  ACT_KIND.BROWSER_CLOSE,
-  ACT_KIND.MICROPHONE_REQUEST,
-  ACT_KIND.MICROPHONE_ROUTE,
-  ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS,
-] as const;
 
 /** The page every act is from: a tab holds one panel and nothing else. */
 type WebSender = Window;
@@ -246,32 +220,41 @@ const noticeDoors = (
     (doors) => Effect.sync(() => doors.close()),
   );
 
-/** The rows the tab answers itself, and every other platform kind refused. */
-function platformRows(
+/**
+ * The platform procedures the tab answers itself: a copy, a download, focus,
+ * the contact mail, Settings' test notification, and feedback. Every other
+ * platform kind is refused in its own words, since a page cannot carry it
+ * yet: the updater, Browser tabs, the microphone, the system's notification
+ * settings, the terminals and the Mac's own, the voice, the call window, and
+ * the avatar.
+ */
+function platformProcedures(
   http: HttpClient.HttpClient,
   doors: WebNoticeDoors,
-): PlatformActRows<WebSender> {
+): PlatformActProcedures<WebSender> {
+  const port = actPortFor<WebSender>();
   const feedback = feedbackDelivery({ url: new URL(FEEDBACK_PATH, location.origin).href });
+  const KIND = WINDOW_SURFACE_ACT_KIND;
   return {
-    ...refusedRows(REFUSED_KINDS),
-    [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => navigator.clipboard.writeText(words),
-    [ACT_KIND.WINDOW_SAVE_FILE]: ({ name, text }) => downloadText({ name, text }),
-    [ACT_KIND.WINDOW_FOCUS_PANEL]: () => window.focus(),
-    [ACT_KIND.CONTACT_EMAIL]: () => location.assign(CONTACT_MAILTO),
+    ...refusedPlatformProcedures<WebSender>(),
+    [KIND.WINDOW_COPY_TEXT]: port[KIND.WINDOW_COPY_TEXT].handler(({ input }) =>
+      navigator.clipboard.writeText(input.words),
+    ),
+    [KIND.WINDOW_SAVE_FILE]: port[KIND.WINDOW_SAVE_FILE].handler(({ input }) =>
+      downloadText({ name: input.name, text: input.text }),
+    ),
+    [KIND.WINDOW_FOCUS_PANEL]: port[KIND.WINDOW_FOCUS_PANEL].handler(() => window.focus()),
+    [KIND.CONTACT_EMAIL]: port[KIND.CONTACT_EMAIL].handler(() => location.assign(CONTACT_MAILTO)),
     // Note that this is the one place the tab asks for permission, because a
     // browser lets a page ask only on a press.
-    [ACT_KIND.NOTIFICATIONS_TEST]: () => doors.postTest(),
-    [ACT_KIND.FEEDBACK_SEND]: ({ submission }) =>
-      Effect.provideService(feedback.deliver(submission), HttpClient.HttpClient, http),
-  };
-}
-
-/** The host's own rows' dependencies, answered for a tab: no voice, no keys, and links opened in a tab of their own, a connect's in the tab its press opened. */
-function hostRowDependencies(operator: OperatorClient): HostActDependencies {
-  const host = operator.host;
-  return {
-    tasks: { host, colourCode: highlightSnippet },
-    codingAgents: { host },
+    [KIND.NOTIFICATIONS_TEST]: port[KIND.NOTIFICATIONS_TEST].handler(() => doors.postTest()),
+    [KIND.FEEDBACK_SEND]: port[KIND.FEEDBACK_SEND].effect(function* ({ input }) {
+      return yield* Effect.provideService(
+        feedback.deliver(input.submission),
+        HttpClient.HttpClient,
+        http,
+      );
+    }),
   };
 }
 
@@ -296,6 +279,7 @@ function portDependencies(
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    agentInbox: { host },
     agents: { host, notices },
     automations: { host },
     factory: { host },
@@ -320,6 +304,7 @@ function portDependencies(
     // No voice stands in a tab, so a started task opens no call and the microphone's press reaches none.
     tasks: {
       host,
+      colourCode: highlightSnippet,
       openExternal: async (url) => tabs.open(url),
       serviceBaseUrl: location.origin,
       activeTaskId: () => state.snapshot().tasks.activeTaskId,
@@ -339,21 +324,21 @@ function portDependencies(
  * panel's and trusted; the procedures' effects run on the tab's runtime.
  * Both ends close with the host's scope.
  */
-const servedActPort = (dependencies: ActPortDependencies, services: Context.Context<never>) =>
+const servedActPort = (
+  dependencies: ActPortDependencies,
+  procedures: PlatformActProcedures<WebSender>,
+  services: Context.Context<never>,
+) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const channel = new MessageChannel();
-      // Every platform kind on the port is refused, since a tab carries none of them yet.
-      createActPortHandler(dependencies, refusedPlatformProcedures<WebSender>()).upgrade(
-        channel.port2,
-        {
-          context: () => ({
-            actor: { sender: window, panel: true, voice: false, call: false },
-            trusted: true,
-            "effect/context": services,
-          }),
-        },
-      );
+      createActPortHandler(dependencies, procedures).upgrade(channel.port2, {
+        context: () => ({
+          actor: { sender: window, panel: true, voice: false, call: false },
+          trusted: true,
+          "effect/context": services,
+        }),
+      });
       channel.port2.start();
       return channel;
     }),
@@ -431,8 +416,8 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       };
       const made = yield* createInProcessBridge<WebSender>({
         sender: window,
-        routerFor: () =>
-          createHostActRouter(hostRowDependencies(operator), platformRows(http, doors)),
+        // `app:act` carries no act now that every one rides the act port.
+        routerFor: () => createActRouter({}),
         run,
         state,
         windowFacts: () => ({ fullScreen: document.fullscreenElement !== null }),
@@ -443,6 +428,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       events = made.events;
       const actPort = yield* servedActPort(
         portDependencies(operator, state, notices, crypto.randomUUID(), tabs),
+        platformProcedures(http, doors),
         services,
       );
       return {

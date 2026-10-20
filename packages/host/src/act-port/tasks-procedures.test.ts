@@ -1,5 +1,5 @@
 /**
- * tasks-procedures.test.ts -- the task list and lifecycle acts, through the act port as a window calls them.
+ * tasks-procedures.test.ts -- the task list, lifecycle, and content acts, through the act port as a window calls them.
  *
  * Only a panel of this build's own renderer asks; the voice and call
  * windows, and a frame this build does not trust, are refused in each
@@ -7,17 +7,30 @@
  * with its payload as the kind's schema read it, and answers what the host
  * answered; a started task opens its call where it planned and voice is
  * ready; a microphone press opens a call about the task the host has open;
- * and the browser opens only the addresses each kind may open.
+ * the browser opens only the addresses each kind may open; and what a task
+ * holds is read through the host, a page's source coloured, and a pull
+ * request or an issue the service did not answer refused.
  */
 
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
+import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
+import { PICTURE_TYPE } from "@luke/features/picture-wire";
+import {
+  PLAN_COMMENT_ACTION,
+  PLAN_COMMENT_REFUSAL,
+  PLAN_COMMENT_SCOPE,
+} from "@luke/features/plan-comment-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
+import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import {
   GITHUB_DISCONNECT_FAILURE,
   TASK_CALL_FAILURE,
   type TasksGitHubDisconnectAnswer,
   type TasksGitHubPageAnswer,
+  type TasksPageSourceAnswer,
   type TasksStartAnswer,
 } from "@luke/features/tasks-view";
 import { ORPCError } from "@orpc/client";
@@ -32,6 +45,7 @@ import {
   type PortActResult,
   TASKS_ACT_KIND,
 } from "../contract/index.js";
+import { highlightSnippet } from "../task-code.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
@@ -68,6 +82,27 @@ const REFUSAL = {
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: "Could not disconnect GitHub on this system.",
   [TASKS_ACT_KIND.TASKS_TALK]: "Could not talk about that task on this system.",
   [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: "Could not save the board on this system.",
+  [TASKS_ACT_KIND.TASKS_SET_STANDING]: "Could not change where that task stands on this system.",
+  [TASKS_ACT_KIND.TASKS_WORK_EARLIER]: "Could not read that task's earlier work on this system.",
+  [TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER]:
+    "Could not read that task's earlier conversation on this system.",
+  [TASKS_ACT_KIND.TASKS_MESSAGES]: "Could not read that task's conversation on this system.",
+  [TASKS_ACT_KIND.TASKS_FILE]: "Could not read that file on this system.",
+  [TASKS_ACT_KIND.TASKS_TREE]: "Could not list that folder on this system.",
+  [TASKS_ACT_KIND.TASKS_SKILLS]: "Could not read this repository's skills on this system.",
+  [TASKS_ACT_KIND.TASKS_PULL_REQUEST]: "Could not read that pull request on this system.",
+  [TASKS_ACT_KIND.TASKS_ISSUE]: "Could not read that issue on this system.",
+  [TASKS_ACT_KIND.TASKS_COLOUR_CODE]: "Could not colour that code on this system.",
+  [TASKS_ACT_KIND.TASKS_REVISIONS]: "Could not read that plan's history on this system.",
+  [TASKS_ACT_KIND.TASKS_REVISION]: "Could not read that version on this system.",
+  [TASKS_ACT_KIND.TASKS_RESTORE]: "Could not restore that version on this system.",
+  [TASKS_ACT_KIND.TASKS_PAGE_SOURCE]: "Could not read that page's source on this system.",
+  [TASKS_ACT_KIND.TASKS_PAGES]: "Could not read that plan's pages on this system.",
+  [TASKS_ACT_KIND.TASKS_PICTURE_READ]: "Could not read that picture on this system.",
+  [TASKS_ACT_KIND.TASKS_PICTURE_KEEP]: "Could not keep that picture on this system.",
+  [TASKS_ACT_KIND.TASKS_COMMENTS]: "Could not read the task's comments on this system.",
+  [TASKS_ACT_KIND.TASKS_COMMENT_START]: "Could not comment on the task on this system.",
+  [TASKS_ACT_KIND.TASKS_COMMENT_ACT]: "Could not change the task's comment on this system.",
 } as const;
 
 type TasksKind = keyof typeof REFUSAL;
@@ -78,6 +113,49 @@ type AnyPayload = PortActPayload<PortActKind>;
 const TASK = { taskId: TASK_ID };
 const EDIT = { ...TASK, edit: { document: { base: "", value: "Invites expire." } } };
 const BOARD = { ...TASK, elements: [], appliedDrawing: 0 };
+
+/** A comment thread's id, as the service spells one. */
+const THREAD_ID = "0f9b5f6e-6a8e-4c51-9a0e-2c1f2f0b7a11";
+/** The one picture the fake host holds. */
+const PICTURE_ID = "picture-1";
+/** The one page the fake host lists, by its id as the service spells one. */
+const PAGE_LINE_ID = "5a1c3f7e-8b2d-4e6f-9a0b-1c2d3e4f5a6b";
+const PLAN = { planId: "plan-1" };
+const PLACE = { workspaceId: "workspace-acme", repository: "acme/relay" };
+const PAGE = { ...TASK, pageId: "page-funnel", version: 2 };
+const COMMENT_START = {
+  ...PLAN,
+  start: {
+    clientKey: "comment-1",
+    scope: PLAN_COMMENT_SCOPE.WORDS,
+    quote: "Invites",
+    anchor: { from: 0, to: 7 },
+    text: "Invites expire.",
+    words: "Shorter?",
+  },
+};
+const COMMENT_ACT = {
+  ...PLAN,
+  threadId: THREAD_ID,
+  action: { action: PLAN_COMMENT_ACTION.RESOLVE },
+};
+
+/** The one pull request the fake host's service holds; it holds none numbered `PULL_REQUEST_NONE`, and answers nothing for any other number. */
+const PULL_REQUEST = {
+  number: 42,
+  title: "Send invitations in batches",
+  url: "https://github.com/acme/relay/pull/42",
+  state: PULL_REQUEST_STATE.OPEN,
+};
+const PULL_REQUEST_NONE = 43;
+/** The one issue the fake host's service holds; it holds none numbered `ISSUE_NONE`, and answers nothing for any other number. */
+const ISSUE = {
+  number: 7,
+  title: "Invitations expire too soon",
+  url: "https://github.com/acme/relay/issues/7",
+  state: ISSUE_STATE.CLOSED,
+};
+const ISSUE_NONE = 8;
 
 /** One ask of every task kind, with a payload its schema admits. */
 const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
@@ -107,6 +185,32 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.GITHUB_DISCONNECT, payload: undefined },
   { kind: TASKS_ACT_KIND.TASKS_TALK, payload: undefined },
   { kind: TASKS_ACT_KIND.TASKS_BOARD_SAVE, payload: BOARD },
+  { kind: TASKS_ACT_KIND.TASKS_SET_STANDING, payload: { ...TASK, status: "done" } },
+  { kind: TASKS_ACT_KIND.TASKS_WORK_EARLIER, payload: undefined },
+  { kind: TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER, payload: undefined },
+  { kind: TASKS_ACT_KIND.TASKS_MESSAGES, payload: { ...TASK, after: "0:0" } },
+  {
+    kind: TASKS_ACT_KIND.TASKS_FILE,
+    payload: { ...TASK, path: "README.md", firstLine: 1, lastLine: 2 },
+  },
+  { kind: TASKS_ACT_KIND.TASKS_TREE, payload: { ...PLAN, path: "src" } },
+  { kind: TASKS_ACT_KIND.TASKS_SKILLS, payload: PLAN },
+  { kind: TASKS_ACT_KIND.TASKS_PULL_REQUEST, payload: { ...PLACE, number: PULL_REQUEST.number } },
+  { kind: TASKS_ACT_KIND.TASKS_ISSUE, payload: { ...PLACE, number: ISSUE.number } },
+  { kind: TASKS_ACT_KIND.TASKS_COLOUR_CODE, payload: { language: "ts", code: "const a = 1;" } },
+  { kind: TASKS_ACT_KIND.TASKS_REVISIONS, payload: TASK },
+  { kind: TASKS_ACT_KIND.TASKS_REVISION, payload: { ...TASK, seq: 3 } },
+  { kind: TASKS_ACT_KIND.TASKS_RESTORE, payload: { ...TASK, seq: 3 } },
+  { kind: TASKS_ACT_KIND.TASKS_PAGE_SOURCE, payload: PAGE },
+  { kind: TASKS_ACT_KIND.TASKS_PAGES, payload: TASK },
+  { kind: TASKS_ACT_KIND.TASKS_PICTURE_READ, payload: { ...PLAN, attachmentId: PICTURE_ID } },
+  {
+    kind: TASKS_ACT_KIND.TASKS_PICTURE_KEEP,
+    payload: { ...PLAN, picture: "data:image/png;base64,iVBORw0KGgo=" },
+  },
+  { kind: TASKS_ACT_KIND.TASKS_COMMENTS, payload: { ...PLAN, after: "0" } },
+  { kind: TASKS_ACT_KIND.TASKS_COMMENT_START, payload: COMMENT_START },
+  { kind: TASKS_ACT_KIND.TASKS_COMMENT_ACT, payload: COMMENT_ACT },
 ];
 
 /** What the fake host and the window's process answer, set by each test before it asks. */
@@ -125,6 +229,8 @@ interface Script {
   lastSignIn: boolean;
   /** A key the host's start answer carries beside what the window reads, as a newer host might. */
   startExtra: boolean;
+  /** The HTML the service answers for a page's version, none where it does not answer. */
+  pageHtml: string | undefined;
 }
 
 const ports: TestActPort<unknown>[] = [];
@@ -149,6 +255,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     connectPage: CONNECT_PAGE,
     lastSignIn: false,
     startExtra: false,
+    pageHtml: undefined,
   };
   const ask = <A>(line: string, answer: () => A) =>
     Effect.sync(() => {
@@ -206,10 +313,72 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
             ? { failure: GITHUB_DISCONNECT_FAILURE.NOT_PERMITTED }
             : { connection: { connected: false, login: null } },
       ),
+    tasksSetStanding: (params) =>
+      ask(`standing:${params.taskId}:${params.status ?? ""}`, () => true),
+    tasksWorkEarlier: () => ask("earlier", () => undefined),
+    tasksConversationEarlier: () => ask("conversation-earlier", () => undefined),
+    tasksMessages: (params) =>
+      ask(
+        `messages:${params.taskId}:${params.callId}:${params.after}`,
+        () => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }) as const,
+      ),
+    tasksFile: (params) =>
+      ask(
+        `file:${params.path}:${params.firstLine}-${params.lastLine}`,
+        () => ({ refusal: TASK_FILE_REFUSAL.MISSING }) as const,
+      ),
+    tasksTree: (params) =>
+      ask(`tree:${params.path}`, () => ({ refusal: TASK_FILE_REFUSAL.NOT_REACHABLE }) as const),
+    tasksSkills: (params) =>
+      ask(
+        `skills:${"planId" in params ? params.planId : params.repository}`,
+        () => ({ refusal: TASK_FILE_REFUSAL.NO_REPOSITORY }) as const,
+      ),
+    tasksPullRequest: (params) =>
+      ask(`pullRequest:${params.repository}:${params.number}`, () => {
+        if (params.number === PULL_REQUEST.number) return { pullRequest: PULL_REQUEST };
+        if (params.number === PULL_REQUEST_NONE) return { pullRequest: null };
+        return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+      }),
+    tasksIssue: (params) =>
+      ask(`issue:${params.repository}:${params.number}`, () => {
+        if (params.number === ISSUE.number) return { issue: ISSUE };
+        if (params.number === ISSUE_NONE) return { issue: null };
+        return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+      }),
+    tasksRevisions: (params) =>
+      ask(`revisions:${params.taskId}:${params.before}`, () => ({ revisions: [] })),
+    tasksRevision: (params) =>
+      ask(`revision:${params.seq}`, () => ({ failure: TASK_CALL_FAILURE.UNANSWERED }) as const),
+    tasksRestore: (params) => ask(`restore:${params.seq}`, () => true),
+    tasksPictureKeep: (params) => ask(`keep:${params.planId}`, () => ({ id: PICTURE_ID })),
+    tasksComments: (params) =>
+      ask(`comments:${params.planId}:${params.after}`, () => ({ threads: [], cursor: "c1" })),
+    tasksCommentStart: (params) =>
+      ask(`comment:${params.planId}`, () => ({ refused: PLAN_COMMENT_REFUSAL.TOO_MANY })),
+    tasksCommentAct: (params) =>
+      ask(`act:${params.threadId}:${params.action.action}`, () => ({ deleted: params.threadId })),
+    tasksPicture: (params) =>
+      ask(`picture:${params.planId}:${params.attachmentId}`, () =>
+        params.attachmentId === PICTURE_ID
+          ? { contentType: PICTURE_TYPE.WEBP, base64: "UklGRg==" }
+          : ({ failure: TASK_CALL_FAILURE.NOT_FOUND } as const),
+      ),
+    tasksPage: (params) =>
+      ask(`page:${params.pageId}:${params.version}`, () => {
+        const html = script.pageHtml;
+        if (html === undefined) return { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+        return { page: { id: params.pageId, title: "Invite funnel", version: 2, at: 0, html } };
+      }),
+    tasksPages: (params) =>
+      ask(`pages:${params.taskId}`, () => ({
+        pages: [{ id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 }],
+      })),
   };
   const port = testActPort(
     tasksProcedures({
       host,
+      colourCode: highlightSnippet,
       openExternal: (url) => {
         browsed.push(url);
         return Promise.resolve();
@@ -489,5 +658,205 @@ it("a payload carrying a key its kind's schema does not name is refused, as app:
     await settled(client, TASKS_ACT_KIND.TASKS_DELETE, { ...TASK, extra: true } as AnyPayload),
     { refused: REFUSAL[TASKS_ACT_KIND.TASKS_DELETE] },
   );
+  assert.deepEqual(asked, []);
+});
+
+it("what a task holds is read through the host from a panel, and answers what it answered", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const ask = (kind: TasksKind, payload: AnyPayload) => settled(client, kind, payload);
+
+  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_SET_STANDING, { ...TASK, status: "done" }), {
+    answer: true,
+  });
+  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_WORK_EARLIER, undefined), { answer: undefined });
+  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_CONVERSATION_EARLIER, undefined), {
+    answer: undefined,
+  });
+  assert.deepEqual(
+    await ask(TASKS_ACT_KIND.TASKS_FILE, { ...TASK, path: "README.md", firstLine: 1, lastLine: 2 }),
+    { answer: { refusal: TASK_FILE_REFUSAL.MISSING } },
+  );
+  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_TREE, { ...PLAN, path: "src" }), {
+    answer: { refusal: TASK_FILE_REFUSAL.NOT_REACHABLE },
+  });
+  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_SKILLS, PLACE), {
+    answer: { refusal: TASK_FILE_REFUSAL.NO_REPOSITORY },
+  });
+  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_REVISIONS, TASK), { answer: { revisions: [] } });
+  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_REVISION, { ...TASK, seq: 3 }), {
+    answer: { failure: TASK_CALL_FAILURE.UNANSWERED },
+  });
+  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_RESTORE, { ...TASK, seq: 3 }), { answer: true });
+  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_PAGES, TASK), {
+    answer: { pages: [{ id: PAGE_LINE_ID, title: "Invite funnel", version: 2, at: 0 }] },
+  });
+  assert.deepEqual(await ask(TASKS_ACT_KIND.TASKS_COMMENT_START, COMMENT_START), {
+    answer: { refused: PLAN_COMMENT_REFUSAL.TOO_MANY },
+  });
+
+  assert.deepEqual(asked, [
+    `standing:${TASK_ID}:done`,
+    "earlier",
+    "conversation-earlier",
+    "file:README.md:1-2",
+    "tree:src",
+    "skills:acme/relay",
+    `revisions:${TASK_ID}:undefined`,
+    "revision:3",
+    "restore:3",
+    `pages:${TASK_ID}`,
+    "comment:plan-1",
+  ]);
+});
+
+it("a fenced block is coloured for a panel, its lines answered as the highlighter drew them", async () => {
+  const { client } = windowPort(PANEL);
+
+  const coloured = await settled(client, TASKS_ACT_KIND.TASKS_COLOUR_CODE, {
+    language: "ts",
+    code: "const a = 1;",
+  });
+
+  assert.ok("answer" in coloured && Array.isArray(coloured.answer));
+  const [line] = coloured.answer;
+  assert.ok(Array.isArray(line));
+  assert.equal(line.map((run) => run.text).join(""), "const a = 1;");
+  assert.ok(line.some((run) => run.color !== undefined));
+});
+
+it("a page's source is read through the host and coloured as HTML for a panel, plain past the bound, and its silence answered", async () => {
+  const { client, asked, script } = windowPort(PANEL);
+  const source = () => settled(client, TASKS_ACT_KIND.TASKS_PAGE_SOURCE, PAGE);
+  const long = `<p>${"a".repeat(70_000)}</p>`;
+
+  const unanswered = await source();
+  script.pageHtml = "<h1>Invites</h1>\n<p>sent</p>";
+  const read = await source();
+  script.pageHtml = long;
+  const plain = await source();
+
+  assert.deepEqual(unanswered, { answer: { failure: TASK_CALL_FAILURE.UNANSWERED } });
+  // SAFETY: the page-source procedure answers a page source, which the assertion below reads.
+  const answer = ("answer" in read ? read.answer : undefined) as TasksPageSourceAnswer | undefined;
+  assert.ok(answer !== undefined && "lines" in answer);
+  const { lines } = answer;
+  assert.deepEqual(
+    lines.map((line) => line.map((run) => run.text).join("")),
+    ["<h1>Invites</h1>", "<p>sent</p>"],
+  );
+  assert.ok(lines[0]?.some((run) => run.color !== undefined));
+  assert.deepEqual(plain, { answer: { lines: [[{ text: long }]] } });
+  assert.deepEqual(asked, ["page:page-funnel:2", "page:page-funnel:2", "page:page-funnel:2"]);
+});
+
+it("a planning worker's page is read through the host from a panel", async () => {
+  const { client, asked } = windowPort(PANEL);
+
+  assert.deepEqual(
+    await settled(client, TASKS_ACT_KIND.TASKS_MESSAGES, {
+      ...TASK,
+      callId: "call-models",
+      after: "0:0",
+    }),
+    { answer: { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } },
+  );
+  assert.deepEqual(asked, [`messages:${TASK_ID}:call-models:0:0`]);
+});
+
+it("a plan's picture is read through the host from a panel, its absence answered rather than refused, and one is kept", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const read = (attachmentId: string) =>
+    settled(client, TASKS_ACT_KIND.TASKS_PICTURE_READ, { ...PLAN, attachmentId });
+
+  assert.deepEqual(await read(PICTURE_ID), {
+    answer: { contentType: PICTURE_TYPE.WEBP, base64: "UklGRg==" },
+  });
+  assert.deepEqual(await read("picture-gone"), {
+    answer: { failure: TASK_CALL_FAILURE.NOT_FOUND },
+  });
+  assert.deepEqual(
+    await settled(client, TASKS_ACT_KIND.TASKS_PICTURE_KEEP, {
+      ...PLAN,
+      picture: "data:image/png;base64,iVBORw0KGgo=",
+    }),
+    { answer: { id: PICTURE_ID } },
+  );
+  assert.deepEqual(asked, [
+    `picture:plan-1:${PICTURE_ID}`,
+    "picture:plan-1:picture-gone",
+    "keep:plan-1",
+  ]);
+});
+
+it("a plan's comments are read and acted on through the host from a panel", async () => {
+  const { client, asked } = windowPort(PANEL);
+
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_COMMENTS, { ...PLAN, after: "0" }), {
+    answer: { threads: [], cursor: "c1" },
+  });
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_COMMENT_ACT, COMMENT_ACT), {
+    answer: { deleted: THREAD_ID },
+  });
+  assert.deepEqual(asked, ["comments:plan-1:0", `act:${THREAD_ID}:resolve`]);
+});
+
+it("a pull request is answered to a panel as the host read it, or as none, and a service that did not answer is refused in its kind's own words", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const ask = (number: number) =>
+    settled(client, TASKS_ACT_KIND.TASKS_PULL_REQUEST, { ...PLACE, number });
+
+  assert.deepEqual(await ask(PULL_REQUEST.number), { answer: PULL_REQUEST });
+  assert.deepEqual(await ask(PULL_REQUEST_NONE), { answer: null });
+  assert.deepEqual(await ask(44), { refused: REFUSAL[TASKS_ACT_KIND.TASKS_PULL_REQUEST] });
+  assert.deepEqual(asked, [
+    `pullRequest:acme/relay:${PULL_REQUEST.number}`,
+    `pullRequest:acme/relay:${PULL_REQUEST_NONE}`,
+    "pullRequest:acme/relay:44",
+  ]);
+});
+
+it("an issue is answered to a panel as the host read it, or as none, and a service that did not answer is refused in its kind's own words", async () => {
+  const { client, asked } = windowPort(PANEL);
+  const ask = (number: number) => settled(client, TASKS_ACT_KIND.TASKS_ISSUE, { ...PLACE, number });
+
+  assert.deepEqual(await ask(ISSUE.number), { answer: ISSUE });
+  assert.deepEqual(await ask(ISSUE_NONE), { answer: null });
+  assert.deepEqual(await ask(9), { refused: REFUSAL[TASKS_ACT_KIND.TASKS_ISSUE] });
+  assert.deepEqual(asked, [
+    `issue:acme/relay:${ISSUE.number}`,
+    `issue:acme/relay:${ISSUE_NONE}`,
+    "issue:acme/relay:9",
+  ]);
+});
+
+it("a content act's payload carrying a key its schema does not name, or past its bound, is refused in the kind's own words, and the host is not asked", async () => {
+  const { client, asked } = windowPort(PANEL);
+
+  for (const act of ACTS.slice(
+    ACTS.findIndex((each) => each.kind === TASKS_ACT_KIND.TASKS_SET_STANDING),
+  )) {
+    // SAFETY: every content kind but the two earlier-page presses takes an object payload, which ACTS gives it.
+    const payload =
+      act.payload === undefined ? { extra: true } : { ...(act.payload as object), extra: true };
+    assert.deepEqual(
+      // SAFETY: a key the schema does not name, refused on purpose.
+      await settled(client, act.kind, payload as AnyPayload),
+      { refused: REFUSAL[act.kind] },
+    );
+  }
+  assert.deepEqual(
+    await settled(client, TASKS_ACT_KIND.TASKS_COLOUR_CODE, {
+      language: "ts",
+      code: "a".repeat(20_001),
+    }),
+    { refused: REFUSAL[TASKS_ACT_KIND.TASKS_COLOUR_CODE] },
+  );
+  assert.deepEqual(
+    await settled(client, TASKS_ACT_KIND.TASKS_COLOUR_CODE, { language: "  ", code: "a" }),
+    { refused: REFUSAL[TASKS_ACT_KIND.TASKS_COLOUR_CODE] },
+  );
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_SET_STANDING, TASK), {
+    refused: REFUSAL[TASKS_ACT_KIND.TASKS_SET_STANDING],
+  });
   assert.deepEqual(asked, []);
 });

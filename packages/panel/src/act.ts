@@ -1,5 +1,4 @@
 import {
-  ACT,
   ACT_KIND,
   ACT_OUTCOME_STATUS,
   type Act,
@@ -7,6 +6,7 @@ import {
   type ActOutcome,
   type ActPayload,
   type ActResultFor,
+  actDeclarationOf,
 } from "@luke/host/acts";
 import {
   ACT_ERROR,
@@ -64,7 +64,7 @@ function decodedOutcome<Kind extends ActKind>(kind: Kind, outcome: ActOutcome): 
     throw new Error(`Luke does not know the act ${kind}.`);
   }
   if (outcome.status === ACT_OUTCOME_STATUS.REFUSED) throw new Error(outcome.reason);
-  if (ACT[kind].result(outcome.value) === false) {
+  if (actDeclarationOf(kind)?.result(outcome.value) !== true) {
     throw new Error(`Invalid answer to the act ${kind}.`);
   }
   // SAFETY: the kind's own result guard admitted this value.

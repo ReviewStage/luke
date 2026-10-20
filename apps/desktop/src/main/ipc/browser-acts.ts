@@ -1,8 +1,3 @@
-import { ActRefused, type ActRows, type ActSender } from "@luke/host/act-router";
-import { ACT, ACT_KIND } from "@luke/host/acts";
-import type { WebContents } from "electron";
-import type { BrowserViews } from "../window/browser-views";
-
 /**
  * browser-acts.ts -- the Browser tab's acts as main carries them: each handed to the panel's views, from a panel alone and only while the experiment is on.
  *
@@ -13,13 +8,14 @@ import type { BrowserViews } from "../window/browser-views";
  * are each panel's own, so one panel's tab can reach no other's page.
  */
 
-type BrowserActKind =
-  | typeof ACT_KIND.BROWSER_OPEN
-  | typeof ACT_KIND.BROWSER_NAVIGATE
-  | typeof ACT_KIND.BROWSER_STEP
-  | typeof ACT_KIND.BROWSER_PLACE
-  | typeof ACT_KIND.BROWSER_CAPTURE
-  | typeof ACT_KIND.BROWSER_CLOSE;
+import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
+import type { ActSender } from "@luke/host/act-router";
+import { BROWSER_ACT_KIND } from "@luke/host/contract";
+import { Effect } from "effect";
+import type { WebContents } from "electron";
+import type { BrowserViews } from "../window/browser-views";
+
+type BrowserActKind = (typeof BROWSER_ACT_KIND)[keyof typeof BROWSER_ACT_KIND];
 
 export interface BrowserActsDependencies {
   views: BrowserViews;
@@ -27,44 +23,67 @@ export interface BrowserActsDependencies {
   experimentOn: () => boolean;
 }
 
-export function browserActRows(
+const browserPort = actPortFor<WebContents>();
+
+export function browserProcedures(
   dependencies: BrowserActsDependencies,
-): Pick<ActRows<WebContents>, BrowserActKind> {
+): Pick<PlatformActProcedures<WebContents>, BrowserActKind> {
   const { views, experimentOn } = dependencies;
-  /** The asking panel's contents, or the kind's own refusal where it is no panel or the experiment is off. */
-  const panelOf = (kind: BrowserActKind, sender: ActSender<WebContents>) => {
-    if (!sender.panel || !experimentOn()) throw new ActRefused({ message: ACT[kind].refusal });
-    return sender.sender;
-  };
-  /** The kind's own refusal where the panel holds no view by that id. */
-  const held = (kind: BrowserActKind, found: boolean) => {
-    if (!found) throw new ActRefused({ message: ACT[kind].refusal });
-  };
+  /** The asking panel's contents, or nothing where it is no panel or the experiment is off. */
+  const panelOf = (actor: ActSender<WebContents>): WebContents | undefined =>
+    actor.panel && experimentOn() ? actor.sender : undefined;
   return {
-    [ACT_KIND.BROWSER_OPEN]: ({ browserId, address }, sender) => {
-      const page = views.open(panelOf(ACT_KIND.BROWSER_OPEN, sender), browserId, address);
-      if (page === undefined) throw new ActRefused({ message: ACT[ACT_KIND.BROWSER_OPEN].refusal });
+    [BROWSER_ACT_KIND.BROWSER_OPEN]: browserPort[BROWSER_ACT_KIND.BROWSER_OPEN].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      const contents = panelOf(context.actor);
+      if (contents === undefined) return yield* Effect.fail(errors.REFUSED());
+      const page = views.open(contents, input.browserId, input.address);
+      if (page === undefined) return yield* Effect.fail(errors.REFUSED());
       return page;
-    },
-    [ACT_KIND.BROWSER_NAVIGATE]: ({ browserId, address }, sender) => {
-      const contents = panelOf(ACT_KIND.BROWSER_NAVIGATE, sender);
-      held(ACT_KIND.BROWSER_NAVIGATE, views.navigate(contents, browserId, address));
-    },
-    [ACT_KIND.BROWSER_STEP]: ({ browserId, step }, sender) => {
-      const contents = panelOf(ACT_KIND.BROWSER_STEP, sender);
-      held(ACT_KIND.BROWSER_STEP, views.step(contents, browserId, step));
-    },
-    [ACT_KIND.BROWSER_PLACE]: ({ browserId, bounds }, sender) => {
-      const contents = panelOf(ACT_KIND.BROWSER_PLACE, sender);
-      held(ACT_KIND.BROWSER_PLACE, views.place(contents, browserId, bounds));
-    },
-    [ACT_KIND.BROWSER_CAPTURE]: ({ browserId }, sender) =>
-      views.capture(panelOf(ACT_KIND.BROWSER_CAPTURE, sender), browserId),
+    }),
+    [BROWSER_ACT_KIND.BROWSER_NAVIGATE]: browserPort[BROWSER_ACT_KIND.BROWSER_NAVIGATE].effect(
+      function* ({ input, context, errors }) {
+        const contents = panelOf(context.actor);
+        if (contents === undefined || !views.navigate(contents, input.browserId, input.address)) {
+          return yield* Effect.fail(errors.REFUSED());
+        }
+      },
+    ),
+    [BROWSER_ACT_KIND.BROWSER_STEP]: browserPort[BROWSER_ACT_KIND.BROWSER_STEP].effect(function* ({
+      input,
+      context,
+      errors,
+    }) {
+      const contents = panelOf(context.actor);
+      if (contents === undefined || !views.step(contents, input.browserId, input.step)) {
+        return yield* Effect.fail(errors.REFUSED());
+      }
+    }),
+    [BROWSER_ACT_KIND.BROWSER_PLACE]: browserPort[BROWSER_ACT_KIND.BROWSER_PLACE].effect(
+      function* ({ input, context, errors }) {
+        const contents = panelOf(context.actor);
+        if (contents === undefined || !views.place(contents, input.browserId, input.bounds)) {
+          return yield* Effect.fail(errors.REFUSED());
+        }
+      },
+    ),
+    [BROWSER_ACT_KIND.BROWSER_CAPTURE]: browserPort[BROWSER_ACT_KIND.BROWSER_CAPTURE].handler(
+      async ({ input, context, errors }) => {
+        const contents = panelOf(context.actor);
+        if (contents === undefined) throw errors.REFUSED();
+        return views.capture(contents, input.browserId);
+      },
+    ),
     // Note that a close is answered even with the experiment off, because a
     // tab closed as it was turned off must not leave its page standing.
-    [ACT_KIND.BROWSER_CLOSE]: ({ browserId }, sender) => {
-      if (!sender.panel) throw new ActRefused({ message: ACT[ACT_KIND.BROWSER_CLOSE].refusal });
-      views.close(sender.sender, browserId);
-    },
+    [BROWSER_ACT_KIND.BROWSER_CLOSE]: browserPort[BROWSER_ACT_KIND.BROWSER_CLOSE].effect(
+      function* ({ input, context, errors }) {
+        if (!context.actor.panel) return yield* Effect.fail(errors.REFUSED());
+        views.close(context.actor.sender, input.browserId);
+      },
+    ),
   };
 }

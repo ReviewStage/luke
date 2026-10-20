@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { type RowMediaReads, useRowMediaReads } from "./inbox-row-media.js";
 
@@ -39,17 +39,12 @@ afterEach(() => {
 /** The hook over the items listed, every picture read held until the test answers it; and how to list others. */
 function reads(first: readonly string[]) {
   const out = new Map<string, () => Promise<void>>();
-  fakeAppBridge({
-    act: (request: Act) =>
-      new Promise<ActOutcome>((resolve) => {
-        if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT) return;
-        const { attachmentId } = request.payload;
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: ({ attachmentId }) =>
+      new Promise((resolve) => {
         out.set(attachmentId, async () => {
           await act(async () => {
-            resolve({
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: { contentType: "image/png", base64: BYTES.get(attachmentId) ?? "" },
-            });
+            resolve({ contentType: "image/png", base64: BYTES.get(attachmentId) ?? "" });
             for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
           });
         });

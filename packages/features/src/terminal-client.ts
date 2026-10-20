@@ -1,20 +1,8 @@
-import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
-import { Effect, Result, type Schema } from "effect";
+import { Effect } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import {
-  type AccountCallEffects,
-  accountCall,
-  type CallAnswer,
-  type CallCredential,
-  callAnswered,
-} from "./account-call.js";
-import { agentSandboxResumePath, agentTerminalPath, agentTerminalsPath } from "./service-paths.js";
-import {
-  HOSTED_API_ERROR,
-  type HostedApiError,
-  hostedErrorSchema,
-  readServiceAnswer,
-} from "./service-wire.js";
+import type { CallCredential } from "./account-call.js";
+import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+import { HOSTED_API_ERROR, type HostedApiError } from "./service-wire.js";
 import {
   TERMINAL_REFUSAL,
   type TerminalCreatedActAnswer,
@@ -22,18 +10,14 @@ import {
   type TerminalResumedActAnswer,
   type TerminalsActAnswer,
 } from "./terminal-view.js";
-import {
-  sandboxResumedAnswerSchema,
-  TERMINAL_RELAY,
-  terminalCreatedAnswerSchema,
-  terminalsAnswerSchema,
-} from "./terminal-wire.js";
+import { TERMINAL_RELAY } from "./terminal-wire.js";
 
 /**
  * terminal-client.ts -- a coding agent's terminals, as the host asks the service for them: its shells listed, started, named, and ended, its sandbox resumed, and the address one shell's relay socket opens on.
  *
- * Every call is the one account call, so the bearer is read fresh per
- * attempt and a 401 is renewed and retried once. A refusal the tab has
+ * Every call is a procedure of the hosted contract over the one account
+ * call (`hosted-link.ts`), so the bearer is read fresh per attempt and a
+ * 401 is renewed and retried once. A refusal the tab has
  * something to say of is answered as one; anything else — the network, an
  * outage, a shape this build does not read — answers unanswered, which the
  * desktop draws as the act's own refusal. Nothing a shell printed ever
@@ -83,29 +67,21 @@ export function terminalRelayAddress(socketOrigin: string, ask: TerminalRelayAsk
   return `${socketOrigin}${TERMINAL_RELAY.PATH}?${query}`;
 }
 
-/** A response's body as JSON, or nothing where it is not JSON at all. */
-function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
-  return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
-}
-
 /**
- * An answer read whole: the body the schema admits where the service
- * answered, a key a newer service added dropped rather than refused, the
- * refusal where it is one the tab names, and unanswered for everything else.
+ * A procedure's answer, the refusal it failed with where it is one the tab
+ * names, and unanswered for everything else.
  */
-function readAnswer<Answer, Encoded>(
-  answer: CallAnswer,
-  schema: Schema.Codec<Answer, Encoded>,
-): Effect.Effect<Answer | { readonly refused: TerminalRefusal } | TerminalUnanswered> {
-  if (!callAnswered(answer)) return Effect.succeed(TERMINAL_UNANSWERED);
-  return Effect.map(jsonOf(answer.response), (body) => {
-    const payload = unparsedWire(body);
-    if (!answer.response.ok) {
-      const error = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
-      const refused = error === undefined ? undefined : TERMINAL_REFUSALS.get(error);
-      return refused === undefined ? TERMINAL_UNANSWERED : { refused };
-    }
-    return Result.getOrUndefined(readServiceAnswer(schema)(payload)) ?? TERMINAL_UNANSWERED;
+function terminalAnswer<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<
+  Answer | { readonly refused: TerminalRefusal } | TerminalUnanswered,
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.catch(asked, (failed) => {
+    const refused =
+      failed._tag === "HostedRefused" ? TERMINAL_REFUSALS.get(failed.refusal) : undefined;
+    return Effect.succeed(refused === undefined ? TERMINAL_UNANSWERED : { refused });
   });
 }
 
@@ -114,10 +90,10 @@ function readAnswer<Answer, Encoded>(
  * sandbox, as the service answers them.
  */
 export class HostedTerminalClient {
-  readonly #call: AccountCallEffects;
+  readonly #hosted: HostedClient;
 
   constructor(options: HostedTerminalClientOptions) {
-    this.#call = accountCall({
+    this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
@@ -128,10 +104,7 @@ export class HostedTerminalClient {
   list(
     agentId: string,
   ): Effect.Effect<TerminalsActAnswer | TerminalUnanswered, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentTerminalsPath(agentId) }),
-      (answer) => readAnswer(answer, terminalsAnswerSchema),
-    );
+    return terminalAnswer(askHosted(this.#hosted.agents.terminals, { id: agentId }));
   }
 
   /** A new shell in the agent's running sandbox, named where the developer named it. */
@@ -139,13 +112,11 @@ export class HostedTerminalClient {
     agentId: string,
     title: string | undefined,
   ): Effect.Effect<TerminalCreatedActAnswer | TerminalUnanswered, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: agentTerminalsPath(agentId),
-        body: JSON.stringify(title === undefined ? {} : { title }),
+    return terminalAnswer(
+      askHosted(this.#hosted.agents.openTerminal, {
+        params: { id: agentId },
+        body: title === undefined ? {} : { title },
       }),
-      (answer) => readAnswer(answer, terminalCreatedAnswerSchema),
     );
   }
 
@@ -155,13 +126,11 @@ export class HostedTerminalClient {
     terminalId: string,
     title: string,
   ): Effect.Effect<TerminalsActAnswer | TerminalUnanswered, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PATCH,
-        path: agentTerminalPath(agentId, terminalId),
-        body: JSON.stringify({ title }),
+    return terminalAnswer(
+      askHosted(this.#hosted.agents.renameTerminal, {
+        params: { id: agentId, terminal: terminalId },
+        body: { title },
       }),
-      (answer) => readAnswer(answer, terminalsAnswerSchema),
     );
   }
 
@@ -170,9 +139,8 @@ export class HostedTerminalClient {
     agentId: string,
     terminalId: string,
   ): Effect.Effect<TerminalsActAnswer | TerminalUnanswered, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.DELETE, path: agentTerminalPath(agentId, terminalId) }),
-      (answer) => readAnswer(answer, terminalsAnswerSchema),
+    return terminalAnswer(
+      askHosted(this.#hosted.agents.endTerminal, { id: agentId, terminal: terminalId }),
     );
   }
 
@@ -180,9 +148,6 @@ export class HostedTerminalClient {
   resume(
     agentId: string,
   ): Effect.Effect<TerminalResumedActAnswer | TerminalUnanswered, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.POST, path: agentSandboxResumePath(agentId) }),
-      (answer) => readAnswer(answer, sandboxResumedAnswerSchema),
-    );
+    return terminalAnswer(askHosted(this.#hosted.agents.sandboxResume, { id: agentId }));
   }
 }

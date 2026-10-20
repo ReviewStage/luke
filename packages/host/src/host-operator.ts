@@ -1937,6 +1937,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           text: params.text,
           ...(params.attachments === undefined ? undefined : { attachments: params.attachments }),
           clientKey: params.clientKey,
+          ...(params.answers === undefined ? undefined : { answers: params.answers }),
         }),
         codingAgentAnswer(codingAgentInboxMessagedViewSchema),
       ),

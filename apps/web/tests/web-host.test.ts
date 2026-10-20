@@ -221,3 +221,44 @@ it.effect("a workspace connect on the act port lands in the tab its press opened
     }),
   ),
 );
+
+it.effect(
+  "the tab carries a copy and a focus on the act port, and refuses the updater, the microphone, and a Browser tab in their own words",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const copied: string[] = [];
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: { writeText: async (words: string) => void copied.push(words) },
+        });
+        const focused: string[] = [];
+        vi.spyOn(window, "focus").mockImplementation(() => void focused.push("tab"));
+        const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+        installAppBridge(bridge);
+        installActPort(actPort);
+
+        yield* Effect.promise(() => askAct(ACT_KIND.WINDOW_COPY_TEXT, { words: "copied" }));
+        yield* Effect.promise(() => askAct(ACT_KIND.WINDOW_FOCUS_PANEL));
+        const refusals = yield* Effect.promise(() =>
+          Promise.all([
+            askAct(ACT_KIND.UPDATE_CHECK).catch((error: Error) => error.message),
+            askAct(ACT_KIND.MICROPHONE_REQUEST).catch((error: Error) => error.message),
+            askAct(ACT_KIND.BROWSER_OPEN, {
+              browserId: "browser-1",
+              address: "https://example.com/",
+            }).catch((error: Error) => error.message),
+          ]),
+        );
+
+        assert.deepEqual(copied, ["copied"]);
+        assert.deepEqual(focused, ["tab"]);
+        assert.deepEqual(refusals, [
+          "Could not check for updates on this system.",
+          "Could not ask for the microphone on this system.",
+          "Could not open that page.",
+        ]);
+        Reflect.deleteProperty(navigator, "clipboard");
+      }),
+    ),
+);

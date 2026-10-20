@@ -321,95 +321,20 @@ export function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
 }
 
-/** Every code Luke showed on one task, oldest first (GET). */
-export function taskCodePath(taskId: string): string {
-  return `${taskPath(taskId)}/code`;
-}
-
-/** One window of a file of one task's repository, as GitHub holds it now (GET): the path, and its first and last line; `raw=1` for its whole text uncut. */
-export function taskFilePath(
-  taskId: string,
-  window: {
-    readonly path: string;
-    readonly firstLine: number;
-    readonly lastLine: number;
-    readonly raw?: boolean;
-    readonly ref?: string;
-  },
-): string {
-  const query = new URLSearchParams({
-    path: window.path,
-    first: String(window.firstLine),
-    last: String(window.lastLine),
-  });
-  if (window.raw === true) query.set("raw", "1");
-  if (window.ref !== undefined) query.set("ref", window.ref);
-  return `${taskPath(taskId)}/file?${query}`;
-}
-
-/** One folder of one task's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one, and `recursive=1` for everything under it. */
-export function taskTreePath(
-  taskId: string,
-  folder: { readonly path: string; readonly recursive?: boolean },
-): string {
-  const path = `${taskPath(taskId)}/tree`;
-  const query = new URLSearchParams();
-  if (folder.path !== "") query.set("path", folder.path);
-  if (folder.recursive === true) query.set("recursive", "1");
-  return query.size === 0 ? path : `${path}?${query}`;
-}
-
-/** The skills a developer may choose of one task's repository, as GitHub holds it now (GET). */
-export function taskSkillsPath(taskId: string): string {
-  return `${taskPath(taskId)}/skills`;
-}
-
 /** A repository as a read with no plan names it: the workspace whose installation reaches it, and the repository, `owner/name`. */
 export interface RepositoryPlace {
   readonly workspaceId: string;
   readonly repository: string;
 }
 
-/** One plan's pictures: one kept on the plan (POST). */
-export function planAttachmentsPath(taskId: string): string {
+/** One plan's pictures, under which each is served as its bytes (`planAttachmentPath`). */
+function planAttachmentsPath(taskId: string): string {
   return `${taskPath(taskId)}/attachments`;
-}
-
-/**
- * One plan's comment threads: every thread past a cursor (GET), held open
- * while nothing changed as the inbox is, and one started (POST).
- * `plan-comment-wire.ts` declares both.
- */
-export function planCommentsPath(planId: string, after?: string): string {
-  const path = `${taskPath(planId)}/comments`;
-  if (after === undefined) return path;
-  const query = new URLSearchParams({ after });
-  return `${path}?${query}`;
-}
-
-/** One comment thread of one plan: one thing done to it (POST). */
-export function planCommentThreadPath(planId: string, threadId: string): string {
-  return `${planCommentsPath(planId)}/${encodeURIComponent(threadId)}`;
 }
 
 /** One picture of one plan, as its bytes (GET). */
 export function planAttachmentPath(taskId: string, attachmentId: string): string {
   return `${planAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
-}
-
-/** One plan's pages (GET): each page's newest version, the most recently written first. */
-export function taskPagesPath(taskId: string): string {
-  return `${taskPath(taskId)}/pages`;
-}
-
-/** One version of one page of one plan, with its HTML (GET). */
-export function planPageVersionPath(taskId: string, pageId: string, version: number): string {
-  return `${taskPagesPath(taskId)}/${encodeURIComponent(pageId)}/versions/${version}`;
-}
-
-/** One task's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
-export function taskAgentsPath(taskId: string): string {
-  return `${taskPath(taskId)}/agents`;
 }
 
 /**
@@ -467,93 +392,7 @@ export function agentPicturePath(agentId: string, pictureId: string, callId?: st
   return `${owner}/pictures/${encodeURIComponent(pictureId)}`;
 }
 
-/** One agent: its model and effort changed for its next step (PATCH), `models-wire.ts`'s choice as the body. */
-export function agentPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}`;
-}
-
-/** Stops one agent (POST): its turn is cancelled and its sandbox stopped; anything it pushed stays. */
-export function agentStopPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/stop`;
-}
-
-/** What one agent published (GET): the branch it pushed and the pull request from it, as GitHub holds them; `coding-agent-wire.ts` declares the answer. With a `number`, this and the Pull request tab's reads and changes below are of that pull request of the agent's repository instead. */
-export function agentPullRequestPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/pull-request`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
-/** One agent's changes (GET): the files of its pull request as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
-export function agentChangesPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/changes`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
-/** One agent's pull request itself as its overview draws it (GET): its description, branches, mergeability, author, and the reviewers it asks for; `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewPullRequestPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/overview/pull-request`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
-/** The checks on one agent's pull request's head as its overview draws them (GET); `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewChecksPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/overview/checks`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
-/** One agent's pull request's conversation as its overview draws it (GET): its comments, reviews, threads, and where its reviewers stand; `coding-agent-wire.ts` declares the answer. */
-export function agentOverviewConversationPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/overview/conversation`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
 /** One image its pull request's overview names (GET), by the address GitHub's rendering spelled; answered as bytes of one of `github-image.ts`'s types. */
 export function agentGitHubImagePath(agentId: string, src: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/github-image?${new URLSearchParams({ src })}`;
-}
-
-/** One change to an agent's pull request (POST), made on GitHub as the member who asks; `pull-request-write-wire.ts` declares the request and the answer. */
-export function agentPullRequestActionPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/pull-request/action`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
-/** Which of an agent's pull request's files the asking member marked viewed on GitHub (GET), read on their own sign-in; `pull-request-write-wire.ts` declares the answer. */
-export function agentPullRequestViewedPath(agentId: string, number?: number): string {
-  const path = `/api/agents/${encodeURIComponent(agentId)}/pull-request/viewed`;
-  if (number === undefined) return path;
-  const query = new URLSearchParams({ number: String(number) });
-  return `${path}?${query}`;
-}
-
-/** What the reviewer and label pickers of an agent's Pull request tab offer: its repository's labels, collaborators, and teams. */
-export function agentReviewOptionsPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/review-options`;
-}
-
-/** One agent's shells: list them and where its sandbox stands (GET), or start one (POST); `terminal-wire.ts` declares both. */
-export function agentTerminalsPath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/terminals`;
-}
-
-/** One of an agent's shells: named anew (PATCH) or ended (DELETE), each answering the shells as they stand after. */
-export function agentTerminalPath(agentId: string, terminalId: string): string {
-  return `${agentTerminalsPath(agentId)}/${encodeURIComponent(terminalId)}`;
-}
-
-/** Resumes one agent's stopped sandbox (POST), on the developer's click and nothing else. */
-export function agentSandboxResumePath(agentId: string): string {
-  return `/api/agents/${encodeURIComponent(agentId)}/sandbox/resume`;
 }

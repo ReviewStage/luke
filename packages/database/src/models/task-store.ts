@@ -1,5 +1,6 @@
 import { AUTOMATION_SCOPE } from "@luke/features/automation-wire";
 import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { planAttachmentIdsIn } from "@luke/features/plan-attachment-link";
 import type { PlanSectionWriter } from "@luke/features/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
@@ -179,6 +180,8 @@ export interface NewTask {
   readonly organizationId: string;
   readonly name?: string;
   readonly repository?: string | null;
+  /** How the repository was reached as it was named; the App's where none is named. */
+  readonly githubAccess?: GitHubAccess;
   readonly issueLinks?: readonly NewTaskIssueLink[];
   readonly issueId?: string;
   readonly planning?: boolean;
@@ -199,6 +202,8 @@ export interface TaskChanges {
   readonly name?: string;
   readonly organizationId?: string;
   readonly repository?: string | null;
+  /** How a repository the change names was reached, written with it; the App's where it names none. */
+  readonly githubAccess?: GitHubAccess;
   readonly pinned?: boolean;
   /** Where the pin stands in the sidebar's Pinned section, which comes only with a pin. */
   readonly pinPosition?: string;
@@ -206,6 +211,9 @@ export interface TaskChanges {
   readonly status?: TaskStatus;
   readonly priority?: TaskPriority;
 }
+
+/** How a task's repository was reached, as a write takes it. */
+const GitHubAccessSchema = Schema.Literals(Object.values(GITHUB_ACCESS));
 
 /**
  * The columns a line of the list reads: none of the document. Note that the
@@ -520,6 +528,7 @@ const TaskInsertSchema = Schema.Struct({
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   repository: Schema.NullOr(Schema.String),
+  githubAccess: GitHubAccessSchema,
   document: Schema.String,
   issueId: Schema.NullOr(Schema.String),
   brief: Schema.NullOr(Schema.String),
@@ -537,6 +546,7 @@ function taskValues(write: typeof TaskInsertSchema.Type) {
     status: write.status,
     priority: write.priority,
     repository: write.repository,
+    githubAccess: write.githubAccess,
     document: write.document,
     issueId: write.issueId,
     brief: write.brief,
@@ -707,6 +717,7 @@ const TaskColumnChangesSchema = Schema.Struct({
   name: Schema.optionalKey(Schema.String),
   organizationId: Schema.optionalKey(Schema.String),
   repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  githubAccess: Schema.optionalKey(GitHubAccessSchema),
   issueId: Schema.optionalKey(Schema.Null),
   number: Schema.optionalKey(Schema.Number),
   status: Schema.optionalKey(taskStatusSchema),
@@ -943,6 +954,7 @@ const insertOf = (userId: string, started: NewTask & { readonly id?: string }) =
       organizationId: started.organizationId,
       name: named.length > 0 ? named : UNTITLED_TASK_NAME,
       repository: started.repository ?? null,
+      githubAccess: started.githubAccess ?? GITHUB_ACCESS.APP,
       document: template ?? DEFAULT_PLAN_TEMPLATE,
       issueId: started.issueId ?? null,
       brief: brief.length > 0 ? brief : null,
@@ -1115,7 +1127,12 @@ function columnChangesOf(
     ...(movedNumber === undefined || changes.organizationId === undefined
       ? undefined
       : { organizationId: changes.organizationId, issueId: null, number: movedNumber }),
-    ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
+    ...(changes.repository === undefined
+      ? undefined
+      : {
+          repository: changes.repository,
+          githubAccess: changes.githubAccess ?? GITHUB_ACCESS.APP,
+        }),
     ...(changes.status === undefined ? undefined : { status: changes.status }),
     ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
     ...(changes.archived === undefined

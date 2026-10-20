@@ -83,6 +83,7 @@ import { modelCatalogOf } from "@luke/service/providers/model-catalog";
 import type { WebServices } from "@luke/service/runtime";
 import { DRAW_ON_BOARD_STATUS, runDrawOnBoard } from "@luke/service/tasks/board-tool";
 import { PLAN_SAVE_STATUS, saveNotes } from "@luke/service/tasks/plan-notes";
+import { taskFilesProcedures } from "@luke/service/tasks/task-files-procedures";
 import { tasksApp } from "@luke/service/tasks/tasks-app";
 import { tasksProcedures } from "@luke/service/tasks/tasks-procedures";
 import {
@@ -122,6 +123,7 @@ import {
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
+import { DISPATCH_QUERY } from "../server/function-dispatch.js";
 import { dispatched } from "./support/platform-landing";
 
 /**
@@ -149,14 +151,17 @@ const ISSUES = (taskId: string) => `${ONE_TASK(taskId)}/issues`;
 const ISSUE = (taskId: string, linkId: string) => `${ISSUES(taskId)}/${linkId}`;
 const MESSAGES = "/api/plans/messages";
 const SUBAGENT_MESSAGES = "/api/plans/subagent-messages";
-const CODE = "/api/plans/code";
-const FILE = "/api/plans/file";
+const CODE = (taskId: string) => `${ONE_TASK(taskId)}/code`;
+const FILE = (taskId: string) => `${ONE_TASK(taskId)}/file`;
+const SKILLS = (taskId: string) => `${ONE_TASK(taskId)}/skills`;
+const PAGES = (taskId: string) => `${ONE_TASK(taskId)}/pages`;
 const REVISIONS = (taskId: string) => `${ONE_TASK(taskId)}/revisions`;
 const REVISION = (taskId: string, seq: number) => `${REVISIONS(taskId)}/${seq}`;
 const RESTORE = (taskId: string, seq: number) => `${REVISION(taskId, seq)}/restore`;
 const EDIT = (taskId: string) => `${ONE_TASK(taskId)}/edit`;
 const STOP = (taskId: string) => `${ONE_TASK(taskId)}/stop`;
-const PAGE = "/api/plans/page";
+const PAGE = (taskId: string, pageId: string, version: string) =>
+  `${PAGES(taskId)}/${pageId}/versions/${version}`;
 
 const RELAY = {
   name: "Teammate invitations",
@@ -278,9 +283,9 @@ function sessionOf(sessions: ReadonlyMap<string, string>): SessionEndpoint {
 }
 
 /** The flattened paths the old group still serves, which a request names as the rewrite hands them to it. */
-const GROUP_PATHS: ReadonlySet<string> = new Set([MESSAGES, SUBAGENT_MESSAGES, CODE, FILE, PAGE]);
+const GROUP_PATHS: ReadonlySet<string> = new Set([MESSAGES, SUBAGENT_MESSAGES]);
 
-/** The route keys the hosted oRPC router answers, as `tasks-procedures.ts` serves them. */
+/** The route keys the hosted oRPC router answers, as `tasks-procedures.ts` and `task-files-procedures.ts` serve them. */
 const TASK_ROUTES = [
   "plans",
   "plans/plan",
@@ -292,6 +297,13 @@ const TASK_ROUTES = [
   "plans/transcript",
   "plans/work",
   "plans/stop",
+  "plans/code",
+  "plans/file",
+  "plans/tree",
+  "plans/skills",
+  "plans/attachments",
+  "plans/pages",
+  "plans/page",
   "plans/issues",
   "plans/issue",
 ] as const;
@@ -341,6 +353,7 @@ const answer = (
     const routed = hostedFetch({
       messages: messagesProcedures(seams),
       plans: tasksProcedures(seams),
+      taskFiles: taskFilesProcedures(seams),
     });
     const tasksRoute = { fetch: (each: Request) => routed(each, webServices) };
     /** A task's transcript reads are the hosted oRPC router's, at the public paths their rewrites carry; the rest of the old group's flattened paths are its own. */
@@ -857,9 +870,8 @@ it.layer(getTestDB())("the plan routes", (it) => {
         body: { plans: [], planlessAgents: [] },
       });
       assert.equal((yield* ask(request(ONE_TASK(taskId), owner))).status, HOSTED_HTTP_STATUS.OK);
-      for (const path of [MESSAGES, CODE]) {
-        assert.deepEqual(yield* ask(request(path, other, { id: taskId })), notFound);
-      }
+      assert.deepEqual(yield* ask(request(MESSAGES, other, { id: taskId })), notFound);
+      assert.deepEqual(yield* ask(request(CODE(taskId), other)), notFound);
       assert.deepEqual(yield* ask(request(STOP(taskId), other, { method: "POST" })), notFound);
       assert.deepEqual(
         yield* ask(request(SUBAGENT_MESSAGES, other, { id: taskId, query: { call: "call-0-0" } })),
@@ -970,7 +982,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           [page.messages, page.status, page.earlier],
           [[], CODING_AGENT_STATUS.COMPLETED, undefined],
         );
-        assert.deepEqual(yield* ask(request(CODE, owner, { id: taskId })), {
+        assert.deepEqual(yield* ask(request(CODE(taskId), owner)), {
           status: HOSTED_HTTP_STATUS.OK,
           body: { code: [] },
         });
@@ -1878,7 +1890,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ),
         );
         const window = (userId: string, path: string, first: string, last: string) =>
-          ask(request(FILE, userId, { id: taskId, query: { path, first, last } }));
+          ask(request(FILE(taskId), userId, { query: { path, first, last } }));
 
         const read = readAnswer(
           taskFileAnswerSchema,
@@ -1953,8 +1965,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           taskFileAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(
-            request(FILE, owner, {
-              id: taskId,
+            request(FILE(taskId), owner, {
               query: { path: "src/invite.ts", first: "1", last: "2" },
             }),
           ),
@@ -1994,7 +2005,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
         );
         const refusalOf = (path: string) =>
           Effect.map(
-            ask(request(FILE, owner, { id: taskId, query: { path, first: "1", last: "10" } })),
+            ask(request(FILE(taskId), owner, { query: { path, first: "1", last: "10" } })),
             (answered) => readAnswer(taskFileAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
           );
         const asked = () =>
@@ -2043,8 +2054,7 @@ it.layer(getTestDB())("the plan routes", (it) => {
           taskFileAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(
-            request(FILE, other, {
-              id: taskId,
+            request(FILE(taskId), other, {
               query: { path: "src/invite.ts", first: "1", last: "2" },
             }),
           ),
@@ -2179,18 +2189,25 @@ it.layer(getTestDB())("the plan routes", (it) => {
           ),
         );
         const version = (asker: string, pageId: string, number: string, method?: string) =>
-          ask(
-            request(PAGE, asker, {
-              id: taskId,
-              query: { page: pageId, version: number },
-              ...(method === undefined ? undefined : { method }),
-            }),
-          );
+          ask(request(PAGE(taskId, pageId, number), asker, method === undefined ? {} : { method }));
         const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
 
-        assert.deepEqual(yield* ask(request(`/api/plans/${taskId}/pages`, other), "plans/pages"), {
+        assert.deepEqual(yield* ask(request(PAGES(taskId), other)), {
           status: HOSTED_HTTP_STATUS.OK,
           body: { pages: [] },
+        });
+        assert.deepEqual(yield* ask(request(PAGE(taskId, page.id, "1"), owner)), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            page: {
+              id: page.id,
+              title: "Invite funnel",
+              version: 1,
+              at: page.at,
+              shownBy: { kind: PAGE_SHOWER.LUKE },
+              html: "<p>v1</p>",
+            },
+          },
         });
         assert.deepEqual(yield* version(other, page.id, "1"), notFound);
         assert.deepEqual(yield* version(owner, page.id, "2"), notFound);
@@ -2202,6 +2219,65 @@ it.layer(getTestDB())("the plan routes", (it) => {
         assert.deepEqual(
           yield* version(owner, page.id, "1", "POST"),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan's files are refused as the old group refused them: the caller read before the query, an unreadable query, an id that is no UUID, and a wrong method",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const taskId = startedId(
+          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
+        );
+        const unreadable = { query: { path: "src/invite.ts", first: "1", last: "2", raw: "2" } };
+
+        assert.deepEqual(
+          yield* ask(request(FILE(taskId), undefined, unreadable)),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+          "the caller is read before the query",
+        );
+        assert.deepEqual(
+          yield* ask(request(FILE(taskId), owner, unreadable)),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* ask(request(CODE("not-a-plan"), owner)),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(request(SKILLS(taskId), owner, { method: "POST" })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
+    "a route-path a client names on a plan's pages cannot steer the read to another procedure: it answers as the pages, and a delete there deletes nothing",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const taskId = startedId(
+          yield* ask(request(TASKS, owner, { method: "POST", body: RELAY })),
+        );
+        const steered = (method?: string) =>
+          ask(
+            request(PAGES(taskId), owner, {
+              query: { [DISPATCH_QUERY.PATH]: "plans/plan" },
+              ...(method === undefined ? undefined : { method }),
+            }),
+          );
+
+        assert.deepEqual(yield* steered(), { status: HOSTED_HTTP_STATUS.OK, body: { pages: [] } });
+        assert.deepEqual(
+          yield* steered("DELETE"),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+        assert.equal(
+          (yield* ask(request(ONE_TASK(taskId), owner))).status,
+          HOSTED_HTTP_STATUS.OK,
+          "the plan stands",
         );
       }),
   );

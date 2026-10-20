@@ -5,7 +5,8 @@
  * what a caller says of it: a Linear issue by its id or its key, read
  * through the workspace's own Linear connection (`linear-issues.ts`), and a
  * GitHub issue by its repository and number, read through the workspace's
- * installation where it has granted the App issues (`github-app.ts`'s
+ * installation where it has granted the App issues, or the member's own
+ * GitHub token where no installation reaches the repository (`github-app.ts`'s
  * `repositoryIssueAccess`, `github/issues.ts`'s `issueLink`), as New task's
  * start reads one. An issue the provider answers none for, or a repository
  * whose issues the installation does not grant, is refused as not found;
@@ -71,12 +72,13 @@ export const linkedLinearIssue = (organizationId: string, issueId: string) =>
  * reaches no such issue or has not granted the App issues.
  */
 export const linkedGitHubIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
   organizationId: string,
   chosen: { readonly repository: string; readonly number: number },
 ) {
   const app = yield* GitHubApp;
   const access = yield* githubReadOrRefusal(
-    app.repositoryIssueAccess(organizationId, chosen.repository),
+    app.repositoryIssueAccess(organizationId, chosen.repository, userId),
   );
   if (access.kind !== ISSUE_ACCESS.READABLE) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const read = yield* githubReadOrRefusal(
@@ -88,13 +90,14 @@ export const linkedGitHubIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The issue a choice names, read from its provider, with the relation the choice names where it names one. */
 export const linkedIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
   organizationId: string,
   choice: TaskIssueChoice,
 ) {
   const read: NewTaskIssueLink =
     choice.provider === TASK_ISSUE_PROVIDER.LINEAR
       ? yield* linkedLinearIssue(organizationId, choice.id)
-      : yield* linkedGitHubIssue(organizationId, choice);
+      : yield* linkedGitHubIssue(userId, organizationId, choice);
   return choice.relation === undefined ? read : { ...read, relation: choice.relation };
 });
 
@@ -125,7 +128,7 @@ interface LiveIssue {
 }
 
 /** The repositories whose issues the workspace's installation reads, each once, by the name the links keep. */
-function githubTokens(organizationId: string, links: readonly TaskIssueLink[]) {
+function githubTokens(userId: string, organizationId: string, links: readonly TaskIssueLink[]) {
   const names = [
     ...new Set(links.flatMap((link) => (link.repository === null ? [] : [link.repository]))),
   ];
@@ -133,7 +136,9 @@ function githubTokens(organizationId: string, links: readonly TaskIssueLink[]) {
     Effect.forEach(
       names,
       (name) =>
-        Effect.flatMap(GitHubApp, (app) => app.repositoryIssueAccess(organizationId, name)).pipe(
+        Effect.flatMap(GitHubApp, (app) =>
+          app.repositoryIssueAccess(organizationId, name, userId),
+        ).pipe(
           Effect.map((access) => [name, access] as const),
           Effect.orElseSucceed(() => [name, undefined] as const),
         ),
@@ -163,7 +168,8 @@ export const liveTaskIssues = /* @__PURE__ */ Effect.fnUntraced(function* (
   links: readonly TaskIssueLink[],
 ) {
   const github = links.filter((link) => link.provider === TASK_ISSUE_PROVIDER.GITHUB);
-  const tokens = github.length === 0 ? new Map() : yield* githubTokens(organizationId, github);
+  const tokens =
+    github.length === 0 ? new Map() : yield* githubTokens(userId, organizationId, github);
   const linear = links.some((link) => link.provider === TASK_ISSUE_PROVIDER.LINEAR)
     ? yield* linearToken(organizationId)
     : undefined;

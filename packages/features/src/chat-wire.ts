@@ -87,10 +87,12 @@ export {
  * chat-wire.ts -- a workspace's chat: the members, channels, messages, and asks its coding agents, planners, and people talk through.
  *
  * A workspace has one chat, reached only through tools on the agent's side
- * and through the window on a person's. Every member has a handle minted
- * once and kept for life: a person's is a slug of their name, a coding
- * agent's `agent-N`, and a plan's planner is always `luke`, told apart by
- * the plan a channel or an author belongs to. A channel is the workspace's
+ * and through the window on a person's. A member is named the way the rest
+ * of the app names a person, an agent, or a task's Luke: by its mention
+ * link (`mention-link.ts`), `[@Ada Lovelace](…/person/<userId>)`, an agent's
+ * under its task or its workspace, a Luke's under his task, which a post
+ * addresses a member by, a `to` names a DM by, and a reader is named by;
+ * the handle each member was minted is no longer read. A channel is the workspace's
  * `#general`, a plan's own channel where its agents post by default, a
  * topic channel a member opened, or a DM between two members; a thread is
  * a reply to a root message. Messages are records of their own, addressed
@@ -174,6 +176,8 @@ export const CHAT_BOUNDS = {
   MAX_POSTS_PER_TURN: 20,
   /** The most characters a handle may spell. */
   MAX_HANDLE_CHARS: 40,
+  /** The most characters a `to` may spell: a channel's `#name`, or a member's mention link, whose label is a name and whose address an agent's task and id make long. */
+  MAX_TARGET_CHARS: 512,
   /** The most characters a topic channel's purpose may spell: a line under its name, never a brief. */
   MAX_PURPOSE_CHARS: 250,
   /** The most pictures one post from the window may carry: a message's blocks, its words' one left out. */
@@ -204,12 +208,24 @@ export const MEMBER_KIND = {
   HUMAN: "human",
   /** A coding agent started on one of the workspace's plans. */
   AGENT: "agent",
-  /** A plan's Luke, one per plan, always `@luke`. */
+  /** A plan's Luke, one per plan, named by his task's `…/plan/<taskId>/luke` link. */
   LUKE: "planner",
 } as const;
 
 /** @public */
 export type MemberKind = (typeof MEMBER_KIND)[keyof typeof MEMBER_KIND];
+
+/**
+ * What a member is called where no mention link can be written of it, or no
+ * name is known: a task's Luke is Luke, and an agent whose coding agent is
+ * gone, or a person whose account is, a former one.
+ * @public
+ */
+export const CHAT_MEMBER_LABEL = {
+  LUKE: "Luke",
+  FORMER_AGENT: "Former agent",
+  FORMER_PERSON: "Former member",
+} as const;
 
 /**
  * The kinds of channel a workspace's chat holds.
@@ -242,7 +258,7 @@ export const GENERAL_CHANNEL = "general";
 export const LUKE_HANDLE = "luke";
 
 /**
- * How a `to` names a channel, and how it names a member.
+ * How a `to` names a channel, and how the window's composer opens a member's mention.
  * @public
  */
 export const CHAT_TARGET_SIGIL = {
@@ -266,6 +282,15 @@ export function chatNoticeReplyLine(seq: number): string {
   return `Reply with ${CHAT_TOOL.POST}({ replyTo: ${seq}, text }).`;
 }
 
+/**
+ * A notice's head as `chat-notify.ts` writes it, whole: the lead, who said it,
+ * by their mention link or a plain name, where, and its place.
+ */
+const CHAT_NOTICE_HEAD = new RegExp(
+  `^${CHAT_NOTICE_LEAD} · .+ (?:to you|in #\\S*)(?:, in a thread)? \\(m \\d+\\):$`,
+  "u",
+);
+
 /** The closing lines as `chatNoticeAsksLine` and `chatNoticeReplyLine` write them, whole, which nothing a member typed is read as. */
 const CHAT_NOTICE_CLOSINGS = [
   /^It asks you \([a-z-]+\): answer it in its thread\.$/u,
@@ -282,7 +307,7 @@ const CHAT_NOTICE_CLOSINGS = [
  */
 export function chatNoticeWords(text: string): string {
   const [head, ...rest] = text.split("\n\n");
-  if (head === undefined || !head.startsWith(`${CHAT_NOTICE_LEAD} · @`)) return text;
+  if (head === undefined || !CHAT_NOTICE_HEAD.test(head)) return text;
   const words = [...rest];
   // The reply line ends every notice, and the asks line stands before it where the message asks.
   for (const closing of [...CHAT_NOTICE_CLOSINGS].reverse()) {
@@ -310,31 +335,22 @@ export const chatHandleSchema = EffectSchema.String.check(
   EffectSchema.isPattern(HANDLE_GRAMMAR),
 );
 
-/** Where a post goes, as a poster names it: `#name` for a channel, `@handle` for a member's DM, each within its own grammar's bound. */
-export const chatTargetSchema = EffectSchema.String.check(
-  EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_KEY_CHARS + 1),
-  EffectSchema.isPattern(
-    new RegExp(
-      `^(#[a-z0-9][a-z0-9._-]{0,${CHAT_BOUNDS.MAX_KEY_CHARS - 1}}|@[a-z][a-z0-9-]{0,${CHAT_BOUNDS.MAX_HANDLE_CHARS - 1}})$`,
-      "u",
-    ),
-  ),
-);
+/** A channel as a `to` names it: `#name`, within a key's grammar and bound. */
+const CHANNEL_TARGET = `#[a-z0-9][a-z0-9._-]{0,${CHAT_BOUNDS.MAX_KEY_CHARS - 1}}`;
 
 /**
- * A mention in a post's words: an `@handle` glued to no word before it or
- * after it, so an address or a token past the grammar names no one, while
- * punctuation after it, `@luke:` or `@agent-2's`, ends it.
+ * A member as a `to` names it: its mention link written whole,
+ * `[@Name](address)`, its label's brackets and backslashes escaped, or the
+ * address alone. Only the shape is held here; whether the address names a
+ * member of the chat is the service's to say.
  */
-const MENTION = /(?<![\w@.-])@([a-z][a-z0-9-]*)(?![\w@-]|\.\w)/gu;
+const MEMBER_TARGET = String.raw`\[@(?:[^\\\]\r\n]|\\.)+\]\([^\s()]+\)|[a-z][a-z0-9+.-]*:\/\/[^\s()]+`;
 
-/** The handles a post's words mention, each once, in the order first mentioned. */
-export function mentionedHandles(text: string): readonly string[] {
-  const handles = [...text.matchAll(MENTION)]
-    .map((match) => match[1] ?? "")
-    .filter((handle) => handle.length <= CHAT_BOUNDS.MAX_HANDLE_CHARS);
-  return [...new Set(handles)];
-}
+/** Where a post goes, as a poster names it: `#name` for a channel, or a member's mention link, or its bare address, for that member's DM. */
+export const chatTargetSchema = EffectSchema.String.check(
+  EffectSchema.isMaxLength(CHAT_BOUNDS.MAX_TARGET_CHARS),
+  EffectSchema.isPattern(new RegExp(`^(?:${CHANNEL_TARGET}|${MEMBER_TARGET})$`, "u")),
+);
 
 /**
  * What an ask asks for, one of six, as the Inbox asked before its version 5:
@@ -485,10 +501,10 @@ function oneDestination(post: { readonly to?: string; readonly replyTo?: number 
 
 /**
  * What a post's tool part carries as its input: the words, Markdown; where
- * they go, a channel by `#name` or a member's DM by `@handle`, the poster's
- * plan channel where unsaid; and the message it replies to in a thread, by
- * its sequence number, which posts into that message's channel and names no
- * `to`. An `@handle` in the words tells that member.
+ * they go, a channel by `#name` or a member's DM by its mention link, the
+ * poster's plan channel where unsaid; and the message it replies to in a
+ * thread, by its sequence number, which posts into that message's channel
+ * and names no `to`. A member's mention link in the words tells that member.
  */
 export const postChatInputSchema = EffectSchema.Struct(postFields).check(
   EffectSchema.makeFilter(oneDestination),
@@ -516,7 +532,7 @@ export const postChatAskInputSchema = EffectSchema.Struct({
 
 /**
  * What a read's tool part carries as its input: a channel by `#name` or a
- * member's DM by `@handle`, a thread by its root's sequence number, and a
+ * member's DM by its mention link, a thread by its root's sequence number, and a
  * place to read back from, by sequence number; with none, what the reader
  * has not read yet.
  */
@@ -553,7 +569,10 @@ export const editChannelInputSchema = EffectSchema.Struct({
 export const chatMemberSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(MEMBER_KIND)),
-  handle: EffectSchema.String,
+  /** The member's handle, which a person's window no longer names anyone by; absent from a service past it. */
+  handle: EffectSchema.optionalKey(EffectSchema.String),
+  /** What a person or an agent is called: a person's account's name, an agent's title, or its model's id before it has one; absent for a Luke, always Luke, and for a member whose account or agent is gone. */
+  name: EffectSchema.optionalKey(EffectSchema.String),
   userId: EffectSchema.optionalKey(EffectSchema.String),
   agentId: EffectSchema.optionalKey(wireUuidSchema),
   /** The plan a planner is Luke on, or the plan an agent works on; absent for a person, an agent on no plan, and from a service before agents named theirs. */
@@ -744,9 +763,13 @@ function picturesFit(post: WindowPost): boolean {
   );
 }
 
-/** Whether a window's post names one place: a `to`, or the message it replies to, never both. */
-function placedOnce(post: { readonly to?: string; readonly replyTo?: number }): boolean {
-  return post.to === undefined || post.replyTo === undefined;
+/** Whether a window's post names one place at most: a `to`, the channel shown, or the message it replies to. */
+function placedOnce(post: {
+  readonly to?: string;
+  readonly channelId?: string;
+  readonly replyTo?: number;
+}): boolean {
+  return [post.to, post.channelId, post.replyTo].filter((place) => place !== undefined).length <= 1;
 }
 
 /**
@@ -754,11 +777,11 @@ function placedOnce(post: { readonly to?: string; readonly replyTo?: number }): 
  * blocks, a link or lines of code among them; the pictures under them, in
  * the coding agent's file shape, PNG, JPEG, or WebP alone, which the
  * service keeps and the message names as image blocks after the words, a
- * post of pictures alone carrying no words; where it goes, a channel by
- * `#name` or a member's DM by `@handle`, `#general` where unsaid, or the
- * message it replies to by its place; and the window's own key for the
- * post, which a retry carries again. An `@handle` in the words tells that
- * member.
+ * post of pictures alone carrying no words; where it goes, the channel the
+ * window shows by its id, a channel by `#name`, `#general` where unsaid, or
+ * the message it replies to by its place; and the window's own key for the
+ * post, which a retry carries again. A member's mention link in the words
+ * tells that member.
  */
 export const chatPostRequestSchema = EffectSchema.Struct({
   text: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_TEXT_CHARS)),
@@ -770,6 +793,8 @@ export const chatPostRequestSchema = EffectSchema.Struct({
   ),
   attachments: codingAgentMessageRequestSchema.fields.attachments,
   to: EffectSchema.optionalKey(chatTargetSchema),
+  /** The channel the window shows, a direct message among them, which names its place by what it is rather than by any member's name. */
+  channelId: EffectSchema.optionalKey(wireUuidSchema),
   replyTo: EffectSchema.optionalKey(countedNumber),
   clientKey: filledText(CHAT_BOUNDS.MAX_CLIENT_KEY_CHARS),
 }).check(
@@ -847,7 +872,7 @@ export const chatWriteRequestSchema = EffectSchema.Union([
 /** @public */
 export type ChatWriteRequest = typeof chatWriteRequestSchema.Type;
 
-/** Who a post came to, by handle: told now, held for their next read, left, and the handles its words mention that name no member. */
+/** Who a post came to, each member by its mention link or a plain name where none can be written: told now, held for their next read, left, and the labels of the links its words write that name no member. */
 export const chatReceiptSchema = EffectSchema.Struct({
   told: EffectSchema.Array(EffectSchema.String),
   held: EffectSchema.Array(EffectSchema.String),

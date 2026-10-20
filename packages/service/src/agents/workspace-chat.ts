@@ -10,7 +10,7 @@ import {
   ensureGeneral,
   ensureMember,
   findOrMakeDm,
-  memberNamed,
+  memberOfSubject,
   messageAt,
   openTopicChannel,
   readAllTo,
@@ -19,6 +19,7 @@ import {
 } from "@luke/database/models/chat-store";
 import { chatAttachmentId } from "@luke/database/models/ids";
 import { storeWriter } from "@luke/database/models/writer";
+import { chatTargetMember } from "@luke/features/chat-mentions";
 import {
   CHAT_BLOCK,
   CHAT_BOUNDS,
@@ -50,7 +51,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 import { EVE_MOUNT, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
-import { type ChatNamed, namedIn } from "./coder-host/chat-ask.js";
+import { type ChatNamed, namedIn, subjectOf } from "./coder-host/chat-ask.js";
 import {
   CHAT_DOORS,
   type ChatTelling,
@@ -75,8 +76,9 @@ import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
  * moved (`hosted/coder-host/chat-page.ts`): the roster, the channels, the
  * messages posted or changed past the cursor, and the cursor to read on
  * from. `POST` to the same path writes as the account's own member of the
- * workspace, one of four things: a post, to a channel by `#name`, a
- * member's DM by `@handle`, `#general` where unsaid, or a thread by the
+ * workspace, one of four things: a post, to the channel the window shows
+ * by its id, a channel by `#name`, a member's DM by the member's mention
+ * link, `#general` where unsaid, or a thread by the
  * place of the message it replies to, told to the members it addresses
  * through the one door a coding agent's post goes through too
  * (`hosted/coder-host/chat-notify.ts`); an answer to an ask, at the
@@ -196,35 +198,47 @@ const tellingOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** Where a person's post goes: the message it replies to, a channel by `#name`, a member's DM by `@handle`, or `#general`. */
+/** Where a person's post says it goes: a `to`, the channel shown, or the message it replies to, one at most. */
+interface PostPlace {
+  readonly to?: string;
+  readonly channelId?: string;
+  readonly replyTo?: number;
+}
+
+/** Where a person's post goes: the message it replies to, the channel the window shows by its id, which the store holds the person to, a channel by `#name`, a member's DM by the member's mention link, or `#general`. */
 const placeOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   writer: Writer,
-  to: string | undefined,
-  replyTo: number | undefined,
+  post: PostPlace,
 ): Effect.fn.Return<ChatPost["to"], HostedRefusal, DatabaseServices> {
   const { userId, organizationId } = writer;
+  const { to, channelId, replyTo } = post;
   if (replyTo !== undefined) return { replyTo };
+  if (channelId !== undefined) return { channelId };
   const channel =
     to === undefined
       ? yield* hostedStoreOrUnavailable(ensureGeneral(userId, organizationId))
       : to.startsWith(CHAT_TARGET_SIGIL.CHANNEL)
         ? yield* hostedStoreOrUnavailable(channelNamed(userId, organizationId, to.slice(1)))
-        : yield* dmWith(writer, to.slice(1));
+        : yield* dmWith(writer, to);
   if (Option.isNone(channel)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return { channelId: channel.value.id };
 });
 
-/** The person's DM with the member a handle names; nothing where it names none, or the person. */
-const dmWith = /* @__PURE__ */ Effect.fnUntraced(function* (writer: Writer, handle: string) {
+/** The person's DM with the member a mention link names, written whole or as its address; nothing where it names none, or the person. */
+const dmWith = /* @__PURE__ */ Effect.fnUntraced(function* (writer: Writer, target: string) {
   const { userId, organizationId, self } = writer;
-  const other = yield* hostedStoreOrUnavailable(memberNamed(userId, organizationId, handle));
+  const mention = chatTargetMember(target);
+  if (mention === undefined) return Option.none();
+  const other = yield* hostedStoreOrUnavailable(
+    memberOfSubject(userId, organizationId, subjectOf(mention)),
+  );
   if (Option.isNone(other)) return Option.none();
   return yield* hostedStoreOrUnavailable(
     findOrMakeDm(userId, organizationId, self.id, other.value.id),
   );
 });
 
-/** Whom a post's words name, read off its Markdown: the handles typed, and the members its mention links write. */
+/** Whom a post's words name, read off its Markdown: the members its mention links write. */
 function mentionsOf(blocks: readonly ChatBlock[]): ChatNamed {
   const words = blocks.flatMap((block) => (block.type === CHAT_BLOCK.MARKDOWN ? [block.text] : []));
   return namedIn(words.join("\n"));
@@ -262,12 +276,10 @@ function picturesOf(
 const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
   writer: Writer,
-  post: {
+  post: PostPlace & {
     readonly text?: string;
     readonly blocks?: readonly ChatBlock[];
     readonly attachments?: readonly CodingAgentAttachment[];
-    readonly to?: string;
-    readonly replyTo?: number;
     readonly clientKey: string;
   },
 ): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, ChatServices> {
@@ -280,7 +292,7 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     ...words,
     ...pictures.map(({ id, name }) => ({ type: CHAT_BLOCK.IMAGE, attachmentId: id, alt: name })),
   ];
-  const to = yield* placeOf(writer, post.to, post.replyTo);
+  const to = yield* placeOf(writer, post);
   const teller = yield* telling;
   const told = yield* postChat(
     teller,

@@ -328,8 +328,9 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     ActPortDependencies,
     "account" | "settings"
   >;
-  // SAFETY: no agent, automation, factory, integration, or task issue act is called here, so their hosts are never reached.
+  // SAFETY: no agent, inbox, chat, automation, factory, integration, or task issue act is called here, so their hosts are never reached.
   const elsewhere = {
+    agentInbox: { host: {} },
     agents: { host: {}, notices: {} },
     automations: { host: {} },
     factory: { host: {} },
@@ -337,7 +338,7 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     taskIssues: { host: {} },
   } as Pick<
     ActPortDependencies,
-    "agents" | "automations" | "factory" | "integrations" | "taskIssues"
+    "agentInbox" | "agents" | "automations" | "factory" | "integrations" | "taskIssues"
   >;
   const handler = createActPortHandler(
     {

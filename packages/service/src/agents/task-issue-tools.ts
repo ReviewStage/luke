@@ -171,6 +171,7 @@ function readRefusalWords(refusal: HostedRefusal, named: string): string {
  * the first its provider does not answer for.
  */
 export const readIssueChoices = (
+  userId: string,
   organizationId: string,
   items: readonly TaskIssueItem[],
   choices: readonly TaskIssueChoice[],
@@ -178,7 +179,7 @@ export const readIssueChoices = (
   Effect.gen(function* () {
     const read: NewTaskIssueLink[] = [];
     for (const [index, choice] of choices.entries()) {
-      const one = yield* Effect.result(linkedIssue(organizationId, choice));
+      const one = yield* Effect.result(linkedIssue(userId, organizationId, choice));
       if (Result.isFailure(one)) {
         return Result.fail(readRefusalWords(one.failure, items[index]?.issue ?? ""));
       }
@@ -242,6 +243,7 @@ function namedLink(
  * task would link more than a task may.
  */
 export const issueChangesOf = (
+  userId: string,
   organizationId: string,
   links: readonly TaskIssueLink[],
   repositories: { readonly standing: string | null; readonly changed: string | null },
@@ -280,6 +282,7 @@ export const issueChangesOf = (
       return Result.fail(TASK_ISSUE_REFUSAL.FULL);
     }
     const read = yield* readIssueChoices(
+      userId,
       organizationId,
       fresh.map(({ item }) => item),
       fresh.map(({ choice }) => choice),

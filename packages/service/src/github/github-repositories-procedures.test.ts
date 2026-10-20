@@ -20,7 +20,11 @@ import {
   HostedTaskClient,
 } from "@luke/features";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
-import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  githubRepositoryIssuesAnswerSchema,
+  ISSUE_STATE,
+} from "@luke/features/github-repositories-wire";
 import {
   TASK_FILE_REFUSAL,
   TASK_TREE_ENTRY,
@@ -38,9 +42,13 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import {
   type FakeGitHub,
+  GITHUB_APP_WITH_TOKENS,
   GITHUB_FIXTURE,
+  GITHUB_FIXTURE_MEMBER,
   githubReaching,
+  memberRepositoryJson,
   openGithubUser,
+  openTokenMember,
 } from "../testing/github-app-fake.js";
 import type { GitHubApp } from "./github-app.js";
 import { githubProcedures } from "./github-procedures.js";
@@ -306,6 +314,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               defaultBranch: "main",
               private: true,
               updatedAt: Date.parse("2026-10-08T00:00:00Z"),
+              access: GITHUB_ACCESS.APP,
             },
             {
               owner: "octocat",
@@ -314,6 +323,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               defaultBranch: "main",
               private: false,
               updatedAt: Date.parse("2026-09-01T00:00:00Z"),
+              access: GITHUB_ACCESS.APP,
             },
           ],
           installationUrl: `https://github.com/apps/${GITHUB_FIXTURE.SLUG}/installations/new`,
@@ -321,6 +331,62 @@ it.layer(getTestDB())("the repositories route", (it) => {
         // Note that neither the account's own token nor the App's are in the answer.
         assert.equal(JSON.stringify(reached).includes("ghu_"), false);
         assert.equal(JSON.stringify(reached).includes("ghs_"), false);
+      }),
+  );
+
+  it.effect(
+    "a member's own token adds the repositories it may push to, each entry marked by what reaches it, and one the installation lists is listed once, as the App's",
+    () =>
+      Effect.gen(function* () {
+        const own = [
+          memberRepositoryJson(
+            { owner: "acme", name: "relay", updatedAt: "2026-10-02T00:00:00Z" },
+            true,
+          ),
+          memberRepositoryJson(
+            { owner: "octo-member", name: "side", updatedAt: "2026-10-05T00:00:00Z" },
+            true,
+          ),
+          memberRepositoryJson(
+            { owner: "octo-member", name: "fork", updatedAt: "2026-10-06T00:00:00Z" },
+            false,
+          ),
+        ];
+        const github = githubReaching(
+          [
+            {
+              id: 7151,
+              login: "acme",
+              repositories: [{ owner: "acme", name: "relay", updatedAt: "2026-10-02T00:00:00Z" }],
+            },
+          ],
+          GITHUB_APP_WITH_TOKENS,
+          {},
+          (sent) =>
+            new URL(sent.url).pathname === "/user/repos" &&
+            sent.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`
+              ? Response.json(own)
+              : undefined,
+        );
+        const { bearers, ask } = yield* openAccounts(github);
+        const member = yield* openTokenMember();
+        bearers.set(`Bearer ${member}`, member);
+        const workspace = yield* openInstallationWorkspace(member, {
+          installationId: 7151,
+          accountId: 9151,
+          accountLogin: "acme",
+        });
+
+        const reached = listed(yield* ask(member, "GET", [workspace]));
+
+        assert.deepEqual(
+          reached.repositories.map((one) => [one.fullName, one.access]),
+          [
+            ["octo-member/side", GITHUB_ACCESS.TOKEN],
+            ["acme/relay", GITHUB_ACCESS.APP],
+          ],
+        );
+        assert.equal(JSON.stringify(reached).includes(GITHUB_FIXTURE_MEMBER.TOKEN), false);
       }),
   );
 
@@ -906,6 +972,61 @@ it.layer(getTestDB())("the repositories route", (it) => {
         for (const mint of mints) {
           assert.deepEqual(mint, { repositories: ["relay"], permissions: { issues: "read" } });
         }
+      }),
+  );
+
+  it.effect(
+    "a repository reached on a member's own token reads its open issues on that token, never the App's",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [{ id: 7823, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          GITHUB_APP_WITH_TOKENS,
+          {},
+          (sent) => {
+            const { pathname } = new URL(sent.url);
+            const onToken =
+              sent.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`;
+            if (!onToken) return undefined;
+            if (pathname === "/repos/octo-member/side") {
+              return Response.json(
+                memberRepositoryJson({ owner: "octo-member", name: "side" }, true),
+              );
+            }
+            return pathname === "/repos/octo-member/side/issues"
+              ? Response.json([
+                  {
+                    ...issueRecord(3, "Side project bug", "open", null),
+                    html_url: "https://github.com/octo-member/side/issues/3",
+                  },
+                ])
+              : undefined;
+          },
+        );
+        const { bearers, read } = yield* openAccounts(github);
+        const member = yield* openTokenMember();
+        bearers.set(`Bearer ${member}`, member);
+        const workspace = yield* openInstallationWorkspace(member, {
+          installationId: 7823,
+          accountId: 9823,
+          accountLogin: "acme",
+        });
+
+        const answered = yield* read(member, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES, [
+          [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+          [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "octo-member/side"],
+        ]);
+
+        const issuesRead = readOf(githubRepositoryIssuesAnswerSchema, answered);
+        assert.deepEqual(
+          ("issues" in issuesRead ? issuesRead.issues : []).map((issue) => [
+            issue.repository,
+            issue.number,
+            issue.title,
+          ]),
+          [["octo-member/side", 3, "Side project bug"]],
+        );
+        assert.equal(JSON.stringify(answered).includes(GITHUB_FIXTURE_MEMBER.TOKEN), false);
       }),
   );
 

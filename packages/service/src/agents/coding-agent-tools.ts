@@ -48,7 +48,11 @@ import {
   contextWindowSchema,
   disabledServersSchema,
 } from "@luke/features/coding-agent-wire";
-import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  type GitHubAccess,
+  githubRepositoryFullNameSchema,
+} from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
@@ -1879,15 +1883,34 @@ function repositoryRefusalWords(refusal: HostedRefusal): string {
     : CODING_AGENT_TOOL_REFUSAL.STORE;
 }
 
-/** A repository confirmed as the menu's PATCH confirms one, through the workspace's installation, or the refusal's words; none clears it. */
-export const reachedRepository = (workspaceId: string, repository: string | null) =>
+/** A repository as a task records it: its name as GitHub spells it, none where it is cleared, and how it was reached. */
+interface RecordedRepository {
+  readonly repository: string | null;
+  readonly githubAccess: GitHubAccess;
+}
+
+/**
+ * A repository confirmed as the menu's PATCH confirms one, through the
+ * workspace's installation or else the member's own token, or the refusal's
+ * words; none clears it.
+ */
+export const reachedRepository = (
+  workspaceId: string,
+  repository: string | null,
+  member: string,
+) =>
   repository === null
-    ? Effect.succeed<Result.Result<string | null, string>>(Result.succeed(null))
+    ? Effect.succeed<Result.Result<RecordedRepository, string>>(
+        Result.succeed({ repository: null, githubAccess: GITHUB_ACCESS.APP }),
+      )
     : Effect.map(
-        Effect.result(workspaceRepository(workspaceId, repository)),
-        (reached): Result.Result<string | null, string> =>
+        Effect.result(workspaceRepository(workspaceId, repository, member)),
+        (reached): Result.Result<RecordedRepository, string> =>
           Result.isSuccess(reached)
-            ? Result.succeed(reached.success.fullName)
+            ? Result.succeed({
+                repository: reached.success.repository.fullName,
+                githubAccess: reached.success.access,
+              })
             : Result.fail(repositoryRefusalWords(reached.failure)),
       );
 
@@ -1941,24 +1964,33 @@ export function runUpdateTask(
       const repository =
         changes.repository === undefined
           ? undefined
-          : yield* reachedRepository(workspace.value, changes.repository);
+          : yield* reachedRepository(workspace.value, changes.repository, userId);
       if (repository !== undefined && Result.isFailure(repository)) {
         return agentToolRejected(repository.failure);
       }
       // A repository is compared as GitHub spells it, which is how the task holds it.
       const asWritten = {
         ...changes,
-        ...(repository === undefined ? undefined : { repository: repository.success }),
+        ...(repository === undefined
+          ? undefined
+          : {
+              repository: repository.success.repository,
+              githubAccess: repository.success.githubAccess,
+            }),
       };
       // Every issue to link is read from its provider before anything is written; `#N` names a link
       // of the repository the task stands on now, and an issue to link of the one the call leaves it on.
       const relinked = relinking
         ? yield* issueChangesOf(
+            userId,
             workspace.value,
             read.value.issueLinks,
             {
               standing: read.value.task.repository,
-              changed: repository === undefined ? read.value.task.repository : repository.success,
+              changed:
+                repository === undefined
+                  ? read.value.task.repository
+                  : repository.success.repository,
             },
             issuesAsked,
           )

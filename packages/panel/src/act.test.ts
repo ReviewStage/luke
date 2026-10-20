@@ -45,8 +45,9 @@ function openActPort(actor: ActSender): void {
   const unanswered = () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED });
   const noKeys = () => Effect.succeed({ keys: [] });
   const notTemplated = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-  // SAFETY: no agent, automation, factory, integration, or task issue act is called here, so their hosts are never reached.
+  // SAFETY: no agent, inbox, chat, automation, factory, integration, or task issue act is called here, so their hosts are never reached.
   const elsewhere = {
+    agentInbox: { host: {} },
     agents: { host: {}, notices: {} },
     automations: { host: {} },
     factory: { host: {} },
@@ -54,7 +55,7 @@ function openActPort(actor: ActSender): void {
     taskIssues: { host: {} },
   } as Pick<
     ActPortDependencies,
-    "agents" | "automations" | "factory" | "integrations" | "taskIssues"
+    "agentInbox" | "agents" | "automations" | "factory" | "integrations" | "taskIssues"
   >;
   const handler = createActPortHandler(
     {

@@ -1,15 +1,4 @@
-import { workspaceSeams } from "@luke/database/models/workspace-seams";
-import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
-import { auth } from "@luke/service/auth/auth";
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { tasksApp } from "@luke/service/tasks/tasks-app";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
-/** A window of one file of a task's repository as GitHub holds it now, for the File tab, by the id its path carries (GET). */
-export default routeFromHttpRouter(
-  tasksApp({
-    resolveUserId: resolveHostedUserId,
-    workspaces: workspaceSeams(auth.api),
-    eveOrigin: deploymentEveOrigin,
-  }),
-);
+/** Answered by the hosted oRPC router (`packages/service/src/tasks/task-files-procedures.ts`). */
+export default orpcRoute;

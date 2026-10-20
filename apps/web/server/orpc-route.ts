@@ -3,6 +3,7 @@
 import { memberSeams, workspaceSeams } from "@luke/database/models/workspace-seams";
 import { accountProcedureSeams } from "@luke/service/accounts/account-seams";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
+import { agentSandboxLayer } from "@luke/service/agents/terminal/agent-sandbox";
 import { auth } from "@luke/service/auth/auth";
 import { resolveHostedUserId } from "@luke/service/auth/bearer";
 import { resolveBrowserSessionUserId } from "@luke/service/auth/browser-session";
@@ -64,6 +65,7 @@ const DEPLOYMENT_SEAMS: HostedRouterSeams = {
   unlinkGitHub: githubUnlink(auth.api),
   workspaces: workspaceSeams(auth.api),
   eveOrigin: deploymentEveOrigin,
+  sandbox: agentSandboxLayer,
   members: memberSeams(auth.api),
 };
 

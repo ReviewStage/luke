@@ -68,14 +68,14 @@ const DISCARD_QUESTION: DialogQuestion = {
   running: "Discarding",
 };
 
-/** What the review may say, in the order GitHub's own review box offers it, and what each means. */
+/** What the review may say, in the order GitHub's own review box offers it, and what the two that need it mean. */
 const EVENT_OPTIONS = [
   {
     value: REVIEW_EVENT.COMMENT,
     label: "Comment",
     detail: "Submit general feedback without approval.",
   },
-  { value: REVIEW_EVENT.APPROVE, label: "Approve", detail: "Approve this pull request." },
+  { value: REVIEW_EVENT.APPROVE, label: "Approve" },
   {
     value: REVIEW_EVENT.REQUEST_CHANGES,
     label: "Request changes",

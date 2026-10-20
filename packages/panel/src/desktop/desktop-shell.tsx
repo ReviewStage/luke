@@ -660,6 +660,7 @@ export function DesktopShell({
         onSignOut={settings.onSignOut}
         call={sidebar.collapsed ? undefined : call}
         onPressWithin={keepOverlay}
+        room={room}
       />
       <main className="desktop-main">
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}

@@ -22,7 +22,7 @@ import {
 } from "@luke/features/pull-request-write-wire";
 import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TasksFileAnswer } from "@luke/features/tasks-view";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { ACT_ERROR, SETTINGS_ACT_KIND } from "@luke/host/contract";
 import { DIFF_LAYOUT } from "@luke/settings/diff-view";
 import {
@@ -44,8 +44,11 @@ import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
 import {
+  type AnyAct,
+  type AnyActOutcome,
   fakeActPort,
   fakeActPortCalls,
+  fakeActs,
   fakeAppBridge,
   refusedOnPort,
 } from "../testing/app-bridge.js";
@@ -1769,6 +1772,69 @@ test("minimized, the threads on no line take a row of their own for their chip, 
   assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
 });
 
+/** The seats patch and a second hunk far below it, so a long gap stands between them, its line 30 the same line on both sides but one. */
+const GAPPED_PATCH = [
+  PATCH,
+  "@@ -59,3 +60,3 @@",
+  " const kept = 59;",
+  "-const late = 60;",
+  "+const late = 61;",
+  " const end = 61;",
+].join("\n");
+
+test("a review thread on a line between hunks moves onto its line once a gap opened over it draws it, and back above the diff as the gap closes; an outdated one stays above", async () => {
+  commits = { headSha: HEAD_SHA };
+  files = [changed("src/seats.ts", { patch: GAPPED_PATCH })];
+  const threads: ChangesThreads = {
+    list: [seatsThread(30, "in-gap"), seatsThread(null, "was-3")],
+    draw: (thread) => createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+  };
+  await drawTab({ threads });
+  const file = () => lastDrawn().files[0] ?? assert.fail("the file is drawn");
+  const onLines = () =>
+    file()
+      .annotations.filter((note) => note.line !== 0)
+      .map((note) => [note.key, note.side, note.line]);
+  const aboveWords = () => {
+    const above = file().annotations.find((note) => note.line === 0);
+    return lastDrawn()
+      .renderAnnotation("src/seats.ts", above?.key ?? "")
+      .querySelector('[aria-label="Comments on lines this diff does not show"]')?.textContent;
+  };
+  assert.deepEqual(file().hidden, [30], "the list is asked to tell of the thread's line");
+  assert.deepEqual(onLines(), []);
+  assert.equal(aboveWords(), "in-gapwas-3");
+
+  // The gap's arrow opened over line 30, as the list tells it.
+  act(() => lastDrawn().onDrawn?.("src/seats.ts", [30]));
+  await flush();
+  assert.deepEqual(onLines(), [[`${PAGE}#in-gap`, "additions", 30]]);
+  assert.equal(
+    lastDrawn().renderAnnotation("src/seats.ts", `${PAGE}#in-gap`).textContent,
+    "in-gap",
+  );
+  assert.equal(aboveWords(), "was-3", "the outdated thread stays above");
+
+  // Minimized, the thread that moved is its line's chip.
+  press(listBox(), { key: "i" });
+  await flush();
+  assert.equal(
+    lastDrawn()
+      .renderAnnotation("src/seats.ts", `${PAGE}#in-gap`)
+      .querySelector(".diff-thread-chip")
+      ?.getAttribute("aria-label"),
+    "1 comment by octo · 1 open, show",
+  );
+  press(listBox(), { key: "i" });
+  await flush();
+
+  // The gap closed again, its patch read anew.
+  act(() => lastDrawn().onDrawn?.("src/seats.ts", []));
+  await flush();
+  assert.deepEqual(onLines(), []);
+  assert.equal(aboveWords(), "in-gapwas-3");
+});
+
 test("a header copies the path it names on a press, the path a file moved from apart from the one it moved to", async () => {
   files = [
     changed("src/seats.ts"),
@@ -1834,12 +1900,12 @@ const BASE_TEXT = HEAD_TEXT.replace("five", "5");
 const HEAD_PATCH = "@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8";
 
 /** Answers each read of a file whole as given, keeping every read asked. */
-function answerFileReads(answer: (path: string) => TasksFileAnswer): Act[] {
-  const asked: Act[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+function answerFileReads(answer: (path: string) => TasksFileAnswer): AnyAct[] {
+  const asked: AnyAct[] = [];
+  fakeActs({
+    act: (request: AnyAct) => {
       asked.push(request);
-      const outcome: ActOutcome = {
+      const outcome: AnyActOutcome = {
         status: ACT_OUTCOME_STATUS.DONE,
         value: request.kind === ACT_KIND.TASKS_FILE ? answer(request.payload.path) : undefined,
       };
@@ -2083,8 +2149,8 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
     changed("src/plan.ts", { patch: HEAD_PATCH }),
   ];
   const held: Array<() => void> = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+  fakeActs({
+    act: (request: AnyAct) => {
       const value =
         request.kind === ACT_KIND.TASKS_FILE
           ? {
@@ -2096,7 +2162,7 @@ test("a whole file read for an earlier answer, landing after a refresh, leaves t
               },
             }
           : undefined;
-      const outcome: ActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
+      const outcome: AnyActOutcome = { status: ACT_OUTCOME_STATUS.DONE, value };
       // The first file's read is held until the test lets it land.
       if (request.kind === ACT_KIND.TASKS_FILE && request.payload.path === "src/seats.ts") {
         return new Promise((resolve) => held.push(() => resolve(outcome)));

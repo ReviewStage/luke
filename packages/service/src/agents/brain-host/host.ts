@@ -628,6 +628,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           { userId: admitted.caller, conversationId: admitted.target.conversationId },
           taskWorkspace(admitted.caller, task.task.id),
           repository,
+          admitted.caller,
           brainSkillMarkdown,
         );
       }),

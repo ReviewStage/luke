@@ -163,7 +163,7 @@ test("every dollar figure is said to be a list-price equivalent, not what Luke p
 
   expect(page.textContent).toContain("a list-price equivalent, not what Luke pays.");
   expect(page.textContent).toContain(
-    "Figures are public list prices, used to compare accounts, models, and sources and to show trends. They are not what Luke pays: discounts, credits, plan fees, and which key paid aren't reflected.",
+    "List prices leave out discounts, credits, plan fees, and which key paid.",
   );
   expect(page.textContent).not.toMatch(/\bspend\b/i);
   expect(page.textContent).toContain(

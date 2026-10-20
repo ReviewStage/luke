@@ -8,6 +8,7 @@ import { MEMBER_KIND } from "./chat-wire.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { INBOX_REPLY } from "./inbox-wire.js";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
@@ -241,7 +242,7 @@ it.effect(
 );
 
 it.effect(
-  "writes a message on an inbox item's thread at the item's own path, its words trimmed, answers the item as it then stands, names a refusal as a message's, and sends nothing that carries neither words nor files",
+  "writes a message on an inbox item's thread at the item's own path, its words trimmed, answers the item as it then stands, names a refusal as a message's, sends an answer to the open ask on a reply with no words, and sends nothing that carries neither words, files, nor an answer",
   () =>
     Effect.gen(function* () {
       const itemId = "5d2b8f0e-1a3c-4e6f-9b7d-2c4e6a8b0d1f";
@@ -284,15 +285,28 @@ it.effect(
         client().messageInbox(itemId, { text: " ", clientKey: "key-2" }),
         api.layer,
       );
+      const answers = {
+        ask: "7f4d0b2a-3c5e-4a81-9d9f-4e6a8c0d2f3b",
+        reply: INBOX_REPLY.CHOSE,
+        choices: ["Short"],
+      };
+      const answered = yield* Effect.provide(
+        client().messageInbox(itemId, { text: " ", clientKey: "key-3", answers }),
+        api.layer,
+      );
 
       assert.deepEqual(sent, { item });
-      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "null"), {
-        text: "Drop the emoji.",
-        clientKey: "key-1",
-      });
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
       assert.deepEqual(empty, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      assert.equal(api.requests().length, 1, "nothing is sent for a message of neither");
+      assert.deepEqual(answered, { item });
+      assert.deepEqual(
+        api.requests().map((request) => JSON.parse(request.body ?? "null")),
+        [
+          { text: "Drop the emoji.", clientKey: "key-1" },
+          { text: "", clientKey: "key-3", answers },
+        ],
+        "nothing is sent for a message of neither, and an answer goes without words",
+      );
     }),
 );
 

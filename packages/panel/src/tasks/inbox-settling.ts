@@ -344,10 +344,11 @@ function passedBy(read: InboxItem, entry: Settling): boolean {
   return read.revision > entry.revision || (entry.taken && read.updatedAt > entry.item.updatedAt);
 }
 
-/** Whether a read holds the message the entry stands for: the newest on the service's thread. */
+/** Whether a read holds the message the entry stands for: the newest on the service's thread, its whole thread's from version 5. */
 function holdsMessage(read: InboxItem, entry: Settling): boolean {
-  const newest = entry.item.messages?.at(-1)?.id;
-  return newest === undefined || (read.messages ?? []).some((message) => message.id === newest);
+  const newest = (entry.item.thread ?? entry.item.messages)?.at(-1)?.id;
+  const held = [...(read.thread ?? []), ...(read.messages ?? [])];
+  return newest === undefined || held.some((message) => message.id === newest);
 }
 
 /** How a read's item stands under an entry: the entry's item where the read is behind it, nothing where it holds the send, and passed where it holds a later change. */

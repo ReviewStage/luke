@@ -10,10 +10,10 @@ import {
 } from "./chat-mention.js";
 
 const TARGETS: readonly ChatTarget[] = [
-  { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "maria", detail: undefined },
-  { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "agent-1", detail: "Add teammate invitations" },
-  { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "luke", detail: "Luke" },
-  { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "agent-2", detail: "Invite emails" },
+  { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "Maria Chen", detail: undefined },
+  { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "Add invitations", detail: "Teammate invitations" },
+  { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "Luke", detail: "Teammate invitations" },
+  { sigil: CHAT_TARGET_SIGIL.MEMBER, name: "Invite emails", detail: "Billing export" },
   {
     sigil: CHAT_TARGET_SIGIL.CHANNEL,
     name: "teammate-invitations",
@@ -28,11 +28,11 @@ function openedAt(text: string): string | undefined {
   return mention === undefined ? undefined : `${mention.sigil}${mention.query}@${mention.start}`;
 }
 
-test("an @ or a # opens the list only where it starts a word outside code, a dot read as a channel's and never a handle's", () => {
+test("an @ or a # opens the list only where it starts a word outside code, a name's letters in any case after an @, a dot read as a channel's and never a name's", () => {
   assert.deepEqual(
     [
       "@",
-      "ask @age",
+      "ask @Mar",
       "see #gen",
       "see #v1.2",
       "ask @a.b",
@@ -44,7 +44,7 @@ test("an @ or a # opens the list only where it starts a word outside code, a dot
     ].map(openedAt),
     [
       "@@0",
-      "@age@4",
+      "@Mar@4",
       "#gen@4",
       "#v1.2@4",
       undefined,
@@ -57,7 +57,7 @@ test("an @ or a # opens the list only where it starts a word outside code, a dot
   );
 });
 
-test("the list stays shut on a word longer than a handle or a channel's name may be", () => {
+test("the list stays shut on a word longer than a member's search or a channel's name may be", () => {
   const handle = "a".repeat(40);
   const name = "b".repeat(80);
   assert.deepEqual(
@@ -74,24 +74,28 @@ test("the list offers the sigil's targets whose name starts with what is typed f
     assert.ok(mention, `no mention in ${text}`);
     return matchingTargets(TARGETS, mention).map((target) => target.name);
   };
-  assert.deepEqual(offered("@"), ["maria", "agent-1", "luke", "agent-2"]);
-  assert.deepEqual(offered("@a"), ["agent-1", "agent-2", "maria"]);
-  assert.deepEqual(offered("@email"), ["agent-2"]);
+  assert.deepEqual(offered("@"), ["Maria Chen", "Add invitations", "Luke", "Invite emails"]);
+  assert.deepEqual(offered("@a"), ["Add invitations", "Maria Chen", "Invite emails", "Luke"]);
+  assert.deepEqual(offered("@chen"), ["Maria Chen"]);
+  assert.deepEqual(offered("@billing"), ["Invite emails"]);
   assert.deepEqual(offered("#invit"), ["teammate-invitations"]);
 });
 
-test("choosing a target writes it over the word typed, with a space after it and the caret past the space", () => {
-  const text = "ask @ag about it";
+test("choosing a target writes it over the word typed, a member as their mention link, with a space after it and the caret past the space", () => {
+  const text = "ask @Ma about it";
   const mention = chatMentionAt(text, 7);
   assert.ok(mention);
-  const member = CHAT_TARGET_SIGIL.MEMBER;
-  assert.deepEqual(
-    chooseTarget(text, mention, { sigil: member, name: "agent-2", detail: undefined }),
-    {
-      text: "ask @agent-2 about it",
-      caret: 13,
-    },
-  );
+  const markdown = "[@Maria Chen](https://tryluke.dev/acme/person/user-maria)";
+  const maria = {
+    sigil: CHAT_TARGET_SIGIL.MEMBER,
+    name: "Maria Chen",
+    detail: undefined,
+    markdown,
+  };
+  assert.deepEqual(chooseTarget(text, mention, maria), {
+    text: `ask ${markdown} about it`,
+    caret: 4 + markdown.length + 1,
+  });
   const end = chatMentionAt("see #te", 7);
   assert.ok(end);
   const channel = {
@@ -114,7 +118,7 @@ function listedFor(query: string): string[] {
   return chatRows([], mention, MONDAY_NOON, "UTC").map((row) => `${row.name} | ${row.detail}`);
 }
 
-test("words after an @ that read as a date list it, across words, and prose after a handle lists nothing", () => {
+test("words after an @ that read as a date list it, across words, and prose after a name lists nothing", () => {
   assert.deepEqual(
     [
       "tomorrow",
@@ -145,7 +149,13 @@ test("an @ word that reads as a date lists the date first, then the members it m
     return chatRows([...TARGETS, frida], mention, MONDAY_NOON, "UTC").map((target) => target.name);
   };
   assert.deepEqual(listed("@fri"), ["Friday", "frida"]);
-  assert.deepEqual(listed("@a"), ["agent-1", "agent-2", "maria", "frida"]);
+  assert.deepEqual(listed("@a"), [
+    "Add invitations",
+    "Maria Chen",
+    "Invite emails",
+    "frida",
+    "Luke",
+  ]);
   assert.deepEqual(listed("#tomorrow"), []);
 });
 

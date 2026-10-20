@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
-import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { ACT_KIND } from "@luke/host/acts";
+import { fakeActPortAnswering, type SentPortAct } from "@luke/panel/testing/app-bridge";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -282,13 +282,11 @@ test("closing the last tab shuts the panel and leaves full screen, and the toggl
 });
 
 test("a Browser tab opens chosen on its plan alone, closes with its page, and is kept across no launch", () => {
-  const sent: Act[] = [];
-  // The act channel is the window's door to main, the process boundary a closed tab's page is let go across.
-  fakeAppBridge({
-    act: (request: Act) => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
+  const sent: SentPortAct[] = [];
+  // The act port is the window's door to main, the process boundary a closed tab's page is let go across.
+  fakeActPortAnswering((request) => {
+    sent.push(request);
+    return Promise.resolve(undefined);
   });
   const first = launch({ task: TASK, taskAgents: [] });
   act(() => first.control().onOpenBrowser("http://localhost:3000/"));
@@ -324,13 +322,11 @@ test("a Browser tab opens chosen on its plan alone, closes with its page, and is
 });
 
 test("the Browser tab experiment going off closes every Browser tab on every plan, each page with it", () => {
-  const sent: Act[] = [];
-  // The act channel is the window's door to main, the process boundary a closed tab's page is let go across.
-  fakeAppBridge({
-    act: (request: Act) => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
+  const sent: SentPortAct[] = [];
+  // The act port is the window's door to main, the process boundary a closed tab's page is let go across.
+  fakeActPortAnswering((request) => {
+    sent.push(request);
+    return Promise.resolve(undefined);
   });
   const panel = launch({ task: TASK, taskAgents: [] });
   act(() => panel.control().onOpenBrowser("http://localhost:3000/"));
@@ -347,7 +343,7 @@ test("the Browser tab experiment going off closes every Browser tab on every pla
   panel.render({ task: TASK, taskAgents: [] });
   assert.deepEqual(panel.control().browsers, []);
   assert.deepEqual(
-    sent.map((request) => ("payload" in request ? request.payload : undefined)),
+    sent.map((request) => request.payload),
     [{ browserId: here.tab.browser }, { browserId: there.tab.browser }],
   );
 });

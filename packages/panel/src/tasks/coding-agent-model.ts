@@ -385,7 +385,7 @@ const SHARED_FAILURE_NOTE = {
 const START_RETIRED = "This agent has ended. Start a new one.";
 
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
-export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one to carry on.";
+export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
 
 /** What the agent's own box says once a message closed it on an ended agent, beside the press that continues it in a new one (`ContinueAgent`), which says the rest. */
 const BOX_RETIRED = "This agent has ended.";
@@ -601,6 +601,14 @@ function unreachedFailure(
         taskId: taskId,
         workspace: unreached.workspace,
       };
+    case REPOSITORY_UNREACHED.NO_TOKEN:
+      return callFailure("No GitHub token saved.");
+    case REPOSITORY_UNREACHED.TOKEN_INVALID:
+      return callFailure("Your GitHub token was refused.");
+    case REPOSITORY_UNREACHED.TOKEN_NO_ACCESS:
+      return callFailure(`Your GitHub token can't access ${repository}.`);
+    case REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH:
+      return callFailure(`Your GitHub token can't push to ${repository}.`);
   }
 }
 

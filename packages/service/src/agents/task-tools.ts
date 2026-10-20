@@ -298,12 +298,12 @@ export function runCreateTask(
         asked.success.repository === undefined
           ? yield* workedRepository(call.caller)
           : asked.success.repository;
-      const reached = yield* reachedRepository(workspace.value, named);
+      const reached = yield* reachedRepository(workspace.value, named, userId);
       if (Result.isFailure(reached)) return agentToolRejected(reached.failure);
       // Every issue is read from its provider before anything is written, so one refused makes no task.
-      const choices = issueChoicesOf(issues, reached.success);
+      const choices = issueChoicesOf(issues, reached.success.repository);
       if (Result.isFailure(choices)) return agentToolRejected(choices.failure);
-      const read = yield* readIssueChoices(workspace.value, issues, choices.success);
+      const read = yield* readIssueChoices(userId, workspace.value, issues, choices.success);
       if (Result.isFailure(read)) return agentToolRejected(read.failure);
       const text = planTextOf(plan ?? "");
       // The make and its plan's first revision are one write, so a call run again at once makes one task.
@@ -314,7 +314,8 @@ export function runCreateTask(
               id,
               organizationId: workspace.value,
               name,
-              repository: reached.success,
+              repository: reached.success.repository,
+              githubAccess: reached.success.githubAccess,
               text,
               ...(brief === undefined ? undefined : { brief }),
               ...(status === undefined ? undefined : { status }),

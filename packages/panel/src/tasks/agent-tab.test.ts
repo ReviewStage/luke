@@ -739,14 +739,17 @@ test("a connection_execute that failed keeps its own row beside the call it ran,
 // A reply is drawn once the parser has landed, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(markdownHtmlParserLanded));
 
-/** A line a chat notice steered into the agent's turn, telling of message 43 from @agent-2. */
+/** A line a chat notice steered into the agent's turn, telling of message 43 from the agent named "Invite emails". */
 const NOTICE: CodingAgentMessage = {
   id: "notice",
   role: MESSAGE_ROLE.USER,
   parts: [
-    { type: "text", text: "Chat: @agent-2 in #teammate-invitations asked about memberships." },
+    {
+      type: "text",
+      text: "Chat · [@Invite emails](https://tryluke.dev/acme/agent/7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f) in #teammate-invitations (m 43):\n\nAre you changing memberships?",
+    },
   ],
-  metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "agent-2" },
+  metadata: { author: "agent", channel: "chat", chat_seq: 43, from: "Invite emails" },
 };
 
 /** The notice drawn in an agent's transcript, beside the fixture's chat or none, with Chat offered or not, every place it opens recorded. */
@@ -795,14 +798,14 @@ test("a line a chat notice wrote draws as a card from its sender, naming the cha
   assert.ok(card, "the notice draws as a card");
   assert.equal(card.dataset.messageId, "notice", "a link to the line finds its card");
   assert.equal(container.querySelector(".is-user"), null);
-  assert.equal(card.querySelector(".chat-notice-from")?.textContent, "@agent-2");
+  assert.equal(card.querySelector(".chat-notice-from")?.textContent, "Invite emails");
   assert.match(
     card.querySelector(".chat-notice-place")?.textContent ?? "",
     /^in #teammate-invitations · m 43 · /u,
   );
   assert.match(
     card.querySelector(".chat-notice-words")?.textContent ?? "",
-    /^@agent-1 are you changing memberships columns\?/u,
+    /^Add teammate invitations are you changing memberships columns\?/u,
   );
   const open = [...card.querySelectorAll("button")].find(
     (each) => each.textContent === "Open in Chat",
@@ -814,11 +817,11 @@ test("a line a chat notice wrote draws as a card from its sender, naming the cha
 test("where the window holds no chat, a notice's card says its sender and place from the notice alone, its own words under them, with nothing to open", () => {
   const { container } = noticeDrawn(false);
   const card = container.querySelector<HTMLElement>("[data-chat-notice]");
-  assert.equal(card?.querySelector(".chat-notice-from")?.textContent, "@agent-2");
+  assert.equal(card?.querySelector(".chat-notice-from")?.textContent, "Invite emails");
   assert.equal(card?.querySelector(".chat-notice-place")?.textContent, "m 43");
   assert.equal(
     card?.querySelector(".chat-notice-words")?.textContent?.trim(),
-    "Chat: @agent-2 in #teammate-invitations asked about memberships.",
+    "Are you changing memberships?",
   );
   assert.equal(
     [...(card?.querySelectorAll("button") ?? [])].some(
@@ -879,7 +882,7 @@ test("an inbox answer the developer sent reads back in their bubble without the 
 test("with Chat off, a line a chat notice wrote is drawn as the plain line it is, with no card and nothing to open", () => {
   const { container } = noticeDrawn(true, false);
   assert.equal(container.querySelector("[data-chat-notice]"), null);
-  assert.match(container.textContent ?? "", /Chat: @agent-2 in #teammate-invitations asked/u);
+  assert.match(container.textContent ?? "", /Are you changing memberships\?/u);
 });
 
 test("a notice of a message holding no Markdown, a link alone, keeps the notice's own words under its head", () => {
@@ -930,7 +933,7 @@ test("a notice of a message holding no Markdown, a link alone, keeps the notice'
   );
   assert.equal(
     container.querySelector(".chat-notice-words")?.textContent?.trim(),
-    "Chat: @agent-2 in #teammate-invitations asked about memberships.",
+    "Are you changing memberships?",
   );
 });
 

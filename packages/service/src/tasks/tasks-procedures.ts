@@ -74,6 +74,7 @@ import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/model
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { BOARD_BOUNDS } from "@luke/features/board-wire";
 import { TASK_START_STATUS } from "@luke/features/contract";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import {
   TASK_ISSUE_LINK_REFUSAL,
@@ -168,23 +169,27 @@ const taskIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The repository as the row keeps it: null where none was named, or the
- * full name as GitHub spells it once the App confirms the workspace's
- * installation reaches it (`packages/service/src/github/workspace-repository.ts`). The workspace
+ * The repository as the row keeps it, with how it was reached: null where
+ * none was named, or the full name as GitHub spells it once the workspace's
+ * installation, or else the member's own token, reaches it
+ * (`packages/service/src/github/workspace-repository.ts`). The workspace
  * is read only where a repository is named.
  */
 const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   workspace: Effect.Effect<string, HostedRefusal, DatabaseServices>,
   repository: string | null | undefined,
+  member: string,
 ): Effect.fn.Return<
-  string | null,
+  { readonly repository: string | null; readonly githubAccess: GitHubAccess },
   HostedRefusal,
   GitHubApp | HttpClient.HttpClient | DatabaseServices
 > {
-  if (repository === undefined || repository === null) return null;
+  if (repository === undefined || repository === null) {
+    return { repository: null, githubAccess: GITHUB_ACCESS.APP };
+  }
   const organizationId = yield* workspace;
-  const reached = yield* workspaceRepository(organizationId, repository);
-  return reached.fullName;
+  const reached = yield* workspaceRepository(organizationId, repository, member);
+  return { repository: reached.repository.fullName, githubAccess: reached.access };
 });
 
 /** The account's plan, or not found for a plan it does not reach. */
@@ -221,13 +226,13 @@ const movedToWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The move's guard: the workspace's GitHub reaches the repository the plan names under its lock, where it names one. */
 const movedRepositoryReached =
-  (workspaceId: string) =>
+  (workspaceId: string, member: string) =>
   (
     repository: string | null,
   ): Effect.Effect<void, MoveRefused, GitHubApp | HttpClient.HttpClient | DatabaseServices> =>
     repository === null
       ? Effect.void
-      : workspaceRepository(workspaceId, repository).pipe(
+      : workspaceRepository(workspaceId, repository, member).pipe(
           Effect.asVoid,
           Effect.mapError((refusal) => new MoveRefused({ refusal })),
         );
@@ -273,6 +278,7 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
  * reaches no such issue of it or has not granted the App issues.
  */
 const startingGitHubIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
   organizationId: string,
   repository: string | null,
   chosen: { readonly repository: string; readonly number: number },
@@ -280,7 +286,7 @@ const startingGitHubIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (repository === null || repository.toLowerCase() !== chosen.repository.toLowerCase()) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  return yield* linkedGitHubIssue(organizationId, { repository, number: chosen.number });
+  return yield* linkedGitHubIssue(userId, organizationId, { repository, number: chosen.number });
 });
 
 /**
@@ -291,6 +297,7 @@ const startingGitHubIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
  * written.
  */
 const startingIssueLinks = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
   organizationId: string,
   repository: string | null,
   input: { readonly linearIssueId?: string; readonly issues?: readonly TaskIssueChoice[] },
@@ -304,7 +311,7 @@ const startingIssueLinks = /* @__PURE__ */ Effect.fnUntraced(function* (
     const read =
       choice.provider === TASK_ISSUE_PROVIDER.LINEAR
         ? yield* linkedLinearIssue(organizationId, choice.id)
-        : yield* startingGitHubIssue(organizationId, repository, choice);
+        : yield* startingGitHubIssue(userId, organizationId, repository, choice);
     const relation: TaskIssueRelation | undefined = choice.relation;
     links.push(relation === undefined ? read : { ...read, relation });
   }
@@ -485,11 +492,17 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ? Option.none()
           : yield* startedBefore(userId, agent.idempotencyKey, organizationId);
       if (Option.isSome(before)) return { status: TASK_START_STATUS.RETRIED, body: before.value };
-      const repository = yield* reachableRepository(
+      const reached = yield* reachableRepository(
         Effect.succeed(organizationId),
         input.repository,
+        userId,
       );
-      const issueLinks = yield* startingIssueLinks(organizationId, repository, input);
+      const issueLinks = yield* startingIssueLinks(
+        userId,
+        organizationId,
+        reached.repository,
+        input,
+      );
       const issueId =
         input.issueId === undefined
           ? undefined
@@ -500,7 +513,8 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         createTask(userId, {
           organizationId,
           ...(input.name === undefined ? undefined : { name: input.name }),
-          repository,
+          repository: reached.repository,
+          githubAccess: reached.githubAccess,
           ...(issueLinks.length === 0 ? undefined : { issueLinks }),
           ...(issueId === undefined ? undefined : { issueId }),
           ...(planning === undefined ? undefined : { planning }),
@@ -564,9 +578,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         organizationId === undefined
           ? Effect.map(reachedTask(userId, taskId), (stored) => stored.task.workspaceId)
           : Effect.succeed(organizationId);
-      const repository =
+      const reached =
         "repository" in changes
-          ? yield* reachableRepository(workspace, changes.repository)
+          ? yield* reachableRepository(workspace, changes.repository, userId)
           : undefined;
       const archiving = changes.archived === true;
       if (archiving) {
@@ -586,14 +600,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         {
           ...("name" in changes ? { name: changes.name } : undefined),
           ...(organizationId === undefined ? undefined : { organizationId }),
-          ...(repository === undefined ? undefined : { repository }),
+          ...(reached === undefined
+            ? undefined
+            : { repository: reached.repository, githubAccess: reached.githubAccess }),
           ...("pinned" in changes ? { pinned: changes.pinned } : undefined),
           ...("pinPosition" in changes ? { pinPosition: changes.pinPosition } : undefined),
           ...("archived" in changes ? { archived: changes.archived } : undefined),
           ...(changes.status === undefined ? undefined : { status: changes.status }),
           ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
         },
-        organizationId === undefined ? undefined : movedRepositoryReached(organizationId),
+        organizationId === undefined ? undefined : movedRepositoryReached(organizationId, userId),
         archiving ? standsStopped : undefined,
       ).pipe(
         Effect.catch((failure) =>
@@ -783,7 +799,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       const { userId } = context;
       const taskId = yield* taskIdOf(input.params.id);
       const stored = yield* liveTask(userId, taskId);
-      const read = yield* linkedIssue(stored.task.workspaceId, input.body);
+      const read = yield* linkedIssue(userId, stored.task.workspaceId, input.body);
       const made = yield* linkTaskIssue(userId, taskId, read).pipe(
         Effect.map(
           (link): Option.Option<TaskIssueLinkAnswer> =>

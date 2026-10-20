@@ -44,7 +44,7 @@ import {
   REVIEW_EVENT,
 } from "@luke/features/pull-request-write-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { Clock, Context, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -284,9 +284,7 @@ beforeEach(() => {
   listReveals = [];
   changeHeld = undefined;
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
       opened.push(url);
@@ -2554,7 +2552,7 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   const panel = openReview(tab);
   assert.deepEqual(words(panel, '[aria-label="What the review says"] [role="radio"]'), [
     "CommentSubmit general feedback without approval.",
-    "ApproveApprove this pull request.",
+    "Approve",
     "Request changesSubmit feedback that must be addressed.",
   ]);
 

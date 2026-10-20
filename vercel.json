@@ -59,19 +59,19 @@
         },
         {
           "src": "/api/plans/([^/]+)/code",
-          "dest": "/api/default.js?route=plans/code&id=$1"
+          "dest": "/api/default.js?route=plans/code&route-path=plans/$1/code&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/file",
-          "dest": "/api/default.js?route=plans/file&id=$1"
+          "dest": "/api/default.js?route=plans/file&route-path=plans/$1/file&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/tree",
-          "dest": "/api/default.js?route=plans/tree&id=$1"
+          "dest": "/api/default.js?route=plans/tree&route-path=plans/$1/tree&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/skills",
-          "dest": "/api/default.js?route=plans/skills&id=$1"
+          "dest": "/api/default.js?route=plans/skills&route-path=plans/$1/skills&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/edit",
@@ -83,11 +83,11 @@
         },
         {
           "src": "/api/plans/([^/]+)/comments/([^/]+)",
-          "dest": "/api/default.js?route=plans/comment-thread&id=$1&thread=$2"
+          "dest": "/api/default.js?route=plans/comment-thread&route-path=plans/$1/comments/$2&id=$1&thread=$2"
         },
         {
           "src": "/api/plans/([^/]+)/comments",
-          "dest": "/api/default.js?route=plans/comments&id=$1"
+          "dest": "/api/default.js?route=plans/comments&route-path=plans/$1/comments&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/attachments/([^/]+)",
@@ -95,11 +95,11 @@
         },
         {
           "src": "/api/plans/([^/]+)/attachments",
-          "dest": "/api/default.js?route=plans/attachments&id=$1"
+          "dest": "/api/default.js?route=plans/attachments&route-path=plans/$1/attachments&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/agents",
-          "dest": "/api/default.js?route=plans/agents&id=$1"
+          "dest": "/api/default.js?route=plans/agents&route-path=plans/$1/agents&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/issues/([^/]+)",
@@ -127,11 +127,11 @@
         },
         {
           "src": "/api/plans/([^/]+)/pages/([^/]+)/versions/([^/]+)",
-          "dest": "/api/default.js?route=plans/page&id=$1&page=$2&version=$3"
+          "dest": "/api/default.js?route=plans/page&route-path=plans/$1/pages/$2/versions/$3&id=$1&page=$2&version=$3"
         },
         {
           "src": "/api/plans/([^/]+)/pages",
-          "dest": "/api/default.js?route=plans/pages&id=$1"
+          "dest": "/api/default.js?route=plans/pages&route-path=plans/$1/pages&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)",
@@ -163,35 +163,35 @@
         },
         {
           "src": "/api/agents/([^/]+)/stop",
-          "dest": "/api/default.js?route=agents/stop&id=$1"
+          "dest": "/api/default.js?route=agents/stop&route-path=agents/$1/stop&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/pull-request",
-          "dest": "/api/default.js?route=agents/pull-request&id=$1"
+          "dest": "/api/default.js?route=agents/pull-request&route-path=agents/$1/pull-request&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/pull-request/action",
-          "dest": "/api/default.js?route=agents/pull-request-action&id=$1"
+          "dest": "/api/default.js?route=agents/pull-request-action&route-path=agents/$1/pull-request/action&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/pull-request/viewed",
-          "dest": "/api/default.js?route=agents/pull-request-viewed&id=$1"
+          "dest": "/api/default.js?route=agents/pull-request-viewed&route-path=agents/$1/pull-request/viewed&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/changes",
-          "dest": "/api/default.js?route=agents/changes&id=$1"
+          "dest": "/api/default.js?route=agents/changes&route-path=agents/$1/changes&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/overview/pull-request",
-          "dest": "/api/default.js?route=agents/overview-pull-request&id=$1"
+          "dest": "/api/default.js?route=agents/overview-pull-request&route-path=agents/$1/overview/pull-request&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/overview/checks",
-          "dest": "/api/default.js?route=agents/overview-checks&id=$1"
+          "dest": "/api/default.js?route=agents/overview-checks&route-path=agents/$1/overview/checks&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/overview/conversation",
-          "dest": "/api/default.js?route=agents/overview-conversation&id=$1"
+          "dest": "/api/default.js?route=agents/overview-conversation&route-path=agents/$1/overview/conversation&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/github-image",
@@ -199,7 +199,7 @@
         },
         {
           "src": "/api/agents/([^/]+)/review-options",
-          "dest": "/api/default.js?route=agents/review-options&id=$1"
+          "dest": "/api/default.js?route=agents/review-options&route-path=agents/$1/review-options&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/inbox",
@@ -207,19 +207,19 @@
         },
         {
           "src": "/api/agents/([^/]+)/terminals/([^/]+)",
-          "dest": "/api/default.js?route=agents/terminal&id=$1&terminal=$2"
+          "dest": "/api/default.js?route=agents/terminal&route-path=agents/$1/terminals/$2&id=$1&terminal=$2"
         },
         {
           "src": "/api/agents/([^/]+)/terminals",
-          "dest": "/api/default.js?route=agents/terminals&id=$1"
+          "dest": "/api/default.js?route=agents/terminals&route-path=agents/$1/terminals&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)/sandbox/resume",
-          "dest": "/api/default.js?route=agents/sandbox-resume&id=$1"
+          "dest": "/api/default.js?route=agents/sandbox-resume&route-path=agents/$1/sandbox/resume&id=$1"
         },
         {
           "src": "/api/agents/([^/]+)",
-          "dest": "/api/default.js?route=agents/agent&id=$1"
+          "dest": "/api/default.js?route=agents/agent&route-path=agents/$1&id=$1"
         },
         {
           "src": "/api/inbox/([^/]+)/attachments/([^/]+)",
@@ -564,7 +564,7 @@
           "src": "/app/?",
           "dest": "/app.html",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io wss://*.us-east-1.aws.neon.tech; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin"
           }
@@ -573,7 +573,7 @@
           "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person|issue)(?:/[^/]+)*/?",
           "dest": "/app.html",
           "headers": {
-            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
+            "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io wss://*.us-east-1.aws.neon.tech; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
             "X-Content-Type-Options": "nosniff",
             "Referrer-Policy": "strict-origin-when-cross-origin"
           }

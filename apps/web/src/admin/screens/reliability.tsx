@@ -354,9 +354,7 @@ function ReliabilityBody({
           <SectionHeading>Failures</SectionHeading>
           <Card>
             <Text tone={TEXT_TONE.MUTED}>
-              The database did not answer its probe, so no failure count and no account is shown:
-              nothing read is nothing known, not nothing failed. System health below still reads the
-              deployment's own configuration.
+              The database did not answer its probe, so no failure count or account could be read.
             </Text>
           </Card>
         </>

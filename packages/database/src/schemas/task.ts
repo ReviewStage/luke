@@ -1,4 +1,5 @@
 import type { BoardElement, DrawingElement } from "@luke/features/board-wire";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import type { PlanAgentEdit } from "@luke/features/plan-template";
 import {
   TASK_PRIORITY,
@@ -68,6 +69,11 @@ export const task = pgTable(
      * task from before repositories stands and is no error.
      */
     repository: text("repository"),
+    /**
+     * How the repository was reached as it was named: the workspace's GitHub
+     * App, or the naming member's own token; the App's for a task with none.
+     */
+    githubAccess: text("github_access").$type<GitHubAccess>().notNull().default(GITHUB_ACCESS.APP),
     /**
      * @deprecated A task's issues are its links now, in `task_issue`
      * (`task-issue.ts`), and nothing writes or reads this. It was the one

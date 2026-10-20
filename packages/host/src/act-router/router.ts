@@ -1,13 +1,13 @@
 import type { UnparsedWireValue } from "@luke/wire";
 import { Data, Effect, Predicate } from "effect";
 import {
-  ACT,
   ACT_OUTCOME_STATUS,
   type Act,
   type ActKind,
   type ActOutcome,
   type ActPayload,
   type ActResultFor,
+  actDeclarationOf,
 } from "../acts.js";
 
 /**
@@ -34,7 +34,7 @@ export interface ActSender<Sender = unknown> {
  * reason worth saying; every other throw is answered with the kind's fixed
  * sentence instead, so nothing an exception happened to carry crosses back.
  */
-export class ActRefused extends Data.TaggedError("ActRefused")<{ readonly message: string }> {}
+class ActRefused extends Data.TaggedError("ActRefused")<{ readonly message: string }> {}
 
 /**
  * The one failure a row's effect may end in: the row's own refusal, worded.
@@ -70,14 +70,20 @@ export interface ActRouter<Sender = unknown> {
   ): Effect.Effect<ActOutcome<Kind>>;
 }
 
-/** Any one kind's payload, which is what the union index below hands a row. */
-type AnyActPayload = ActPayload<ActKind>;
+/** One act as the dispatch reads it: its kind's name, and the payload it carried. */
+interface ActEnvelope {
+  readonly kind: string;
+  readonly payload?: UnparsedWireValue;
+}
+
+/** What an erased row answers: a value, a promise of one, or an effect ending in one or in its refusal. */
+type ErasedAnswer =
+  | UnparsedWireValue
+  | Promise<UnparsedWireValue>
+  | Effect.Effect<UnparsedWireValue, ActRowFailure>;
 
 /** The erased row shape the dispatch below calls; the kind's own types are checked by `ActRows`. */
-type ErasedRow<Sender> = (
-  payload: AnyActPayload,
-  sender: ActSender<Sender>,
-) => ReturnType<ActRow<ActKind, Sender>>;
+type ErasedRow<Sender> = (payload: UnparsedWireValue, sender: ActSender<Sender>) => ErasedAnswer;
 
 function refused(reason: string): ActOutcome {
   return { status: ACT_OUTCOME_STATUS.REFUSED, reason };
@@ -106,14 +112,12 @@ function thrown<Answer>(
  * its own, and nothing dispatches on anything but the kind.
  */
 export function createActRouter<Sender>(rows: ActRows<Sender>): ActRouter<Sender> {
-  function perform(act: Act, sender: ActSender<Sender>): Effect.Effect<ActOutcome> {
-    if (!Object.hasOwn(ACT, act.kind)) {
+  function perform(act: ActEnvelope, sender: ActSender<Sender>): Effect.Effect<ActOutcome> {
+    const declared = actDeclarationOf(act.kind);
+    if (declared === undefined) {
       return Effect.succeed({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
     }
-    const declared = ACT[act.kind];
-    // SAFETY: an act's payload is the structured-clone value its own schema
-    // admitted, which is what reading it again takes.
-    const sent = ("payload" in act ? act.payload : undefined) as UnparsedWireValue;
+    const sent = act.payload;
     const read = declared.payload.read(sent);
     if (!read.ok) return Effect.succeed(refused(declared.refusal));
     return Effect.gen(function* () {
@@ -121,7 +125,11 @@ export function createActRouter<Sender>(rows: ActRows<Sender>): ActRouter<Sender
       // union index this dispatch is, and the answer is guarded below.
       const answer = yield* thrown(
         Effect.try({
-          try: () => (rows[act.kind] as ErasedRow<Sender>)(read.value, sender),
+          try: () =>
+            (rows as Readonly<Record<string, ErasedRow<Sender>>>)[act.kind]?.(
+              read.value as UnparsedWireValue,
+              sender,
+            ),
           catch: (error) => error,
         }),
       );
@@ -135,7 +143,8 @@ export function createActRouter<Sender>(rows: ActRows<Sender>): ActRouter<Sender
             )
           : Effect.succeed(answer);
       if (declared.result(value) === false) return refused(declared.refusal);
-      return { status: ACT_OUTCOME_STATUS.DONE, value };
+      // SAFETY: the kind's own guard admitted this value just above.
+      return { status: ACT_OUTCOME_STATUS.DONE, value: value as ActResultFor<ActKind> };
     }).pipe(
       // A defect is a bug of this build, so it is reported before it is
       // worded: the window hears the kind's sentence, and Sentry the defect.
@@ -155,7 +164,8 @@ export function createActRouter<Sender>(rows: ActRows<Sender>): ActRouter<Sender
       sender: ActSender<Sender>,
     ) =>
       // SAFETY: `perform` answers the outcome of the kind it was handed, which
-      // is the kind this call named; the dispatch above erases the union.
-      perform(act, sender) as Effect.Effect<ActOutcome<Kind>>,
+      // is the kind this call named; the dispatch above erases the union, and
+      // an act is the structured-clone envelope its own schema admitted.
+      perform(act as ActEnvelope, sender) as Effect.Effect<ActOutcome<Kind>>,
   };
 }
