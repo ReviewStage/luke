@@ -64,3 +64,29 @@ test("an authored file bundled again is answered from its first bundle until a f
   expect(unseen).toBe(first);
   expect(changed).toContain("changed words");
 });
+
+/**
+ * What a bundle resolves an import to is the package's `tsconfig.json` as
+ * much as its sources, so a `paths` entry changed under `eve dev` must
+ * bundle anew though no source the bundle holds changed.
+ */
+test("an authored file is bundled anew once its package's tsconfig changes", async (t) => {
+  const root = await temporaryDirectory(t, "agent-build-");
+  const tsconfig = (words: string) =>
+    JSON.stringify({ compilerOptions: { paths: { "#words": [words] } } });
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "authored", type: "module" }));
+  writeFileSync(join(root, "tsconfig.json"), tsconfig("./first.ts"));
+  writeFileSync(join(root, "first.ts"), 'export const WORDS: string = "first words";\n');
+  writeFileSync(join(root, "second.ts"), 'export const WORDS: string = "second words";\n');
+  writeFileSync(
+    join(root, "tool.ts"),
+    'import { WORDS } from "#words";\n\nexport default { WORDS };\n',
+  );
+
+  const first = await bundleAuthoredModuleCode(join(root, "tool.ts"));
+  writeFileSync(join(root, "tsconfig.json"), tsconfig("./second.ts"));
+  const remapped = await bundleAuthoredModuleCode(join(root, "tool.ts"));
+
+  expect(first).toContain("first words");
+  expect(remapped).toContain("second words");
+});
