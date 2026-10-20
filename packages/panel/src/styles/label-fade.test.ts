@@ -121,3 +121,16 @@ test("a toolbar's title nothing measures, a fixed word or a date, keeps its elli
   assert.equal(style.textOverflow, "ellipsis");
   assert.ok(!style.maskImage.includes("gradient"));
 });
+
+test("who wrote a revision, pressed to open where it was written, is a box of its own that fades, not an inline line its press cuts with an ellipsis", () => {
+  const head = document.body.appendChild(document.createElement("p"));
+  head.className = "version-sections-head";
+  const press = head.appendChild(document.createElement("button"));
+  press.className = "luke-text-button";
+  const name = press.appendChild(document.createElement("span"));
+  name.className = "version-row-author";
+  name.dataset.overflow = "true";
+  const style = getComputedStyle(name);
+  assert.equal(style.display, "block");
+  assert.equal(style.maskImage, FADE);
+});

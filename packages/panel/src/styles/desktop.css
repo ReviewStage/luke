@@ -5566,6 +5566,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
   white-space: nowrap;
 }
 
+/* Who wrote it stands as a box of its own over a revision's sections, a
+   flex item there and a block inside the press that opens where it was
+   written, so it is its own box that cuts the name and fades it
+   (`fading-words.tsx`), never the press's ellipsis around an inline line. */
+.version-sections-head .version-row-author {
+  display: block;
+}
+
 /* The list's foot, a row in the caption's type whose failure wraps under
    its words rather than being cut short. */
 .version-earlier {
