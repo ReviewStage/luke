@@ -887,8 +887,8 @@ test("a waiting row wears its agent's tile, and hangs the thread's card, its tas
     "the agent that asked stands at its foot",
   );
   assert.ok(
-    card?.querySelector('.state-glyph[data-state="working"]'),
-    "the spinner says the agent works, in no words",
+    card?.querySelector('.luke-hover-card-row-end .state-glyph[data-state="working"]'),
+    "the spinner beside the agent says it works, in no words",
   );
   assert.doesNotMatch(card?.textContent ?? "", /Working/u);
 });

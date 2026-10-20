@@ -1,4 +1,3 @@
-import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { INBOX_ASK, INBOX_STATUS } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
@@ -72,7 +71,7 @@ import { useCallback, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
-import { useInboxItemDrafted, useInboxItemTicked } from "../composer-drafts.js";
+import { useInboxItemDraft, useInboxItemDrafted } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar.js";
@@ -94,7 +93,7 @@ import { GLYPH_STATE, StateGlyph } from "../state-glyph.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { useAppState } from "../use-app-state.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
-import { providerOf } from "./coding-agent-model.js";
+import { agentStillWriting, providerOf } from "./coding-agent-model.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import {
   INBOX_COLUMNS,
@@ -132,6 +131,8 @@ import {
   inboxLineKind,
   inboxMedia,
   inboxPreview,
+  inboxSettledWords,
+  inboxShownTicks,
   isUnread,
   listedItems,
   NEEDS_YOU,
@@ -473,10 +474,13 @@ function InboxItemCard({
   const { holder, item } = listed;
   const subject = itemSubject(holder, item.agentId, models, readerId);
   const thread = inboxCardThread(item);
-  const ticked = useInboxItemTicked(item) ?? NO_TICKS;
-  const working =
-    subject?.agent?.status === CODING_AGENT_STATUS.RUNNING ||
-    subject?.agent?.status === CODING_AGENT_STATUS.STARTING;
+  const ticked = inboxShownTicks(item, useInboxItemDraft(item));
+  // Note that a task's row names what each of its agents is doing; an agent with no task carries no such word, and shows no spinner.
+  const line =
+    holder.kind === INBOX_HOLDER.TASK
+      ? holder.task.agents?.agents.find((each) => each.id === item.agentId)
+      : undefined;
+  const working = line !== undefined && agentStillWriting(line.status);
   return (
     <HoverCard data-inbox-row-card="">
       <HolderChips holder={holder} />
@@ -493,7 +497,7 @@ function InboxItemCard({
           <HoverCardRow look={HOVER_CARD_ROW_LOOK.DETAIL} glyph={<CheckIcon />} label={settled} />
         )
       ) : (
-        <CardAsk ask={thread.ask} ticked={ticked} />
+        <CardAsk ask={thread.ask} ticked={ticked} title={cardTitle(item.title)} />
       )}
       {thread.words === "" ? null : <HoverCardNote>{thread.words}</HoverCardNote>}
       <HoverCardRule />
@@ -547,9 +551,12 @@ function HolderChips({ holder }: { holder: InboxHolder }): React.JSX.Element {
 function CardAsk({
   ask,
   ticked,
+  title,
 }: {
   ask: InboxKnownAsk;
   ticked: readonly number[];
+  /** The item's title, which a to-do naming no steps of its own asks as its one step, as its box shows it. */
+  title: string;
 }): React.JSX.Element {
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
@@ -568,7 +575,7 @@ function CardAsk({
     case INBOX_ASK.DO:
       return (
         <ul className="inbox-card-steps" aria-label="Steps">
-          {ask.steps.map((step, at) => (
+          {(ask.steps.length === 0 ? [title] : ask.steps).map((step, at) => (
             <li key={at} data-done={ticked.includes(at) ? "true" : undefined}>
               <SquareCheckIcon aria-hidden="true" />
               {plainWords(step)}
@@ -590,9 +597,6 @@ function CardAsk({
       );
   }
 }
-
-/** No step ticked, where the reader's draft ticks none. */
-const NO_TICKS: readonly number[] = [];
 
 /** What marks a choice's option the agent recommends, on an item's card. */
 const RECOMMENDED = "Recommended";
@@ -702,13 +706,11 @@ export function InboxItemRow({
   const starter = readersItem(item, reader)
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
-  const ticked = useInboxItemTicked(item);
+  const ticked = inboxShownTicks(item, useInboxItemDraft(item));
   const lineKind = inboxLineKind(item);
-  const preview = inboxPreview(
-    item,
-    (member) => actorName(personActor(member, directory.members, reader, directory.former)),
-    ticked,
-  );
+  const nameOf = (member: Parameters<typeof personActor>[0]) =>
+    actorName(personActor(member, directory.members, reader, directory.former));
+  const preview = inboxPreview(item, nameOf, ticked);
   const carried = useMemo(() => inboxMedia(item), [item]);
   useRowMediaAsks(item.id, item.updatedAt, carried, media);
   const menu = useMenu(true);
@@ -752,7 +754,7 @@ export function InboxItemRow({
             readerId={readerId}
             needsYou={needsYou}
             starter={starter}
-            settled={lineKind === INBOX_LINE.SETTLED ? preview : undefined}
+            settled={inboxSettledWords(item, nameOf)}
           />
         }
         cardBeside

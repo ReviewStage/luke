@@ -604,7 +604,7 @@ function shownSteps(ask: Pick<InboxDoAsk, "steps">): number {
 }
 
 /** The steps the draft ticks, in order, each once. */
-function tickedSteps(draft: InboxDraft): readonly number[] {
+function tickedSteps(draft: Pick<InboxDraft, "steps">): readonly number[] {
   return [...new Set(draft.steps ?? [])].toSorted((a, b) => a - b);
 }
 
@@ -618,7 +618,10 @@ function everyStep(ask: Pick<InboxDoAsk, "steps">): readonly number[] {
  * pressed, which ticks them all, or else those the reader ticked by hand,
  * which the draft keeps apart so Couldn't do it still sends only those.
  */
-export function shownTicks(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): readonly number[] {
+export function shownTicks(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: Pick<InboxDraft, "steps" | "press">,
+): readonly number[] {
   return draft.press === INBOX_REPLY.DONE ? everyStep(ask) : tickedSteps(draft);
 }
 
@@ -1365,6 +1368,53 @@ export function inboxCardThread(item: InboxItem): InboxCardThread {
     ask: asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined,
     words: said === undefined ? "" : plainWords(said.text),
   };
+}
+
+/**
+ * The steps of an item's open to-do its row and card show ticked, as its box
+ * shows them (`shownTicks`): every one while Mark done is pressed in its
+ * draft, else those ticked by hand; none where no draft stands.
+ */
+export function inboxShownTicks(
+  item: InboxItem,
+  draft: Pick<InboxDraft, "steps" | "press"> | undefined,
+): readonly number[] {
+  if (draft === undefined) return [];
+  const thread = inboxThreadOf(item);
+  const ask = thread === undefined ? undefined : openAskOf(thread)?.ask;
+  if (ask === undefined || !knownAsk(ask) || ask.type !== INBOX_ASK.DO) return draft.steps ?? [];
+  return shownTicks(ask, draft);
+}
+
+/**
+ * How a settled item ended, as its hover card says it, whatever its row's
+ * glyph: the latest answer on its thread by its answerer, even with words
+ * after it; an ask the agent took back, and why; a member's close; or, for
+ * an item drawn before version 5, what its row said then. None while it is
+ * open, or where its thread says nothing of how it ended.
+ */
+export function inboxSettledWords(
+  item: InboxItem,
+  nameOf: (member: InboxMember | undefined) => string,
+): string | undefined {
+  if (item.status === INBOX_STATUS.OPEN) return undefined;
+  const thread = inboxThreadOf(item);
+  if (thread === undefined) return legacyPreview(item, nameOf);
+  const answering = thread.findLast((each) => each.answers !== undefined);
+  if (answering?.answers !== undefined) {
+    const { answers } = answering;
+    const stamp = sentStamp(answers, thread.find((each) => each.id === answers.ask)?.ask).words;
+    const words = plainWords(answering.text);
+    return `${nameOf(answering.member)}: ${words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`}`;
+  }
+  // Note that an ask the agent took back says so before a close is read as a member's, since a close naming no closer reads as one.
+  const withdrawn = thread.findLast((each) => each.ask?.status === INBOX_ASK_STATUS.WITHDRAWN);
+  if (withdrawn?.ask !== undefined) {
+    const why = plainWords(withdrawn.ask.withdrawnReason ?? "");
+    return why === "" ? "Withdrawn" : `Withdrawn: ${why}`;
+  }
+  if (closedByMember(item)) return `${nameOf(item.closedBy)}: ${CLOSED_WORDS}`;
+  return undefined;
 }
 
 /** What an open ask asks, as its row's second line says it (`inboxPreview`). */

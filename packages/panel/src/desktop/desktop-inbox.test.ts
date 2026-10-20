@@ -2163,7 +2163,10 @@ test("an item's row hangs the thread's card beside it, as a sidebar task's row h
   const card =
     document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
     assert.fail("the thread's card is hung");
-  assert.ok(card.querySelector('.state-glyph[data-state="working"]'), "the spinner, not words");
+  assert.ok(
+    card.querySelector('.luke-hover-card-row-end .state-glyph[data-state="working"]'),
+    "the spinner stands beside the agent at the card's foot, no words",
+  );
   // A press on the card, as one selecting its words makes, leaves the row unchosen and the card standing.
   act(() => {
     card.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
@@ -6908,6 +6911,37 @@ test("a thread's row says the ask itself while one is open, led by its kind's gl
   act(() => rowNamed(page, CHOSEN.title).click());
   await settle();
   assert.deepEqual(rowLines(page, STEPS.title), [true, "2 steps left · Add the secret"]);
+
+  // Mark done pressed in the box ticks every step on the row and its card, as the box shows them.
+  act(() => rowNamed(page, STEPS.title).click());
+  await settle();
+  act(() => askPress(itemPane(page), "Mark done").click());
+  act(() => rowNamed(page, CHOSEN.title).click());
+  await settle();
+  assert.deepEqual(rowLines(page, STEPS.title), [true, "Every step ticked · Mark done"]);
+  hoveredCard(rowNamed(page, STEPS.title), "[data-inbox-row-card]");
+  assert.deepEqual(
+    [...document.querySelectorAll(".luke-tooltip-card .inbox-card-steps > li")].map((step) =>
+      step.getAttribute("data-done"),
+    ),
+    ["true", "true", "true"],
+  );
+});
+
+test("an item's card shows a to-do naming no steps of its own its title as its one step, as its box does", async () => {
+  const ROTATE = threadItem([askingMessage({ type: INBOX_ASK.DO, steps: [] })], {
+    title: "Rotate the deployment key",
+  });
+  inboxes = new Map([[BILLING.id, [ROTATE]]]);
+  const { page } = mount();
+  await settle();
+  hoveredCard(rowNamed(page, ROTATE.title), "[data-inbox-row-card]");
+  assert.deepEqual(
+    [...document.querySelectorAll(".luke-tooltip-card .inbox-card-steps > li")].map(
+      (step) => step.textContent,
+    ),
+    ["Rotate the deployment key"],
+  );
 });
 
 test("with the inbox-first sidebar the sidebar lists the Inbox's items, read once with the page, and the page shows the chosen item alone, a press on a row choosing it", async () => {

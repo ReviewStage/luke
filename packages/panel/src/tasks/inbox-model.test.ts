@@ -54,6 +54,7 @@ import {
   inboxMissing,
   inboxPreview,
   inboxReply,
+  inboxSettledWords,
   inboxSteps,
   inboxThreadOf,
   inboxThreadSend,
@@ -1745,3 +1746,53 @@ function standing(
   const { ask } = message;
   return ask === undefined ? message : { ...message, ask: { ...ask, status } };
 }
+
+test("a settled item's card says how it ended whatever its row's glyph: an answer even with words after it, an ask taken back and why, a member's close, and an item before threads as its row said it", () => {
+  const asked = asking({
+    type: INBOX_ASK.DECIDE,
+    options: [{ label: "7 days" }, { label: "14 days" }],
+  });
+  const answer = message({
+    text: "",
+    createdAt: 2_000,
+    member: YOU,
+    answers: { ask: asked.id, reply: INBOX_REPLY.CHOSE, choices: ["7 days"] },
+  });
+  const after = message({
+    text: "Thanks, on it.",
+    createdAt: 3_000,
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+  });
+  const settled = standing(asked, INBOX_ASK_STATUS.ANSWERED);
+  const answered = item({
+    id: "s1",
+    status: INBOX_STATUS.ANSWERED,
+    thread: [settled, answer, after],
+  });
+  assert.equal(inboxSettledWords(answered, previewName), "You: Chose 7 days");
+  assert.equal(
+    inboxLineKind(answered),
+    INBOX_LINE.SAID,
+    "the row's glyph reads only the last message",
+  );
+
+  const takenBack = item({
+    id: "s2",
+    status: INBOX_STATUS.CLOSED,
+    thread: [
+      {
+        ...asked,
+        ask: {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "7 days" }, { label: "14 days" }],
+          status: INBOX_ASK_STATUS.WITHDRAWN,
+          withdrawnReason: "The deploy was **canceled**",
+        },
+      },
+    ],
+  });
+  assert.equal(inboxSettledWords(takenBack, previewName), "Withdrawn: The deploy was canceled");
+
+  const open = item({ id: "s3", thread: [asked] });
+  assert.equal(inboxSettledWords(open, previewName), undefined, "an open item has not ended");
+});
