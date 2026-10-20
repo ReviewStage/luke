@@ -2756,6 +2756,68 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
   assert.deepEqual(readTo(), [mark(4), mark(5)]);
 });
 
+test("a channel link the chat held before it was opened does not hold stands until a later read: kept where that read holds it, back on For you where it does not", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const [held, fresh, gone] = [
+    "c0ffee00-0000-4000-8000-000000000001",
+    "c0ffee00-0000-4000-8000-000000000002",
+    "c0ffee00-0000-4000-8000-000000000003",
+  ];
+  /** The chat as one read answers it, holding `ids` as its channels. */
+  const answerOf = (cursor: number, ids: readonly string[]) => ({
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    channels: ids.map((id) => ({ id, kind: CHANNEL_KIND.TOPIC, name: id, archived: false })),
+    messages: [],
+    cursor: String(cursor),
+  });
+  // Each later read waits for the test, as the service's long read waits for a change.
+  const second = Promise.withResolvers<ReturnType<typeof answerOf>>();
+  const third = Promise.withResolvers<ReturnType<typeof answerOf>>();
+  let reads = 0;
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
+    {
+      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
+        reads += 1;
+        if (reads === 1) return Promise.resolve(answerOf(1, [held]));
+        if (reads === 2) return second.promise;
+        return reads === 3 ? third.promise : new Promise(() => undefined);
+      },
+    },
+    AtomRegistryModule.make(),
+  );
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().chatView.chat, "the chat landed");
+  });
+  const linkTo = (channelId: string) =>
+    act(() =>
+      tab
+        .control()
+        .onOpenLink({ workspace: "personal", place: { kind: LINK_PLACE.CHAT, channelId } }),
+    );
+  const place = () => tab.control().chatView.place;
+
+  linkTo(fresh);
+  await settle();
+  assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: fresh }, "made since the read");
+  second.resolve(answerOf(2, [held, fresh]));
+  await settle();
+  assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: fresh }, "and held by the next");
+
+  linkTo(gone);
+  await settle();
+  assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: gone });
+  third.resolve(answerOf(3, [held, fresh]));
+  await vi.waitFor(async () => {
+    await settle();
+    assert.deepEqual(place(), FOR_YOU, "a read since that holds it not puts Chat on For you");
+  });
+});
+
 test("a task New task files for later asks the host to start it in the backlog, with no planning and its brief", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
