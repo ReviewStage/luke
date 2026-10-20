@@ -2353,6 +2353,10 @@
    pixel. */
 .pull-request-tab {
   --boxed-inset: calc(var(--row-inset) - 1px);
+  /* The band a section's heading sticks at in the Conversation, never
+     shorter than the controls it holds, so a finger's 44px filter on the
+     web stands inside it rather than over what scrolls beneath. */
+  --pull-request-band: max(var(--luke-scroll-band), var(--luke-control-height));
   /* Note that the tab isolates its stacking, so its header, raised over its
      own rows, rises over nothing outside the tab; and answers its own width,
      so its tabs' row folds by the room the tab has wherever it stands. */
@@ -2363,6 +2367,10 @@
 /* The tab shown fills the room under the header and the tabs, the others
    kept drawn but hidden, so switching back draws what each last read. */
 .pull-request-view {
+  /* Note that the view hands the tab's band down as the scroller's own, so
+     the fade begins beneath the heading at whatever height it stands
+     (`SCROLL_FADE_INSET.BAND`). */
+  --luke-scroll-band: var(--pull-request-band);
   display: flex;
   min-height: 0;
   flex: 1;
