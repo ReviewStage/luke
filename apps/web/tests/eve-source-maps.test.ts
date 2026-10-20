@@ -115,12 +115,26 @@ test("a build without SENTRY_AUTH_TOKEN uploads nothing and leaves the output as
   assert.deepEqual(existing(root, ".vercel/output"), BUILT_FILES);
 });
 
+test("a Preview build with the token uploads nothing and leaves the output as eve wrote it", async (t) => {
+  const root = await builtService(t, ".vercel/output");
+  const run = await upload(t, root, {
+    VERCEL: "1",
+    VERCEL_GIT_COMMIT_SHA: COMMIT,
+    SENTRY_AUTH_TOKEN: "test-token",
+    VERCEL_ENV: "preview",
+  });
+  assert.equal(run.status, 0, run.output);
+  assert.equal(run.uploadArguments, undefined);
+  assert.deepEqual(existing(root, ".vercel/output"), BUILT_FILES);
+});
+
 test("a build with the token uploads every bundle's maps to luke-web under the commit, then ships none", async (t) => {
   const root = await builtService(t, ".vercel/output");
   const run = await upload(t, root, {
     VERCEL: "1",
     VERCEL_GIT_COMMIT_SHA: COMMIT,
     SENTRY_AUTH_TOKEN: "test-token",
+    VERCEL_ENV: "production",
   });
   assert.equal(run.status, 0, run.output);
   assert.equal(flagValue(run.uploadArguments, "--org"), "stage-review");
@@ -147,6 +161,7 @@ test("the output Vercel names for the service is the one uploaded from", async (
     VERCEL: "1",
     EVE_INTERNAL_BUILD_OUTPUT_DIRECTORY: "service-output",
     SENTRY_AUTH_TOKEN: "test-token",
+    VERCEL_ENV: "production",
   });
   assert.equal(run.status, 0, run.output);
   assert.equal(run.uploadedMaps.length, 3);
@@ -164,6 +179,7 @@ test("a build with the token but no maps fails rather than shipping traces Sentr
     VERCEL: "1",
     VERCEL_GIT_COMMIT_SHA: COMMIT,
     SENTRY_AUTH_TOKEN: "test-token",
+    VERCEL_ENV: "production",
   });
   assert.notEqual(run.status, 0);
   assert.equal(run.uploadArguments, undefined);

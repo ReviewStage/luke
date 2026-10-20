@@ -17,5 +17,9 @@ const SENTRY_SOURCE_MAPS = {
 };
 
 export default {
-  $production: process.env.SENTRY_AUTH_TOKEN ? SENTRY_SOURCE_MAPS : {},
+  // Only a production deployment uploads maps (`scripts/eve-source-maps.sh`).
+  $production:
+    process.env.SENTRY_AUTH_TOKEN && process.env.VERCEL_ENV === "production"
+      ? SENTRY_SOURCE_MAPS
+      : {},
 };

@@ -48,14 +48,15 @@ const SITE_DIRECTORY = "dist";
  * The bundles' source maps, uploaded to Sentry's `luke-web` project as its
  * esbuild guide sets it up, so a function's stack trace reads as the source.
  * The maps are written beside the bundles, uploaded, and deleted before the output is
- * emitted, so none ships in a function. Only a build that holds
- * `SENTRY_AUTH_TOKEN` uploads; any other bundles as before. The plugin names
+ * emitted, so none ships in a function. Only a production build that holds
+ * `SENTRY_AUTH_TOKEN` uploads; any other, a Preview's included, bundles as
+ * before, since a Preview's traces are rarely read and the maps cost its build. The plugin names
  * the release from the deployment's commit and writes it into each bundle,
  * which is the release the SDK then reports under.
  */
 function withSentrySourceMaps(options: BuildOptions): BuildOptions {
   const authToken = process.env.SENTRY_AUTH_TOKEN;
-  if (!authToken) return options;
+  if (!authToken || process.env.VERCEL_ENV !== "production") return options;
   return {
     ...options,
     // Sentry's guide asks for "hidden" maps; esbuild spells that `external`,
