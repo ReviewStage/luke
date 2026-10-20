@@ -74,7 +74,11 @@ import type { ConversationTarget } from "@luke/database/models/writer";
 import type { UserContent } from "ai";
 import { Data, DateTime, Duration, Effect, Option, Stream } from "effect";
 import type { HostedEnvironment } from "../../environment.js";
-import { AgentSandboxImage } from "../agent-sandbox-image.js";
+import {
+  AgentSandboxImage,
+  IMAGE_PREPARING_STATUS,
+  ImagePreparing,
+} from "../agent-sandbox-image.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -375,23 +379,26 @@ interface TaggedRunner {
   readonly stamp: string | undefined;
 }
 
+/** The launch tag read: its first event number and its stamp; none where the tag is missing or unreadable. */
+function taggedLaunch(
+  tags: Readonly<Record<string, string>>,
+): { readonly firstSequence: number; readonly stamp: string | undefined } | undefined {
+  const launch = tags[RUNNER_TAG.LAUNCH] ?? "";
+  const at = launch.indexOf(LAUNCH_STAMP_SEPARATOR);
+  const firstSequence = Number(at < 0 ? launch : launch.slice(0, at));
+  if (launch === "" || !Number.isSafeInteger(firstSequence)) return undefined;
+  return { firstSequence, stamp: at < 0 ? undefined : launch.slice(at + 1) };
+}
+
 function taggedRunner(sandbox: ListedSandbox): TaggedRunner | undefined {
   const tags = sandbox.tags ?? {};
   const sandboxSessionId = tags[RUNNER_TAG.SANDBOX_SESSION];
   const commandId = tags[RUNNER_TAG.COMMAND];
-  const launch = tags[RUNNER_TAG.LAUNCH] ?? "";
-  const at = launch.indexOf(LAUNCH_STAMP_SEPARATOR);
-  const firstSequence = Number(at < 0 ? launch : launch.slice(0, at));
-  if (
-    sandboxSessionId === undefined ||
-    commandId === undefined ||
-    launch === "" ||
-    !Number.isSafeInteger(firstSequence)
-  ) {
+  const launch = taggedLaunch(tags);
+  if (sandboxSessionId === undefined || commandId === undefined || launch === undefined) {
     return undefined;
   }
-  const stamp = at < 0 ? undefined : launch.slice(at + 1);
-  return { sandboxSessionId, commandId, firstSequence, stamp };
+  return { sandboxSessionId, commandId, ...launch };
 }
 
 /** The tags of a sandbox running the runner given. */
@@ -437,6 +444,7 @@ function failedStatus(failure: { readonly _tag: string }): number {
       : FAILED_STATUS.REFUSED;
   }
   if (failure._tag === "RunnerBundleMissing") return FAILED_STATUS.REFUSED;
+  if (failure instanceof ImagePreparing) return IMAGE_PREPARING_STATUS;
   return failure instanceof SandboxUnavailable
     ? (failure.status ?? FAILED_STATUS.UNAVAILABLE)
     : FAILED_STATUS.UNAVAILABLE;
@@ -506,6 +514,15 @@ export const runnerSessions = <
         yield* api.writeFiles(sandbox.running, [
           { path: RUNNER_PATH.UPLOAD, contents: bundle, mode: 0o644 },
         ]);
+        // The launch's tag is written before its command starts, so an END the launch it
+        // replaces posts late is told apart from this one's and stops nothing.
+        const firstSequence = yield* options.nextSequence(agent.conversationId);
+        const launching = {
+          [SESSION_TAG]: sessionId,
+          [RUNNER_TAG.AGENT]: agent.id,
+          [RUNNER_TAG.LAUNCH]: launchTag(firstSequence, credential.stamp),
+        };
+        yield* api.updateTags(sandbox.name, launching);
         const commandId = yield* api.start(sandbox.running, {
           command: "bash",
           args: ["-c", LAUNCH_SCRIPT, LAUNCH_NAME, digest],
@@ -516,7 +533,6 @@ export const runnerSessions = <
         // A runner started but never configured is ended, and its tags cleared, so the next
         // message relaunches whole rather than writing to a runner that waits for its config.
         yield* Effect.gen(function* () {
-          const firstSequence = yield* options.nextSequence(agent.conversationId);
           yield* api.updateTags(
             sandbox.name,
             runnerTags(sessionId, agent.id, {
@@ -533,10 +549,7 @@ export const runnerSessions = <
             Effect.ignore(
               Effect.andThen(
                 api.kill(sandbox.running, commandId),
-                api.updateTags(sandbox.name, {
-                  [SESSION_TAG]: sessionId,
-                  [RUNNER_TAG.AGENT]: agent.id,
-                }),
+                api.updateTags(sandbox.name, launching),
               ),
             ),
           ),
@@ -737,8 +750,9 @@ export const runnerEnded = Effect.fn("web/runnerEnded")(function* (ending: Runne
   const api = yield* vercelSandboxApi(deploymentOidcToken);
   const found = yield* sandboxOf(api, ending.sessionId);
   if (Option.isNone(found)) return RUNNER_ENDED.STALE;
-  const runner = taggedRunner(found.value);
-  if (runner !== undefined && ending.sequence < runner.firstSequence) return RUNNER_ENDED.STALE;
+  // Read apart from the runner's other tags, which a launch writes only once its command started.
+  const launch = taggedLaunch(found.value.tags ?? {});
+  if (launch !== undefined && ending.sequence < launch.firstSequence) return RUNNER_ENDED.STALE;
   const running = found.value.currentSessionId;
   if (found.value.status !== "running" || running === undefined) return RUNNER_ENDED.STALE;
   // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the sandbox.

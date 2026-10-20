@@ -80,6 +80,8 @@ export function runnerSandboxApi() {
   const uploads: Map<string, string>[] = [];
   const policies: { readonly session: string; readonly policy: unknown }[] = [];
   const runs: { readonly session: string; readonly args: readonly string[] }[] = [];
+  /** What a test does the moment a detached command has started, before the API answers. */
+  const hooks: { onStart?: ((command: FakeCommand) => Promise<void>) | undefined } = {};
   let next = 0;
   const id = (prefix: string) => {
     next += 1;
@@ -184,6 +186,7 @@ export function runnerSandboxApi() {
         exitCode: null,
       };
       commands.push(command);
+      await hooks.onStart?.(command);
       return Response.json({ command: { id: command.id, exitCode: null } });
     }
     const commandCall = /^cmd\/([^/]+)(\/stdin|\/kill)?$/u.exec(rest);
@@ -221,6 +224,7 @@ export function runnerSandboxApi() {
     policies,
     runs,
     failStdin,
+    hooks,
   };
 }
 

@@ -43,8 +43,6 @@ export interface HostedEnvironmentValues {
   readonly providerKeyEncryptionKeys: Redacted.Redacted | undefined;
   /** The cohort whose plan-paid coding agents may run on a provider's own harness, by user id; empty, as it is unset, admits none. */
   readonly nativeAgentAccounts: readonly string[];
-  /** The snapshot a native harness's sandbox opens from (`agent-sandbox-image.ts`); absent opens none. */
-  readonly agentSandboxSnapshot: string | undefined;
 }
 
 export class HostedEnvironment extends Context.Service<
@@ -151,7 +149,6 @@ export const hostedEnvironment = Layer.effect(
         Config.Redacted(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
       ),
       nativeAgentAccounts: Config.option(Config.String(CODER_ENVIRONMENT.NATIVE_AGENT_ACCOUNTS)),
-      agentSandboxSnapshot: Config.option(Config.String(CODER_ENVIRONMENT.AGENT_SANDBOX_SNAPSHOT)),
     }),
     (read) => {
       const cronSecret = presentRedacted(read.cronSecret);
@@ -170,7 +167,6 @@ export const hostedEnvironment = Layer.effect(
         githubWebhookSecret: presentRedacted(read.githubWebhookSecret),
         providerKeyEncryptionKeys: presentRedacted(read.providerKeyEncryptionKeys),
         nativeAgentAccounts: listed(read.nativeAgentAccounts),
-        agentSandboxSnapshot: present(read.agentSandboxSnapshot),
       };
       // Note that the warning names the two variables alone, because a value in a log line is a leaked secret.
       return eveDeploymentSecret === namedEveSecret

@@ -104,7 +104,6 @@ function environment(anthropicKey?: string): Layer.Layer<HostedEnvironment> {
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
     nativeAgentAccounts: [],
-    agentSandboxSnapshot: undefined,
   });
 }
 

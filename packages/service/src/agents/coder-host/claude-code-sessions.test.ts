@@ -33,7 +33,11 @@ import {
   type InstallationFixture,
 } from "../../testing/github-app-fake.js";
 import { fixtureToken, linesOf, runnerSandboxApi } from "../../testing/runner-sandbox-fake.js";
-import { AgentSandboxImage } from "../agent-sandbox-image.js";
+import {
+  AgentSandboxImage,
+  IMAGE_PREPARING_STATUS,
+  ImagePreparing,
+} from "../agent-sandbox-image.js";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
@@ -89,7 +93,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
   nativeAgentAccounts: [],
-  agentSandboxSnapshot: SNAPSHOT,
 };
 
 /** Everything but the store, around the fake Vercel given. */
@@ -393,6 +396,68 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         );
         assert.equal(late, RUNNER_ENDED.STALE);
         assert.equal(api.sandboxes[0]?.status, "running");
+      }),
+  );
+
+  it.effect(
+    "an END the replaced launch posts while its replacement's command is starting stops nothing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sequence = { next: 0 };
+        const sessions = yield* sessionsFor(userId, sequence).pipe(Effect.provide(services(api)));
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const target = { userId, conversationId: agent.conversationId };
+        const first = api.commands[0];
+        assert.ok(first !== undefined);
+        first.exitCode = 0;
+        sequence.next = 42;
+        const lateEnds: string[] = [];
+        // The first launch's END lands just as the relaunch's command has started, before its answer.
+        api.hooks.onStart = async () => {
+          lateEnds.push(
+            await Effect.runPromise(
+              runnerEnded({ target, sessionId: opened.sessionId, sequence: 41 }).pipe(
+                Effect.provide(Layer.mergeAll(api.layer, getTestDB())),
+              ),
+            ),
+          );
+        };
+
+        const sent = yield* sessions.send(opened.sessionId, message(agent, "Again."));
+
+        assert.equal(sent.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.deepEqual(lateEnds, [RUNNER_ENDED.STALE]);
+        assert.equal(api.sandboxes[0]?.status, "running");
+      }),
+  );
+
+  it.effect(
+    "a launch while the image is still being prepared fails as preparing and opens nothing",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = runnerSandboxApi();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(
+            Layer.merge(
+              services(api),
+              Layer.succeed(AgentSandboxImage, { snapshotId: Effect.fail(new ImagePreparing()) }),
+            ),
+          ),
+        );
+
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+
+        assert.deepEqual(opened, {
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: IMAGE_PREPARING_STATUS,
+        });
+        assert.equal(api.sandboxes.length, 0);
       }),
   );
 

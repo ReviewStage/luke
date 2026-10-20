@@ -93,7 +93,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   providerKeyEncryptionKeys: undefined,
   nativeAgentAccounts: [],
   eveDeploymentSecret: undefined,
-  agentSandboxSnapshot: undefined,
 };
 
 /** The services the doors run against, over the test's database: GitHub, the catalog, Linear and eve none of them reach. */
