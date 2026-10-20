@@ -3675,15 +3675,18 @@
   margin: 0;
   padding: var(--luke-space-8) var(--luke-space-12);
   list-style: none;
-  border-bottom: 1px solid var(--luke-color-border);
 }
 
+/* A review thread's head, its whole row pressing to fold it: the chevron
+   leading, in the slot and at the gap a Files changed file header's fold
+   stands in (`.diff-list-head-row`), so a thread reads as a file does, then
+   who and where, and the ⋯ at the row's end. */
 .pull-request-thread-head {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--boxed-inset);
+  padding: var(--luke-space-6) var(--boxed-inset) var(--luke-space-6) var(--luke-space-4);
   color: var(--luke-color-text);
   font-size: var(--luke-type-caption-size);
   transition: background-color var(--duration-hover) ease;
@@ -3693,9 +3696,11 @@
   background: var(--luke-color-fill-hover);
 }
 
-.pull-request-thread-turn {
-  display: flex;
-  margin-left: auto;
+.pull-request-thread-head > .luke-disclosure-turn {
+  width: var(--luke-space-24);
+  height: var(--luke-space-24);
+  align-items: center;
+  justify-content: center;
 }
 
 /* A long path is cut at its start rather than its end, so its file's name
@@ -3724,14 +3729,10 @@
   gap: var(--luke-space-8);
 }
 
-/* A thread's ⋯ stands at the end of its head, before the chevron. */
+/* A thread's ⋯ stands at the end of its head. */
 .pull-request-thread-menu {
   display: flex;
   margin-left: auto;
-}
-
-.pull-request-thread-menu + .pull-request-thread-turn {
-  margin-left: 0;
 }
 
 /* Whether a thread was resolved or outdated, in the quiet badge a bot's

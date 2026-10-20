@@ -4675,6 +4675,42 @@ test("a thread whose file the changes no longer hold stays in the Conversation, 
   assert.equal(card.hasAttribute("data-search-landed"), false, "nothing is landed on");
 });
 
+test("every review thread's head leads with its chevron and ends with its ⋯, in the Conversation as on its line in Files changed, and a press on the row folds it", async () => {
+  const tab = await drawn(
+    createElement(Routed, {
+      control: jumpControl([thread({ id: JUMPED })]),
+      heard: [],
+      first: PULL_REQUEST_VIEW.FILES,
+    }),
+  );
+  const inline = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
+    INVITE_FILE.path,
+    `${PAGE}#discussion_r1`,
+  );
+  document.body.appendChild(inline);
+  await choose(tab, "Conversation");
+  const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread is drawn");
+  for (const [where, root] of [
+    ["the Conversation", card],
+    ["its line", inline],
+  ] as const) {
+    const head =
+      root.querySelector<HTMLElement>("summary.pull-request-thread-head") ??
+      assert.fail(`the thread on ${where} has a head`);
+    assert.ok(
+      head.firstElementChild?.classList.contains("luke-disclosure-turn"),
+      `on ${where}, the chevron leads the head`,
+    );
+    assert.ok(
+      head.lastElementChild?.classList.contains("pull-request-thread-menu"),
+      `on ${where}, the ⋯ ends it`,
+    );
+    assert.equal(head.getAttribute("aria-expanded"), "true");
+    act(() => head.click());
+    assert.equal(head.getAttribute("aria-expanded"), "false", `on ${where}, the row folds it`);
+  }
+});
+
 test("a thread's ⋯ in Files changed shows it in the Conversation through the same route, standing through Hide resolved, ringed and focused there", async () => {
   window.localStorage.clear();
   const heard: ReadLink[] = [];

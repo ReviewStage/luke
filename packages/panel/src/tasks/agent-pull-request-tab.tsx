@@ -914,6 +914,7 @@ function ThreadCard({
     >
       <Fold open={landed.open} onOpenChange={landed.onOpenChange}>
         <FoldSummary className="pull-request-thread-head">
+          <DisclosureChevron />
           {/* The file and lines take the thread to them in Files changed, where it can be found there. */}
           <Tooltip label={toFiles === undefined ? thread.path : THREAD_REVEAL_WORDS.VIEW_FILES}>
             {toFiles === undefined ? (
@@ -939,9 +940,6 @@ function ThreadCard({
             here={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
             there={PULL_REQUEST_THREAD_VIEW.FILES}
           />
-          <span className="pull-request-thread-turn">
-            <DisclosureChevron />
-          </span>
         </FoldSummary>
         <FoldBody>
           {preview === undefined ? null : (
@@ -1105,6 +1103,7 @@ function InlineThread({
     >
       <Fold open={landed.open} onOpenChange={landed.onOpenChange}>
         <FoldSummary className="pull-request-thread-head">
+          <DisclosureChevron />
           {first === undefined ? null : <PersonRef person={first.by} />}
           {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
           {labels.map((label) => (
@@ -1123,9 +1122,6 @@ function InlineThread({
               there={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
             />
           )}
-          <span className="pull-request-thread-turn">
-            <DisclosureChevron />
-          </span>
         </FoldSummary>
         <FoldBody>
           <ThreadComments thread={thread} now={now} picture={picture} />
