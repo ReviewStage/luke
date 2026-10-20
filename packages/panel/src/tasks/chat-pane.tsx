@@ -9,6 +9,7 @@ import {
   type ChatMessage,
   type ChatReadBlock,
   knownBlock,
+  MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import type { MentionPlace } from "@luke/features/mention-link";
@@ -220,6 +221,27 @@ interface MessageContext {
   readonly readPicture: (messageId: string, attachmentId: string) => Promise<PictureAnswer>;
 }
 
+/**
+ * A message's blocks in the order they are drawn, each with its place in
+ * the message: a person's pictures first, over their words, as the box held
+ * them and as every message's files stand; an agent's and Luke's in the
+ * order they wrote them, since a picture of theirs may stand between words
+ * that speak of it.
+ */
+function drawnBlocks(
+  message: ChatMessage,
+  chat: ChatAnswer,
+): readonly { readonly block: ChatReadBlock; readonly index: number }[] {
+  const placed = message.blocks.map((block, index) => ({ block, index }));
+  const author = chat.members.find((member) => member.id === message.authorId);
+  if (author?.kind !== MEMBER_KIND.HUMAN) return placed;
+  const picture = (block: ChatReadBlock) => knownBlock(block) && block.type === CHAT_BLOCK.IMAGE;
+  return [
+    ...placed.filter(({ block }) => picture(block)),
+    ...placed.filter(({ block }) => !picture(block)),
+  ];
+}
+
 /** A message's body: its ask's card where it carries one, its blocks inside, else its blocks in turn. */
 function Body({
   message,
@@ -228,8 +250,8 @@ function Body({
   message: ChatMessage;
   context: MessageContext;
 }): React.JSX.Element {
-  const blocks = message.blocks.map((block, index) => (
-    // Blocks have no key of their own and are never reordered.
+  const blocks = drawnBlocks(message, context.chat).map(({ block, index }) => (
+    // Blocks have no key of their own, so each keeps its place in the message as its key.
     <Block key={index} messageId={message.id} block={block} context={context} />
   ));
   const { ask } = message;

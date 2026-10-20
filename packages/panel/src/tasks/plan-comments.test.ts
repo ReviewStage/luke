@@ -1321,6 +1321,12 @@ test("a reply carries the files picked into its field, and a comment's files are
     ["expiry.txt"],
   );
   assert.deepEqual(read, [fileId]);
+  const words = card.querySelector(".comment-entry .comment-words");
+  assert.ok(sent[0] && words);
+  assert.ok(
+    sent[0].compareDocumentPosition(words) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "a comment's files stand over its words",
+  );
 
   const field = card.querySelector(".comment-field") ?? assert.fail("no reply field");
   await pickFiles(field, [new File(["Steps to reproduce\n"], "steps.txt", { type: "text/plain" })]);
