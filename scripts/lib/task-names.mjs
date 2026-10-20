@@ -218,6 +218,9 @@ const WIRE_NAME = {
   ],
   // The main tabs' kept choice, under the key it was first stored as, which a
   // record kept before the Call anchored the column still holds.
+  // The ChatGPT subscription tier in Codex's rate-limit snapshot (`account/rateLimits/updated`),
+  // which the Codex probe reads as evidence a turn ran on the user's ChatGPT subscription.
+  planType: ["tools/codex-probe/src/checks.ts", "tools/codex-probe/src/sanitize.test.ts"],
   planClosed: [
     "packages/panel/src/tasks/use-main-tabs.ts",
     "packages/panel/src/tasks/use-tasks-tab.test.ts",

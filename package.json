@@ -22,6 +22,8 @@
     "package:dir": "pnpm --filter @luke/desktop package:dir",
     "prepare": "husky",
     "probe:claude-code": "pnpm --filter @luke/claude-code-probe probe",
+    "probe:codex": "tsx tools/codex-probe/src/cli.ts",
+    "probe:codex:sign-in": "tsx tools/codex-probe/src/cli.ts sign-in",
     "release:macos": "./scripts/release-macos.sh",
     "start": "pnpm --filter @luke/desktop start",
     "task-names": "node scripts/task-names.mjs",
