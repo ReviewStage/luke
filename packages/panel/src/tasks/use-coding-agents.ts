@@ -66,7 +66,6 @@ import type { ServersWriter } from "./use-agent-servers.js";
 import type { TranscriptReader } from "./use-agent-transcript.js";
 import type {
   InboxAnswerer,
-  InboxCloser,
   InboxImageReader,
   InboxMessenger,
   InboxReader,
@@ -336,8 +335,6 @@ export interface CodingAgentsControl {
   readInbox: InboxReader;
   /** One answer to an inbox item, as a card sends it. */
   answerInbox: InboxAnswerer;
-  /** One close of an inbox item without an answer, as its pane sends it. */
-  closeInbox: InboxCloser;
   /** One message on an inbox item's thread, as its box sends it. */
   messageInbox: InboxMessenger;
   /** One read of an inbox item's image, as its card asks it. */
@@ -1243,11 +1240,6 @@ export function useCodingAgents(input: {
     [act],
   );
 
-  const closeInbox = useCallback<InboxCloser>(
-    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_CLOSE, params),
-    [act],
-  );
-
   const messageInbox = useCallback<InboxMessenger>(
     (params) => act(ACT_KIND.CODING_AGENTS_INBOX_MESSAGE, params),
     [act],
@@ -1341,7 +1333,6 @@ export function useCodingAgents(input: {
     readSkills,
     readInbox,
     answerInbox,
-    closeInbox,
     messageInbox,
     readInboxImage,
   };

@@ -24,6 +24,7 @@ import {
   knownBlock,
   knownResponse,
 } from "@luke/features/inbox-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -39,18 +40,18 @@ import {
   Checkbox,
   ChoiceList,
   type ChoiceOption,
-  ConfirmDialog,
   type Crumb,
   DISCLOSURE_BODY,
-  type DialogQuestion,
   Disclosure,
   DisclosureBody,
   DisclosureSummary,
+  EllipsisIcon,
   ErrorState,
   FoldingButton,
   type FoldingButtonHint,
   FormField,
   GAP,
+  IconButton,
   SCROLL_FADE,
   ScrollArea,
   Stack,
@@ -58,14 +59,16 @@ import {
   TEXT_TONE,
   Text,
   TextField,
-  useConfirmDialog,
+  useMenu,
 } from "@luke/ui";
 import { type Actor, actorName, personActor } from "@luke/ui/actor-model";
-import { ACTION_RESULT_STATUS, isWireString } from "@luke/wire";
+import { isWireString } from "@luke/wire";
 import { CheckIcon, CircleSlashIcon, ClockIcon, FactoryIcon, Undo2Icon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorLine, ActorMark, ActorRef, AutomationCard } from "../actor-ref.js";
 import { useAutomation } from "../automation-directory.js";
+import { useCopyLinkItem } from "../copy-link-item.js";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
 import { SHELL_ROOM } from "../shell-room.js";
 import { TextLink } from "../text-link.js";
@@ -81,6 +84,7 @@ import { ArchivedComposerNote } from "./archived-task.js";
 import { AttachedFileChips } from "./attached-file-chips.js";
 import { InboxAnswerBox } from "./inbox-answer-box.js";
 import { askHeadWords } from "./inbox-ask-words.js";
+import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
@@ -105,6 +109,7 @@ import {
   type InboxMissing,
   inboxFileChips,
   inboxThreadOf,
+  isUnread,
   itemWorkspaceId,
   knownAsk,
   messagesWords,
@@ -133,6 +138,7 @@ import { REPLY_SCOPE } from "./reply-to-selection.js";
 import { SentWords } from "./skill-chip.js";
 import { TAB_KIND, tabLook } from "./tab-look.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
+import { markReadItem } from "./task-menu-items.js";
 import { useMinute } from "./task-time.js";
 import { cardTitle } from "./tool-call-model.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -1988,68 +1994,64 @@ function ThreadMessage({
   );
 }
 
-/**
- * The pane's Resolve, which settles an open item without an answer: its
- * words, and what its tooltip says it does. Note that it is not called
- * Close, because the bar of a side panel or a window standing it full
- * screen already holds a Close that only puts the panel away.
- */
-const CLOSE_ITEM = {
-  LABEL: "Resolve",
-  HINT: "Resolve without answering",
-} as const;
-
-/** The Resolve's tooltip, which says what it does whether its word is folded away or not, as the way back's does. */
-const CloseHint: FoldingButtonHint = ({ children }) => (
-  <Tooltip label={CLOSE_ITEM.HINT}>{children}</Tooltip>
-);
-
-/** What the Resolve asks first: which item, and whether its agent is told now or reads it later. */
-function closeQuestion(item: InboxItem): DialogQuestion {
-  return {
-    title: `Resolve “${cardTitle(item.title)}” without answering?`,
-    body: item.needsReply
-      ? "The agent is told you resolved it. Only the agent can open it again."
-      : "The agent reads that you resolved it the next time it reads its inbox. Only the agent can open it again.",
-    verb: CLOSE_ITEM.LABEL,
-    running: "Resolving…",
-  };
-}
+/** What the pane's ⋯ menu is called, which is its tooltip too. */
+const ITEM_MENU_LABEL = "Item actions";
 
 /**
- * An open item's Resolve in the pane's bar, which asks first, since only the
- * agent can open an item again (`packages/panel/AGENTS.md`'s Confirms). It
- * is keyed by its item, so a question asked on one item never closes the
- * next, and the question goes with the pane once it is hidden. Note that
- * the close is laid over the reads at once (`use-task-inbox.ts`), so the
- * question is answered as it is sent, and a refusal is said on the card.
+ * The item's ⋯ menu at the end of the pane's bar, as an issue's page and an
+ * agent's tab end theirs: Mark as read or unread, naming U, as the item's
+ * row's menu does; Copy link, the item's link under its task or its agent; and, while the item is open on a task that is not archived, Close
+ * without answering, asked first (`inbox-close.tsx`). It is keyed by its
+ * item where it is drawn, so a question asked on one item never closes the
+ * next, and the menu and the question go with the pane once it is hidden.
  */
-function CloseItem({
+function InboxItemMenu({
+  holder,
   item,
-  control,
   shown,
+  onMark,
+  onClose,
 }: {
+  holder: InboxHolder;
   item: InboxItem;
-  control: TaskInboxControl;
   shown: boolean;
-}): React.JSX.Element {
-  const confirm = useConfirmDialog(
-    { subject: item.status === INBOX_STATUS.OPEN, surfaceOpen: shown },
-    () => {
-      control.onClose(item);
-      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-    },
+  onMark: InboxPaneDoors["onMark"];
+  onClose: InboxCloser | undefined;
+}): React.JSX.Element | null {
+  const menu = useMenu(shown);
+  const read: MenuAction | undefined =
+    onMark === undefined
+      ? undefined
+      : {
+          ...markReadItem({ unread: isUnread(item), onMark: (unread) => onMark(item, unread) }),
+          command: APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
+        };
+  const copyLink = useCopyLinkItem()(
+    holder.kind === INBOX_HOLDER.TASK
+      ? { kind: LINK_PLACE.INBOX_ITEM, planId: holder.task.id, itemId: item.id }
+      : { kind: LINK_PLACE.INBOX_ITEM, agentId: item.agentId, itemId: item.id },
   );
+  const close = useInboxClose(item, archivedHolder(holder) ? undefined : onClose, shown);
+  const groups = [
+    read === undefined ? [] : [read],
+    copyLink === undefined ? [] : [copyLink],
+    close.action === undefined ? [] : [close.action],
+  ].filter((group) => group.length > 0);
+  if (groups.length === 0) return null;
   return (
     <>
-      <FoldingButton
-        label={CLOSE_ITEM.LABEL}
-        icon={<CircleSlashIcon />}
-        disabled={control.sending.has(item.id)}
-        onClick={confirm.ask}
-        hint={CloseHint}
-      />
-      <ConfirmDialog confirm={confirm} question={closeQuestion(item)} />
+      <Tooltip label={ITEM_MENU_LABEL}>
+        <IconButton icon={<EllipsisIcon />} label={ITEM_MENU_LABEL} {...menu.trigger()} />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu
+          label={ITEM_MENU_LABEL}
+          menu={menu.drawn}
+          groups={groups}
+          onClose={menu.close}
+        />
+      )}
+      {close.dialog}
     </>
   );
 }
@@ -2109,6 +2111,10 @@ export interface InboxPaneDoors {
   readonly code: InboxCodeDoors;
   /** Brings the item's task back from the archive, offered where the box would stand while it is archived; none where the task is not archived. */
   readonly onUnarchive?: (() => void) | undefined;
+  /** Marks the item read or unread, from the bar's ⋯ menu; none where the pane offers no mark. */
+  readonly onMark?: ((item: InboxItem, unread: boolean) => void) | undefined;
+  /** Closes an open item without an answer, from the bar's ⋯ menu; none where the pane offers no close. */
+  readonly onClose?: InboxCloser | undefined;
 }
 
 /**
@@ -2283,13 +2289,21 @@ export function InboxPane({
           <FoldingButton label="Inbox" icon={<BackIcon />} onClick={onBack} hint={BackHint} />
         )}
         <Crumbs holder={holder} by={by} doors={doors} />
-        {answerable ? (
-          <CloseItem key={item.id} item={item} control={control} shown={!hidden} />
-        ) : null}
-        {pager === undefined ||
-        (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
-          <InboxPagerControls pager={pager} />
-        )}
+        {/* The bar ends in the pager, where the item stands alone, and the item's ⋯ menu. */}
+        <div className="desktop-toolbar-actions inbox-item-actions">
+          {pager === undefined ||
+          (pager.onPrevious === undefined && pager.onNext === undefined) ? null : (
+            <InboxPagerControls pager={pager} />
+          )}
+          <InboxItemMenu
+            key={item.id}
+            holder={holder}
+            item={item}
+            shown={!hidden}
+            onMark={doors.onMark}
+            onClose={doors.onClose}
+          />
+        </div>
       </header>
       <div className="desktop-inbox">
         {/* The box docks under the thread as an agent's composer does under its log, which runs up to the card and fades there. */}

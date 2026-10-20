@@ -918,21 +918,19 @@ test("a thread leads with its item's title alone as its subject, whether the ite
   assert.equal(withdrawn.querySelector("p")?.textContent, "The plan now says 7 days.");
 });
 
-test("an open item's Resolve, never called Close beside the panel's own Close, asks first, then settles it without an answer at the revision drawn, the thread then saying who closed it and that the agent was told, and a settled item offers no Resolve", async () => {
-  onlyAsking({ type: INBOX_RESPONSE.APPROVAL }, { needsReply: true });
-  const { page } = mount();
-  await settle();
-  const sent: { itemId: string; revision: number; clientKey: string }[] = [];
+/** Every close the Inbox sends, answered as the service takes it: the item closed by the reader. */
+function takenCloses(): { itemId: string; revision: number }[] {
+  const sent: { itemId: string; revision: number }[] = [];
   const bridge = appBridge();
   const previous = fakeActsAnswer();
   fakeActs({
     ...bridge,
     act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_CLOSE) return previous(request);
-      sent.push(request.payload);
+      sent.push({ itemId: request.payload.itemId, revision: request.payload.revision });
+      const asked = [...inboxes.values()].flat().find((each) => each.id === request.payload.itemId);
       const closed: InboxItem = {
-        ...THRESHOLD,
-        response: { type: INBOX_RESPONSE.APPROVAL },
+        ...(asked ?? THRESHOLD),
         status: INBOX_STATUS.CLOSED,
         closedBy: READER,
         settledAt: 6_000,
@@ -944,28 +942,51 @@ test("an open item's Resolve, never called Close beside the panel's own Close, a
       });
     },
   });
-  const closeButton = () =>
-    [...itemPane(page).querySelectorAll<HTMLButtonElement>(".desktop-toolbar button")].find(
-      (button) => (button.getAttribute("aria-label") ?? button.textContent) === "Resolve",
-    );
+  return sent;
+}
 
-  await act(async () => (closeButton() ?? assert.fail("an open item offers Resolve")).click());
-  await settle();
-  assert.deepEqual(sent, [], "Resolve asks first");
+/** The question Resolve asks, answered Resolve. */
+async function confirmClose(): Promise<void> {
   const question =
     document.querySelector<HTMLElement>('[role="alertdialog"]') ??
     assert.fail("Resolve asks first");
   assert.equal(document.activeElement?.textContent, "Cancel", "Cancel takes the keyboard");
-  const confirmClose = [...question.querySelectorAll<HTMLButtonElement>("button")].find(
+  const resolve = [...question.querySelectorAll<HTMLButtonElement>("button")].find(
     (button) => button.textContent === "Resolve",
   );
-  await act(async () => (confirmClose ?? assert.fail("the question offers Resolve")).click());
+  await act(async () => (resolve ?? assert.fail("the question offers Resolve")).click());
   await settle();
+}
 
-  assert.deepEqual(
-    sent.map(({ itemId, revision }) => ({ itemId, revision })),
-    [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }],
-  );
+test("an open item's ⋯ menu in the pane's bar offers Mark as read or unread, Copy link, and Resolve without answering, which asks first and then settles it at the revision drawn, the thread saying who closed it and that the agent was told; a settled item's menu offers Copy link alone", async () => {
+  listedWorkspace = ACME;
+  onlyAsking({ type: INBOX_RESPONSE.APPROVAL }, { needsReply: true });
+  const { page } = mount();
+  await settle();
+  const sent = takenCloses();
+  const ellipsis = () =>
+    itemPane(page).querySelector<HTMLButtonElement>(
+      '.desktop-toolbar button[aria-label="Item actions"]',
+    ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
+
+  act(() => ellipsis().click());
+  assert.deepEqual(menuWords(), [
+    "Mark as unreadU",
+    "—",
+    "Copy link",
+    "—",
+    "Resolve without answering",
+  ]);
+  act(() => menuItem("Mark as unread").click());
+  await settle();
+  assert.ok(readMarks.includes(`unread:${THRESHOLD.id}`), "the menu marks the item unread");
+  act(() => ellipsis().click());
+  act(() => menuItem("Resolve without answering").click());
+  await settle();
+  assert.deepEqual(sent, [], "Close asks first");
+  await confirmClose();
+
+  assert.deepEqual(sent, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
   const closed =
     itemPane(page).querySelector('[data-inbox-comment="closed"]') ??
     assert.fail("the close is a comment of the closer's");
@@ -974,7 +995,119 @@ test("an open item's Resolve, never called Close beside the panel's own Close, a
     closed.querySelector("[data-inbox-pick]")?.textContent,
     "Resolved without an answer",
   );
-  assert.equal(closeButton(), undefined, "a settled item offers no Resolve");
+  act(() => ellipsis().click());
+  assert.deepEqual(
+    menuWords(),
+    ["Mark as unreadU", "—", "Copy link"],
+    "a settled item offers no Close",
+  );
+});
+
+test("an open item's row offers Resolve without answering beside its mark and last in its right-click menu, each asking first; a settled item's row offers neither", async () => {
+  const { page } = mount();
+  await settle();
+  const sent = takenCloses();
+  const threshold = "Alert at 80%?";
+  const retry = "How is a failed email retried?";
+  const hoverClose = (title: string) =>
+    rowNamed(page, title)
+      .closest("li")
+      ?.querySelector<HTMLButtonElement>(
+        '.luke-list-row-actions button[aria-label="Resolve without answering"]',
+      );
+
+  assert.equal(hoverClose(retry), null, "a settled row offers no Close");
+  assert.ok(!rowMenu(page, retry).includes("Resolve without answering"));
+  act(() =>
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+  );
+
+  assert.deepEqual(rowMenu(page, threshold).slice(-2), ["—", "Resolve without answering"]);
+  act(() => menuItem("Resolve without answering").click());
+  await settle();
+  const question =
+    document.querySelector<HTMLElement>('[role="alertdialog"]') ?? assert.fail("Close asks first");
+  const cancel = [...question.querySelectorAll<HTMLButtonElement>("button")].find(
+    (button) => button.textContent === "Cancel",
+  );
+  act(() => cancel?.click());
+  await settle();
+  assert.deepEqual(sent, [], "Cancel closes nothing");
+
+  act(() => (hoverClose(threshold) ?? assert.fail("an open row offers Close")).click());
+  await settle();
+  await confirmClose();
+  assert.deepEqual(sent, [{ itemId: THRESHOLD.id, revision: THRESHOLD.revision }]);
+  assert.equal(hoverClose(threshold), null, "the closed row offers Close no longer");
+});
+
+/** The act channel answering every close as `answer` does, written down by item. */
+function answeredCloses(answer: (itemId: string) => { item: InboxItem; taken: boolean }): string[] {
+  const sent: string[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_CLOSE) return previous(request);
+      sent.push(request.payload.itemId);
+      return Promise.resolve({
+        status: FAKE_ANSWER.DONE,
+        value: answer(request.payload.itemId),
+      });
+    },
+  });
+  return sent;
+}
+
+/** Closes the item from its pane's ⋯ menu, answering the question Close. */
+async function closeFromPane(page: HTMLElement): Promise<void> {
+  const ellipsis =
+    itemPane(page).querySelector<HTMLButtonElement>(
+      '.desktop-toolbar button[aria-label="Item actions"]',
+    ) ?? assert.fail("the pane's bar ends in its ⋯ menu");
+  act(() => ellipsis.click());
+  act(() => menuItem("Resolve without answering").click());
+  await settle();
+  await confirmClose();
+}
+
+test("a close taken lets go of the item's draft, though another item is chosen", async () => {
+  const { page } = mount();
+  await settle();
+  typeInComposer(itemPane(page), "Use 90% instead");
+  await settle();
+  act(() => rowNamed(page, "Expire after 7 days?").click());
+  await settle();
+  assert.equal(rowDrafted(page, "Alert at 80%?"), true);
+  takenCloses();
+
+  act(() =>
+    rowNamed(page, "Alert at 80%?").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    ),
+  );
+  act(() => menuItem("Resolve without answering").click());
+  await settle();
+  await confirmClose();
+
+  assert.equal(rowDrafted(page, "Alert at 80%?"), false, "the closed item's draft is let go");
+});
+
+test("a close the agent changed its item before is not taken: the item stands as the agent now asks it, though no read holds the newer revision yet", async () => {
+  const { page } = mount();
+  await settle();
+  const changed = { ...THRESHOLD, revision: 2, title: "Alert at 85%?", updatedAt: 6_000 };
+  const sent = answeredCloses(() => ({ item: changed, taken: false }));
+
+  await closeFromPane(page);
+
+  assert.deepEqual(sent, [THRESHOLD.id]);
+  assert.equal(
+    needsYouMark(rowNamed(page, "Alert at 85%?")),
+    "*",
+    "it needs you as the agent now asks it",
+  );
 });
 
 test("a teammate's open item leads with its title alone, and its box still takes your answer", async () => {
@@ -1588,8 +1721,8 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
     [...page.querySelectorAll(".inbox-view-items .desktop-toolbar button")]
       .map((button) => button.getAttribute("aria-label") ?? button.textContent)
       .slice(2),
-    ["Resolve"],
-    "beside the crumbs the bar holds the open item's Resolve alone",
+    ["Item actions"],
+    "beside the crumbs the bar holds the item's ⋯ menu alone",
   );
   act(() => crumbs[0]?.click());
   act(() => crumbs[1]?.click());

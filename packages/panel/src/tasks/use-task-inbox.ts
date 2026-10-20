@@ -5,7 +5,6 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
-  type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
   type CodingAgentInboxParams,
@@ -117,11 +116,6 @@ export type InboxAnswerer = (
   params: CodingAgentInboxAnswerParams,
 ) => Promise<CodingAgentInboxAnsweredView>;
 
-/** How one close of an item without an answer is sent: the item, its revision, and the key the send is known by. */
-export type InboxCloser = (
-  params: CodingAgentInboxCloseParams,
-) => Promise<CodingAgentInboxAnsweredView>;
-
 /** How one message on an item's thread is sent: the item, the words and files, and the key the send is known by. */
 export type InboxMessenger = (
   params: CodingAgentInboxMessageParams,
@@ -160,8 +154,6 @@ export interface TaskInboxControl {
   ) => void;
   /** Sends the card's answer, with the press where its kind is answered by one; nothing where it holds none or one is out. */
   readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
-  /** Closes an open item without an answer, its draft let go once taken; nothing where it is settled or a send is out. */
-  readonly onClose: (item: InboxItem) => void;
   /** Sends the box's words and files as a message on the item's thread, open or settled, with the answer attached to the thread's open ask where one is; nothing where it holds nothing the service takes or a send is out. */
   readonly onMessage: (item: InboxItem, draft: InboxDraft) => void;
   /** The images the cards asked for, by attachment, as each read came back; none while a read is out. */
@@ -176,9 +168,6 @@ export interface TaskInboxControl {
 const INBOX_NOT_TAKEN_NOTE = {
   /** The agent changed the item before the answer landed. */
   CHANGED: "The agent changed this item before your answer landed. Answer it as it stands now.",
-  /** The agent changed the item before the close landed. */
-  CHANGED_BEFORE_CLOSE:
-    "The agent changed this item before you closed it. Read it as it stands now.",
   /** The item was answered first, from another window or Mac. */
   ANSWERED: "This item was already answered.",
   /** The agent took the item back first. */
@@ -187,8 +176,8 @@ const INBOX_NOT_TAKEN_NOTE = {
   CLOSED_BY_MEMBER: "This item was already closed.",
 } as const;
 
-/** Why an answer, or a close where `closing`, was not taken, from the item as the service answered it. */
-function notTakenNote(item: InboxItem, closing = false): string {
+/** Why an answer was not taken, from the item as the service answered it. */
+function notTakenNote(item: InboxItem): string {
   switch (item.status) {
     case INBOX_STATUS.ANSWERED:
       return INBOX_NOT_TAKEN_NOTE.ANSWERED;
@@ -197,7 +186,7 @@ function notTakenNote(item: InboxItem, closing = false): string {
         ? INBOX_NOT_TAKEN_NOTE.CLOSED
         : INBOX_NOT_TAKEN_NOTE.CLOSED_BY_MEMBER;
     case INBOX_STATUS.OPEN:
-      return closing ? INBOX_NOT_TAKEN_NOTE.CHANGED_BEFORE_CLOSE : INBOX_NOT_TAKEN_NOTE.CHANGED;
+      return INBOX_NOT_TAKEN_NOTE.CHANGED;
   }
 }
 
@@ -295,7 +284,6 @@ export function useTaskInbox(input: {
     readonly heldIds: readonly string[] | undefined;
     readonly readInbox: InboxReader;
     readonly answerInbox: InboxAnswerer;
-    readonly closeInbox: InboxCloser;
     readonly messageInbox: InboxMessenger;
     readonly readInboxImage: InboxImageReader;
     /** Reads the task's agents again, for where an agent an answer reached stands now. */
@@ -425,51 +413,6 @@ export function useTaskInbox(input: {
           writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
           // Note that an answer the agent hears may open its turn, so the agents are read again.
           if (inboxAnswerHeard(item, reply, attachments)) latest.current.onRetryList();
-        });
-    },
-    [sending, note, taskId, writer, settler],
-  );
-
-  const onClose = useCallback(
-    (item: InboxItem) => {
-      if (item.status !== INBOX_STATUS.OPEN || sending.has(item.id)) return;
-      const words = JSON.stringify([item.revision, "close"]);
-      const was = attempts.current.get(item.id);
-      const key = was?.words === words ? was.key : crypto.randomUUID();
-      attempts.current.set(item.id, { key, words });
-      setSending((standing) => new Set(standing).add(item.id));
-      note(item.id, undefined);
-      // Note that the close stands over every read the moment it is sent, as an answer does.
-      const sent = settler.close(item);
-      const askedOn = taskId;
-      latest.current
-        .closeInbox({ itemId: item.id, revision: item.revision, clientKey: key })
-        .catch((): CodingAgentInboxAnsweredView => UNANSWERED)
-        .then((answer) => {
-          setSending((standing) => {
-            const next = new Set(standing);
-            next.delete(item.id);
-            return next;
-          });
-          if ("failure" in answer) {
-            settler.refuse(sent);
-            note(item.id, messageFailureWords(answer.failure));
-            return;
-          }
-          setHeld((standing) =>
-            standing.taskId === askedOn
-              ? { ...standing, items: withItem(standing.items, answer.item) }
-              : standing,
-          );
-          if (!answer.taken) {
-            settler.refuse(sent);
-            note(item.id, notTakenNote(answer.item, true));
-            return;
-          }
-          settler.take(sent, answer.item);
-          writer.drop((place) => place.kind === DRAFT_PLACE.INBOX && place.itemId === item.id);
-          // Note that a close the agent waits on reaches it as a message, which may open its turn, so the agents are read again.
-          if (item.needsReply) latest.current.onRetryList();
         });
     },
     [sending, note, taskId, writer, settler],
@@ -656,7 +599,6 @@ export function useTaskInbox(input: {
     sending,
     notes,
     onAnswer,
-    onClose,
     onMessage,
     images,
     onImage,
