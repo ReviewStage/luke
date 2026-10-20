@@ -4414,8 +4414,9 @@ test("a message refused as naming no agent says the agent is archived where it i
       if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
       unarchived.push(request.payload);
       // Brought back, the agent is listed so from then on.
-      listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.COMPLETED }];
-      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agent: listedAgents[0] } });
+      const back = { ...AGENT, status: CODING_AGENT_STATUS.COMPLETED };
+      listedAgents = [back];
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agent: back } });
     },
   });
   const pane = itemPane(page);

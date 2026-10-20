@@ -111,7 +111,7 @@ export interface InboxNoteReading {
 }
 
 /** What a card says of a send refused because its agent is archived on its own. */
-export const AGENT_ARCHIVED_NOTE = "This agent is archived.";
+const AGENT_ARCHIVED_NOTE = "This agent is archived.";
 
 /**
  * What a card says of its last send, by its agent as the window lists it.
