@@ -46,7 +46,7 @@ export const LiveWake = Context.Reference<LiveWakeShape>("@luke/service/LiveWake
 });
 
 /** One statement's subscription, the slice of Realtime's raw subscription a watch reads. */
-export interface LiveSubscription {
+interface LiveSubscription {
   onUpdate(listener: () => void): () => void;
   onStateChange(listener: (state: { readonly status: string }) => void): () => void;
   getState(): { readonly status: string };
