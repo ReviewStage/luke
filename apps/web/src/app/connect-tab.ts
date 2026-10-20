@@ -51,6 +51,8 @@ export interface ConnectBrowser {
   readonly openEmptyTab: () => ConnectTab | null;
   /** Sends this tab to the address. */
   readonly navigate: (url: string) => void;
+  /** Takes `go`, a way out of this tab, once the panel's leave guard says to (`page-leave.ts`). */
+  readonly leave: (go: () => void) => void;
   /** Where this tab stands, as a path with its query and fragment. */
   readonly address: () => string;
   /** Any other address, opened as every link is. */
@@ -120,8 +122,10 @@ export function connectTabs(browser: ConnectBrowser): ConnectTabs {
       return;
     }
     if (press.tab === null) {
-      rememberReturn(browser.address());
-      browser.navigate(url);
+      browser.leave(() => {
+        rememberReturn(browser.address());
+        browser.navigate(url);
+      });
       return;
     }
     // Note that a tab the developer closed before the address came opens nothing, because closing it said no.
@@ -148,7 +152,10 @@ export function connectTabs(browser: ConnectBrowser): ConnectTabs {
 }
 
 /** The tab's own browser, as a connect reaches it. */
-export function tabBrowser(openLink: (url: string) => void): ConnectBrowser {
+export function tabBrowser(
+  openLink: (url: string) => void,
+  leave: (go: () => void) => void,
+): ConnectBrowser {
   return {
     openEmptyTab: () => {
       const tab = window.open("", "_blank");
@@ -156,6 +163,7 @@ export function tabBrowser(openLink: (url: string) => void): ConnectBrowser {
       return tab;
     },
     navigate: (url) => location.assign(url),
+    leave,
     address: () => `${location.pathname}${location.search}${location.hash}`,
     openLink,
   };
