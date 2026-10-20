@@ -113,7 +113,7 @@ test("each experiment is a switch, on as the account chose, that writes the choi
   assert.ok(factory, "Factory has a switch");
   assert.equal(factory.getAttribute("aria-checked"), "true");
   // The row's one line says what turning it on brings; the page says nothing above the rows, the newest experiment's first.
-  assert.ok(page.textContent?.startsWith("GitHub personal access token"));
+  assert.ok(page.textContent?.startsWith("Code review"));
 
   await act(async () => factory.click());
   assert.deepEqual(sent, [{ experiment: EXPERIMENT.FACTORY, on: false }]);
@@ -129,7 +129,6 @@ test("an experiment's Send feedback opens the dialog about that experiment", () 
     for (const button of feedback) button.click();
   });
   assert.deepEqual(feedbackAbout, [
-    EXPERIMENT.GITHUB_TOKEN,
     EXPERIMENT.CODE_REVIEW,
     EXPERIMENT.BROWSER,
     EXPERIMENT.SECTIONS,

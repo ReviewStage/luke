@@ -20,8 +20,6 @@ export const EXPERIMENT = {
   VIDEO_CALLS: "video-calls",
   /** Sections of your own in the sidebar, each a title and an icon, that tasks are dragged into. */
   SECTIONS: "sections",
-  /** A member's own classic GitHub personal access token, for repositories the Luke GitHub App is not installed on. */
-  GITHUB_TOKEN: "github-token",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -45,13 +43,6 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
-  {
-    key: EXPERIMENT.GITHUB_TOKEN,
-    name: "GitHub personal access token",
-    detail: "Use a classic personal access token for repositories without the Luke GitHub App.",
-    owner: "Dean",
-    since: "2026-10-19",
-  },
   {
     key: EXPERIMENT.CODE_REVIEW,
     name: "Code review",

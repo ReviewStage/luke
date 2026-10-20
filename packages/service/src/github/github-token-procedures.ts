@@ -14,10 +14,8 @@
  * `invalid-request` slug (`orpc/errors.ts`), so what the schema said of the
  * token never leaves the function.
  *
- * The path answers only while the member has the GitHub token experiment on
- * (`EXPERIMENT.GITHUB_TOKEN`), and as a path that names nothing otherwise.
  * A deployment holding no ring, or one it cannot parse, answers every
- * request unavailable. The caller, the experiment, the ring, and the save's
+ * request unavailable. The caller, the ring, and the save's
  * body bound are each checked on the resource's implementer, in that order,
  * so they run before oRPC reads the save's body, as the old group checked
  * them before it read one. A save is braked per member, ten an hour, as the
@@ -25,7 +23,6 @@
  * the caller's.
  */
 
-import { accountExperimentOn } from "@luke/database/models/account-store";
 import {
   type GitHubTokenRow,
   linkedGitHubUserIds,
@@ -46,7 +43,6 @@ import {
   type GitHubTokenRejection,
   type GitHubTokenSummary,
 } from "@luke/features/github-token-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { DateTime, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
 import { HttpClient } from "effect/http";
@@ -57,7 +53,7 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { makeRateBrake } from "../http/rate-brake.js";
-import { accountMiddleware, type HostedCaller, type HostedContext, hosted } from "../orpc/base.js";
+import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import { githubRead } from "./github-app.js";
 
 const SAVE_BRAKE = {
@@ -181,18 +177,6 @@ const checkGitHubToken = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
 });
 
-/** The path names nothing for a member without the GitHub token experiment on. */
-const experimentMiddleware = middlewareGen<HostedContext & HostedCaller>(function* ({
-  context,
-  next,
-}) {
-  const on = yield* hostedStoreOrUnavailable(
-    accountExperimentOn(context.userId, EXPERIMENT.GITHUB_TOKEN),
-  );
-  if (!on) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return yield* next();
-});
-
 /** The deployment's ring, handed on as the procedure's, or the request refused as unavailable where it holds none it can parse. */
 const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: KeyRing }>(function* ({
   next,
@@ -233,12 +217,11 @@ const tokenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   } satisfies GitHubTokenAnswer;
 });
 
-/** The token's three procedures, braked per instance, each to a signed-in member with the experiment on, on a deployment that holds a ring. */
+/** The token's three procedures, braked per instance, each to a signed-in member, on a deployment that holds a ring. */
 export function githubTokenProcedures(seams: GitHubTokenProcedureSeams) {
   const brake = makeRateBrake(SAVE_BRAKE);
   const held = hosted.githubToken
     .use(accountMiddleware(seams.resolveUserId))
-    .use(experimentMiddleware)
     .use(keyRingMiddleware);
   return {
     read: held.read.effect(function* ({ context }) {
