@@ -34,6 +34,9 @@ const PHONE_WIDTH = 390;
 
 let root: Root | undefined;
 
+/** What the fake answers a sign-out with: Better Auth's success, unless a test refuses it. */
+let signOutStatus = 200;
+
 const SIGNED_IN = {
   session: { id: "session-1" },
   user: { id: "user-1", name: "Ada Lovelace", email: "ada@example.com", image: null },
@@ -43,15 +46,19 @@ const SIGNED_IN = {
 async function openAdmin(address = "/admin"): Promise<HTMLElement> {
   vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
-    const answer = (body: WireValue) =>
+    const answer = (body: WireValue, status = 200) =>
       Promise.resolve(
         new Response(JSON.stringify(body), {
-          status: 200,
+          status,
           headers: { "content-type": "application/json" },
         }),
       );
     if (url.pathname === SESSION_PATH) return answer(SIGNED_IN);
-    if (url.pathname === SIGN_OUT_PATH) return answer({ success: true });
+    if (url.pathname === SIGN_OUT_PATH) {
+      return signOutStatus === 200
+        ? answer({ success: true })
+        : answer({ message: "Sign-out failed" }, signOutStatus);
+    }
     return new Promise(() => undefined);
   });
   window.localStorage.setItem("luke-admin-sign-in-chosen", "true");
@@ -125,6 +132,7 @@ afterEach(() => {
   vi.runOnlyPendingTimers();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  signOutStatus = 200;
   window.localStorage.clear();
   document.body.replaceChildren();
 });
@@ -343,4 +351,56 @@ test("a quarter's address opens Reliability on the month, the longest window it 
   const radios = Array.from(windows?.querySelectorAll('[role="radio"]') ?? []);
   expect(radios.map((radio) => radio.textContent)).toEqual(["7d", "30d"]);
   expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "true"]);
+});
+
+/** A press as a pointer makes it: its pointerdown, which a dismissal listens for, then its click. */
+async function press(element: Element | null | undefined): Promise<void> {
+  if (!(element instanceof HTMLElement)) throw new Error("Nothing to press");
+  await act(async () => {
+    element.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    element.click();
+  });
+}
+
+/** The Log out question's own button for `words`. */
+function dialogButton(words: string): HTMLButtonElement | undefined {
+  return Array.from(document.querySelectorAll('[role="alertdialog"] button')).find(
+    (candidate): candidate is HTMLButtonElement =>
+      candidate instanceof HTMLButtonElement && candidate.textContent === words,
+  );
+}
+
+test("in a phone's drawer, Log out and its question are pressed through without the drawer going away", async () => {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ width: PHONE_WIDTH, height: 800 }),
+  );
+  const page = await openAdmin();
+  await vi.waitFor(() => expect(page.querySelector("main h1")?.textContent).toBe("Overview"));
+  await press(button("Show sidebar"));
+  await press(await accountButton(page));
+
+  await press(document.querySelector('[role="menu"] [role="menuitem"]'));
+  expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+    "Log out of ada@example.com?",
+  );
+  expect(unreachable(sectionLink(page, "Users"))).toBe(false);
+
+  await press(dialogButton("Log out"));
+  await vi.waitFor(() => expect(page.querySelector("nav")).toBeNull());
+});
+
+test("a sign-out the service refuses says so and leaves the dashboard signed in", async () => {
+  signOutStatus = 500;
+  const page = await openAdmin();
+  await press(await accountButton(page));
+  await press(document.querySelector('[role="menu"] [role="menuitem"]'));
+  await press(dialogButton("Log out"));
+
+  await vi.waitFor(() =>
+    expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+      "Luke could not log out. Try again.",
+    ),
+  );
+  expect(page.querySelector('nav[aria-label="Admin sections"]')).not.toBeNull();
+  expect(window.localStorage.getItem("luke-admin-sign-in-chosen")).toBe("true");
 });

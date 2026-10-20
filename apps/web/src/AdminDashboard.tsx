@@ -88,10 +88,14 @@ export function AdminDashboard(): React.JSX.Element {
   // way any refetch does.
   const metrics = useMetricsRead(hideAdmins, windowDays, view.kind === "dashboard");
   const withdrawSession = metrics.withdraw;
+  // Note that Better Auth answers a refused sign-out as a result rather than a
+  // throw, so the refusal is thrown here: the session still stands, and
+  // nothing past this may say it is gone.
   const signOut = useCallback(
     () =>
       withdrawSession(async () => {
-        await authClient.signOut();
+        const { error } = await authClient.signOut();
+        if (error) throw new Error("The sign-out was refused.");
         SIGN_IN_CHOSEN.write(false);
       }),
     [withdrawSession],

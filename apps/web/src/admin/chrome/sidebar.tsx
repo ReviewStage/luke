@@ -204,12 +204,17 @@ function AdminSidebar({
 
 /**
  * The drawer's own dismissals while it stands over a narrow room's view: a
- * press anywhere but the drawer and the toggle, and Escape, which hands the
- * keyboard back to the toggle. Opened, it takes the keyboard to the place
- * shown, as the app's drawer does.
+ * press on the shell anywhere but the drawer and the toggle, and Escape in
+ * it, which hands the keyboard back to the toggle. Opened, it takes the keyboard
+ * to the place shown, as the app's drawer does. Note that a press outside
+ * the shell, or Escape there, is not the view's: the account's menu and the
+ * Log out question are drawn over the page from the body, and what is
+ * pressed in them is theirs, so it must not put the drawer, and them with
+ * it, away.
  */
 function useDrawerDismiss(
   open: boolean,
+  shell: React.RefObject<HTMLElement | null>,
   drawer: React.RefObject<HTMLElement | null>,
   toggle: React.RefObject<HTMLButtonElement | null>,
   onClose: () => void,
@@ -219,12 +224,14 @@ function useDrawerDismiss(
     drawer.current?.querySelector<HTMLElement>('[aria-current="page"]')?.focus();
     const press = (event: PointerEvent) => {
       const target = event.target;
-      if (!(target instanceof Node)) return;
+      if (!(target instanceof Node) || shell.current?.contains(target) !== true) return;
       if (drawer.current?.contains(target) || toggle.current?.contains(target)) return;
       onClose();
     };
     const key = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      const target = event.target;
+      if (event.key !== "Escape" || !(target instanceof Node)) return;
+      if (shell.current?.contains(target) !== true) return;
       onClose();
       toggle.current?.focus();
     };
@@ -234,7 +241,7 @@ function useDrawerDismiss(
       document.removeEventListener("pointerdown", press);
       document.removeEventListener("keydown", key);
     };
-  }, [open, drawer, toggle, onClose]);
+  }, [open, shell, drawer, toggle, onClose]);
 }
 
 /**
@@ -270,10 +277,11 @@ export function AdminShell({
   const drawerOpen = overlay === SIDEBAR_OVERLAY.OPEN;
   const collapsed = hidden || narrow;
   const inSight = !collapsed || drawerOpen;
+  const shell = useRef<HTMLDivElement | null>(null);
   const sidebar = useRef<HTMLElement | null>(null);
   const toggle = useRef<HTMLButtonElement | null>(null);
   const closeDrawer = useCallback(() => setOverlay(SIDEBAR_OVERLAY.CLOSED), []);
-  useDrawerDismiss(drawerOpen, sidebar, toggle, closeDrawer);
+  useDrawerDismiss(drawerOpen, shell, sidebar, toggle, closeDrawer);
 
   const onToggle = () => {
     if (!narrow) {
@@ -291,6 +299,7 @@ export function AdminShell({
   return (
     <div ref={stage.ref} className="relative h-dvh">
       <div
+        ref={shell}
         className="desktop-shell"
         data-room={stage.room}
         data-sidebar-collapsed={String(collapsed)}
