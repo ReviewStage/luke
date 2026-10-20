@@ -97,6 +97,16 @@ patchedDependencies:
 # the map.
   eve@0.74.0: patches/eve@0.74.0.patch
 
+# `@neon/realtime-drizzle` 0.1.0 declares `drizzle-orm` `>=0.45.2 <0.46.0` as
+# its peer, but its adapter reads only what a select compiles to and the
+# fields it selected, which 1.0.0-rc.4 builds the same way: sealing a
+# `liveSelection` read through it was checked to match our SQL and values
+# (`packages/service/src/live/realtime.test.ts`). Delete this when a release
+# declares the 1.0 line.
+peerDependencyRules:
+  allowedVersions:
+    "@neon/realtime-drizzle>drizzle-orm": 1.0.0-rc.4
+
 # A dependency is keyed by its peers' names alone, not by the peers' own peer
 # graphs, so one `vitest` serves every workspace. Keyed in full, a peer's own
 # optional peers can split `vitest` in two, and `@effect/vitest` then reads

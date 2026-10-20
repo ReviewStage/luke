@@ -1120,6 +1120,9 @@ importers:
       '@neon/realtime':
         specifier: 0.1.1
         version: 0.1.1(ws@8.21.3)
+      '@neon/realtime-drizzle':
+        specifier: 0.1.0
+        version: 0.1.0(@neon/realtime@0.1.1)(drizzle-orm@1.0.0-rc.4)
       '@orpc/contract':
         specifier: 'catalog:'
         version: 2.0.0-beta.44
@@ -2594,6 +2597,16 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
+
+  '@neon/realtime-drizzle@0.1.0':
+    resolution: {integrity: sha512-JZ4g5Zg2klNxF7QPxUKU77d8i+IEtX3fQ83oDoG61/DUi8jPZrTuZGhQyZuspaYTb+tPMYhITBpaRd1qAr0Xtg==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      '@neon/realtime': ^0.1.0
+      drizzle-orm: '>=0.45.2 <0.46.0'
+    peerDependenciesMeta:
+      drizzle-orm:
+        optional: true
 
   '@neon/realtime@0.1.1':
     resolution: {integrity: sha512-YbTaKcq7Vmaw05oEu/1HNbxrtLeHaofnPHptd6QPGZj2M1uZJRJKKrjb+ShH0GpR5fpBlp8S4iZcTW3IsnIoqg==}
@@ -9229,6 +9242,12 @@ snapshots:
       '@emnapi/runtime': 1.11.2
       '@tybys/wasm-util': 0.10.3
     optional: true
+
+  '@neon/realtime-drizzle@0.1.0(@neon/realtime@0.1.1)(drizzle-orm@1.0.0-rc.4)':
+    dependencies:
+      '@neon/realtime': 0.1.1(ws@8.21.3)
+    optionalDependencies:
+      drizzle-orm: 1.0.0-rc.4(patch_hash=7eca027493ea68b0777e0306d382bf89cdd6217b8c3377c6d44e7911303f9f5b)(@effect/sql-pg@4.0.4)(@effect/sql-pglite@4.0.4)(@electric-sql/pglite@0.5.8)(@opentelemetry/api@1.9.1)(@types/pg@8.21.0)(effect@4.0.4)(pg@8.23.0)(zod@4.5.4)
 
   '@neon/realtime@0.1.1(ws@8.21.3)':
     dependencies:
