@@ -11,10 +11,13 @@ import {
   AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
+  BROWSER_ACT_KIND,
   FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
   SETTINGS_ACT_KIND,
   TASKS_ACT_KIND,
+  UPDATE_ACT_KIND,
+  WINDOW_SURFACE_ACT_KIND,
 } from "@luke/host/contract";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
@@ -799,10 +802,13 @@ const REFUSED_ON_PORT: readonly string[] = Object.values({
   ...AGENT_ACT_KIND,
   ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
+  ...BROWSER_ACT_KIND,
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,
+  ...UPDATE_ACT_KIND,
+  ...WINDOW_SURFACE_ACT_KIND,
 }).filter((kind) => kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN);
 
 /**
@@ -824,7 +830,7 @@ async function handBridge(): Promise<void> {
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    // A read of the account's automations, integrations, a Factory world, or its coding agents, their Inbox, or the chat, an account or settings act, and a task kind are refused, as `app:act` refused them before they moved onto the port.
+    // A read of the account's automations, integrations, a Factory world, or its coding agents, their Inbox, or the chat, an account or settings act, a task kind, and the platform's updater, Browser tab, and window acts are refused, as `app:act` refused them before they moved onto the port.
     if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });

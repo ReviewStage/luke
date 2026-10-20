@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { MENTION_KIND, type Mention, type MentionLines } from "@luke/features/mention-link";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, type Act } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -48,12 +48,7 @@ const told: (Act | OpenedLink)[] = [];
 beforeEach(() => {
   told.length = 0;
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      told.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppBridge({});
   fakeActPort(openingLinks((link) => told.push(link)));
 });
 

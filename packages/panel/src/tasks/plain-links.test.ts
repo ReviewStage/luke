@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, type Act } from "@luke/host/acts";
 import { useConfirmDialog } from "@luke/ui";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { Effect } from "effect";
@@ -97,12 +97,7 @@ beforeEach(() => {
   sent = [];
   installEditorLayout();
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppBridge({});
   fakeActPort(openingLinks((link) => sent.push(link)));
 });
 

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
+import { askAct } from "@luke/panel/act";
+import { installActPort } from "@luke/panel/app-bridge";
 import { HOST_CAPABILITY } from "@luke/settings";
 import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/settings-controls";
 import { Context, Effect, Layer } from "effect";
@@ -141,19 +143,18 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         browser = fakeNotifications({ permission: "default", answer: "granted" });
-        const { bridge } = yield* standingHost(fakeService({ signedIn: true }));
+        const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+        installActPort(actPort);
         const loaded = yield* Effect.promise(() => bridge.requestAppState());
 
         assert.equal(browser.permissionAsks, 0, "nothing asks as the tab loads");
         assert.ok(loaded.run.capabilities.includes(HOST_CAPABILITY.NOTIFICATIONS));
         assert.equal(loaded.notifications.status, NOTIFICATIONS_STATUS.UNKNOWN);
 
-        const outcome = yield* Effect.promise(() =>
-          bridge.act({ kind: ACT_KIND.NOTIFICATIONS_TEST }),
-        );
+        const outcome = yield* Effect.promise(() => askAct(ACT_KIND.NOTIFICATIONS_TEST));
         const after = yield* Effect.promise(() => bridge.requestAppState());
 
-        assert.equal(outcome.status, ACT_OUTCOME_STATUS.DONE);
+        assert.equal(outcome, undefined);
         assert.equal(browser.permissionAsks, 1);
         assert.deepEqual(
           browser.shown.map(({ title }) => title),
@@ -168,9 +169,10 @@ it.effect("a permission the browser refuses on the test says notifications are o
   Effect.scoped(
     Effect.gen(function* () {
       browser = fakeNotifications({ permission: "default", answer: "denied" });
-      const { bridge } = yield* standingHost(fakeService({ signedIn: true }));
+      const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+      installActPort(actPort);
 
-      yield* Effect.promise(() => bridge.act({ kind: ACT_KIND.NOTIFICATIONS_TEST }));
+      yield* Effect.promise(() => askAct(ACT_KIND.NOTIFICATIONS_TEST));
       const after = yield* Effect.promise(() => bridge.requestAppState());
 
       assert.deepEqual(browser.shown, []);

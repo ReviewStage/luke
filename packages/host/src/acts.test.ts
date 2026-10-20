@@ -7,15 +7,10 @@ test("an envelope that is not one act of a named kind is refused whole", () => {
   assert.equal(parsedAct("session.open"), undefined);
   assert.equal(parsedAct({}), undefined);
   assert.equal(parsedAct({ kind: "session.reopen" }), undefined);
-  // A key beside the two the envelope has is a shape this build does not know.
-  assert.equal(parsedAct({ kind: ACT_KIND.WINDOW_FOCUS_PANEL, sender: "panel" }), undefined);
-  // A payload sent to a kind that takes none, and a kind that takes one sent none.
-  assert.equal(parsedAct({ kind: ACT_KIND.WINDOW_FOCUS_PANEL, payload: { now: true } }), undefined);
-  assert.equal(parsedAct({ kind: ACT_KIND.WINDOW_COPY_TEXT }), undefined);
-  // A payload its own schema refuses is refused here.
-  assert.equal(parsedAct({ kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: 3 } }), undefined);
-  assert.equal(
-    parsedAct({ kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: "x", extra: 1 } }),
-    undefined,
-  );
+});
+
+test("a kind the act port answers is no act of app:act's, however well formed", () => {
+  assert.equal(parsedAct({ kind: ACT_KIND.WINDOW_FOCUS_PANEL }), undefined);
+  assert.equal(parsedAct({ kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: "x" } }), undefined);
+  assert.equal(parsedAct({ kind: ACT_KIND.UPDATE_CHECK }), undefined);
 });
