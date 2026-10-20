@@ -26,10 +26,10 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** Each part of a row, by the class it wears after `task-issue-link-`. */
-const PARTS = ["mark", "key", "title", "state", "relation", "unlink"] as const;
+/** The parts that lead a row, by the class each wears after `task-issue-link-`. */
+const LEAD = ["mark", "key", "title"] as const;
 
-/** The parts that are presses or words that must stay whole. */
+/** The parts that follow them in its controls, the same way. */
 const CONTROLS = ["state", "relation", "unlink"] as const;
 
 /** A linked issue's row drawn in a shell standing in `room`, the sheets laid for a touch screen. */
@@ -39,8 +39,10 @@ function rowIn(room: "narrow" | "wide"): HTMLElement {
     `<div class="desktop-shell" data-room="${room}">`,
     '<section class="task-issue-links"><ul class="task-issue-links-rows">',
     '<li class="task-issue-link" data-provider="github">',
-    ...PARTS.map((part) => `<span class="task-issue-link-${part}"></span>`),
-    "</li></ul></section></div>",
+    ...LEAD.map((part) => `<span class="task-issue-link-${part}"></span>`),
+    '<span class="task-issue-link-controls">',
+    ...CONTROLS.map((part) => `<span class="task-issue-link-${part}"></span>`),
+    "</span></li></ul></section></div>",
   ].join("");
   return document.querySelector<HTMLElement>(".task-issue-link") ?? assert.fail("the row stands");
 }
@@ -59,29 +61,37 @@ function lineOf(row: HTMLElement, part: string): number | undefined {
   return at === -1 ? undefined : at;
 }
 
+/** How `part` of the row is drawn. */
+function styleOf(row: HTMLElement, part: string): CSSStyleDeclaration {
+  return getComputedStyle(
+    row.querySelector(`.task-issue-link-${part}`) ?? assert.fail(`${part} stands`),
+  );
+}
+
 test("on a phone a linked issue's controls stand on a line of their own, under a title that gives way", () => {
   const row = rowIn("narrow");
   assert.equal(getComputedStyle(row).display, "grid");
   const title = lineOf(row, "title");
+  const controls = lineOf(row, "controls");
   assert.notEqual(title, undefined, "the title stands in the row");
-  for (const control of CONTROLS) {
-    const line = lineOf(row, control);
-    assert.notEqual(line, undefined, `${control} stands in the row`);
-    assert.notEqual(line, title, `${control} is not on the title's line`);
+  assert.notEqual(controls, undefined, "the controls stand in the row");
+  assert.notEqual(controls, title, "the controls are not on the title's line");
+  assert.equal(
+    styleOf(row, "controls").display,
+    "flex",
+    "the controls stand in one row of their own",
+  );
+  assert.equal(styleOf(row, "state").minWidth, "0px", "the state gives way before a control does");
+  for (const control of ["relation", "unlink"]) {
+    assert.equal(styleOf(row, control).flexShrink, "0", `${control} keeps its whole width`);
   }
   const tracks = getComputedStyle(row).getPropertyValue("grid-template-columns");
   assert.match(tracks, /minmax\(0,\s*1fr\)/, "the title's track may shrink to nothing");
-  for (const line of lines(row)) {
-    assert.equal(
-      line.length,
-      tracks.match(/minmax\([^)]*\)|\S+/g)?.length,
-      "every line spans the tracks",
-    );
-  }
 });
 
-test("in a wide room a linked issue keeps its one line", () => {
+test("in a wide room a linked issue keeps its one line, its controls among its parts", () => {
   const row = rowIn("wide");
   assert.equal(getComputedStyle(row).display, "flex");
+  assert.equal(styleOf(row, "controls").display, "contents");
   assert.deepEqual(lines(row), []);
 });

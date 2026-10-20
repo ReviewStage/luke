@@ -105,35 +105,38 @@ function LinkRow({
           {link.title}
         </TextButton>
       </span>
-      {state === undefined ? null : <span className="task-issue-link-state">{state}</span>}
-      <span className="task-issue-link-relation">
-        <Tooltip label={LINKS_WORDS.RELATION}>
-          <span>
-            <ChoiceBar
-              label={`${LINKS_WORDS.RELATION}: ${link.key}`}
-              items={RELATION_ITEMS}
-              value={link.relation}
-              look={CHOICE_BAR_LOOK.SEGMENTED}
-              size={CHOICE_BAR_SIZE.COMPACT}
-              disabled={!editable}
-              onChange={(relation) => {
-                if (relation !== link.relation) onRelate(relation);
-              }}
-            />
-          </span>
-        </Tooltip>
-      </span>
-      {editable ? (
-        <span className="task-issue-link-unlink">
-          <Tooltip label={LINKS_WORDS.UNLINK}>
-            <IconButton
-              icon={<CloseIcon />}
-              label={`${LINKS_WORDS.UNLINK} ${link.key}`}
-              onClick={onUnlink}
-            />
+      {/* Note that the controls stand in the row's line as its other parts do, and take a line of their own on a phone (`tasks.css`). */}
+      <span className="task-issue-link-controls">
+        {state === undefined ? null : <span className="task-issue-link-state">{state}</span>}
+        <span className="task-issue-link-relation">
+          <Tooltip label={LINKS_WORDS.RELATION}>
+            <span>
+              <ChoiceBar
+                label={`${LINKS_WORDS.RELATION}: ${link.key}`}
+                items={RELATION_ITEMS}
+                value={link.relation}
+                look={CHOICE_BAR_LOOK.SEGMENTED}
+                size={CHOICE_BAR_SIZE.COMPACT}
+                disabled={!editable}
+                onChange={(relation) => {
+                  if (relation !== link.relation) onRelate(relation);
+                }}
+              />
+            </span>
           </Tooltip>
         </span>
-      ) : null}
+        {editable ? (
+          <span className="task-issue-link-unlink">
+            <Tooltip label={LINKS_WORDS.UNLINK}>
+              <IconButton
+                icon={<CloseIcon />}
+                label={`${LINKS_WORDS.UNLINK} ${link.key}`}
+                onClick={onUnlink}
+              />
+            </Tooltip>
+          </span>
+        ) : null}
+      </span>
     </li>
   );
 }

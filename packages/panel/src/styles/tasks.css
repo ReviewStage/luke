@@ -6009,16 +6009,22 @@ ol.transcript-list {
   flex: none;
 }
 
+/* A row's state and controls stand in its line as its other parts do. */
+.task-issue-link-controls {
+  display: contents;
+}
+
 /* On a phone a row's controls, its state, its Closes / Part of switch, and
    its ×, are wider together than the box beside its key, so the row takes
    two lines: its mark, key, and title, cut short, over its state and its
-   controls at the row's end. Nothing is ever pushed past the box's edge. */
+   controls at the row's end, under the key and the title. The state gives
+   way before a control does, so nothing is pushed past the box's edge. */
 .desktop-shell[data-room="narrow"] .task-issue-link {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto auto minmax(0, 1fr);
   grid-template-areas:
-    "mark key title title title"
-    ". state state relation unlink";
+    "mark key title"
+    ". controls controls";
   gap: var(--luke-space-4) var(--luke-space-8);
 }
 
@@ -6034,19 +6040,21 @@ ol.transcript-list {
   grid-area: title;
 }
 
-.desktop-shell[data-room="narrow"] .task-issue-link-state {
-  grid-area: state;
+.desktop-shell[data-room="narrow"] .task-issue-link-controls {
+  display: flex;
   min-width: 0;
+  grid-area: controls;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-space-8);
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-state {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: auto;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.desktop-shell[data-room="narrow"] .task-issue-link-relation {
-  grid-area: relation;
-}
-
-.desktop-shell[data-room="narrow"] .task-issue-link-unlink {
-  grid-area: unlink;
 }
 
 .task-issue-links-note {
