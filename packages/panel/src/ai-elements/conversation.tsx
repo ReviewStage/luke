@@ -86,9 +86,12 @@ export function Conversation({ className, children, ...props }: ConversationProp
   // touches no layout.
   const observed = useRef<{ box: HTMLDivElement; count: number; last: Element | null }>(undefined);
   // A line can grow a word or shrink, a card or a group closed, without the
-  // list scrolling or this rendering, so one observer watches the log and
-  // its lines: it keeps a log that follows its newest line at its bottom,
-  // and puts one back there once nothing is left below to scroll to.
+  // list scrolling or this rendering, so one observer watches the scroll box
+  // and the block its lines stand in: it keeps a log that follows its newest
+  // line at its bottom, and puts one back there once nothing is left below
+  // to scroll to. Note that it watches no line of its own, because the block
+  // is as tall as its lines, so any line resizing resizes it, and a line
+  // replaced or removed is then never held by the observer.
   const [resized] = useState(
     () =>
       new ResizeObserver(() => {
@@ -120,9 +123,7 @@ export function Conversation({ className, children, ...props }: ConversationProp
     observed.current = { box: element, count, last };
     if (following.current) element.scrollTop = element.scrollHeight;
     resized.observe(element);
-    if (lines === null) return;
-    resized.observe(lines);
-    for (const line of lines.children) resized.observe(line);
+    if (lines !== null) resized.observe(lines);
   });
   const scrollToBottom = useCallback(() => {
     following.current = true;
