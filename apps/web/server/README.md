@@ -579,15 +579,15 @@ warm invocation reaches the services the cold one built. A group's routes are
 a layer rather than a value because that is what an `HttpRouter` registration
 is: the router is a service the layer writes each path into, and the
 requirements a route's own handler has travel as request markers the handler
-provides per request from the context `runWeb` read. The auth group, the
-events and maintenance groups below, the account group's
-`server/routes/account/delete.ts`, `preferences.ts`, and `plan-template.ts`,
-and the tasks group's four are converted this way; the voice route alone exports something else, the
+provides per request from the context `runWeb` read. The routes the hosted
+oRPC route does not answer are converted this way: auth, the two webhooks,
+the maintenance sweep and key rewrap, the GitHub and integration redirects,
+and the byte routes; the voice route alone exports something else, the
 `http.Server` described under "Hosted voice service".
 
 `packages/service/src/http/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
-`readJsonBodyEffect` reading a bounded body off the request stream. A refusal is declared as its body
+`readBodyBytesEffect` reading a bounded body off the request stream. A refusal is declared as its body
 rather than as a `Schema.TaggedError`, because `error` is already the
 discriminant the desktop's hosted clients read and a `_tag` beside it would be
 a byte they never asked for.
