@@ -95,6 +95,12 @@ test("a path no procedure matches is the router's own JSON 404 through the fallb
   }
 });
 
+test("a procedure's path with a trailing slash reaches the procedure through the fallback, where no exact rule once took it", async () => {
+  const unsigned = await dispatched(new Request(`${ORIGIN}/api/models/`), ORPC_ROUTES);
+  assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED);
+  assert.equal(await unsigned.text(), '{"error":"invalid-token"}');
+});
+
 test("/api/models refuses through the committed table, the dispatcher and the deployed route as its old group did", async () => {
   const routes = ORPC_ROUTES;
   const unsigned = await dispatched(new Request(`${ORIGIN}/api/models`), routes);
