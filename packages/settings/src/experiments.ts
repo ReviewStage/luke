@@ -20,7 +20,7 @@ export const EXPERIMENT = {
   VIDEO_CALLS: "video-calls",
   /** Sections of your own in the sidebar, each a title and an icon, that tasks are dragged into. */
   SECTIONS: "sections",
-  /** The sidebar as the Inbox: its threads under their tasks, and the task list on a Tasks page beside the Board. */
+  /** The sidebar as the Inbox: its threads under their tasks where the task list stood, the tasks left to the Tasks page. */
   INBOX_FIRST: "inbox-first",
 } as const;
 
@@ -49,8 +49,8 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.INBOX_FIRST,
     name: "Inbox-first sidebar",
     detail:
-      "The sidebar lists your Inbox's threads under their tasks, and your tasks move to a " +
-      "Tasks page with a List and a Board.",
+      "The sidebar lists your Inbox's threads under their tasks in place of your task list, " +
+      "which you find on the Tasks page.",
     owner: "Dean",
     since: "2026-10-20",
   },

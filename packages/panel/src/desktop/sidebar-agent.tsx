@@ -11,14 +11,17 @@ import {
 import { ACTOR_KIND, ACTOR_STATE, type Actor, teammateCreator } from "@luke/ui/actor-model";
 import { agentRow, taskRowName } from "@luke/ui/task-list-model";
 import { useCallback, useRef } from "react";
+import { useAct } from "../act.js";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { agentPlace, useCopyLinkItem } from "../copy-link-item.js";
 import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
+import { type CodingAgentsControl, readAgentById } from "../tasks/use-coding-agents.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { useAgentArchive, useAgentUnarchive } from "./agent-archive.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
 
 /**
@@ -35,6 +38,11 @@ import { useRowPlace, withRowMoves } from "./row-moves.js";
  * task's row does: Copy link, the agent's own, as its page's ⋯ copies it,
  * then Pin or Unpin, the reader's own, which moves the row in or out of
  * Pinned at once; an archived agent offers no pin, as an archived task.
+ * Last stands Archive agent, as a task's agent's tab offers it, asked first
+ * while the agent works (`agent-archive.tsx`), or Unarchive once it is
+ * archived. Note that the agent is read again by its own id before it is
+ * archived unasked, because the row's status is the list's and the task
+ * open's agents never hold it.
  */
 
 /** What the row's menu is called, as the agent page's ⋯ is. */
@@ -63,6 +71,7 @@ function pinItem(agent: TasklessAgent, onPin: (pinned: boolean) => void): MenuAc
 /** One agent with no task among the sidebar's tasks. */
 export function SidebarAgent({
   agent,
+  agents,
   current,
   unread,
   now,
@@ -74,6 +83,8 @@ export function SidebarAgent({
   onPin,
 }: {
   agent: TasklessAgent;
+  /** The window's agent control, whose archive acts on any agent by its id. */
+  agents: CodingAgentsControl;
   /** Whether this agent's page is the one standing. */
   current: boolean;
   /** Whether its turn ended while the developer was not looking at it. */
@@ -102,9 +113,17 @@ export function SidebarAgent({
   const menu = useMenu(shown);
   const place = useRowPlace();
   const copyLink = useCopyLinkItem()(agentPlace(agent));
+  const { act } = useAct();
+  const archive = useAgentArchive(
+    agent,
+    { ...agents, readAgent: (agentId) => readAgentById(act, agentId) },
+    shown,
+  );
+  const unarchive = useAgentUnarchive(agent.id, agents);
   const groups = [
     copyLink === undefined ? [] : [copyLink],
     onPin === undefined ? [] : [pinItem(agent, onPin)],
+    [agent.archivedAt === undefined ? archive.action : unarchive],
   ].filter((group) => group.length > 0);
   return (
     <>
@@ -141,7 +160,7 @@ export function SidebarAgent({
           menu.close(false);
           onOpen();
         }}
-        contextMenu={groups.length === 0 ? undefined : menu.contextMenu(row)}
+        contextMenu={menu.contextMenu(row)}
       />
       {menu.drawn === undefined ? null : (
         <ActionMenu
@@ -151,6 +170,7 @@ export function SidebarAgent({
           onClose={menu.close}
         />
       )}
+      {archive.dialog}
     </>
   );
 }
