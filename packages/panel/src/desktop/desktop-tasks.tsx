@@ -35,6 +35,7 @@ import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { ArchivedBanner } from "../tasks/archived-task.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
+import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
 import { InboxList, InboxListSkeleton, ItemMark, ShowEmpty } from "../tasks/inbox-list.js";
@@ -234,6 +235,7 @@ function TaskInboxTab({
     // Note that a task's own Inbox offers no Mark all as read.
     onMarkedAll: () => undefined,
   });
+  const closeItem = useInboxCloser({ act, onHeard: tasks.agents.onRetryList });
   // Note that the task's read draws the window's own marks, answers, and messages over it already (`inbox-settling.ts`).
   const groups = [
     { holder: taskHolder(task), items: [...inbox.board.open, ...inbox.board.settled] },
@@ -324,6 +326,7 @@ function TaskInboxTab({
         }
         onChoose={open}
         onMark={(listed, unread) => marks.onMark(listed.item, unread)}
+        onClose={closeItem}
       />
       {chosen === undefined ? (
         <section
@@ -354,6 +357,8 @@ function TaskInboxTab({
             onOpenAgent,
             openLink,
             code,
+            onMark: marks.onMark,
+            onClose: closeItem,
             // An archived plan's items are read but not answered, the box giving way to Unarchive.
             onUnarchive:
               task.archivedAt === undefined

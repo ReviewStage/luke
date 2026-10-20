@@ -76,6 +76,7 @@ import { useMemberDirectory } from "../member-directory.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
 import { providerOf } from "./coding-agent-model.js";
+import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import {
   INBOX_COLUMNS,
   type InboxColumnsShown,
@@ -83,6 +84,7 @@ import {
   listHeadControl,
 } from "./inbox-columns.js";
 import {
+  archivedHolder,
   EVERYONES,
   holderKey,
   holderName,
@@ -419,7 +421,12 @@ export function ItemMark({
  * Copy link, the item's link under the task or the agent that holds it, where
  * the list hands down a workspace to write it under. Where the list hands
  * down its media reads (`media`), the row shows the pictures and pages its
- * item carries under its preview (`inbox-row-media.tsx`).
+ * item carries under its preview (`inbox-row-media.tsx`). Where the list
+ * hands down `onClose`, an open item's row offers to close it without an
+ * answer, asked first (`inbox-close.tsx`): a press beside its mark while
+ * the pointer rests on it or it holds the keyboard, and the last item of
+ * its right-click menu; never on an archived task's item, which nothing
+ * answers until the task is back.
  */
 export function InboxItemRow({
   listed,
@@ -435,6 +442,7 @@ export function InboxItemRow({
   ref,
   onChoose,
   onMark,
+  onClose,
 }: {
   listed: InboxListed;
   chosen: boolean;
@@ -456,6 +464,8 @@ export function InboxItemRow({
   onChoose: (listed: InboxListed) => void;
   /** Marks the item read or unread; none where the row offers no mark. */
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
+  /** Closes an open item without an answer; none where the row offers no close. */
+  onClose?: InboxCloser | undefined;
 }): React.JSX.Element {
   const { holder, item } = listed;
   const unread = isUnread(item);
@@ -488,9 +498,11 @@ export function InboxItemRow({
           ...markReadItem({ unread, onMark: (next) => onMark(listed, next) }),
           command: APP_COMMAND.TOGGLE_INBOX_ITEM_READ,
         };
+  const close = useInboxClose(item, archivedHolder(holder) ? undefined : onClose, true);
   const groups = [
     read === undefined ? [] : [read],
     copyLink === undefined ? [] : [copyLink],
+    close.action === undefined ? [] : [close.action],
   ].filter((group) => group.length > 0);
   const press = useRef<HTMLElement | null>(null);
   const hold = useCallback(
@@ -552,15 +564,29 @@ export function InboxItemRow({
         }
         metaAt={LIST_ROW_META.TITLE}
         actions={
-          read === undefined ? undefined : (
-            <Tooltip label={read.label} command={read.command}>
-              <IconButton
-                icon={unread ? <MailOpenIcon /> : <MailIcon />}
-                label={read.label}
-                size={BUTTON_SIZE.COMPACT}
-                onClick={read.onSelect}
-              />
-            </Tooltip>
+          read === undefined && close.action === undefined ? undefined : (
+            <>
+              {read === undefined ? null : (
+                <Tooltip label={read.label} command={read.command}>
+                  <IconButton
+                    icon={unread ? <MailOpenIcon /> : <MailIcon />}
+                    label={read.label}
+                    size={BUTTON_SIZE.COMPACT}
+                    onClick={read.onSelect}
+                  />
+                </Tooltip>
+              )}
+              {close.action === undefined ? null : (
+                <Tooltip label={close.action.label}>
+                  <IconButton
+                    icon={close.action.icon}
+                    label={close.action.label}
+                    size={BUTTON_SIZE.COMPACT}
+                    onClick={close.action.onSelect}
+                  />
+                </Tooltip>
+              )}
+            </>
           )
         }
         actionsAt={LIST_ROW_ACTIONS.HOVER}
@@ -582,6 +608,7 @@ export function InboxItemRow({
       {menu.drawn === undefined || groups.length === 0 ? null : (
         <ActionMenu label={ITEM_ACTIONS} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
+      {close.dialog}
     </>
   );
 }
@@ -1176,6 +1203,7 @@ export function InboxList({
   rows,
   onChoose,
   onMark,
+  onClose,
 }: {
   view: InboxListView;
   /** The id of the item the pane shows. */
@@ -1194,6 +1222,8 @@ export function InboxList({
   onChoose: (listed: InboxListed) => void;
   /** Marks an item read or unread from its row; none where the rows offer no mark. */
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
+  /** Closes an open item without an answer from its row; none where the rows offer no close. */
+  onClose?: InboxCloser | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const { width, onResize } = useInboxListWidth();
@@ -1231,6 +1261,7 @@ export function InboxList({
       ref={rows.hold(listed.item.id)}
       onChoose={onChoose}
       onMark={onMark}
+      onClose={onClose}
     />
   );
   const needingYou = (items: readonly InboxListed[]) =>

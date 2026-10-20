@@ -4016,14 +4016,18 @@ ul.actor-stack {
   font-weight: var(--luke-weight-regular);
 }
 
-/* An item standing alone ends its bar in the pager (`inbox-pager.tsx`):
-   where it stands in the list, in the meta voice's figures, and the arrows
-   up and down it, as far in from the Inbox's edge as its crumbs start. An
-   arrow with nowhere to go steps back. */
-.inbox-pager {
-  align-items: center;
+/* An item's bar ends in its actions, as far in from the Inbox's edge as its
+   crumbs start: the pager where the item stands alone, and its ⋯ menu. */
+.inbox-item-actions {
   margin-left: auto;
   padding-right: var(--column-inset);
+}
+
+/* The pager (`inbox-pager.tsx`): where the item stands in the list, in the
+   meta voice's figures, and the arrows up and down it. An arrow with
+   nowhere to go steps back. */
+.inbox-pager {
+  align-items: center;
 }
 
 .inbox-pager-count {
@@ -4052,9 +4056,10 @@ ul.actor-stack {
   container: inbox-item / inline-size;
 }
 
-/* An item standing alone narrower than its bar's crumbs, the way back, and
-   the pager draws its way back's glyph alone, named still, beside the
-   pager, and the crumbs take a line of their own under them. */
+/* An item standing alone narrower than its bar's crumbs, the way back, the
+   pager, and the ⋯ menu draws its way back's glyph alone, named still,
+   beside the pager and the menu, and the crumbs take a line of their own
+   under them. */
 @container inbox-item (width < 360px) {
   /* The way back folds to its glyph (`FoldingButton`). */
   .inbox-view-items > .desktop-toolbar {
