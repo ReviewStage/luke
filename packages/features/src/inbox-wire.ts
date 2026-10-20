@@ -405,13 +405,8 @@ export function codeLinesReadable(block: Pick<InboxCodeBlock, "startLine" | "end
 /** An image block as an item carries one, naming the attachment the desktop fetches. */
 export type InboxImageBlock = Extract<InboxBlock, { type: typeof INBOX_BLOCK.IMAGE }>;
 
-/** An item's context: its blocks in order, few. */
-export const inboxBlocksSchema = EffectSchema.Array(inboxBlockSchema).check(
-  EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_BLOCKS),
-);
-
 /** One block as the agent posts it: the word blocks as they are kept, and an image by the path of its file in the agent's sandbox, which the service reads and keeps. */
-export const inboxPostBlockSchema = EffectSchema.Union([
+const inboxPostBlockSchema = EffectSchema.Union([
   ...WORD_BLOCKS,
   EffectSchema.Struct({
     type: EffectSchema.Literal(INBOX_BLOCK.IMAGE),
@@ -511,7 +506,7 @@ export type InboxPost = typeof inboxPostInputSchema.Type;
 export const inboxReadInputSchema = EffectSchema.Struct({});
 
 /** What a form's field holds once filled: words, a number, an option, or yes or no, by the field's type. */
-export const inboxFieldValueSchema = EffectSchema.Union([
+const inboxFieldValueSchema = EffectSchema.Union([
   boundedText(INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS),
   EffectSchema.Finite,
   EffectSchema.Boolean,
@@ -569,7 +564,7 @@ const unknownTypeSchema = unknownTypeOf([
 ]);
 
 /** A block as a desktop reads one: one this build knows, or the type alone of one it does not. */
-export const inboxReadBlockSchema = EffectSchema.Union([
+const inboxReadBlockSchema = EffectSchema.Union([
   ...inboxBlockSchema.members,
   EffectSchema.Struct({ type: unknownTypeSchema }),
 ]);

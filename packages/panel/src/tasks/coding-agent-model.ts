@@ -329,7 +329,7 @@ export function endLineReason(
     : FAILURE_REASON.OTHER;
 }
 
-/** The statuses an agent may still write under, which is when its transcript is followed and it can be stopped. */
+/** The statuses an agent may still write under, which is when it can be stopped. */
 const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.STARTING,
   CODING_AGENT_STATUS.RUNNING,
@@ -353,15 +353,6 @@ export function agentGlyphState(status: CodingAgentStatus): GlyphState {
 /** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
 export function agentStateWords(status: CodingAgentStatus): string | undefined {
   return glyphStateWords(agentGlyphState(status), status === CODING_AGENT_STATUS.CANCELLED);
-}
-
-/**
- * Whether an agent's transcript is read on the held long-poll now: only
- * while its tab is on screen and the agent may still write. A tab hidden,
- * a task left, and an agent that ended each stop the reads.
- */
-export function followsAgent(input: { shown: boolean; status: CodingAgentStatus }): boolean {
-  return input.shown && agentStillWriting(input.status);
 }
 
 /** What the Start button says while it cannot start: the task names no repository yet. */

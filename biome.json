@@ -13,6 +13,7 @@
       "!!**/.agents",
       "!.claude/settings.json",
       "!apps/web/fixtures",
+      "!packages/agent-runner/src/codex-protocol",
       "!packages/features/fixtures",
       "!packages/service/fixtures",
       "!packages/wire/fixtures"

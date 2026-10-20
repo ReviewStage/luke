@@ -39,6 +39,12 @@ is a named instance without asking: `preview-<branch>` for the Preview the scrip
 looks up, `preview-<host>` for an address given by hand, so each Preview keeps a
 sign-in of its own and never touches the plain instance's.
 
+Vercel builds no Preview for a coding agent's branch (`luke/**`; the root
+`vercel.json`'s `git.deploymentEnabled`), so `--preview` finds none there. To
+try an agent's change against a Preview, push its branch under another name
+(`git push origin HEAD:<name>`) and run `--preview` from that branch, or pass
+that Preview's address by hand.
+
 Each instance has its own profile under `~/Library/Application Support/Luke Dev
 <name>/` (sign-in, settings, window place, single-instance lock), its own
 `Luke Dev <name> Safe Storage` Keychain entry, and its own trace folder,
@@ -96,8 +102,8 @@ package's `package.json` `description` says what it holds.
 
 ## Make the change
 
-[docs/WORKFLOW.md](docs/WORKFLOW.md) is the step-by-step, from the scoped issue
-through the evidence in the pull request.
+[docs/WORKFLOW.md](docs/WORKFLOW.md) is the step-by-step, from the scoped task
+to the merge.
 
 Keep Electron main and preload code thin, keep the renderer sandboxed, and put
 platform-independent behavior in a package (see Repository layout above).
@@ -109,8 +115,8 @@ The canonical commands and when each one is required are the command table in
 
 ## Open the pull request
 
-What the description has to carry is step 5 of
-[docs/WORKFLOW.md](docs/WORKFLOW.md).
+Open it ready for review, not as a draft, with a short summary of what changed
+and why; root [AGENTS.md](AGENTS.md)'s "Merging" says how it merges.
 
 ## Reporting problems
 

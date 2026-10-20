@@ -8,7 +8,12 @@
  */
 
 import { createInterface } from "node:readline";
-import { NodeRuntime } from "@effect/platform-node";
+import {
+  NodeChildProcessSpawner,
+  NodeFileSystem,
+  NodePath,
+  NodeRuntime,
+} from "@effect/platform-node";
 import { Effect, Exit, Layer, Stream } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import { claudeCodeLive } from "./claude-code.js";
@@ -35,7 +40,16 @@ const main = runAgent({ lines: stdinLines, env: process.env }).pipe(
   Effect.catch((error) =>
     Effect.logError(`agent-runner: ${error._tag}: ${error.detail}`).pipe(Effect.as(EXIT.FAILED)),
   ),
-  Effect.provide(Layer.mergeAll(claudeCodeLive, FetchHttpClient.layer)),
+  Effect.provide(
+    Layer.mergeAll(
+      claudeCodeLive,
+      FetchHttpClient.layer,
+      // Codex's app-server, spawned as the runner's own child (codex.ts).
+      NodeChildProcessSpawner.layer.pipe(
+        Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+      ),
+    ),
+  ),
 );
 
 // Note that we exit explicitly, even on success, where `runMain` would leave

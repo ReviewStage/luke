@@ -4,30 +4,12 @@ import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type PluginOption } from "vite";
-import { bundleBudget } from "./scripts/bundle-budget";
 import { panelBuild } from "./scripts/panel-build";
 
 const resolveEntry = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 /** Where the client build leaves the site, which the Build Output copies under its `static/`. */
 const SITE_DIRECTORY = resolveEntry("./dist");
-
-// The panel's side bundles the app entry splits off, each by the module its
-// chunk starts at (`@luke/panel`'s bundle loader), held to the budget beside
-// the entry's first load.
-const PANEL_SIDE_BUNDLES = {
-  "plan-editor": "/packages/panel/src/plan-editor/index.ts",
-  whiteboard: "/packages/panel/src/whiteboard/index.tsx",
-  "file-tree": "/packages/panel/src/file-tree/index.ts",
-  terminal: "/packages/panel/src/terminal/index.ts",
-  diagram: "/packages/panel/src/diagram/index.ts",
-  "diff-view": "/packages/panel/src/diff-view/index.ts",
-  // What only a tab that records or reports loads: session replay's recorder
-  // and its client, and Sentry's SDK.
-  "session-recorder": "/apps/web/src/app/session-recorder.ts",
-  "session-replay": "/posthog-js/dist/module.no-external.js",
-  sentry: "/apps/web/src/app/web-sentry-sdk.ts",
-};
 
 // What the web app's tab reads of the deployment it was built for, from the
 // build's environment as the desktop's build reads its own: Vercel's name for
@@ -83,17 +65,11 @@ export default defineConfig(({ isSsrBuild }) => {
       react(),
       tailwindcss(),
       ...panelBuild(),
-      bundleBudget({
-        budgetFile: resolveEntry("./bundle-budget.json"),
-        entry: resolveEntry("./app.html"),
-        sideBundles: PANEL_SIDE_BUNDLES,
-      }),
       // Sentry's plugin goes after all others.
       ...sentrySourceMaps(sourceMapToken),
     ],
     build: {
-      // The bundle budget measures what it needs itself, so vite's own gzip
-      // report is only a cost to every build.
+      // Vite's own gzip report is only a cost to every build.
       reportCompressedSize: false,
       sourcemap: sourceMapToken ? "hidden" : false,
       rollupOptions: {

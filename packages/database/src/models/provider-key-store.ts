@@ -9,14 +9,13 @@ import {
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
 import { and, asc, eq } from "drizzle-orm";
-import { Cause, Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
-import { isSqlError } from "effect/sql/SqlError";
 import { Database } from "../core/query.js";
 import { accountProviderKey } from "../schemas/account-provider-key.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { SealedProviderKey } from "./provider-key-seal.js";
-import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
+import type { TaskStoreEffect } from "./task-store.js";
 
 /**
  * provider-key-store.ts -- the rows of an account's own provider keys, sealed as `provider-key-seal.ts` seals them.
@@ -30,9 +29,8 @@ import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
  * provider accepted it, with whether its organization may run fast mode as
  * the save's own fast request found it. A subscription credential is a row
  * of its own kind, saved unverified, since no provider is asked about it
- * before an agent runs on it. Until the primary key moves onto the kind, a
- * provider holds one row of either kind, and a save never replaces a row of
- * the other kind. A status is written against the sealed key a step
+ * before an agent runs on it. A provider holds one row of each kind, side by
+ * side, and a save replaces only the row of its own kind. A status is written against the sealed key a step
  * ran on, so a step on a key since replaced marks nothing of its successor.
  */
 
@@ -103,26 +101,16 @@ const findEveryRow = SqlSchema.findAll({
       db
         .select({ userId: accountProviderKey.userId, ...ROW_COLUMNS })
         .from(accountProviderKey)
-        .orderBy(asc(accountProviderKey.userId), asc(accountProviderKey.provider)),
+        .orderBy(
+          asc(accountProviderKey.userId),
+          asc(accountProviderKey.provider),
+          asc(accountProviderKey.kind),
+        ),
     ),
 });
 
-/**
- * Whether a save failed on the primary key, which names no kind yet: the
- * provider holds a row of another kind, which the conflict target, on the
- * kind, does not take. The primary key moves onto the kind in a later
- * change, once no deployment upserts on the provider alone.
- */
-function otherKindHeld(failure: TaskStoreFailure): boolean {
-  const beneath =
-    failure._tag === "EffectDrizzleQueryError" && Cause.isCause(failure.cause)
-      ? Cause.squash(failure.cause)
-      : failure;
-  return isSqlError(beneath) && beneath.reason._tag === "UniqueViolation";
-}
-
-/** The row written where the provider holds none or one of the same kind; nothing where it holds the other kind. */
-const upsertRow = SqlSchema.findAll({
+/** The row written, or written over the provider's row of the same kind. */
+const upsertRow = SqlSchema.void({
   Request: Schema.Struct({
     ...KindKeySchema.fields,
     keyVersion: Schema.Int,
@@ -132,7 +120,6 @@ const upsertRow = SqlSchema.findAll({
     fastAccess: Schema.NullOr(FastAccessSchema),
     now: Schema.Date,
   }),
-  Result: Schema.Struct({ provider: ProviderSchema }),
   execute: (write) => {
     const row = {
       keyVersion: write.keyVersion,
@@ -155,9 +142,7 @@ const upsertRow = SqlSchema.findAll({
         .onConflictDoUpdate({
           target: [accountProviderKey.userId, accountProviderKey.provider, accountProviderKey.kind],
           set: row,
-          setWhere: eq(accountProviderKey.kind, write.kind),
-        })
-        .returning({ provider: accountProviderKey.provider }),
+        }),
     );
   },
 });
@@ -224,7 +209,7 @@ const updateFastAccess = SqlSchema.void({
 /** The wrap moved only where the row still holds the seal it was read with, so a key replaced meanwhile keeps its own. */
 const rewrapRow = SqlSchema.findAll({
   Request: Schema.Struct({
-    ...KeySchema.fields,
+    ...KindKeySchema.fields,
     fromVersion: Schema.Int,
     sealedKey: Schema.String,
     keyVersion: Schema.Int,
@@ -240,6 +225,7 @@ const rewrapRow = SqlSchema.findAll({
           and(
             eq(accountProviderKey.userId, write.userId),
             eq(accountProviderKey.provider, write.provider),
+            eq(accountProviderKey.kind, write.kind),
             eq(accountProviderKey.keyVersion, write.fromVersion),
             eq(accountProviderKey.sealedKey, write.sealedKey),
           ),
@@ -260,8 +246,7 @@ export function listProviderKeyRows(
  * Keeps the provider's credential of this kind for the account, replacing
  * the one of the kind it held, as added now: an API key verified, a
  * subscription credential unverified, with its fast access where the save
- * found it. Answers whether it kept it: not where the provider holds the
- * other kind, which it leaves as it is.
+ * found it. The provider's credential of another kind stays as it is.
  */
 export function saveProviderKey(
   userId: string,
@@ -271,11 +256,8 @@ export function saveProviderKey(
   hint: string,
   fastAccess: FastAccess | null,
   now: Date,
-): TaskStoreEffect<boolean> {
-  return upsertRow({ userId, provider, kind, ...sealed, hint, fastAccess, now }).pipe(
-    Effect.map((kept) => kept.length > 0),
-    Effect.catchIf(otherKindHeld, () => Effect.succeed(false)),
-  );
+): TaskStoreEffect<void> {
+  return upsertRow({ userId, provider, kind, ...sealed, hint, fastAccess, now });
 }
 
 /** Removes the provider's credential of this kind from the account; removing one it does not hold moves nothing. */
@@ -325,6 +307,7 @@ export function rewrapProviderKeyRow(
     rewrapRow({
       userId: row.userId,
       provider: row.provider,
+      kind: row.kind,
       fromVersion: row.keyVersion,
       sealedKey: row.sealedKey,
       keyVersion: rewrapped.keyVersion,

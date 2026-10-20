@@ -68,8 +68,7 @@ import { useWindowTitle } from "./window-title.js";
 /**
  * Settings, loaded as a chunk of its own the first time it opens rather than
  * with the window, because the renderer bundle is parsed at every window
- * open, the voice window's included, and Settings is opened seldom
- * (`bundle-budget.json`). The chunk is a local file, so it stands a frame
+ * open, the voice window's included, and Settings is opened seldom. The chunk is a local file, so it stands a frame
  * later, over its frame of placeholders in the meantime (`SettingsLoading`).
  */
 const DesktopSettings = lazy(() =>
@@ -80,7 +79,7 @@ const DesktopSettings = lazy(() =>
  * The Automations pages, loaded as a chunk of their own the first time
  * they open, as Settings is and for the same reason: the renderer bundle is
  * parsed at every window open, and the pages, their editor and its triggers
- * among them, are opened seldom (`bundle-budget.json`). What stands while
+ * among them, are opened seldom. What stands while
  * the chunk loads is the pages' own empty frame, for a frame.
  */
 const AutomationsPage = lazy(() =>

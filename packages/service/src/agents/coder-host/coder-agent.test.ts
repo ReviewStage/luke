@@ -274,7 +274,7 @@ test("an agent on a task starts the agents that help with it on its own task, an
   }
 });
 
-test("an agent on a task is offered edit_plan, show_page, and the comment tools, whether it was handed the plan or a prompt, and one an automation started with no task none", () => {
+test("an agent on a task is offered edit_plan, show_page, the comment tools, and the whiteboard's, whether it was handed the plan or a prompt, and one an automation started with no task none", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
   const comments = [
     CODER_TOOL.READ_COMMENTS,
@@ -282,7 +282,8 @@ test("an agent on a task is offered edit_plan, show_page, and the comment tools,
     CODER_TOOL.REPLY_TO_COMMENT,
     CODER_TOOL.RESOLVE_THREAD,
   ];
-  const all = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments].sort();
+  const board = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD];
+  const all = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments, ...board].sort();
   const handedItsTask = { taskId: "plan-1", prompt: null };
   const handedPrompt = { taskId: "plan-1", prompt: "Fix the flaky test." };
   const automation = { taskId: null, prompt: "Sweep the flaky tests." };
@@ -429,6 +430,26 @@ test("every agent is told that what happens on its pull request after its turn r
       const instructions = coderInstructions("Acme/Relay", brief, ciReadable, TASK_ADDRESS);
       assert.ok(instructions.includes("reaches you as a message from GitHub"), brief);
       assert.ok(instructions.includes("before you end a turn on an open pull request"), brief);
+    }
+  }
+});
+
+test("every agent is told to reply to a message on an inbox thread on that thread, never in its own message alone", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    for (const onTask of [true, false]) {
+      const instructions = coderInstructions(
+        "Acme/Relay",
+        brief,
+        true,
+        onTask ? TASK_ADDRESS : null,
+      );
+      assert.ok(
+        instructions.includes(
+          `reply on that thread with \`${INBOX_TOOLS.POST.name}\` under its key`,
+        ),
+        brief,
+      );
+      assert.ok(instructions.includes("never answer them in your message alone"), brief);
     }
   }
 });

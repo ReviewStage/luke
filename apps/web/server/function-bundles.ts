@@ -214,13 +214,6 @@ export async function functionBundlePlan(web: string): Promise<FunctionBundlePla
   };
 }
 
-type MetafileImport = Metafile["inputs"][string]["imports"][number];
-
-/** The specifier a module wrote, whether esbuild inlined what it resolved to or left it external. */
-function importSpecifier(imported: MetafileImport): string {
-  return imported.original ?? imported.path;
-}
-
 /** The bundle's file under `dist-functions/`, POSIX-separated, whatever the metafile's output path was relative to. */
 function bundleKey(web: string, outputPath: string): string {
   const fromWeb = relative(join(web, FUNCTION_BUNDLE_DIRECTORY), join(web, outputPath));
@@ -300,42 +293,4 @@ export function externalsDrift(
     if (added.length > 0 || removed.length > 0) drift.push({ bundle, added, removed });
   }
   return drift;
-}
-
-/**
- * The import chain from a bundle's entry to the first module that imports
- * the specifier, as the metafile's input paths: what makes a drift fixable
- * rather than merely true, since the offending edge is the last step and the
- * module that carried it into the bundle is the one before. Empty when the
- * bundle does not import it.
- */
-export function importChain(
-  metafile: Metafile,
-  outputPath: string,
-  specifier: string,
-): readonly string[] {
-  const output = metafile.outputs[outputPath];
-  if (output?.entryPoint === undefined) return [];
-  const inBundle = new Set(Object.keys(output.inputs));
-  const parent = new Map<string, string | undefined>([[output.entryPoint, undefined]]);
-  const queue = [output.entryPoint];
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (current === undefined) break;
-    const input = metafile.inputs[current];
-    if (input === undefined) continue;
-    if (input.imports.some((imported) => importSpecifier(imported) === specifier)) {
-      const chain: string[] = [];
-      for (let at: string | undefined = current; at !== undefined; at = parent.get(at)) {
-        chain.unshift(at);
-      }
-      return chain;
-    }
-    for (const imported of input.imports) {
-      if (imported.external || !inBundle.has(imported.path) || parent.has(imported.path)) continue;
-      parent.set(imported.path, current);
-      queue.push(imported.path);
-    }
-  }
-  return [];
 }

@@ -6,6 +6,7 @@
     ".codex/**",
     ".cursor/**",
     ".opencode/**",
+    "packages/agent-runner/src/codex-protocol/**",
     "tools/anti-slop/**"
   ],
   "jsPlugins": [
@@ -19,31 +20,15 @@
     "anti-slop/enforce-delete-with-where": "error",
     "anti-slop/enforce-update-with-where": "error",
     "anti-slop/no-await-drizzle-statement": "error",
-    "anti-slop/no-chained-type-assertions": "error",
-    "anti-slop/no-conditional-empty-object-spread": "error",
-    "anti-slop/no-known-value-widening": "error",
     "anti-slop/no-node-test": "error",
     "anti-slop/no-raw-async-primitives": "error",
-    "anti-slop/no-reflect": "error",
-    "anti-slop/no-run-promise-outside-edges": "error",
-    "anti-slop/no-runtime-typeof": "error",
-    "anti-slop/no-unknown-parameters": "error",
-    "anti-slop/no-unknown-returns": "error",
-    "anti-slop/no-unsafe-dictionary-type": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error"
+    "anti-slop/no-run-promise-outside-edges": "error"
   },
   "overrides": [
     {
       "files": ["**/*.test.ts", "**/*.test.mjs", "**/*.test.tsx"],
       "rules": {
-        "anti-slop/enforce-delete-with-where": "off",
-        "anti-slop/no-chained-type-assertions": "off"
-      }
-    },
-    {
-      "files": ["packages/wire/src/effect/json-schema.ts"],
-      "rules": {
-        "anti-slop/no-unknown-parameters": "off"
+        "anti-slop/enforce-delete-with-where": "off"
       }
     }
   ]

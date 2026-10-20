@@ -38,7 +38,12 @@ import { Effect, Option, Result, type Schema, Stream } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
-import { MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "../../core.js";
+import {
+  ACTION_RESULT_STATUS,
+  MESSAGE_ROLE,
+  type UnparsedWireValue,
+  type WireRecord,
+} from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { logStoreFailure } from "../../http/store-failure.js";
@@ -48,6 +53,8 @@ import {
   type OfferedModel,
   offeredToAccount,
 } from "../../providers/model-catalog.js";
+import { runLookAtBoard } from "../../tasks/board-look.js";
+import { runDrawOnBoard } from "../../tasks/board-tool.js";
 import {
   COMMENT_TOOL_REFUSAL,
   type CommentToolName,
@@ -61,6 +68,7 @@ import {
   pictureNotLooked,
   runLookAtPicture,
 } from "../../tasks/picture-look.js";
+import { SHOW_CODE_REFUSAL, showCodeIn, showCodeRejected } from "../../tasks/show-code.js";
 import { delegatedChildOf, type HostAdmission, hostAdmission } from "../agent-runtime/host-core.js";
 import type { AgentSkill } from "../agent-runtime/skills.js";
 import { standingContext } from "../agent-runtime/standing-context.js";
@@ -121,7 +129,12 @@ import {
   runSearchWeb,
   type SearchWebResult,
 } from "../public-research.js";
-import type { RepositorySandbox } from "../repository-shell.js";
+import {
+  checkoutDeepened,
+  REPOSITORY_REFUSAL,
+  RepositoryRefusal,
+  type RepositorySandbox,
+} from "../repository-shell.js";
 import { runCreateSection, runDeleteSection } from "../task-section-tools.js";
 import { runCreateTask, runReadTask } from "../task-tools.js";
 import type { RepositoryCredential } from "../terminal/agent-sandbox.js";
@@ -148,6 +161,7 @@ import {
   type CheckoutServices,
   checkOutAgentRepository,
   checkoutBranch,
+  deepenAgentCheckout,
   openWorkingFolder,
 } from "./checkout.js";
 import { contextWindowOf } from "./context.js";
@@ -321,16 +335,30 @@ export interface CoderHost extends HostAdmission {
    */
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
   /**
-   * The agent's repository checked out into the sandbox; answers the
-   * credential for the caller to set at the firewall (`credentialPolicy`).
-   * An agent with no repository has an empty working folder made where the
-   * checkout would stand, so its shell and reads start there, and answers no
-   * credential: nothing is set at the firewall.
+   * The agent's repository checked out shallow into the sandbox as it opens,
+   * with no credential standing (`checkout.ts`). An agent with no repository
+   * has an empty working folder made where the checkout would stand, so its
+   * shell and reads start there.
    */
   checkOut(
     admitted: AdmittedConversation,
     sandbox: RepositorySandbox,
-  ): Effect.Effect<RepositoryCredential | undefined, CheckoutFailure, CheckoutServices>;
+  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
+  /**
+   * The agent's shallow checkout deepened to its whole history, as its
+   * first write asks, with the write credential set at the sandbox's
+   * firewall (`checkout.ts`'s `deepenAgentCheckout`); nothing where a deepen
+   * already finished in the sandbox or the agent has no repository to deepen.
+   */
+  deepen(
+    admitted: AdmittedConversation,
+    sandbox: RepositorySandbox,
+  ): Effect.Effect<void, CheckoutFailure, CheckoutServices>;
+  /** Whether a deepen finished in the sandbox, so its credential may stand and be renewed; none ever did for an agent with no repository. */
+  deepened(
+    admitted: AdmittedConversation,
+    sandbox: RepositorySandbox,
+  ): Effect.Effect<boolean, CheckoutFailure, DatabaseServices>;
   /** A fresh credential for the agent's repository, for the firewall once the standing one is old or was taken off; none for an agent with no repository, which mints nothing. */
   repositoryCredential(
     admitted: AdmittedConversation,
@@ -462,6 +490,23 @@ export interface CoderHost extends HostAdmission {
     name: CommentToolName,
     input: UnparsedWireValue,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /**
+   * Runs one `show_code` call (`../../tasks/show-code.ts`): lines of the
+   * checkout the session's sandbox opened with, read through the door given,
+   * and journaled with the call on the agent's own conversation, whatever
+   * kind of turn made it.
+   */
+  showCode(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+    sandbox: () => Promise<RepositorySandbox>,
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /** Runs one call of the whiteboard's tools (`../../tasks/board-tool.ts`, `../../tasks/board-look.ts`) on the agent's task, as the member whose turn it is. */
+  board(
+    admitted: AdmittedConversation,
+    tool: BoardTool,
+    input: UnparsedWireValue,
+  ): Effect.Effect<WireRecord, never, DatabaseServices>;
   /** Runs one `show_page` call (`../page-tool.ts`) on the agent's task, a page's path read from the session's sandbox through the door given. */
   showPage(
     admitted: AdmittedConversation,
@@ -506,6 +551,20 @@ export interface CoderHost extends HostAdmission {
     state: RelayStateStore,
     prompt: CoderSessionPromptRecord,
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
+}
+
+/** The whiteboard's tools, by the name a call of one is made under. */
+export type BoardTool = typeof CODER_TOOL.DRAW_ON_BOARD | typeof CODER_TOOL.LOOK_AT_BOARD;
+
+/** Why a call of the whiteboard's tools drew or looked at nothing, in words the model can act on. */
+const BOARD_REFUSAL = {
+  TASKLESS: "Not run: you work on no task, so there is no whiteboard to draw on or look at.",
+  UNAVAILABLE: "Not run: the whiteboard could not be reached just now. The call may be made again.",
+} as const;
+
+/** A call of the whiteboard's tools that ran nothing, and why. */
+function boardRejected(reason: string): WireRecord {
+  return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
 /** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post carries the door to the session's sandbox, where its pictures are read. */
@@ -1028,7 +1087,22 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
         hasRepository(agent)
           ? checkOutAgentRepository(admitted.target, agent, sandbox)
-          : Effect.as(openWorkingFolder(sandbox), undefined),
+          : openWorkingFolder(sandbox),
+      ),
+
+    deepen: (admitted, sandbox) =>
+      Effect.flatMap(agentOrRefused(admitted), (agent) =>
+        // An agent with no repository has a working folder and no history to fetch.
+        hasRepository(agent) ? deepenAgentCheckout(admitted.target, agent, sandbox) : Effect.void,
+      ),
+
+    deepened: (admitted, sandbox) =>
+      Effect.flatMap(agentOrRefused(admitted), (agent) =>
+        hasRepository(agent)
+          ? checkoutDeepened(sandbox).pipe(
+              Effect.mapError((refused) => new CheckoutRefused({ reason: refused.reason })),
+            )
+          : Effect.succeed(false),
       ),
 
     repositoryCredential: (admitted) =>
@@ -1264,6 +1338,45 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),
+      ),
+
+    showCode: (admitted, input, sandbox) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return showCodeRejected(found.failure);
+        const { repository } = found.success;
+        // Note that the tool is not offered to an agent with no repository (`repositoryToolsOf`), so this refuses only a call made across a change of its row.
+        // The sandbox opened with the checkout standing (`checkOut`), so the lines are read where it stands.
+        const checkout =
+          repository === null
+            ? Effect.fail(new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NO_REPOSITORY }))
+            : Effect.tryPromise({
+                try: sandbox,
+                catch: () =>
+                  new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE }),
+              }).pipe(Effect.map((opened) => ({ sandbox: opened, repository })));
+        return yield* showCodeIn(checkout, input);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(showCodeRejected(SHOW_CODE_REFUSAL.READ_FAILED))),
+      ),
+
+    board: (admitted, tool, input) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return boardRejected(found.failure);
+        const { taskId } = found.success;
+        if (taskId === null) return boardRejected(BOARD_REFUSAL.TASKLESS);
+        // The board is drawn and read as the member whose turn this is, as `editPlan` writes the plan.
+        const binding = { userId: admitted.caller, taskId };
+        const ran =
+          tool === CODER_TOOL.DRAW_ON_BOARD
+            ? runDrawOnBoard(binding, input)
+            : runLookAtBoard(binding, input);
+        return { ...(yield* ran) };
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(boardRejected(BOARD_REFUSAL.UNAVAILABLE))),
       ),
 
     showImage: (admitted, input, sandbox) =>

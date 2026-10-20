@@ -53,6 +53,7 @@ import {
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  codingAgentTranscriptKeySchema,
   codingAgentWorkspaceListParamsSchema,
   type DictationTranscribeAnswerView,
   dictationTranscribeParamsSchema,
@@ -67,6 +68,7 @@ import {
   planTemplateWriteParamsSchema,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import {
@@ -75,10 +77,16 @@ import {
   type PullRequestChaptersAnswerView,
   pullRequestChaptersParamsSchema,
 } from "@luke/features/pull-request-chapters-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethodTable,
+  invalid,
+} from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, RcMap, Result, type Schema, type Scope } from "effect";
+import { Effect, FiberMap, RcMap, Result, type Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -86,10 +94,11 @@ import type { HostKernel } from "./host-kernel.js";
 import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import {
+  followTranscript,
   type TranscriptFollows,
   TranscriptKey,
   transcriptFollows,
-  transcriptPast,
+  windowsPage,
 } from "./transcript-follow.js";
 
 /**
@@ -174,7 +183,7 @@ export type CodingAgentClient = Pick<
 >;
 
 export interface CodingAgentsDependencies {
-  kernel: Pick<HostKernel, "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: CodingAgentClient;
   /** Realtime's client at an address, which a transcript is followed over; Realtime's own outside a test. */
@@ -200,7 +209,8 @@ export function composeCodingAgents(
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
     });
-    return composed(dependencies, http, transcripts);
+    const followed = yield* FiberMap.make<TranscriptKey>();
+    return composed(dependencies, http, transcripts, followed);
   });
 }
 
@@ -218,6 +228,8 @@ function composed(
   dependencies: CodingAgentsDependencies,
   http: HttpClient.HttpClient,
   transcripts: TranscriptFollows,
+  /** The transcripts main follows for its windows, one fiber each. */
+  followed: FiberMap.FiberMap<TranscriptKey>,
 ): CodingAgentsComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
@@ -232,6 +244,20 @@ function composed(
     const result = readEither(schema)(unparsedWire(params));
     return Result.isFailure(result) ? invalid(sentence) : Effect.succeed(result.success);
   };
+
+  /** The agent's or worker's transcript a follow names, and the key its subscription and follow are held under. */
+  const agentTranscriptOf = (
+    params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
+  ) =>
+    Effect.gen(function* () {
+      const sentence = "following a transcript names an agent, and a worker's call where it is one";
+      const transcript = yield* read(codingAgentTranscriptKeySchema, params, sentence);
+      if (transcript.kind !== TRANSCRIPT_KIND.AGENT) return yield* invalid(sentence);
+      return {
+        transcript,
+        key: new TranscriptKey({ agentId: transcript.agentId, callId: transcript.callId }),
+      };
+    });
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.CODING_AGENTS_MODELS]: () =>
@@ -381,12 +407,33 @@ function composed(
           params,
           "reading an agent's transcript names the agent and a cursor",
         );
-        const answer = gate()
-          ? yield* transcriptPast(transcripts, new TranscriptKey({ agentId, callId }), {
-              now: asked(client.messagesNow(agentId, after, callId)),
-            })
-          : UNANSWERED;
-        return carried<CodingAgentMessagesAnswerView>(answer);
+        // Note that the page is read at once, since Copy transcript waits on no hold.
+        const answer = yield* asked(client.messagesNow(agentId, after, callId));
+        return carried<CodingAgentMessagesAnswerView>(windowsPage(answer));
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { transcript, key } = yield* agentTranscriptOf(params);
+        const tell = (page: CodingAgentMessagesAnswerView) =>
+          Effect.sync(() =>
+            kernel.emit(GATEWAY_EVENT.TRANSCRIPT_CHANGED, carried({ transcript, page })),
+          );
+        const follow = gate()
+          ? followTranscript(
+              transcripts,
+              key,
+              (after) => asked(client.messagesNow(key.agentId, after, key.callId)),
+              tell,
+            )
+          : tell(UNANSWERED);
+        yield* FiberMap.run(followed, key, follow);
+        return {};
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_TRANSCRIPT_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { key } = yield* agentTranscriptOf(params);
+        yield* FiberMap.remove(followed, key);
+        return {};
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGE]: (params) =>
       Effect.gen(function* () {
@@ -727,6 +774,7 @@ function composed(
   };
 
   const reset = Effect.gen(function* () {
+    yield* FiberMap.clear(followed);
     for (const key of yield* RcMap.keys(transcripts)) yield* RcMap.invalidate(transcripts, key);
   });
 

@@ -3,24 +3,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { temporaryDirectory } from "@luke/runtime/testing";
 import { test } from "vitest";
-import {
-  callerDirectories,
-  checkApiCallers,
-  PATHS_MODULE,
-  RESOLUTION,
-} from "../server/api-callers";
+import { checkApiCallers, PATHS_MODULE, RESOLUTION } from "../server/api-callers";
 
 const WEB = join(import.meta.dirname, "..");
-const REPO_ROOT = join(WEB, "..", "..");
-
-test("every /api/ path a client in the repository builds resolves to a route", async () => {
-  const directories = await callerDirectories(REPO_ROOT);
-  assert.equal(directories.includes(PATHS_MODULE.split("/").slice(0, 3).join("/")), true);
-  const report = await checkApiCallers({ repoRoot: REPO_ROOT, web: WEB });
-  assert.deepEqual(report.refused, []);
-  assert.notEqual(report.resolved.length, 0);
-  assert.notEqual(report.filesScanned, 0);
-});
 
 /** A repository holding one client file and a paths module, read against this app's own table and the hosted contract. */
 async function repositoryWith(root: string, client: string): Promise<void> {

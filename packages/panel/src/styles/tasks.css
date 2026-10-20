@@ -1208,7 +1208,7 @@
    the numbers' gutter may be gone. The frame around them is as wide as
    the place, which a note between them measures itself by. */
 .code-lines-frame {
-  container-type: inline-size;
+  container: code-lines / inline-size;
 }
 
 /* Lines in a syntax theme other than the window's own (themed-lines.tsx)
@@ -3033,6 +3033,13 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* A pressed filter is drawn in the ink, so its count steps back from the
+   ground's colour its words are in, rather than the subtle ink it would
+   vanish into. */
+.luke-chip[aria-pressed="true"] .pull-request-filter-count {
+  color: color-mix(in srgb, var(--luke-color-ink-inverse) 65%, var(--luke-color-ink));
+}
+
 /* What a section holds opens a step under its band. */
 .pull-request-section-body {
   padding-top: var(--luke-space-4);
@@ -4189,8 +4196,9 @@
   align-items: center;
   gap: var(--luke-space-4);
   padding: var(--luke-space-2) var(--luke-space-8);
-  border: 1px solid var(--luke-color-border);
+  border: 1px solid var(--luke-color-chip-edge);
   border-radius: var(--luke-radius-full);
+  background: var(--luke-color-chip);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
@@ -4219,10 +4227,12 @@
   line-height: 1;
 }
 
+/* The reader's own reaction, where it cannot be pressed, stands as a
+   pressed compact filter does, in the ink. */
 .pull-request-reaction[data-mine="true"] {
-  border-color: color-mix(in srgb, var(--luke-color-focus-ring) 55%, transparent);
-  background: color-mix(in srgb, var(--luke-color-focus-ring) 14%, transparent);
-  color: var(--luke-color-text);
+  border-color: var(--luke-color-ink);
+  background: var(--luke-color-ink);
+  color: var(--luke-color-ink-inverse);
 }
 
 /* The comment box at the foot of the Conversation
@@ -4269,23 +4279,27 @@
   user-select: none;
 }
 
-/* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
-   card in the window's own type between the lines, as a review comment
-   stands in a diff. Lines unwrapped scroll sideways under it while it
-   keeps to the tab's width in view. */
+/* Luke's note under the lines it is on, in a File tab (file-note.tsx): the
+   annotation card (`.annotation-card`), standing from the code's column past
+   the numbers, or at the pane's inset where the place is narrow. Lines
+   unwrapped scroll sideways under it while it keeps to the place's width in
+   view. */
 .file-note {
-  display: grid;
-  align-items: center;
-  margin: var(--luke-space-6) var(--luke-space-12);
-  overflow: hidden;
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  font-family: var(--luke-font-sans);
-  font-size: var(--luke-type-body-size);
-  grid-template-columns: minmax(0, 1fr) auto;
-  line-height: var(--luke-type-body-leading);
+  --file-note-start: 48px; /* off-scale: the numbers' gutter, `.code-line-number` */
+  --file-note-end: var(--luke-space-12);
+  margin: var(--luke-space-6) var(--file-note-end) var(--luke-space-6) var(--file-note-start);
+  container: annotation / inline-size;
+}
+
+.code-lines[data-line-numbers="false"] > .file-note {
+  --file-note-start: var(--luke-space-12);
+}
+
+@container code-lines (max-width: 439px) {
+  .code-lines[data-line-numbers] > .file-note {
+    --file-note-start: var(--luke-space-8);
+    --file-note-end: var(--luke-space-8);
+  }
 }
 
 /* Note that the note is stuck within the lines, which are as wide as the
@@ -4293,87 +4307,26 @@
    as the place they scroll in, less its margins. */
 .code-lines[data-wrap="false"] > .file-note {
   position: sticky;
-  left: var(--luke-space-12);
-  width: calc(100cqi - 2 * var(--luke-space-12));
+  left: var(--file-note-start);
+  width: calc(100cqi - var(--file-note-start) - var(--file-note-end));
 }
 
-/* The fold's line, its age and link beside it, then its words the card's
-   whole width under both: the fold's parts stand in the card's own grid. */
-.file-note-fold {
-  display: contents;
-}
-
-.file-note-fold > summary {
-  min-width: 0;
-  margin: var(--luke-space-2);
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.file-note-fold::details-content {
-  grid-column: 1 / -1;
-  grid-row: 2;
-}
-
-/* The note's words select with the lines around it; its line and what
-   stands beside it are the card's controls. */
-.file-note-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-6);
-  padding-right: var(--luke-space-8);
-  font-size: var(--luke-type-caption-size);
-  grid-column: 2;
-  grid-row: 1;
-  line-height: var(--luke-type-caption-leading);
-  -webkit-user-select: none;
-  user-select: none;
+/* Luke is told by his wing mark and his name in his own colour, on the card a review thread wears. */
+.file-note .transcript-luke-mark,
+.file-note .transcript-luke-mark .luke-face {
+  width: var(--annotation-face);
+  height: var(--annotation-face);
 }
 
 .file-note-author {
-  flex: 0 0 auto;
   color: var(--voice-luke);
-  font-weight: var(--luke-weight-semibold);
 }
 
-.file-note-lines,
-.file-note-time {
-  flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
-}
-
-/* The lines give way before the header's parts would stand on one another. */
-.file-note-lines {
-  min-width: 0;
-  flex-shrink: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Folded, the note's words stand in the header cut to one line. */
-.file-note-preview {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--luke-color-text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A narrow panel's note says its age in the link's pill, and the link
-   folds to the Code tab's glyph alone, named still. */
-@container side-panel (max-width: 359px) {
-  .file-note-time {
-    display: none;
-  }
-
-  .file-note-actions {
-    --luke-fold: folded;
-  }
+.file-note-menu {
+  display: flex;
 }
 
 .file-note-words {
-  padding: 0 var(--luke-space-12) var(--luke-space-8) var(--luke-space-40);
   overflow-wrap: anywhere;
 }
 

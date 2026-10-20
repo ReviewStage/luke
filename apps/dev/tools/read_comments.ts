@@ -3,7 +3,7 @@ import { READ_COMMENTS_TOOL } from "@luke/service/tasks/comment-tools";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineDynamic, defineTool } from "eve/tools";
-import { offeredPlanTools, runCommentTool } from "../host.js";
+import { offeredTaskTools, runCommentTool } from "../host.js";
 
 /**
  * read_comments.ts -- `read_comments`, the agent reads the plan's comment threads, open or resolved, for context; reading asks nothing of it (`packages/service/src/tasks/comment-tools.ts`).
@@ -16,7 +16,7 @@ import { offeredPlanTools, runCommentTool } from "../host.js";
 export default defineDynamic({
   events: {
     "turn.started": async (_event, ctx) =>
-      (await offeredPlanTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.READ_COMMENTS)
+      (await offeredTaskTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.READ_COMMENTS)
         ? defineTool({
             description: READ_COMMENTS_TOOL.description,
             inputSchema: emitJsonSchema(READ_COMMENTS_TOOL.inputSchema),
