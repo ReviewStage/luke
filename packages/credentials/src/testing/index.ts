@@ -16,8 +16,9 @@ import { CHATGPT_SIGN_IN } from "../chatgpt-sign-in.js";
 
 /** What the fake issues and where it answers, synthetic throughout. */
 export const CHATGPT_FAKE = {
-  AUTHORIZE_URL: "https://auth.openai.com/api/accounts/authorize",
-  TOKEN_URL: "https://auth.openai.com/api/accounts/oauth/token",
+  /** Where the fake publishes its endpoints, as its discovery document names them. */
+  AUTHORIZE_URL: "https://auth.openai.com/oauth/authorize",
+  TOKEN_URL: "https://auth.openai.com/oauth/token",
   JWKS_URL: "https://auth.openai.com/.well-known/jwks.json",
   ISSUED_CLIENT: "oaiapp_test_client",
   SUBJECT: "user-chatgpt-subject",
@@ -25,6 +26,9 @@ export const CHATGPT_FAKE = {
   REFRESH_TOKEN: "refresh-token-from-openai",
   GRANTED: CHATGPT_SIGN_IN.SCOPES.join(" "),
 } as const;
+
+/** An instant no test clock reaches, in Unix seconds (2100-01-01). */
+const FAR_FUTURE_SECONDS = 4_102_444_800;
 
 const signingKey = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const publicJwk = signingKey.publicKey.export({ format: "jwk" });
@@ -111,8 +115,8 @@ export function fakeChatGptAuthorizationServer(
         aud: [answers.audience ?? CHATGPT_FAKE.ISSUED_CLIENT],
         sub: CHATGPT_FAKE.SUBJECT,
         nonce: answers.nonce ?? pending.nonce,
-        // A test runs on a clock that starts at the epoch, so an hour past it is not yet expired.
-        exp: answers.expiresAt ?? 3600,
+        // Far past any clock a test runs on, the test clock moved on by a suite included.
+        exp: answers.expiresAt ?? FAR_FUTURE_SECONDS,
       }),
       expires_in: 3600,
       scope: answers.scope ?? CHATGPT_FAKE.GRANTED,

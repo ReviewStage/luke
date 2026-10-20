@@ -68,7 +68,7 @@ export const CHATGPT_SIGN_IN_REASON = {
   TIMED_OUT: "ChatGPT sign-in timed out.",
   UNREACHABLE: "Luke couldn't reach ChatGPT. Try again.",
   NOT_REGISTERED: "ChatGPT didn't finish connecting Luke. Try again.",
-  PLAN_NOT_ENABLED:
+  USAGE_NOT_ENABLED:
     "ChatGPT plan use wasn't enabled for Luke. Try again and allow it in the browser.",
   NOT_VERIFIED: "Luke couldn't verify the ChatGPT sign-in. Try again.",
 } as const;
@@ -360,7 +360,7 @@ export function chatGptSignIn<Saved extends object>(
       if (Option.isNone(tokens)) return { reason: CHATGPT_SIGN_IN_REASON.NOT_VERIFIED };
       // A valid sign-in without the plan's scope is one that may not use the plan.
       if (!tokens.value.scopes.includes(CHATGPT_SIGN_IN.USAGE_SCOPE)) {
-        return { reason: CHATGPT_SIGN_IN_REASON.PLAN_NOT_ENABLED };
+        return { reason: CHATGPT_SIGN_IN_REASON.USAGE_NOT_ENABLED };
       }
       const jwks = yield* getJson(standing.endpoints.jwks);
       if (Option.isNone(jwks)) return { reason: CHATGPT_SIGN_IN_REASON.UNREACHABLE };

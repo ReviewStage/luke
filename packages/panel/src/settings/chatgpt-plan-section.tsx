@@ -75,7 +75,7 @@ const WORDS = {
 } as const;
 
 /** Where this Mac keeps that the notice was seen, in the renderer's own storage. */
-const NOTICE_SEEN_KEY = "luke.chatGptPlanNoticeSeen";
+const NOTICE_SEEN_KEY = "luke.chatGptFirstSignInNoticeSeen";
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
@@ -131,7 +131,7 @@ function rowDescription(stored: SubscriptionKeySummary | undefined): React.React
 }
 
 /** OpenAI's first-sign-in notice: what using the plan means, and Got it. */
-function PlanNotice({ onDismiss }: { onDismiss: () => void }): React.JSX.Element {
+function FirstSignInNotice({ onDismiss }: { onDismiss: () => void }): React.JSX.Element {
   const gotIt = useRef<HTMLButtonElement | null>(null);
   const bodyId = useId();
   return (
@@ -312,7 +312,7 @@ export function ChatGptPlanSection({ signedIn }: { signedIn: boolean }): React.J
           running: "Disconnecting…",
         }}
       />
-      {notice ? <PlanNotice onDismiss={dismissNotice} /> : null}
+      {notice ? <FirstSignInNotice onDismiss={dismissNotice} /> : null}
     </div>
   );
 }

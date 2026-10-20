@@ -836,6 +836,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         const { extAgentHostId } = readHost((yield* ask(request(owner, { path: HOST_PATH }))).body);
         const openai = fakeChatGptAuthorizationServer();
         const opened = yield* Deferred.make<URL>();
+        const database = yield* Effect.context<Database | SqlClient.SqlClient>();
         // The desktop's own sign-in, its save the service's own route, as the host posts it.
         const signIn = chatGptSignIn<ProviderKeysAnswer>({
           openConsent: loopbackConsent,
@@ -853,7 +854,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
                 }),
               ),
               keysOf,
-            ),
+            ).pipe(Effect.provideContext(database)),
         });
 
         const running = yield* Effect.forkChild(signIn.signIn(extAgentHostId));

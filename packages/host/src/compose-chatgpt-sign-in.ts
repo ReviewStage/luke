@@ -32,10 +32,7 @@ import type { HostKernel } from "./host-kernel.js";
  */
 
 /** The service's side of the sign-in, as this concern asks it. */
-export type ChatGptSignInClient = Pick<
-  HostedCodingAgentClient,
-  "chatGptHost" | "saveChatGptCredentials"
->;
+type ChatGptSignInClient = Pick<HostedCodingAgentClient, "chatGptHost" | "saveChatGptCredentials">;
 
 export interface ChatGptSignInDependencies {
   kernel: Pick<HostKernel, "openExternalThroughNode"> & {

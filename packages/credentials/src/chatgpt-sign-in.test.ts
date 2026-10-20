@@ -94,7 +94,7 @@ it.effect("a grant without ChatGPT plan use keeps nothing and says so", () =>
   Effect.gen(function* () {
     const setup = harness({ scope: "openid profile email offline_access" });
     const { outcome } = yield* consentWith(setup, grantedCallback);
-    assert.deepEqual(outcome, { reason: CHATGPT_SIGN_IN_REASON.PLAN_NOT_ENABLED });
+    assert.deepEqual(outcome, { reason: CHATGPT_SIGN_IN_REASON.USAGE_NOT_ENABLED });
     assert.deepEqual(setup.saves, []);
   }),
 );
