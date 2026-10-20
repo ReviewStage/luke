@@ -16,7 +16,7 @@
 
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { agentSandboxImageFromEnvironment } from "@luke/service/agents/agent-sandbox-image";
+import { agentSandboxImageFromTemplate } from "@luke/service/agents/agent-sandbox-image";
 import { nativeAgentSessionsLayer } from "@luke/service/agents/coder-host/native-agent-sessions";
 import { runnerBundleFromDirectory } from "@luke/service/agents/coder-host/runner-bundle";
 import type { NativeAgentSessions } from "@luke/service/agents/coder-host/runtime-sessions";
@@ -29,7 +29,7 @@ const nativeAgents = nativeAgentSessionsLayer({ run: runWeb }).pipe(
   Layer.provide(
     Layer.merge(
       runnerBundleFromDirectory(dirname(fileURLToPath(import.meta.url))),
-      agentSandboxImageFromEnvironment,
+      agentSandboxImageFromTemplate(),
     ),
   ),
 );

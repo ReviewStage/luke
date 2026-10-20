@@ -156,7 +156,6 @@ function environment(cohort: readonly string[]): Layer.Layer<HostedEnvironment> 
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: Redacted.make(RING),
     nativeAgentAccounts: cohort,
-    agentSandboxSnapshot: undefined,
   };
   return Layer.succeed(HostedEnvironment, values);
 }
