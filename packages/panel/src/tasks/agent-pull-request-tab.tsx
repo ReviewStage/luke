@@ -45,7 +45,6 @@ import {
   ChoiceBar,
   type ChoiceItem,
   COUNT_TONE,
-  CopyIcon,
   type CountPart,
   type CountTone,
   DETAIL_PAGE_INSET,
@@ -97,9 +96,9 @@ import {
 } from "react";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
-import { useCopyToast } from "../copy-feedback.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
+import { type HandTabActions, useHandedTabActions } from "../desktop/strip-tabs.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { Tooltip } from "../tooltip.js";
 import {
@@ -208,8 +207,10 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * (⌘-click opens it on GitHub), the title first in the markup so a screen
  * reader names it before the pill drawn ahead of it, and at the row's end, while it is open or a
  * draft, the merge control saying what can happen now, its panel holding
- * GitHub's own sentence and the presses (`merge-box.tsx`), then the ⋯,
- * which opens it on GitHub first. Under it one line, wrapping where it must:
+ * GitHub's own sentence and the presses (`merge-box.tsx`). Open on GitHub
+ * and Refresh stand in the side panel's own ⋯ over the tab, which the tab
+ * hands them to while it is drawn (`useHandedTabActions`). Under it one
+ * line, wrapping where it must:
  * its branches, with the stack it stands in beside them
  * (`pull-request-stack.tsx`); who opened it and when, as the Changes tab
  * names them (`pull-request-people.tsx`), with its reviewers' first faces
@@ -409,48 +410,21 @@ function unfoldedCountOf(checks: readonly PullRequestCheck[]): number {
   return Math.max(CHECKS_UNFOLDED, asking);
 }
 
-/** The header's ⋯: the pull request opened on GitHub, the page read again, and its link copied. */
-function PullRequestMenu({
-  url,
-  reading,
-  onRefresh,
-}: {
-  url: string;
-  /** Whether a read is out, which a refresh would only repeat. */
-  reading: boolean;
-  onRefresh: () => void;
-}): React.JSX.Element {
-  const label = "Pull request actions";
-  const menu = useMenu(true);
-  const copyWithToast = useCopyToast();
-  const actions: MenuAction[] = [
+/** What the side panel's toolbar ⋯ offers on the pull request: it opened on GitHub, and the page read again, dimmed while a read is out, which a refresh would only repeat. */
+function pullRequestActions(url: string, reading: boolean, onRefresh: () => void): MenuAction[] {
+  return [
     {
       label: "Open on GitHub",
       icon: <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />,
       onSelect: () => appPlatform().openGitHub(url),
     },
     {
-      label: "Refresh pull request",
+      label: "Refresh",
       icon: <RotateCwIcon aria-hidden="true" />,
       disabled: reading,
       onSelect: onRefresh,
     },
-    {
-      label: "Copy link",
-      icon: <CopyIcon />,
-      onSelect: () => copyWithToast(url, "Link copied"),
-    },
   ];
-  return (
-    <>
-      <Tooltip label={label}>
-        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-      </Tooltip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={[actions]} onClose={menu.close} />
-      )}
-    </>
-  );
 }
 
 /** What the header draws of the pull request from the first frame: its mark's three, and its page. */
@@ -464,7 +438,7 @@ function checksSummaryOf(checks: readonly PullRequestCheck[]): CheckSummary {
 }
 
 /**
- * The pull request the header's pill and ⋯ draw: what the agent published,
+ * The pull request the header's pill and the toolbar's ⋯ draw: what the agent published,
  * as last read for the plan, from the first frame, each of its words
  * replaced by the overview's own as its read lands, since that is the newest
  * and the page under the header says the same: where it stands by the pull request's read,
@@ -1956,7 +1930,7 @@ function useConversationAnchors(input: {
  * One agent's Pull request tab, laid out as stage-cli's pull request page:
  * a fixed header that stays put while what is under it scrolls (the pill
  * saying where it stands, its title and number, and, while it is open, the
- * merge control and the ⋯, in one row; then its branches, who opened it and
+ * merge control, in one row; then its branches, who opened it and
  * when, and its reviewers, in one line), then a row of tabs, Conversation,
  * Checks, and Files changed (`AgentChangesTab`), each with its count, and
  * Review at its end while it is open. Each tab stands once shown, the others hidden, so
@@ -1990,6 +1964,8 @@ interface AgentPullRequestTabProps {
   tree: TreeShown;
   view: PullRequestView;
   onView: (view: PullRequestView) => void;
+  /** Hears what the side panel's toolbar ⋯ offers while the tab is drawn, Open on GitHub and Refresh (`useHandedTabActions`); none where no toolbar draws them. */
+  onActions?: HandTabActions | undefined;
 }
 
 /**
@@ -2077,6 +2053,7 @@ function PullRequestTabBody({
   tree,
   view,
   onView,
+  onActions,
 }: AgentPullRequestTabProps): React.JSX.Element {
   const status = control.agents?.find((each) => each.id === agentId)?.status;
   const ended = !agentStillWriting(status ?? CODING_AGENT_STATUS.RUNNING);
@@ -2133,6 +2110,16 @@ function PullRequestTabBody({
   const reading = pullRequestRead.out || checksRead.out || conversationRead.out;
   const published = pullRequestOfTab(control, { changes: agentId, number });
   const held = headerPullRequestOf(landed(parts.pullRequest), landed(parts.checks), published);
+  // The toolbar's ⋯ opens the pull request on GitHub and reads it again while it is held, Refresh dimmed while a read is out.
+  const refreshNow = useRef(refresh);
+  refreshNow.current = refresh;
+  const url = held?.url;
+  const handed = useMemo(
+    () =>
+      url === undefined ? undefined : pullRequestActions(url, reading, () => refreshNow.current()),
+    [url, reading],
+  );
+  useHandedTabActions(onActions, handed);
   const none = [parts.pullRequest, parts.checks, parts.conversation].some(
     (part) => part.kind === PART.NONE,
   );
@@ -2233,9 +2220,6 @@ function PullRequestTabBody({
                           shown={shown}
                           writes={writes}
                         />
-                      )}
-                      {held === undefined ? null : (
-                        <PullRequestMenu url={held.url} reading={reading} onRefresh={refresh} />
                       )}
                     </div>
                   </div>

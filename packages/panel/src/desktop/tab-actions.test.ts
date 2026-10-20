@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
+  type CodingAgentSummary,
+  PULL_REQUEST_STATE,
+} from "@luke/features/coding-agent-wire";
 import { pageFrameUrl } from "@luke/features/page-frame";
 import type { Task } from "@luke/features/task-wire";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -9,6 +15,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
@@ -26,7 +33,8 @@ import { DesktopTasks } from "./desktop-tasks.js";
  * or a subagent's tab the actions its right-click offers on what it shows,
  * without the tab's own keeping (Close, Close others, Pin tab), which stays
  * on the right-click alone. A tab with no content action shows no ⋯, and no
- * tab wears one of its own.
+ * tab wears one of its own. A Pull request tab's ⋯ also offers what its body
+ * hands up, Open on GitHub and Refresh, which no other tab's offers.
  */
 
 const TASK: Task = {
@@ -85,7 +93,10 @@ async function settle(): Promise<void> {
  * among them, the agent's delegated worker's, a file's, the agent's Changes
  * and Terminal, and a page's.
  */
-async function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): Promise<HTMLElement> {
+async function mountEveryTab(
+  chosen: { main: MainTab; side: SidePanelTab },
+  pullRequests: CodingAgentsControl["pullRequests"] = new Map(),
+): Promise<HTMLElement> {
   const control = tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: TASK.id,
@@ -110,6 +121,7 @@ async function mountEveryTab(chosen: { main: MainTab; side: SidePanelTab }): Pro
     agents: codingAgentsControl({
       agents: [AGENT],
       agentIds: [AGENT.id],
+      pullRequests,
       draft: {
         id: "draft-1",
         prompt: "",
@@ -265,6 +277,61 @@ test("a tab with no content action shows no ⋯ in its bar, though its right-cli
     assert.equal(container.querySelector(".tab [aria-haspopup]"), null, "no tab wears a ⋯");
     act(() => roots.pop()?.unmount());
     container.remove();
+  }
+});
+
+/** The agent's pull request, as what it published names it. */
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 42,
+  title: "Expire invitations",
+  url: "https://github.com/acme/web/pull/42",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 210,
+  deletions: 14,
+  changedFiles: 6,
+};
+
+test("the Pull request tab's bar ⋯ offers Open on GitHub and Refresh before Copy link, which no other tab's offers, and opens the pull request on GitHub", async () => {
+  const opened: string[] = [];
+  fakeAppPlatform({
+    ...QUIET_PANEL,
+    pageFrameUrl,
+    openGitHub: (url) => {
+      opened.push(url);
+    },
+  });
+  const published = new Map([[AGENT.id, PULL_REQUEST]]);
+  const container = await mountEveryTab(
+    { main: MAIN_TAB.CALL, side: { changes: AGENT.id } },
+    published,
+  );
+  const { side } = bars(container);
+  assert.deepEqual(pressBarMore(side), ["Open on GitHub", "Refresh", "Copy link"]);
+  assert.ok(
+    !rightClickChosen(side).some((item) => item === "Open on GitHub" || item === "Refresh"),
+    "a right-click keeps to the tab's own and its link",
+  );
+  const [more] = slotButtons(side);
+  act(() => more?.click());
+  const github = [
+    ...(openMenu()?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
+  ].find((each) => each.textContent === "Open on GitHub");
+  assert.ok(github, "the ⋯ offers Open on GitHub");
+  await act(async () => github.click());
+  assert.deepEqual(opened, [PULL_REQUEST.url]);
+  act(() => roots.pop()?.unmount());
+  container.remove();
+
+  for (const other of [SUBAGENT, { page: PAGE_ID }, SIDE_PANEL_TAB.PLAN] as const) {
+    const each = await mountEveryTab({ main: MAIN_TAB.CALL, side: other }, published);
+    const items = pressBarMore(bars(each).side);
+    assert.ok(
+      !items.includes("Open on GitHub") && !items.includes("Refresh"),
+      `the ${JSON.stringify(other)} tab offers neither`,
+    );
+    act(() => roots.pop()?.unmount());
+    each.remove();
   }
 });
 

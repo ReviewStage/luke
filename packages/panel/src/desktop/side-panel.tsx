@@ -139,6 +139,7 @@ import {
 } from "../tasks/work-model.js";
 import { Tooltip } from "../tooltip.js";
 import { useCapability, useExperiment } from "../use-app-state.js";
+import type { MenuAction } from "./action-menu.js";
 import { useFileTreeWidth } from "./folded-groups.js";
 import { paneTiming } from "./pane-motion.js";
 import {
@@ -340,6 +341,12 @@ export interface ChangesOffer {
   readonly agent: CodingAgentSummary;
   readonly label: string;
   readonly pullRequest: CodingAgentPullRequest;
+}
+
+/** What the chosen tab's body hands its toolbar's ⋯ (`useHandedTabActions`), and the tab it was drawn for, which alone offers them. */
+interface HandedTabActions {
+  readonly tab: SidePanelTab;
+  readonly actions: MenuAction[];
 }
 
 /** What the "+" calls the row that opens a Browser tab. */
@@ -863,6 +870,7 @@ function PanelTabs({
   held,
   readWorker,
   actionsSlot,
+  handed,
   onOpenAgent,
   shownAgent,
   inboxWaiting,
@@ -902,6 +910,8 @@ function PanelTabs({
   readWorker: TranscriptReader;
   /** The bar's slot the chosen tab's ⋯ stands in. */
   actionsSlot: HTMLElement | null;
+  /** What the chosen tab's body hands its ⋯, under the tab it was drawn for (`useHandedTabActions`). */
+  handed: HandedTabActions | undefined;
   /** Opens an agent's tab in the plan's column, as a Changes tab's card offers. */
   onOpenAgent: (agentId: string) => void;
   /** The agent whose tab the plan's column shows, whose Changes card follows its run. */
@@ -965,6 +975,10 @@ function PanelTabs({
       pin: pinOf(entry),
       onCopy: entry.copy,
       copyLink: linked === undefined ? undefined : copyLink(linked),
+      handed:
+        entry.look.selected && handed !== undefined && sameTab(handed.tab, entry.tab)
+          ? handed.actions
+          : undefined,
     };
   };
   return (
@@ -1376,6 +1390,7 @@ function TabContent({
   onBrowserOpened,
   plan,
   inbox,
+  onTabActions,
 }: {
   tab: SidePanelTab;
   taskId: string;
@@ -1437,6 +1452,8 @@ function TabContent({
   plan: React.ReactNode;
   /** The task's Inbox, drawn by the task's page on the same terms. */
   inbox: React.ReactNode;
+  /** Hears what a tab's body offers its toolbar's ⋯, under the tab it is drawn for (`useHandedTabActions`). */
+  onTabActions: (tab: SidePanelTab, actions: MenuAction[] | undefined) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   if (isMacTerminalTab(tab)) {
@@ -1499,6 +1516,7 @@ function TabContent({
           tree={fileTree}
           view={ofPullRequestTab(pullRequestViews, tab) ?? PULL_REQUEST_VIEW.CONVERSATION}
           onView={(view) => onPullRequestView(tab, view)}
+          onActions={(actions) => onTabActions(tab, actions)}
         />
       </PullRequestsOnGitHub>
     );
@@ -1899,6 +1917,17 @@ export function SidePanel({
 }): React.JSX.Element {
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  // What the chosen tab's body offers that ⋯ beyond what the strip does, let go only by the tab that handed it.
+  const [handed, setHanded] = useState<HandedTabActions | undefined>(undefined);
+  const handTabActions = useCallback((tab: SidePanelTab, actions: MenuAction[] | undefined) => {
+    setHanded((was) =>
+      actions !== undefined
+        ? { tab, actions }
+        : was !== undefined && sameTab(was.tab, tab)
+          ? undefined
+          : was,
+    );
+  }, []);
   const { tab } = panel;
   // A Pull request tab naming another pull request by its number is named by
   // that pull request, read once for each such tab the strip draws, since
@@ -2070,6 +2099,7 @@ export function SidePanel({
           held={drawnTranscripts}
           readWorker={work.readWorker}
           actionsSlot={actionsSlot}
+          handed={handed}
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           shownAgent={shownAgent}
           inboxWaiting={inbox?.waiting ?? 0}
@@ -2150,6 +2180,7 @@ export function SidePanel({
             onBrowserOpened={panel.onBrowserOpened}
             plan={plan}
             inbox={inbox?.body}
+            onTabActions={handTabActions}
           />
         </FindScope>
       )}
