@@ -6,27 +6,83 @@
  * server (`app.ts`). Each tool here is the one the agent's eve tool file
  * declares (`apps/dev/tools/<name>.ts`): the same name, the same description,
  * the same input schema, and the same door the coder host's method for it
- * runs (`../coder-host/inbox-door.ts` for the inbox), so the two runtimes run
- * one implementation. A door is reached directly rather than through the
- * coder host, because the host composes eve's sandbox and tools, which the
- * web function serving this server does not bundle. The registry maps a tool's name to those
- * three and nothing else, so serving another tool is one entry.
+ * runs (`../coder-host/inbox-door.ts` for the inbox, `../coder-host/agent-doors.ts`
+ * for the rest), so the two runtimes run one implementation. A door is
+ * reached directly rather than through the coder host, because the host
+ * composes eve's sandbox and tools, which the web function serving this
+ * server does not bundle. The registry maps a tool's name to those three,
+ * and, for the one tool whose answer is a picture, how it is shown.
+ *
+ * Left out, beside the harness's own shell, files, todos, waiting,
+ * subagents, skills, and web reads: the spoken-turn tools
+ * (`queue_question`, `withdraw_question`, `end_call`), which only a spoken
+ * turn of eve's offers, and the integrations' `connection_search` and
+ * `connection_execute`, which are eve's own and have no door of Luke's yet.
+ *
+ * Two things eve's tool files keep in the session's own state have none
+ * here, since the server keeps no session: a call's id, which the agent
+ * tools key a start or a message on and chat a post, is minted for each
+ * call; and the turn's count of plan notes and chat posts, which each call
+ * starts from nothing, so those caps hold per call. Nor is the list
+ * narrowed per agent as eve narrows its own at each turn: a tool eve would
+ * not offer (no plan, no repository, Chat off) is refused by its door.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
+import { CHAT_TOOL } from "@luke/features/chat-wire";
 import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { type Effect, Schema } from "effect";
 import type { HttpClient } from "effect/http";
+import type { HostedEnvironment } from "../../environment.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import type { ModelCatalog } from "../../providers/model-catalog.js";
-import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
+import {
+  type CommentToolName,
+  READ_COMMENTS_TOOL,
+  REOPEN_THREAD_TOOL,
+  REPLY_TO_COMMENT_TOOL,
+  RESOLVE_THREAD_TOOL,
+} from "../../tasks/comment-tools.js";
+import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
+import { LOOK_AT_PICTURE_TOOL, PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import type { AdmittedConversation } from "../brain-host/conversation.js";
+import {
+  type AgentDoorSeams,
+  type AgentToolCall,
+  runAgentChat,
+  runAgentComment,
+  runAgentEditPlan,
+  runAgentLookAtPicture,
+  runAgentOpenPullRequest,
+  runAgentShowImage,
+  runAgentShowPage,
+  runAgentTools,
+} from "../coder-host/agent-doors.js";
+import { CHAT_TOOLS } from "../coder-host/chat.js";
 import { INBOX_TOOLS } from "../coder-host/inbox.js";
 import { runAgentInbox } from "../coder-host/inbox-door.js";
+import type { InboxSandboxDoor } from "../coder-host/inbox-image.js";
+import { EDIT_PLAN_TOOL } from "../coder-host/plan-edit.js";
+import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
+import { SHOW_IMAGE_TOOL } from "../coder-host/show-image.js";
+import {
+  CODER_READ_AGENT_TOOL,
+  LIST_AGENTS_TOOL,
+  LIST_MODELS_TOOL,
+  LIST_TASKS_TOOL,
+  MESSAGE_AGENT_TOOL,
+  READ_PAGE_TOOL,
+  START_AGENT_TOOL,
+  STOP_AGENT_TOOL,
+  UPDATE_AGENT_TOOL,
+  UPDATE_TASK_TOOL,
+} from "../coding-agent-tools.js";
 import { RUN_ON_MAC_TOOL, runOnMacTool } from "../mac-command.js";
+import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
+import { CREATE_TASK_TOOL, READ_TASK_TOOL } from "../task-tools.js";
 
 /** What a door answers: the tool's own result, the value its eve tool hands the model. */
 export type LukeMcpToolResult = { readonly status?: string } & object;
@@ -37,7 +93,15 @@ export type LukeMcpServices =
   | HttpClient.HttpClient
   | GitHubApp
   | ModelCatalog
-  | WorkspaceLinearConnect;
+  | WorkspaceLinearConnect
+  | HostedEnvironment;
+
+/** What a call carries beside its input: the door to the agent's sandbox, where a tool reads a file the agent names by its path; a fresh id of its own; and the seams the doors that reach eve or the store's writer read. */
+interface LukeMcpCallContext {
+  readonly sandbox: InboxSandboxDoor;
+  readonly callId: string;
+  readonly seams: AgentDoorSeams;
+}
 
 /** One block of an MCP tool result: text, or an image as base64 with its type. */
 export type McpContent =
@@ -53,6 +117,7 @@ export interface LukeMcpTool {
   readonly run: (
     admitted: AdmittedConversation,
     input: UnparsedWireValue,
+    context: LukeMcpCallContext,
   ) => Effect.Effect<LukeMcpToolResult, unknown, LukeMcpServices>;
   /** How a result is shown to the agent, where it is more than its JSON: a picture as an image. */
   readonly content?: (result: LukeMcpToolResult) => readonly McpContent[];
@@ -79,6 +144,18 @@ function entry(
   return [spec.name, tool];
 }
 
+/** A tool about the workspace's agents and tasks, run through their one door. */
+function agentTool(spec: ToolSpec & { readonly name: AgentToolCall["tool"] }) {
+  return entry(spec, (admitted, input, { seams, callId }) =>
+    runAgentTools(seams, admitted, { tool: spec.name, input, callId }),
+  );
+}
+
+/** A tool of the plan's comment threads, run through the comment door. */
+function commentTool(spec: ToolSpec & { readonly name: CommentToolName }) {
+  return entry(spec, (admitted, input) => runAgentComment(admitted, spec.name, input));
+}
+
 /** A look that answered a picture: its bytes as base64 and their type. */
 const isLooked = Schema.is(
   Schema.Struct({
@@ -89,7 +166,7 @@ const isLooked = Schema.is(
 );
 
 /** What the agent is shown of a look: the picture itself, as an image, where it looked; its JSON otherwise. */
-export function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] {
+function lookedPictureContent(result: LukeMcpToolResult): readonly McpContent[] {
   if (isLooked(result)) {
     return [
       { type: "text", text: "The picture you asked to see:" },
@@ -101,13 +178,72 @@ export function lookedPictureContent(result: LukeMcpToolResult): readonly McpCon
 
 /** The tools served, by name, in the order `tools/list` names them. */
 export const LUKE_MCP_TOOLS: ReadonlyMap<string, LukeMcpTool> = new Map<string, LukeMcpTool>([
-  // The inbox. Posting waits on a door to the agent's sandbox, which the server has none of yet.
+  // The inbox.
+  entry(INBOX_TOOLS.POST, (admitted, input, { sandbox }) =>
+    runAgentInbox(admitted, { tool: INBOX_TOOL.POST, input, sandbox }),
+  ),
   entry(INBOX_TOOLS.READ, (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.READ, input }),
   ),
   entry(INBOX_TOOLS.WITHDRAW, (admitted, input) =>
     runAgentInbox(admitted, { tool: INBOX_TOOL.WITHDRAW, input }),
   ),
+  // The pull request, the plan, and pages and pictures.
+  entry(OPEN_PULL_REQUEST_TOOL, (admitted, input) => runAgentOpenPullRequest(admitted, input)),
+  entry(EDIT_PLAN_TOOL, (admitted, input, { sandbox }) =>
+    runAgentEditPlan(admitted, input, 0, sandbox),
+  ),
+  entry(
+    LOOK_AT_PICTURE_TOOL,
+    (admitted, input) => runAgentLookAtPicture(admitted, input),
+    lookedPictureContent,
+  ),
+  entry(SHOW_IMAGE_TOOL, (admitted, input, { sandbox }) =>
+    runAgentShowImage(admitted, input, sandbox),
+  ),
+  entry(SHOW_PAGE_TOOL, (admitted, input, { sandbox }) =>
+    runAgentShowPage(admitted, input, sandbox),
+  ),
+  agentTool(READ_PAGE_TOOL),
+  // The workspace's agents.
+  agentTool(START_AGENT_TOOL),
+  agentTool(MESSAGE_AGENT_TOOL),
+  agentTool(STOP_AGENT_TOOL),
+  agentTool(LIST_AGENTS_TOOL),
+  agentTool(CODER_READ_AGENT_TOOL),
+  agentTool(UPDATE_AGENT_TOOL),
+  agentTool(LIST_MODELS_TOOL),
+  // Tasks, sections, and issues.
+  agentTool(LIST_TASKS_TOOL),
+  agentTool(READ_TASK_TOOL),
+  agentTool(CREATE_TASK_TOOL),
+  agentTool(UPDATE_TASK_TOOL),
+  agentTool(CREATE_SECTION_TOOL),
+  agentTool(DELETE_SECTION_TOOL),
+  // Chat.
+  entry(CHAT_TOOLS.POST, (admitted, input, { seams, sandbox, callId }) =>
+    runAgentChat(seams, admitted, {
+      tool: CHAT_TOOL.POST,
+      input,
+      clientKey: callId,
+      postsInTurn: 0,
+      sandbox,
+    }),
+  ),
+  entry(CHAT_TOOLS.READ, (admitted, input, { seams }) =>
+    runAgentChat(seams, admitted, { tool: CHAT_TOOL.READ, input }),
+  ),
+  entry(CHAT_TOOLS.RESOLVE, (admitted, input, { seams }) =>
+    runAgentChat(seams, admitted, { tool: CHAT_TOOL.RESOLVE, input }),
+  ),
+  entry(CHAT_TOOLS.EDIT_CHANNEL, (admitted, input, { seams }) =>
+    runAgentChat(seams, admitted, { tool: CHAT_TOOL.EDIT_CHANNEL, input }),
+  ),
+  // The plan's comments.
+  commentTool(READ_COMMENTS_TOOL),
+  commentTool(REPLY_TO_COMMENT_TOOL),
+  commentTool(RESOLVE_THREAD_TOOL),
+  commentTool(REOPEN_THREAD_TOOL),
   // The developer's Mac.
   entry(RUN_ON_MAC_TOOL, (admitted, input) => runOnMacTool(admitted.target.userId, input)),
 ]);
