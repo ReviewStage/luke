@@ -263,6 +263,9 @@ function platformRows(
     [ACT_KIND.NOTIFICATIONS_TEST]: () => doors.postTest(),
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) =>
       Effect.provideService(feedback.deliver(submission), HttpClient.HttpClient, http),
+    // A tab follows no transcript: it is pushed nothing and reads each page once.
+    [ACT_KIND.CODING_AGENTS_TRANSCRIPT_FOLLOW]: () => undefined,
+    [ACT_KIND.CODING_AGENTS_TRANSCRIPT_UNFOLLOW]: () => undefined,
   };
 }
 

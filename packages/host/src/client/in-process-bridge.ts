@@ -195,6 +195,8 @@ export function createInProcessBridge<Sender = unknown>(
       onBrowserState: neverDelivered,
       onBrowserKey: neverDelivered,
       onBrowserFocus: neverDelivered,
+      // A tab is pushed no transcript; it reads each one once rather than following it.
+      onTranscript: neverDelivered,
     };
     const events: InProcessEvents = {
       onShowAgent: said.onShowAgent.emit,
