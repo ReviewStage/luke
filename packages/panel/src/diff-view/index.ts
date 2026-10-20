@@ -296,6 +296,10 @@ const LOOK_CSS = `
     --mix-light: 88%;
     --mix-dark: 80%;
   }
+  [data-gutter-buffer="annotation"][${ANNOTATION_BAND_ATTRIBUTE}] {
+    --mix-light: 91%;
+    --mix-dark: 85%;
+  }
   [data-line-annotation][${ANNOTATION_BAND_ATTRIBUTE}],
   [data-gutter-buffer="annotation"][${ANNOTATION_BAND_ATTRIBUTE}] {
     background-color: light-dark(
