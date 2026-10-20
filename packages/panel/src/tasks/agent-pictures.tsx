@@ -317,7 +317,7 @@ function SetTile({
 
 /** A picture of a set past the six drawn, read all the same, so the viewer walks the whole set. */
 function UnseenPicture({ door, picture }: { door: AgentPictureDoor; picture: KeptPicture }): null {
-  usePicture(door.owner, picture.id, door.read);
+  usePicture(door.owner, picture.id, door.read, false);
   return null;
 }
 

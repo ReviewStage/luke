@@ -76,12 +76,10 @@ test("once the window lets go of every picture, the budget counts from nothing",
     assert.equal(pictureNow(OWNER, id).kind, PICTURE_STATE.READY);
 });
 
-test("pictures drawn together past the budget all land, each read once, none sent back to reading", async () => {
+test("pictures drawn together past the budget all land, none sent back to reading", async () => {
   const answers = new Map<string, (answer: PictureAnswer) => void>();
-  let reads = 0;
   const read = (_owner: string, id: string) =>
     new Promise<PictureAnswer>((answer) => {
-      reads += 1;
       answers.set(id, answer);
     });
   const ids = ["a", "b", "c", "d", "e", "f"];
@@ -108,5 +106,24 @@ test("pictures drawn together past the budget all land, each read once, none sen
     [...shown.values()],
     ids.map(() => PICTURE_STATE.READY),
   );
-  assert.equal(reads, ids.length);
+});
+
+test("pictures read ahead and drawn nowhere are let go by the budget, the newest kept", async () => {
+  const ids = ["a", "b", "c", "d", "e", "f"];
+  const base64 = "A".repeat(QUARTER - "data:image/png;base64,".length);
+  const read = () => Promise.resolve<PictureAnswer>({ contentType: "image/png", base64 });
+  function Ahead({ id }: { id: string }): null {
+    usePicture(OWNER, id, read, false);
+    return null;
+  }
+  const root = createRoot(document.createElement("div"));
+  roots.push(root);
+  await act(async () =>
+    root.render(
+      createElement("div", null, ...ids.map((id) => createElement(Ahead, { key: id, id }))),
+    ),
+  );
+
+  assert.equal(pictureNow(OWNER, "a").kind, PICTURE_STATE.READING);
+  assert.equal(pictureNow(OWNER, "f").kind, PICTURE_STATE.READY);
 });

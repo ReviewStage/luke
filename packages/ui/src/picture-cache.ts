@@ -170,12 +170,14 @@ function heedForgetting(listener: () => void): () => void {
  * lands, then its `data:` URL, or missing. A read that did not land draws
  * as missing here, for this picture alone, and is read again by the next
  * place to mount; once the window lets go of every picture, it is read
- * again here.
+ * again here. A place that reads a picture ahead and draws none of it
+ * passes `drawn` false, so the byte budget may let its picture go.
  */
 export function usePicture(
   owner: string,
   id: string,
   read: (owner: string, id: string) => Promise<PictureAnswer>,
+  drawn = true,
 ): PictureState {
   const [, redraw] = useReducer((count: number) => count + 1, 0);
   const generation = useSyncExternalStore(heedForgetting, () => forgotten);
@@ -185,8 +187,8 @@ export function usePicture(
   useEffect(() => {
     let standing = true;
     const kept = keptPicture(owner, id, () => read(owner, id));
-    // Note that the budget lets go of no picture a place is drawing, so one never goes back to reading under it.
-    kept.pins += 1;
+    // Note that the budget lets go of no picture a place is drawing, so one never goes back to reading under it; a place only reading ahead, which draws nothing, leaves its picture to the budget.
+    if (drawn) kept.pins += 1;
     kept.read.then((answered) => {
       if (!standing) return;
       if (
@@ -199,10 +201,10 @@ export function usePicture(
     });
     return () => {
       standing = false;
-      kept.pins -= 1;
+      if (drawn) kept.pins -= 1;
       trim(undefined);
     };
-  }, [owner, id, read, generation]);
+  }, [owner, id, read, generation, drawn]);
   const mine =
     failed !== undefined &&
     failed.owner === owner &&
