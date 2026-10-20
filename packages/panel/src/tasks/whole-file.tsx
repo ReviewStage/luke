@@ -62,6 +62,17 @@ type FindStep = (typeof FIND_STEP)[keyof typeof FIND_STEP];
 /** No matches. */
 const NO_TALLY: FindTally = { count: 0, at: -1 };
 
+/** Whether two runs of notes read alike to a find: the same words under the same lines by the same keys. */
+function sameFindNotes(a: readonly FindNote[], b: readonly FindNote[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (note, at) =>
+        note.key === b[at]?.key && note.line === b[at]?.line && note.words === b[at]?.words,
+    )
+  );
+}
+
 /** The line a range of drawn words stands on, read from the row Pierre drew it in, or the note its words are in. */
 function placeOf(range: Range): { line: number | undefined; note: string | undefined } {
   const start = range.startContainer;
@@ -96,7 +107,7 @@ function drawnAt(ranges: readonly Range[], match: FileMatch | undefined): number
  */
 function useWholeFileFind(
   host: RefObject<HTMLDivElement | null>,
-  read: RefObject<{ lines: readonly string[]; notes: readonly FindNote[]; from: number }>,
+  read: RefObject<{ text: string; notes: readonly FindNote[]; from: number }>,
   handle: RefObject<FileViewHandle | undefined>,
 ): () => void {
   const [find] = useState(() => {
@@ -107,6 +118,8 @@ function useWholeFileFind(
       painting: NO_PAINTING as FindPainting,
       // Whether the match the find is at still waits to be brought into view, once drawn.
       pending: false,
+      // The text and notes the matches were read from.
+      searched: { text: "", notes: [] as readonly FindNote[] },
       listeners: new Set<(tally: FindTally) => void>(),
     };
     const tell = () => {
@@ -135,12 +148,30 @@ function useWholeFileFind(
         handle.current?.revealLines({ startLine: match.line, endLine: match.line });
       paint();
     };
+    const readMatches = () => {
+      const { text, notes } = read.current;
+      state.searched = { text, notes };
+      return fileMatches(text.split("\n"), notes, state.query);
+    };
     const search = (query: string) => {
-      const { lines, notes, from } = read.current;
       state.query = query;
-      state.matches = fileMatches(lines, notes, query);
-      state.at = matchFrom(state.matches, from);
+      state.matches = readMatches();
+      state.at = matchFrom(state.matches, read.current.from);
       go();
+    };
+    // Note that matches are read again where the text or the notes changed under an open find, as a note Luke adds, the find kept at the match it was at where that still stands, and nothing scrolled.
+    const refresh = () => {
+      const { text, notes } = read.current;
+      if (state.query.length === 0) return;
+      if (text === state.searched.text && sameFindNotes(notes, state.searched.notes)) return;
+      const was = state.matches[state.at];
+      state.matches = readMatches();
+      const kept = state.matches.findIndex(
+        (match) => match.line === was?.line && match.note === was.note && match.nth === was.nth,
+      );
+      state.at = kept !== -1 ? kept : matchFrom(state.matches, was?.line ?? read.current.from);
+      tell();
+      paint();
     };
     const source: FindSource = {
       search,
@@ -166,11 +197,12 @@ function useWholeFileFind(
       },
       selection: () => (host.current === null ? undefined : selectedWords(host.current)),
     };
-    return { source, paint, clear: source.clear };
+    return { source, paint, refresh, clear: source.clear };
   });
   useFindSource(find.source);
   // Note that the tints are taken away with the file, since they name ranges of its rows.
   useEffect(() => find.clear, [find]);
+  useEffect(() => find.refresh());
   return find.paint;
 }
 
@@ -215,12 +247,8 @@ export function WholeFile({
     elements.current.set(key, element);
     return element;
   }, []);
-  const read = useRef({
-    lines: [] as readonly string[],
-    notes: [] as readonly FindNote[],
-    from: 1,
-  });
-  read.current = { lines: text.split("\n"), notes, from: findFrom };
+  const read = useRef({ text: "", notes: [] as readonly FindNote[], from: 1 });
+  read.current = { text, notes, from: findFrom };
   const paint = useWholeFileFind(host, read, handle);
   const props: FileViewProps = {
     name,

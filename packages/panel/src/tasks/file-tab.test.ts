@@ -98,46 +98,56 @@ function service(asked: TaskFileRequest[]): ReadFileWindow {
   };
 }
 
-function notes(): FileNotes {
+const NOTES = [
+  { callId: "call-1", shownAt: 1_760_000_000_000, startLine: 3, endLine: 4, note: NOTE },
+];
+
+function notes(shown: FileNotes["notes"] = NOTES): FileNotes {
   return {
-    notes: [{ callId: "call-1", shownAt: 1_760_000_000_000, startLine: 3, endLine: 4, note: NOTE }],
+    notes: shown,
     folded: [],
     onFold: () => undefined,
     taskId: "task-1",
   };
 }
 
+/** Draws the latest tab mounted again with Luke's notes as `shown`, as a note he adds does. */
+let draw: (shown: FileNotes["notes"]) => void = () => undefined;
+
 /** A File tab opened on `file`, in a find's scope, drawn once its file is. */
 async function tab(file: OpenFile, read: ReadFileWindow): Promise<HTMLElement> {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(
-          OpenLinkProvider,
-          { value: () => undefined },
+  const registry = AtomRegistry.make();
+  draw = (shown) =>
+    act(() =>
+      root.render(
+        onRegistry(
+          registry,
           createElement(
-            LinkWorkspaceProvider,
-            { value: "acme" },
+            OpenLinkProvider,
+            { value: () => undefined },
             createElement(
-              FindScope,
-              { active: true, subject: { task: "task-1", tab: { file: PATH } } },
-              createElement(FileTab, {
-                file,
-                snippet: undefined,
-                notes: notes(),
-                readFile: read,
-                onRead: () => undefined,
-              }),
+              LinkWorkspaceProvider,
+              { value: "acme" },
+              createElement(
+                FindScope,
+                { active: true, subject: { task: "task-1", tab: { file: PATH } } },
+                createElement(FileTab, {
+                  file,
+                  snippet: undefined,
+                  notes: notes(shown),
+                  readFile: read,
+                  onRead: () => undefined,
+                }),
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  draw(NOTES);
   await wholeFileDrawn(container);
   return container;
 }
@@ -257,4 +267,30 @@ test("⌘F over a File tab counts every match in the file and in Luke's notes, f
     runAppCommand(APP_COMMAND.FIND_NEXT);
   });
   assert.equal(findTally(), "2 of 5");
+});
+
+test("a note Luke adds while ⌘F stands open over a File tab joins the count at once, the find kept at its match", async () => {
+  const container = await tab({ path: PATH, range: undefined, opened: 1 }, service([]));
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND);
+  });
+  typeFind("seat");
+  act(() => {
+    runAppCommand(APP_COMMAND.FIND_NEXT);
+  });
+  assert.equal(findTally(), "2 of 5");
+
+  draw([
+    ...NOTES,
+    {
+      callId: "call-2",
+      shownAt: 1_760_000_100_000,
+      startLine: 6,
+      endLine: 6,
+      note: "The seat is exported",
+    },
+  ]);
+  await wholeFileDrawn(container);
+
+  assert.equal(findTally(), "2 of 6");
 });

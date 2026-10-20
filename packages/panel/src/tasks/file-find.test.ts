@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { fileMatches, matchFrom } from "./file-find.js";
+import { fileMatches, matchFrom, noteFindWords } from "./file-find.js";
 
 /**
  * file-find.test.ts -- a find over a whole file read from its text: the
@@ -31,4 +31,15 @@ test("a find starts at the first match on or after a line, or the first of all p
   assert.equal(matchFrom(matches, 3), 3);
   assert.equal(matchFrom(matches, 9), 0);
   assert.equal(matchFrom([], 1), -1);
+});
+
+test("a note is read as its card shows it: a link by its name and never its destination, its marks left out, no match across its lines", () => {
+  const words = noteFindWords("**Seats** first, [read more](https://example.com/seats)\nsea\nts");
+  const notes = [{ key: "call-1", line: 1, words }];
+  assert.deepEqual(fileMatches(["const a = 1;"], notes, "seats"), [
+    { line: 1, note: "call-1", nth: 0 },
+  ]);
+  assert.deepEqual(fileMatches(["const a = 1;"], notes, "read more"), [
+    { line: 1, note: "call-1", nth: 0 },
+  ]);
 });

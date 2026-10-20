@@ -9,6 +9,7 @@ import { useAppCommand } from "../app-commands.js";
 import { SpinnerRegion } from "../spinner.js";
 import { typingInto } from "./changes-list.js";
 import { CodeLinesView, useLinesLook } from "./code-lines.js";
+import { noteFindWords } from "./file-find.js";
 import {
   FileNoteAnnotation,
   type FileNotes,
@@ -156,7 +157,7 @@ function FileTextView({
       {
         key: note.callId,
         line,
-        words: note.note,
+        words: noteFindWords(note.note),
         content: (
           <div className="whole-file-note">
             <FileNoteAnnotation

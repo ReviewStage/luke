@@ -5,6 +5,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { TaskFileRequest } from "@luke/features/task-wire";
+import { TASK_CALL_FAILURE, type TasksFileAnswer } from "@luke/features/tasks-view";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -14,12 +16,13 @@ import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { wholeFileDrawn, wholeFileRoot } from "../testing/whole-file.js";
+import { installScrollTo, wholeFileDrawn, wholeFileRoot } from "../testing/whole-file.js";
 import { WHOLE_TEXT } from "./file-tab-model.js";
-import { FileViewMenu } from "./file-view.js";
+import { FileView, FileViewMenu } from "./file-view.js";
 import { WholeFile } from "./whole-file.js";
 
 const PATH = "src/billing/plan.ts";
+const HEAD = "0123456789abcdef0123456789abcdef01234567";
 
 const roots: Root[] = [];
 
@@ -158,4 +161,67 @@ test("a File tab's ⋯ holds its actions alone, and Copy path copies the file's 
   );
   await act(async () => items[1]?.click());
   assert.deepEqual(copied, [PATH]);
+});
+
+test("Copy file contents copies the text the tab draws, read at its commit, rather than reading the branch again", async () => {
+  installScrollTo();
+  const copied: string[] = [];
+  fakeAppPlatform(copyingInto(copied));
+  const asked: TaskFileRequest[] = [];
+  // The service: the head's commit from the first line, the text at it, and newer text once the branch moves on.
+  const readFile = (request: TaskFileRequest): Promise<TasksFileAnswer> => {
+    asked.push(request);
+    if (request.raw !== true) {
+      return Promise.resolve({
+        file: {
+          path: PATH,
+          repository: "acme/relay",
+          branch: "main",
+          commit: HEAD,
+          firstLine: 1,
+          lineCount: 1,
+          lines: [[{ text: "x" }]],
+        },
+      });
+    }
+    const text = request.ref === HEAD ? "const seats = 3;\n" : "const seats = 4;\n";
+    return Promise.resolve({
+      text: { path: PATH, repository: "acme/relay", branch: "main", text },
+    });
+  };
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(FileView, {
+          taskId: "task-1",
+          repository: null,
+          file: { path: PATH, range: undefined, opened: 1 },
+          snippet: undefined,
+          shownCode: [],
+          readFile,
+          readFolder: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+          readWhole: () => Promise.resolve({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+          openGitHub: () => undefined,
+          treeOpen: false,
+          onToggleTree: () => undefined,
+          onBrowse: () => undefined,
+          history: { canGoBack: false, canGoForward: false, onStep: () => undefined },
+          onFoldNote: () => undefined,
+        }),
+      ),
+    ),
+  );
+  await wholeFileDrawn(container);
+  press(container, "File actions");
+  const copy = [...document.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]')].find(
+    (item) => item.textContent === "Copy file contents",
+  );
+  await act(async () => copy?.click());
+
+  assert.deepEqual(copied, ["const seats = 3;\n"]);
+  assert.equal(asked.length, 2, "nothing more is read for the copy");
 });
