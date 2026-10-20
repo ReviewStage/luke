@@ -375,6 +375,14 @@ export interface ProductEvent {
 export type ProductEventBatch = readonly ProductEvent[];
 
 /**
+ * What the service answers a batch it took: how many of its events it
+ * recorded, which a batch of nothing but retired names makes none.
+ */
+export const productEventsAnswerSchema = Schema.Struct({
+  accepted: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+
+/**
  * How many events one request may carry. A flush past this is a desktop bug
  * rather than a busy day, so the endpoint refuses the batch whole.
  */

@@ -52,10 +52,11 @@ export const HOSTED_REFUSAL_STATUS = {
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
 
-/** A refusal: its slug, and for a repository out of reach, why (`repositoryNotReachable`). */
+/** A refusal: its slug, for a repository out of reach, why (`repositoryNotReachable`), and for an upstream that refused, its status (`upstreamRefused`). */
 export type HostedRefusal = {
   readonly error: HostedRefusalSlug;
   readonly unreached?: RepositoryUnreached;
+  readonly upstreamStatus?: number;
 };
 
 /**
@@ -119,6 +120,11 @@ export const HOSTED_REFUSAL = {
 /** The repository out of reach, with why, so the desktop can offer what mends it. */
 export function repositoryNotReachable(unreached: RepositoryUnreached): HostedRefusal {
   return { ...HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE, unreached };
+}
+
+/** The upstream refused what was asked of it, with the status it answered and none of its body. */
+export function upstreamRefused(upstreamStatus: number): HostedRefusal {
+  return { ...HOSTED_REFUSAL.UPSTREAM_ERROR, upstreamStatus };
 }
 
 /**

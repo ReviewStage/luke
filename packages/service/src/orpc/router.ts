@@ -25,6 +25,10 @@ import {
 } from "../agents/agent-pull-request-procedures.js";
 import { type AgentsProcedureSeams, agentsProcedures } from "../agents/agents-procedures.js";
 import { instancePublishedCache } from "../agents/coder-host/published.js";
+import {
+  type MacCommandsProcedureSeams,
+  macCommandsProcedures,
+} from "../agents/mac-commands-procedures.js";
 import { type MessagesProcedureSeams, messagesProcedures } from "../agents/messages-procedures.js";
 import {
   type AutomationsProcedureSeams,
@@ -34,6 +38,7 @@ import {
   type DictationProcedureSeams,
   dictationProcedures,
 } from "../dictation/dictation-procedures.js";
+import { type EventsProcedureSeams, eventsProcedures } from "../events/events-procedures.js";
 import {
   type FactoryProcedureSeams,
   factoryProcedures,
@@ -73,10 +78,12 @@ export type HostedRouterSeams = AccountProcedureSeams &
   AgentsProcedureSeams &
   AutomationsProcedureSeams &
   DictationProcedureSeams &
+  EventsProcedureSeams &
   FactoryProcedureSeams &
   GitHubProcedureSeams &
   InboxProcedureSeams &
   IntegrationsProcedureSeams &
+  MacCommandsProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams &
   PlanCommentsProcedureSeams &
@@ -99,10 +106,12 @@ export function hostedRouter(seams: HostedRouterSeams) {
     agents: agentsProcedures(published),
     automations: automationsProcedures(seams),
     dictation: dictationProcedures(seams),
+    events: eventsProcedures(seams),
     factory: factoryProcedures(seams),
     github: githubProcedures(seams),
     inbox: inboxProcedures(seams),
     integrations: integrationsProcedures(seams),
+    macCommands: macCommandsProcedures(seams),
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
     planComments: planCommentsProcedures(seams),

@@ -1,10 +1,4 @@
-import { eventsApp } from "@luke/service/events/events-app";
-import { routeFromHttpRouter } from "../route-effect.js";
+import { orpcRoute } from "../orpc-route.js";
 
-/**
- * Records what the signed-in desktop counted about its own use. The logic
- * lives in `packages/service/src/events/events.ts`, behind the group in
- * `packages/service/src/events/events-app.ts`; this file only hands the group's export to the
- * route adaptor.
- */
-export default routeFromHttpRouter(eventsApp());
+/** What the signed-in desktop counted about its own use, answered by the hosted oRPC router (`packages/service/src/events/events-procedures.ts`). */
+export default orpcRoute;

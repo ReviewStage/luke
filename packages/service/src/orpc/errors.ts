@@ -29,11 +29,12 @@ const ORPC_PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE";
 /** The status each error code is answered with: oRPC's own codes as oRPC answers them, and every refusal as the hosted vocabulary does. */
 export const HOSTED_ERROR_STATUS = { ...COMMON_ERROR_STATUS_MAP, ...HOSTED_REFUSAL_STATUS };
 
-/** A refusal as the failure channel carries it: a slug that has a status, and the reason a repository is out of reach where it has one. */
+/** A refusal as the failure channel carries it: a slug that has a status, the reason a repository is out of reach, and an upstream's status, where it has them. */
 const isHostedRefusal = Schema.is(
   Schema.Struct({
     error: Schema.Literals(HOSTED_REFUSAL_SLUGS),
     unreached: Schema.optionalKey(repositoryUnreachedSchema),
+    upstreamStatus: Schema.optionalKey(Schema.Int),
   }),
 );
 
