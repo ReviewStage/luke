@@ -107,7 +107,8 @@ export const INBOX_TOOLS = {
       "An answer you do not wait for is kept for you to read, though one carrying their words or a file still reaches you as a message. " +
       `An answer reaches you as a developer's message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. ` +
       `Replying never answers: a member may write on a thread at any point, which reaches you as a developer's message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key; ` +
-      "answer it, or follow up after an answer, with a post under the key that asks nothing unless what you need changed. " +
+      "where it, or an answer carrying their words, wants a reply, such as a question or a request, reply on that thread with a post under its key that asks nothing unless what you need changed, " +
+      "as you follow up after an answer; they read your reply there and not in your transcript, so never answer them in your message alone. " +
       `You may hold at most ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open asks. The call answers with your whole inbox as it stands.`,
     inputSchema: inboxThreadPostInputSchema,
   },
