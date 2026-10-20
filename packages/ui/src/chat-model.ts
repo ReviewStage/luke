@@ -74,7 +74,7 @@ export type ChatPlace =
   | { readonly kind: typeof CHAT_PLACE.AGENT_PAIR; readonly agentIds: AgentPairIds };
 
 /** The two agents of a pair by id, the lesser first, so a pair is named one way whichever of the two spoke. */
-export type AgentPairIds = readonly [string, string];
+type AgentPairIds = readonly [string, string];
 
 /** One pair of agents' direct messages: the two by id, the two as the newest line names them, the one who spoke first first, and their lines in the order sent. */
 export interface AgentPair {
@@ -398,7 +398,7 @@ function pairIdsOf(message: ChatAgentMessage): AgentPairIds {
  * to the other is the pair's, so a send and the reply to it read as one
  * conversation.
  */
-export function agentPairs(chat: ChatAnswer): readonly AgentPair[] {
+function agentPairs(chat: ChatAnswer): readonly AgentPair[] {
   const byPair = new Map<string, Map<string, ChatAgentMessage[]>>();
   for (const message of chat.agentMessages ?? []) {
     const [first, second] = pairIdsOf(message);
