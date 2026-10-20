@@ -1,11 +1,12 @@
 import {
   MAC_COMMAND_KIND,
+  type MacCommandImage,
   type MacCommandKind,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
 import { index, integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import type { Schema } from "effect";
-import { timestamptz } from "./_helpers.js";
+import { bytea, timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
 /**
@@ -15,7 +16,9 @@ import { user } from "./auth.js";
  * the account's read claims it, runs it, and writes its result; the call
  * reads the result and deletes the row, so a row stands only while its call
  * does. A Mac claims only rows of the kinds its read named. Every row
- * belongs to the account and leaves with it.
+ * belongs to the account and leaves with it. A browser command's image,
+ * such as a screenshot, waits here beside its JSON result rather than in
+ * it, and leaves with the row as its call reads it, so nothing keeps it.
  */
 export const macCommand = pgTable(
   "mac_command",
@@ -34,8 +37,12 @@ export const macCommand = pgTable(
     queuedAt: timestamptz("queued_at").notNull(),
     /** When a Mac took it; null while it waits. */
     claimedAt: timestamptz("claimed_at"),
-    /** What it came to, once the Mac that took it said; null until then. */
+    /** What it came to, once the Mac that took it said; null until then. Never its image. */
     result: jsonb("result").$type<MacCommandResult>(),
+    /** The image a browser command's result carries, as its bytes; null for every other result. */
+    resultImage: bytea("result_image"),
+    /** The type `resultImage` is, null where it is. */
+    resultImageType: text("result_image_type").$type<MacCommandImage["mediaType"]>(),
   },
   (table) => [index("mac_command_waiting").on(table.userId, table.claimedAt)],
 );

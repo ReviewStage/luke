@@ -63,6 +63,11 @@ function scriptedService(commands: readonly MacCommandRead[]) {
           Ref.update(settled, (held) => new Map([...held, [id, result]])),
           true,
         ),
+      settleBrowser: (id, result) =>
+        Effect.as(
+          Ref.update(settled, (held) => new Map([...held, [id, result]])),
+          true,
+        ),
     };
     return { client, reads, settled };
   });
