@@ -28,7 +28,7 @@ import { type TabDoors, type TranscriptRead, useTranscriptCopier } from "./strip
  */
 
 /** What an agent offers on itself, as a tab's menu and a toolbar's ⋯ draw it (`strip-tabs.tsx`). */
-export type AgentDoors = Pick<
+type AgentDoors = Pick<
   TabDoors,
   "onCopy" | "onRename" | "onOpenTerminal" | "onOpenOnMac" | "archive" | "copyLink"
 >;
