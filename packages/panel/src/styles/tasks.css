@@ -192,6 +192,35 @@
   line-height: var(--luke-type-caption-leading);
 }
 
+/* The byline's presses, its people and the time that opens the version
+   history, each take a press a finger's height on a coarse pointer, and at
+   least as wide, centred on what they draw; the lines between them part a
+   little further, so one line's press does not cover the next's words. Note
+   that the time's own clip is lifted there, since it would clip its press,
+   and the time is too short to want cutting. */
+@media (pointer: coarse) {
+  .plan-byline {
+    row-gap: var(--luke-space-12);
+  }
+
+  .plan-byline [data-actor-ref],
+  .plan-byline .luke-text-button {
+    position: relative;
+    overflow: visible;
+  }
+
+  .plan-byline [data-actor-ref]::before,
+  .plan-byline .luke-text-button::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--luke-touch-target));
+    height: var(--luke-touch-target);
+    transform: translate(-50%, -50%);
+    content: "";
+  }
+}
+
 /* Who last edited the plan template, under its title in the muted meta weight. */
 .plan-edit-note {
   margin: 0 0 var(--luke-space-12);
@@ -602,6 +631,20 @@
   margin-top: 0;
 }
 
+/* The editor's box takes a finger's press around it on a coarse pointer, as
+   the read view's does (`markdown.css`), its label holding the press. */
+@media (pointer: coarse) {
+  .plan-document-text li[data-checked] > label::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--luke-touch-target);
+    height: var(--luke-touch-target);
+    transform: translate(-50%, -50%);
+    content: "";
+  }
+}
+
 /* What the editor keeps byte for byte but does not draw as its own: inline
    HTML, a footnote, a link's definition, a block of HTML. */
 .plan-raw-block {
@@ -638,6 +681,34 @@
   max-width: 100%;
   height: auto;
   margin: 0 auto;
+}
+
+.plan-diagram-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* A diagram opens over the window where its column is too narrow to read it
+   (`plan-diagram.tsx`): its head offers Full screen and a tap on the picture
+   does the same, in a narrow room or on a coarse pointer. A wide room with a
+   mouse offers neither, as before. */
+.plan-diagram-full-screen {
+  display: none;
+}
+
+.desktop-shell[data-room="narrow"] .plan-diagram-full-screen {
+  display: flex;
+}
+
+.desktop-shell[data-room="narrow"] .plan-diagram-picture {
+  cursor: zoom-in;
+}
+
+@media (pointer: coarse) {
+  .plan-diagram-full-screen {
+    display: flex;
+  }
 }
 
 /* A fence Mermaid refused says so over its code, in the failure's red. */
@@ -5089,6 +5160,13 @@ ol.transcript-list {
   height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
 }
 
+/* A picture opened at its own pixels, a diagram on a phone, is shown in
+   the whole of the dimmed window, so as much of it as fits is in sight. */
+.attachment-viewer[data-view="image"][data-opening="own-pixels"] {
+  width: calc(100vw - 2 * var(--luke-space-24));
+  height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
+}
+
 .attachment-viewer[data-view="other"] {
   width: min(400px, 100vw - 2 * var(--luke-space-24));
 }
@@ -5171,6 +5249,8 @@ ol.transcript-list {
   overflow: hidden;
   place-items: center;
   background: var(--luke-color-surface);
+  /* Two fingers anywhere on the frame pinch the picture (use-image-zoom.ts), never the page. */
+  touch-action: none;
 }
 
 /* The picture is zoomed by a transform over its fitted size
@@ -5935,6 +6015,54 @@ ol.transcript-list {
 .task-issue-link-unlink {
   display: flex;
   flex: none;
+}
+
+/* A row's state and controls stand in its line as its other parts do. */
+.task-issue-link-controls {
+  display: contents;
+}
+
+/* On a phone a row's controls, its state, its Closes / Part of switch, and
+   its ×, are wider together than the box beside its key, so the row takes
+   two lines: its mark, key, and title, cut short, over its state and its
+   controls at the row's end, under the key and the title. The state gives
+   way before a control does, so nothing is pushed past the box's edge. */
+.desktop-shell[data-room="narrow"] .task-issue-link {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "mark key title"
+    ". controls controls";
+  gap: var(--luke-space-4) var(--luke-space-8);
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-mark {
+  grid-area: mark;
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-key {
+  grid-area: key;
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-title {
+  grid-area: title;
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-controls {
+  display: flex;
+  min-width: 0;
+  grid-area: controls;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-space-8);
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-state {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .task-issue-links-note {

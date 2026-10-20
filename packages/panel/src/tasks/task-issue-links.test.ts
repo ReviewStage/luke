@@ -21,6 +21,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { fakeActPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform } from "../testing/app-platform.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { TaskIssueLinks } from "./task-issue-links.js";
@@ -31,8 +32,9 @@ import { TaskIssueLinks } from "./task-issue-links.js";
  * changed through the act port; Link issue opening New task's picker over
  * the task's repository, the issues the task links dimmed; what the service
  * refuses said under the rows; and nothing drawn where the workspace offers
- * no issue to link and the task links none. Synthetic task, workspace, and
- * issues.
+ * no issue to link and the task links none. On a phone a row stands its
+ * controls on a line of their own under its title, which gives way, and a
+ * wide room keeps its one line. Synthetic task, workspace, and issues.
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -374,4 +376,67 @@ test("a keyword change a newer one overtook puts nothing back when it is refused
     ["Part of"],
   );
   assert.equal(container.querySelector('[role="alert"]'), null);
+});
+
+/**
+ * The box drawn under a shell in `room`, the window's sheets laid for a
+ * touch screen (`testing/container-width.ts`): jsdom lays nothing out, so
+ * the rows are read through the sheets, which line of each row's grid each
+ * part stands on, and whether the title's track may shrink to nothing.
+ */
+async function laidIn(room: "narrow" | "wide") {
+  const laid = layContainersAt({}, { touch: true });
+  const { container } = await mount({ links: [SAFARI, ENG] });
+  const shell = document.body.appendChild(document.createElement("div"));
+  shell.className = "desktop-shell";
+  shell.dataset.room = room;
+  shell.append(container);
+  const row = container.querySelector<HTMLElement>(".task-issue-link") ?? assert.fail("a row");
+  const style = (part: string) =>
+    getComputedStyle(row.querySelector(`.task-issue-link-${part}`) ?? assert.fail(part));
+  const lines = [
+    ...getComputedStyle(row)
+      .getPropertyValue("grid-template-areas")
+      .matchAll(/"([^"]*)"/g),
+  ].map(([, line = ""]) => line.trim().split(/\s+/));
+  const lineOf = (part: string) => {
+    const at = lines.findIndex((line) => line.includes(style(part).getPropertyValue("grid-area")));
+    return at === -1 ? undefined : at;
+  };
+  return { laid, row, style, lines, lineOf };
+}
+
+test("on a phone a linked issue's controls stand on a line of their own, under a title that gives way, so none is pushed past the box at 360px", async () => {
+  const { laid, row, style, lineOf } = await laidIn("narrow");
+  try {
+    assert.equal(getComputedStyle(row).display, "grid");
+    const title = lineOf("title");
+    const controls = lineOf("controls");
+    assert.notEqual(title, undefined, "the title stands in the row");
+    assert.notEqual(controls, undefined, "the controls stand in the row");
+    assert.notEqual(controls, title, "the controls are not on the title's line");
+    assert.equal(style("controls").display, "flex", "the controls stand in one row of their own");
+    assert.equal(style("state").minWidth, "0px", "the state gives way before a control does");
+    for (const control of ["relation", "unlink"]) {
+      assert.equal(style(control).flexShrink, "0", `${control} keeps its whole width`);
+    }
+    assert.match(
+      getComputedStyle(row).getPropertyValue("grid-template-columns"),
+      /minmax\(0,\s*1fr\)/,
+      "the title's track may shrink to nothing",
+    );
+  } finally {
+    laid.remove();
+  }
+});
+
+test("in a wide room a linked issue keeps its one line, its controls among its parts", async () => {
+  const { laid, row, style, lines } = await laidIn("wide");
+  try {
+    assert.equal(getComputedStyle(row).display, "flex");
+    assert.equal(style("controls").display, "contents");
+    assert.deepEqual(lines, []);
+  } finally {
+    laid.remove();
+  }
 });

@@ -142,6 +142,36 @@ blockquote.markdown-quote > * + * {
   accent-color: var(--luke-color-accent);
 }
 
+/* A box the reader can tick stands in a label (`markdown-message.tsx`'s
+   `TaskBox`) in the bullet's gutter, exactly where the box alone stands, so
+   on a coarse pointer the label takes a press a finger's width across and as
+   tall, centred on the box, while the box draws at its own size. The plan's
+   editor gives its own label the same press (`tasks.css`). */
+.markdown li.task-list-item > .task-list-box {
+  position: absolute;
+  top: calc((1lh - 0.95em) / 2);
+  left: -1.45em;
+  width: 0.95em;
+  height: 0.95em;
+}
+
+.markdown li.task-list-item > .task-list-box > input[type="checkbox"] {
+  position: static;
+  display: block;
+}
+
+@media (pointer: coarse) {
+  .markdown li.task-list-item > .task-list-box::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--luke-touch-target);
+    height: var(--luke-touch-target);
+    transform: translate(-50%, -50%);
+    content: "";
+  }
+}
+
 /* A table scrolls sideways rather than widening the bubble; a column's
    alignment arrives as each cell's own inline style, from the delimiter row.
    Its edges fade where it hides columns past them (the mask below). */
@@ -171,6 +201,14 @@ blockquote.markdown-quote > * + * {
   overflow-wrap: normal;
 }
 
+/* On a phone a table too wide for the column would otherwise squeeze each
+   column to its longest word, a word to a line; each cell keeps room for a
+   few words instead, and the table scrolls inside its own box, its edges
+   fading where it hides columns (below). */
+.desktop-shell[data-room="narrow"] :is(.markdown, .transcript-table) :is(th, td) {
+  min-width: 7.5em;
+}
+
 /* A table that scrolls sideways fades each edge it hides columns past, as the
    tab strip does, so a column cut at the edge reads as more to scroll to
    rather than as words cut short. It is the window's one scroll fade
@@ -180,9 +218,12 @@ blockquote.markdown-quote > * + * {
    without asking JavaScript. Note that the table is no `ScrollArea` itself,
    because a table's own box is what scrolls. Its mask multiplies with the
    faded scroller it stands in, a document's or a log's, and neither reads
-   the other's depths, which do not inherit. */
+   the other's depths, which do not inherit. On a phone, whose scroll bars
+   stay hidden until a swipe, a code block's lines cut at its edge fade the
+   same way, so a line cut short reads as one to scroll. */
 .markdown table,
-.transcript-table {
+.transcript-table,
+.desktop-shell[data-room="narrow"] :is(.markdown pre, .transcript-code-body) {
   mask-image: linear-gradient(
     to right,
     transparent,
