@@ -1,5 +1,5 @@
 /**
- * account-procedures.ts -- the signed-in account's own procedures: its deletion, its preferences, its plan template, and its provider keys.
+ * account-procedures.ts -- the signed-in account's own procedures: its deletion, its preferences, its access, its plan template, and its provider keys.
  *
  * Each resolves the caller before touching anything, and answers nothing
  * about any account but the one the caller is: root AGENTS.md pins that no
@@ -33,6 +33,11 @@
  * Every write that changes it is kept as a revision, which its history
  * reads a page at a time and one at a time, and which a restore puts back
  * as a revision of its own, all under the caller's account alone.
+ *
+ * The access is whether the caller is an admin, read off its own role, so a
+ * client can offer the admin dashboard to the account that may open it. It
+ * says nothing of any other account and authorizes nothing: the dashboard's
+ * own gate (`admin/gate.ts`) decides every admin read on its own.
  *
  * The provider keys are `provider-keys-procedures.ts`'s.
  */
@@ -68,6 +73,7 @@ import type { UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Redacted, Result, Schema } from "effect";
 import type { HttpClient } from "effect/http";
+import { isAdminRole } from "../admin/admin-access.js";
 import type { EveReach } from "../agents/coder-host/stop.js";
 import { retireSessions, retiringReach } from "../agents/retire-sessions.js";
 import { HostedEnvironment } from "../environment.js";
@@ -91,6 +97,8 @@ export interface AccountProcedureSeams extends EveReach {
   /** Deletes the user row, every dependent row cascading with it, and queues the sandboxes of every session the account ran. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
+  /** The role on the account's own row, as Better Auth stores it; nothing where it holds none. */
+  readRole: (userId: string) => AccountSeamEffect<string | undefined>;
   /** Whether the Anthropic key the account's agents run on may run fast mode, by which its coding-agent choice may name a fast version (`offeredToAccount`). */
   anthropicFastAccess: (
     userId: string,
@@ -242,6 +250,12 @@ export function accountProcedures(seams: AccountProcedureSeams) {
     preferences: signedIn.preferences.effect(function* ({ context }) {
       const row = yield* hostedStoreOrUnavailable(seams.readPreferences(context.userId));
       return snapshotAnswer(row);
+    }),
+
+    /** Whether the caller's own account is an admin; any role but the admin role is not. */
+    access: signedIn.access.effect(function* ({ context }) {
+      const role = yield* hostedStoreOrUnavailable(seams.readRole(context.userId));
+      return { admin: isAdminRole(role) };
     }),
 
     /**

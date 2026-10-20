@@ -1,4 +1,4 @@
-// compose-account.test.ts -- session replay's answer across an account deletion and a later sign-in, over the desktop's account source; and a browser tab's account steps refused rather than dying, a change during the launch's read heard, and a sign-in's count sent before the tab leaves, over the cookie source.
+// compose-account.test.ts -- session replay's answer across an account deletion and a later sign-in, and the account's access across a read and a sign-out, over the desktop's account source; and a browser tab's account steps refused rather than dying, a change during the launch's read heard, and a sign-in's count sent before the tab leaves, over the cookie source.
 import assert from "node:assert/strict";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
@@ -180,6 +180,59 @@ it.effect("a sign-in after a deletion in the same run lets session replay record
     assert.deepEqual(yield* account.sessionReplayState, { permitted: true, accountId: "user-2" });
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, accountService),
+    Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+  ),
+);
+
+it.effect("an admin's access reaches the windows once read, and a sign-out takes it away", () =>
+  Effect.gen(function* () {
+    const stateRoot = yield* temporaryDirectoryScoped("luke-account-access-");
+    const events: { kind: GatewayEventKind; payload: WireValue }[] = [];
+    const kernel = hostKernelOver({
+      stateRoot,
+      runMode: runModeFor({ capture: false, fixture: false }),
+      accountBaseUrl: ACCOUNT_BASE_URL,
+      now: () => 0,
+      createId: () => "id",
+      report: () => undefined,
+      emit: (kind, payload) => {
+        events.push({ kind, payload });
+      },
+    });
+    const lastAccess = () =>
+      events.findLast((event) => event.kind === GATEWAY_EVENT.ACCOUNT_ACCESS_CHANGED)?.payload;
+    const lastAdmin = () => {
+      const access = lastAccess();
+      return isRecord(access) ? access.admin : undefined;
+    };
+
+    const account = yield* signedInAccount({
+      kernel,
+      machine: Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
+      openSocket: scriptedOpenSocket([]).openSocket,
+    });
+    // Nothing is read until the gate opening asks, so nothing is an admin before it.
+    assert.deepEqual(yield* account.accessState, { admin: false });
+
+    yield* account.refreshAccess;
+    yield* until(() => lastAdmin() === true);
+    assert.deepEqual(lastAccess(), { admin: true });
+    assert.deepEqual(yield* account.accessState, { admin: true });
+
+    const handler = account.methods[GATEWAY_METHOD.ACCOUNT_SIGN_OUT];
+    assert.ok(handler);
+    yield* Effect.orDie(handler({}, CONTEXT));
+    yield* until(() => lastAdmin() === false);
+    assert.deepEqual(lastAccess(), { admin: false });
+    assert.deepEqual(yield* account.accessState, { admin: false });
+  }).pipe(
+    Effect.provideService(FetchHttpClient.Fetch, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url === `${SERVICE_BASE_URL}${HOSTED_SERVICE_PATH.ACCOUNT_ACCESS}`)
+        return jsonResponse({ admin: true });
+      if (request.url.startsWith(`${ACCOUNT_BASE_URL}/`)) return jsonResponse({});
+      throw new Error(`this test reaches no network: ${request.url}`);
+    }),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),
   ),
 );

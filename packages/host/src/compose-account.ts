@@ -21,10 +21,12 @@ import {
 } from "@luke/gateway";
 import { VoiceCapabilityAssembler } from "@luke/voice";
 import type { OpenSocket } from "@luke/voice/live-socket";
-import { Config, Effect, Option, type Scope, Stream } from "effect";
+import { Config, Effect, FiberSet, Option, type Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
+import { AccountAccessClient, accountAccessHolder } from "./account-access-client.js";
 import type { AccountSession } from "./account-source.js";
+import type { AppAccessSlice } from "./app-state.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { agentTraceDirectory } from "./devtrace/trace-directory.js";
@@ -72,6 +74,14 @@ export interface AccountComposer extends Composer {
   readonly sessionCredential: CallCredential;
   applyVoiceCredential: Effect.Effect<void>;
   sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }>;
+  /** What the signed-in account may open in the app, as last read for it; no admin for anyone else. */
+  accessState: Effect.Effect<AppAccessSlice>;
+  /**
+   * Reads the signed-in account's access afresh, in a fiber of this
+   * concern's own so the gate that asks does not wait on the service; the
+   * answer reaches the windows as its own event.
+   */
+  refreshAccess: Effect.Effect<void>;
   link: (links: AccountLinks) => Effect.Effect<void>;
 }
 
@@ -132,6 +142,25 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
   let previousAccount: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 
   /**
+   * What the account may open, held for the account it was read for: a
+   * sign-in reads it (`refreshAccess`, from the gate opening), and a change
+   * of account publishes it again, so another account, or nobody, is never
+   * told an admin's answer.
+   */
+  const access = accountAccessHolder({
+    client: new AccountAccessClient({
+      serviceBaseUrl: kernel.hostedServiceBaseUrl,
+      credential: session.credential,
+    }),
+    accountKey: () => {
+      const account = session.snapshot();
+      return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
+    },
+    publish: (next) => kernel.emit(GATEWAY_EVENT.ACCOUNT_ACCESS_CHANGED, carried(next)),
+  });
+  const accessReads = yield* FiberSet.make();
+
+  /**
    * What a session change means to the rest of the host, as the subscriber
    * a fiber in this composer's own lifetime pumps from `session.changes`
    * rather than a callback the session held and ran: never
@@ -152,6 +181,7 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     // A deletion stands recording down until the next sign-in, which starts it again.
     if (signedIn && !wasSignedIn) sessionReplayEndedByDeletion = false;
     kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(next));
+    yield* access.accountChanged;
     yield* settings.emitSettings();
     yield* emitSessionReplay;
     if (signedIn && !wasSignedIn) settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
@@ -343,6 +373,8 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     sessionCredential: session.sessionCredential,
     applyVoiceCredential,
     sessionReplayState,
+    accessState: Effect.sync(access.current),
+    refreshAccess: Effect.asVoid(FiberSet.run(accessReads, access.refresh)),
     link: (next) => Effect.asVoid(late.set(next)),
     // The session holds no timer this host started beyond its own
     // subscription: what a sign-in began is stopped by the capabilities it

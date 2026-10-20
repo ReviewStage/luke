@@ -249,11 +249,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch
-     * behind an account already signed in runs: the preferences reconciled and
-     * the voice credential applied.
+     * behind an account already signed in runs: the preferences reconciled,
+     * the account's access read, and the voice credential applied.
      */
     const openCapabilities = Effect.gen(function* () {
-      if (account.signedIn()) yield* settings.reconcileAccountPreferences();
+      if (account.signedIn()) {
+        yield* settings.reconcileAccountPreferences();
+        yield* account.refreshAccess;
+      }
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
@@ -315,10 +318,12 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         Effect.gen(function* () {
           const snapshot = yield* Effect.orDie(settings.store.snapshot());
           const replay = yield* account.sessionReplayState;
+          const access = yield* account.accessState;
           return {
             settings: carried(snapshot),
             account: carried(account.snapshot()),
             sessionReplay: carried(replay),
+            access: carried(access),
             voiceAvailable: account.voiceCapabilities.liveSessions !== undefined,
             agentTraceEnabled: account.agentTrace !== undefined,
           };

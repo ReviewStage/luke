@@ -248,6 +248,29 @@ export function chatEnabledFor(
   return accountExperimentOn(userId, EXPERIMENT.CHAT);
 }
 
+const findRole = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ role: Schema.NullOr(Schema.String) }),
+  execute: (userId) =>
+    Database.use((db) =>
+      db.select({ role: user.role }).from(user).where(eq(user.id, userId)).limit(1),
+    ),
+});
+
+/**
+ * The role stored on the account's own `user` row, as Better Auth keeps it,
+ * or nothing where the row holds none or there is no such account. Read for
+ * the one account named and no other; what a role means is the service's
+ * (`admin-access.ts`), so this answers the text as it stands.
+ */
+export function readAccountRole(
+  userId: string,
+): Effect.Effect<string | undefined, AccountSeamFailure, DatabaseServices> {
+  return Effect.map(findRole(userId), (row) =>
+    Option.match(row, { onNone: () => undefined, onSome: ({ role }) => role ?? undefined }),
+  );
+}
+
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   voice: Schema.optionalKey(Schema.NullOr(Schema.String)),

@@ -569,6 +569,8 @@ export const GATEWAY_EVENT = {
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",
   ACCOUNT_CHANGED: "account.changed",
+  /** What the signed-in account may open in the app (whether it is an admin), whenever a read or the account moved it. */
+  ACCOUNT_ACCESS_CHANGED: "accountAccess.changed",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's tasks, active task, and document, whole, whenever a read moved them. */

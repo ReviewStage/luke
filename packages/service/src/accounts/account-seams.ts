@@ -1,6 +1,7 @@
 import {
   deleteAccount,
   readAccountPreferences,
+  readAccountRole,
   readPlanTemplate,
   restorePlanTemplate,
   writeAccountPreferences,
@@ -37,6 +38,7 @@ export function accountProcedureSeams(): AccountProcedureSeams {
     standingSessions: (userId) => standingSessionsOf(userId),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
+    readRole: readAccountRole,
     anthropicFastAccess,
     writePreferences: writeAccountPreferences,
     readPlanTemplate,

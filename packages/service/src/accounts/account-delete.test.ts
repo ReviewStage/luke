@@ -6,6 +6,7 @@ import { Database } from "@luke/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
+  readAccountRole,
   readPlanTemplate,
   restorePlanTemplate,
   writeAccountPreferences,
@@ -151,6 +152,7 @@ const openAccounts = (eve: ReturnType<typeof retiringEve> | undefined) =>
       standingSessions: (userId) => standingSessionsOf(userId),
       deleteUser: deleteAccount,
       readPreferences: readAccountPreferences,
+      readRole: readAccountRole,
       anthropicFastAccess,
       writePreferences: writeAccountPreferences,
       readPlanTemplate,

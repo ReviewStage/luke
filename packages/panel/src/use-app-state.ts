@@ -180,6 +180,18 @@ export function experimentOnNow(experiment: Experiment): boolean {
 }
 
 /**
+ * Whether the signed-in account is an admin, redrawn as it moves: what the
+ * sidebar offers the admin dashboard by. Signed out, before the first read,
+ * or where the host's read of it failed, no account is. It only draws: the
+ * dashboard's own gate on the service decides every admin read.
+ *
+ * @public Read by the sidebar's Admin row, which lands above this contract.
+ */
+export function useAdminAccess(): boolean {
+  return useAppState()?.access.admin === true;
+}
+
+/**
  * Whether the platform this window runs on offers a capability, redrawn as
  * the document arrives: the one way a platform feature's tab, command, or
  * button asks whether to stand at all. Before the first read nothing is

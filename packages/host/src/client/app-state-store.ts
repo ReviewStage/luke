@@ -141,6 +141,7 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
     run: { ...held.run, agentTraceEnabled: boot.agentTraceEnabled },
     settings: boot.settings,
     account: boot.account,
+    access: boot.access,
     voice: held.voice,
     sessionReplay: { ...boot.sessionReplay, halted: held.sessionReplay.halted },
   };
@@ -284,6 +285,7 @@ export function initialAppState(
       agentTraceEnabled: false,
     },
     account: { status: ACCOUNT_STATUS.SIGNED_OUT },
+    access: { admin: false },
     update: idleUpdateSnapshot(config.appVersion, installSupported),
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     hotkeys: { talkHeld: true },

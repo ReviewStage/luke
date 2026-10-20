@@ -212,6 +212,18 @@ interface AppNetworkSlice {
 }
 
 /**
+ * What the signed-in account may open in the app, as the host last read it
+ * from the service for that account (`account-access-client.ts`): whether
+ * it is an admin, which the sidebar offers the admin dashboard by. Never an
+ * admin while nobody is signed in, for another account than the one read,
+ * or where the read failed. A window draws by it and authorizes nothing:
+ * the dashboard's own gate on the service decides every admin read.
+ */
+export interface AppAccessSlice {
+  admin: boolean;
+}
+
+/**
  * Everything main keeps of what the host tells it and what this machine
  * answers for itself: one document, read whole and replaced a slice at a
  * time, so the state a window is handed and the state main answers a call
@@ -227,6 +239,7 @@ export interface AppState {
   run: AppRunFacts;
   settings?: AppSettings;
   account: AccountSnapshot;
+  access: AppAccessSlice;
   update: UpdateSnapshot;
   audio: AppAudioSlice;
   hotkeys: AppHotkeysSlice;

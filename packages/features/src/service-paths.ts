@@ -14,6 +14,11 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
   /**
+   * Whether the signed-in account is an admin (GET), so a client can offer
+   * the admin dashboard; `account-wire.ts` declares the answer.
+   */
+  ACCOUNT_ACCESS: "/api/account/access",
+  /**
    * The account's own Anthropic and OpenAI API keys: read what they are
    * (GET), save one (PUT), or remove one (DELETE). No answer carries a key.
    * `provider-key-wire.ts` declares every body.
