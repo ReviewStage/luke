@@ -86,7 +86,7 @@ import { readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { STOP_REFUSAL, stopConversation } from "../agents/brain-host/brain-ask.js";
-import { EVE_MOUNT } from "../agents/brain-host/eve-sessions.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
@@ -355,7 +355,7 @@ const startedAgentOn = (
   task: Task,
   agent: TaskAgentStart,
 ) =>
-  startRequestedAgent(eveFor(seams, request, userId), userId, task.id, agent).pipe(
+  startRequestedAgent(eveFor<EveTypedTurn>(seams, request, userId), userId, task.id, agent).pipe(
     Effect.flatMap((started) =>
       Effect.map(
         taskAfterStart(userId, task),

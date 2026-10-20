@@ -49,6 +49,7 @@ import { openChildConversation } from "../agents/brain-host/conversation.js";
 import { ownedAuth } from "../agents/brain-host/door.js";
 import {
   EVE_CANCEL_OUTCOME,
+  EVE_MOUNT,
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
@@ -648,6 +649,7 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
       eveSessions({
         origin: "https://luke.test",
         caller: { secret: Redacted.make(CRON_SECRET), account: target.userId },
+        mount: EVE_MOUNT.TASKS,
       }),
       door,
     ),

@@ -39,6 +39,7 @@ import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
 import {
   type AgentTurnStanding,
@@ -557,7 +558,10 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       );
       if (Option.isSome(recorded)) {
         // Note that the run reaches eve as this request's caller, whoever made the automation, as a Start does.
-        yield* executeAutomationRun(() => eveFor(seams, context.request, userId), recorded.value);
+        yield* executeAutomationRun(
+          () => eveFor<EveTypedTurn>(seams, context.request, userId),
+          recorded.value,
+        );
       }
       const run = yield* hostedStoreOrUnavailable(automationRunByKey(userId, id, key));
       if (Option.isNone(run)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

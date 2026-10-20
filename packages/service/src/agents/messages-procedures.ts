@@ -62,6 +62,7 @@ import {
   brainTurnsPage,
   brainWorkerSession,
 } from "../tasks/brain-transcript.js";
+import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -249,7 +250,7 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
       .use(tooLongMiddleware)
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
-        const eve = yield* eveFor(seams, context.request, context.userId);
+        const eve = yield* eveFor<EveTypedTurn>(seams, context.request, context.userId);
         yield* steerCodingAgent(eve, writer, context.userId, agent, {
           ...input.body,
           sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },

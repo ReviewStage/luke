@@ -26,6 +26,7 @@ import {
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMount,
+  type EveTypedTurn,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
@@ -204,8 +205,12 @@ it.effect(
     Effect.gen(function* () {
       const eve = eveOverHttp();
       const reached = yield* Effect.gen(function* () {
-        const coder = yield* eveFor(REACH, routeRequest({ authorization: BEARER }), ACCOUNT);
-        const brain = yield* eveFor(
+        const coder = yield* eveFor<EveTypedTurn>(
+          REACH,
+          routeRequest({ authorization: BEARER }),
+          ACCOUNT,
+        );
+        const brain = yield* eveFor<EveTypedTurn>(
           REACH,
           routeRequest({ authorization: BEARER }),
           ACCOUNT,
@@ -258,8 +263,8 @@ it.effect(
       const cookieRequest = routeRequest({ cookie: COOKIE, [BRAIN_HOST_HEADER.ACCOUNT]: OTHER });
       const typed = (conversationId: string) => messageOn(conversationId, BRAIN_HOST_TURN.TYPED);
       const outcomes = yield* Effect.gen(function* () {
-        const coder = yield* eveFor(REACH, cookieRequest, ACCOUNT);
-        const brain = yield* eveFor(REACH, cookieRequest, ACCOUNT, EVE_MOUNT.TASKS);
+        const coder = yield* eveFor<EveTypedTurn>(REACH, cookieRequest, ACCOUNT);
+        const brain = yield* eveFor<EveTypedTurn>(REACH, cookieRequest, ACCOUNT, EVE_MOUNT.TASKS);
         return {
           coder: [
             (yield* coder.open(typed(OWN_CONVERSATION))).outcome,
@@ -341,13 +346,13 @@ it.effect(
     Effect.gen(function* () {
       const eve = eveOverHttp();
       yield* Effect.gen(function* () {
-        const overBearer = yield* eveFor(
+        const overBearer = yield* eveFor<EveTypedTurn>(
           REACH,
           routeRequest({ authorization: BEARER }),
           ACCOUNT,
           EVE_MOUNT.TASKS,
         );
-        const overCookie = yield* eveFor(
+        const overCookie = yield* eveFor<EveTypedTurn>(
           REACH,
           routeRequest({ cookie: COOKIE }),
           ACCOUNT,
@@ -357,6 +362,7 @@ it.effect(
         const voice = yield* eveSessions({
           origin: ORIGIN,
           caller: { secret: Redacted.make(SECRET), account: ACCOUNT },
+          mount: EVE_MOUNT.TASKS,
         });
         yield* overBearer.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));
         yield* overCookie.open(messageOn(OWN_CONVERSATION, BRAIN_HOST_TURN.TYPED));

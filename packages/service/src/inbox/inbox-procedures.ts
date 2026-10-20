@@ -37,6 +37,7 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
 import type { AccountResolving } from "../agents/agent-reach.js";
+import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import {
   accountInboxPast,
   agentInboxPast,
@@ -183,7 +184,7 @@ const answered = /* @__PURE__ */ Effect.fnUntraced(function* (
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor(seams, request, userId);
+    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxAnswerMessage(taken, answer),
       attachments,
@@ -262,7 +263,7 @@ const answeredByReply = /* @__PURE__ */ Effect.fnUntraced(function* (
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor(seams, request, userId);
+    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxAnswerMessage(item, reply),
       attachments,
@@ -340,7 +341,7 @@ const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, taken.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor(seams, request, userId);
+    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxClosedMessage(taken),
       attachments: [],
@@ -418,7 +419,7 @@ const messaged = /* @__PURE__ */ Effect.fnUntraced(function* (
   const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
-    const eve = yield* eveFor(seams, request, userId);
+    const eve = yield* eveFor<EveTypedTurn>(seams, request, userId);
     yield* steerCodingAgent(eve, writer, userId, agent.value, {
       text: inboxThreadMessage(item, text),
       attachments,

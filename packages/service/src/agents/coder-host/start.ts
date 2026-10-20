@@ -78,6 +78,7 @@ import {
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveSessions,
+  type EveTypedTurn,
 } from "../brain-host/eve-sessions.js";
 import { fenceable } from "../fenced-text.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
@@ -699,7 +700,7 @@ function continuedTitle(source: string | null): string | undefined {
  * not be stopped is logged, since the new agent stands either way.
  */
 const stoppedSource = (
-  eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   source: CodingAgent,
 ) =>
   cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
@@ -710,7 +711,7 @@ const stoppedSource = (
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
-  eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
@@ -898,7 +899,7 @@ export interface RequestedStart {
  * made, with no turn; one a retry found under its key, as it stands now.
  */
 export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
   taskId: string,
   request: CodingAgentStartRequest,

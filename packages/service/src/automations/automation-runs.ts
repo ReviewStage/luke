@@ -49,7 +49,7 @@ import {
 import { failureKind } from "@luke/runtime/effect";
 import { Clock, Duration, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
-import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
+import type { EveSessions, EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { type StartServices, startCodingAgent } from "../agents/coder-host/start.js";
 import { codingAgentStatusOf } from "../agents/coder-host/status.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
@@ -116,7 +116,7 @@ const WORKING: ReadonlySet<CodingAgentStatus> = new Set([
 /** eve's coding-agent service as the deployment acting for one account, or the refusal where this deployment cannot reach it. */
 export type EveForAccount = (
   userId: string,
-) => Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>;
+) => Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>;
 
 /** Each GitHub event as the agent's prompt names it. */
 const GITHUB_EVENT_WORDS = {
