@@ -1,6 +1,6 @@
-import { AGENT_TOOL, CLAUDE_CODE_TOOL } from "@luke/features/agent-tools";
+import { AGENT_TOOL, CLAUDE_CODE_TOOL, CODEX_TOOL } from "@luke/features/agent-tools";
 import { CODING_AGENT_TODO_STATUS } from "@luke/features/coding-agent-wire";
-import { isRecord, isWireString, type WireValue } from "@luke/wire";
+import { isRecord, isWireNumber, isWireString, type WireValue } from "@luke/wire";
 
 /**
  * native-tool-calls.ts -- a call a native harness made, as the transcript draws it: the tool of Luke's whose renderer draws its kind, and its input and answer in that tool's shapes.
@@ -19,8 +19,8 @@ import { isRecord, isWireString, type WireValue } from "@luke/wire";
  * makes as one call, keeps its name for `tool-call-model.ts` to draw.
  *
  * Each harness has one table, keyed by the names its calls are stored under,
- * which no two harnesses share; Codex's joins Claude Code's in
- * `NATIVE_TOOL_CALLS`. Nothing here draws.
+ * which no two harnesses share: Claude Code's and Codex's (`CODEX_TOOL`,
+ * `codex-moments.ts`), joined in `NATIVE_TOOL_CALLS`. Nothing here draws.
  */
 
 /** A call as the transcript reads it: the tool, its input, and its answer, none while it runs. */
@@ -192,10 +192,145 @@ const CLAUDE_CODE_CALLS: Record<
   [CLAUDE_CODE_TOOL.AGENT]: (call) => call,
 };
 
+/** A Codex command's answer, `{output, exitCode}`, as eve's shell answers one; the exit code is none while it runs or once it was stopped. */
+function codexTerminalAnswer(output: WireValue | undefined): WireValue | undefined {
+  if (!isRecord(output) || !isWireString(output.output)) return output;
+  const exitCode = isWireNumber(output.exitCode) ? output.exitCode : 0;
+  return { stdout: output.output, stderr: "", exitCode };
+}
+
+/** The header `apply_patch` opens a file's change with, for each kind of change Codex reports. */
+const CODEX_CHANGE_HEADER: Readonly<Record<string, string>> = {
+  add: "Add",
+  delete: "Delete",
+  update: "Update",
+};
+
+/**
+ * One file of a Codex file change as `apply_patch` spells it: a file added
+ * as its lines added, one deleted as its lines removed, and an update as the
+ * unified diff Codex reports, which is already marked line by line; a move
+ * names where the file went, as `apply_patch` does.
+ */
+function codexFilePatch(change: WireValue): readonly string[] {
+  const path = inputString(change, "path") ?? "";
+  const kind = isRecord(change) ? change.kind : undefined;
+  const type = inputString(kind, "type") ?? "update";
+  const diff = inputString(change, "diff");
+  const header = `*** ${CODEX_CHANGE_HEADER[type] ?? "Update"} File: ${path}`;
+  if (type === "add") return [header, ...patchLines("+", diff)];
+  if (type === "delete") return [header, ...patchLines("-", diff)];
+  const moved = inputString(kind, "move_path");
+  return [
+    header,
+    ...(moved === undefined ? [] : [`*** Move to: ${moved}`]),
+    ...patchLines("", diff),
+  ];
+}
+
+/** A Codex file change's files as one `apply_patch`, which the edit renderer reads each file and its coloured lines from. */
+function codexPatch(input: WireValue | undefined): WireValue | undefined {
+  const changes = isRecord(input) ? input.changes : undefined;
+  if (!Array.isArray(changes)) return input;
+  return { patchText: changes.flatMap(codexFilePatch).join("\n") };
+}
+
+/** A plan step's status as the wire spells a to-do's: Codex's `inProgress` and `completed` are in progress and done. */
+function codexStepStatus(status: WireValue | undefined): WireValue | undefined {
+  if (status === "inProgress") return CODING_AGENT_TODO_STATUS.IN_PROGRESS;
+  if (status === "completed") return CODING_AGENT_TODO_STATUS.DONE;
+  return status;
+}
+
+/** Codex's plan as `write_todos` takes a list: each step's words and status; a step that does not read is kept, so the list reads as JSON rather than as a shorter list. */
+function codexTodosInput(input: WireValue | undefined): WireValue | undefined {
+  const plan = isRecord(input) ? input.plan : undefined;
+  if (!Array.isArray(plan)) return input;
+  return {
+    todos: plan.map((step: WireValue) =>
+      isRecord(step)
+        ? { content: step.step ?? "", status: codexStepStatus(step.status) ?? "" }
+        : step,
+    ),
+  };
+}
+
+/** The few words a Codex subagent call is named by where it carries no task: what it did to the subagents it names. */
+const CODEX_SUBAGENT_DOING: Readonly<Record<string, string>> = {
+  wait: "Wait for subagents",
+  closeAgent: "Close a subagent",
+  resumeAgent: "Resume a subagent",
+};
+
+/** A Codex subagent call's input as a native subagent's is drawn: its task, and the words naming it where it has none. */
+function codexSubagentInput(input: WireValue | undefined): WireValue | undefined {
+  if (!isRecord(input)) return input;
+  const prompt = inputString(input, "prompt") ?? "";
+  const tool = inputString(input, "tool") ?? "";
+  return prompt.trim() === ""
+    ? { prompt, description: CODEX_SUBAGENT_DOING[tool] ?? tool }
+    : { prompt };
+}
+
+/** A Codex subagent call's answer as the subagents' words, each state's message, or its status where none said any; any other answer as it is. */
+function codexSubagentAnswer(output: WireValue | undefined): WireValue | undefined {
+  const states = isRecord(output) ? output.agentsStates : undefined;
+  if (!isRecord(states)) return output;
+  const words = Object.values(states).flatMap((state) => {
+    const message = inputString(state, "message")?.trim();
+    return message === undefined || message === "" ? [] : [message];
+  });
+  return words.length > 0 ? words.join("\n\n") : (inputString(output, "status") ?? output);
+}
+
+/**
+ * Codex's items, each read as the eve call that does what it does: a
+ * command as `bash`, a file change as an `apply_patch` of its files, a web
+ * search as `search_web`, and the turn's plan as `write_todos`. A call to
+ * an MCP server other than Luke's is named by its server and its tool, which
+ * the generic row draws, its arguments as its input. A subagent's call keeps
+ * its name for `tool-call-model.ts` to draw as one call, its task and its
+ * subagents' words read as a native subagent's.
+ */
+const CODEX_CALLS: Record<(typeof CODEX_TOOL)[keyof typeof CODEX_TOOL], NativeCallReading> = {
+  [CODEX_TOOL.COMMAND_EXECUTION]: ({ input, output }) => ({
+    tool: AGENT_TOOL.BASH,
+    input: { command: inputString(input, "command") ?? "" },
+    output: codexTerminalAnswer(output),
+  }),
+  [CODEX_TOOL.FILE_CHANGE]: ({ input, output }) => ({
+    tool: AGENT_TOOL.APPLY_PATCH,
+    input: codexPatch(input),
+    output: inputString(output, "status") ?? output,
+  }),
+  [CODEX_TOOL.WEB_SEARCH]: ({ input, output }) => ({
+    tool: AGENT_TOOL.SEARCH_WEB,
+    input: { query: inputString(input, "query") ?? "" },
+    output,
+  }),
+  [CODEX_TOOL.TODO_LIST]: ({ input, output }) => ({
+    tool: AGENT_TOOL.WRITE_TODOS,
+    input: codexTodosInput(input),
+    output,
+  }),
+  // Note that the server's name is joined to the tool's with a dot, which no tool of Luke's or eve's is named with, so no renderer of theirs takes it.
+  [CODEX_TOOL.MCP_TOOL_CALL]: ({ input, output }) => ({
+    tool: `${inputString(input, "server") ?? ""}.${inputString(input, "tool") ?? ""}`,
+    input: isRecord(input) ? input.arguments : input,
+    output,
+  }),
+  [CODEX_TOOL.SUBAGENT]: ({ input, output }) => ({
+    tool: CODEX_TOOL.SUBAGENT,
+    input: codexSubagentInput(input),
+    output: codexSubagentAnswer(output),
+  }),
+};
+
 /** Every native harness's calls, by the names they are stored under. */
-const NATIVE_TOOL_CALLS: ReadonlyMap<string, NativeCallReading> = new Map(
-  Object.entries(CLAUDE_CODE_CALLS),
-);
+const NATIVE_TOOL_CALLS: ReadonlyMap<string, NativeCallReading> = new Map([
+  ...Object.entries(CLAUDE_CODE_CALLS),
+  ...Object.entries(CODEX_CALLS),
+]);
 
 /** A stored call as the transcript draws it: a native harness's as the eve call that does the same, and any other as it is. */
 export function drawnCall(call: DrawnCall): DrawnCall {
