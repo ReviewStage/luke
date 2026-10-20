@@ -900,6 +900,31 @@ it.layer(getTestDB())("a repository on a member's own token", (it) => {
       }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
   );
 
+  it.effect(
+    "a reach kept on the member's token gives way at once to an installation connected since on the repository's owner",
+    () =>
+      Effect.gen(function* () {
+        const relay = relayInstallation(310);
+        const fake = githubReaching([relay], GITHUB_APP_WITH_TOKENS, {}, memberToken());
+        const member = yield* openTokenMember();
+        const workspace = yield* openWorkspace(member);
+        const app = yield* GitHubApp;
+        const ask = () =>
+          app
+            .repositoryReadToken(workspace, "octo-org/relay", member)
+            .pipe(Effect.provide(fake.layer));
+
+        const before = yield* ask();
+        yield* connectWorkspaceGitHub(workspace, relay);
+        const after = yield* ask();
+
+        assert.ok(Option.isSome(before) && Option.isSome(after));
+        assert.equal(before.value.access.kind, GITHUB_ACCESS.TOKEN);
+        assert.deepEqual(after.value.access, { kind: GITHUB_ACCESS.APP });
+        assert.equal(Redacted.value(after.value.token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
+      }).pipe(Effect.provide(GITHUB_APP_WITH_TOKENS)),
+  );
+
   it.effect("a token GitHub answers 401 is marked invalid, and is not sent again", () =>
     Effect.gen(function* () {
       const fake = githubReaching(

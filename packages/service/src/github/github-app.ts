@@ -1554,20 +1554,24 @@ function githubAppService(
      * Note that we read the links on every ask, because an installation the
      * workspace disconnected, or one GitHub replaced, removed, or suspended
      * as a webhook told the store, must stop minting at once rather than
-     * when the kept reach lapses. A reach on the member's token stands as
-     * kept, since the token it names is read afresh at each use.
+     * when the kept reach lapses. A reach on the member's token stands
+     * while the workspace links no running installation on the repository's
+     * owner, since the App wins the moment one is connected; the token it
+     * names is read afresh at each use.
      */
     const standingReach = (key: ReachKey) =>
       Effect.gen(function* () {
         const kept = yield* Cache.get(reaches, key);
-        if (Result.isFailure(kept) || kept.success.access === GITHUB_ACCESS.TOKEN) return kept;
+        if (Result.isFailure(kept)) return kept;
         // Note that the links are read after the reach, because a reach afresh mends a stale status first.
         const linked = yield* installationsOfWorkspace(key.organizationId);
-        const throughId = kept.success.installation.id;
-        const stands = linked.some(
-          (one) =>
-            one.installationId === throughId && one.status === GITHUB_INSTALLATION_STATUS.ACTIVE,
-        );
+        const running = linked.filter((one) => one.status === GITHUB_INSTALLATION_STATUS.ACTIVE);
+        const [owner = ""] = key.fullName.split("/");
+        const reached = kept.success;
+        const stands =
+          reached.access === GITHUB_ACCESS.TOKEN
+            ? !running.some((one) => sameName(one.accountLogin, owner))
+            : running.some((one) => one.installationId === reached.installation.id);
         if (stands) return kept;
         yield* Cache.invalidate(reaches, key);
         return yield* Cache.get(reaches, key);
