@@ -103,15 +103,16 @@ function agentChip(
 }
 
 /**
- * What an agent's tab hands its messages for forking: the press, where the
- * agent works on a task that is not archived and the place opens a draft,
- * and the agents of the task started from each of its messages as chips.
+ * What an agent's tab hands its messages for forking: the press, where
+ * what the agent stands under, its task or, with none, the agent itself, is
+ * not archived and the place opens a draft, and the agents started from
+ * each of its messages as chips.
  */
 export function agentForkDoors(input: {
   agent: CodingAgentSummary;
   control: Pick<CodingAgentsControl, "agents" | "archived" | "onUnarchive">;
   onFork: ((fork: AgentFork) => void) | undefined;
-  /** Opens the task's draft as a continue of an agent, by its id, with the words and files given; none where no draft opens. */
+  /** Opens the draft, the task's or the agent page's, as a continue of an agent, by its id, with the words and files given; none where no draft opens. */
   onContinue?:
     | ((agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) => void)
     | undefined;
@@ -122,7 +123,8 @@ export function agentForkDoors(input: {
   const standing = new Set(control.agents?.map((each) => each.id));
   const listed = [...(control.agents ?? []), ...(control.archived ?? [])];
   const forks = forksOf(listed, agent.id);
-  const drafts = agent.planId !== null && control.onUnarchive === undefined;
+  // Note that an agent with no task is forked and continued as a task's is, its draft on its own page.
+  const drafts = control.onUnarchive === undefined;
   const forkable = onFork !== undefined && drafts;
   const open =
     onOpenTarget === undefined

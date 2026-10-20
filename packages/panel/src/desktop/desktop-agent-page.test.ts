@@ -31,7 +31,7 @@ import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-w
 import { ACT_KIND } from "@luke/host/acts";
 import type { PortActResult } from "@luke/host/contract";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
-import { isMacTerminalTab } from "@luke/ui/tab-strip-model";
+import { isMacTerminalTab, TAB_WORDS } from "@luke/ui/tab-strip-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -57,7 +57,12 @@ import {
   QUIET_PANEL,
 } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, stateWith } from "../testing/app-state.js";
-import { editorBundleLanded, installEditorLayout, typeInComposer } from "../testing/composer.js";
+import {
+  editorBundleLanded,
+  installEditorLayout,
+  pressInComposer,
+  typeInComposer,
+} from "../testing/composer.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -77,6 +82,9 @@ import { DesktopAgentPage } from "./desktop-agent-page.js";
  */
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+/** The agent a Continue or a Fork on the page starts. */
+const STARTED_ID = "1d2e3f40-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
 
 const PAGE: CodingAgentPage = {
   id: AGENT_ID,
@@ -279,6 +287,12 @@ beforeEach(() => {
         const value = held === undefined ? null : { number, author: "octo-dev", ...held };
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
+      if (request.kind === ACT_KIND.CODING_AGENTS_START) {
+        const value = {
+          agent: { ...PAGE, id: STARTED_ID, status: CODING_AGENT_STATUS.STARTING },
+        };
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
+      }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
         return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
       }
@@ -366,6 +380,49 @@ test("the page draws the task column's agent pane, at its reading width, and ⌘
   assert.equal(offered, true);
   assert.ok(page.querySelector(".desktop-agent")?.closest(".find-scope"), "the pane finds");
   assert.ok(page.querySelector("search[aria-label='Find']"), "⌘F opens the find bar");
+});
+
+test("Fork to new agent on the page's agent opens the page's draft in its place, which starts the fork where that agent is, naming no task, and the new agent opens on its own page", async () => {
+  transcript = {
+    messages: [
+      { id: "brief", role: MESSAGE_ROLE.USER, parts: [{ type: "text", text: "Sweep the tests." }] },
+      {
+        id: "answer",
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text: "The flaky retry is gone." }],
+      },
+    ],
+    cursor: "1:0",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  };
+  const opened: string[] = [];
+  const agentView = {
+    agentId: AGENT_ID,
+    onOpen: (id: string) => opened.push(id),
+    onClose: () => undefined,
+  };
+  const page = mount(tasksControl({ agentView }));
+  await settle();
+
+  const fork =
+    page.querySelector<HTMLButtonElement>('button[aria-label="Fork to new agent"]') ??
+    assert.fail("the agent's message offers Fork to new agent");
+  act(() => fork.click());
+  await settle();
+  const draft =
+    page.querySelector<HTMLElement>(
+      `.desktop-agent section[aria-label="${TAB_WORDS.NEW_AGENT}"]`,
+    ) ?? assert.fail("the draft stands in the agent's place");
+  pressInComposer(draft, "Enter");
+  await settle();
+
+  const starts = told.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_START);
+  assert.equal(starts.length, 1);
+  const payload = starts[0]?.payload;
+  assert.ok(payload !== undefined && !("taskId" in payload), "the Start names no task");
+  assert.deepEqual(payload.from, { agentId: AGENT_ID, messageId: "answer" });
+  assert.deepEqual(opened, [STARTED_ID]);
 });
 
 /** The page over the window's own side panel, held by the agent as the window holds it while the page stands. */

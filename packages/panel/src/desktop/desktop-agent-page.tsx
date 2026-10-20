@@ -16,7 +16,7 @@ import {
 } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
@@ -49,6 +49,7 @@ import { ActionMenu } from "./action-menu.js";
 import {
   type AgentTerminalDoors,
   useAgentActions,
+  useAgentDraftDoors,
   useAgentTerminalDoors,
 } from "./agent-actions.js";
 import { AgentPane } from "./main-tabs.js";
@@ -228,7 +229,16 @@ export function DesktopAgentPage({
   tasks: TasksControl;
   agentId: string;
 }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_AGENT_PAGE, tasks.agentView.onClose);
+  // The draft a Fork or a Continue opened on the page, by its key, which the pane shows in the agent's place.
+  const [drafting, setDrafting] = useState<{ agentId: string; draftId: string } | undefined>(
+    undefined,
+  );
+  const draftShown = drafting?.agentId === agentId ? drafting.draftId : undefined;
+  // Escape leaves a draft for the agent it was opened from, its words kept, and the page otherwise.
+  useAppCommand(
+    APP_COMMAND.EXIT_AGENT_PAGE,
+    draftShown === undefined ? tasks.agentView.onClose : () => setDrafting(undefined),
+  );
   const { act } = useAct();
   const views = useTabViews();
   const { sidePanel } = tasks;
@@ -251,7 +261,8 @@ export function DesktopAgentPage({
     onUnarchive: nothing,
     onOpenIntegrations: tasks.agents.onOpenIntegrations,
     onOpenApiKeys: tasks.agents.onOpenApiKeys,
-    onStarted: nothing,
+    // An agent a Continue or a Fork started opens on its own page, as a Start's tab opens on a task.
+    onStarted: tasks.agentView.onOpen,
     me: tasks.me,
   });
   const agent = agents.agents?.[0] ?? agents.archived?.[0];
@@ -304,6 +315,13 @@ export function DesktopAgentPage({
     onUnarchive: agent?.archivedAt === undefined ? undefined : unarchive,
   };
   const tab = { agent: agentId };
+  // A Fork or a Continue opens the page's draft in the agent's place, through the same doors a task's column opens its own by.
+  const draftDoors = useAgentDraftDoors(agents, agent?.archivedAt !== undefined, (draftId) =>
+    setDrafting({ agentId, draftId }),
+  );
+  // The draft stands in the pane while it is the one the page opened, and the agent again once it starts or is let go.
+  const paneTab =
+    draftShown !== undefined && agents.draft?.id === draftShown ? { draft: draftShown } : tab;
   const { onOpen: onOpenAutomations } = tasks.automationsView;
   const openAutomation = useCallback(
     (automationId: string) => onOpenAutomations({ kind: AUTOMATIONS_PAGE.EDIT, automationId }),
@@ -432,7 +450,7 @@ export function DesktopAgentPage({
                         <AgentPane
                           label={agentTabLabel(agent, control.models)}
                           tabbed={false}
-                          tab={tab}
+                          tab={paneTab}
                           agents={control}
                           shown={shown}
                           views={views}
@@ -440,6 +458,8 @@ export function DesktopAgentPage({
                           onOpenPullRequest={openPullRequest}
                           onOpenTarget={openTarget}
                           cards={cards}
+                          onFork={draftDoors.onFork}
+                          onContinue={draftDoors.onContinue}
                         />
                       </FindScope>
                     </section>

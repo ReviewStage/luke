@@ -1,4 +1,4 @@
-import type { CodingAgentAttachment, CodingAgentStatus } from "@luke/features/coding-agent-wire";
+import type { CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import { type MentionLines, sectionAnchors } from "@luke/features/mention-link";
 import { planSections } from "@luke/features/plan-document";
 import type { TaskStanding } from "@luke/features/task-wire";
@@ -38,7 +38,6 @@ import { AgentCard, agentSubject } from "../tasks/agent-ref.js";
 import { ArchivedBanner } from "../tasks/archived-task.js";
 import { useChatOn } from "../tasks/chat-gate.js";
 import { agentActor, agentTabLabel } from "../tasks/coding-agent-model.js";
-import type { AgentFork } from "../tasks/fork-model.js";
 import { useInboxCloser } from "../tasks/inbox-close.js";
 import type { InboxCodeDoors } from "../tasks/inbox-code-card.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
@@ -87,7 +86,7 @@ import { type TaskLooks, useReadMarks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { workRowsOf } from "../tasks/work-model.js";
 import { useCallingAgent } from "../use-voice-view.js";
-import { useAgentTerminalDoors } from "./agent-actions.js";
+import { useAgentDraftDoors, useAgentTerminalDoors } from "./agent-actions.js";
 import { TaskChatTab } from "./desktop-chat.js";
 import { DesktopHome } from "./desktop-home.js";
 import { useTaskInboxShow } from "./folded-groups.js";
@@ -627,14 +626,10 @@ function PlanDocument({
   const openAgent = useSteadyDoor((agent: string) => openColumnTab({ agent }));
   const agentLookDoor = useSteadyDoor(agentLook);
   const openMentionedFileDoor = useSteadyDoor(openMentionedFile);
-  const forkDoor = useSteadyDoor(
-    archived ? undefined : (fork: AgentFork) => openColumnTab({ draft: agents.onForkDraft(fork) }),
-  );
-  const continueDoor = useSteadyDoor(
-    archived
-      ? undefined
-      : (agentId: string, words: string, attachments: readonly CodingAgentAttachment[]) =>
-          openColumnTab({ draft: agents.onContinueDraft(agentId, words, attachments) }),
+  const { onFork: forkDoor, onContinue: continueDoor } = useAgentDraftDoors(
+    agents,
+    archived,
+    (draft) => openColumnTab({ draft }),
   );
   const showHistory = useSteadyDoor((save: number | undefined) => {
     if (opened !== undefined) tasks.history.onOpen(opened.id, save);

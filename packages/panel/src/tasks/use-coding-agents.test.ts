@@ -407,6 +407,59 @@ test("another agent named with no plan open holds nothing of the last, even wher
   assert.equal(tab.control().listFailed, true);
 });
 
+test("on an agent's own page, its agent is continued and forked through the page's draft, each Start naming no task so the service puts it where that agent is, and the agent started opens; a fork let go there lets its draft go", async () => {
+  const taskless = { ...STARTED, planId: null, status: CODING_AGENT_STATUS.COMPLETED };
+  const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_PAGE, {
+    agent: {
+      ...taskless,
+      automationId: null,
+      workspaceId: "workspace-1",
+      repository: "acme/relay",
+    },
+  });
+  const continued = { ...taskless, id: "continued-1", status: CODING_AGENT_STATUS.STARTING };
+  const forked = { ...taskless, id: "forked-1", status: CODING_AGENT_STATUS.STARTING };
+  tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: continued }, { agent: forked });
+  await tab.mount();
+
+  const control = tab.control();
+  assert.ok(control.continueAgent, "the page's agent is continued as a task's is");
+  let failed: Failure | undefined;
+  await act(async () => {
+    failed = await tab.control().continueAgent?.(AGENT, "Carry on with the clock.");
+  });
+  assert.equal(failed, undefined);
+
+  const fork = { agentId: AGENT, messageId: "message-1", opening: "Swept…" };
+  let draft = "";
+  act(() => {
+    draft = tab.control().onForkDraft(fork);
+  });
+  assert.equal(tab.control().draft?.fork, fork, "the page holds the fork's draft");
+  await act(async () => {
+    failed = await tab.control().startFork(draft, fork, "", undefined, [], []);
+  });
+  assert.equal(failed, undefined);
+  assert.equal(tab.control().draft, undefined, "a fork that started lets its draft go");
+
+  assert.deepEqual(startPayloads(tab.asked), [
+    { idempotencyKey: "key-1", from: { agentId: AGENT }, note: "Carry on with the clock." },
+    {
+      idempotencyKey: draft,
+      from: { agentId: AGENT, messageId: "message-1" },
+      disabledServers: [],
+    },
+  ]);
+  assert.deepEqual(tab.started, ["continued-1", "forked-1"]);
+
+  act(() => {
+    tab.control().onForkDraft(fork);
+  });
+  act(() => tab.control().onDropFork());
+  assert.equal(tab.control().draft, undefined, "nothing but a fork starts here, so its draft goes");
+});
+
 test("a read of an agent's changes keeps who its pull request names, by agent and with the pull request read, so its Changes card says them wherever it hangs; only the agent's newest read is kept, and a read naming no pull request drops them", async () => {
   const tab = mount({ taskId: undefined, agentId: AGENT, repository: null });
   const url = "https://github.com/acme/relay/pull/42";
@@ -948,7 +1001,7 @@ test("a second continue of an agent once the first landed mints a key of its own
   assert.deepEqual(tab.started, [first.id, second.id, third.id]);
 });
 
-test("no continue is offered while no Start could run: an archived task, a task naming no repository, or an agent read with no task", async () => {
+test("no continue is offered while no Start could run: an archived task, or a task naming no repository", async () => {
   const archived = mount({ taskId: TASK, repository: "acme/relay", archived: true });
   archived.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await archived.mount();
@@ -958,9 +1011,4 @@ test("no continue is offered while no Start could run: an archived task, a task 
   bare.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
   await bare.mount();
   assert.equal(bare.control().continueAgent, undefined);
-
-  const page = mount({ taskId: undefined, agentId: AGENT, repository: null });
-  page.answer(ACT_KIND.CODING_AGENTS_PAGE, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-  await page.mount();
-  assert.equal(page.control().continueAgent, undefined);
 });

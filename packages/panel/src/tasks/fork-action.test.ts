@@ -143,7 +143,15 @@ test("a settled turn of no words, its calls alone or failed before it said anyth
   assert.deepEqual(view.forks, [{ agentId: SOURCE, messageId: TURN, opening: "" }]);
 });
 
-test("no fork is offered on the developer's message, a task archived, an agent on no task, a place that opens no draft, or a tab that hands none, as a worker's", () => {
+test("an agent on no task offers Fork to new agent as a task's agent does, its press forking at that message", () => {
+  const view = drawn({ agent: summary(SOURCE, { planId: null }) });
+  assert.ok(view.fork, "the action is drawn");
+  act(() => view.fork?.click());
+  assert.equal(view.forks[0]?.agentId, SOURCE);
+  assert.equal(view.forks[0]?.messageId, TURN);
+});
+
+test("no fork is offered on the developer's message, a task archived, a place that opens no draft, or a tab that hands none, as a worker's", () => {
   const developers: CodingAgentMessage = {
     id: "line-1",
     role: MESSAGE_ROLE.USER,
@@ -152,7 +160,6 @@ test("no fork is offered on the developer's message, a task archived, an agent o
   const cases = {
     "the developer's message": drawn({ message: developers }),
     "a task archived": drawn({ taskArchived: true }),
-    "an agent on no task": drawn({ agent: summary(SOURCE, { planId: null }) }),
     "a place that opens no draft": drawn({ opensDraft: false }),
     "a worker's tab": drawn({ provided: false }),
   };
