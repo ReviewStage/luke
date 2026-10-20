@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "3bcaf327-2546-485b-ba9b-e4395060dab6",
-  "prevIds": ["3a783747-d5be-4954-a5cf-cefaa500def7"],
+  "id": "f5108f34-4aeb-4a1b-882a-ec7bd5134937",
+  "prevIds": ["c629749c-44b3-46ea-9a8a-ba9c795c975e"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -9521,41 +9521,6 @@
       "nameExplicit": true,
       "columns": [
         {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "provider",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "kind",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "account_provider_key_user_provider_kind_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "account_provider_key"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
           "value": "coding_agent_id",
           "isExpression": false,
           "asc": true,
@@ -14223,9 +14188,9 @@
       "table": "workspace_token_repository"
     },
     {
-      "columns": ["user_id", "provider"],
-      "nameExplicit": false,
-      "name": "account_provider_key_user_id_provider_pk",
+      "columns": ["user_id", "provider", "kind"],
+      "nameExplicit": true,
+      "name": "account_provider_key_pkey",
       "entityType": "pks",
       "schema": "public",
       "table": "account_provider_key"
