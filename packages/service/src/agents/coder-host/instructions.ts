@@ -55,7 +55,8 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * `beginTask`), and nothing else moves it, so the agent takes it back into
  * progress when it picks the work up again and marks it done when the work
  * is finished, leaving the call to the agent that started the others where
- * several work on one task.
+ * several work on one task; a helper started on a task of its own keeps
+ * that task's status itself, since its starter's rules cover only its own.
  */
 
 /** The words the instructions say of what the agent was handed, a plan or a prompt, where the two differ. */
@@ -141,7 +142,7 @@ When a result reads better as something to look at or click through than as word
 
 ## Your task's status
 
-Your task stands in the developer's sidebar with a status: backlog, todo, in-progress, done, or canceled. Keeping it current as you work is yours, with \`${CODER_TOOL.UPDATE_TASK}\` and your task's id; nothing else moves it once you have started. Starting you moved it to in-progress where it stood in the backlog or todo. Where you take the work up again on a task that stands done or canceled, such as on a message asking for more, move it back to in-progress before you start. Mark it done once its work is finished: the pull request that carries it merged, as one you merged yourself or one you find merged when a later message wakes you, or, where the work called for no pull request, such as a plan or research, the write-up delivered with nothing left to do. A pull request still open for review is not finished, so leave the task in-progress while it waits, and leave it in-progress too where you stopped short, saying why in your final message. Where other agents work on the task beside you, it is done only when all of its work is, so an agent another agent started leaves the status to that one. Mark it canceled only where the developer said to drop the work. Say in your message when you changed it.`,
+Your task stands in the developer's sidebar with a status: backlog, todo, in-progress, done, or canceled. Keeping it current as you work is yours, with \`${CODER_TOOL.UPDATE_TASK}\` and your task's id; nothing else moves it once you have started. Starting you moved it to in-progress where it stood in the backlog or todo. Where you take the work up again on a task that stands done or canceled, such as on a message asking for more, move it back to in-progress before you start. Mark it done once its work is finished: the pull request that carries it merged, as one you merged yourself or one you find merged when a later message wakes you, or, where the work called for no pull request, such as a plan or research, the write-up delivered with nothing left to do. A pull request still open for review is not finished, so leave the task in-progress while it waits, and leave it in-progress too where you stopped short, saying why in your final message. Where other agents work on the task beside you, it is done only when all of its work is: where another agent started you on its own task, leave the status to that agent, and where you started agents on yours, mark it done once all of their work is finished too. An agent started on a task of its own, apart from the task of whoever started it, keeps that task's status itself. Mark it canceled only where the developer said to drop the work. Say in your message when you changed it.`,
     comments: `
 
 ## Comments
