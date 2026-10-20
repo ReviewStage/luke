@@ -39,7 +39,8 @@ import { useAppCommand } from "./app-commands.js";
 import { appPlatform } from "./app-platform.js";
 import { drawnVisibly, focusSeek } from "./focus-seek.js";
 import { focusSearchField, Highlighted } from "./search-field.js";
-import { settingsPageOf, settingsPageShown } from "./settings/pages.js";
+import { settingsPageOf } from "./settings/pages.js";
+import { settingsPageShown } from "./settings/settings-rows.js";
 import { Shortcut } from "./shortcut.js";
 import { commandKeyshortcuts } from "./tooltip.js";
 
