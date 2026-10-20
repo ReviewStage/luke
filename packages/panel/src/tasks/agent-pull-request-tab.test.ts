@@ -2963,6 +2963,26 @@ it.effect(
     }),
 );
 
+test("a head on a fork is named, and copied, as GitHub names it: the fork's account, then its branch", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...DESKTOP_LINKS, ...copyingInto(copied) });
+  const tab = await draw(
+    controlAnswering({
+      pullRequest: () =>
+        Promise.resolve({
+          pullRequest: { ...PULL_REQUEST, head: "patch-1", headOwner: "octocat" },
+        }),
+    }),
+  );
+  const head =
+    tab.querySelector<HTMLButtonElement>('[aria-label="Copy branch octocat:patch-1"]') ??
+    assert.fail("the head's chip names its fork");
+  assert.equal(tab.querySelector(".pull-request-branches")?.textContent, "main ← octocat:patch-1");
+  await act(async () => head.click());
+  await settle();
+  assert.deepEqual(copied, ["octocat:patch-1"]);
+});
+
 test("the number keeps to the title's last word, the space before it inside the end that never wraps, so it never stands alone on a line", async () => {
   const tab = await draw(controlAnswering());
   const title =
