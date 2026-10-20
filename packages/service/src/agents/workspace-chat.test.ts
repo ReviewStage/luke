@@ -6,11 +6,14 @@ import { writeAccountPreferences } from "@luke/database/models/account-store";
 import {
   ensureGeneral,
   ensureMember,
+  findOrMakeDm,
   postAsk,
   postMessage,
 } from "@luke/database/models/chat-store";
+import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { claimRuntimeSession } from "@luke/database/models/recorded-session";
 import { user } from "@luke/database/schemas/auth";
-import { getTestDB, joinWorkspace, openWorkspace } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
 import {
   CHANNEL_KIND,
@@ -23,17 +26,37 @@ import {
 import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Clock, type Context, Duration, Effect, Fiber, Layer, Option, Queue, Result } from "effect";
+import {
+  Clock,
+  type Context,
+  DateTime,
+  Duration,
+  Effect,
+  Fiber,
+  Layer,
+  Option,
+  Queue,
+  Redacted,
+  Result,
+} from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
+import { LINK_OUTCOME } from "../github/github-installations.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import { announcingClock, driven } from "../testing/clock-driven.js";
-import { githubReaching } from "../testing/github-app-fake.js";
+import {
+  connectWorkspaceGitHub,
+  githubReaching,
+  type InstallationFixture,
+  openGithubUser,
+} from "../testing/github-app-fake.js";
+import { BRAIN_HOST_HEADER } from "./brain-host/bounds.js";
 import { CODER } from "./coder-host/bounds.js";
 import { messagesProcedures } from "./messages-procedures.js";
+import { writeWorkspaceChat } from "./workspace-chat.js";
 
 /**
  * The window's read of a workspace's chat, answered by the hosted oRPC
@@ -42,6 +65,9 @@ import { messagesProcedures } from "./messages-procedures.js";
  * where something already has, a changed ask read again, and a workspace
  * the account is not in answered as nothing. The clock is the test's, each
  * wait the route makes announced so the test moves it one step at a time.
+ * And a teammate's post to an agent, with no eve handed in, tells the agent
+ * through eve as the deployment acting for its starter, under the
+ * deployment's own secret and never the cron's the same environment holds.
  * Synthetic accounts, bearers, and words throughout.
  */
 
@@ -345,6 +371,93 @@ it.layer(getTestDB())("the window's read of a workspace's chat", (it) => {
         ]);
         yield* chooseChat(room.quiet, false);
         assert.equal((yield* room.ask(room.quiet, asQuiet)).status, HOSTED_HTTP_STATUS.NOT_FOUND);
+      }),
+  );
+});
+
+const RELAY = { owner: "Acme", name: "Relay" } as const;
+const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
+const INSTALLATION: InstallationFixture = { id: 4711, login: RELAY.owner, repositories: [RELAY] };
+
+/** The deployment holding both secrets: the cron's, and its own at eve's door. */
+const BOTH_SECRETS: HostedEnvironmentValues = {
+  ...NO_KEYS,
+  cronSecret: Redacted.make("cron-secret-1"),
+  eveDeploymentSecret: Redacted.make("eve-deployment-secret-1"),
+};
+
+it.layer(getTestDB())("a person's chat post told to an agent through eve", (it) => {
+  it.effect(
+    "with no eve handed in, a teammate's message to an agent reaches eve as the deployment acting for the agent's starter, under the deployment's own secret and never the cron's",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openGithubUser();
+        yield* chooseChat(owner, true);
+        const task = yield* startTask(owner, { name: "Invites", repository: RELAY_FULL_NAME });
+        const workspace = task.workspaceId;
+        assert.equal(yield* connectWorkspaceGitHub(workspace, INSTALLATION), LINK_OUTCOME.LINKED);
+        const teammate = yield* openAccount("Grace Hopper");
+        yield* joinWorkspace(workspace, teammate);
+        const { agent } = Option.getOrThrow(
+          yield* createCodingAgent(owner, {
+            taskId: task.id,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            planSnapshot: "# Invites\n",
+            prompt: null,
+            repository: RELAY_FULL_NAME,
+          }),
+        );
+        const sessionId = `wrun_${randomUUID()}`;
+        yield* claimRuntimeSession(
+          { userId: owner, conversationId: agent.conversationId },
+          sessionId,
+          yield* DateTime.nowAsDate,
+        );
+        const poster = Option.getOrThrow(
+          yield* ensureMember(teammate, workspace, { kind: MEMBER_KIND.HUMAN, userId: teammate }),
+        );
+        const agentMember = Option.getOrThrow(
+          yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.AGENT, agentId: agent.id }),
+        );
+        const dm = Option.getOrThrow(
+          yield* findOrMakeDm(teammate, workspace, poster.id, agentMember.id),
+        );
+
+        // eve answers on the same fake client GitHub does, and every request is written down in `github.sent`.
+        const eveAt = `${ORIGIN}/eve/coder/v1/session/`;
+        const github = githubReaching([INSTALLATION], undefined, undefined, (sent) =>
+          sent.url.startsWith(eveAt)
+            ? Response.json({ sessionId, deliveryId: "delivery-1" }, { status: 202 })
+            : undefined,
+        );
+        const answer = yield* writeWorkspaceChat({ eveOrigin: () => ORIGIN }, teammate, workspace, {
+          text: "The invite table is yours.",
+          channelId: dm.id,
+          clientKey: randomUUID(),
+        }).pipe(
+          Effect.provide(Layer.merge(github.layer, Layer.succeed(HostedEnvironment, BOTH_SECRETS))),
+        );
+
+        assert.ok("receipt" in answer);
+        assert.deepEqual([answer.receipt.told.length, answer.receipt.held], [1, []]);
+        assert.deepEqual(
+          github.sent
+            .filter((sent) => sent.url.startsWith(eveAt))
+            .map(({ url, headers }) => ({
+              url,
+              authorization: headers.get("authorization"),
+              account: headers.get(BRAIN_HOST_HEADER.ACCOUNT),
+            })),
+          [
+            {
+              url: `${eveAt}${sessionId}`,
+              authorization: "Bearer eve-deployment-secret-1",
+              account: owner,
+            },
+          ],
+        );
       }),
   );
 });

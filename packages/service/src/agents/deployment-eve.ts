@@ -7,18 +7,25 @@ import type { BrainHostTurn } from "./brain-host/bounds.js";
 import { type EveMount, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
 
 /**
- * Every web function that reaches eve for an account whose bearer it does
- * not hold composes the deployment's caller here and nowhere else: a
- * cookie request's `eveFor` (`coder-host/stop.ts`), a chat notice to an
- * agent's starter (`workspace-chat.ts`), a GitHub wake
- * (`github-webhook-app.ts`), and an automation's run
- * (`maintenance-app.ts`). The caller is the deployment's own secret at
- * eve's door, `HostedEnvironment.eveDeploymentSecret` (read as unset where
- * it is blank or the cron's own value, `environment.ts`), beside the
- * account; the door's deployment actor admits it only for what its table
- * allows and only on what that account reaches (`brain-host/auth.ts`). So no
- * caller reaches for another secret, and a deployment holding none, or no
- * environment at all, or no origin for eve, reaches eve for nobody.
+ * The web functions that reach eve, over the web runtime's own
+ * `HttpClient`, for an account whose bearer they do not hold compose the
+ * deployment's caller here: a cookie request's `eveFor`
+ * (`coder-host/stop.ts`), a chat notice to an agent's starter
+ * (`workspace-chat.ts`), a GitHub wake (`github-webhook-app.ts`), and an
+ * automation's run (`maintenance-app.ts`). The caller is the deployment's
+ * own secret at eve's door, `HostedEnvironment.eveDeploymentSecret` (read as
+ * unset where it is blank or the cron's own value, `environment.ts`),
+ * beside the account; the door's deployment actor admits it only for what
+ * its table allows and only on what that account reaches
+ * (`brain-host/auth.ts`). So none of them reaches for another secret, and a
+ * deployment holding none, or no environment at all, or no origin for eve,
+ * reaches eve for nobody.
+ *
+ * The voice function is the one caller that composes its own: its exchange
+ * stands for a function instance's life outside any request, over an
+ * `HttpClient` of its own, so it reads the same secret by the same rule
+ * from its environment (`eveDeploymentSecretIn`) and composes eve's client
+ * in `voice/deployment-exchange.ts`.
  */
 
 /**
