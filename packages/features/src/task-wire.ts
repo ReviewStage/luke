@@ -119,6 +119,16 @@ export const taskStatusSchema = EffectSchema.Literals(Object.values(TASK_STATUS)
 
 export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIORITY));
 
+/**
+ * The member a task is assigned to, by their account's id, as a start or a
+ * change names them: a member of the task's workspace, which the service
+ * confirms before it keeps them.
+ */
+export const taskAssigneeIdSchema = EffectSchema.String.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(200),
+);
+
 /** A task's number in its workspace, counted from one; its key is the workspace's prefix and this (`workspace-key.ts`). */
 const taskNumberSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
@@ -237,7 +247,8 @@ function issuesNamedOnce(request: {
  * starts the task with none. A brief beside `planning: false` or an `agent`
  * is kept rather than refused, and goes unread until a call is opened on the
  * task, since that start opens none. A task starts to do and unweighed
- * unless `status` and `priority` say otherwise.
+ * unless `status` and `priority` say otherwise, and assigned to no one
+ * unless `assigneeId` names a member of its workspace.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -258,6 +269,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   ),
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
+  assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
 }).check(EffectSchema.makeFilter(agentStartsUnplanned), EffectSchema.makeFilter(issuesNamedOnce));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
@@ -279,6 +291,7 @@ function updateNamesAChange(update: {
   workspaceId?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  assigneeId?: string | null;
 }): boolean {
   return Object.keys(update).length > 0;
 }
@@ -293,10 +306,11 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
  * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
  * which comes only with `pinned: true` and pins a plan not yet pinned,
  * whether it is archived, the workspace it moves to, where it stands, how
- * much it matters, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
- * workspace before it is kept, and null clears it. A move is the task's
+ * much it matters, who it is assigned to, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
+ * workspace before it is kept, and null clears it. An assignee is confirmed a
+ * member of the task's workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
- * the task's repository.
+ * the task's repository, and lets its assignee go where they are no member there.
  */
 export const taskUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
@@ -307,12 +321,13 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
+  assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
 }).check(EffectSchema.makeFilter(updateNamesAChange), EffectSchema.makeFilter(positionIsPinned));
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
-/** What a change of where a task stands names: its status, its priority, or both. */
-export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority">;
+/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), or any of them. */
+export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId">;
 
 /**
  * A repository the account pinned in the sidebar, and the instant it was
@@ -400,6 +415,12 @@ const taskSummaryFields = {
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   /** The task's number in its workspace, which its key is drawn from with the workspace's prefix; absent from a service before tasks had one. */
   number: EffectSchema.optionalKey(taskNumberSchema),
+  /**
+   * The member the task is assigned to, by id and the name their account
+   * holds now; absent while no one is, and from a service before tasks could
+   * be assigned.
+   */
+  assignee: EffectSchema.optionalKey(memberRefSchema),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */

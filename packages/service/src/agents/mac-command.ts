@@ -12,8 +12,12 @@ import {
 import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import {
   MAC_COMMAND_BOUNDS,
+  MAC_COMMAND_KIND,
+  type MacBrowserResult,
   type MacCommand,
+  type MacCommandKind,
   type MacCommandResult,
+  type MacShellResult,
   macCommandSchema,
 } from "@luke/features/mac-command-wire";
 import type { UnparsedWireValue } from "@luke/wire";
@@ -23,7 +27,7 @@ import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import { COMMAND_DESCRIPTION } from "./command-description.js";
 
 /**
- * mac-command.ts -- a shell command an agent runs on the developer's own Mac: queued for the account, run by a signed-in Mac that holds the read for it, and its result handed back to the call.
+ * mac-command.ts -- a command an agent runs on the developer's own Mac: queued for the account, run by a signed-in Mac that holds the read for it, and its result handed back to the call.
  *
  * Any agent may call it, the brain, a coding agent, and either's
  * workers, and nothing asks the developer first: Dean's call, with the one
@@ -39,6 +43,14 @@ import { COMMAND_DESCRIPTION } from "./command-description.js";
  * would refuse is refused before it is queued. The Mac's side is `GET /api/mac-commands`, held open while
  * nothing waits and answered with every waiting command claimed for it,
  * and `POST`, its result (`../mac-commands-app.ts`).
+ *
+ * A command is of a kind (`MAC_COMMAND_KIND`), and a Mac is handed only
+ * the kinds its read named: shell, which every Mac runs, an older one's
+ * read naming nothing, and each other kind a newer one names. So a call of
+ * another kind is refused at once where no Mac that runs it listened
+ * lately, rather than left for a Mac that would never take it, and a Mac
+ * that took a command it would not run answers why, which the call
+ * answers as not run.
  */
 
 const MAC_COMMAND_SERVICE = {
@@ -77,16 +89,55 @@ const MAC_COMMAND_REFUSAL = {
     `number from 1 to ${MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS}.`,
 } as const;
 
+/** Why a call ran nothing by its kind: no Mac that runs that kind listening, or an ask the Mac's read would refuse. */
+const MAC_COMMAND_KIND_REFUSAL = {
+  [MAC_COMMAND_KIND.SHELL]: {
+    NO_MAC: MAC_COMMAND_REFUSAL.NO_MAC,
+    UNREADABLE: MAC_COMMAND_REFUSAL.UNREADABLE,
+  },
+  [MAC_COMMAND_KIND.BROWSER]: {
+    NO_MAC:
+      "Not run: no Mac of the developer's that can drive its Browser tabs is listening. Luke " +
+      "may not be running there, may need updating, or Settings › Let agents run commands on " +
+      "this Mac is off.",
+    UNREADABLE:
+      "Not run: a browser command's params must be JSON of at most " +
+      `${MAC_COMMAND_BOUNDS.MAX_BROWSER_PARAMS_CHARS} characters, and its timeout a whole ` +
+      `number of seconds from 1 to ${MAC_COMMAND_BOUNDS.MAX_TIMEOUT_SECONDS}.`,
+  },
+} as const satisfies Record<
+  MacCommandKind,
+  { readonly NO_MAC: string; readonly UNREADABLE: string }
+>;
+
+/**
+ * What a call answers: what a shell command did, what a browser command
+ * did, its image among it where it carried one, or why nothing ran. Note
+ * that a browser command's image is its base64 as the Mac sent it, which
+ * the tool that asked hands the model as an image and keeps out of what
+ * the conversation stores, as `look_at_picture` does (`tasks/picture-look.ts`).
+ */
 // A type rather than an interface, so a result is a `WireRecord` the model is handed as it stands.
 export type MacCommandAnswer =
-  | ({ readonly status: typeof MAC_COMMAND_STATUS.RAN } & MacCommandResult)
+  | ({ readonly status: typeof MAC_COMMAND_STATUS.RAN } & MacShellResult)
+  | ({ readonly status: typeof MAC_COMMAND_STATUS.RAN } & MacBrowserResult)
   | { readonly status: typeof MAC_COMMAND_STATUS.NOT_RUN; readonly reason: string };
 
-/** What a call asks: the shell text, and how long it may run, the default where unsaid. */
-interface MacCommandAsk {
-  readonly command: string;
-  readonly timeoutSeconds?: number;
-}
+/**
+ * What a call asks of the Mac: a command of one kind, what that kind
+ * carries, and how long it may run, the default where unsaid.
+ */
+export type MacCommandAsk =
+  | {
+      readonly kind: typeof MAC_COMMAND_KIND.SHELL;
+      readonly command: string;
+      readonly timeoutSeconds?: number;
+    }
+  | {
+      readonly kind: typeof MAC_COMMAND_KIND.BROWSER;
+      readonly params: Schema.Json;
+      readonly timeoutSeconds?: number;
+    };
 
 const readMacCommand = readEither(macCommandSchema);
 
@@ -134,14 +185,21 @@ function notRun(reason: string): MacCommandAnswer {
   return { status: MAC_COMMAND_STATUS.NOT_RUN, reason };
 }
 
-/** Whether a Mac of the account read for its commands within the freshness window. */
-function macListening(userId: string): TaskStoreEffect<boolean> {
+/** Whether a Mac of the account that runs the kind given read for its commands within the freshness window. */
+function macListening(userId: string, kind: MacCommandKind): TaskStoreEffect<boolean> {
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
     macListeningSince(
       userId,
+      kind,
       new Date(now - Duration.toMillis(MAC_COMMAND_SERVICE.LISTENER_FRESH)),
     ),
   );
+}
+
+/** What a call answers for what the Mac said: what a shell or a browser command did, or why the Mac ran nothing. */
+function answered(result: MacCommandResult): MacCommandAnswer {
+  if ("refused" in result) return notRun(result.refused);
+  return { status: MAC_COMMAND_STATUS.RAN, ...result };
 }
 
 /** The command's result once a Mac settles it, looked for until the deadline; nothing past it. */
@@ -164,37 +222,38 @@ function awaitedResult(
 }
 
 /**
- * Runs one command on the account's Mac and answers what it did: refused
- * at once where no Mac listens, and the row withdrawn however the wait
- * ends, an interrupted call's included.
+ * Runs one command on the account's Mac and answers what it came to:
+ * refused at once where no Mac that runs its kind listens, and the row
+ * withdrawn however the wait ends, an interrupted call's included.
  */
-function runOnMac(
+export function askMac(
   userId: string,
   ask: MacCommandAsk,
 ): Effect.Effect<MacCommandAnswer, never, DatabaseServices> {
+  const refusal = MAC_COMMAND_KIND_REFUSAL[ask.kind];
   const asked = readMacCommand({
+    ...ask,
     id: randomUUID(),
-    command: ask.command,
     timeoutSeconds: ask.timeoutSeconds ?? MAC_COMMAND_BOUNDS.DEFAULT_TIMEOUT_SECONDS,
   });
   // A command the Mac's read would refuse is refused here, before it is queued where it would spoil that read.
-  if (Result.isFailure(asked)) return Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNREADABLE));
+  if (Result.isFailure(asked)) return Effect.succeed(notRun(refusal.UNREADABLE));
   const queued = asked.success;
   const run = Effect.gen(function* () {
-    if (!(yield* macListening(userId))) return notRun(MAC_COMMAND_REFUSAL.NO_MAC);
-    const answered = yield* queueMacCommand(userId, queued).pipe(
+    if (!(yield* macListening(userId, queued.kind))) return notRun(refusal.NO_MAC);
+    const result = yield* queueMacCommand(userId, queued).pipe(
       Effect.andThen(awaitedResult(userId, queued)),
       Effect.ensuring(Effect.ignore(withdrawMacCommand(userId, queued.id))),
     );
-    if (Option.isNone(answered)) return notRun(MAC_COMMAND_REFUSAL.NO_ANSWER);
-    return { status: MAC_COMMAND_STATUS.RAN, ...answered.value } satisfies MacCommandAnswer;
+    if (Option.isNone(result)) return notRun(MAC_COMMAND_REFUSAL.NO_ANSWER);
+    return answered(result.value);
   });
   return Effect.catch(run, () => Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNAVAILABLE)));
 }
 
 /**
  * One `run_on_mac` call made for the account, whichever agent made it: its
- * input read against the tool's schema, then run as `runOnMac` runs it. The
+ * input read against the tool's schema, then run as `askMac` runs it. The
  * one door every agent's tool goes through, so each root's tool is a line.
  */
 export function runOnMacTool(
@@ -204,29 +263,37 @@ export function runOnMacTool(
   const read = readInput(input);
   if (Result.isFailure(read)) return Effect.succeed(notRun(MAC_COMMAND_REFUSAL.UNREADABLE));
   const { command, timeout_seconds } = read.success;
-  return runOnMac(
+  const kind = MAC_COMMAND_KIND.SHELL;
+  return askMac(
     userId,
-    timeout_seconds === undefined ? { command } : { command, timeoutSeconds: timeout_seconds },
+    timeout_seconds === undefined
+      ? { kind, command }
+      : { kind, command, timeoutSeconds: timeout_seconds },
   );
 }
 
 /**
- * The Mac's held read: it is counted listening as the read arrives, and
- * answered with every waiting command claimed for it as soon as one waits,
- * or with none once the hold ends.
+ * The Mac's held read, naming the kinds it runs: it is counted listening
+ * for them as the read arrives, and answered with every waiting command of
+ * those kinds claimed for it as soon as one waits, or with none once the
+ * hold ends. A command of any other kind is left waiting for a Mac that
+ * runs it, or for its call to give up on it.
  */
-export function macCommandsFor(userId: string): TaskStoreEffect<readonly MacCommand[]> {
+export function macCommandsFor(
+  userId: string,
+  kinds: readonly MacCommandKind[],
+): TaskStoreEffect<readonly MacCommand[]> {
   const queuedSince = Effect.map(
     Clock.currentTimeMillis,
     (now) => new Date(now - Duration.toMillis(MAC_COMMAND_SERVICE.CLAIM_WINDOW)),
   );
-  return markMacListening(userId).pipe(
+  return markMacListening(userId, kinds).pipe(
     Effect.andThen(
-      Effect.flatMap(queuedSince, (since) => macCommandsWaiting(userId, since)).pipe(
+      Effect.flatMap(queuedSince, (since) => macCommandsWaiting(userId, since, kinds)).pipe(
         Effect.repeat({ schedule: Schedule.spaced(MAC_COMMAND_SERVICE.POLL), until: (any) => any }),
         Effect.timeoutOption(MAC_COMMAND_SERVICE.HOLD),
       ),
     ),
-    Effect.andThen(Effect.flatMap(queuedSince, (since) => claimMacCommands(userId, since))),
+    Effect.andThen(Effect.flatMap(queuedSince, (since) => claimMacCommands(userId, since, kinds))),
   );
 }

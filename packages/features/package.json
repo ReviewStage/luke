@@ -118,6 +118,7 @@
     "./terminal-acts": "./src/terminal-acts.js",
     "./page-frame": "./src/page-frame.js",
     "./browser-acts": "./src/browser-acts.js",
+    "./agent-browser-tab-wire": "./src/agent-browser-tab-wire.js",
     "./page-policy": "./src/page-policy.js",
     "./page-find": "./src/page-find.js",
     "./terminal-entry": "./src/terminal-entry.js",

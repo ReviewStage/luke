@@ -36,6 +36,7 @@ import {
   type InboxReply,
   type InboxReplyKind,
   type InboxResponse,
+  inboxAnswerHeard,
   inboxAnswersRefusal,
   inboxReplyRefusal,
   knownBlock,
@@ -613,6 +614,29 @@ function everyStep(ask: Pick<InboxDoAsk, "steps">): readonly number[] {
   return Array.from({ length: shownSteps(ask) }, (_, at) => at);
 }
 
+/** Whether the reader ticked every step a `do` ask shows by hand. */
+function everyStepTicked(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: Pick<InboxDraft, "steps">,
+): boolean {
+  const ticked = new Set(tickedSteps(draft));
+  return everyStep(ask).every((at) => ticked.has(at));
+}
+
+/**
+ * The decision a `do` ask's draft holds: the press given, Mark done or
+ * Couldn't do it, or else Mark done where every step is ticked by hand,
+ * which nothing stores, so letting a step go takes it back off. Note that
+ * a press given wins, so Couldn't do it stands with every step ticked.
+ */
+export function doDecision(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: Pick<InboxDraft, "steps" | "press">,
+): InboxReplyKind | undefined {
+  if (draft.press === INBOX_REPLY.DONE || draft.press === INBOX_REPLY.NOT_DONE) return draft.press;
+  return everyStepTicked(ask, draft) ? INBOX_REPLY.DONE : undefined;
+}
+
 /**
  * The steps a `do` ask's card shows ticked: every one while Mark done is
  * pressed, which ticks them all, or else those the reader ticked by hand,
@@ -644,9 +668,29 @@ export function withStep(
 }
 
 /**
+ * The draft after a `do` ask's Mark done or Couldn't do it is pressed: the
+ * decision it holds (`doDecision`) taken off where it is the one pressed,
+ * or else given. Note that taking off a Mark done every step's hand tick
+ * stands for lets those ticks go, or it would stand again at once.
+ */
+export function withDoPress(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: InboxDraft,
+  reply: typeof INBOX_REPLY.DONE | typeof INBOX_REPLY.NOT_DONE,
+): InboxDraft {
+  if (doDecision(ask, draft) !== reply) return { ...draft, press: reply };
+  const released = { ...draft, press: undefined };
+  return reply === INBOX_REPLY.DONE && everyStepTicked(ask, released)
+    ? { ...released, steps: [] }
+    : released;
+}
+
+/**
  * The answer the draft attaches to the reply for the open ask, or none: a
- * `decide`'s options picked, a `do`'s Mark done with every step ticked or
- * Couldn't do it with the steps ticked, an `answer`'s fields' values once
+ * `decide`'s options picked, a `do`'s Mark done with every step ticked,
+ * pressed or every step ticked by hand, Couldn't do it with the steps
+ * ticked, or, with no press, the steps ticked as an answer deciding
+ * nothing, an `answer`'s fields' values once
  * any is filled, as a form filled in part sends what was filled, or its
  * Answer, whose words are the reply's own. Note that the title standing as a `do`'s
  * one step is ticked on the card alone, since the ask names no such step.
@@ -661,13 +705,17 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
         ? undefined
         : { ask: id, reply: INBOX_REPLY.CHOSE, choices: draft.choices };
     case INBOX_ASK.DO: {
-      if (draft.press !== INBOX_REPLY.DONE && draft.press !== INBOX_REPLY.NOT_DONE)
-        return undefined;
-      const steps =
-        draft.press === INBOX_REPLY.DONE
-          ? everyStep(ask).filter((at) => at < ask.steps.length)
-          : tickedSteps(draft).filter((at) => at < ask.steps.length);
-      return { ask: id, reply: draft.press, steps };
+      const decision = doDecision(ask, draft);
+      const named = (steps: readonly number[]) => steps.filter((at) => at < ask.steps.length);
+      if (decision === INBOX_REPLY.DONE) {
+        return { ask: id, reply: decision, steps: named(everyStep(ask)) };
+      }
+      const ticked = named(tickedSteps(draft));
+      if (decision === INBOX_REPLY.NOT_DONE) return { ask: id, reply: decision, steps: ticked };
+      // Steps ticked with no press go as they stand, an answer that decides nothing.
+      return ticked.length === 0
+        ? undefined
+        : { ask: id, reply: INBOX_REPLY.ANSWERED, steps: ticked };
     }
     case INBOX_ASK.ANSWER:
       // A form's fields attach as they are filled, with no press, any filled in part sending what was filled.
@@ -843,7 +891,8 @@ const SENT_WORDS = {
 /**
  * What a sent answer's stamp says on the thread, in the past: "Approved",
  * "Requested changes", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
- * "Submitted", or "Answered". The ask it answers is read where the thread
+ * a to-do's steps ticked with no press, "Ticked 2/3", "Submitted", or
+ * "Answered". The ask it answers is read where the thread
  * still carries it.
  */
 export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerStamp {
@@ -858,6 +907,11 @@ export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined):
         return counting("Done", stepCount(answers, ask));
       case INBOX_REPLY.NOT_DONE:
         return counting("Couldn't do it", stepCount(answers, ask));
+      case INBOX_REPLY.ANSWERED: {
+        // A to-do's steps ticked with no press decided nothing, so they say what was ticked.
+        const count = answers.steps === undefined ? undefined : stepCount(answers, ask);
+        return count === undefined ? sentenceCased(SENT_WORDS[answers.reply]) : `Ticked ${count}`;
+      }
       default:
         return sentenceCased(SENT_WORDS[answers.reply]);
     }
@@ -1762,6 +1816,23 @@ export function needsReader(item: InboxItem, readerId: string | undefined): bool
   return item.status === INBOX_STATUS.OPEN && readersItem(item, readerId);
 }
 
+/**
+ * Whether opening the item acknowledges it, as Got it did: a notice waiting
+ * on a nod (`awaitsNod`), the reader's own (`needsReader`) by an id already
+ * known, since an acknowledgement settles it for every member, and one whose
+ * acknowledgement messages nobody (`inboxAnswerHeard`), since a note that
+ * asks to be heard back would reach its agent as "Acknowledged." on a mere
+ * open. A box holding no words or files for it offers no Got it.
+ */
+export function acknowledgedOnOpen(item: InboxItem, readerId: string | undefined): boolean {
+  return (
+    readerId !== undefined &&
+    needsReader(item, readerId) &&
+    awaitsNod(item, inboxThreadOf(item) ?? []) &&
+    !inboxAnswerHeard(item, { reply: INBOX_REPLY.ACKNOWLEDGED })
+  );
+}
+
 /** Whether a listed item needs the reader (`needsReader`) where it stands: never on a task put away in the archive, which nothing answers until it is back. */
 export function needsYou(listed: InboxListed, readerId: string | undefined): boolean {
   return needsReader(listed.item, readerId) && !archivedHolder(listed.holder);
@@ -2002,17 +2073,35 @@ export function inboxSteps(
   return { at: at + 1, total: rowed.length, previous: rowed[at - 1], next: rowed[at + 1] };
 }
 
-/** The first row after the chosen one whose item needs the reader, in the list's order, wrapping round to its top, a folded group's left out; none where nothing else does. */
+/** Which way the reader last stepped through the list, K up and J down, which Next follows. */
+export const INBOX_DIRECTION = {
+  UP: "up",
+  DOWN: "down",
+} as const;
+
+export type InboxDirection = (typeof INBOX_DIRECTION)[keyof typeof INBOX_DIRECTION];
+
+/**
+ * The nearest row past the chosen one, the way the reader is moving, whose
+ * item needs the reader, a folded group's left out; none where nothing else
+ * does. Down it reads the rows below and wraps round to the list's top; up,
+ * the rows above, nearest first, and wraps round from the list's foot.
+ */
 export function nextNeedingYou(
   view: InboxListView,
   chosen: string | undefined,
   folded: (key: string) => boolean,
+  direction: InboxDirection = INBOX_DIRECTION.DOWN,
 ): InboxListed | undefined {
   const listed = rowedItems(view, folded, chosen);
   const at = listed.findIndex(({ item }) => item.id === chosen);
-  return [...listed.slice(at + 1), ...listed.slice(0, Math.max(at, 0))].find(
-    (listed) => needsYou(listed, view.readerId) && listed.item.id !== chosen,
-  );
+  const below = listed.slice(at + 1);
+  const above = listed.slice(0, Math.max(at, 0));
+  const ahead =
+    direction === INBOX_DIRECTION.UP
+      ? [...above.reverse(), ...below.reverse()]
+      : [...below, ...above];
+  return ahead.find((listed) => needsYou(listed, view.readerId) && listed.item.id !== chosen);
 }
 
 /** The item that stands chosen where none is: the first listed that needs the reader, else the first listed. */

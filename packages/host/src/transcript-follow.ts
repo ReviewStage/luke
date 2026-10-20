@@ -69,10 +69,11 @@ interface Failed {
 }
 
 export interface TranscriptFollowDependencies {
-  /** The transcript sealed for following, or with `poll` its rows inline; not found, or a failure where the service sealed none. */
+  /** The transcript sealed for following, or with `poll` its rows inline, held past `after`; not found, or a failure where the service sealed none. */
   readonly seal: (
     key: TranscriptKey,
     poll: boolean,
+    after?: string,
   ) => Effect.Effect<AgentTranscriptLiveAnswer | Failed>;
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;
@@ -123,7 +124,7 @@ export function transcriptFollows(
               {
                 openLive: dependencies.openLive,
                 reseal: () => dependencies.seal(key, false),
-                poll: () => dependencies.seal(key, true),
+                poll: (after) => dependencies.seal(key, true, after),
                 now: dependencies.now,
               },
               sealed,

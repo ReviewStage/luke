@@ -463,7 +463,7 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
   [APP_COMMAND.EXIT_BOARD]: {
-    label: "Exit board",
+    label: "Exit tasks",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },

@@ -591,13 +591,13 @@ test("the sidebar offers no Issues row, with every experiment on, since Luke kee
   assert.equal(placeRow(page, "Issues"), undefined);
 });
 
-test("while the account has the inbox-first sidebar on, the sidebar lists the Inbox in its task list's place, its Inbox row gone, and the Board's row is the Tasks page's", async () => {
+test("while the account has the inbox-first sidebar on, the sidebar lists the Inbox in its task list's place, its Inbox row gone, and the Tasks page's row stands either way", async () => {
   handState({});
   const off = mount(false);
   await settle();
-  assert.ok(placeRow(off, "Board"));
+  assert.ok(placeRow(off, "Tasks"));
+  assert.equal(placeRow(off, "Board"), undefined);
   assert.ok(placeRow(off, "Inbox"));
-  assert.equal(placeRow(off, "Tasks"), undefined);
   assert.equal(off.querySelector('aside .inbox-tasks[data-placement="sidebar"]'), null);
   act(() => root?.unmount());
   document.body.innerHTML = "";

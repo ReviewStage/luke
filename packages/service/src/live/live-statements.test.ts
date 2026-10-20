@@ -20,6 +20,7 @@ const USER_ID = "user-live-statements";
 /** A deployment's Realtime over a synthetic secret in the shape its SDK reads, so no credential is written down. */
 const SEALING_ENVIRONMENT = {
   DATABASE_URL: "postgresql://luke:synthetic@db.example/neondb?sslmode=require",
+  [REALTIME_ENVIRONMENT.SWITCH]: "on",
   [REALTIME_ENVIRONMENT.URL]: "wss://realtime.example/v1",
   [REALTIME_ENVIRONMENT.SECRET]: `nrt_live_1${Buffer.alloc(32).toString("base64url")}`,
 };

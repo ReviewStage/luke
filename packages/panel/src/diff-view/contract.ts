@@ -10,7 +10,7 @@ import type {
 } from "@luke/settings/diff-view";
 
 /**
- * contract.ts -- what the panel and the diff bundle say to each other: a mount for one patch and one for a list of files, the handles the view redraws them through, and a door that colours a run of a file's lines as a diff is coloured.
+ * contract.ts -- what the panel and the diff bundle say to each other: a mount for one patch, one for a list of files, and one for a whole file with no diff, the handles the view redraws them through, and a door that colours a run of a file's lines as a diff is coloured.
  *
  * A changed file's patch is drawn by Pierre's diffs (`@pierre/diffs`), with
  * Shiki colouring it, which is too large for the bundle every window parses,
@@ -101,13 +101,17 @@ export function sameNotes(a: readonly DiffAnnotation[], b: readonly DiffAnnotati
   );
 }
 
-/** What the view hands the bundle: one file's patch, headed as git writes one, how to draw it, the lines lit in it, if any, and whether it is an excerpt. */
+/** What the view hands the bundle: one file's patch, headed as git writes one, how to draw it, the lines lit in it, if any, whether it is an excerpt, and the notes under its lines, each drawn in the element the view keeps for it. */
 export interface DiffViewProps {
   readonly patch: string;
   readonly look: DiffLook;
   readonly selected?: DiffSelection | undefined;
   /** Whether the patch is an excerpt, a few lines of a file as a review thread's, drawn with nothing said of the lines around them. */
   readonly excerpt?: boolean | undefined;
+  /** The notes under the patch's lines; none where absent. */
+  readonly annotations?: readonly DiffAnnotation[] | undefined;
+  /** The element each note is drawn in, by its key, which the view keeps and fills; asked only for a note `annotations` names. */
+  readonly renderAnnotation?: ((key: string) => HTMLElement) | undefined;
 }
 
 /**
@@ -193,6 +197,73 @@ export interface DiffListProps {
    * or closed again where the file's patch is read anew.
    */
   readonly onDrawn?: ((path: string, lines: readonly number[]) => void) | undefined;
+}
+
+/** A run of a whole file's lines, from its first to its last, counted from 1. */
+export interface FileLineRange {
+  readonly startLine: number;
+  readonly endLine: number;
+}
+
+/** A note drawn under a line of a whole file, one of Luke's: its key, and the line it stands under. */
+export interface FileAnnotation {
+  readonly key: string;
+  readonly line: number;
+}
+
+/** Whether two runs of a whole file's notes stand under the same lines by the same keys. */
+export function sameFileNotes(a: readonly FileAnnotation[], b: readonly FileAnnotation[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((note, at) => note.key === b[at]?.key && note.line === b[at]?.line)
+  );
+}
+
+/** Whether two runs of lines are the same lines, or both none. */
+export function sameFileLines(a: FileLineRange | undefined, b: FileLineRange | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.startLine === b.startLine && a.endLine === b.endLine;
+}
+
+/**
+ * What the view hands the bundle for a whole file with no diff, as a File
+ * tab, a page's source, or a text file opened over the window draws one:
+ * its name, which its grammar is read from; its text, every line of it;
+ * the revision the text was read at, which names it in the pool's cache, so
+ * the same file at the same revision opened again takes its colours at
+ * once; how to draw it, the diff's own look less what only a diff draws;
+ * the lines lit, the ones a snippet pointed at or a note's under the
+ * pointer; and its notes, each drawn under its line in the element the view
+ * keeps for it. `onDrawn` is told each time the lines drawn change, as the
+ * file scrolls, so what the view paints over them, a find's matches, is
+ * painted again.
+ */
+export interface FileViewProps {
+  readonly name: string;
+  readonly text: string;
+  readonly revision: string;
+  readonly look: DiffLook;
+  readonly lit?: FileLineRange | undefined;
+  readonly annotations: readonly FileAnnotation[];
+  readonly renderAnnotation: (key: string) => HTMLElement;
+  readonly onDrawn?: (() => void) | undefined;
+}
+
+/**
+ * The file as mounted: drawn again for new props, scrolled to a run of its
+ * lines, asked which lines the reader picked, and taken down.
+ */
+export interface FileViewHandle {
+  readonly update: (props: FileViewProps) => void;
+  /** Scrolls a run of lines to the middle of the view at once, its first line where the run is taller than the view. */
+  readonly revealLines: (range: FileLineRange) => void;
+  /**
+   * The lines the reader picked: those picked by pressing their numbers, as
+   * GitHub's file does, or else those code selected as text runs over;
+   * none where neither is.
+   */
+  readonly pickedLines: () => FileLineRange | undefined;
+  readonly unmount: () => void;
 }
 
 /** How many unchanged lines one press of a gap's arrow opens, as GitHub's diff opens them. */
@@ -303,6 +374,12 @@ export interface DiffViewModule {
    * drawn at all.
    */
   readonly mountList: (host: HTMLElement, props: DiffListProps) => DiffListHandle;
+  /**
+   * Draws a whole file under `host`, which is its scroller, in a shadow root
+   * the tab's find reads, only the lines near the view drawn at all, and
+   * coloured off the window's thread where the pool's workers run.
+   */
+  readonly mountFile: (host: HTMLElement, props: FileViewProps) => FileViewHandle;
   /**
    * Colours a run of a file's lines in the look's syntax themes, as a diff
    * is coloured, off the window's thread where the pool's workers run; none

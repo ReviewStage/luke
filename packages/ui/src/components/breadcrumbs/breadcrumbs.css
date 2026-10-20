@@ -100,6 +100,44 @@
     color: var(--luke-color-text);
   }
 
+  /* A crumb that comes and goes (`shown`) lands in the path at once and
+     rides in on the pair an arriving element rides, a fade and a short rise
+     on the spring, and fades out before it goes. Reduced motion keeps no
+     rise, and its tokens hold the fade still. */
+  .luke-breadcrumbs li[data-motion="arriving"] {
+    animation:
+      luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards,
+      luke-breadcrumb-rise var(--luke-duration-fast) var(--luke-spring-fast) backwards;
+  }
+
+  .luke-breadcrumbs li[data-motion="leaving"] {
+    animation: luke-breadcrumb-leave var(--luke-duration-exit) var(--luke-motion-exit) forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .luke-breadcrumbs li[data-motion="arriving"] {
+      animation: luke-breadcrumb-fade var(--luke-duration-quick) var(--luke-motion-pane) backwards;
+    }
+  }
+
+  @keyframes luke-breadcrumb-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes luke-breadcrumb-rise {
+    from {
+      transform: translateY(var(--luke-space-4));
+    }
+  }
+
+  @keyframes luke-breadcrumb-leave {
+    to {
+      opacity: 0;
+    }
+  }
+
   /* A bar's path, in the caption type. A crumb gives way, by its share, down
      to its first letters, fading out, its chevron always standing
      before it, and the current one, last, gives way last of all. */

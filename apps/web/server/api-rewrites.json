@@ -40,6 +40,14 @@
     "dest": "/api/default.js?route=account/integrations/connected"
   },
   {
+    "src": "/api/agents/mcp",
+    "dest": "/api/default.js?route=agents/mcp"
+  },
+  {
+    "src": "/api/agents/runner-events",
+    "dest": "/api/default.js?route=agents/runner-events"
+  },
+  {
     "src": "/api/github/install",
     "dest": "/api/default.js?route=github/install"
   },

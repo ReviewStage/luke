@@ -204,8 +204,8 @@ export function composeCodingAgents(
     const http = yield* HttpClient.HttpClient;
     const asked = askedOf(dependencies, http);
     const transcripts = yield* transcriptFollows({
-      seal: (key, poll) =>
-        asked(dependencies.client.agentTranscriptLive(key.agentId, key.callId, poll)),
+      seal: (key, poll, after) =>
+        asked(dependencies.client.agentTranscriptLive(key.agentId, key.callId, poll, after)),
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
     });

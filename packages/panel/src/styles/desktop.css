@@ -486,15 +486,17 @@ body,
   font-weight: var(--luke-weight-medium);
 }
 
-/* View options wears a dot while the view leaves tasks out, so a filtered
-   list never passes for the whole of it: drawn by the box around the
-   button, over its corner. */
-.sidebar-view-options {
+/* The sidebar's View options and the Tasks page's Filter wear a dot while
+   the view leaves tasks out, so a filtered list never passes for the whole
+   of it: drawn by the box around the button, over its corner. */
+.sidebar-view-options,
+.tasks-page-option {
   position: relative;
   display: inline-flex;
 }
 
-.sidebar-view-options[data-filtered="true"]::after {
+.sidebar-view-options[data-filtered="true"]::after,
+.tasks-page-option[data-filtered="true"]::after {
   position: absolute;
   top: var(--luke-space-4);
   right: var(--luke-space-4);
@@ -3709,10 +3711,10 @@ ul.actor-stack {
 }
 
 /* The ask closing the message that asks it, once it no longer waits: a
-   bordered card, its head the ask's kind and where it stands. Answered,
-   the card heads the reply that answered it with no head of its own, its
-   controls as the answer left them. A replaced or withdrawn ask is its
-   head alone, a replaced one struck through. */
+   bordered card, its head the ask's kind and where it stands. Once
+   answered, its controls alone head the reply that answered it, as the
+   answer left them, with no card around them. A withdrawn ask is its head
+   alone. */
 .inbox-ask {
   display: flex;
   min-width: 0;
@@ -3741,12 +3743,6 @@ ul.actor-stack {
   font-weight: var(--luke-weight-medium);
 }
 
-.inbox-ask[data-inbox-ask="replaced"] .inbox-ask-kind {
-  color: var(--luke-color-text-muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--luke-color-text-subtle);
-}
-
 .inbox-ask-standing {
   display: inline-flex;
   min-width: 0;
@@ -3754,21 +3750,21 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
+/* An answered ask's controls stand in the reply itself, at its words' left
+   edge, a step further from the words under them than the reply's own gap
+   so the two do not run together. */
 .inbox-ask-answered {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
-  padding: var(--luke-space-12);
-}
-
-.inbox-ask-body {
-  border-top: 1px solid var(--luke-color-border);
+  margin-bottom: var(--luke-space-4);
 }
 
 /* An answered ask of words alone, which draws no card, ends the agent's
    message with a small pill saying it was answered, its check in the
-   complete ink. */
+   complete ink; a replaced ask with the same pill saying so, in the muted
+   ink alone. */
 .inbox-ask-settled {
   display: inline-flex;
   max-width: 100%;
@@ -3889,10 +3885,18 @@ ul.actor-stack {
   flex: 0 1 auto;
 }
 
+/* Once the item's title joins the path, its last words (`inbox-pane.tsx`'s
+   `Crumbs`), the agent's crumb before it keeps its size, so a narrow bar cuts
+   the task's crumb short first and then the title. */
+.inbox-crumbs .luke-breadcrumbs li:has(+ li[data-words="true"]:last-child) {
+  flex-shrink: 0;
+}
+
 /* A settled item's foot, over its box: the next item that needs the
    developer as a card of one row (`inbox-pager.tsx`), led by its agent's
-   tile, then Next in the meta voice and its title in the unread weight, cut
-   short at the row's end, and J where J reaches it. */
+   tile, then Next in the meta voice, an arrow up where it lies above, and
+   its title in the unread weight, cut short at the row's end, and K or J
+   where that key reaches it. */
 .inbox-next-dock {
   padding-bottom: var(--luke-space-12);
 }
@@ -8508,7 +8512,7 @@ button.tasks-board-card-press:focus-visible::after {
   flex: 1 1 auto;
 }
 
-/* The Tasks page (`tasks-page.tsx`), while the inbox-first sidebar is on: its
+/* The Tasks page (`tasks-page.tsx`): its
    List | Board switch stands beside its title, and the List runs its groups
    down the page, each headed as a Board's column is, its rows the page's
    own `ListRow`s led by the task's priority, key, and status. */
