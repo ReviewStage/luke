@@ -51,6 +51,7 @@ import {
   type CodingAgentInboxAnswerView,
   type CodingAgentInboxAttachmentParams,
   type CodingAgentInboxAttachmentView,
+  type CodingAgentInboxChanged,
   type CodingAgentInboxCloseParams,
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxMessageParams,
@@ -58,6 +59,7 @@ import {
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateParams,
   type CodingAgentInboxReadStateView,
+  type CodingAgentInboxScope,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -97,6 +99,7 @@ import {
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerViewSchema,
   codingAgentInboxAttachmentViewSchema,
+  codingAgentInboxChangedSchema,
   codingAgentInboxMessagedViewSchema,
   codingAgentInboxReadAllViewSchema,
   codingAgentInboxReadStateViewSchema,
@@ -770,6 +773,12 @@ export interface HostOperator {
   codingAgentAgentInbox(
     params: CodingAgentAgentInboxParams,
   ): Effect.Effect<CodingAgentInboxAnswerView>;
+  /** One task's or agent's inbox, followed from now until let go or signed out, heard through `onInboxChanged`; following again starts over. */
+  codingAgentInboxFollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+  /** One task's or agent's inbox let go: nothing more is heard of it until it is followed again. */
+  codingAgentInboxUnfollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+  /** A followed inbox, its items whole or why there are none, each time it changes. */
+  onInboxChanged(listener: (changed: CodingAgentInboxChanged) => void): () => void;
   /** One item of a task's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
   codingAgentInboxAnswer(
     params: CodingAgentInboxAnswerParams,
@@ -2172,6 +2181,26 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           after: params.after,
         }),
         codingAgentAnswer(codingAgentInboxAnswerViewSchema),
+      ),
+    codingAgentInboxFollow: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_FOLLOW, { kind: scope.kind, id: scope.id }),
+      ),
+    codingAgentInboxUnfollow: (scope) =>
+      fire(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_UNFOLLOW, {
+          kind: scope.kind,
+          id: scope.id,
+        }),
+      ),
+    onInboxChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.INBOX_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(codingAgentInboxChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
       ),
     codingAgentInboxAnswer: (params) =>
       Effect.map(

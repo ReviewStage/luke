@@ -19,6 +19,7 @@
 
 import {
   type CodingAgentChatAnswerView,
+  type CodingAgentInboxChanged,
   codingAgentAgentInboxParamsSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatFollowParamsSchema,
@@ -36,6 +37,7 @@ import {
   codingAgentInboxReadAllViewSchema,
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxReadStateViewSchema,
+  codingAgentInboxScopeSchema,
   codingAgentPictureParamsSchema,
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
@@ -55,6 +57,11 @@ export const agentInboxActsContract = {
   )
     .input(exactInput(codingAgentAgentInboxParamsSchema))
     .output(EffectSchema.toType(codingAgentInboxAnswerViewSchema)),
+  [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actProcedure(
+    "Could not follow the inbox on this system.",
+  )
+    .input(exactInput(codingAgentInboxScopeSchema))
+    .output(eventIterator(type<CodingAgentInboxChanged["inbox"]>())),
   [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: actProcedure(
     "Could not answer the inbox item on this system.",
   )

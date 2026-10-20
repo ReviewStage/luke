@@ -18,6 +18,9 @@ import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChatChanged,
+  type CodingAgentInboxChanged,
+  type CodingAgentInboxScope,
+  INBOX_SCOPE_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   INBOX_IMAGE_TYPE,
@@ -624,4 +627,64 @@ it("one workspace's unfollow on its way holds no other workspace's follow", asyn
   unfollowed.resolve();
   await closed;
   await elsewhere.return(undefined);
+});
+
+it("a panel's inbox stream follows the inbox at the host, hears each change told of it alone, and lets it go once its last stream closes", async () => {
+  const asked: string[] = [];
+  const listeners = new Set<(changed: CodingAgentInboxChanged) => void>();
+  const follows: Pick<
+    HostAsk,
+    "codingAgentInboxFollow" | "codingAgentInboxUnfollow" | "onInboxChanged"
+  > = {
+    codingAgentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
+    codingAgentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
+    onInboxChanged: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+  };
+  // SAFETY: the stream reaches the follow asks alone.
+  const host = follows as HostAsk;
+  const port = testActPort(agentInboxProcedures({ host }));
+  ports.push(port);
+  const client = port.as(PANEL);
+  const scope: CodingAgentInboxScope = { kind: INBOX_SCOPE_KIND.PLAN, id: TASK_ID };
+
+  const one = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW](scope);
+  const two = await client[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW](scope);
+  const first = one.next();
+  const second = two.next();
+  await until(() => asked.length === 1);
+  for (const listener of [...listeners]) {
+    listener({ scope: { kind: INBOX_SCOPE_KIND.AGENT, id: AGENT_ID }, inbox: UNANSWERED });
+    listener({ scope, inbox: { items: [ITEM] } });
+  }
+  assert.deepEqual((await first).value, { items: [ITEM] });
+  assert.deepEqual((await second).value, { items: [ITEM] });
+
+  await one.return(undefined);
+  await until(() => listeners.size === 1);
+  assert.deepEqual(asked, ["follow"], "the host follows the inbox once for both streams");
+  await two.return(undefined);
+  await until(() => asked.length === 2);
+  assert.deepEqual(asked, ["follow", "unfollow"]);
+});
+
+it("the voice window is refused an inbox stream, and the host follows nothing", async () => {
+  const asked: string[] = [];
+  // SAFETY: the stream reaches the follow asks alone.
+  const host = {
+    codingAgentInboxFollow: () => Effect.sync(() => void asked.push("follow")),
+    codingAgentInboxUnfollow: () => Effect.sync(() => void asked.push("unfollow")),
+    onInboxChanged: () => () => undefined,
+  } as unknown as HostAsk;
+  const port = testActPort(agentInboxProcedures({ host }));
+  ports.push(port);
+  await assert.rejects(
+    port.as(VOICE)[AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]({
+      kind: INBOX_SCOPE_KIND.PLAN,
+      id: TASK_ID,
+    }),
+  );
+  assert.deepEqual(asked, []);
 });

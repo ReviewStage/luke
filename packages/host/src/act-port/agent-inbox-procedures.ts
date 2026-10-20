@@ -26,6 +26,7 @@ import type {
   CodingAgentInboxAnswerView,
   CodingAgentInboxAttachmentParams,
   CodingAgentInboxAttachmentView,
+  CodingAgentInboxChanged,
   CodingAgentInboxCloseParams,
   CodingAgentInboxMessagedView,
   CodingAgentInboxMessageParams,
@@ -33,12 +34,14 @@ import type {
   CodingAgentInboxReadAllView,
   CodingAgentInboxReadStateParams,
   CodingAgentInboxReadStateView,
+  CodingAgentInboxScope,
   CodingAgentPictureParams,
 } from "@luke/features/coding-agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
-import { Effect, Queue, Semaphore, Stream } from "effect";
+import { Effect, MutableHashMap, Option, Queue, Semaphore, Stream } from "effect";
 import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
 import { type ActSender, actPort } from "./base.js";
+import { followedStream, type OpenFollows } from "./followed-stream.js";
 
 /** What the Inbox and chat procedures reach: the host's asks of the service. */
 export interface AgentInboxProceduresDependencies {
@@ -47,6 +50,10 @@ export interface AgentInboxProceduresDependencies {
     codingAgentAgentInbox(
       params: CodingAgentAgentInboxParams,
     ): Effect.Effect<CodingAgentInboxAnswerView>;
+    /** A task's or agent's inbox followed at the host, heard through `onInboxChanged`; following again starts over. */
+    codingAgentInboxFollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+    codingAgentInboxUnfollow(scope: CodingAgentInboxScope): Effect.Effect<void>;
+    onInboxChanged(listener: (changed: CodingAgentInboxChanged) => void): () => void;
     codingAgentInboxAnswer(
       params: CodingAgentInboxAnswerParams,
     ): Effect.Effect<CodingAgentInboxAnsweredView>;
@@ -165,6 +172,8 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
   const { host } = dependencies;
   /** How many streams stand open of each workspace's chat, so the host lets one go only with the last. */
   const openChats = new Map<string, number>();
+  /** Every inbox a window holds a stream open of, so the host lets one go only with the last. */
+  const openInboxes: OpenFollows<CodingAgentInboxChanged["inbox"]> = MutableHashMap.empty();
   /**
    * One turn at a time for a chat stream's follow or unfollow, per workspace,
    * so the host hears a workspace's in the order its streams opened and
@@ -191,6 +200,26 @@ export function agentInboxProcedures(dependencies: AgentInboxProceduresDependenc
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.codingAgentAgentInbox(input);
+    }),
+    [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW]: actPort[
+      AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_FOLLOW
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      const changes = followedStream(
+        {
+          keyOf: (scope: CodingAgentInboxScope) => `${scope.kind}:${scope.id}`,
+          follow: host.codingAgentInboxFollow,
+          unfollow: host.codingAgentInboxUnfollow,
+          onChanged: host.onInboxChanged,
+          valueOf: (changed: CodingAgentInboxChanged, scope: CodingAgentInboxScope) =>
+            changed.scope.kind === scope.kind && changed.scope.id === scope.id
+              ? Option.some(changed.inbox)
+              : Option.none(),
+        },
+        openInboxes,
+        input,
+      );
+      return streamed(yield* Stream.toAsyncIterableEffect(changes));
     }),
     [AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: actPort[
       AGENT_INBOX_ACT_KIND.CODING_AGENTS_INBOX_ANSWER
