@@ -83,7 +83,7 @@ export const CHATGPT_OAUTH = {
   USAGE_SCOPE: "chatgpt.tokens.use.direct",
 } as const;
 
-/** How long before its expiry an access token is renewed rather than handed out. */
+/** How long before its expiry an access token is renewed rather than handed out, unless a caller asks for longer. */
 const REFRESH_MARGIN = Duration.minutes(10);
 
 /** How long OpenAI is given to answer one call. */
@@ -454,13 +454,16 @@ const postForm = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * An access token for the account's ChatGPT sign-in, good for at least the
- * renewal margin: the one it holds where it is, a renewed one otherwise.
- * Runs under the row's lock, OpenAI's token endpoint included, so two
- * renewals of one sign-in never race its rotating refresh token.
+ * renewal margin, or the longer one a caller names (a launch of Codex asks
+ * for a token that outlasts its first turn's start): the one it holds where
+ * it is, a renewed one otherwise. Runs under the row's lock, OpenAI's token
+ * endpoint included, so two renewals of one sign-in never race its rotating
+ * refresh token.
  */
 export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   ring: KeyRing,
+  margin: Duration.Duration = REFRESH_MARGIN,
 ) {
   const access: ChatGptAccess = yield* withProviderKeyLocked(
     userId,
@@ -473,7 +476,7 @@ export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* 
       const credentials = openCredentials(ring, userId, row);
       if (credentials === undefined) return { outcome: CHATGPT_ACCESS.UNREADABLE };
       const now = yield* DateTime.nowAsDate;
-      const dueAt = now.getTime() + Duration.toMillis(REFRESH_MARGIN);
+      const dueAt = now.getTime() + Duration.toMillis(Duration.max(margin, REFRESH_MARGIN));
       if (row.accessExpiresAt !== null && row.accessExpiresAt.getTime() > dueAt) {
         return {
           outcome: CHATGPT_ACCESS.READY,

@@ -9,7 +9,8 @@
  * it asks here, of the calls that SDK's `APIClient` makes (`@vercel/sandbox`
  * 3.3.0, the copy eve 0.74.0 bundles: re-read `listSandboxes`, `getSandbox`,
  * `deleteSandbox`, `stopSession`, `runCommand`, `openInteractive`, and
- * `updateNetworkPolicy` when it moves), directly rather than through the SDK,
+ * `updateNetworkPolicy` when it moves; `readFile` is Vercel's documented
+ * `fs/read`), directly rather than through the SDK,
  * because
  * the SDK bundled into a function fails it as it loads and carries a dozen
  * Node modules these calls never use.
@@ -18,7 +19,10 @@
  * than eve, so its calls are copied from the SDK's 3.8.0 client, the first
  * with stdin on a detached command: the create from a snapshot, a file
  * upload, a detached command started with its stdin held open, a write to
- * that stdin, a command's state, its kill, and a sandbox's tags updated.
+ * that stdin, a command's state, its kill, and a sandbox's tags updated;
+ * and, for Luke's own template of that sandbox's image
+ * (`native-sandbox-template.ts`), a sandbox looked up and listed by name,
+ * one created on an image, and a running session snapshotted.
  *
  * Every sandbox eve opens carries its session's id as a tag, so a session's
  * sandbox is found by the tag alone; a session has one, so the first page is
@@ -30,8 +34,8 @@
 import { gzipSync } from "node:zlib";
 import { readEither } from "@luke/wire/effect";
 import { getVercelOidcToken } from "@vercel/oidc";
-import { Data, Effect, Redacted, Result, Schema } from "effect";
-import { HttpClient, HttpClientRequest } from "effect/http";
+import { Data, Effect, Redacted, Result, Schema, Stream } from "effect";
+import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../core.js";
 
 /** The tag eve sets on every session's sandbox, its value the session's id; a sandbox Luke opens itself carries it too. */
@@ -72,6 +76,10 @@ export interface ListedSandbox {
   readonly status?: string | undefined;
   readonly currentSessionId?: string | undefined;
   readonly tags?: Readonly<Record<string, string>> | undefined;
+  /** The snapshot a persistent sandbox resumes from, which its last stop or snapshot made. */
+  readonly currentSnapshotId?: string | undefined;
+  /** When the sandbox was created, in epoch milliseconds. */
+  readonly createdAt?: number | undefined;
 }
 
 /** A command the sandbox ran to its end: its exit code and what it printed on stdout and stderr. */
@@ -146,6 +154,15 @@ interface SandboxCreate {
   readonly env: Readonly<Record<string, string>>;
 }
 
+/** A persistent sandbox opened on an image rather than a snapshot: a template being prepared. */
+interface ImageSandboxCreate {
+  readonly name: string;
+  readonly image: string;
+  readonly tags: Readonly<Record<string, string>>;
+  readonly timeoutMs: number;
+  readonly vcpus: number;
+}
+
 /** A file written into a sandbox: its absolute path, its bytes, and its mode. */
 interface SandboxFile {
   readonly path: string;
@@ -169,6 +186,17 @@ export interface VercelSandboxApi {
     sandboxSessionId: string,
     ask: CommandAsk,
   ) => Effect.Effect<CommandRun, SandboxUnavailable>;
+  /**
+   * One file of the running sandbox session, its path absolute or from the
+   * sandbox's home, read off the wire up to `maxBytes` and one byte past
+   * them, so a caller's own bound still sees a file larger than it; nothing
+   * where there is no such file.
+   */
+  readonly readFile: (
+    sandboxSessionId: string,
+    path: string,
+    maxBytes: number,
+  ) => Effect.Effect<Uint8Array | undefined, SandboxUnavailable>;
   /** Mints a connection to the running sandbox session's PTY; a session not running is unavailable, and nothing is resumed. */
   readonly openInteractive: (
     sandboxSessionId: string,
@@ -180,6 +208,26 @@ export interface VercelSandboxApi {
   ) => Effect.Effect<void, SandboxUnavailable>;
   /** Opens a persistent sandbox from the snapshot named, on the open internet; answers it with the session it runs. */
   readonly create: (ask: SandboxCreate) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
+  /** The sandbox of that name, as it stands, without resuming it; none where there is no such sandbox. */
+  readonly getNamed: (name: string) => Effect.Effect<ListedSandbox | undefined, SandboxUnavailable>;
+  /** The project's sandboxes whose names start with the prefix, the first page of them. */
+  readonly listNamed: (
+    prefix: string,
+  ) => Effect.Effect<readonly ListedSandbox[], SandboxUnavailable>;
+  /**
+   * Opens a persistent sandbox of that name on the image, on the open
+   * internet. A name already taken is refused with Vercel's 409, which is
+   * what makes the name a lock.
+   */
+  readonly createFromImage: (
+    ask: ImageSandboxCreate,
+  ) => Effect.Effect<ListedSandbox, SandboxUnavailable>;
+  /**
+   * Snapshots the running session, which stops it, answering the snapshot's
+   * id. The snapshot never expires. A session that is no longer running is
+   * refused, so of two snapshots asked at once only the first is taken.
+   */
+  readonly snapshot: (sandboxSessionId: string) => Effect.Effect<string, SandboxUnavailable>;
   /** Replaces the named sandbox's tags whole. */
   readonly updateTags: (
     name: string,
@@ -221,7 +269,12 @@ const ListedSandboxSchema = Schema.Struct({
   status: Schema.optional(Schema.String),
   currentSessionId: Schema.optional(Schema.String),
   tags: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  currentSnapshotId: Schema.optional(Schema.String),
+  createdAt: Schema.optional(Schema.Number),
 });
+
+/** A snapshot's answer: the snapshot taken. */
+const SnapshotTakenSchema = Schema.Struct({ snapshot: Schema.Struct({ id: Schema.String }) });
 
 /** A create's answer: the sandbox and the session it opened. */
 const CreatedSandboxSchema = Schema.Struct({
@@ -285,6 +338,7 @@ const readCommandLine = readEither(CommandLineSchema, { excess: EXCESS_KEYS.DROP
 const readCreated = readEither(CreatedSandboxSchema, { excess: EXCESS_KEYS.DROP });
 const readCommand = readEither(CommandSchema, { excess: EXCESS_KEYS.DROP });
 const readStdin = readEither(StdinSchema, { excess: EXCESS_KEYS.DROP });
+const readSnapshot = readEither(SnapshotTakenSchema, { excess: EXCESS_KEYS.DROP });
 
 /** SIGTERM's number, which the kill takes. */
 const SIGTERM = 15;
@@ -386,6 +440,34 @@ function callApi(
     ),
     Effect.scoped,
     Effect.mapError(() => new SandboxUnavailable({})),
+  );
+}
+
+/** A body's bytes, read off the wire up to the bound given and no further. */
+function boundedBytes(
+  response: HttpClientResponse.HttpClientResponse,
+  bound: number,
+): Effect.Effect<Uint8Array, unknown> {
+  return response.stream.pipe(
+    Stream.mapAccum(
+      () => 0,
+      (seen, chunk: Uint8Array) => {
+        const kept = chunk.subarray(0, Math.max(0, bound - seen));
+        const total = seen + kept.length;
+        return [total, [{ kept, total }]] as const;
+      },
+    ),
+    Stream.takeUntil(({ total }) => total >= bound),
+    Stream.runCollect,
+    Effect.map((pieces) => {
+      const bytes = new Uint8Array(pieces.at(-1)?.total ?? 0);
+      let at = 0;
+      for (const { kept } of pieces) {
+        bytes.set(kept, at);
+        at += kept.length;
+      }
+      return bytes;
+    }),
   );
 }
 
@@ -542,6 +624,30 @@ export function vercelSandboxApi(
           }
           return run;
         }),
+      readFile: (sandboxSessionId, path, maxBytes) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl(
+            `/sessions/${encodeURIComponent(sandboxSessionId)}/fs/read`,
+            asked.teamId,
+          );
+          const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ path }),
+          );
+          return yield* client.execute(request).pipe(
+            Effect.flatMap((response) => {
+              if (response.status === NOT_FOUND_STATUS) return Effect.succeed(undefined);
+              if (!succeeded(response.status)) {
+                return Effect.fail(new SandboxUnavailable({ status: response.status }));
+              }
+              return boundedBytes(response, maxBytes + 1);
+            }),
+            Effect.scoped,
+            Effect.mapError((failure) =>
+              failure instanceof SandboxUnavailable ? failure : new SandboxUnavailable({}),
+            ),
+          );
+        }),
       openInteractive: (sandboxSessionId) =>
         Effect.gen(function* () {
           const asked = yield* credentials;
@@ -609,6 +715,93 @@ export function vercelSandboxApi(
             currentSessionId: session.id,
             status: session.status ?? sandbox.status,
           };
+        }),
+      getNamed: (name) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl(`/${encodeURIComponent(name)}`, asked.teamId, {
+            projectId: asked.projectId,
+            resume: "false",
+          });
+          const found = yield* callApi(
+            client,
+            HttpClientRequest.get(url, { headers: asked.headers }),
+          );
+          if (found.status === NOT_FOUND_STATUS) return undefined;
+          const read = readFound(jsonOf(found.text));
+          if (!succeeded(found.status) || Result.isFailure(read)) {
+            return yield* new SandboxUnavailable({ status: found.status });
+          }
+          const { sandbox, session } = read.success;
+          // The session's own status is the live one; the sandbox's record of it can lag.
+          return session === undefined || session.id !== sandbox.currentSessionId
+            ? sandbox
+            : { ...sandbox, status: session.status ?? sandbox.status };
+        }),
+      listNamed: (prefix) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl("", asked.teamId, {
+            project: asked.projectId,
+            limit: String(SANDBOX_API.PAGE),
+            namePrefix: prefix,
+          });
+          const listed = yield* callApi(
+            client,
+            HttpClientRequest.get(url, { headers: asked.headers }),
+          );
+          const page = readListed(jsonOf(listed.text));
+          if (!succeeded(listed.status) || Result.isFailure(page)) {
+            return yield* new SandboxUnavailable({ status: listed.status });
+          }
+          return page.success.sandboxes;
+        }),
+      createFromImage: (ask) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = new URL(SANDBOX_API.CREATE_PATH, SANDBOX_API.ORIGIN);
+          url.searchParams.set("teamId", asked.teamId);
+          const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
+            HttpClientRequest.bodyJsonUnsafe({
+              projectId: asked.projectId,
+              ports: [],
+              image: ask.image,
+              name: ask.name,
+              persistent: true,
+              tags: ask.tags,
+              timeout: ask.timeoutMs,
+              resources: { vcpus: ask.vcpus },
+              networkPolicy: { mode: "allow-all" },
+            }),
+          );
+          const created = yield* callApi(client, request);
+          const read = readCreated(jsonOf(created.text));
+          if (!succeeded(created.status) || Result.isFailure(read)) {
+            return yield* new SandboxUnavailable({ status: created.status });
+          }
+          const { sandbox, session } = read.success;
+          return {
+            ...sandbox,
+            currentSessionId: session.id,
+            status: session.status ?? sandbox.status,
+          };
+        }),
+      snapshot: (sandboxSessionId) =>
+        Effect.gen(function* () {
+          const asked = yield* credentials;
+          const url = apiUrl(
+            `/sessions/${encodeURIComponent(sandboxSessionId)}/snapshot`,
+            asked.teamId,
+          );
+          const request = HttpClientRequest.post(url, { headers: asked.headers }).pipe(
+            HttpClientRequest.bodyJsonUnsafe({ expiration: 0 }),
+          );
+          const taken = yield* callApi(client, request);
+          const read = readSnapshot(jsonOf(taken.text));
+          if (!succeeded(taken.status) || Result.isFailure(read)) {
+            return yield* new SandboxUnavailable({ status: taken.status });
+          }
+          return read.success.snapshot.id;
         }),
       updateTags: (name, tags) =>
         Effect.gen(function* () {

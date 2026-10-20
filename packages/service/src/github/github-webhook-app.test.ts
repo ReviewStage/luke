@@ -143,7 +143,6 @@ function environment(secret: string | undefined): HostedEnvironmentValues {
     githubWebhookSecret: secret === undefined ? undefined : Redacted.make(secret),
     providerKeyEncryptionKeys: undefined,
     nativeAgentAccounts: [],
-    agentSandboxSnapshot: undefined,
   };
 }
 

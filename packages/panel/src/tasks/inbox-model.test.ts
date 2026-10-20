@@ -26,6 +26,7 @@ import {
   codeNotice,
   codeReadOf,
   codeWindow,
+  doDecision,
   EMPTY_INBOX_DRAFT,
   EVERYONES,
   firstChoice,
@@ -61,6 +62,7 @@ import {
   listedItems,
   nextNeedingYou,
   numberedPick,
+  openItems,
   proposedOptions,
   SETTLED_BY,
   sentStamp,
@@ -70,6 +72,7 @@ import {
   tasklessGroups,
   withChoice,
   withDecision,
+  withDoPress,
   withStep,
   withValue,
 } from "./inbox-model.js";
@@ -604,10 +607,10 @@ test("the list holds every item the latest changed first, under its plan, the pl
   );
 });
 
-test("Needs you lists only what waits, and the item chosen where one is given, as the steps through the list keep it, and a plan with nothing listed has no group", () => {
+test("To do lists only what waits, and the item chosen where one is given, as the steps through the list keep it, and a plan with nothing listed has no group", () => {
   const waiting = {
     grouping: INBOX_GROUPING.TASK,
-    show: INBOX_SHOW.NEEDS_YOU,
+    show: INBOX_SHOW.TO_DO,
     readerId: undefined,
   } as const;
   assert.deepEqual(drawn(inboxList(TASKS, { ...waiting, chosen: undefined })), [
@@ -711,10 +714,10 @@ const SHARED = [
   },
 ];
 
-test("only an open item the reader's own agent asks needs them, or one whose starter the service does not name: Needs you leaves a teammate's out, though the list holds it, and the Inbox's attention mark does not count it", () => {
+test("only an open item the reader's own agent asks needs them, or one whose starter the service does not name: To do leaves a teammate's out, though the list holds it, and does not count it", () => {
   const newest = { grouping: INBOX_GROUPING.NONE, chosen: undefined } as const;
   assert.deepEqual(
-    drawn(inboxList(SHARED, { ...newest, show: INBOX_SHOW.NEEDS_YOU, readerId: ME.userId })),
+    drawn(inboxList(SHARED, { ...newest, show: INBOX_SHOW.TO_DO, readerId: ME.userId })),
     ["mine-invites", "mine", "unnamed"],
   );
   assert.deepEqual(
@@ -722,32 +725,36 @@ test("only an open item the reader's own agent asks needs them, or one whose sta
     ["danas-answered", "danas", "kais", "mine-invites", "mine", "unnamed"],
   );
   assert.deepEqual(
-    drawn(inboxList(SHARED, { ...newest, show: INBOX_SHOW.NEEDS_YOU, readerId: DANA.userId })),
+    drawn(inboxList(SHARED, { ...newest, show: INBOX_SHOW.TO_DO, readerId: DANA.userId })),
     ["danas", "unnamed"],
     "the same list read by the teammate needs them for their own",
   );
   const teammates = [{ holder: taskHolder(BILLING), items: [item({ id: "d", startedBy: DANA })] }];
   const needingYou = (readerId: string | undefined) =>
-    inboxCounts(teammates, readerId)[INBOX_SHOW.NEEDS_YOU];
+    inboxCounts(teammates, readerId)[INBOX_SHOW.TO_DO];
   assert.equal(needingYou(ME.userId), 0);
   assert.equal(needingYou(DANA.userId), 1);
   assert.equal(needingYou(undefined), 1, "a reader not known yet is asked everything");
 });
 
-test("an archived task's open item needs nobody, as a plan's own Inbox lists it: Needs you neither lists nor counts it, nor is it chosen first, while All open still lists it", () => {
+test("an archived task's items, open or unread, need nobody, as a plan's own Inbox lists them: To do neither lists nor counts them, nor is one the next, while All still lists them", () => {
   const archived = [
     {
       holder: taskHolder({ ...BILLING, archivedAt: 9 }),
-      items: [item({ id: "put-away", updatedAt: 20 }), item({ id: "also", updatedAt: 10 })],
+      items: [
+        item({ id: "put-away", updatedAt: 20 }),
+        item({ id: "also", updatedAt: 10 }),
+        item({ id: "unread", status: INBOX_STATUS.ANSWERED, updatedAt: 5, unread: true }),
+      ],
     },
   ];
   const counts = inboxCounts(archived, undefined);
-  assert.equal(counts[INBOX_SHOW.NEEDS_YOU], 0);
-  assert.equal(counts[INBOX_SHOW.OPEN], 2);
+  assert.equal(counts[INBOX_SHOW.TO_DO], 0);
+  assert.equal(counts[INBOX_SHOW.ALL], 3);
   const view = { grouping: INBOX_GROUPING.NONE, readerId: undefined, chosen: undefined } as const;
-  assert.deepEqual(drawn(inboxList(archived, { ...view, show: INBOX_SHOW.NEEDS_YOU })), []);
-  const open = inboxList(archived, { ...view, show: INBOX_SHOW.OPEN });
-  assert.deepEqual(drawn(open), ["put-away", "also"]);
+  assert.deepEqual(drawn(inboxList(archived, { ...view, show: INBOX_SHOW.TO_DO })), []);
+  const open = inboxList(archived, { ...view, show: INBOX_SHOW.ALL });
+  assert.deepEqual(drawn(open), ["put-away", "also", "unread"]);
   assert.equal(
     nextNeedingYou(open, "put-away", () => false),
     undefined,
@@ -788,15 +795,32 @@ test("going up, the next item that needs you is the nearest above the chosen one
   );
 });
 
-/** The shared items with two of them unread: a teammate's settled one and the reader's own open one. */
+/**
+ * The shared items with three of them unread: a teammate's settled one, the
+ * reader's own open one, and the reader's own settled one, whose agent wrote
+ * on the thread again after it was answered.
+ */
 const UNREAD_SHARED = SHARED.map(({ holder, items }) => ({
   holder,
-  items: items.map((each) =>
-    each.id === "danas-answered" || each.id === "mine" ? { ...each, unread: true } : each,
-  ),
+  items: [
+    ...items.map((each) =>
+      each.id === "danas-answered" || each.id === "mine" ? { ...each, unread: true } : each,
+    ),
+    ...(holder === SHARED[0]?.holder
+      ? [
+          item({
+            id: "mine-followed",
+            startedBy: ME,
+            status: INBOX_STATUS.ANSWERED,
+            updatedAt: 50,
+            unread: true,
+          }),
+        ]
+      : []),
+  ],
 }));
 
-test("each tab lists its own items and counts them: Needs you the reader's own open ones, Unread anyone's unread ones whether open or settled, All open every open one, and Everything all of them", () => {
+test("To do lists the reader's own open items and their own unread ones, a settled thread written on again among them, never a teammate's however unread, and All lists every item; each counts its own", () => {
   const rows = (show: InboxShow) =>
     drawn(
       inboxList(UNREAD_SHARED, {
@@ -806,66 +830,64 @@ test("each tab lists its own items and counts them: Needs you the reader's own o
         chosen: undefined,
       }),
     );
-  assert.deepEqual(rows(INBOX_SHOW.NEEDS_YOU), ["mine-invites", "mine", "unnamed"]);
-  assert.deepEqual(rows(INBOX_SHOW.UNREAD), ["danas-answered", "mine"]);
-  assert.deepEqual(rows(INBOX_SHOW.OPEN), ["danas", "kais", "mine-invites", "mine", "unnamed"]);
+  assert.deepEqual(rows(INBOX_SHOW.TO_DO), ["mine-followed", "mine-invites", "mine", "unnamed"]);
   assert.deepEqual(rows(INBOX_SHOW.ALL), [
     "danas-answered",
     "danas",
+    "mine-followed",
     "kais",
     "mine-invites",
     "mine",
     "unnamed",
   ]);
   assert.deepEqual(inboxCounts(UNREAD_SHARED, ME.userId), {
-    [INBOX_SHOW.NEEDS_YOU]: 3,
-    [INBOX_SHOW.UNREAD]: 2,
-    [INBOX_SHOW.OPEN]: 5,
-    [INBOX_SHOW.ALL]: 6,
+    [INBOX_SHOW.TO_DO]: 4,
+    [INBOX_SHOW.ALL]: 7,
   });
 });
 
-test("the first item chosen, the next that needs you, and the steps either side follow the tab shown, the chosen item keeping its place among the steps once the tab leaves it out", () => {
-  const unread = inboxList(UNREAD_SHARED, {
+test("the first item chosen and the next one reach the reader's own unread update as they reach what waits on them, and the item read keeps its place among the steps once To do leaves it out", () => {
+  const all = inboxList(UNREAD_SHARED, {
     grouping: INBOX_GROUPING.NONE,
-    show: INBOX_SHOW.UNREAD,
+    show: INBOX_SHOW.ALL,
     readerId: ME.userId,
     chosen: undefined,
   });
-  assert.equal(firstChoice(unread)?.item.id, "mine");
   assert.equal(
-    nextNeedingYou(unread, "danas-answered", () => false)?.item.id,
-    "mine",
-    "Unread holds no other item that needs you than the reader's unread one",
+    firstChoice(all)?.item.id,
+    "mine-followed",
+    "All chooses the reader's own unread update first, past a teammate's newer items",
   );
-  assert.equal(inboxSteps(unread, "danas-answered", () => false)?.next?.item.id, "mine");
-  // Note that an item read once opened leaves Unread's rows but not its steps.
+  assert.equal(nextNeedingYou(all, "danas", () => false)?.item.id, "mine-followed");
+  assert.equal(
+    nextNeedingYou(all, "mine-followed", () => false)?.item.id,
+    "mine-invites",
+    "a teammate's open item between them is passed over",
+  );
+  // Note that an item read once opened leaves To do's rows but not its steps.
   const read = UNREAD_SHARED.map(({ holder, items }) => ({
     holder,
-    items: items.map((each) => (each.id === "mine" ? { ...each, unread: false } : each)),
+    items: items.map((each) => (each.id === "mine-followed" ? { ...each, unread: false } : each)),
   }));
-  const steps = inboxList(read, {
-    grouping: INBOX_GROUPING.NONE,
-    show: INBOX_SHOW.UNREAD,
-    readerId: ME.userId,
-    chosen: "mine",
-  });
-  assert.equal(inboxSteps(steps, "mine", () => false)?.previous?.item.id, "danas-answered");
-  const open = inboxList(UNREAD_SHARED, {
-    grouping: INBOX_GROUPING.NONE,
-    show: INBOX_SHOW.OPEN,
-    readerId: ME.userId,
-    chosen: undefined,
-  });
-  assert.equal(
-    firstChoice(open)?.item.id,
+  const view = { grouping: INBOX_GROUPING.NONE, show: INBOX_SHOW.TO_DO, readerId: ME.userId };
+  assert.deepEqual(drawn(inboxList(read, { ...view, chosen: undefined })), [
     "mine-invites",
-    "All open still chooses the reader's own first, past a teammate's newer one",
-  );
-  assert.equal(
-    inboxSteps(open, "danas", () => false)?.previous,
-    undefined,
-    "the settled item newer than it is not a step",
+    "mine",
+    "unnamed",
+  ]);
+  const steps = inboxList(read, { ...view, chosen: "mine-followed" });
+  assert.equal(inboxSteps(steps, "mine-followed", () => false)?.next?.item.id, "mine-invites");
+  assert.equal(inboxSteps(steps, "mine-followed", () => false)?.previous, undefined);
+});
+
+test("what waits, as Home, Factory, and a person's page list it, is every open item of a standing task, whoever's, the latest first, never a settled one however unread nor an archived task's", () => {
+  const archived = {
+    holder: taskHolder({ ...INVITES, id: "put-away", archivedAt: 9 }),
+    items: [item({ id: "archived-open", updatedAt: 90 })],
+  };
+  assert.deepEqual(
+    openItems([...UNREAD_SHARED, archived]).map(({ item }) => item.id),
+    ["danas", "kais", "mine-invites", "mine", "unnamed"],
   );
 });
 
@@ -889,7 +911,7 @@ test("grouped by person, the reader's own items stand first as You, then each te
     drawn(
       inboxList(SHARED, {
         grouping: INBOX_GROUPING.PERSON,
-        show: INBOX_SHOW.NEEDS_YOU,
+        show: INBOX_SHOW.TO_DO,
         readerId: ME.userId,
         chosen: "kais",
       }),
@@ -898,7 +920,7 @@ test("grouped by person, the reader's own items stand first as You, then each te
       ["You", ["mine-invites", "mine", "unnamed"]],
       ["Kai Moreno", ["kais"]],
     ],
-    "Needs you leaves a teammate's group out but for the item chosen",
+    "To do leaves a teammate's group out but for the item chosen",
   );
 });
 
@@ -915,7 +937,11 @@ test("grouped by status, what needs the reader stands first, then what waits on 
     [INBOX_STATUS_GROUP.WAITING, ["danas", "kais"]],
     [INBOX_STATUS_GROUP.ANSWERED, ["danas-answered"]],
   ]);
-  assert.deepEqual(drawn(status(INBOX_SHOW.OPEN)).length, 2, "All open holds nothing answered");
+  assert.deepEqual(
+    drawn(status(INBOX_SHOW.TO_DO)),
+    [[INBOX_STATUS_GROUP.NEEDS_YOU, ["mine-invites", "mine", "unnamed"]]],
+    "To do holds nothing waiting on a teammate nor answered and read",
+  );
   const view = status(INBOX_SHOW.ALL);
   const waiting = view.grouping === INBOX_GROUPING.STATUS ? view.groups[1]?.key : undefined;
   const folded = (key: string) => key === waiting;
@@ -923,20 +949,20 @@ test("grouped by status, what needs the reader stands first, then what waits on 
   assert.equal(inboxSteps(view, "danas", folded)?.next?.item.id, "danas-answered");
 });
 
-test("sorted by waiting longest, the open items stand first, the one posted longest ago first, then the settled ones the latest changed first, and the tasks in the order their first item stands", () => {
+test("sorted oldest first, the item changed longest ago stands first, open or settled, and the tasks in the order their first item stands; latest first is its reverse", () => {
   const tasks = [
     {
       holder: taskHolder(BILLING),
       items: [
-        item({ id: "fresh", postedAt: 90, updatedAt: 95 }),
-        item({ id: "settled-late", status: INBOX_STATUS.ANSWERED, postedAt: 5, updatedAt: 99 }),
+        item({ id: "fresh", updatedAt: 95 }),
+        item({ id: "settled-late", status: INBOX_STATUS.ANSWERED, updatedAt: 99 }),
       ],
     },
     {
       holder: taskHolder(INVITES),
       items: [
-        item({ id: "oldest", postedAt: 10, updatedAt: 98 }),
-        item({ id: "settled-early", status: INBOX_STATUS.CLOSED, postedAt: 1, updatedAt: 50 }),
+        item({ id: "open-late", updatedAt: 98 }),
+        item({ id: "settled-early", status: INBOX_STATUS.CLOSED, updatedAt: 50 }),
       ],
     },
   ];
@@ -950,25 +976,25 @@ test("sorted by waiting longest, the open items stand first, the one posted long
         sort,
       }),
     );
-  assert.deepEqual(sorted(INBOX_GROUPING.NONE, INBOX_SORT.WAITING), [
-    "oldest",
-    "fresh",
-    "settled-late",
+  assert.deepEqual(sorted(INBOX_GROUPING.NONE, INBOX_SORT.OLDEST), [
     "settled-early",
+    "fresh",
+    "open-late",
+    "settled-late",
   ]);
-  assert.deepEqual(sorted(INBOX_GROUPING.TASK, INBOX_SORT.WAITING), [
-    ["Invites", ["oldest", "settled-early"]],
+  assert.deepEqual(sorted(INBOX_GROUPING.TASK, INBOX_SORT.OLDEST), [
+    ["Invites", ["settled-early", "open-late"]],
     ["Billing alerts", ["fresh", "settled-late"]],
   ]);
   assert.deepEqual(sorted(INBOX_GROUPING.NONE, INBOX_SORT.LATEST), [
     "settled-late",
-    "oldest",
+    "open-late",
     "fresh",
     "settled-early",
   ]);
 });
 
-test("Whose lists everyone's items, the reader's own, items whose starter the service does not name among them, or one teammate's, and the tabs count only those; the item chosen keeps its place among the steps", () => {
+test("Whose lists everyone's items, the reader's own, items whose starter the service does not name among them, or one teammate's, and the scopes count only those; the item chosen keeps its place among the steps", () => {
   const whose = (choice: InboxWhose, chosen?: string) =>
     drawn(
       inboxList(SHARED, {
@@ -985,9 +1011,7 @@ test("Whose lists everyone's items, the reader's own, items whose starter the se
   assert.deepEqual(whose(dana), ["danas-answered", "danas"]);
   assert.deepEqual(whose(dana, "kais"), ["danas-answered", "danas", "kais"]);
   assert.deepEqual(inboxCounts(SHARED, ME.userId, dana), {
-    [INBOX_SHOW.NEEDS_YOU]: 0,
-    [INBOX_SHOW.UNREAD]: 0,
-    [INBOX_SHOW.OPEN]: 1,
+    [INBOX_SHOW.TO_DO]: 0,
     [INBOX_SHOW.ALL]: 2,
   });
 });
@@ -1488,6 +1512,88 @@ test("Mark done ticks every step of a to-do, ticked by hand or not, while Couldn
   const titled = { type: INBOX_ASK.DO, steps: [] } as const;
   assert.deepEqual(shownTicks(titled, done), [0], "the title standing as the one step is ticked");
   assert.deepEqual(inboxThreadSend([asking(titled)], done)?.answers?.steps, []);
+});
+
+test("ticking every step by hand counts as Mark done, which letting one go takes back off, while a press given wins", () => {
+  const ask = { type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] } as const;
+  const steps = [asking(ask)];
+  const tick = (draft: InboxDraft, ...at: number[]) =>
+    at.reduce((held, each) => withStep(ask, held, each), draft);
+  const every = tick(EMPTY_INBOX_DRAFT, 2, 0, 1);
+  assert.equal(doDecision(ask, every), INBOX_REPLY.DONE, "Mark done stands pressed");
+  assert.deepEqual(inboxThreadSend(steps, every)?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.DONE,
+    steps: [0, 1, 2],
+  });
+
+  const letGo = withStep(ask, every, 1);
+  assert.equal(doDecision(ask, letGo), undefined, "letting a step go takes Mark done back off");
+  assert.deepEqual(shownTicks(ask, letGo), [0, 2]);
+
+  const failed = tick({ ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.NOT_DONE }, 0, 1, 2);
+  assert.equal(doDecision(ask, failed), INBOX_REPLY.NOT_DONE, "Couldn't do it pressed stands");
+  assert.deepEqual(inboxThreadSend(steps, failed)?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.NOT_DONE,
+    steps: [0, 1, 2],
+  });
+
+  const released = withDoPress(ask, every, INBOX_REPLY.DONE);
+  assert.equal(
+    doDecision(ask, released),
+    undefined,
+    "pressing the Mark done it stands for lets it go",
+  );
+  assert.deepEqual(shownTicks(ask, released), []);
+  const swapped = withDoPress(ask, every, INBOX_REPLY.NOT_DONE);
+  assert.equal(doDecision(ask, swapped), INBOX_REPLY.NOT_DONE);
+  assert.deepEqual(inboxThreadSend(steps, swapped)?.answers?.steps, [0, 1, 2]);
+  const pressed = withDoPress(ask, tick(EMPTY_INBOX_DRAFT, 1), INBOX_REPLY.DONE);
+  assert.equal(doDecision(ask, pressed), INBOX_REPLY.DONE);
+  assert.deepEqual(shownTicks(ask, withDoPress(ask, pressed, INBOX_REPLY.DONE)), [1]);
+
+  const titled = { type: INBOX_ASK.DO, steps: [] } as const;
+  const ticked = withStep(titled, EMPTY_INBOX_DRAFT, 0);
+  assert.equal(doDecision(titled, ticked), INBOX_REPLY.DONE, "ticking the title marks it done");
+  assert.deepEqual(inboxThreadSend([asking(titled)], ticked)?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.DONE,
+    steps: [],
+  });
+});
+
+test("steps ticked with neither press go with the reply as an answer deciding nothing, its stamp saying what was ticked; none ticked leaves the reply plain", () => {
+  const ask = { type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] } as const;
+  const steps = [asking(ask)];
+  const some = withStep(ask, withStep(ask, EMPTY_INBOX_DRAFT, 2), 0);
+  const answers = inboxThreadSend(steps, { ...some, note: "Stuck on two." })?.answers;
+  assert.deepEqual(answers, { ask: ASKING_ID, reply: INBOX_REPLY.ANSWERED, steps: [0, 2] });
+  assert.equal(doDecision(ask, some), undefined);
+  if (answers !== undefined) {
+    assert.deepEqual(sentStamp(answers, steps[0]?.ask), {
+      tone: ANSWER_TONE.AHEAD,
+      words: "Ticked 2/3",
+    });
+  }
+  assert.deepEqual(
+    inboxThreadSend(steps, { ...EMPTY_INBOX_DRAFT, note: "Later." }),
+    { text: "Later.", attachments: [] },
+    "a reply with nothing ticked is plain",
+  );
+  assert.deepEqual(
+    inboxThreadSend(steps, { ...EMPTY_INBOX_DRAFT, steps: [1], press: INBOX_REPLY.NOT_DONE })
+      ?.answers,
+    { ask: ASKING_ID, reply: INBOX_REPLY.NOT_DONE, steps: [1] },
+    "Couldn't do it carries the step ticked by hand",
+  );
+});
+
+test("an older to-do's single item ticked is its Mark done, and let go decides nothing", () => {
+  const task = item({ id: "task", response: { type: INBOX_RESPONSE.TODO } });
+  const ticked = numberedPick(task, EMPTY_INBOX_DRAFT, 1) ?? EMPTY_INBOX_DRAFT;
+  assert.deepEqual(inboxReply(task, ticked), { reply: INBOX_REPLY.DONE });
+  assert.equal(inboxReply(task, { ...ticked, choices: [] }), undefined);
 });
 
 test("a notice, open and asking nothing with no ask open on its thread, waits on the reader's nod, which Got it answers; a thread whose ask is open, or one settled, waits on none", () => {

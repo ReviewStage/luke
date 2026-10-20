@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { Clock, Effect, type Redacted } from "effect";
+import type { TemplateSweepOutcome } from "../agents/native-sandbox-template.js";
 import type { SessionSandboxSweepOutcome } from "../agents/session-sandboxes.js";
 import type { AutomationSweepOutcome } from "../automations/automation-sweep.js";
 import type { TokenPullRequestSweepOutcome } from "../github/token-pull-request-sweep.js";
@@ -25,14 +26,15 @@ import type { TerminalLeaseSweepOutcome } from "./terminal-lease-sweep.js";
  * automations whose schedule is due are fired, a picture pasted into a
  * plan a day ago that no save ever named is deleted, and the pull requests of
  * agents on a member's own GitHub token, which no webhook reaches, are polled
- * for what their agents are told of. Each is bounded on its own, and the
+ * for what their agents are told of, and the native agents' image template
+ * is moved on and the templates of older images deleted. Each is bounded on its own, and the
  * sweep runs them in turn.
  */
 
 /** One sweep of the cron's: a query against the store, so its requirement is the client the edge provides. */
 type SweepRead<A> = Effect.Effect<A, unknown, DatabaseServices>;
 
-/** The nine sweeps, each answering an Effect over the store's own client the edge provides. */
+/** The ten sweeps, each answering an Effect over the store's own client the edge provides. */
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
@@ -52,10 +54,12 @@ interface MaintenanceSweeps {
   purgeUnsavedPictures: (now: number) => SweepRead<number>;
   /** Polls the token agents' open pull requests due a poll, a sweep's worth, telling each agent what changed. */
   sweepTokenPullRequests: (now: number) => SweepRead<TokenPullRequestSweepOutcome>;
+  /** Moves the native agents' image template on, building it where they are admitted, and deletes older images' templates. */
+  sweepImageTemplates: (now: number) => SweepRead<TemplateSweepOutcome>;
 }
 
 /**
- * How a run is told to the sweep's cron monitor: around the nine sweeps once
+ * How a run is told to the sweep's cron monitor: around the ten sweeps once
  * the call is the cron's own. A call that is not the cron's, or one a
  * deployment without its secret cannot authenticate, is not a run and tells
  * it nothing, so a stranger cannot report a run that failed.
@@ -90,9 +94,11 @@ interface MaintenanceSweepAnswer {
   purgedPictures: number;
   /** What the poll of the token agents' pull requests did. */
   tokenPullRequests: TokenPullRequestSweepOutcome;
+  /** What the sweep over the native agents' image templates did. */
+  imageTemplates: TemplateSweepOutcome;
 }
 
-/** The nine sweeps in turn, each handed the same instant. */
+/** The ten sweeps in turn, each handed the same instant. */
 const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
   sweeps: MaintenanceSweeps,
 ): Effect.fn.Return<MaintenanceSweepAnswer, unknown, DatabaseServices> {
@@ -107,6 +113,7 @@ const sweepAll = /* @__PURE__ */ Effect.fn("web/sweepAll")(function* (
     automations: yield* sweeps.sweepAutomations(now),
     purgedPictures: yield* sweeps.purgeUnsavedPictures(now),
     tokenPullRequests: yield* sweeps.sweepTokenPullRequests(now),
+    imageTemplates: yield* sweeps.sweepImageTemplates(now),
   };
 });
 

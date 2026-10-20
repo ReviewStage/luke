@@ -202,7 +202,12 @@ function channelAuth(accounts: readonly string[]) {
       return sub !== undefined && accounts.includes(sub) ? sub : undefined;
     },
     ownership,
-    { secret: undefined, admits: DEPLOYMENT_TURNS, presents: DEPLOYMENT_PRESENCE.DEPLOYMENT },
+    {
+      secret: undefined,
+      admits: DEPLOYMENT_TURNS,
+      presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+      streams: true,
+    },
   );
   return async (request: Request): Promise<DoorAnswer> => {
     const answer = await routeAuth(request, channel.auth);

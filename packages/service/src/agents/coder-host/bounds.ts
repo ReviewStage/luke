@@ -104,12 +104,6 @@ export const CODER_ENVIRONMENT = {
   MODEL_FIXTURE: "LUKE_CODER_MODEL_FIXTURE",
   /** The accounts, by user id, comma- or whitespace-separated, whose plan-paid agents may run on a provider's own harness; unset admits none. */
   NATIVE_AGENT_ACCOUNTS: "LUKE_NATIVE_AGENT_ACCOUNTS",
-  /**
-   * The snapshot a native harness's sandbox opens from: the one eve prepared
-   * the coding agent's image in, set by hand until Luke prepares its own
-   * (`agent-sandbox-image.ts`); unset opens none.
-   */
-  AGENT_SANDBOX_SNAPSHOT: "LUKE_AGENT_SANDBOX_SNAPSHOT",
 } as const;
 
 /** The one fixture the model environment may name, and the model id its turns are recorded under. */

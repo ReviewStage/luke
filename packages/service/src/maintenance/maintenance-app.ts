@@ -10,6 +10,7 @@ import { HttpClient, HttpRouter } from "effect/http";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
 import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
+import { sweepNativeTemplates } from "../agents/native-sandbox-template.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import { sweepAutomations } from "../automations/automation-sweep.js";
@@ -101,6 +102,11 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
     sweepTokenPullRequests: (now) =>
       sweepTokenPullRequests(eveFor, environment.providerKeyEncryptionKeys, new Date(now)).pipe(
+        Effect.provideContext(startContext),
+      ),
+    // The template is built ahead of a launch only where some account may launch a native agent.
+    sweepImageTemplates: () =>
+      sweepNativeTemplates(environment.nativeAgentAccounts.length > 0).pipe(
         Effect.provideContext(startContext),
       ),
     sweepVoice: (now) =>

@@ -17,7 +17,7 @@ import {
 import { Command } from "cmdk";
 import { useEffect, useState } from "react";
 import { Shortcut } from "../shortcut.js";
-import { agentStillWriting, agentTabLabel } from "./coding-agent-model.js";
+import { agentTabLabel } from "./coding-agent-model.js";
 import { AgentGlyph } from "./tab-look.js";
 import type { CodingAgentsControl } from "./use-coding-agents.js";
 
@@ -27,9 +27,10 @@ import type { CodingAgentsControl } from "./use-coding-agents.js";
  * A terminal belongs to one agent's sandbox (`terminal-entry.ts`), and with
  * several agents on the task New terminal asks, as ⌘J does before any
  * terminal was used. It is the command palette's own dialog and rows: each
- * agent as its tab wears it, its glyph and its name, with whether it works
- * and how its sandbox stands, the agent whose terminal was used last chosen
- * to begin with and saying so. A task with no agent offers to start one.
+ * agent as its tab wears it, its glyph and its name, with how its sandbox
+ * stands, the agent whose terminal was used last chosen to begin with and
+ * saying so. Whether the agent works is its glyph's to say, the working mark
+ * in its place, so no word repeats it. A task with no agent offers to start one.
  * How each sandbox stands is read as the picker opens, which never wakes
  * one.
  */
@@ -40,21 +41,20 @@ const START_ROW = "start-agent";
 /** What the picker's field asks. */
 const PICKER_QUESTION = "New terminal in which agent’s sandbox?";
 
-/** How a sandbox stands, said after whether its agent works. */
+/** How a sandbox stands, said after the agent's name. */
 const SANDBOX_WORDS = {
   [SANDBOX_STATE.RUNNING]: "sandbox running",
   [SANDBOX_STATE.STOPPED]: "sandbox stopped",
   [SANDBOX_STATE.STARTING]: "no sandbox yet",
 } as const satisfies Record<SandboxState, string>;
 
-/** The row's words after the name: working or idle, the sandbox as last read, and whether it was used last. */
-function rowDetail(agent: CodingAgentSummary, sandbox: SandboxState | undefined, last: boolean) {
+/** The row's words after the name: the sandbox as last read, and whether it was used last; none where neither is known. */
+function rowDetail(sandbox: SandboxState | undefined, last: boolean): string | undefined {
   const words = [
-    agentStillWriting(agent.status) ? "Working" : "Idle",
     sandbox === undefined ? undefined : SANDBOX_WORDS[sandbox],
     last ? "last used" : undefined,
-  ];
-  return words.filter((word) => word !== undefined).join(" · ");
+  ].filter((word) => word !== undefined);
+  return words.length === 0 ? undefined : words.join(" · ");
 }
 
 /** One agent's row: its look, and its standing read from what the window last read of its sandbox. */
@@ -77,7 +77,7 @@ function AgentRow({
           id: agent.id,
           label: name,
           icon: <AgentGlyph agent={agent} />,
-          detail: rowDetail(agent, sandbox, last),
+          detail: rowDetail(sandbox, last),
         }}
       />
     </Command.Item>

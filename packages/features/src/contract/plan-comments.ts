@@ -13,6 +13,7 @@
 import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
+import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "../coding-agent-wire.js";
 import {
   PLAN_COMMENT_BOUNDS,
   planCommentActionRequestSchema,
@@ -25,16 +26,18 @@ import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { TASK_BOUNDS } from "../task-wire.js";
 import { bodyCap, exactBodyInput, hostedProcedure } from "./base.js";
 
-/** A start carries the plan's text its anchor is measured in, every character escaped, beside a comment and a quote at their bounds. */
+/** A start carries the plan's text its anchor is measured in, every character escaped, beside a comment and a quote at their bounds, and the comment's files. */
 const START_BODY_BYTES =
   (TASK_BOUNDS.MAX_BODY_CHARS +
     PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS +
     PLAN_COMMENT_BOUNDS.MAX_QUOTE_CHARS) *
     6 +
+  MAXIMUM_ATTACHMENTS_BODY_BYTES +
   1_024;
 
-/** An action is a comment at its bound and an id or a key, every character escaped. */
-const ACTION_BODY_BYTES = PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 6 + 1_024;
+/** An action is a comment at its bound and an id or a key, every character escaped, and a reply's files. */
+const ACTION_BODY_BYTES =
+  PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 6 + MAXIMUM_ATTACHMENTS_BODY_BYTES + 1_024;
 
 const COMMENTS_PATH = `${HOSTED_SERVICE_PATH.TASKS}/{id}/comments` as const;
 

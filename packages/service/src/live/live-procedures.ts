@@ -36,13 +36,14 @@ import { boardLiveStatement } from "@luke/database/models/board-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { readTask } from "@luke/database/models/task-store";
 import { codingAgentCallIdSchema } from "@luke/features/coding-agent-wire";
-import { LIVE_POLL } from "@luke/features/live-wire";
+import { LIVE_POLL, liveDigestOf, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Option, Result } from "effect";
+import { Duration, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { reachedAgentById } from "../agents/agent-reach.js";
 import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import { unparsedWire, wireUuidSchema } from "../core.js";
+import { heldUntil } from "../http/held-read.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
@@ -56,6 +57,13 @@ import { type LiveSealer, LiveSealing, pollSealer } from "./realtime.js";
 export interface LiveProcedureSeams {
   resolveUserId: UserIdResolver;
 }
+
+/**
+ * How a poll past the reader's digest is held: looked at again every
+ * second, and answered unchanged after 25, well inside a function's limit
+ * and the client's held deadline.
+ */
+const LIVE_POLL_HOLD = { LOOK: Duration.seconds(1), HOLD: Duration.seconds(25) } as const;
 
 /** The id a query named, where it is a UUID; any other names no row, and is not found. */
 const rowIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -75,7 +83,7 @@ const rowIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  */
 const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends string>(
   statements: Readonly<Record<Part, LiveStatement>>,
-  poll: boolean,
+  asked: { readonly [LIVE_POLL.QUERY]?: string; readonly [LIVE_POLL.AFTER]?: string },
 ): Effect.fn.Return<
   {
     readonly url: string;
@@ -101,16 +109,39 @@ const sealedParts = /* @__PURE__ */ Effect.fnUntraced(function* <Part extends st
   const polled = Effect.flatMap(SqlClient.SqlClient, (sql) => all(pollSealer(sql))).pipe(
     Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
   );
+  const after = asked[LIVE_POLL.AFTER];
   const sealing = yield* LiveSealing;
-  if (poll || Option.isNone(sealing)) return yield* polled;
-  return yield* all(sealing.value).pipe(
-    Effect.catch(() =>
-      Effect.andThen(
-        Effect.logWarning("live: Realtime could not seal a read; it is answered polled"),
-        polled,
+  if (asked[LIVE_POLL.QUERY] !== LIVE_POLL.ON && Option.isSome(sealing)) {
+    return yield* all(sealing.value).pipe(
+      Effect.catch(() =>
+        Effect.andThen(
+          Effect.logWarning("live: Realtime could not seal a read; it is answered polled"),
+          polled,
+        ),
       ),
-    ),
+    );
+  }
+  if (after === undefined) return yield* polled;
+  // A poll past `after` is held until the rows move past it, or answered unchanged: its digests and no rows.
+  const moved = yield* heldUntil(
+    polled,
+    (read) => liveDigestOf(read.queries) !== after,
+    LIVE_POLL_HOLD.LOOK,
+    LIVE_POLL_HOLD.HOLD,
   );
+  if (Option.isSome(moved)) return moved.value;
+  const standing = yield* polled;
+  if (liveDigestOf(standing.queries) !== after) return standing;
+  return {
+    ...standing,
+    // SAFETY: every part is kept, each with its rows left out.
+    queries: Object.fromEntries(
+      Object.entries<SealedLiveQueryWire>(standing.queries).map(([part, sealed]) => {
+        const { rows: _rows, ...unchanged } = sealed;
+        return [part, unchanged];
+      }),
+    ) as typeof standing.queries,
+  };
 });
 
 /** The delegation call a query named, where one is a call id; one of any other shape names no worker, and is not found. */
@@ -133,7 +164,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         (parts, failedRuns) => ({ ...parts, failedRuns }),
       );
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input[LIVE_POLL.QUERY] === LIVE_POLL.ON);
+      return yield* sealedParts(statements.value, input);
     }),
     taskBoard: signedIn.taskBoard.effect(function* ({ input, context }) {
       const taskId = yield* rowIdOf(input.id);
@@ -141,10 +172,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const statement = boardLiveStatement(context.userId, taskId);
       if (Option.isNone(statement)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(
-        { board: statement.value },
-        input[LIVE_POLL.QUERY] === LIVE_POLL.ON,
-      );
+      return yield* sealedParts({ board: statement.value }, input);
     }),
     agentTranscript: signedIn.agentTranscript.effect(function* ({ input, context }) {
       const callId = input.call === undefined ? undefined : yield* callIdOf(input.call);
@@ -162,7 +190,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
         agentFollowedBy(target.userId, target.conversationId, context.userId),
       );
       if (Option.isNone(statements)) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-      return yield* sealedParts(statements.value, input[LIVE_POLL.QUERY] === LIVE_POLL.ON);
+      return yield* sealedParts(statements.value, input);
     }),
   };
 }

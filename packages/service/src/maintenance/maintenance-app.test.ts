@@ -64,7 +64,6 @@ function environment(cronSecret: string | undefined): HostedEnvironmentValues {
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
     nativeAgentAccounts: [],
-    agentSandboxSnapshot: undefined,
   };
 }
 

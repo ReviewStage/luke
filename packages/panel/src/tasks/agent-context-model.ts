@@ -53,6 +53,7 @@ const ESTIMATE_MARK = "~";
 const BRIEF_LABEL = {
   [CODING_AGENT_BRIEF.PLAN]: "Plan",
   [CODING_AGENT_BRIEF.PROMPT]: "Prompt",
+  [CODING_AGENT_BRIEF.BLANK]: "First message",
 } as const satisfies Record<CodingAgentBrief, string>;
 
 /** One part of the context as the popover's bar and legend draw it. */

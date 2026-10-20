@@ -1,4 +1,4 @@
-import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, liveDigestOf, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { Cause, Data, Duration, Effect, Fiber, Queue, Schedule, Stream } from "effect";
 
 /**
@@ -14,23 +14,31 @@ import { Cause, Data, Duration, Effect, Fiber, Queue, Schedule, Stream } from "e
  * caller builds from the rows leaves.
  *
  * Where Realtime fails the read (a subscription in error, a client that did
- * not load, a renewal refused, or a seal the service answered polled), the
- * read is polled instead: its rows asked of the service inline every
- * `LIVE_POLL_EVERY`, fed to the same caller, while Realtime is subscribed
- * to again every `RESUBSCRIBE_EVERY`; once Realtime delivers again, the
- * polling stops. Each switch is said in the log, never the sealed query.
+ * not load, or a renewal refused), the read is polled instead, and Realtime
+ * is subscribed to again every `RESUBSCRIBE_EVERY`; once it delivers again,
+ * the polling stops. Each switch is said in the log, never the sealed query.
+ * Where the service answers the seal itself polled, Realtime being off, the
+ * read is polled quietly and not subscribed to again. A poll names where
+ * the rows last stood (`liveDigestOf`), the service holds it until they move
+ * or a while passes, and it is asked again at once, a failed one a second
+ * later and then up to five.
  */
 
 /** How long before a sealed statement expires it is renewed, as Neon's own bindings renew it. */
 const RENEW_EARLY = Duration.seconds(10);
 /** How soon a renewal whose fetch failed is asked again, as Neon's own bindings ask. */
 const RENEW_RETRY = Duration.seconds(1);
-/** How often a read Realtime fails is polled. */
-const LIVE_POLL_EVERY = Duration.seconds(3);
+/** The least time between two polls, so a service answering at once is not asked in a hot loop; each poll is otherwise held by the service until the rows move. */
+const LIVE_POLL_FLOOR = Duration.millis(500);
+/** How a poll that failed is asked again: a second later, then longer, up to five seconds. */
+const POLL_BACKOFF = Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]);
 /** How often Realtime is subscribed to again while a read is polled. */
 const RESUBSCRIBE_EVERY = Duration.seconds(15);
 /** Why a read stopped for good: it names nothing the account reaches any more. */
 const GONE = "the read is gone";
+/** What a go at Realtime leaves to do: subscribe again later, or stay polled, the service answering polled. */
+const AGAIN = "again";
+const STAY = "stay";
 
 /** A subscription that stopped for good: Realtime's client did not load, Realtime said so, a renewal was refused, or a row did not decode. */
 export class LiveBroken extends Data.TaggedError("LiveBroken")<{
@@ -83,10 +91,14 @@ export interface LiveFollowDependencies<Part extends string> {
   readonly reseal: () => Effect.Effect<
     SealedRead<Part> | { readonly failure: string; readonly gone?: boolean }
   >;
-  /** The read with each part's rows inline (`LIVE_POLL_URL`), asked while Realtime fails it; a failure as `reseal`'s. */
-  readonly poll: () => Effect.Effect<
-    SealedRead<Part> | { readonly failure: string; readonly gone?: boolean }
-  >;
+  /**
+   * The read with each part's rows inline (`LIVE_POLL_URL`), asked while
+   * Realtime fails or is off, held by the service until the rows move past
+   * `after` (`liveDigestOf`); a failure as `reseal`'s.
+   */
+  readonly poll: (
+    after: string | undefined,
+  ) => Effect.Effect<SealedRead<Part> | { readonly failure: string; readonly gone?: boolean }>;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
 }
@@ -226,24 +238,35 @@ export function liveRows<Part extends string>(
       };
       const gone = () => Queue.failCauseUnsafe(queue, Cause.fail(new LiveBroken({ reason: GONE })));
 
+      /** Where the rows stood at the last poll, which the next is held past. */
+      let seen: string | undefined;
       const pollOnce = Effect.gen(function* () {
-        const read = yield* dependencies.poll();
+        const read = yield* dependencies.poll(seen);
         if ("failure" in read) {
-          if (read.gone === true) gone();
-          return;
+          if (read.gone === true) {
+            gone();
+            return yield* Effect.never;
+          }
+          return yield* Effect.fail(read);
         }
+        seen = liveDigestOf(read.queries) ?? seen;
         const rows = rowsOf(parts, read);
         if (rows !== undefined) emit(rows);
       });
-      let polling: Fiber.Fiber<never> | undefined;
-      const startPolling = (why: LiveBroken) =>
+      let polling: Fiber.Fiber<never, unknown> | undefined;
+      /** Polls from now on, unless it already does; `why` is said in the log where Realtime failed rather than being off. */
+      const startPolling = (why: LiveBroken | undefined) =>
         Effect.gen(function* () {
           if (polling !== undefined) return;
-          yield* Effect.logWarning(`live-follow: Realtime failed (${why.reason}); polling`).pipe(
-            Effect.annotateLogs(why.code === undefined ? {} : { code: why.code }),
-          );
+          if (why !== undefined) {
+            yield* Effect.logWarning(`live-follow: Realtime failed (${why.reason}); polling`).pipe(
+              Effect.annotateLogs(why.code === undefined ? {} : { code: why.code }),
+            );
+          }
           polling = yield* Effect.forkScoped(
-            Effect.repeat(pollOnce, Schedule.spaced(LIVE_POLL_EVERY)).pipe(
+            pollOnce.pipe(
+              Effect.retry(POLL_BACKOFF),
+              Effect.repeat(Schedule.spaced(LIVE_POLL_FLOOR)),
               Effect.andThen(Effect.never),
             ),
           );
@@ -257,28 +280,34 @@ export function liveRows<Part extends string>(
 
       /** The read as last sealed, the first the caller handed, then each resubscribe's. */
       let sealed: SealedRead<Part> | { readonly failure: string; readonly gone?: boolean } = first;
-      /** One go at Realtime: followed until it breaks, polled from then on; false where the read is gone. */
+      /**
+       * One go at Realtime: followed until it breaks, polled from then on.
+       * Answers whether to subscribe again later: not where the read is gone,
+       * nor where the service answered it polled, Realtime being off.
+       */
       const attempt = Effect.gen(function* () {
-        if ("failure" in sealed) {
-          if (sealed.gone === true) return false;
-        } else if (sealed.url === LIVE_POLL_URL) {
-          yield* startPolling(new LiveBroken({ reason: "Realtime could not seal the read" }));
-        } else {
-          const broken = yield* Stream.runForEach(realtimeRows(dependencies, sealed), (rows) =>
-            Effect.andThen(
-              stopPolling,
-              Effect.sync(() => emit(rows)),
-            ),
-          ).pipe(
-            Effect.match({
-              onFailure: (why) => why,
-              onSuccess: () => new LiveBroken({ reason: "the subscription ended" }),
-            }),
-          );
-          if (broken.reason === GONE) return false;
-          yield* startPolling(broken);
+        if ("failure" in sealed) return sealed.gone === true ? GONE : AGAIN;
+        if (sealed.url === LIVE_POLL_URL) {
+          const rows = rowsOf(parts, sealed);
+          if (rows !== undefined) emit(rows);
+          seen = liveDigestOf(sealed.queries) ?? seen;
+          yield* startPolling(undefined);
+          return STAY;
         }
-        return true;
+        const broken = yield* Stream.runForEach(realtimeRows(dependencies, sealed), (rows) =>
+          Effect.andThen(
+            stopPolling,
+            Effect.sync(() => emit(rows)),
+          ),
+        ).pipe(
+          Effect.match({
+            onFailure: (why) => why,
+            onSuccess: () => new LiveBroken({ reason: "the subscription ended" }),
+          }),
+        );
+        if (broken.reason === GONE) return GONE;
+        yield* startPolling(broken);
+        return AGAIN;
       });
       const resubscribe = Effect.andThen(
         Effect.flatMap(dependencies.reseal(), (next) =>
@@ -288,16 +317,16 @@ export function liveRows<Part extends string>(
         ),
         attempt,
       );
-      const follow = Effect.flatMap(attempt, (standing) =>
-        standing
-          ? Effect.asVoid(
-              Effect.repeat(resubscribe, {
-                schedule: Schedule.spaced(RESUBSCRIBE_EVERY),
-                while: (still) => still,
-              }),
-            )
-          : Effect.void,
-      ).pipe(Effect.andThen(Effect.sync(gone)));
+      const follow = Effect.gen(function* () {
+        let next = yield* attempt;
+        if (next === AGAIN) {
+          next = yield* Effect.repeat(resubscribe, {
+            schedule: Schedule.spaced(RESUBSCRIBE_EVERY),
+            while: (then) => then === AGAIN,
+          });
+        }
+        if (next === GONE) gone();
+      });
       yield* Effect.forkScoped(follow);
     }),
   );

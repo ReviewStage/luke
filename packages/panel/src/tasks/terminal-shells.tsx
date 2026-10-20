@@ -33,12 +33,11 @@ import { ActionMenu } from "../desktop/action-menu.js";
 import type { FloatingBox } from "../desktop/hover-pane.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentRef, type AgentSubject } from "./agent-ref.js";
-import { agentStillWriting } from "./coding-agent-model.js";
 import { AgentGlyph } from "./tab-look.js";
 import type { TerminalSession } from "./use-terminal-session.js";
 
 /**
- * terminal-shells.tsx -- the shells beside a Terminal tab's screen: each one in the agent's sandbox, the one shown marked, and the agent's state at the foot.
+ * terminal-shells.tsx -- the shells beside a Terminal tab's screen: each one in the agent's sandbox, the one shown marked, and the agent at the foot.
  *
  * A Terminal tab belongs to one agent's sandbox, and so does every shell in
  * its list: the "+" starts another in that same sandbox, and the list never
@@ -46,8 +45,10 @@ import type { TerminalSession } from "./use-terminal-session.js";
  * the folder it stands in, and a dot while a command runs there; a press
  * shows it on the screen, its × ends it, and its right-click offers
  * renaming it, a new shell, and ending it. The list folds away beside the
- * screen as a File tab's tree does, and its foot names the agent and where
- * it stands.
+ * screen as a File tab's tree does, and its foot names the agent, or its
+ * sandbox where that is stopped or not yet up. Whether the agent works is
+ * its glyph's to say, the working mark in its place, so no word beside it
+ * repeats it (`state-glyph.tsx`).
  */
 
 /** What a Terminal tab's card says under its agent's, before the count of its shells. */
@@ -71,12 +72,11 @@ const SKELETON_ROWS = [
 /** How wide a row's glyph stands while it is read: the glyph's own size. */
 const SKELETON_GLYPH = "var(--luke-control-icon)";
 
-/** What the foot says of the agent: at work, or how its sandbox stands while it is not. */
-function standingWords(subject: AgentSubject, sandbox: string | undefined): string {
-  if (subject.agent !== undefined && agentStillWriting(subject.agent.status)) return "Working…";
+/** What the foot says beside the agent's glyph: its sandbox where that is stopped or still starting, and the agent's name otherwise. */
+function footWords(subject: AgentSubject, sandbox: string | undefined): string {
   if (sandbox === SANDBOX_STATE.STOPPED) return "Sandbox stopped";
   if (sandbox === SANDBOX_STATE.STARTING) return "Starting…";
-  return "Idle";
+  return subject.name;
 }
 
 /** What a row says under a shell's name: what is running in it, or the folder it stands in. */
@@ -321,7 +321,7 @@ export function TerminalShells({
           models={models}
           onOpen={onOpenAgent}
           glyph={<AgentGlyph agent={subject.agent} />}
-          label={standingWords(subject, listed?.sandbox)}
+          label={footWords(subject, listed?.sandbox)}
         />
       </div>
     </aside>
@@ -346,13 +346,13 @@ export function TerminalCardFoot({ agentId }: { agentId: string }): React.JSX.El
 }
 
 /**
- * How an agent and its sandbox stand, as a terminal's row in the panel's "+"
- * says it after the agent's name: at work or idle, then its shells as the
- * window last read them, or its sandbox stopped.
+ * How an agent's sandbox stands, as a terminal's row in the panel's "+" says
+ * it after the agent's name: its shells as the window last read them, or its
+ * sandbox stopped or not yet up; nothing before the first read. Whether the
+ * agent works is the row's glyph's to say.
  */
 export function TerminalStanding({ agent }: { agent: CodingAgentSummary }): React.JSX.Element {
   const listed = useAtomValue(sandboxRead(agent.id));
-  const working = agentStillWriting(agent.status) ? "Working" : "Idle";
   const sandbox =
     listed === undefined
       ? undefined
@@ -361,5 +361,5 @@ export function TerminalStanding({ agent }: { agent: CodingAgentSummary }): Reac
         : listed.sandbox === SANDBOX_STATE.STOPPED
           ? "Sandbox stopped"
           : "No sandbox yet";
-  return <>{sandbox === undefined ? working : `${working} · ${sandbox}`}</>;
+  return <>{sandbox}</>;
 }

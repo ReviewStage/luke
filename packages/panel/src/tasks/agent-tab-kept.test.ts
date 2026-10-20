@@ -303,7 +303,10 @@ test("a message a page did not touch hangs the card the window hands now, and it
   tab.openEarlierFold();
   const row = (callId: string) =>
     tab.container.querySelector<HTMLElement>(`button[data-call-id="${callId}"]`);
-  assert.equal(cardOn(row("call-message"))[0], "Invoice export");
+  // A message folds its words open, so its card hangs from its chip, the row's way to the agent.
+  const messageChip = () =>
+    tab.container.querySelector<HTMLElement>('[data-call-id="call-message"] [data-tool-agent-ref]');
+  assert.equal(cardOn(messageChip())[0], "Invoice export");
   const refused = () =>
     tab.container.querySelector<HTMLElement>('[data-call-id="call-refused"]')?.textContent ?? "";
   assert.match(refused(), /Invoice export/u);
@@ -311,7 +314,7 @@ test("a message a page did not touch hangs the card the window hands now, and it
 
   // The window draws again with the other agent renamed, and no page has touched the earlier turn.
   act(() => drawOver("Invoice export, retried"));
-  assert.equal(cardOn(row("call-message"))[0], "Invoice export, retried");
+  assert.equal(cardOn(messageChip())[0], "Invoice export, retried");
   assert.match(refused(), /Invoice export, retried/u);
 
   // A page touches the newest turn alone, and says the worker has finished.

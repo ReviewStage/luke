@@ -75,12 +75,31 @@ function useConversation(): ConversationScroll {
   return context;
 }
 
-export type ConversationProps = ComponentProps<"div">;
+export type ConversationProps = ComponentProps<"div"> & {
+  /** What the log is of, such as an Inbox item: a new one opens the log at its newest line again, as a log drawn anew opens. */
+  subject?: string | undefined;
+  /** The scroll box's ref, where the caller reads the box too; one of the log's own where none is handed. */
+  list?: RefObject<HTMLDivElement | null> | undefined;
+};
 
-export function Conversation({ className, children, ...props }: ConversationProps): ReactNode {
-  const list = useRef<HTMLDivElement>(null);
+export function Conversation({
+  className,
+  children,
+  subject,
+  list: handed,
+  ...props
+}: ConversationProps): ReactNode {
+  const own = useRef<HTMLDivElement>(null);
+  const list = handed ?? own;
   const following = useRef(true);
   const [isAtBottom, setAtBottom] = useState(true);
+  const opened = useRef(subject);
+  // Where the log last stood, its own writes among it, so a scroll is read as the reader's up or down from there.
+  const lastTop = useRef(0);
+  const toEnd = useCallback((element: HTMLDivElement) => {
+    element.scrollTop = element.scrollHeight;
+    lastTop.current = element.scrollTop;
+  }, []);
   // What the last render left observed: the scroll box, and how many lines
   // stood in it ending in which, so a render that changed none of them
   // touches no layout.
@@ -98,7 +117,7 @@ export function Conversation({ className, children, ...props }: ConversationProp
         const element = list.current;
         if (element === null) return;
         if (following.current) {
-          element.scrollTop = element.scrollHeight;
+          toEnd(element);
           return;
         }
         if (!followsNewest(element)) return;
@@ -107,6 +126,17 @@ export function Conversation({ className, children, ...props }: ConversationProp
       }),
   );
   useEffect(() => () => resized.disconnect(), [resized]);
+  // Note that a new subject reuses the box, scrolled wherever the reader
+  // left the last, so it is taken to its newest line here, before the paint,
+  // even where its lines happen to number and end as the last subject's did.
+  useLayoutEffect(() => {
+    if (opened.current === subject) return;
+    opened.current = subject;
+    following.current = true;
+    setAtBottom(true);
+    const element = list.current;
+    if (element !== null) toEnd(element);
+  }, [subject, list, toEnd]);
   // Note that this runs after every render but reads no layout unless the
   // lines changed, because a re-render with the same lines (any app-state
   // patch) has nothing new to scroll to, and a line that grew is the
@@ -121,7 +151,7 @@ export function Conversation({ className, children, ...props }: ConversationProp
     const held = observed.current;
     if (held?.box === element && held.count === count && held.last === last) return;
     observed.current = { box: element, count, last };
-    if (following.current) element.scrollTop = element.scrollHeight;
+    if (following.current) toEnd(element);
     resized.observe(element);
     if (lines !== null) resized.observe(lines);
   });
@@ -129,15 +159,23 @@ export function Conversation({ className, children, ...props }: ConversationProp
     following.current = true;
     setAtBottom(true);
     const element = list.current;
-    if (element !== null) element.scrollTop = element.scrollHeight;
-  }, []);
+    if (element !== null) toEnd(element);
+  }, [list, toEnd]);
+  // Note that a scroll down short of the end, or one that moved nothing,
+  // leaves a following log following, because only the reader scrolling up
+  // takes it off its newest line: the browser shifts a log down of its own accord to hold its place
+  // as lines above grow (scroll anchoring), a message's words drawn late
+  // among them, and the observer then takes it the rest of the way down.
   const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
-    following.current = followsNewest(event.currentTarget);
+    const element = event.currentTarget;
+    const down = element.scrollTop >= lastTop.current;
+    lastTop.current = element.scrollTop;
+    following.current = followsNewest(element) || (following.current && down);
     setAtBottom(following.current);
   }, []);
   const scroll = useMemo<ConversationScroll>(
     () => ({ isAtBottom, list, scrollToBottom, onScroll }),
-    [isAtBottom, scrollToBottom, onScroll],
+    [isAtBottom, list, scrollToBottom, onScroll],
   );
   return (
     <ConversationContext.Provider value={scroll}>

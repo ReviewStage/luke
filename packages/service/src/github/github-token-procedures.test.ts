@@ -64,7 +64,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: Redacted.make(RING),
   nativeAgentAccounts: [],
-  agentSandboxSnapshot: undefined,
 };
 
 /** What the fake GitHub answers `GET /user` with, per token; a token it does not know is refused. */

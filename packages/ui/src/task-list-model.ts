@@ -54,6 +54,8 @@ export interface TaskListView {
   readonly order: TaskOrder;
   /** Whose tasks the list holds: one member's by account id, or everyone's where absent. */
   readonly createdBy?: string;
+  /** Who the tasks the list holds are assigned to: one member by account id, or anyone, no one included, where absent. */
+  readonly assignedTo?: string;
   /** The statuses whose tasks the list holds, in `TASK_STATUS_ORDER`; `DEFAULT_SHOWN_STATUSES` where absent. */
   readonly statuses?: readonly TaskStatus[];
 }
@@ -239,6 +241,25 @@ export function taskRowsCreatedBy(
   createdBy: string | undefined,
 ): readonly TaskRow[] {
   return createdBy === undefined ? rows : rows.filter((row) => taskRowCreatorId(row) === createdBy);
+}
+
+/**
+ * Who the row is assigned to, by account id: a task's assignee, none for a
+ * task no one is on, or whoever started an agent with no task, which is
+ * theirs as it is theirs by Created by.
+ */
+function taskRowAssigneeId(row: TaskRow): string | undefined {
+  return row.kind === TASK_ROW.TASK ? row.task.assignee?.userId : row.agent.startedBy?.userId;
+}
+
+/** The rows assigned to one member, or every row where the view names nobody. */
+export function taskRowsAssignedTo(
+  rows: readonly TaskRow[],
+  assignedTo: string | undefined,
+): readonly TaskRow[] {
+  return assignedTo === undefined
+    ? rows
+    : rows.filter((row) => taskRowAssigneeId(row) === assignedTo);
 }
 
 /** The statuses a view shows, in `TASK_STATUS_ORDER`. */
