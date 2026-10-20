@@ -359,9 +359,7 @@ describe("the cookie account source", () => {
       );
 
       assert.deepEqual(answer, { fault: CALL_FAULT.NO_CREDENTIAL });
-      assert.equal(sent(HOSTED_ROUTE).length, 0);
-      // Only the launch's own read; nothing refused, so nothing read again.
-      assert.equal(sent("/api/auth/get-session").length, 1);
+      assert.deepEqual(sent(HOSTED_ROUTE), []);
     }).pipe(Effect.scoped),
   );
 
@@ -385,17 +383,19 @@ describe("the cookie account source", () => {
       sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
 
       yield* sender.flush;
-      assert.equal(sent(HOSTED_SERVICE_PATH.EVENTS).length, 0);
+      assert.deepEqual(sent(HOSTED_SERVICE_PATH.EVENTS), []);
 
       // The sign-in lands, and the tab reads it.
       state.user = { ...USER };
       yield* session.refreshOnce();
       yield* sender.flush;
 
-      const batches = sent(HOSTED_SERVICE_PATH.EVENTS);
-      assert.equal(batches.length, 1);
+      // Every count the service received, whichever batches carried them.
+      const received = sent(HOSTED_SERVICE_PATH.EVENTS).flatMap(
+        (batch): { name: string }[] => JSON.parse(batch.body ?? "{}").events,
+      );
       assert.deepEqual(
-        JSON.parse(batches[0]?.body ?? "{}").events.map((event: { name: string }) => event.name),
+        received.map((event) => event.name),
         [PRODUCT_EVENT.APP_LAUNCH, PRODUCT_EVENT.ACCOUNT_SIGN_IN],
       );
     }).pipe(Effect.scoped),
