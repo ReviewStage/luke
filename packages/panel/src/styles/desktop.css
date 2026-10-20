@@ -2302,25 +2302,26 @@ ul.actor-stack {
   max-width: 100%;
 }
 
-/* A phone's column is too narrow for a long sender beside the buttons and
-   the time, and a line ending at the bubble's right edge would push its
-   buttons off the column's left one, so there who sent it gives way, cut
-   short with an ellipsis (`@luke/ui`'s inline ref), and the buttons and the
-   time keep their whole width inside the column. */
-.desktop-shell[data-room="narrow"] .message-meta > .message-sender {
+/* A column, a phone's or a narrow pane's on the desktop and the web, can be
+   too narrow for a long sender beside the buttons and the time, and a line
+   ending at the bubble's right edge would push it off the column's left
+   one, so who sent it gives way, cut short with an ellipsis (`@luke/ui`'s
+   inline ref), and the buttons and the time keep their whole width inside
+   the column. */
+.message-meta > .message-sender {
   min-width: 0;
 }
 
-/* A sender the window cannot place is named in plain words, cut short there
-   as an inline ref's name is. */
-.desktop-shell[data-room="narrow"] .message-sender-words {
+/* A sender the window cannot place is named in plain words, cut short as an
+   inline ref's name is. */
+.message-sender-words {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.desktop-shell[data-room="narrow"] .message-meta > :is(.message-actions, .message-sent-at) {
+.message-meta > :is(.message-actions, .message-sent-at) {
   flex: none;
 }
 
@@ -2351,10 +2352,6 @@ ul.actor-stack {
 .agent-origin > .message-meta {
   flex-wrap: wrap;
   row-gap: var(--luke-space-2);
-}
-
-.agent-origin > .message-meta > .message-sender {
-  min-width: 0;
 }
 
 /* Who sent it can name an automation, an issue, and a runner: too narrow
