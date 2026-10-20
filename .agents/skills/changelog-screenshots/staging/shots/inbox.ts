@@ -1,29 +1,38 @@
 /**
- * inbox.ts -- shot D, "The Inbox": three items the plan's coding agents posted, waiting on the plan's Inbox tab, and the sidebar's Inbox counting them.
+ * inbox.ts -- shot D, "The Inbox": three threads the plan's coding agents opened, each ending with an ask, waiting on the plan's Inbox tab, and the sidebar's Inbox counting them.
  *
  * Throwaway (`README.md`). SPEC: sidebar open with the Inbox count badge;
- * the plan's column on its Inbox tab; side panel closed. Three items from
+ * the plan's column on its Inbox tab; side panel closed. Three threads from
  * the plan's two coding agents (`coding-agent.ts`), oldest first as the
- * board orders them: a decision with choices carrying the exact lines of
- * `src/members/invite.ts` it is about, a question carrying a screenshot
- * the agent took in its sandbox of the expired invite page, and a manual
- * step with a link. The inbox read is answered once from its start and
- * held after, since its loop asks again as soon as an answer lands; the
- * code block's lines are answered through `TASKS_FILE` and the picture
- * through `CODING_AGENTS_INBOX_ATTACHMENT` (`expired-invite-picture.ts`).
+ * board orders them, each drawn from its version 5 `thread`: a `decide`
+ * whose message names the exact lines of `src/members/invite.ts` it is
+ * about, with a question from Dean and the agent's answer after it; an
+ * `answer` whose message draws a screenshot the agent took in its sandbox
+ * of the expired invite page; and a `do` with its steps and a link. Each
+ * item keeps the version 4 fields the service writes beside its thread for
+ * an older desktop. The inbox read is answered once from its start and held
+ * after, since its loop asks again as soon as an answer lands; the code
+ * block's lines are answered through `TASKS_FILE` and the picture through
+ * `CODING_AGENTS_INBOX_ATTACHMENT` (`expired-invite-picture.ts`).
  */
 
-import type { CodeToken } from "@luke/features/planning-view";
+import type { CodeToken } from "@luke/features/tasks-view";
+import { inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxAnswer,
   type InboxItem,
+  type InboxMessage,
 } from "@luke/features/inbox-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import { ACT_KIND } from "@luke/host/acts";
 import { FIXTURE_CLOSED_PANEL } from "../tasks/tasks-fixture";
 import { MAIN_TAB } from "../tasks/use-main-tabs";
@@ -42,6 +51,24 @@ export const INBOX_ITEM_IDS = [
 
 /** The picture the question carries, as the service keeps it. */
 const ATTACHMENT_ID = "f4a5b6c7-d8e9-4fa0-9b1c-3d4e5f607182";
+
+/** The workspace the shots' plan stands in, as a picture's address names it (`account.ts`). */
+const WORKSPACE_SLUG = "acme";
+
+/** Each thread's messages, by id. */
+const MESSAGE_ID = {
+  DECISION: "a1c2e3f4-0b1d-4e2f-8a3b-4c5d6e7f8091",
+  DECISION_QUESTION: "a2c3e4f5-1b2d-4e3f-9a4b-5c6d7e8f90a2",
+  DECISION_REPLY: "a3c4e5f6-2b3d-4e4f-8a5b-6c7d8e9f0ab3",
+  QUESTION: "b1d2f3a4-3c4e-4f5a-9b6c-7d8e9f0a1bc4",
+  STEP: "c1e2a3b4-4d5f-4a6b-8c7d-8e9f0a1b2cd5",
+} as const;
+
+/** Dean, as a member's message names him (`account.ts`). */
+const DEAN = { userId: "user-dean", name: "Dean Stratakos" } as const;
+
+/** The vercel page the manual step is done on. */
+const ENVIRONMENT_URL = "https://vercel.com/acme/relay/settings/environment-variables";
 
 /** The cursor the one read of the inbox ends on. */
 const READ_THROUGH = "1";
@@ -157,9 +184,11 @@ const INVITE_FILE: readonly CodeToken[][] = [
   line("}"),
 ];
 
-/** One item waiting on the developer, first posted `minutes` before launch and unchanged since. */
+/** One item waiting on the developer, first posted `minutes` before launch and changed last as its thread's latest message was written. */
 function waiting(
-  item: Pick<InboxItem, "id" | "agentId" | "key" | "title" | "blocks" | "response">,
+  item: Pick<InboxItem, "id" | "agentId" | "key" | "title" | "blocks" | "response"> & {
+    readonly thread: readonly InboxMessage[];
+  },
   minutes: number,
 ): InboxItem {
   return {
@@ -169,8 +198,34 @@ function waiting(
     needsReply: true,
     status: INBOX_STATUS.OPEN,
     postedAt: ago(minutes),
-    updatedAt: ago(minutes),
+    updatedAt: item.thread.at(-1)?.createdAt ?? ago(minutes),
   };
+}
+
+/** The agent's message, written `minutes` before launch, ending with the ask given where it asks. */
+function agentSaid(
+  id: string,
+  text: string,
+  minutes: number,
+  ask?: InboxMessage["ask"],
+): InboxMessage {
+  return {
+    id,
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+    text,
+    ...(ask === undefined ? undefined : { ask }),
+    createdAt: ago(minutes),
+  };
+}
+
+/** The picture the question draws, by its address under its item. */
+function questionPicture(itemId: string): string {
+  const address = inboxAttachmentAddress(
+    { kind: LINK_PLACE.INBOX_ITEM, planId: SHOT_ID.TASK, itemId },
+    ATTACHMENT_ID,
+    WORKSPACE_SLUG,
+  );
+  return `![The expired invite page: This invite is no longer valid](<${address}> "/invites/:token, a day after the link expired")`;
 }
 
 /** The three items, as the service answers the plan's inbox. */
@@ -190,11 +245,27 @@ function shotInboxItems(): InboxItem[] {
           },
           {
             type: INBOX_BLOCK.LINK,
-            url: "https://vercel.com/acme/relay/settings/environment-variables",
+            url: ENVIRONMENT_URL,
             label: "acme/relay › Settings › Environment Variables",
           },
         ],
-        response: { type: INBOX_RESPONSE.TASK },
+        response: { type: INBOX_RESPONSE.TODO },
+        thread: [
+          agentSaid(
+            MESSAGE_ID.STEP,
+            "Staging can't send the invite email without it. Use the token of the **Relay staging** server in Postmark; I can't reach the project's settings from the sandbox.",
+            3,
+            {
+              type: INBOX_ASK.DO,
+              steps: [
+                `Open [acme/relay › Settings › Environment Variables](${ENVIRONMENT_URL})`,
+                "Add `POSTMARK_SERVER_TOKEN` for **Preview** with the **Relay staging** token",
+                "Redeploy staging",
+              ],
+              status: INBOX_ASK_STATUS.OPEN,
+            },
+          ),
+        ],
       },
       3,
     ),
@@ -216,6 +287,14 @@ function shotInboxItems(): InboxItem[] {
           },
         ],
         response: { type: INBOX_RESPONSE.TEXT, placeholder: "What the page should offer" },
+        thread: [
+          agentSaid(
+            MESSAGE_ID.QUESTION,
+            `This is \`/invites/:token\` once a link has expired. It sends the visitor to an admin; should it let them ask for a new invite in one press instead?\n\n${questionPicture(question)}`,
+            16,
+            { type: INBOX_ASK.ANSWER, status: INBOX_ASK_STATUS.OPEN },
+          ),
+        ],
       },
       16,
     ),
@@ -254,6 +333,41 @@ function shotInboxItems(): InboxItem[] {
           ],
           recommended: "7 days",
         },
+        thread: [
+          agentSaid(
+            MESSAGE_ID.DECISION,
+            `The plan leaves this open. I set 7 days, its assumption, so the tests have something to hold; your answer changes [@invite.ts:${TTL_LINE}](https://github.com/${TASK_REPOSITORY}/blob/${INVITE_SHA}/${INVITE_PATH}#L${TTL_LINE}).`,
+            24,
+            {
+              type: INBOX_ASK.DECIDE,
+              options: [
+                {
+                  label: "7 days",
+                  detail: "Matches password reset links; a forwarded link goes stale sooner.",
+                },
+                {
+                  label: "14 days",
+                  detail:
+                    "Fewer resends for teammates slow to join, but a forwarded link works for two weeks.",
+                },
+              ],
+              recommended: "7 days",
+              status: INBOX_ASK_STATUS.OPEN,
+            },
+          ),
+          {
+            id: MESSAGE_ID.DECISION_QUESTION,
+            author: INBOX_MESSAGE_AUTHOR.MEMBER,
+            member: DEAN,
+            text: "Can an admin resend an expired one, or does the teammate start over?",
+            createdAt: ago(19),
+          },
+          agentSaid(
+            MESSAGE_ID.DECISION_REPLY,
+            "An admin resends it from **Members**, which mints a new link and keeps the pending seat, so a shorter window costs one press.",
+            18,
+          ),
+        ],
       },
       24,
     ),
@@ -295,7 +409,17 @@ export function inboxShot(): ShotSpec {
       },
     },
     inbox: {
-      waiting: [{ taskId: SHOT_ID.TASK, items: INBOX_ITEM_IDS }],
+      waiting: [
+        {
+          taskId: SHOT_ID.TASK,
+          items: shotInboxItems().map(({ id, agentId, title, postedAt }) => ({
+            id,
+            agentId,
+            title,
+            postedAt,
+          })),
+        },
+      ],
       tasks: [{ taskId: SHOT_ID.TASK, items: INBOX_ITEM_IDS.length, updatedAt: ago(3) }],
     },
     layout: { mainTab: MAIN_TAB.INBOX },

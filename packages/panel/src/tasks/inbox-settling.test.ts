@@ -2,12 +2,15 @@
 
 import assert from "node:assert/strict";
 import {
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
   INBOX_MESSAGE_AUTHOR,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_WIRE_VERSION,
   type InboxItem,
+  type InboxMessage,
 } from "@luke/features/inbox-wire";
 import type { AppInboxTask } from "@luke/host/app-state";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -293,4 +296,123 @@ test("a read mark the window made stands over the item as it was marked, and giv
     ["h1", true],
     ["h2", false],
   ]);
+});
+
+/** A thread from version 5: the agent's message ending with a decide, open. */
+const ASKING: InboxMessage = {
+  id: "d1b2c3d4-0000-4000-8000-000000000001",
+  author: INBOX_MESSAGE_AUTHOR.AGENT,
+  text: "Alert at 80% or 90%?",
+  ask: {
+    type: INBOX_ASK.DECIDE,
+    options: [{ label: "80%" }, { label: "90%" }],
+    status: INBOX_ASK_STATUS.OPEN,
+  },
+  createdAt: 1_000,
+};
+
+const THREAD: InboxItem = {
+  ...ASKED,
+  id: "a1b2c3d4-0000-4000-8000-000000000003",
+  thread: [ASKING],
+};
+
+/** The ask on a thread's first message, as a read draws it. */
+const askStatus = (item: InboxItem | undefined) => item?.thread?.[0]?.ask?.status;
+
+test("a reply that answers a thread's ask stands over every read as the thread would hold it, the ask answered and the reply under it, until a read shows the ask settled, though no revision moves", () => {
+  const { probe, render } = mount();
+  render(waitingOn(THREAD), [THREAD]);
+  const answers = { ask: ASKING.id, reply: INBOX_REPLY.CHOSE, choices: ["90%"] };
+  let sent: symbol | undefined;
+  act(() => {
+    sent = probe.settler?.answer(
+      THREAD,
+      { reply: INBOX_REPLY.CHOSE, choices: ["90%"], note: "Night too" },
+      answers,
+    );
+  });
+  const laid = probe.drawn[0];
+  assert.equal(laid?.status, INBOX_STATUS.ANSWERED);
+  assert.equal(askStatus(laid), INBOX_ASK_STATUS.ANSWERED);
+  assert.deepEqual(
+    laid?.thread?.slice(1).map(({ author, text, answers: carried }) => ({ author, text, carried })),
+    [{ author: INBOX_MESSAGE_AUTHOR.MEMBER, text: "Night too", carried: answers }],
+  );
+  assert.equal(probe.count, 0);
+
+  const reply: InboxMessage = {
+    id: "d1b2c3d4-0000-4000-8000-000000000002",
+    author: INBOX_MESSAGE_AUTHOR.MEMBER,
+    text: "Night too",
+    answers,
+    createdAt: 2_000,
+  };
+  const held: InboxItem = {
+    ...THREAD,
+    status: INBOX_STATUS.ANSWERED,
+    thread: [{ ...ASKING, ask: { ...ASKING.ask, status: INBOX_ASK_STATUS.ANSWERED } }, reply],
+    updatedAt: 2_000,
+  };
+  act(() => {
+    if (sent !== undefined) probe.settler?.take(sent, held);
+  });
+  // A read asked before the reply, at the same revision, lands after the service took it.
+  render(waitingOn(THREAD), [THREAD]);
+  assert.equal(askStatus(probe.drawn[0]), INBOX_ASK_STATUS.ANSWERED);
+  assert.equal(
+    probe.drawn[0]?.thread?.[1]?.id,
+    reply.id,
+    "the service's message stands for the window's",
+  );
+  // A read showing the ask settled is drawn as it holds it.
+  render(waitingOn(THREAD), [{ ...held, unread: true }]);
+  assert.equal(probe.drawn[0]?.unread, true);
+});
+
+test("a plain reply on a thread stands over a read that lacks it until a read holds it, and leaves the ask open", () => {
+  const { probe, render } = mount();
+  const reply: InboxMessage = {
+    id: "d1b2c3d4-0000-4000-8000-000000000003",
+    author: INBOX_MESSAGE_AUTHOR.MEMBER,
+    text: "Is 80% too eager?",
+    createdAt: 2_000,
+  };
+  const written = { ...THREAD, thread: [ASKING, reply], updatedAt: 2_000 };
+  render(waitingOn(THREAD), [THREAD]);
+  act(() => probe.settler?.message(written));
+  assert.deepEqual(probe.drawn[0]?.thread, [ASKING, reply]);
+  assert.equal(probe.drawn[0]?.status, INBOX_STATUS.OPEN);
+  assert.equal(probe.count, 1, "a reply answers nothing, so the item still waits");
+  render(waitingOn(THREAD), [{ ...written, unread: false }]);
+  assert.equal(probe.drawn[0]?.unread, false, "a read holding the reply is drawn as it holds it");
+});
+
+test("a close on a thread stands over every read as its ask withdrawn, until a read shows the ask settled", () => {
+  const { probe, render } = mount();
+  render(waitingOn(THREAD), [THREAD]);
+  act(() => {
+    probe.settler?.close(THREAD);
+  });
+  assert.equal(probe.drawn[0]?.status, INBOX_STATUS.CLOSED);
+  assert.equal(askStatus(probe.drawn[0]), INBOX_ASK_STATUS.WITHDRAWN);
+  assert.equal(probe.count, 0);
+  render(waitingOn(THREAD), [THREAD]);
+  assert.equal(
+    askStatus(probe.drawn[0]),
+    INBOX_ASK_STATUS.WITHDRAWN,
+    "a read behind it is not drawn",
+  );
+  const closed = {
+    ...THREAD,
+    status: INBOX_STATUS.CLOSED,
+    thread: [{ ...ASKING, ask: { ...ASKING.ask, status: INBOX_ASK_STATUS.WITHDRAWN } }],
+    unread: true,
+  };
+  render([], [closed]);
+  assert.equal(
+    probe.drawn[0]?.unread,
+    true,
+    "a read holding the ask withdrawn is drawn as it holds it",
+  );
 });

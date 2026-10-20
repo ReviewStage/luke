@@ -5578,3 +5578,76 @@ test("a teammate's open ask says it waits on them, in the line and on its box, r
   act(() => openOptions(pane)[0]?.click());
   assert.equal(sendWords(pane), 'Choose "1 day"');
 });
+
+test("a thread's row leads with what its open ask asks, then its latest message: a pick, the steps the reader ticked in its box, fields, or words; a teammate's waits on them with no mark, and an answer reads as its stamp", async () => {
+  const STEPS = threadItem([
+    askingMessage({
+      type: INBOX_ASK.DO,
+      steps: ["Open the settings", "Add the secret", "Redeploy"],
+    }),
+  ]);
+  const FIELDS: InboxItem = {
+    ...threadItem([
+      askingMessage(
+        { type: INBOX_ASK.ANSWER, fields: [{ type: INBOX_FIELD.TEXT, label: "Host" }] },
+        { id: "e1b2c3d4-0000-4000-8000-000000000021" },
+      ),
+    ]),
+    id: "a1b2c3d4-0000-4000-8000-000000000021",
+    title: "Which SMTP host?",
+    startedBy: TEAMMATE,
+  };
+  const asked = askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.ANSWERED });
+  const CHOSEN: InboxItem = {
+    ...threadItem([
+      asked,
+      {
+        ...threadMessage(
+          "e1b2c3d4-0000-4000-8000-000000000022",
+          { member: READER },
+          "and say so in the docs",
+          2_000,
+        ),
+        answers: { ask: ASKING_ID, reply: INBOX_REPLY.CHOSE, choices: ["7 days"] },
+      },
+    ]),
+    id: "a1b2c3d4-0000-4000-8000-000000000022",
+    title: "Invite window?",
+    status: INBOX_STATUS.ANSWERED,
+    answeredBy: READER,
+  };
+  inboxes = new Map([
+    [BILLING.id, [STEPS, FIELDS, CHOSEN]],
+    [
+      INVITES.id,
+      [threadItem([askingMessage({ type: INBOX_ASK.ANSWER })], { ...EXPIRY, blocks: [] })],
+    ],
+  ]);
+  const { page } = mount();
+  await settle();
+  const said = "Invites expire after 24 hours today, which trips up teams across time zones.";
+  assert.deepEqual(rowLines(page, STEPS.title), [true, `Steps · 0 of 3 · Agent: ${said}`]);
+  assert.deepEqual(rowLines(page, FIELDS.title), [true, `Fill in · Agent: ${said}`]);
+  assert.deepEqual(rowLines(page, EXPIRY.title), [true, `Your answer · Agent: ${said}`]);
+  assert.deepEqual(rowLines(page, CHOSEN.title), [
+    true,
+    "You: Chose 7 days · and say so in the docs",
+  ]);
+  assert.equal(needsYouMark(rowNamed(page, STEPS.title)), "*");
+  assert.equal(needsYouMark(rowNamed(page, FIELDS.title)), "", "a teammate's ask needs them");
+  assert.equal(
+    rowNamed(page, FIELDS.title)
+      .querySelector(".luke-list-row-meta .actor-mark")
+      ?.getAttribute("data-kind"),
+    "person",
+  );
+  assert.equal(needsYouMark(rowNamed(page, CHOSEN.title)), "", "an answered ask waits on nobody");
+
+  // A step ticked in the item's box is counted on its row once another item is chosen.
+  act(() => rowNamed(page, STEPS.title).click());
+  await settle();
+  act(() => itemPane(page).querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
+  act(() => rowNamed(page, CHOSEN.title).click());
+  await settle();
+  assert.deepEqual(rowLines(page, STEPS.title), [true, `Steps · 1 of 3 · Agent: ${said}`]);
+});

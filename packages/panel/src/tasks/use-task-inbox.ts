@@ -490,7 +490,9 @@ export function useTaskInbox(input: {
       note(item.id, undefined);
       // Note that a reply carrying an answer settles the ask, so it stands over every read the moment it is sent, as an answer does.
       const sent =
-        answers === undefined ? undefined : settler.answer(item, inboxAnswersReply(answers, text));
+        answers === undefined
+          ? undefined
+          : settler.answer(item, inboxAnswersReply(answers, text), answers);
       const askedOn = taskId;
       latest.current
         .messageInbox({

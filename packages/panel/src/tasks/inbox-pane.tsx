@@ -86,6 +86,7 @@ import {
   answeredWords,
   answerOf,
   archivedHolder,
+  askHeadWords,
   askNumberedPick,
   CLOSED_WORDS,
   decideButtons,
@@ -115,7 +116,6 @@ import {
   sentStamp,
   settledAt,
   settlementOf,
-  shownSteps,
   THREAD_ENTRY,
   threadCut,
   threadEntries,
@@ -1515,22 +1515,6 @@ const ASK_PRESS = {
   ANSWER: "Answer",
 } as const;
 
-/** What an ask's box leads with, by what it asks: a pick of one or several, steps with how many are ticked while it waits, fields, or the reply's own words. */
-function askHeadWords(ask: InboxKnownAsk, draft: InboxDraft | undefined): string {
-  switch (ask.type) {
-    case INBOX_ASK.DECIDE:
-      return ask.multiple === true ? "Pick any" : "Pick one";
-    case INBOX_ASK.DO: {
-      const shown = shownSteps(ask);
-      if (draft === undefined || shown === 1) return "Steps";
-      const ticked = (draft.steps ?? []).filter((at) => at < shown).length;
-      return `Steps · ${ticked} of ${shown}`;
-    }
-    case INBOX_ASK.ANSWER:
-      return ask.fields === undefined ? "Your answer" : "Fill in";
-  }
-}
-
 /**
  * The thread's subject: the item's title, and under it one muted line of
  * how many messages it holds, who wrote them, and, while an ask waits,
@@ -1805,7 +1789,8 @@ function AskBox({
     );
   }
   const open = ask.status === INBOX_ASK_STATUS.OPEN;
-  const head = askHeadWords(ask, open ? doors?.draft : undefined);
+  const drafted = open ? doors?.draft : undefined;
+  const head = askHeadWords(ask, drafted === undefined ? undefined : (drafted.steps ?? []));
   const standing = (() => {
     switch (ask.status) {
       case INBOX_ASK_STATUS.OPEN:

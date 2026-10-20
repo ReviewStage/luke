@@ -1,5 +1,6 @@
 import type { FileChip } from "@luke/features/attachment-model";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
+import { inboxAttachmentIdsIn } from "@luke/features/inbox-attachment-link";
 import {
   codeLinesReadable,
   fieldValueWords,
@@ -743,6 +744,28 @@ export function answerOf(
   return thread.find((message) => message.answers?.ask === messageId);
 }
 
+/**
+ * What an ask says it asks, as its box leads with it and its row's line
+ * under the title does while it waits: a pick of one or several, steps with
+ * how many the steps given tick, fields, or the reply's own words. Steps
+ * name no count where none are given, as on a settled ask, or where the ask
+ * shows one alone.
+ */
+export function askHeadWords(ask: InboxKnownAsk, ticked: readonly number[] | undefined): string {
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+      return ask.multiple === true ? "Pick any" : "Pick one";
+    case INBOX_ASK.DO: {
+      const shown = shownSteps(ask);
+      if (ticked === undefined || shown === 1) return "Steps";
+      const count = new Set(ticked.filter((at) => at < shown)).size;
+      return `Steps${PREVIEW_PART}${count} of ${shown}`;
+    }
+    case INBOX_ASK.ANSWER:
+      return ask.fields === undefined ? "Your answer" : "Fill in";
+  }
+}
+
 /** How many messages a thread's line counts, "1 message", "6 messages". */
 export function messagesWords(count: number): string {
   return counted(count, "message");
@@ -1029,9 +1052,13 @@ const PICTURE_TYPES: ReadonlySet<string> = new Set(Object.values(INBOX_IMAGE_TYP
  * order its blocks hold them, a page named by a link block or by any link
  * in its words, labelled, an `@` mention, or bare, each page once; then the pictures
  * its answer carried, and the pages and pictures its thread's messages
- * name and carry, oldest first. A file that is no picture is no media.
+ * name and carry, oldest first. A file that is no picture is no media. An
+ * item drawn as its thread from version 5 (`inboxThreadOf`) shows its
+ * messages' instead (`threadMedia`).
  */
 export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
+  const thread = inboxThreadOf(item);
+  if (thread !== undefined) return threadMedia(item, thread);
   const found: InboxMedia[] = [];
   const page = (target: string) => {
     const place = readLink(target)?.place;
@@ -1072,15 +1099,94 @@ export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
 }
 
 /**
+ * The media of an item drawn as its thread (`inboxMedia`): each message's
+ * in turn, oldest first, the pictures its words draw by their addresses
+ * (`inbox-attachment-link.ts`) and the pages it links to in the order its
+ * words name them, each once, then the pictures among its files.
+ */
+function threadMedia(item: InboxItem, thread: readonly InboxMessage[]): readonly InboxMedia[] {
+  const found: InboxMedia[] = [];
+  const known = (media: InboxMedia) =>
+    found.some((each) =>
+      each.kind === INBOX_MEDIA.IMAGE
+        ? media.kind === INBOX_MEDIA.IMAGE && media.attachmentId === each.attachmentId
+        : media.kind === INBOX_MEDIA.PAGE &&
+          media.taskId === each.taskId &&
+          media.pageId === each.pageId,
+    );
+  const add = (media: InboxMedia) => {
+    if (!known(media)) found.push(media);
+  };
+  for (const message of thread) {
+    const named: { readonly at: number; readonly media: InboxMedia }[] = [];
+    for (const attachmentId of inboxAttachmentIdsIn(message.text, item.id)) {
+      const at = message.text.indexOf(`/${attachmentId}`);
+      named.push({ at, media: { kind: INBOX_MEDIA.IMAGE, attachmentId } });
+    }
+    for (const link of linksIn(message.text)) {
+      const place = readLink(link.target)?.place;
+      if (place?.kind !== LINK_PLACE.PAGE) continue;
+      const media = { kind: INBOX_MEDIA.PAGE, taskId: place.planId, pageId: place.pageId } as const;
+      named.push({ at: link.start, media });
+    }
+    for (const each of named.toSorted((a, b) => a.at - b.at)) add(each.media);
+    for (const file of message.files ?? []) {
+      if (PICTURE_TYPES.has(file.mediaType)) {
+        add({ kind: INBOX_MEDIA.IMAGE, attachmentId: file.attachmentId });
+      }
+    }
+  }
+  return found.slice(0, MAX_ROW_MEDIA);
+}
+
+/**
  * The last word in an item's thread, as its row's second line says it,
  * led by who said it: a message on the thread by its writer, "Agent" for
  * the item's own and a member by `nameOf`, which says "You" for the
  * reader; the answer by its answerer, in a few words; the agent taking the
  * item back as "Withdrawn" and why; a member's close by who closed it;
  * and, on an open item nobody has
- * written on, what it asks, "Choice · 3 options, one recommended".
+ * written on, what it asks, "Choice · 3 options, one recommended". An item
+ * drawn as its thread from version 5 (`inboxThreadOf`) says its latest
+ * message, after what its open ask asks while one waits, as its box leads
+ * with it (`askHeadWords`), "Pick one · Agent: Which window?", the steps
+ * counted as the reader's draft ticks them (`ticked`).
  */
 export function inboxPreview(
+  item: InboxItem,
+  nameOf: (member: InboxMember | undefined) => string,
+  ticked?: readonly number[],
+): string {
+  const thread = inboxThreadOf(item);
+  if (thread === undefined) return legacyPreview(item, nameOf);
+  const said = lastSaid(thread, nameOf);
+  const asking = openAskOf(thread);
+  if (asking === undefined || !knownAsk(asking.ask)) return said;
+  return `${askHeadWords(asking.ask, ticked ?? [])}${PREVIEW_PART}${said}`;
+}
+
+/**
+ * A thread's latest message as its row says it, led by who wrote it: the
+ * words of an answer's stamp first where it answered an ask, "You: Chose 7
+ * days · and say it in the docs", and its files where it said nothing.
+ */
+function lastSaid(
+  thread: readonly InboxMessage[],
+  nameOf: (member: InboxMember | undefined) => string,
+): string {
+  const last = thread.at(-1);
+  if (last === undefined) return "";
+  const who = last.author === INBOX_MESSAGE_AUTHOR.AGENT ? "Agent" : nameOf(last.member);
+  const words = plainWords(last.text);
+  const answers = last.answers;
+  if (answers === undefined)
+    return `${who}: ${words === "" ? (filesWords(last.files) ?? "") : words}`;
+  const stamp = sentStamp(answers, thread.find((each) => each.id === answers.ask)?.ask).words;
+  return `${who}: ${words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`}`;
+}
+
+/** The preview of an item drawn from the fields a desktop before version 5 reads (`inboxPreview`). */
+function legacyPreview(
   item: InboxItem,
   nameOf: (member: InboxMember | undefined) => string,
 ): string {

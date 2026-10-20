@@ -57,7 +57,7 @@ import { useCallback, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
-import { useInboxItemDrafted } from "../composer-drafts.js";
+import { useInboxItemDrafted, useInboxItemTicked } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar.js";
@@ -392,7 +392,8 @@ export function ItemMark({
 /**
  * One item as a `ListRow` of two lines, as a mail app lists a thread: the
  * agent's mark, the title, and how long ago it changed, then the last word
- * in its thread, muted (`inboxPreview`). One that needs the developer wears
+ * in its thread, muted, led on a thread by what its open ask asks, the
+ * steps its draft ticks counted (`inboxPreview`). One that needs the developer wears
  * the attention mark before its time, and a teammate's item their face
  * there where `face` allows it, the mark of their open item being theirs to
  * wear. The title hangs in the window's pill, since a narrow list cuts it
@@ -466,8 +467,11 @@ export function InboxItemRow({
   const starter = readersItem(item, reader)
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
-  const preview = inboxPreview(item, (member) =>
-    actorName(personActor(member, directory.members, reader, directory.former)),
+  const ticked = useInboxItemTicked(item);
+  const preview = inboxPreview(
+    item,
+    (member) => actorName(personActor(member, directory.members, reader, directory.former)),
+    ticked,
   );
   const carried = useMemo(() => inboxMedia(item), [item]);
   useRowMediaAsks(item.id, item.updatedAt, carried, media);
