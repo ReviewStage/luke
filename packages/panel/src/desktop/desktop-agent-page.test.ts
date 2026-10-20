@@ -1147,7 +1147,7 @@ function pageMenuItem(page: HTMLElement, label: string): HTMLButtonElement {
   );
 }
 
-test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Copy link, the transcript's two copies, and Archive agent", async () => {
+test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Open terminal and Run, Copy link, the transcript's two copies, and Archive agent", async () => {
   const page = mount();
   await settle();
   const more = page.querySelector<HTMLButtonElement>('[aria-label="Agent actions"]');
@@ -1159,11 +1159,57 @@ test("the page's ⋯ offers what a task's agent's tab ⋯ does: Rename, Copy lin
   );
   assert.deepEqual(offered, [
     "Rename",
+    "Open terminal⌘J",
+    "Run",
     "Copy link",
     "Copy concise transcript",
     "Copy full transcript",
     "Archive agent",
   ]);
+});
+
+/** What a side panel is asked to show. */
+type SidePanelChoice = Parameters<SidePanelControl["onChoose"]>[0];
+
+/** The page over a side panel that hears what it is asked to show, and shows nothing, so no terminal mounts. */
+function mountHearingPanel(): { page: HTMLElement; chosen: SidePanelChoice[] } {
+  const chosen: SidePanelChoice[] = [];
+  const tasks = tasksControl({});
+  const page = mount({
+    ...tasks,
+    sidePanel: { ...tasks.sidePanel, onChoose: (tab) => chosen.push(tab) },
+  });
+  return { page, chosen };
+}
+
+test("Open terminal on the page's ⋯, and ⌘J, show the agent's own Terminal tab in the side panel beside its page, as on a task", async () => {
+  const { page, chosen } = mountHearingPanel();
+  await settle();
+  const open = pageMenuItem(page, "Open terminal⌘J");
+  act(() => open.click());
+  await settle();
+  let offered = false;
+  act(() => {
+    offered = runAppCommand(APP_COMMAND.SHOW_TERMINAL);
+  });
+  await settle();
+
+  assert.equal(offered, true, "⌘J is offered on the page");
+  assert.deepEqual(chosen, [{ terminal: AGENT_ID }, { terminal: AGENT_ID }]);
+});
+
+test("Run on the page's ⋯ runs the agent's branch on this Mac in the side panel, from its own repository", async () => {
+  const { page, chosen } = mountHearingPanel();
+  await settle();
+  const run = pageMenuItem(page, "Run");
+  act(() => run.click());
+  await settle();
+
+  const [tab] = chosen;
+  assert.ok(typeof tab === "object" && "macTerminal" in tab, "Run shows a Mac terminal");
+  assert.equal(chosen.length, 1);
+  assert.equal(tab.macTerminal, AGENT_ID);
+  assert.equal(tab.repository, PAGE.repository);
 });
 
 test("Archive agent on the page's ⋯ reads an agent at rest again and archives it unasked, its composer giving way to Unarchive", async () => {
