@@ -38,6 +38,12 @@ export const accountProviderKey = pgTable(
     statusAt: timestamptz("status_at").notNull(),
     /** Whether the key's organization may run Anthropic's fast mode, as a fast request on the key last settled; null where none has. */
     fastAccess: text("fast_access").$type<FastAccess>(),
+    /**
+     * When the access token a ChatGPT sign-in's sealed credentials hold
+     * expires, so a refresh is due without opening them; null for every
+     * other kind, whose credential carries no expiry Luke reads.
+     */
+    accessExpiresAt: timestamptz("access_expires_at"),
     createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [
@@ -50,3 +56,18 @@ export const accountProviderKey = pgTable(
     ),
   ],
 );
+
+/**
+ * The account's own `ext_agent_host_id` for Luke's hosted runtime: the host
+ * OpenAI's Sign in with ChatGPT names when the desktop signs in for the
+ * service, minted once and kept across sign-outs, as OpenAI's guide asks a
+ * host's id to be, so it outlives the credential row it signs in for. It is
+ * an opaque identifier, not a credential, and leaves with the account.
+ */
+export const accountChatGptHost = pgTable("account_chatgpt_host", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  extAgentHostId: text("ext_agent_host_id").notNull(),
+  createdAt: timestamptz("created_at").notNull(),
+});

@@ -469,6 +469,8 @@ const EFFECT_MODULE_SCHEMAS = {
     subscriptionKeySummarySchema: providerKeyWire.subscriptionKeySummarySchema,
     providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
+    chatGptCredentialsSaveRequestSchema: providerKeyWire.chatGptCredentialsSaveRequestSchema,
+    chatGptHostAnswerSchema: providerKeyWire.chatGptHostAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
   "pull-request-chapters-wire": {
     pullRequestChaptersStateSchema: pullRequestChaptersWire.pullRequestChaptersStateSchema,

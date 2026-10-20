@@ -476,6 +476,19 @@ the hint, and the status; it is replaced whole by a save, deleted by a
 removal, and cascades with the account. `packages/database/src/models/provider-key-store.ts`
 reads and writes the rows and never sees a key in the clear.
 
+A ChatGPT sign-in (`chatgpt_oauth`, `src/accounts/chatgpt-credentials.ts`)
+is a row of the same table, saved by the desktop on
+`PUT /api/account/chatgpt/credentials` after it signs in under the account's
+host id (`GET /api/account/chatgpt/host`, minted once into
+`account_chatgpt_host` and kept across sign-outs). Its seal holds the access,
+refresh and ID tokens, the issued client and the account's subject, bound to
+the kind; `access_expires_at` beside it says when a renewal is due. A
+renewal runs under the row's lock across OpenAI's token endpoint, so
+renewals of one sign-in are serialized as OpenAI asks, and replaces the
+tokens, the expiry and the scopes together. Removing it revokes its refresh
+token at OpenAI first and answers `revocationUnconfirmed` where OpenAI did
+not confirm.
+
 The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
 `HostedEnvironment`: comma-separated `<version>:<base64 of 32 random
 bytes>` entries, the version new saves wrap under first. Production and

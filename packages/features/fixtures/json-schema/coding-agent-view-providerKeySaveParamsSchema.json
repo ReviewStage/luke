@@ -12,7 +12,8 @@
       "type": "string",
       "enum": [
         "api_key",
-        "claude_setup_token"
+        "claude_setup_token",
+        "chatgpt_oauth"
       ]
     },
     "key": {

@@ -1,0 +1,388 @@
+/**
+ * chatgpt-credentials.ts -- an account's ChatGPT sign-in for Luke's hosted runtime: kept sealed, its access renewed under the row's lock, and its renewable session revoked before it is removed.
+ *
+ * The desktop completes OpenAI's open-source Sign in with ChatGPT for the
+ * service (OpenAI's self-hosted VM recipe) under the account's host id, and
+ * hands over what the token endpoint answered. The service then owns the
+ * sign-in, as the recipe asks: the tokens, the issued client and the
+ * account's subject are sealed together as one `chatgpt_oauth` row's
+ * credential (`provider-key-seal.ts`, bound to the kind), and the access
+ * token's expiry stands beside the seal so a renewal is due without it
+ * being opened.
+ *
+ * A renewal (`refreshChatGptAccess`) holds the row's lock across OpenAI's
+ * token endpoint, as OpenAI's sessions guide asks renewals of one session
+ * to be serialized, because each one rotates the refresh token: a second
+ * caller waits, then reads the access token the first one stored and calls
+ * nothing. A renewal replaces the access token, its expiry, the granted
+ * scopes, and the refresh token together, and the ID token where one is
+ * answered. A refusal that names the refresh token unusable marks the row
+ * invalid and keeps it, so the account is asked to sign in again; any other
+ * failure changes nothing and may be tried again.
+ *
+ * Removing the sign-in revokes its renewable session at OpenAI's revocation
+ * endpoint first, under the same lock, retrying a failure to connect or a
+ * server error a few times, and removes the row whether or not OpenAI
+ * confirmed it, answering which, so the account can be told to disconnect
+ * Luke in ChatGPT's settings.
+ *
+ * No token, code, or OpenAI's words of a refusal are ever logged or
+ * answered: a refusal is read for its OAuth error code alone.
+ */
+
+import { randomUUID } from "node:crypto";
+import {
+  type KeyRing,
+  openProviderKey,
+  sealProviderKey,
+} from "@luke/database/models/provider-key-seal";
+import {
+  ensureChatGptHostId,
+  type ProviderKeyRow,
+  removeProviderKey,
+  resealProviderKey,
+  setProviderKeyStatus,
+  withProviderKeyLocked,
+} from "@luke/database/models/provider-key-store";
+import {
+  type ChatGptCredentialsSaveRequest,
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+} from "@luke/features/provider-key-wire";
+import { DateTime, Duration, Effect, Option, Redacted, Result, Schema } from "effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+
+/** OpenAI's endpoints and the fixed values of the open-source flow, as its guides publish them. */
+export const CHATGPT_OAUTH = {
+  TOKEN_URL: "https://auth.openai.com/api/accounts/oauth/token",
+  /** Where the revocation endpoint is read from, as the sessions guide asks. */
+  DISCOVERY_URL: "https://auth.openai.com/.well-known/openid-configuration",
+  RESOURCE: "https://api.openai.com/v1",
+  /** The first-registration client, which no saved sign-in may name as its own. */
+  REGISTRATION_CLIENT_ID: "dynamic_agent_client",
+  /** The scope without which a sign-in may not use the ChatGPT plan. */
+  USAGE_SCOPE: "chatgpt.tokens.use.direct",
+} as const;
+
+/** How long before its expiry an access token is renewed rather than handed out. */
+const REFRESH_MARGIN = Duration.minutes(10);
+
+/** How long OpenAI is given to answer one call. */
+const CALL_TIMEOUT = Duration.seconds(10);
+
+/** The waits between revocation tries, after a failure to connect or a server error. */
+const REVOKE_RETRY_WAITS = [Duration.seconds(1), Duration.seconds(2)] as const;
+
+/** The hint a ChatGPT sign-in is shown by: it has no key to show the end of. */
+const CHATGPT_HINT = "ChatGPT";
+
+/**
+ * The OAuth error codes on a renewal that say the refresh token can never be
+ * used again, or the client is not one OpenAI knows, per OpenAI's errors
+ * guide: the sign-in must be done again.
+ */
+const UNUSABLE_REFRESH_ERRORS: ReadonlySet<string> = new Set([
+  "invalid_grant",
+  "invalid_refresh_token",
+  "token_expired",
+  "refresh_token_expired",
+  "refresh_token_invalidated",
+  "refresh_token_reused",
+  "invalid_client",
+]);
+
+const HTTP_STATUS = { OK: 200, BAD_REQUEST: 400, SERVER_ERROR: 500 } as const;
+
+/** What the seal of a `chatgpt_oauth` row holds, as JSON. */
+const SealedCredentialsSchema = Schema.Struct({
+  clientId: Schema.String,
+  accountId: Schema.String,
+  accessToken: Schema.String,
+  refreshToken: Schema.String,
+  idToken: Schema.String,
+  scopes: Schema.Array(Schema.String),
+});
+
+type SealedCredentials = typeof SealedCredentialsSchema.Type;
+
+const SealedCredentialsJson = Schema.fromJsonString(SealedCredentialsSchema);
+
+/** The token endpoint's answer to a renewal, as far as it is read. */
+const RefreshAnswerSchema = Schema.Struct({
+  access_token: Schema.NonEmptyString,
+  refresh_token: Schema.NonEmptyString,
+  expires_in: Schema.Number.check(Schema.isGreaterThan(0)),
+  scope: Schema.optionalKey(Schema.String),
+  id_token: Schema.optionalKey(Schema.NonEmptyString),
+});
+
+/** An OAuth refusal, read for its code alone. */
+const OAuthErrorSchema = Schema.Struct({ error: Schema.String });
+
+const DiscoverySchema = Schema.Struct({ revocation_endpoint: Schema.String });
+
+/** What a renewal answers. */
+export const CHATGPT_ACCESS = {
+  /** An access token good for at least the renewal margin. */
+  READY: "ready",
+  /** The account holds no ChatGPT sign-in. */
+  NONE: "none",
+  /** The deployment's ring cannot open the sign-in it holds. */
+  UNREADABLE: "unreadable",
+  /** OpenAI refused the refresh token for good: the account must sign in again. */
+  SIGNED_OUT: "signed_out",
+  /** OpenAI could not be asked, or answered nothing usable; nothing changed and it may be tried again. */
+  UNREACHABLE: "unreachable",
+} as const;
+
+export type ChatGptAccess =
+  | {
+      readonly outcome: typeof CHATGPT_ACCESS.READY;
+      readonly accessToken: Redacted.Redacted<string>;
+      readonly expiresAt: Date;
+    }
+  | {
+      readonly outcome: Exclude<
+        (typeof CHATGPT_ACCESS)[keyof typeof CHATGPT_ACCESS],
+        typeof CHATGPT_ACCESS.READY
+      >;
+    };
+
+const OWNER_KIND = {
+  provider: PROVIDER_KEY_PROVIDER.OPENAI,
+  kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+} as const;
+
+function sealCredentials(ring: KeyRing, userId: string, credentials: SealedCredentials) {
+  const json = Schema.encodeSync(SealedCredentialsJson)(credentials);
+  return sealProviderKey(ring, { userId, ...OWNER_KIND }, Redacted.make(json));
+}
+
+/** The credentials a row seals, or nothing where the ring cannot open them or they are not a sign-in's. */
+function openCredentials(
+  ring: KeyRing,
+  userId: string,
+  row: ProviderKeyRow,
+): SealedCredentials | undefined {
+  const opened = openProviderKey(ring, { userId, ...OWNER_KIND }, row);
+  if (Result.isFailure(opened)) return undefined;
+  return Option.getOrUndefined(
+    Schema.decodeUnknownOption(SealedCredentialsJson)(Redacted.value(opened.success)),
+  );
+}
+
+/** Why a sign-in handed over is not kept, before anything is sealed. */
+export function chatGptCredentialsRefusal(
+  request: ChatGptCredentialsSaveRequest,
+): "invalid" | undefined {
+  if (request.clientId === CHATGPT_OAUTH.REGISTRATION_CLIENT_ID) return "invalid";
+  if (!request.scopes.includes(CHATGPT_OAUTH.USAGE_SCOPE)) return "invalid";
+  return undefined;
+}
+
+/** The sign-in sealed for the account's row, with when its access token lapses and the hint it is shown by. */
+export function sealChatGptCredentials(
+  ring: KeyRing,
+  userId: string,
+  request: ChatGptCredentialsSaveRequest,
+  now: Date,
+) {
+  const sealed = sealCredentials(ring, userId, {
+    clientId: request.clientId,
+    accountId: request.accountId,
+    accessToken: request.accessToken,
+    refreshToken: request.refreshToken,
+    idToken: request.idToken,
+    scopes: request.scopes,
+  });
+  const accessExpiresAt = new Date(
+    now.getTime() + Duration.toMillis(Duration.seconds(request.expiresInSeconds)),
+  );
+  return { sealed, accessExpiresAt, hint: CHATGPT_HINT };
+}
+
+/** The account's ChatGPT host id, minted the first time it is asked for and the same ever after. */
+export const chatGptHostId = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string) {
+  const now = yield* DateTime.nowAsDate;
+  return yield* ensureChatGptHostId(userId, `urn:uuid:${randomUUID()}`, now);
+});
+
+/** One form POST to OpenAI, its status and its body read as JSON where it is JSON; nothing where no answer came. */
+const postForm = /* @__PURE__ */ Effect.fnUntraced(function* (
+  url: string,
+  form: Record<string, string>,
+) {
+  const client = yield* HttpClient.HttpClient;
+  const request = HttpClientRequest.post(url).pipe(
+    HttpClientRequest.setHeader("accept", "application/json"),
+    HttpClientRequest.bodyUrlParams(form),
+  );
+  // A request that failed or timed out is no answer, and its cause is dropped unread, since it may quote the form.
+  return yield* client.execute(request).pipe(
+    Effect.flatMap((response) =>
+      Effect.map(
+        Effect.orElseSucceed(response.json, () => undefined),
+        (body) => ({ status: response.status, body }),
+      ),
+    ),
+    Effect.scoped,
+    Effect.timeout(CALL_TIMEOUT),
+    Effect.option,
+  );
+});
+
+/**
+ * An access token for the account's ChatGPT sign-in, good for at least the
+ * renewal margin: the one it holds where it is, a renewed one otherwise.
+ * Runs under the row's lock, OpenAI's token endpoint included, so two
+ * renewals of one sign-in never race its rotating refresh token.
+ */
+export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  ring: KeyRing,
+) {
+  const access: ChatGptAccess = yield* withProviderKeyLocked(
+    userId,
+    OWNER_KIND.provider,
+    OWNER_KIND.kind,
+    Effect.fnUntraced(function* (locked) {
+      if (Option.isNone(locked)) return { outcome: CHATGPT_ACCESS.NONE };
+      const row = locked.value;
+      if (row.status === PROVIDER_KEY_STATUS.INVALID) return { outcome: CHATGPT_ACCESS.SIGNED_OUT };
+      const credentials = openCredentials(ring, userId, row);
+      if (credentials === undefined) return { outcome: CHATGPT_ACCESS.UNREADABLE };
+      const now = yield* DateTime.nowAsDate;
+      const dueAt = now.getTime() + Duration.toMillis(REFRESH_MARGIN);
+      if (row.accessExpiresAt !== null && row.accessExpiresAt.getTime() > dueAt) {
+        return {
+          outcome: CHATGPT_ACCESS.READY,
+          accessToken: Redacted.make(credentials.accessToken),
+          expiresAt: row.accessExpiresAt,
+        };
+      }
+      // The issued client and the refresh token are revealed here alone, into the one form OpenAI reads them from.
+      const answered = yield* postForm(CHATGPT_OAUTH.TOKEN_URL, {
+        grant_type: "refresh_token",
+        client_id: credentials.clientId,
+        refresh_token: credentials.refreshToken,
+        resource: CHATGPT_OAUTH.RESOURCE,
+      });
+      if (Option.isNone(answered)) return { outcome: CHATGPT_ACCESS.UNREACHABLE };
+      const { status, body } = answered.value;
+      if (status !== HTTP_STATUS.OK) {
+        // A refusal is read for its OAuth error code alone.
+        const error = Option.getOrUndefined(
+          Option.map(Schema.decodeUnknownOption(OAuthErrorSchema)(body), (read) => read.error),
+        );
+        if (
+          status >= HTTP_STATUS.BAD_REQUEST &&
+          status < HTTP_STATUS.SERVER_ERROR &&
+          error !== undefined &&
+          UNUSABLE_REFRESH_ERRORS.has(error)
+        ) {
+          yield* setProviderKeyStatus(
+            userId,
+            OWNER_KIND.provider,
+            row.sealedKey,
+            PROVIDER_KEY_STATUS.INVALID,
+            now,
+          );
+          return { outcome: CHATGPT_ACCESS.SIGNED_OUT };
+        }
+        return { outcome: CHATGPT_ACCESS.UNREACHABLE };
+      }
+      const renewed = Schema.decodeUnknownOption(RefreshAnswerSchema)(body);
+      if (Option.isNone(renewed)) return { outcome: CHATGPT_ACCESS.UNREACHABLE };
+      const tokens = renewed.value;
+      const scopes =
+        tokens.scope === undefined
+          ? credentials.scopes
+          : tokens.scope.split(" ").filter((scope) => scope.length > 0);
+      const expiresAt = new Date(
+        now.getTime() + Duration.toMillis(Duration.seconds(tokens.expires_in)),
+      );
+      const sealed = sealCredentials(ring, userId, {
+        ...credentials,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        idToken: tokens.id_token ?? credentials.idToken,
+        scopes,
+      });
+      yield* resealProviderKey(
+        userId,
+        OWNER_KIND.provider,
+        OWNER_KIND.kind,
+        row.sealedKey,
+        sealed,
+        expiresAt,
+      );
+      return {
+        outcome: CHATGPT_ACCESS.READY,
+        accessToken: Redacted.make(tokens.access_token),
+        expiresAt,
+      };
+    }),
+  );
+  return access;
+});
+
+/** One try at revoking a refresh token: confirmed, refused for good, or worth another try. */
+const revokeOnce = /* @__PURE__ */ Effect.fnUntraced(function* (credentials: SealedCredentials) {
+  const client = yield* HttpClient.HttpClient;
+  const discovered = yield* client.get(CHATGPT_OAUTH.DISCOVERY_URL).pipe(
+    Effect.flatMap((response) => response.json),
+    Effect.flatMap(Schema.decodeUnknownEffect(DiscoverySchema)),
+    Effect.scoped,
+    Effect.timeout(CALL_TIMEOUT),
+    Effect.option,
+  );
+  if (Option.isNone(discovered)) return "retry" as const;
+  // The issued client and the refresh token are revealed here alone, into the one form OpenAI reads them from.
+  const answered = yield* postForm(discovered.value.revocation_endpoint, {
+    token: credentials.refreshToken,
+    token_type_hint: "refresh_token",
+    client_id: credentials.clientId,
+  });
+  if (Option.isNone(answered)) return "retry" as const;
+  if (answered.value.status === HTTP_STATUS.OK) return "confirmed" as const;
+  return answered.value.status >= HTTP_STATUS.SERVER_ERROR
+    ? ("retry" as const)
+    : ("refused" as const);
+});
+
+/** Revokes the sign-in's renewable session, trying again after a failure to connect or a server error; answers whether OpenAI confirmed it. */
+const revokeSession = /* @__PURE__ */ Effect.fnUntraced(function* (credentials: SealedCredentials) {
+  for (const wait of [Duration.zero, ...REVOKE_RETRY_WAITS]) {
+    if (Duration.isGreaterThan(wait, Duration.zero)) yield* Effect.sleep(wait);
+    const tried = yield* revokeOnce(credentials);
+    if (tried === "confirmed") return true;
+    if (tried === "refused") return false;
+  }
+  return false;
+});
+
+/**
+ * Removes the account's ChatGPT sign-in, revoking its renewable session at
+ * OpenAI first, under the row's lock so no renewal rotates the token being
+ * revoked. The row goes whether or not OpenAI confirmed it; answers whether
+ * it did, and true where there was nothing to revoke.
+ */
+export const removeChatGptCredentials = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  ring: KeyRing,
+) {
+  return yield* withProviderKeyLocked(
+    userId,
+    OWNER_KIND.provider,
+    OWNER_KIND.kind,
+    Effect.fnUntraced(function* (locked) {
+      if (Option.isNone(locked)) return true;
+      const credentials = openCredentials(ring, userId, locked.value);
+      const confirmed = credentials === undefined ? false : yield* revokeSession(credentials);
+      yield* removeProviderKey(userId, OWNER_KIND.provider, OWNER_KIND.kind);
+      return confirmed;
+    }),
+  );
+});

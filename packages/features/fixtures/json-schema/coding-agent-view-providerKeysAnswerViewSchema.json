@@ -84,7 +84,8 @@
                 "type": "string",
                 "enum": [
                   "api_key",
-                  "claude_setup_token"
+                  "claude_setup_token",
+                  "chatgpt_oauth"
                 ]
               }
             },
@@ -107,6 +108,12 @@
             "unreachable",
             "too_many_tries",
             "other_kind_held"
+          ]
+        },
+        "revocationUnconfirmed": {
+          "type": "boolean",
+          "enum": [
+            true
           ]
         }
       },

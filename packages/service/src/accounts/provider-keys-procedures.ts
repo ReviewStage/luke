@@ -20,6 +20,14 @@
  * replaces nothing. The answer's `keys` are API keys alone, and the
  * subscriptions stand apart beside them.
  *
+ * A ChatGPT sign-in (`chatgpt_oauth`) is the one credential that is not a
+ * pasted key: the desktop hands it over on its own route, after signing in
+ * under the account's host id, which a route of its own mints once and
+ * serves. It is braked and sealed as a key is and never sent to OpenAI on
+ * its save; removing it revokes its renewable session at OpenAI first
+ * (`chatgpt-credentials.ts`), and the answer says where OpenAI did not
+ * confirm that.
+ *
  * A key that the deployment's ring can no longer open answers unreadable
  * rather than as its stored status, so the account is told to replace it.
  * A deployment holding no ring, or one it cannot parse, answers every
@@ -74,6 +82,12 @@ import {
   PROVIDER_KEY_CHECK,
   providerKeyHint,
 } from "../providers/provider-key-check.js";
+import {
+  chatGptCredentialsRefusal,
+  chatGptHostId,
+  removeChatGptCredentials,
+  sealChatGptCredentials,
+} from "./chatgpt-credentials.js";
 
 const SAVE_BRAKE = {
   windowMs: Duration.toMillis(Duration.hours(1)),
@@ -134,6 +148,7 @@ const keysAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   ring: KeyRing,
   rejected?: ProviderKeyRejection,
+  revocationUnconfirmed = false,
 ) {
   const keys = yield* summariesOf(userId, PROVIDER_KEY_KIND.API_KEY, ring);
   const subscriptions: SubscriptionKeySummary[] = [];
@@ -146,6 +161,7 @@ const keysAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
     keys,
     ...(subscriptions.length === 0 ? undefined : { subscriptions }),
     ...(rejected === undefined ? undefined : { rejected }),
+    ...(revocationUnconfirmed ? { revocationUnconfirmed: true as const } : undefined),
   };
 });
 
@@ -173,10 +189,13 @@ function subscriptionShapeOf(
       return Redacted.value(key).startsWith(CLAUDE_SETUP_TOKEN_PREFIX)
         ? undefined
         : PROVIDER_KEY_REJECTION.INVALID;
+    case PROVIDER_KEY_KIND.CHATGPT_OAUTH:
+      // A ChatGPT sign-in is handed over whole on its own route, never pasted as a key.
+      return PROVIDER_KEY_REJECTION.INVALID;
   }
 }
 
-/** The provider keys' three procedures, braked per instance, each to a signed-in caller on a deployment that holds a ring. */
+/** The provider keys' procedures, braked per instance, each to a signed-in caller on a deployment that holds a ring. */
 export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
   const brake = makeRateBrake(SAVE_BRAKE);
   const keyed = hosted.account.use(accountMiddleware(seams.resolveUserId)).use(keyRingMiddleware);
@@ -240,13 +259,53 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
         : yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
     }),
 
-    /** One provider's credential removed, by the provider and the kind the query names; an API key where it names none. */
+    /** One provider's credential removed, by the provider and the kind the query names; an API key where it names none. A ChatGPT sign-in is revoked at OpenAI first. */
     removeProviderKey: keyed.removeProviderKey.effect(function* ({ context, input }) {
+      const { userId, ring } = context;
       const kind = input.query.kind ?? PROVIDER_KEY_KIND.API_KEY;
-      yield* hostedStoreOrUnavailable(
-        removeProviderKey(context.userId, input.query.provider, kind),
+      if (
+        kind === PROVIDER_KEY_KIND.CHATGPT_OAUTH &&
+        input.query.provider === SUBSCRIPTION_KIND_PROVIDER[kind]
+      ) {
+        const confirmed = yield* hostedStoreOrUnavailable(removeChatGptCredentials(userId, ring));
+        return yield* keysAnswer(userId, ring, undefined, !confirmed);
+      }
+      yield* hostedStoreOrUnavailable(removeProviderKey(userId, input.query.provider, kind));
+      return yield* keysAnswer(userId, ring);
+    }),
+
+    /** The account's ChatGPT host id, minted on its first read and the same on every read after it. */
+    chatGptHost: keyed.chatGptHost.effect(function* ({ context }) {
+      const extAgentHostId = yield* hostedStoreOrUnavailable(chatGptHostId(context.userId));
+      return { extAgentHostId };
+    }),
+
+    /** A ChatGPT sign-in the desktop completed, braked and kept sealed, replacing the one the account held; nothing is sent to OpenAI. */
+    saveChatGptCredentials: keyed.saveChatGptCredentials.effect(function* ({ context, input }) {
+      const { userId, ring } = context;
+      // Note that nothing of the body is ever logged or answered, because every field but the scopes is a credential or names one.
+      if (!(yield* brake.check(userId))) {
+        return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
+      }
+      const refused = chatGptCredentialsRefusal(input);
+      if (refused !== undefined) return yield* keysAnswer(userId, ring, refused);
+      const now = yield* DateTime.nowAsDate;
+      const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(ring, userId, input, now);
+      const kept = yield* hostedStoreOrUnavailable(
+        saveProviderKey(
+          userId,
+          PROVIDER_KEY_PROVIDER.OPENAI,
+          PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+          sealed,
+          hint,
+          null,
+          now,
+          accessExpiresAt,
+        ),
       );
-      return yield* keysAnswer(context.userId, context.ring);
+      return kept
+        ? yield* keysAnswer(userId, ring)
+        : yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
     }),
   };
 }

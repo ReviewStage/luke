@@ -7,6 +7,7 @@ import { accountProviderKey } from "@luke/database/schemas/account-provider-key"
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import {
+  chatGptHostAnswerSchema,
   FAST_ACCESS,
   PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
@@ -18,7 +19,12 @@ import {
 } from "@luke/features/provider-key-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
+import {
+  HTTP_STATUS,
+  jsonResponse,
+  type RecordedRequest,
+  recordingHttpClient,
+} from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted, Result, Schema } from "effect";
 import { SqlClient } from "effect/sql";
@@ -57,6 +63,10 @@ const PROVIDER_URL = {
   [PROVIDER_KEY_PROVIDER.ANTHROPIC]: "https://api.anthropic.com/v1/models?limit=1",
   [PROVIDER_KEY_PROVIDER.OPENAI]: "https://api.openai.com/v1/models",
 } as const;
+
+/** OpenAI's authorization server, which a ChatGPT sign-in's removal reaches. */
+const AUTH_ORIGIN = "https://auth.openai.com";
+const REVOCATION_URL = `${AUTH_ORIGIN}/oauth/revoke`;
 
 /** Where Anthropic is asked whether a key's organization may run fast mode. */
 const FAST_CHECK_URL = "https://api.anthropic.com/v1/messages";
@@ -115,7 +125,13 @@ type FastAnswers = ReadonlyMap<string, Response>;
 
 /** Two accounts behind their own bearers, a provider, and the procedures answering under the ring given. */
 const openAccounts = (
-  options: { ring?: string; provider?: ProviderAnswers; fast?: FastAnswers } = {},
+  options: {
+    ring?: string;
+    provider?: ProviderAnswers;
+    fast?: FastAnswers;
+    /** OpenAI's authorization server, where a test reaches it. */
+    auth?: (request: RecordedRequest) => Response;
+  } = {},
 ) =>
   Effect.gen(function* () {
     const db = yield* Database;
@@ -129,9 +145,11 @@ const openAccounts = (
     ]);
     const answers = options.provider ?? ACCEPTING;
     const provider = recordingHttpClient((request) =>
-      request.url === FAST_CHECK_URL
-        ? (options.fast?.get(keyOf(request.headers))?.clone() ?? jsonResponse({}))
-        : jsonResponse({}, answers.get(keyOf(request.headers)) ?? HTTP_STATUS.UNAUTHORIZED),
+      request.url.startsWith(AUTH_ORIGIN)
+        ? (options.auth?.(request) ?? jsonResponse({}, HTTP_STATUS.SERVER_ERROR))
+        : request.url === FAST_CHECK_URL
+          ? (options.fast?.get(keyOf(request.headers))?.clone() ?? jsonResponse({}))
+          : jsonResponse({}, answers.get(keyOf(request.headers)) ?? HTTP_STATUS.UNAUTHORIZED),
     );
     const logged: string[] = [];
     const procedures = providerKeysProcedures({
@@ -182,9 +200,9 @@ const answer = (
 
 function request(
   userId: string | undefined,
-  init: { method?: string; body?: WireBoundaryInput; query?: string } = {},
+  init: { method?: string; body?: WireBoundaryInput; query?: string; path?: string } = {},
 ) {
-  const url = new URL(KEYS_PATH, ORIGIN);
+  const url = new URL(init.path ?? KEYS_PATH, ORIGIN);
   if (init.query !== undefined) url.search = init.query;
   return new Request(url, {
     method: init.method ?? "GET",
@@ -213,6 +231,35 @@ const saveToken = (userId: string, provider: ProviderKeyProvider, key: string) =
     method: "PUT",
     body: { provider, key, kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN },
   });
+
+/** A ChatGPT sign-in as the desktop hands one over, synthetic throughout. */
+const SIGN_IN = {
+  clientId: "oaiapp_test_client",
+  accountId: "chatgpt-subject-0000",
+  accessToken: "test-access-token-000000000000000000acc",
+  refreshToken: "test-refresh-token-0000000000000000000ref",
+  idToken: "test-id-token-00000000000000000000000idt",
+  expiresInSeconds: 3600,
+  scopes: ["chatgpt.tokens.use.direct", "offline_access", "openid"],
+} as const;
+
+/** What of a sign-in must never leave the seal. */
+const SIGN_IN_SECRETS = [SIGN_IN.accessToken, SIGN_IN.refreshToken, SIGN_IN.idToken];
+
+const CREDENTIALS_PATH = "/api/account/chatgpt/credentials";
+const HOST_PATH = "/api/account/chatgpt/host";
+
+const saveSignIn = (userId: string, overrides: Record<string, WireBoundaryInput> = {}) =>
+  request(userId, { method: "PUT", path: CREDENTIALS_PATH, body: { ...SIGN_IN, ...overrides } });
+
+const removeSignIn = (userId: string) =>
+  remove(userId, PROVIDER_KEY_PROVIDER.OPENAI, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
+
+const readHost = (body: WireBoundaryInput) => {
+  const read = readEither(chatGptHostAnswerSchema)(unparsedWire(body));
+  if (Result.isFailure(read)) return assert.fail(`not the wire's: ${read.failure.refusal}`);
+  return read.success;
+};
 
 /** The answer as the wire reads it, failing the test where it is not the wire's. */
 function keysOf(answered: Answer): ProviderKeysAnswer {
@@ -633,5 +680,145 @@ it.layer(getTestDB())("the provider keys route", (it) => {
       assert.equal(braked.rejected, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
       assert.equal(othersSave.rejected, undefined);
     }),
+  );
+
+  it.effect(
+    "a ChatGPT sign-in the desktop hands over is kept sealed and answered under subscriptions as its hint alone, and none of it is answered, logged, or stored in the clear",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const { owner, other, ask, checks, logged } = yield* openAccounts({ ring: KEK.ONE });
+        yield* TestClock.adjust("1 hour");
+        const savedAt = yield* Clock.currentTimeMillis;
+
+        const saved = yield* ask(saveSignIn(owner));
+        const othersRead = keysOf(yield* ask(request(other)));
+
+        assert.deepEqual(keysOf(saved), {
+          keys: [],
+          subscriptions: [
+            {
+              provider: PROVIDER_KEY_PROVIDER.OPENAI,
+              kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+              hint: "ChatGPT",
+              addedAt: savedAt,
+              status: PROVIDER_KEY_STATUS.UNVERIFIED,
+              statusAt: savedAt,
+            },
+          ],
+        });
+        assert.deepEqual(othersRead, { keys: [] });
+        assert.deepEqual(checks, [], "nothing is sent to OpenAI on a save");
+        const rows = yield* db
+          .select()
+          .from(accountProviderKey)
+          .where(eq(accountProviderKey.userId, owner));
+        assert.equal(rows[0]?.accessExpiresAt?.getTime(), savedAt + 3_600_000);
+        const stored = JSON.stringify(rows);
+        for (const secret of SIGN_IN_SECRETS) {
+          assert.ok(!saved.text.includes(secret));
+          assert.ok(!stored.includes(secret));
+          assert.ok(logged.every((line) => !line.includes(secret)));
+        }
+      }),
+  );
+
+  it.effect(
+    "a sign-in without the plan's scope, one under the registration client, a pasted one, and one over an OpenAI API key keep nothing and say why",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
+        const noUsage = keysOf(
+          yield* ask(saveSignIn(owner, { scopes: ["openid", "offline_access"] })),
+        );
+        const registrationClient = keysOf(
+          yield* ask(saveSignIn(owner, { clientId: "dynamic_agent_client" })),
+        );
+        const pasted = keysOf(
+          yield* ask(
+            request(owner, {
+              method: "PUT",
+              body: {
+                provider: PROVIDER_KEY_PROVIDER.OPENAI,
+                key: SIGN_IN.refreshToken,
+                kind: PROVIDER_KEY_KIND.CHATGPT_OAUTH,
+              },
+            }),
+          ),
+        );
+        keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, KEY.OPENAI)));
+        const overKey = keysOf(yield* ask(saveSignIn(owner)));
+
+        assert.deepEqual(
+          [noUsage, registrationClient, pasted].map((answered) => [
+            answered.rejected,
+            answered.subscriptions,
+          ]),
+          [
+            [PROVIDER_KEY_REJECTION.INVALID, undefined],
+            [PROVIDER_KEY_REJECTION.INVALID, undefined],
+            [PROVIDER_KEY_REJECTION.INVALID, undefined],
+          ],
+        );
+        assert.equal(overKey.rejected, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
+        assert.equal(overKey.keys.length, 1);
+        assert.equal(overKey.subscriptions, undefined);
+      }),
+  );
+
+  it.effect(
+    "the account's ChatGPT host id is minted on its first read, the same on every read after, and its own",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts({ ring: KEK.ONE });
+        const read = (userId: string) =>
+          Effect.map(ask(request(userId, { path: HOST_PATH })), (answered) => {
+            assert.equal(answered.status, HOSTED_HTTP_STATUS.OK);
+            return readHost(answered.body).extAgentHostId;
+          });
+
+        const first = yield* read(owner);
+        const again = yield* read(owner);
+        const others = yield* read(other);
+
+        assert.match(first, /^urn:uuid:[0-9a-f-]{36}$/u);
+        assert.equal(again, first);
+        assert.notEqual(others, first);
+      }),
+  );
+
+  it.effect(
+    "removing the ChatGPT sign-in revokes its refresh token at OpenAI first and answers whether OpenAI confirmed it",
+    () =>
+      Effect.gen(function* () {
+        let revocationStatus: number = HTTP_STATUS.OK;
+        const { owner, ask, checks } = yield* openAccounts({
+          ring: KEK.ONE,
+          auth: (incoming) =>
+            incoming.url === REVOCATION_URL
+              ? new Response(null, { status: revocationStatus })
+              : jsonResponse({ revocation_endpoint: REVOCATION_URL }),
+        });
+        keysOf(yield* ask(saveSignIn(owner)));
+
+        const removed = keysOf(yield* ask(removeSignIn(owner)));
+        const revocation = checks.find((check) => check.url === REVOCATION_URL);
+        const form = new URLSearchParams(
+          yield* Effect.promise(() => new Response(revocation?.init.body).text()),
+        );
+
+        assert.deepEqual(removed, { keys: [] });
+        assert.deepEqual(
+          [form.get("token"), form.get("token_type_hint"), form.get("client_id")],
+          [SIGN_IN.refreshToken, "refresh_token", SIGN_IN.clientId],
+        );
+
+        keysOf(yield* ask(saveSignIn(owner)));
+        revocationStatus = HTTP_STATUS.BAD_REQUEST;
+        assert.deepEqual(keysOf(yield* ask(removeSignIn(owner))), {
+          keys: [],
+          revocationUnconfirmed: true,
+        });
+      }),
   );
 });
