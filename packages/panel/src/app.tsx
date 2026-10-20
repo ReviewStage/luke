@@ -516,6 +516,9 @@ export function App(): React.JSX.Element {
   });
   // The narrow screens' ways back to their lists go through the history, so the two never disagree.
   const shellTasks = throughHistory(tasks, history.lists);
+  // Escape reads the latest of them as it lands, so its listener stays the same across renders.
+  const shellDoors = useRef(shellTasks);
+  shellDoors.current = shellTasks;
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all. It folds by the room the
   // stage has, which on the desktop is the window's.
@@ -614,8 +617,10 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
       // An open task unwinds to the home page, which leaves it and ends
-      // its call. That page is home, so a press there does nothing.
-      tasks.back();
+      // its call. That page is home, so a press there does nothing. A side
+      // panel standing only full screen shuts through the history, as its
+      // Close does.
+      shellDoors.current.back();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -623,7 +628,6 @@ export function App(): React.JSX.Element {
     signIn.cancelSignIn,
     signIn.signInWait,
     listening,
-    tasks.back,
     tasks.inboxView.open,
     tasks.chatView.open,
     speaking,
