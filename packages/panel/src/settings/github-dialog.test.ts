@@ -17,11 +17,10 @@ import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { GitHubDialog } from "./github-dialog.js";
 
 /**
- * Settings › Integrations › GitHub › Manage over a bridge answering as the
- * host would: the dialog opens on the App, or on the token where one is
- * saved; a pasted token is sent once and drawn as the service's hint, login,
- * and expiry; opening the App removes nothing; a refused save says why in a
- * short label. Synthetic tokens.
+ * Settings › Profile › GitHub › Manage over a bridge answering as the host
+ * would: the App and the token stand as two sections at once; a pasted token
+ * is sent once and drawn as the service's hint, login, and expiry; Remove
+ * asks first; a refused save says why in a short label. Synthetic tokens.
  */
 
 const PASTED = "synthetic-classic-token-0000000000wxyz";
@@ -102,12 +101,8 @@ async function mount(connected = true): Promise<void> {
   await settle();
 }
 
-const radio = (label: string) =>
-  [...document.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find((each) =>
-    each.textContent?.startsWith(label),
-  ) ?? assert.fail(`no ${label} option`);
-
-const checked = () => document.querySelector('[role="radio"][aria-checked="true"]')?.textContent;
+const sections = () =>
+  [...document.querySelectorAll("section")].map((each) => each.querySelector("h3")?.textContent);
 
 const tokenField = () =>
   document.querySelector<HTMLInputElement>('input[aria-label="Personal access token"]');
@@ -128,12 +123,11 @@ async function paste(token: string): Promise<void> {
   await settle();
 }
 
-test("the dialog opens on the App; a token pasted into the unrecorded field is sent once and drawn as the service's facts, and opening the App removes nothing", async () => {
+test("the App and the token stand together; a token pasted into the unrecorded field is sent once and drawn as the service's facts", async () => {
   await mount();
-  assert.match(checked() ?? "", /^Luke GitHub AppRecommended/u);
-  assert.equal(tokenField(), null);
+  assert.deepEqual(sections(), ["Luke GitHub App", "Personal access token"]);
+  assert.match(document.body.textContent ?? "", /Luke GitHub AppRecommendedConnected/u);
 
-  act(() => radio("Personal access token").click());
   const input = tokenField() ?? assert.fail("no token field");
   assert.equal(input.type, "password");
   assert.ok(input.closest(".ph-no-capture"), "the field is kept out of the recording");
@@ -146,15 +140,12 @@ test("the dialog opens on the App; a token pasted into the unrecorded field is s
   assert.equal(tokenField(), null);
   assert.match(document.body.textContent ?? "", /ghp_…wxyz · octo-member · Expires /u);
   assert.ok(!document.body.innerHTML.includes(PASTED), "the dialog holds the token nowhere");
-
-  act(() => radio("Luke GitHub App").click());
-  assert.equal(sent.filter((each) => each.kind === ACT_KIND.GITHUB_TOKEN_REMOVE).length, 0);
 });
 
-test("the dialog opens on a saved token, and Remove asks first, then takes it away", async () => {
+test("a saved token is drawn beside the App, and Remove asks first, then takes it away", async () => {
   stored = KEPT;
   await mount();
-  assert.match(checked() ?? "", /^Personal access token/u);
+  assert.equal(tokenField(), null);
 
   act(() => button("Remove").click());
   await settle();
@@ -170,7 +161,6 @@ test("the dialog opens on a saved token, and Remove asks first, then takes it aw
 test("a refused save says why in a short label and keeps the field", async () => {
   refuseSave = GITHUB_TOKEN_REJECTION.FINE_GRAINED;
   await mount();
-  act(() => radio("Personal access token").click());
   await paste(PASTED);
 
   assert.equal(document.querySelector('[role="alert"]')?.textContent, "Not a classic token");

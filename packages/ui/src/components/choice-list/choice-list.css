@@ -150,24 +150,6 @@
     text-align: center;
   }
 
-  /* A row holding a control of its own (`aside`) stands with it in a slot,
-     the control at the row's top right on its first line, outside its press. */
-  .luke-choice-slot {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-
-  .luke-choice-aside {
-    position: absolute;
-    top: var(--luke-space-8);
-    right: var(--luke-space-12);
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--luke-type-body-leading);
-  }
-
   /* A marked row's radio or checkbox stands on the label's first line: a
      ring at rest, filled in the accent once checked, a dot in a radio and a
      tick in a box, both in the accent's ink. */

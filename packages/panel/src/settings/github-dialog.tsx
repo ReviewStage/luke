@@ -11,18 +11,20 @@ import { ACT_KIND } from "@luke/host/acts";
 import {
   AVATAR_SIZE,
   Avatar,
+  Badge,
   BUTTON_TYPE,
   BUTTON_VARIANT,
   Button,
-  CHOICE_LOOK,
-  ChoiceList,
   ConfirmDialog,
   DIALOG_SIZE,
   Dialog,
   ErrorState,
+  TEXT_ELEMENT,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
   TEXT_LINK_LOOK,
+  TEXT_VARIANT,
+  Text,
   TextField,
   TextLink,
   useConfirmDialog,
@@ -36,28 +38,22 @@ import { dayText } from "../tasks/task-time.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 
 /**
- * github-dialog.tsx -- Settings › Integrations › GitHub › Manage: how Luke reaches GitHub for the member, the Luke GitHub App or their own classic personal access token.
+ * github-dialog.tsx -- Settings › Profile › GitHub › Manage: how Luke reaches GitHub for the member, through the Luke GitHub App and their own classic personal access token.
  *
- * Two options, one panel open at a time. The Luke GitHub App, recommended
- * and open by default, says whether the account's GitHub is connected, by
- * the login where the connection names one, and Refresh reads that again. The personal access token opens a password
- * field with Save, and once a token is saved its hint, login, expiry, and
- * Remove, which asks first in the confirm dialog. Which option is open is only which panel shows: the saved token
- * is what counts, so opening the App removes nothing, and the dialog opens
- * on the token where one is saved. Every line is a label or a fact.
+ * Two sections, one under the other, since both apply at once: the App
+ * reaches the repositories it is installed on, and the token the rest. The
+ * Luke GitHub App, recommended, says whether the account's GitHub is
+ * connected, by the login where the connection names one, and Refresh
+ * reads that again. The personal access token offers Create token, then a
+ * password field with Save, or once a token is saved its hint, login,
+ * expiry, and Remove, which asks first in the confirm dialog. Every line is
+ * a label or a fact.
  *
  * The token stands in the open field alone, is sent once on Save, and is
  * cleared as soon as the service keeps it; the service never answers one.
  * The token's panel is kept out of the screen recording, which masks a
  * field's characters but not their count, as Settings › API keys is.
  */
-
-const OPTION = {
-  APP: "app",
-  TOKEN: "token",
-} as const;
-
-type Option = (typeof OPTION)[keyof typeof OPTION];
 
 /** The class PostHog's recorder leaves out of a recording, element and children alike. */
 const NO_CAPTURE = "ph-no-capture";
@@ -270,12 +266,11 @@ export function GitHubDialog({
 }): React.JSX.Element {
   const { act } = useAct();
   const openLink = useOpenLink();
-  const [option, setOption] = useState<Option>(OPTION.APP);
   const [token, setToken] = useState<GitHubTokenSummary | null | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
 
-  // The dialog opening reads the token as the service holds it now, and opens on it where one is saved.
+  // The dialog opening reads the token as the service holds it now.
   useEffect(() => {
     let live = true;
     setReadFailed(false);
@@ -287,7 +282,6 @@ export function GitHubDialog({
           return;
         }
         setToken(answer.token);
-        if (answer.token !== null) setOption(OPTION.TOKEN);
       },
       () => {
         if (live) setReadFailed(true);
@@ -338,39 +332,36 @@ export function GitHubDialog({
       }
     >
       <div className="github-dialog">
-        <ChoiceList<Option>
-          legend="GitHub access"
-          look={CHOICE_LOOK.MARKED}
-          options={[
-            { value: OPTION.APP, label: "Luke GitHub App", badge: "Recommended" },
-            {
-              value: OPTION.TOKEN,
-              label: "Personal access token",
-              aside: (
-                <TextLink
-                  look={TEXT_LINK_LOOK.UNDERLINED}
-                  href={GITHUB_TOKEN_CREATE_URL}
-                  external
-                  onClick={(event) => {
-                    event.preventDefault();
-                    openLink(GITHUB_TOKEN_CREATE_URL);
-                  }}
-                >
-                  Create token
-                </TextLink>
-              ),
-            },
-          ]}
-          value={[option]}
-          onChange={([next]) => {
-            if (next !== undefined) setOption(next);
-          }}
-        />
-        {option === OPTION.APP ? (
+        <section className="github-dialog-section">
+          <div className="github-dialog-head">
+            <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL}>
+              Luke GitHub App
+            </Text>
+            <Badge>Recommended</Badge>
+          </div>
           <AppPanel connected={connected} onRefresh={onRefresh} />
-        ) : (
+        </section>
+        <section className="github-dialog-section">
+          <div className="github-dialog-head">
+            <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL}>
+              Personal access token
+            </Text>
+            <span className="github-dialog-head-end">
+              <TextLink
+                look={TEXT_LINK_LOOK.UNDERLINED}
+                href={GITHUB_TOKEN_CREATE_URL}
+                external
+                onClick={(event) => {
+                  event.preventDefault();
+                  openLink(GITHUB_TOKEN_CREATE_URL);
+                }}
+              >
+                Create token
+              </TextLink>
+            </span>
+          </div>
           <div className={NO_CAPTURE}>{tokenPanel}</div>
-        )}
+        </section>
       </div>
     </Dialog>
   );

@@ -286,13 +286,30 @@
   font-family: var(--luke-font-mono);
 }
 
-/* Settings › Integrations › GitHub › Manage (`github-dialog.tsx`): the two
-   options, then the open option's panel under them, its facts on one line
-   and its press at the line's end. A login reads beside its avatar. */
+/* Settings › Profile › GitHub › Manage (`github-dialog.tsx`): two sections,
+   one under the other, each a head (its name, a badge or a link at its end)
+   over its panel, whose facts stand on one line and its press at the line's
+   end. A login reads beside its avatar. */
 .github-dialog {
   display: flex;
   flex-direction: column;
-  gap: var(--luke-field-gap);
+  gap: var(--luke-section-gap);
+}
+
+.github-dialog-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+}
+
+.github-dialog-head {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.github-dialog-head-end {
+  margin-left: auto;
 }
 
 .github-dialog-panel {
