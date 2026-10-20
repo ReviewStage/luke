@@ -46,13 +46,13 @@
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
+  type ClaudeCodeConfig,
   type ContentBlock,
   EFFORT,
   type Effort,
   INPUT_LINE,
   type InputLine,
   RUNNER_ENV,
-  type ClaudeCodeConfig,
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
 import {

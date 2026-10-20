@@ -82,7 +82,9 @@ function fakeLuke(answers: readonly Answer[] = [], watchFor?: string) {
 
 /** The events applied, less each ACCEPTED, which its own test follows, so a turn's shape reads alone. */
 function withoutAccepted(events: readonly RunnerEvent[]): RunnerEvent[] {
-  return events.filter(({ message }) => !("type" in message && message.type === RUNNER_EVENT.ACCEPTED));
+  return events.filter(
+    ({ message }) => !("type" in message && message.type === RUNNER_EVENT.ACCEPTED),
+  );
 }
 
 /** The `type`, and `subtype` where it has one, of each message applied but an ACCEPTED, in order. */
@@ -402,14 +404,16 @@ it.effect(
       yield* release;
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
-      const accepted = luke.applied.filter(({ message }) => message.type === RUNNER_EVENT.ACCEPTED);
+      const accepted = luke.applied.filter(
+        ({ message }) => "type" in message && message.type === RUNNER_EVENT.ACCEPTED,
+      );
       assert.deepEqual(
         accepted.map(({ message }) => message),
         cli.prompts.map((prompt) => ({ type: RUNNER_EVENT.ACCEPTED, uuid: prompt.uuid })),
       );
       assert.equal(cli.prompts[0]?.uuid, first);
       assert.notEqual(cli.prompts[1]?.uuid, undefined);
-      assert.equal(luke.applied[0]?.message.type, RUNNER_EVENT.ACCEPTED);
+      assert.deepEqual(luke.applied[0]?.message, accepted[0]?.message);
     }),
 );
 
@@ -423,10 +427,8 @@ it.effect("skips a message line whose uuid is not a UUID, handing the CLI nothin
 
     assert.equal(yield* Fiber.join(run), RUNNER_END.STOPPED);
     assert.deepEqual(cli.prompts, []);
-    assert.deepEqual(
-      luke.applied.map(({ message }) => message.type),
-      [RUNNER_EVENT.END],
-    );
+    assert.deepEqual(kinds(luke.applied), [RUNNER_EVENT.END]);
+    assert.equal(luke.applied.length, 1);
   }),
 );
 

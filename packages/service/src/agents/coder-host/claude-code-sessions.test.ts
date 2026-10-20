@@ -3,10 +3,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { gunzipSync } from "node:zlib";
 import { it } from "@effect/vitest";
 import {
+  type ClaudeCodeConfig,
   INPUT_LINE,
   type InputLine,
   RUNNER_ENV,
-  type ClaudeCodeConfig,
   RUNNER_HARNESS,
 } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
