@@ -1446,8 +1446,8 @@
    opened there no longer leaves either a few words a line: the toggle opens
    it as a sheet over the tab, as wide as the room less a strip of the tab
    to press it away by, so a path reads whole, and a file chosen in it puts
-   it away to show that file (`usePaneRoom`). A finger has no peek, so the
-   tree stands only once pressed open. */
+   it away to show that file (`usePaneRoom`). A finger opens it with the
+   toggle; a pointer, where the phone has one, still peeks it a beat later. */
 .desktop-shell[data-room="narrow"] .file-view .file-tree-pane {
   position: absolute;
   z-index: 1;
@@ -1474,6 +1474,10 @@
   .file-tree-pane {
   display: flex;
   animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+}
+
+.desktop-shell[data-room="narrow"] .file-view[data-pane-over="peek"] .file-tree-pane {
+  animation-delay: var(--duration-quick);
 }
 
 .desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="over"] {
@@ -2307,6 +2311,10 @@
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-8);
+  /* Note that Tab walks a roomy row as it is drawn, the pill before the
+     title's pencil, where the browser reads `reading-flow`, as the
+     desktop's does; a narrow row is drawn in the markup's order (below). */
+  reading-flow: flex-visual;
 }
 
 .pull-request-title-row > .luke-chip,
@@ -2339,6 +2347,7 @@
 @container pull-request-header (max-width: 520px) {
   .pull-request-title-row {
     flex-wrap: wrap;
+    reading-flow: normal;
   }
 
   .pull-request-title-row > .luke-chip,

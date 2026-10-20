@@ -5,7 +5,7 @@ import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
- * pull-request-header-narrow.test.ts -- the Pull request tab's header gives a narrow tab's title a line of its own, over the pill and the controls, rather than a word to a line beside them, drawn in the markup's order, title first; a roomy one keeps the three in one row, the pill drawn ahead of the title that leads the markup.
+ * pull-request-header-narrow.test.ts -- the Pull request tab's header gives a narrow tab's title a line of its own, over the pill and the controls, rather than a word to a line beside them, drawn in the markup's order, title first; a roomy one keeps the three in one row, the pill drawn ahead of the title that leads the markup and Tab walking them as drawn.
  *
  * jsdom lays nothing out and answers no container query, so the window's
  * stylesheets are laid for a header of each width
@@ -41,6 +41,7 @@ function titleRowAt(width: number, touch = false) {
   const order = (element: Element) => Number(getComputedStyle(element).order || "0");
   return {
     wraps: getComputedStyle(row).flexWrap === "wrap",
+    tabsAsDrawn: getComputedStyle(row).getPropertyValue("reading-flow") === "flex-visual",
     titleFirst: order(title) <= order(pill),
     titleFullWidth: style.flexBasis === "100%",
   };
@@ -48,6 +49,7 @@ function titleRowAt(width: number, touch = false) {
 
 const OWN_LINE = {
   wraps: true,
+  tabsAsDrawn: false,
   titleFirst: true,
   titleFullWidth: true,
 } as const;
@@ -66,6 +68,7 @@ test("a header wider than 520px keeps the pill, the title, and the controls in o
   const style = titleRowAt(521);
   assert.equal(style.wraps, false);
   assert.equal(style.titleFirst, false, "the pill is drawn ahead of the title");
+  assert.equal(style.tabsAsDrawn, true, "Tab walks the row as drawn, the pill first");
   assert.equal(style.titleFullWidth, false);
 }, 30_000);
 

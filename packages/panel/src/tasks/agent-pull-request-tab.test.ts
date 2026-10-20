@@ -1752,23 +1752,40 @@ function scrollTo(box: Element, top: number): void {
   });
 }
 
-test("the header folds once the view under it is scrolled down, not by a sideways scroll, and unfolds back at its top or on another view", async () => {
+/** Gives `element` the box jsdom lays out none for: how tall it stands, and how tall what it holds runs. */
+function sized(
+  element: Element,
+  box: { readonly height: number; readonly content?: number },
+): void {
+  Object.defineProperty(element, "offsetHeight", { configurable: true, value: box.height });
+  Object.defineProperty(element, "clientHeight", { configurable: true, value: box.height });
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    value: box.content ?? box.height,
+  });
+}
+
+/** A Pull request tab on its Conversation, the header and the conversation's scroller given the boxes a phone lays them out in. */
+async function phoneTab(conversationRuns: number) {
   const tab = await draw(controlAnswering());
   const header = tab.querySelector(".pull-request-header") ?? assert.fail("the header stands");
-  const folded = () => header.hasAttribute("data-folded");
   const conversation =
     tab.querySelector("section[aria-label='Pull request conversation'] .luke-detail-page-main") ??
     assert.fail("the conversation scrolls");
-  const sideways = tab.querySelector(".luke-choice-bar") ?? assert.fail("the tabs' row stands");
+  sized(header, { height: 200 });
+  sized(conversation, { height: 400, content: conversationRuns });
+  return { tab, conversation, folded: () => header.hasAttribute("data-folded") };
+}
+
+test("the header folds once the view under it is scrolled down, not by a sideways scroll, and unfolds back at its top or on another view", async () => {
+  const { tab, conversation, folded } = await phoneTab(2000);
 
   scrollTo(conversation, 20);
   assert.equal(folded(), false, "a nudge folds nothing");
   scrollTo(conversation, 400);
   assert.equal(folded(), true, "scrolled down, the header folds");
-  act(() => {
-    sideways.dispatchEvent(new Event("scroll"));
-  });
-  assert.equal(folded(), true, "a sideways scroll leaves it folded");
+  scrollTo(conversation, 400);
+  assert.equal(folded(), true, "a sideways scroll, its top where it stood, leaves it folded");
   scrollTo(conversation, 20);
   assert.equal(folded(), true, "near the top it stays folded");
   scrollTo(conversation, 0);
@@ -1777,6 +1794,22 @@ test("the header folds once the view under it is scrolled down, not by a sideway
   scrollTo(conversation, 400);
   await choose(tab, "Checks");
   assert.equal(folded(), false, "another view starts unfolded");
+});
+
+test("a view that runs on past its box by less than the header stands never folds it, since the box the fold grows would land back at its top", async () => {
+  const { conversation, folded } = await phoneTab(400 + 150);
+  scrollTo(conversation, 120);
+  assert.equal(folded(), false);
+});
+
+test("a box scrolled inside the view, a comment's field or its preview, folds nothing; only the view's own scroller does", async () => {
+  const { conversation, folded } = await phoneTab(2000);
+  const field = conversation.appendChild(document.createElement("textarea"));
+  sized(field, { height: 100, content: 1000 });
+  scrollTo(field, 300);
+  assert.equal(folded(), false, "the field's own scroll leaves the header whole");
+  scrollTo(conversation, 300);
+  assert.equal(folded(), true);
 });
 
 test("an agent with no pull request yet says so", async () => {

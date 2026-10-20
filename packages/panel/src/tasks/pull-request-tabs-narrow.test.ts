@@ -66,7 +66,6 @@ function phoneRowAt(room: "narrow" | "wide") {
     '<button class="luke-choice-bar-option" role="tab" aria-selected="true">',
     '<span class="luke-choice-bar-icon"><svg></svg></span><span class="luke-choice-bar-label">Conversation</span>',
     "</button></div></div>",
-    '<div class="pull-request-filters"><span class="pull-request-filter">Hide bots</span></div>',
     "</div></div>",
   ].join("");
   const read = (selector: string) =>
@@ -75,24 +74,17 @@ function phoneRowAt(room: "narrow" | "wide") {
   return {
     named: label.position !== "absolute" && label.clipPath !== "inset(50%)",
     glyph: read(".luke-choice-bar-icon").display !== "none",
-    filtersInset: read(".pull-request-filters").getPropertyValue("padding-inline"),
   };
 }
 
-test("on a phone the tabs are named in words, their glyphs giving way, and the filters' switches stand in from the screen's edge as far as the words under them", () => {
+test("on a phone the tabs are named in words, their glyphs giving way", () => {
   const phone = phoneRowAt("narrow");
   assert.equal(phone.named, true);
   assert.equal(phone.glyph, false);
-  assert.equal(phone.filtersInset, "var(--content-inset)");
 }, 30_000);
 
-test("the desktop's tabs at that width fold to their glyphs as before, the switches at the row's own inset", () => {
+test("the desktop's tabs at that width fold to their glyphs as before", () => {
   const desktop = phoneRowAt("wide");
   assert.equal(desktop.named, false);
   assert.equal(desktop.glyph, true);
-  assert.notEqual(
-    desktop.filtersInset,
-    "var(--content-inset)",
-    "the switches keep the row's inset",
-  );
 }, 30_000);

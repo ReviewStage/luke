@@ -1907,38 +1907,68 @@ interface AgentPullRequestTabProps {
  */
 const HEADER_FOLD = { AT: 48, BACK: 8 } as const;
 
-/** Whether the header is folded, and what the tab's root hears its scrolls by. */
+/**
+ * The views' own scrollers, whose scroll alone folds the header: the
+ * Conversation's and the Checks' page column, and the diff list's.
+ */
+const VIEW_SCROLLER = ".luke-detail-page-main, .diff-list > .luke-scroll-area";
+
+/**
+ * Whether `box` is the shown view's own scroller, drawn in the tab at
+ * `root`: never a box nested in it, such as a comment's field or its
+ * preview, nor one a popover portals out of the tab, nor a hidden view's.
+ */
+function viewScroller(box: Element, root: Element): boolean {
+  const view = box.closest(".pull-request-view");
+  return (
+    box.matches(VIEW_SCROLLER) &&
+    box.parentElement?.closest(VIEW_SCROLLER) === null &&
+    root.contains(box) &&
+    view instanceof HTMLElement &&
+    !view.hidden
+  );
+}
+
+/** Whether the header is folded, the box it stands in, and what the tab's root hears its scrolls by. */
 interface HeaderFold {
   readonly folded: boolean;
+  readonly header: React.RefObject<HTMLElement | null>;
   readonly onScrollCapture: (event: React.UIEvent<HTMLElement>) => void;
 }
 
 /**
- * Whether the header is folded to its title's one line, as the view under it
- * is scrolled down, and what the tab's root hears every scroll in it by. A
- * scroll that leaves its box's top where it was is a sideways one, a code
- * block's or the tabs' own, and is no scroll down. The view switched to
- * starts unfolded. It is held on every width, and only a narrow room's
- * stylesheet folds it (tasks.css), so the desktop's header stays put.
+ * Whether the header is folded to its title's one line, as the shown view's
+ * own scroller is scrolled down, and what the tab's root hears every scroll
+ * in it by. A scroll that leaves its box's top where it was is a sideways
+ * one, an unwrapped diff's, and is no scroll down. It folds only where the
+ * view runs on past its box by more than the header's height, which is more
+ * than folding gives back, so the box grown by the fold still stands
+ * scrolled rather than back at its top, which would unfold it at once. The
+ * view switched to starts unfolded. It is held on every width, and only a
+ * narrow room's stylesheet folds it (tasks.css), so the desktop's header
+ * stays put.
  */
 function useHeaderFold(view: PullRequestView): HeaderFold {
   const [fold, setFold] = useState<{ readonly view: PullRequestView; readonly folded: boolean }>({
     view,
     folded: false,
   });
+  const header = useRef<HTMLElement>(null);
   const tops = useRef(new WeakMap<Element, number>());
   return {
     folded: fold.view === view && fold.folded,
+    header,
     onScrollCapture: (event) => {
       const box = event.target;
-      if (!(box instanceof Element)) return;
+      if (!(box instanceof Element) || !viewScroller(box, event.currentTarget)) return;
       const top = box.scrollTop;
       const was = tops.current.get(box) ?? 0;
       tops.current.set(box, top);
       if (top === was) return;
+      const room = box.scrollHeight - box.clientHeight > (header.current?.offsetHeight ?? 0);
       setFold((held) => {
         const folded =
-          held.view === view && held.folded ? top > HEADER_FOLD.BACK : top > HEADER_FOLD.AT;
+          held.view === view && held.folded ? top > HEADER_FOLD.BACK : top > HEADER_FOLD.AT && room;
         return held.view === view && held.folded === folded ? held : { view, folded };
       });
     },
@@ -2083,7 +2113,11 @@ function PullRequestTabBody({
               </EmptyState>
             ) : (
               <>
-                <header className="pull-request-header" data-folded={fold.folded ? "" : undefined}>
+                <header
+                  ref={fold.header}
+                  className="pull-request-header"
+                  data-folded={fold.folded ? "" : undefined}
+                >
                   <div className="pull-request-title-row">
                     <HeaderTitle title={title} writes={writes} />
                     {held === undefined ? null : (
