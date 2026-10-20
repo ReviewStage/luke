@@ -1,4 +1,5 @@
 import { nativeTurnId, reasoningItemId } from "@luke/database/models/ids";
+import type { WireValue } from "@luke/wire";
 import { Option, Schema } from "effect";
 import {
   addModelUsage,
@@ -86,7 +87,7 @@ const TurnSchema = Schema.Struct({
 type Turn = typeof TurnSchema.Type;
 
 /** What the projection keeps between batches. */
-export const NativeProjectionSchema = Schema.Struct({
+const NativeProjectionSchema = Schema.Struct({
   turn: Schema.optionalKey(TurnSchema),
   /** The harness's own session id as last recorded. */
   session: Schema.optionalKey(Schema.String),
@@ -95,12 +96,12 @@ export const NativeProjectionSchema = Schema.Struct({
 });
 export type NativeProjection = typeof NativeProjectionSchema.Type;
 
-export const EMPTY_PROJECTION: NativeProjection = {};
+const EMPTY_PROJECTION: NativeProjection = {};
 
 const readProjection = Schema.decodeUnknownOption(NativeProjectionSchema);
 
 /** The projection a conversation kept, or the empty one before its first save or for state no longer read. */
-export function heldProjection(saved: unknown): NativeProjection {
+export function heldProjection(saved: WireValue | null): NativeProjection {
   return Option.getOrElse(readProjection(saved), () => EMPTY_PROJECTION);
 }
 
@@ -243,10 +244,8 @@ class Fold {
       { ...closed, steps },
       { kind: BRAIN_RUN_EVENT.STEP_STARTED, step: steps },
     );
-    const next: Turn = {
-      ...opened,
-      step: { ...(key === undefined ? {} : { key }), open: true, draft: EMPTY_DRAFT, reasoning: 0 },
-    };
+    const fresh = { open: true, draft: EMPTY_DRAFT, reasoning: 0 };
+    const next: Turn = { ...opened, step: key === undefined ? fresh : { ...fresh, key } };
     this.#setTurn(next);
     return next;
   }

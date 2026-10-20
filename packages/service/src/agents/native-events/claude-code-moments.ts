@@ -12,9 +12,10 @@ import {
   isWireString,
   type UnparsedWireValue,
   valueFromJsonText,
+  type WireValue,
   WireValueSchema,
 } from "@luke/wire";
-import { Option, Schema } from "effect";
+import { Option, Predicate, Schema } from "effect";
 import { NATIVE_ENDING, NATIVE_MOMENT, type NativeMoment } from "./native-moments.js";
 
 /**
@@ -56,7 +57,7 @@ const ToolUseBlockSchema = Schema.Struct({
 const ToolResultBlockSchema = Schema.Struct({
   type: Schema.Literal("tool_result"),
   tool_use_id: Schema.String,
-  content: Schema.optionalKey(Schema.Unknown),
+  content: Schema.optionalKey(Schema.Union([Schema.String, Schema.Array(WireValueSchema)])),
   is_error: Schema.optionalKey(Schema.Boolean),
 });
 
@@ -80,7 +81,7 @@ const readAssistant = Schema.decodeUnknownOption(
   Schema.Struct({
     message: Schema.Struct({
       id: Schema.optionalKey(Schema.String),
-      content: Schema.Array(Schema.Unknown),
+      content: Schema.Array(WireValueSchema),
     }),
   }),
 );
@@ -160,7 +161,7 @@ const RATE_LIMIT_REFUSED = "rejected";
 const FAILURE_CHARS = 300;
 
 /** The name a call is stored under: Luke's tool's own for a call to Luke's MCP server, the CLI's otherwise. */
-export function storedClaudeCodeToolName(name: string): string {
+function storedClaudeCodeToolName(name: string): string {
   return name.startsWith(CLAUDE_CODE_LUKE_TOOL_PREFIX)
     ? name.slice(CLAUDE_CODE_LUKE_TOOL_PREFIX.length)
     : name;
@@ -172,9 +173,9 @@ const CLI_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(CLAUDE_CODE_TO
 export type HeldCallName = (callId: string) => string | undefined;
 
 /** A tool's answer as the text the model read: its text blocks joined, a picture standing in for its bytes. */
-function answerText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
+function answerText(content: string | readonly WireValue[] | undefined): string {
+  if (content === undefined) return "";
+  if (Predicate.isString(content)) return content;
   return content
     .map((block) =>
       Option.match(readTextBlock(block), {
@@ -208,7 +209,7 @@ function settlementOf(storedName: string, text: string, isError: boolean): ToolC
 }
 
 /** A model call's answer, or the one block of it the SDK streams as a message: a step, and its words, reasoning, and calls. */
-function assistantMoments(message: unknown): readonly NativeMoment[] {
+function assistantMoments(message: WireValue): readonly NativeMoment[] {
   const read = readAssistant(message);
   if (Option.isNone(read)) return [];
   const { id, content } = read.value.message;
@@ -242,11 +243,13 @@ function assistantMoments(message: unknown): readonly NativeMoment[] {
 }
 
 /** The tools' answers a user message carries, each settling the call the projection holds; the step that asked for them is over. */
-function userMoments(message: unknown, heldCallName: HeldCallName): readonly NativeMoment[] {
+function userMoments(message: WireValue, heldCallName: HeldCallName): readonly NativeMoment[] {
   const read = readUser(message);
-  if (Option.isNone(read) || typeof read.value.message.content === "string") return [];
+  if (Option.isNone(read)) return [];
+  const { content } = read.value.message;
+  if (Predicate.isString(content)) return [];
   const moments: NativeMoment[] = [];
-  for (const block of read.value.message.content) {
+  for (const block of content) {
     const answer = readToolResultBlock(block);
     if (Option.isNone(answer)) continue;
     const name = heldCallName(answer.value.tool_use_id);
@@ -265,7 +268,7 @@ function userMoments(message: unknown, heldCallName: HeldCallName): readonly Nat
 }
 
 /** A token of the words while they stream: the step a model call opens, and the piece of its words. */
-function streamMoments(message: unknown): readonly NativeMoment[] {
+function streamMoments(message: WireValue): readonly NativeMoment[] {
   const read = readStreamEvent(message);
   if (Option.isNone(read)) return [];
   const { type, message: started, delta } = read.value.event;
@@ -289,7 +292,7 @@ function counted(value: number | null | undefined): number {
  * prefix cache read and what was written to it, while the record's input
  * counts both, as the price reads it (`model-catalog.ts`).
  */
-function resultMoments(message: unknown): readonly NativeMoment[] {
+function resultMoments(message: WireValue): readonly NativeMoment[] {
   const read = readResult(message);
   if (Option.isNone(read)) return [{ kind: NATIVE_MOMENT.RESULT }];
   const { subtype, is_error, errors, usage } = read.value;
@@ -323,7 +326,7 @@ function resultMoments(message: unknown): readonly NativeMoment[] {
 }
 
 /** The plan's limit as the CLI reports it: refused or not, and which limit and when it resets. */
-function rateLimitMoments(message: unknown): readonly NativeMoment[] {
+function rateLimitMoments(message: WireValue): readonly NativeMoment[] {
   const read = readRateLimit(message);
   if (Option.isNone(read)) return [];
   const { status, rateLimitType, resetsAt } = read.value.rate_limit_info;
@@ -348,7 +351,7 @@ const ENDING_OF_RUNNER_END = {
   [RUNNER_END.FAILED]: NATIVE_ENDING.FAILED,
 } as const satisfies Record<RunnerEnd, (typeof NATIVE_ENDING)[keyof typeof NATIVE_ENDING]>;
 
-function endMoments(message: unknown): readonly NativeMoment[] {
+function endMoments(message: WireValue): readonly NativeMoment[] {
   const read = readEnd(message);
   if (Option.isNone(read)) return [];
   const { reason, detail } = read.value;
@@ -364,7 +367,7 @@ function endMoments(message: unknown): readonly NativeMoment[] {
   ];
 }
 
-function systemMoments(subtype: string | undefined, message: unknown): readonly NativeMoment[] {
+function systemMoments(subtype: string | undefined, message: WireValue): readonly NativeMoment[] {
   switch (subtype) {
     case SYSTEM_SUBTYPE.INIT:
       return [
@@ -391,7 +394,7 @@ function systemMoments(subtype: string | undefined, message: unknown): readonly 
  * that tool answers.
  */
 export function claudeCodeMoments(
-  message: unknown,
+  message: WireValue,
   heldCallName: HeldCallName,
 ): readonly NativeMoment[] {
   const envelope = readEnvelope(message);

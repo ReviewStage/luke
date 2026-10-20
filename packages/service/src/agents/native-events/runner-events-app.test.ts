@@ -16,7 +16,8 @@ import { conversations, messages, turns } from "@luke/database/schemas/storage";
 import { CONVERSATION_RUNTIME, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
-import { TURN_STATUS } from "@luke/wire";
+import { TURN_STATUS, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
+import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { asc, eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
@@ -112,7 +113,7 @@ const agentWithBearer = Effect.gen(function* () {
 /** The SDK messages of P00's workflow turn, in the pinned SDK's shapes, as the runner numbers and posts them. */
 function workflowTurn(lineId: string): readonly RunnerEvent[] {
   const envelope = { parent_tool_use_id: null, session_id: SESSION, uuid: randomUUID() };
-  const toolUse = (id: string, name: string, input: object) => ({
+  const toolUse = (id: string, name: string, input: WireRecord) => ({
     type: "assistant",
     message: { content: [{ type: "tool_use", id, name, input }] },
     ...envelope,
@@ -204,8 +205,14 @@ const UNANSWERED = {
 } as const;
 
 /** A part as the transcript draws it: its type, and its words, state, and output where it has them. */
-function drawn(part: Readonly<Record<string, unknown>>): readonly unknown[] {
-  return [part.type, part.text ?? part.state, part.output].filter((field) => field !== undefined);
+function drawn(part: StoredUIMessage["parts"][number]): readonly WireValue[] {
+  const fields: WireValue[] = [part.type];
+  if ("text" in part) fields.push(part.text);
+  else if ("state" in part && part.state !== undefined) fields.push(part.state);
+  if ("output" in part && part.output !== undefined) {
+    fields.push(valueFromJsonText(JSON.stringify(part.output)));
+  }
+  return fields;
 }
 
 it.layer(getTestDB())("the runner events route", (it) => {

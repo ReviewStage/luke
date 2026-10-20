@@ -14,6 +14,7 @@ import {
   type StoreWriter,
   storeWriter,
 } from "@luke/database/models/writer";
+import { type WireValue, WireValueSchema } from "@luke/wire";
 import { Clock, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { type BrainRunEvent, TURN_ORIGIN } from "../../core.js";
@@ -72,7 +73,7 @@ const RunnerEventBatchSchema = Schema.Struct({
   events: Schema.Array(
     Schema.Struct({
       sequence: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
-      message: Schema.Unknown,
+      message: WireValueSchema,
     }),
   ),
 });
@@ -86,10 +87,7 @@ const readBatch = Schema.decodeUnknownOption(RunnerEventBatchSchema);
  * Claude Code's is the one reader yet; Codex's notifications are read by
  * another of the same shape.
  */
-export type NativeReader = (
-  message: unknown,
-  heldCallName: HeldCallName,
-) => readonly NativeMoment[];
+type NativeReader = (message: WireValue, heldCallName: HeldCallName) => readonly NativeMoment[];
 
 /** What the batch is applied for: the conversation, its agent, and what that agent runs on. */
 interface Applying {

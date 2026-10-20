@@ -1,9 +1,19 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "32c92417-1431-44a2-b75c-58de08456f6c",
-  "prevIds": ["44c10be8-40b8-4857-a5a6-a975fb90831e"],
+  "id": "d921e078-cd52-43f9-993c-def07d07222f",
+  "prevIds": [
+    "2c67ce47-35b1-46b7-b885-7754676f4141",
+    "ab6b290d-468e-498f-bc07-eebf2d6ffaff",
+    "edad1ba7-1bf0-439f-a276-55a66e473d57"
+  ],
   "ddl": [
+    {
+      "isRlsEnabled": false,
+      "name": "account_chatgpt_host",
+      "entityType": "tables",
+      "schema": "public"
+    },
     {
       "isRlsEnabled": false,
       "name": "account_provider_key",
@@ -441,6 +451,45 @@
       "name": "user_id",
       "entityType": "columns",
       "schema": "public",
+      "table": "account_chatgpt_host"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ext_agent_host_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_chatgpt_host"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_chatgpt_host"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "public",
       "table": "account_provider_key"
     },
     {
@@ -556,6 +605,19 @@
       "generated": null,
       "identity": null,
       "name": "fast_access",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_provider_key"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "access_expires_at",
       "entityType": "columns",
       "schema": "public",
       "table": "account_provider_key"
@@ -8127,6 +8189,19 @@
       "table": "task"
     },
     {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "assignee_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "task"
+    },
+    {
       "type": "jsonb",
       "typeSchema": null,
       "notNull": true,
@@ -9529,41 +9604,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "workspace_token_repository"
-    },
-    {
-      "nameExplicit": true,
-      "columns": [
-        {
-          "value": "user_id",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "provider",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        },
-        {
-          "value": "kind",
-          "isExpression": false,
-          "asc": true,
-          "nullsFirst": false,
-          "opclass": null
-        }
-      ],
-      "isUnique": true,
-      "where": null,
-      "with": "",
-      "method": "btree",
-      "concurrently": false,
-      "name": "account_provider_key_user_provider_kind_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "account_provider_key"
     },
     {
       "nameExplicit": true,
@@ -12145,6 +12185,34 @@
       "nameExplicit": true,
       "columns": [
         {
+          "value": "organization_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "assignee_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "task_organization_assignee",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
           "value": "task_id",
           "isExpression": false,
           "asc": true,
@@ -12448,6 +12516,19 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "workspace_token_repository"
+    },
+    {
+      "nameExplicit": false,
+      "columns": ["user_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "name": "account_chatgpt_host_user_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "account_chatgpt_host"
     },
     {
       "nameExplicit": false,
@@ -13933,6 +14014,19 @@
     },
     {
       "nameExplicit": false,
+      "columns": ["assignee_id"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "SET NULL",
+      "name": "task_assignee_id_user_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "task"
+    },
+    {
+      "nameExplicit": false,
       "columns": ["issue_id"],
       "schemaTo": "public",
       "tableTo": "issue",
@@ -14257,9 +14351,9 @@
       "table": "workspace_token_repository"
     },
     {
-      "columns": ["user_id", "provider"],
-      "nameExplicit": false,
-      "name": "account_provider_key_user_id_provider_pk",
+      "columns": ["user_id", "provider", "kind"],
+      "nameExplicit": true,
+      "name": "account_provider_key_pkey",
       "entityType": "pks",
       "schema": "public",
       "table": "account_provider_key"
@@ -14359,6 +14453,14 @@
       "entityType": "pks",
       "schema": "public",
       "table": "workspace_integration_connection"
+    },
+    {
+      "columns": ["user_id"],
+      "nameExplicit": false,
+      "name": "account_chatgpt_host_pkey",
+      "schema": "public",
+      "table": "account_chatgpt_host",
+      "entityType": "pks"
     },
     {
       "columns": ["id"],

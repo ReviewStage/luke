@@ -1,3 +1,4 @@
+import { type WireValue, WireValueSchema } from "@luke/wire";
 import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
@@ -24,7 +25,7 @@ export interface NativeProjectionRow {
   /** The number of the last event applied; null before the first. */
   readonly sequence: number | null;
   /** The projection's state as it was saved; null before the first save. */
-  readonly projection: unknown;
+  readonly projection: WireValue | null;
 }
 
 type NativeProjectionFailure = QueryError | Schema.SchemaError;
@@ -33,7 +34,7 @@ const lockProjectionRow = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: Schema.Struct({
     sequence: Schema.NullOr(Schema.Number),
-    projection: Schema.Unknown,
+    projection: Schema.NullOr(WireValueSchema),
   }),
   execute: ({ userId, conversationId }) =>
     Database.use((db) =>
@@ -77,7 +78,7 @@ const saveProjectionRow = SqlSchema.void({
     userId: Schema.String,
     conversationId: Schema.String,
     sequence: Schema.Number,
-    projection: Schema.Unknown,
+    projection: WireValueSchema,
   }),
   execute: ({ userId, conversationId, sequence, projection }) =>
     Database.use((db) =>
@@ -91,7 +92,7 @@ const saveProjectionRow = SqlSchema.void({
 /** What one application of a batch answers: its own result, and the place to keep, where it moved. */
 export interface NativeProjectionApplied<A> {
   readonly result: A;
-  readonly saved?: { readonly sequence: number; readonly projection: unknown };
+  readonly saved?: { readonly sequence: number; readonly projection: WireValue };
 }
 
 /**
