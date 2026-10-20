@@ -129,7 +129,7 @@ function agentLeakReport(messages: readonly WireValue[]): LeakReport | undefined
   return undefined;
 }
 
-function planConditions(seen: ProbeObservations): readonly Condition[] {
+function sandboxRunConditions(seen: ProbeObservations): readonly Condition[] {
   const init = sessionInit(seen.firstLaunch);
   const account = accountReading(seen.firstLaunch);
   const calls = toolCalls(seen.firstLaunch);
@@ -291,7 +291,7 @@ function tokenConditions(seen: ProbeObservations): readonly Condition[] {
 }
 
 export function verdict(seen: ProbeObservations): readonly Condition[] {
-  return [...planConditions(seen), ...tokenConditions(seen)];
+  return [...sandboxRunConditions(seen), ...tokenConditions(seen)];
 }
 
 /** Whether every condition the verdict rests on held; findings that gate nothing are left out. */
