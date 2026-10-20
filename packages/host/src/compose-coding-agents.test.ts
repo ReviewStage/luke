@@ -1281,6 +1281,50 @@ it.effect("a follow that answers within thirty seconds reports nothing", () =>
 );
 
 it.effect(
+  "a follow that answered and later stops for good is watched again from its restart: one that never answers again is reported thirty seconds after it, once",
+  () =>
+    Effect.gen(function* () {
+      const { call, seal, realtime, inboxes } = yield* subject();
+      const { reported, layer } = heard();
+      seal(SEALED);
+      yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+      yield* settled;
+      for (const part of [
+        "items",
+        "planless",
+        "plans",
+        "automations",
+        "failedRuns",
+        "chatAsks",
+        "chatNotices",
+      ]) {
+        realtime.deliver(part, []);
+      }
+      yield* settled;
+      assert.equal(inboxes().length, 1);
+
+      // A minute on, past the first bound, the subscription stops for good and is started again,
+      // and the new one never delivers.
+      yield* TestClock.adjust("1 minute");
+      realtime.fail("items");
+      yield* settled;
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+
+      yield* TestClock.adjust("29 seconds");
+      yield* settled;
+      assert.deepEqual(reported, []);
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      assert.equal(reported.length, 1);
+      yield* TestClock.adjust("5 minutes");
+      yield* settled;
+      assert.equal(reported.length, 1);
+    }),
+);
+
+it.effect(
   "a seal the service did not answer is asked for again after a pause, and letting go, or a sign-out, ends the follow",
   () =>
     Effect.gen(function* () {
