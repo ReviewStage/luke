@@ -243,7 +243,8 @@
 
   /* Note that the dot is drawn only where nothing but the chevron is a
      glyph, because a leading mark already says the state in its colour. */
-  .luke-chip[data-tone] .luke-chip-face:not(:has(> :is(svg, img):not(.settings-chevron)))::before {
+  .luke-chip[data-tone]
+  .luke-chip-face:not(:has(> svg:not(.settings-chevron))):not(:has(> img))::before {
     content: "";
     flex: none;
     width: 7px; /* off-scale: a status dot */
