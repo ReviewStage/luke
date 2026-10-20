@@ -112,6 +112,7 @@ const EvaluatedSchema = Schema.Struct({
   result: Schema.Struct({ value: Schema.optional(WireValueSchema) }),
 });
 const CapturedSchema = Schema.Struct({ data: Schema.String });
+const ClosedSchema = Schema.Struct({ success: Schema.optional(Schema.Boolean) });
 const ConsoleCallSchema = Schema.Struct({
   type: Schema.String,
   timestamp: Schema.Number,
@@ -247,6 +248,7 @@ const readQuads = answerOf(QuadsSchema);
 const readMetrics = answerOf(MetricsSchema);
 const readEvaluated = answerOf(EvaluatedSchema);
 const readCaptured = answerOf(CapturedSchema);
+const readClosed = answerOf(ClosedSchema);
 
 function navigate(page: Page, url: string) {
   return Effect.gen(function* () {
@@ -328,20 +330,23 @@ function typeText(page: Page, text: string, ref: string | undefined) {
   });
 }
 
-/** What a key event says of a key: its name, code, Windows key code, and the text it types. */
-function keyOf(key: string) {
+/** What a key event says of a key, Shift held or not: its name, code, Windows key code, and the text it types. */
+function keyOf(key: string, shifted: boolean) {
   const named = NAMED_KEYS.get(key);
   if (named !== undefined) return { key: named.text === " " ? " " : key, ...named };
   const upper = key.toUpperCase();
-  if (/^[A-Z]$/u.test(upper))
-    return { key, code: `Key${upper}`, keyCode: upper.charCodeAt(0), text: key };
+  if (/^[A-Z]$/u.test(upper)) {
+    // Note that a letter under Shift is its capital, as a keyboard's own event says it.
+    const letter = shifted ? upper : key;
+    return { key: letter, code: `Key${upper}`, keyCode: upper.charCodeAt(0), text: letter };
+  }
   if (/^\d$/u.test(key)) return { key, code: `Digit${key}`, keyCode: key.charCodeAt(0), text: key };
   return { key, code: "", keyCode: 0, text: key };
 }
 
 /** A key pressed and let go, with the modifiers held; under a shortcut's modifier it types nothing. */
 function pressKey(page: Page, key: string, modifiers: readonly (keyof typeof MODIFIER_BITS)[]) {
-  const pressed = keyOf(key);
+  const pressed = keyOf(key, modifiers.includes(BROWSER_MODIFIER.SHIFT));
   const bits = modifiers.reduce((sum, modifier) => sum | MODIFIER_BITS[modifier], 0);
   const text = modifiers.some((modifier) => SHORTCUT_MODIFIERS.has(modifier)) ? "" : pressed.text;
   const event = {
@@ -613,6 +618,26 @@ function onPage(
   }
 }
 
+/**
+ * Closes a tab, forgetting its session once it is gone. Note that the close
+ * is sent here rather than through the session's `closePage`, because
+ * Chrome may answer a target it could not close with `success: false`
+ * rather than a refusal, and that answer has to be read.
+ */
+function closeTab(cdp: CdpSession, pages: Pages, tab: string) {
+  return Effect.gen(function* () {
+    const method = "Target.closeTarget";
+    const gone = `there is no tab ${tab}; list the tabs to see which are open`;
+    const answer = yield* cdp
+      .send({ method, params: { targetId: tab } })
+      .pipe(Effect.mapError(refusedAs(gone)));
+    const { success } = yield* readClosed(method, answer);
+    if (success === false) return yield* failed(gone);
+    pages.forget(tab);
+    return actedOn(BROWSER_AGENT_ACTION.CLOSE, tab);
+  });
+}
+
 /** The step an action answers, the tab it names or the one before it acted on standing in for a tab it leaves out. */
 function stepOf(
   cdp: CdpSession,
@@ -640,13 +665,7 @@ function stepOf(
     );
   }
   if (action.action === BROWSER_AGENT_ACTION.CLOSE) {
-    pages.forget(tab);
-    return cdp
-      .closePage(tab)
-      .pipe(
-        Effect.mapError(refusedAs(`there is no tab ${tab}; list the tabs to see which are open`)),
-        Effect.as(actedOn(action.action, tab)),
-      );
+    return closeTab(cdp, pages, tab);
   }
   return Effect.flatMap(pages.page(tab), (page) => onPage(cdp, page, action));
 }

@@ -118,6 +118,7 @@ it.effect("each action sends the browser's own commands, on the tab's flattened 
       { action: BROWSER_AGENT_ACTION.TYPE, text: "héllo" },
       { action: BROWSER_AGENT_ACTION.KEY, key: "Enter" },
       { action: BROWSER_AGENT_ACTION.KEY, key: "a", modifiers: ["control"] },
+      { action: BROWSER_AGENT_ACTION.KEY, key: "a", modifiers: ["shift"] },
       { action: BROWSER_AGENT_ACTION.SCROLL, deltaY: 300 },
       { action: BROWSER_AGENT_ACTION.BACK },
       { action: BROWSER_AGENT_ACTION.CLOSE },
@@ -126,6 +127,7 @@ it.effect("each action sends the browser's own commands, on the tab's flattened 
 
     const page = { sessionId: "session-page-1" };
     const keyA = { modifiers: 2, key: "a", code: "KeyA", windowsVirtualKeyCode: 65 };
+    const shiftA = { modifiers: 8, key: "A", code: "KeyA", windowsVirtualKeyCode: 65 };
     const enter = { modifiers: 0, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 };
     assert.deepEqual(pageCommands(sent), [
       { method: "Target.createTarget", params: { url: "http://localhost:3000/" } },
@@ -155,6 +157,12 @@ it.effect("each action sends the browser's own commands, on the tab's flattened 
       { method: "Input.dispatchKeyEvent", params: { type: "keyUp", ...enter }, ...page },
       { method: "Input.dispatchKeyEvent", params: { type: "rawKeyDown", ...keyA }, ...page },
       { method: "Input.dispatchKeyEvent", params: { type: "keyUp", ...keyA }, ...page },
+      {
+        method: "Input.dispatchKeyEvent",
+        params: { type: "keyDown", ...shiftA, text: "A" },
+        ...page,
+      },
+      { method: "Input.dispatchKeyEvent", params: { type: "keyUp", ...shiftA }, ...page },
       { method: "Page.getLayoutMetrics", params: {}, ...page },
       {
         method: "Input.dispatchMouseEvent",
@@ -172,6 +180,7 @@ it.effect("each action sends the browser's own commands, on the tab's flattened 
         ["navigate", "done"],
         ["click", "done"],
         ["type", "done"],
+        ["key", "done"],
         ["key", "done"],
         ["key", "done"],
         ["scroll", "done"],
@@ -318,6 +327,9 @@ it.effect(
 it.effect("a sequence stops at its first failure, says why, and counts what never ran", () =>
   Effect.gen(function* () {
     const { peer } = yield* browser((command) => {
+      if (command.method === "Target.closeTarget" && command.params.targetId === "page-vanished") {
+        return { result: { success: false } };
+      }
       if (command.method === "Target.attachToTarget" && command.params.targetId === "page-gone") {
         return { error: { code: -32602, message: "No target with given id found" } };
       }
@@ -333,6 +345,10 @@ it.effect("a sequence stops at its first failure, says why, and counts what neve
       { action: BROWSER_AGENT_ACTION.CLOSE },
     ]);
     const unnamed = yield* run(peer, [{ action: BROWSER_AGENT_ACTION.SCREENSHOT }]);
+    const unclosed = yield* run(peer, [
+      { action: BROWSER_AGENT_ACTION.CLOSE, tab: "page-vanished" },
+      { action: BROWSER_AGENT_ACTION.LIST },
+    ]);
     const unknown = yield* run(peer, [
       { action: BROWSER_AGENT_ACTION.KEY, tab: "page-gone", key: "Enter" },
       { action: BROWSER_AGENT_ACTION.LIST },
@@ -349,6 +365,14 @@ it.effect("a sequence stops at its first failure, says why, and counts what neve
     ]);
     assert.equal(navigated.skipped, 2);
     assert.match(failureOf(unnamed.steps[0]) ?? "", /^name the tab/u);
+    assert.deepEqual(unclosed.steps, [
+      {
+        action: "close",
+        status: "failed",
+        tab: "page-vanished",
+        error: "there is no tab page-vanished; list the tabs to see which are open",
+      },
+    ]);
     assert.deepEqual(unknown.steps, [
       {
         action: "key",
