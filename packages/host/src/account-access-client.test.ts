@@ -38,6 +38,10 @@ function service(answers: Array<() => Response>) {
   return { requests, client: client(fetchLike) };
 }
 
+/** What an admin outside the native-agents cohort may open, and what nobody may. */
+const ADMIN: AppAccessSlice = { admin: true, nativeAgents: false };
+const NOTHING: AppAccessSlice = { admin: false, nativeAgents: false };
+
 function client(fetchLike: Parameters<typeof fakeHttpClientLayer>[0]) {
   return new AccountAccessClient({
     serviceBaseUrl: "https://tryluke.dev",
@@ -61,7 +65,7 @@ function holder(accessClient: AccountAccessClient, signedIn: string | undefined)
 it.effect("asks the service for the signed-in account's access under its bearer", () =>
   Effect.gen(function* () {
     const { requests, client } = service([json({ admin: true })]);
-    assert.equal(yield* client.readAdmin(), true);
+    assert.deepEqual(yield* client.readAccess(), ADMIN);
     const [request] = requests;
     assert.equal(request?.url, "https://tryluke.dev/api/account/access");
     assert.equal(request?.init?.method, "GET");
@@ -73,23 +77,23 @@ it.effect("an admin's read is an admin, and a sign-out leaves no admin standing"
   Effect.gen(function* () {
     const { client } = service([json({ admin: true })]);
     const { held, account, published } = holder(client, "admin@luke.test");
-    assert.deepEqual(held.current(), { admin: false });
+    assert.deepEqual(held.current(), NOTHING);
 
     yield* held.refresh;
-    assert.deepEqual(held.current(), { admin: true });
-    assert.deepEqual(published, [{ admin: true }]);
+    assert.deepEqual(held.current(), ADMIN);
+    assert.deepEqual(published, [ADMIN]);
 
     // The gate closes as the account signs out, and its change event follows.
     account.key = undefined;
     yield* held.forget;
     yield* held.accountChanged;
-    assert.deepEqual(held.current(), { admin: false });
-    assert.deepEqual(published.at(-1), { admin: false });
+    assert.deepEqual(held.current(), NOTHING);
+    assert.deepEqual(published.at(-1), NOTHING);
 
     // The same account back is no admin until it is read again.
     account.key = "admin@luke.test";
     yield* held.accountChanged;
-    assert.deepEqual(held.current(), { admin: false });
+    assert.deepEqual(held.current(), NOTHING);
   }),
 );
 
@@ -103,8 +107,8 @@ it.effect("a sign-out the same account returned from before its change landed st
     yield* held.forget;
     yield* held.accountChanged;
     yield* held.accountChanged;
-    assert.deepEqual(held.current(), { admin: false });
-    assert.deepEqual(published.at(-1), { admin: false });
+    assert.deepEqual(held.current(), NOTHING);
+    assert.deepEqual(published.at(-1), NOTHING);
   }),
 );
 
@@ -116,11 +120,11 @@ it.effect("an admin's read is no answer for another account signed in after it",
 
     account.key = "member@luke.test";
     yield* held.accountChanged;
-    assert.deepEqual(held.current(), { admin: false });
-    assert.deepEqual(published.at(-1), { admin: false });
+    assert.deepEqual(held.current(), NOTHING);
+    assert.deepEqual(published.at(-1), NOTHING);
 
     yield* held.refresh;
-    assert.deepEqual(held.current(), { admin: false });
+    assert.deepEqual(held.current(), NOTHING);
   }),
 );
 
@@ -138,11 +142,11 @@ it.effect("a read answered after the account changed is kept for nobody", () =>
     };
 
     yield* held.refresh;
-    assert.deepEqual(held.current(), { admin: false });
+    assert.deepEqual(held.current(), NOTHING);
     assert.deepEqual(published, []);
 
     account.key = "admin@luke.test";
-    assert.deepEqual(held.current(), { admin: false });
+    assert.deepEqual(held.current(), NOTHING);
   }),
 );
 
@@ -174,8 +178,8 @@ it.effect("a read still out across a sign-out and the same account's return is d
     yield* Fiber.join(reading);
 
     assert.equal(held.requests.length, 1);
-    assert.deepEqual(access.current(), { admin: false });
-    assert.deepEqual(published, [{ admin: false }]);
+    assert.deepEqual(access.current(), NOTHING);
+    assert.deepEqual(published, [NOTHING]);
   }),
 );
 
@@ -191,12 +195,12 @@ it.effect("a read that fails, or answers no flag, is no admin", () =>
     for (const failure of failures) {
       const { held } = holder(service([failure]).client, "admin@luke.test");
       yield* held.refresh;
-      assert.deepEqual(held.current(), { admin: false });
+      assert.deepEqual(held.current(), NOTHING);
     }
     const refused = client(async () => {
       throw new Error("offline");
     });
-    assert.equal(yield* refused.readAdmin(), false);
+    assert.deepEqual(yield* refused.readAccess(), NOTHING);
   }),
 );
 
@@ -207,6 +211,17 @@ it.effect("nobody signed in asks the service nothing", () =>
     yield* held.refresh;
     assert.equal(requests.length, 0);
     assert.deepEqual(published, []);
-    assert.deepEqual(held.current(), { admin: false });
+    assert.deepEqual(held.current(), NOTHING);
   }),
+);
+
+it.effect(
+  "an account in the native-agents cohort reads as one, and a service that names no cohort reads as outside it",
+  () =>
+    Effect.gen(function* () {
+      const { client: cohort } = service([json({ admin: false, nativeAgents: true })]);
+      assert.deepEqual(yield* cohort.readAccess(), { admin: false, nativeAgents: true });
+      const { client: older } = service([json({ admin: true })]);
+      assert.deepEqual(yield* older.readAccess(), ADMIN);
+    }),
 );

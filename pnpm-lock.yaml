@@ -1218,6 +1218,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.0)
+      '@luke/credentials':
+        specifier: workspace:*
+        version: link:../credentials
       '@modelcontextprotocol/sdk':
         specifier: 1.32.1
         version: 1.32.1(zod@4.5.4)

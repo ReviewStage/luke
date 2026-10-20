@@ -281,6 +281,17 @@ export function useAdminAccess(): boolean {
 }
 
 /**
+ * Whether the signed-in account is in the native-agents cohort
+ * (`LUKE_NATIVE_AGENT_ACCOUNTS`), redrawn as it moves: what Settings draws a
+ * plan's sign-in by. Signed out, before the first read, or where the read
+ * failed, no account is. It only draws: the service's own cohort check
+ * decides which runtime an agent runs on.
+ */
+export function useNativeAgentsAccess(): boolean {
+  return useAppState()?.access.nativeAgents === true;
+}
+
+/**
  * Whether the platform this window runs on offers a capability, redrawn as
  * the document arrives: the one way a platform feature's tab, command, or
  * button asks whether to stand at all. Before the first read nothing is

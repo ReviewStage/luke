@@ -116,7 +116,13 @@ import {
   modelChoiceSchema,
 } from "./models-wire.js";
 import { planTemplateWriteRequestSchema } from "./plan-document-template.js";
-import { PROVIDER_KEY_QUERY, providerKeySaveRequestSchema } from "./provider-key-wire.js";
+import {
+  type ChatGptCredentialsSaveRequest,
+  type ChatGptHostAnswer,
+  chatGptCredentialsSaveRequestSchema,
+  PROVIDER_KEY_QUERY,
+  providerKeySaveRequestSchema,
+} from "./provider-key-wire.js";
 import {
   type ChaptersModelAnswerView,
   PULL_REQUEST_CHAPTERS_CALL_FAILURE,
@@ -499,6 +505,26 @@ export class HostedCodingAgentClient {
     const admitted = Result.getOrUndefined(readEither(providerKeySaveRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
+  }
+
+  /** The account's `ext_agent_host_id` for Luke's hosted runtime, which a ChatGPT sign-in names as its host. */
+  chatGptHost(): Effect.Effect<ChatGptHostAnswer | Failed, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.account.chatGptHost, undefined), {});
+  }
+
+  /**
+   * A ChatGPT sign-in the desktop completed, handed to the service once,
+   * answering the keys as they then stand and, where the service kept
+   * nothing, why; a sign-in the service would refuse by shape never travels.
+   */
+  saveChatGptCredentials(
+    credentials: ChatGptCredentialsSaveRequest,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(
+      readEither(chatGptCredentialsSaveRequestSchema)(credentials),
+    );
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.account.saveChatGptCredentials, admitted), {});
   }
 
   /** One provider's key of the kind named, an API key where none is, removed, answering the keys as they then stand. */

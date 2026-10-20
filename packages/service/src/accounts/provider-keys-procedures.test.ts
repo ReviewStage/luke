@@ -1,12 +1,22 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, type KeyObject, randomUUID, sign } from "node:crypto";
 import { it } from "@effect/vitest";
+import { chatGptSignIn } from "@luke/credentials";
+import { loopbackConsent } from "@luke/credentials/node";
+import {
+  CHATGPT_FAKE,
+  fakeChatGptAuthorizationServer,
+  grantedCallback,
+  returnToLoopback,
+  signingKeysAnswer,
+} from "@luke/credentials/testing";
 import { Database } from "@luke/database/core/query";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
 import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import {
+  type ChatGptCredentialsSaveRequest,
   chatGptHostAnswerSchema,
   FAST_ACCESS,
   PROVIDER_KEY_KIND,
@@ -26,7 +36,20 @@ import {
   recordingHttpClient,
 } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Cause, Clock, Effect, Layer, Logger, Option, Redacted, Result, Schema } from "effect";
+import {
+  Cause,
+  Clock,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Logger,
+  Option,
+  Redacted,
+  Result,
+  Schema,
+} from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../environment.js";
@@ -797,6 +820,60 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           assert.ok(!saved.text.includes(secret));
           assert.ok(!stored.includes(secret));
           assert.ok(logged.every((line) => !line.includes(secret)));
+        }
+      }),
+  );
+
+  it.effect(
+    "a desktop's Sign in with ChatGPT against OpenAI's authorization server, for the host the service named, is kept as the account's ChatGPT plan",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        // The service checks the ID token against the keys the fake OpenAI publishes.
+        const { owner, ask } = yield* openAccounts({
+          ring: KEK.ONE,
+          auth: (incoming) => signingKeysAnswer(incoming.url) ?? openAiAuth()(incoming),
+        });
+        const { extAgentHostId } = readHost((yield* ask(request(owner, { path: HOST_PATH }))).body);
+        const openai = fakeChatGptAuthorizationServer();
+        const opened = yield* Deferred.make<URL>();
+        const database = yield* Effect.context<Database | SqlClient.SqlClient>();
+        // The desktop's own sign-in, its save the service's own route, as the host posts it.
+        const signIn = chatGptSignIn<ProviderKeysAnswer>({
+          openConsent: loopbackConsent,
+          openExternal: (url) => {
+            Deferred.doneUnsafe(opened, Exit.succeed(openai.authorize(url)));
+          },
+          http: openai.http,
+        });
+        const save = (credentials: ChatGptCredentialsSaveRequest) =>
+          Effect.map(
+            ask(
+              request(owner, {
+                method: "PUT",
+                path: CREDENTIALS_PATH,
+                body: { ...credentials, scopes: [...credentials.scopes] },
+              }),
+            ),
+            keysOf,
+          ).pipe(Effect.provideContext(database));
+
+        const running = yield* Effect.forkChild(signIn.signIn({ extAgentHostId, save }));
+        const page = yield* Deferred.await(opened);
+        yield* Effect.orDie(returnToLoopback(page, grantedCallback(page)));
+        const kept = yield* Fiber.join(running);
+
+        assert.equal(page.searchParams.get("ext_agent_host_id"), extAgentHostId);
+        assert.ok(!("reason" in kept), "the sign-in was kept");
+        assert.equal(kept.subscriptions?.[0]?.kind, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
+        const rows = yield* listProviderKeyRows(owner, PROVIDER_KEY_KIND.CHATGPT_OAUTH);
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0]?.status, PROVIDER_KEY_STATUS.UNVERIFIED);
+        const stored = JSON.stringify(
+          yield* db.select().from(accountProviderKey).where(eq(accountProviderKey.userId, owner)),
+        );
+        for (const secret of [CHATGPT_FAKE.ACCESS_TOKEN, CHATGPT_FAKE.REFRESH_TOKEN]) {
+          assert.ok(!stored.includes(secret), "the row holds the sign-in sealed");
         }
       }),
   );

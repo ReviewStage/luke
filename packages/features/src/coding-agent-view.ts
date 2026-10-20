@@ -145,6 +145,22 @@ export const providerKeysAnswerViewSchema = EffectSchema.Union([providerKeysAnsw
 
 export type ProviderKeysAnswerView = typeof providerKeysAnswerViewSchema.Type;
 
+/**
+ * A ChatGPT sign-in, as the window hears it end: the keys as they then
+ * stand, the sign-in among their subscriptions; why nothing was kept, in a
+ * sentence for the row; that the developer withdrew it; or why there was no
+ * answer. Never a token: the sign-in's credentials go from the host to the
+ * service and nowhere else.
+ */
+export const chatGptSignInAnswerViewSchema = EffectSchema.Union([
+  providerKeysAnswerSchema,
+  EffectSchema.Struct({ refused: EffectSchema.String }),
+  EffectSchema.Struct({ cancelled: EffectSchema.Literal(true) }),
+  failed,
+]);
+
+export type ChatGptSignInAnswerView = typeof chatGptSignInAnswerViewSchema.Type;
+
 /** Saving a key, as the window asks it: the provider and the key, once. */
 export const providerKeySaveParamsSchema = providerKeySaveRequestSchema;
 

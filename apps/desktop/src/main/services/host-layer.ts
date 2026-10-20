@@ -36,6 +36,7 @@ interface HostSeamDependencies {
 function hostSeamLayersFor(dependencies: HostSeamDependencies) {
   const { config, cipher } = dependencies;
   const { runMode } = config;
+  const consent = Layer.succeed(SignInConsent, { open: loopbackConsent });
   return Layer.mergeAll(
     Layer.succeed(StateRoot, config.stateRoot),
     Layer.succeed(RunMode, runMode),
@@ -46,14 +47,13 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(VoiceSocket, openVoiceSocketOverWs),
     Layer.succeed(TerminalSocket, openTerminalSocketOverWs),
     // The account is the OAuth sign-in, its tokens sealed by this Mac's
-    // cipher. The sign-in's consent is a loopback on this Mac: the browser
-    // hands the code back to a `node:http` listener on 127.0.0.1.
+    // cipher. Every sign-in's consent is a loopback on this Mac: the browser
+    // hands the code back to a `node:http` listener on 127.0.0.1, the
+    // account's and ChatGPT's alike.
+    consent,
     Layer.provide(
       oauthAccountSourceLayer,
-      Layer.merge(
-        Layer.succeed(SecretCipher, cipher),
-        Layer.succeed(SignInConsent, { open: loopbackConsent }),
-      ),
+      Layer.merge(Layer.succeed(SecretCipher, cipher), consent),
     ),
     // The protocol's shutdown answers accepted at once; the quit that follows
     // is the one drain, which the entry's `before-quit` asks for.

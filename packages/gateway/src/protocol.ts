@@ -216,8 +216,12 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_READ: "providerKeys.read",
   /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
   PROVIDER_KEYS_SAVE: "providerKeys.save",
-  /** One provider's key removed on the service; the keys as they then stand. */
+  /** One provider's key of the kind named removed on the service, an API key where none is; the keys as they then stand. */
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** A ChatGPT sign-in for Luke's hosted runtime, run on this Mac through the browser and handed to the service; the keys as they then stand, or why nothing was kept. Never a token. */
+  CHATGPT_SIGN_IN: "chatGpt.signIn",
+  /** The ChatGPT sign-in waiting on the browser, withdrawn. */
+  CHATGPT_SIGN_IN_CANCEL: "chatGpt.cancelSignIn",
   /** The member's own GitHub token, read from the service now as its login, hint, and status; never the token. */
   GITHUB_TOKEN_READ: "githubToken.read",
   /** The member's GitHub token saved on the service, carried once in the params; the token as it then stands, or why nothing was kept. */

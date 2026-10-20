@@ -68,40 +68,50 @@ interface Answer {
 }
 
 /** An admin and a member behind their own bearers, and the procedures answering on the test's database and clock. */
-const openAccounts = Effect.gen(function* () {
-  const db = yield* Database;
-  const [admin, member] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
-  for (const id of [admin, member]) {
-    yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
-  }
-  yield* db.update(user).set({ role: USER_ROLE.ADMIN }).where(eq(user.id, admin));
-  const bearers = new Map([
-    [`Bearer ${admin}`, admin],
-    [`Bearer ${member}`, member],
-  ]);
-  const procedures = accountProcedures({
-    resolveUserId: (incoming) =>
-      Effect.succeed(
-        Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
-      ),
-    // This suite deletes nothing, so it retires no session and reaches no eve.
-    eveOrigin: () => undefined,
-    standingSessions: () => Effect.die(new Error("this suite deletes no account")),
-    deleteUser: deleteAccount,
-    readPreferences: readAccountPreferences,
-    readRole: readAccountRole,
-    anthropicFastAccess,
-    writePreferences: writeAccountPreferences,
-    readPlanTemplate,
-    writePlanTemplate,
-    listPlanTemplateRevisions: listTemplateRevisions,
-    readPlanTemplateRevision: readTemplateRevision,
-    restorePlanTemplate,
+const openAccounts = () =>
+  Effect.gen(function* () {
+    const db = yield* Database;
+    const [admin, member] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
+    for (const id of [admin, member]) {
+      yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
+    }
+    yield* db.update(user).set({ role: USER_ROLE.ADMIN }).where(eq(user.id, admin));
+    const bearers = new Map([
+      [`Bearer ${admin}`, admin],
+      [`Bearer ${member}`, member],
+    ]);
+    const procedures = accountProcedures({
+      resolveUserId: (incoming) =>
+        Effect.succeed(
+          Option.fromNullishOr(bearers.get(incoming.headers.get("authorization") ?? "")),
+        ),
+      // This suite deletes nothing, so it retires no session and reaches no eve.
+      eveOrigin: () => undefined,
+      standingSessions: () => Effect.die(new Error("this suite deletes no account")),
+      deleteUser: deleteAccount,
+      readPreferences: readAccountPreferences,
+      readRole: readAccountRole,
+      anthropicFastAccess,
+      writePreferences: writeAccountPreferences,
+      readPlanTemplate,
+      writePlanTemplate,
+      listPlanTemplateRevisions: listTemplateRevisions,
+      readPlanTemplateRevision: readTemplateRevision,
+      restorePlanTemplate,
+    });
+    return {
+      admin,
+      member,
+      ask: (request: Request, environment: HostedEnvironmentValues = NO_ENVIRONMENT) =>
+        answer(procedures, request, environment),
+    };
   });
-  return { admin, member, ask: (request: Request) => answer(procedures, request) };
-});
 
-const answer = (procedures: ReturnType<typeof accountProcedures>, request: Request) =>
+const answer = (
+  procedures: ReturnType<typeof accountProcedures>,
+  request: Request,
+  environment: HostedEnvironmentValues,
+) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     // The procedures run on oRPC's own fiber, so they are handed the test's clock and services.
@@ -109,7 +119,7 @@ const answer = (procedures: ReturnType<typeof accountProcedures>, request: Reque
       Layer.succeed(SqlClient.SqlClient, client),
       Layer.succeed(Database, yield* Database),
       Layer.succeed(Clock.Clock, yield* Clock.Clock),
-      Layer.succeed(HostedEnvironment, NO_ENVIRONMENT),
+      Layer.succeed(HostedEnvironment, environment),
       noNetwork,
       modelCatalogOf([]),
       // Only a delete asks Connect anything, and this suite deletes nothing.
@@ -134,16 +144,16 @@ function request(bearer: string | undefined, query = "") {
   });
 }
 
-const granted = (admin: boolean): Answer => ({
+const granted = (admin: boolean, nativeAgents = false): Answer => ({
   status: HOSTED_HTTP_STATUS.OK,
   cacheControl: "private, no-store",
-  body: { admin },
+  body: { admin, nativeAgents },
 });
 
 it.layer(getTestDB())("the account's access", (it) => {
   it.effect("an admin reads that it is one, and a member that it is not", () =>
     Effect.gen(function* () {
-      const { admin, member, ask } = yield* openAccounts;
+      const { admin, member, ask } = yield* openAccounts();
       assert.deepEqual(yield* ask(request(admin)), granted(true));
       assert.deepEqual(yield* ask(request(member)), granted(false));
     }),
@@ -151,14 +161,14 @@ it.layer(getTestDB())("the account's access", (it) => {
 
   it.effect("names the bearer's own account, whatever the query names", () =>
     Effect.gen(function* () {
-      const { admin, member, ask } = yield* openAccounts;
+      const { admin, member, ask } = yield* openAccounts();
       assert.deepEqual(yield* ask(request(member, `?userId=${admin}`)), granted(false));
     }),
   );
 
   it.effect("a role that is not the admin role is no admin, nor is a role left empty", () =>
     Effect.gen(function* () {
-      const { member, ask } = yield* openAccounts;
+      const { member, ask } = yield* openAccounts();
       const db = yield* Database;
       yield* db.update(user).set({ role: "Admin" }).where(eq(user.id, member));
       assert.deepEqual(yield* ask(request(member)), granted(false));
@@ -167,9 +177,22 @@ it.layer(getTestDB())("the account's access", (it) => {
     }),
   );
 
+  it.effect(
+    "an account the native-agents cohort names reads that it is in it, and one it does not that it is not",
+    () =>
+      Effect.gen(function* () {
+        const { admin, member, ask } = yield* openAccounts();
+        // The cohort names the member alone, read from the deployment's environment as it stands.
+        const cohort = { ...NO_ENVIRONMENT, nativeAgentAccounts: [member] };
+        assert.deepEqual(yield* ask(request(member), cohort), granted(false, true));
+        assert.deepEqual(yield* ask(request(admin), cohort), granted(true, false));
+        assert.deepEqual(yield* ask(request(member)), granted(false, false));
+      }),
+  );
+
   it.effect("a caller no bearer names is refused, and learns nothing", () =>
     Effect.gen(function* () {
-      const { admin, ask } = yield* openAccounts;
+      const { admin, ask } = yield* openAccounts();
       const refused: Answer = {
         status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
         cacheControl: null,
