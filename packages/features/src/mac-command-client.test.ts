@@ -79,6 +79,21 @@ it.effect("a held read names this Mac's kinds and answers the commands claimed f
   }),
 );
 
+it.effect(
+  "a shell command from a service before kinds, which names none, is read as a shell command",
+  () =>
+    Effect.gen(function* () {
+      const { kind: _kind, ...older } = COMMAND;
+      const api = fakeCloudApi({
+        "GET /api/mac-commands": { answer: () => ({ commands: [older] }) },
+      });
+
+      const waiting = yield* Effect.provide(client().waiting([MAC_COMMAND_KIND.SHELL]), api.layer);
+
+      assert.deepEqual(waiting, [COMMAND]);
+    }),
+);
+
 it.effect("a held read outlasts the service's hold, then gives up as nothing", () =>
   Effect.gen(function* () {
     const silent = recordingHttpClient(() => new Promise<Response>(() => undefined));

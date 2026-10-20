@@ -1,4 +1,4 @@
-import { Schema as EffectSchema } from "effect";
+import { Effect, Schema as EffectSchema } from "effect";
 import { wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -125,9 +125,22 @@ const unknownMacCommandKindSchema = EffectSchema.String.check(
   EffectSchema.makeFilter((kind) => !isMacCommandKind(kind)),
 ).pipe(EffectSchema.brand("UnknownMacCommandKind"));
 
+/**
+ * A shell command as the Mac reads one: with its kind, or without one, as
+ * a service from before kinds wrote it, which claimed the command before it
+ * answered and so must not have it dropped.
+ */
+const macShellCommandReadSchema = macShellCommandSchema.mapFields((fields) => ({
+  ...fields,
+  kind: fields.kind.pipe(
+    EffectSchema.withDecodingDefaultKey(Effect.succeed(MAC_COMMAND_KIND.SHELL)),
+  ),
+}));
+
 /** A command as the Mac reads one: one of a kind this build knows, or the id and kind alone of one it does not. */
 const macCommandReadSchema = EffectSchema.Union([
-  ...macCommandSchema.members,
+  macShellCommandReadSchema,
+  macBrowserCommandSchema,
   EffectSchema.Struct({ id: wireUuidSchema, kind: unknownMacCommandKindSchema }),
 ]);
 
