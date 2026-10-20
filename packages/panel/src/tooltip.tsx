@@ -473,9 +473,7 @@ export function Tooltip({
     };
   }, [up, region, leave, linger, hide]);
 
-  // A hint a finger opened is a popover: a press anywhere but on its
-  // control or on a card standing takes it down, as Escape and a scroll do
-  // (above). Its control's own press closes it again (`onPointerDown`).
+  // A hint a finger opened is a popover, which a press off its control and its cards takes down.
   const touchedUp = shown?.touched === true;
   useEffect(() => {
     if (!touchedUp) return;
@@ -519,8 +517,7 @@ export function Tooltip({
       hide();
       const control = event.currentTarget;
       if (!fingerPress.current || shownAtPress.current || label === undefined) return;
-      // Note that the press may land on a control inside the hint's words, a
-      // choice bar the hint names, whose hold opens the hint as its own would.
+      // Note that an inner control holds for the hint because its tap does not open it.
       const pressed = event.target instanceof Element ? event.target : control;
       if (pressed.closest(OWN_CONTROL) === null || pressed.closest(LONG_PRESS_MENU) !== null) {
         return;
@@ -541,8 +538,7 @@ export function Tooltip({
       const { target } = event;
       const onControl = target instanceof Element && target.closest(OWN_CONTROL) !== null;
       if (onControl || event.currentTarget.closest(OWN_CONTROL) !== null) return;
-      // Note that the tap is spent on the hint, so what holds the words, a
-      // message whose tap shows its actions, leaves them be.
+      // Note that the tap is spent here, so a message holding the words shows no actions for it.
       event.preventDefault();
       show(event.currentTarget, true);
     },
@@ -554,9 +550,7 @@ export function Tooltip({
     },
     onBlur: (event) => {
       own.onBlur?.(event);
-      // A press on the card takes focus from its control, and leaves the card
-      // standing, as does any press while a finger's hint stands, which a
-      // press elsewhere takes down itself.
+      // A press on the card, or anywhere while a finger's hint stands, leaves it to its own close.
       if (!overCard.current && latest()?.touched !== true) hide();
     },
   });
