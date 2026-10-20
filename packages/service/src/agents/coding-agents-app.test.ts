@@ -5571,6 +5571,20 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.deepEqual(threadOf(again.item), threadOf(sent.item), "a resend writes nothing");
         assert.equal(eve.sent.length, before + 1, "and reaches the agent once");
         assert.equal(countedFor(inbox.owner, SERVER_EVENT.INBOX_ANSWER_SEND), 1);
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        assert.deepEqual(
+          yield* inbox.message(item.id, { ...body, text: "Ship it, and tell the team." }),
+          invalid,
+          "other words under the key it was taken by are refused",
+        );
+        assert.deepEqual(
+          yield* inbox.message(item.id, { ...body, answers: { ...answers, choices: ["Wait"] } }),
+          invalid,
+          "another answer under that key is refused",
+        );
+        assert.equal(eve.sent.length, before + 1, "and neither reaches the agent");
+        const standing = (yield* inbox.read()).items.find((each) => each.id === item.id);
+        assert.deepEqual(threadOf(standing), threadOf(sent.item), "the thread holds what it heard");
 
         assert.deepEqual(
           yield* inbox.message(item.id, {
@@ -5578,7 +5592,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
             clientKey: randomUUID(),
             answers: { ...answers, choices: ["Wait"] },
           }),
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          invalid,
           "an ask answered already takes no second answer",
         );
         assert.equal(eve.sent.length, before + 1);
