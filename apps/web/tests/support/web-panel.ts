@@ -134,13 +134,18 @@ export async function drawPanel() {
     [...element.querySelectorAll("button")].findLast(
       (one) => one.getAttribute("aria-label") === label,
     );
+  const click = (label: string) => {
+    const button = buttonOf(label);
+    assert.ok(button !== undefined, `a ${label} button stands`);
+    button.click();
+  };
   return {
     shows: (label: string) => element.querySelector(`[aria-label="${label}"]`) !== null,
     offers: (label: string) => buttonOf(label) !== undefined,
+    /** Presses `label` without waiting on what follows: for a press that moves the browser, inside `travel`, which waits for it to land. */
+    click,
     press: async (label: string) => {
-      const button = buttonOf(label);
-      assert.ok(button !== undefined, `a ${label} button stands`);
-      await act(async () => button.click());
+      await act(async () => click(label));
       await settle();
     },
   };

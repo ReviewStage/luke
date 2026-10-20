@@ -54,8 +54,8 @@ it.effect(
         const shown = addressBar();
         const entries = window.history.length;
 
-        // Close steps back to the plan, as Back does, so Back then has no panel to open.
-        await panel.press("Close panel");
+        // Close steps back to the plan as Back does, its traversal awaited so no later travel hears it.
+        await travel(() => panel.click("Close panel"));
         assert.ok(panel.offers("Show panel"), "Close shuts the side panel");
         assert.equal(addressBar(), FIXTURE_TASK_PATH);
         assert.equal(window.history.length, entries, "and pushes nothing");
