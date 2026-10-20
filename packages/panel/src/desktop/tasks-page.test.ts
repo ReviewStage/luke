@@ -44,6 +44,8 @@ const ACME = {
   memberCount: 1,
 } as const satisfies Workspace;
 
+const BETA = { ...ACME, id: "workspace-beta", name: "Beta" } as const satisfies Workspace;
+
 const MEMBERS: readonly WorkspaceMember[] = [
   { userId: DEAN, name: "Dean Stratakos", email: "dean@acme.dev", role: "owner" },
 ];
@@ -127,27 +129,30 @@ async function mountPage(): Promise<HTMLElement> {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const control = tasksControl({
-    tasks: [...TASKS],
-    inbox: WAITING,
-    workspace: ACME,
-    workspaces: [ACME],
-    me: DEAN,
-    listRead: true,
-    onSelect: (taskId) => opened.push(taskId),
-    boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
-  });
-  act(() =>
+  const registry = AtomRegistry.make();
+  const draw = (workspace: Workspace) => {
+    const control = tasksControl({
+      tasks: TASKS.map((each) => ({ ...each, workspaceId: workspace.id })),
+      inbox: WAITING,
+      workspace,
+      workspaces: [ACME, BETA],
+      me: DEAN,
+      listRead: true,
+      onSelect: (taskId) => opened.push(taskId),
+      boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
+    });
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE }),
-      ),
-    ),
-  );
+      onRegistry(registry, createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE })),
+    );
+  };
+  listWorkspace = (workspace) => act(() => draw(workspace));
+  act(() => draw(ACME));
   await act(async () => undefined);
   return container;
 }
+
+/** Lists another workspace on the page last mounted, as the sidebar's switcher does. */
+let listWorkspace: (workspace: Workspace) => void = () => undefined;
 
 /** Each group of the List: its name and its rows' keys, in order. */
 function groups(page: HTMLElement): [string, string[]][] {
@@ -220,13 +225,15 @@ function choose(...names: string[]): void {
   }
 }
 
-/** Closes whatever menu stands, as Escape does. */
+/** Closes whatever menus stand, a submenu and then its menu, as Escape does each. */
 function closeMenus(): void {
-  act(() => {
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
-    );
-  });
+  while (document.querySelector('[role="menu"]:not([data-leaving])') !== null) {
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+  }
 }
 
 test("Done shows its group once the View options ask for it, kept on this Mac", async () => {
@@ -283,6 +290,23 @@ test("a filter chosen here keeps another workspace's filter that another tab kep
     ...elsewhere,
     [ACME.id]: { priority: [TASK_PRIORITY.HIGH] },
   });
+});
+
+test("with storage refusing every write, each workspace's filter still stands while the page does", async () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("quota");
+  });
+  const page = await mountPage();
+  openOptions(page, "Filter");
+  choose("Priority", "Urgent");
+  closeMenus();
+  listWorkspace(BETA);
+  openOptions(page, "Filter");
+  choose("Priority", "Low");
+  closeMenus();
+  listWorkspace(ACME);
+
+  assert.deepEqual(groups(page), [["Todo", ["ACME-40"]]]);
 });
 
 test("grouped by priority, the pins not leading, the List runs from the most pressing, and a property turned off leaves every row", async () => {
