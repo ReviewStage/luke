@@ -5746,13 +5746,10 @@ test("a replaced ask is struck through and says so, a withdrawn one says why, an
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
 });
 
-test("an ask of a type this build does not know reads as a line naming a newer Luke, and the box still replies", async () => {
+test("an ask of a type this build does not know reads as a line naming a newer Luke, saying who it waits on while open, and the box still replies", async () => {
   const poll = Schema.decodeUnknownSync(inboxReadAskSchema)({ type: "poll", status: "open" });
   const pane = await mountThread(threadItem([{ ...askingMessage(EXPIRY_ASK), ask: poll }]));
-  assert.equal(
-    pane.querySelector('[data-inbox-ask="newer"]')?.textContent,
-    "Answer this in a newer Luke.",
-  );
+  assert.deepEqual(askBoxes(pane), [["newer", "Answer this in a newer Luke.Waiting on you"]]);
   assert.equal(sendWords(pane), "Reply");
 });
 

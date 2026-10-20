@@ -1804,6 +1804,7 @@ function AskBox({
       <div className="inbox-ask" data-inbox-ask="newer">
         <div className="inbox-ask-head">
           <Text tone={TEXT_TONE.MUTED}>{NEWER_LUKE_ASK}</Text>
+          {ask.status === INBOX_ASK_STATUS.OPEN ? <Waiting on={waitingOn} /> : null}
         </div>
       </div>
     );
