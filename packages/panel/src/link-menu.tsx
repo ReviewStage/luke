@@ -44,8 +44,16 @@ const LINK_MENU_LABEL = "Link";
 /** What the menu's opening item is called. */
 const OPEN_LINK_LABEL = "Open link";
 
-/** What words being edited stand in: an element the editor made editable, and not one inside it it made fixed. */
-const EDITED_WORDS = '[contenteditable]:not([contenteditable="false"])';
+/**
+ * Whether `element` stands in words being edited: the nearest element that
+ * says whether it is editable says it is. Note that a node the editor holds
+ * fixed, a mention's chip in a plan being edited, says it is not, so the
+ * chip's own press opens it, as a click would.
+ */
+function inEditedWords(element: Element): boolean {
+  const said = element.closest("[contenteditable]");
+  return said !== null && said.getAttribute("contenteditable") !== "false";
+}
 
 /** The opener of each place holding words being edited, by the element that holds them (`useEditedLinksHost`). */
 const EDITED_LINK_OPENERS = new WeakMap<Element, (href: string) => void>();
@@ -115,7 +123,7 @@ export function LinkMenu(): React.JSX.Element | null {
             label: OPEN_LINK_LABEL,
             icon: <ExternalLinkIcon aria-hidden="true" />,
             onSelect: () => {
-              if (element.closest(EDITED_WORDS) === null) element.click();
+              if (!inEditedWords(element)) element.click();
               else (editedLinkOpenerOf(element) ?? openLink)(href);
             },
           },

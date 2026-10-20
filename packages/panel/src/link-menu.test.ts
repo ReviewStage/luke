@@ -162,6 +162,36 @@ test("a link in words being edited opens where the words stand, through the plac
   assert.deepEqual(openedHere, [ADDRESS]);
 });
 
+test("a chip the editor holds fixed in words being edited opens through its own press", () => {
+  const pressed: string[] = [];
+  mount(
+    createElement(
+      OpenHereProvider,
+      { value: () => assert.fail("a fixed chip opens through its own press") },
+      createElement(
+        "div",
+        { contentEditable: true, suppressContentEditableWarning: true },
+        createElement(
+          "span",
+          { contentEditable: false },
+          createElement(
+            "button",
+            { type: "button", "data-link-href": ADDRESS, onClick: () => pressed.push(ADDRESS) },
+            "app.ts",
+          ),
+        ),
+      ),
+    ),
+  );
+  const chip = document.querySelector("button");
+  assert.ok(chip);
+
+  rightClick(chip);
+  choose("Open link");
+
+  assert.deepEqual(pressed, [ADDRESS]);
+});
+
 /** A row hanging a menu of its own on a right-click, as a task's row does, around a link. */
 function RowWithMenu(): React.JSX.Element {
   const { contextMenu, open } = useMenu(true);
