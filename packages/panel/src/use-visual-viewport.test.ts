@@ -73,10 +73,22 @@ function standViewport(viewport: FakeVisualViewport | undefined): void {
     configurable: true,
     get: () => viewport?.window.height ?? WINDOW_HEIGHT,
   });
+  // A window that keeps its pan, as jsdom has none to undo; a test whose engine undoes it says so (`undoesPan`).
+  Object.defineProperty(window, "scrollTo", { configurable: true, value: () => undefined });
   // The initial containing block, which jsdom answers as 0: the layout viewport's height in every engine, a pinch or not.
   Object.defineProperty(document.documentElement, "clientHeight", {
     configurable: true,
     get: () => viewport?.layoutHeight ?? WINDOW_HEIGHT,
+  });
+}
+
+/** A window whose `scrollTo(0, 0)` brings a panned viewport back to its top, as Safari's does. */
+function undoesPan(viewport: FakeVisualViewport): void {
+  Object.defineProperty(window, "scrollTo", {
+    configurable: true,
+    value: () => {
+      viewport.offsetTop = 0;
+    },
   });
 }
 
@@ -106,6 +118,7 @@ afterEach(() => {
   Reflect.deleteProperty(window, "visualViewport");
   Reflect.deleteProperty(window, "innerWidth");
   Reflect.deleteProperty(window, "innerHeight");
+  Reflect.deleteProperty(window, "scrollTo");
   Reflect.deleteProperty(document.documentElement, "clientHeight");
   document.body.replaceChildren();
 });
@@ -204,4 +217,60 @@ test("a panel taken down leaves the window to the tokens' own height", () => {
   assert.equal(readOverBody("--luke-viewport-top"), "");
   assert.equal(readOverBody("--luke-stage-height"), "");
   assert.equal(readOverBody("--luke-keyboard-inset"), "");
+});
+
+test("in WebKit the keyboard's pan is undone, so the stage stays at the window's top and ends where the keyboard begins", () => {
+  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
+  standViewport(viewport);
+  undoesPan(viewport);
+  mount();
+
+  // Safari opens a keyboard 320px tall and pans the page up to the field under it.
+  act(() => viewport.change({ height: 480, offsetTop: 320 }, "resize"));
+
+  assert.equal(viewport.offsetTop, 0, "the pan is undone");
+  assert.equal(readOverBody("--luke-viewport-top"), "0px");
+  assert.equal(readOverBody("--luke-stage-height"), "480px");
+  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+});
+
+test("a pinch's pan is the developer's own and is never undone", () => {
+  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
+  standViewport(viewport);
+  undoesPan(viewport);
+  mount();
+
+  act(() => viewport.change({ height: 400, scale: 2 }, "resize"));
+  act(() => viewport.change({ height: 400, offsetTop: 250, scale: 2 }, "scroll"));
+
+  assert.equal(viewport.offsetTop, 250);
+  assert.equal(readOverBody("--luke-viewport-top"), "0px");
+});
+
+test("a keyboard rising over a focused field scrolls its caret into view within its own column, and one over nothing focused scrolls nothing", () => {
+  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
+  standViewport(viewport);
+  undoesPan(viewport);
+  // A column 700 tall holding more than it shows, and words in it to type in, the caret 620 down the window.
+  const column = document.body.appendChild(document.createElement("div"));
+  column.style.overflowY = "auto";
+  Object.defineProperty(column, "scrollHeight", { configurable: true, value: 2000 });
+  Object.defineProperty(column, "clientHeight", { configurable: true, value: 700 });
+  column.getBoundingClientRect = () => DOMRect.fromRect({ y: 0, height: 700, width: 390 });
+  const field = column.appendChild(document.createElement("div"));
+  field.contentEditable = "true";
+  Object.defineProperty(field, "isContentEditable", { configurable: true, value: true });
+  field.getBoundingClientRect = () => DOMRect.fromRect({ y: 600, height: 20, width: 390 });
+  mount();
+
+  act(() => viewport.change({ height: 480, offsetTop: 320 }, "resize"));
+  assert.equal(column.scrollTop, 0, "nothing was focused");
+  act(() => viewport.change({ height: 800, offsetTop: 0 }, "resize"));
+
+  field.tabIndex = 0;
+  field.focus();
+  act(() => viewport.change({ height: 480, offsetTop: 320 }, "resize"));
+
+  // The caret's foot at 620 stands under the keyboard's top at 480, kept 24 above it.
+  assert.equal(column.scrollTop, 620 + 24 - 480);
 });

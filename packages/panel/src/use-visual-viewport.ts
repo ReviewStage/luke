@@ -28,6 +28,17 @@
  * window that shrinks for the keyboard (Android's `resizes-content`) shrinks
  * it too, so no inset is read there; at the page's own scale `innerHeight`
  * stays the reference, as before.
+ *
+ * iOS Safari opens its keyboard over the page and pans the visual viewport
+ * down to the focused field, so the whole page slides up, and a stage that
+ * followed the pan slid back down after it; WebKit does not redraw the caret
+ * through that move, so it stood a keyboard's height from the words. So at
+ * the page's own scale the pan is undone (`scrollTo(0, 0)`): the stage stays
+ * at the window's top, ends where the keyboard begins, and the caret of the
+ * field focused is scrolled into view within its own column, as a native app
+ * keeps it above the keyboard. Where an engine keeps its pan anyway, the
+ * stage still follows it, as before. A pinch's pan is the developer's own and
+ * is never undone, and a window that shrinks for the keyboard pans nothing.
  */
 
 import { visibleViewport } from "@luke/ui/visible-viewport";
@@ -43,9 +54,52 @@ const KEYBOARD_INSET = "--luke-keyboard-inset";
 /** How far from 1 a visual viewport's scale may stand and still be the page at its own scale, for a phone's rounding. */
 const UNZOOMED_TOLERANCE = 0.01;
 
+/** How far above the keyboard a focused field's caret is kept, in CSS pixels. */
+const CARET_MARGIN = 24;
+
 /** Whether the page is drawn at its own scale rather than pinch-zoomed. */
 function unzoomed(viewport: VisualViewport): boolean {
   return Math.abs(viewport.scale - 1) <= UNZOOMED_TOLERANCE;
+}
+
+/** The nearest box around `element` that scrolls its content up and down; none where nothing does. */
+function scrollerOf(element: Element): HTMLElement | undefined {
+  for (let at = element.parentElement; at !== null; at = at.parentElement) {
+    const { overflowY } = getComputedStyle(at);
+    if ((overflowY === "auto" || overflowY === "scroll") && at.scrollHeight > at.clientHeight) {
+      return at;
+    }
+  }
+  return undefined;
+}
+
+/** Where the caret of the focused field stands in the window: the selection's box, or the field's own where the selection draws none. */
+function caretBox(field: Element): DOMRect {
+  const selection = window.getSelection();
+  const range =
+    selection !== null && selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined;
+  // Note that a range's box is read as possibly missing, since a page with no layout, as a test's is, draws none.
+  const measured: Partial<Pick<Range, "getBoundingClientRect">> | undefined = range;
+  const box = measured?.getBoundingClientRect?.();
+  return box === undefined || (box.top === 0 && box.bottom === 0)
+    ? field.getBoundingClientRect()
+    : box;
+}
+
+/**
+ * The focused field's caret scrolled up into view within its own column,
+ * above `bottom`, where the keyboard now covers it; nothing while no field
+ * is focused.
+ */
+function caretAboveKeyboard(bottom: number): void {
+  const field = document.activeElement;
+  if (!(field instanceof HTMLElement)) return;
+  const typed = field.isContentEditable || field.matches("textarea, input");
+  const column = typed ? scrollerOf(field) : undefined;
+  if (column === undefined) return;
+  const below =
+    caretBox(field).bottom + CARET_MARGIN - Math.min(bottom, column.getBoundingClientRect().bottom);
+  if (below > 0) column.scrollTop += below;
 }
 
 /**
@@ -61,13 +115,17 @@ export function useVisualViewport(): void {
     const root = document.documentElement.style;
     /** Where the stage begins, as last measured at the page's own scale. */
     let top = 0;
+    /** How much of the window the keyboard covered as last measured. */
+    let covered = 0;
     const write = () => {
       let layout: number;
       let bottom: number;
       if (unzoomed(viewport)) {
-        // A panned viewport (`offsetTop`) is seen, not covered: what stands
-        // above it is the top's, and only what stands below its foot is the
-        // keyboard's.
+        // The keyboard's pan undone, so the stage stays at the window's top.
+        if (viewport.offsetTop > 0 || window.scrollY > 0) window.scrollTo(0, 0);
+        // A viewport still panned (`offsetTop`) is seen, not covered: what
+        // stands above it is the top's, and only what stands below its foot
+        // is the keyboard's.
         const seen = visibleViewport();
         top = seen.top;
         layout = window.innerHeight;
@@ -81,6 +139,9 @@ export function useVisualViewport(): void {
       root.setProperty(VIEWPORT_TOP, `${top}px`);
       root.setProperty(STAGE_HEIGHT, `${bottom - top}px`);
       root.setProperty(KEYBOARD_INSET, `${inset}px`);
+      // A keyboard that rose, or grew, over the focused field keeps its caret in view.
+      if (inset > covered) caretAboveKeyboard(bottom);
+      covered = inset;
     };
     write();
     viewport.addEventListener("resize", write);
