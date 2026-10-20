@@ -63,7 +63,8 @@ export function Message({ className, from, onClick, ...props }: MessageProps): R
       data-actions-shown={actionsShown ? "true" : undefined}
       onClick={(event) => {
         onClick?.(event);
-        if (!window.matchMedia(NO_HOVER).matches) return;
+        // A tap spent on something of the message's own, a hint it opened, shows nothing more.
+        if (event.defaultPrevented || !window.matchMedia(NO_HOVER).matches) return;
         if (window.getSelection()?.isCollapsed === false) return;
         if (event.target instanceof Element && event.target.closest(OWN_CONTROL) !== null) return;
         setActionsShown((shown) => !shown);

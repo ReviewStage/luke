@@ -65,6 +65,7 @@ import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { useAppState, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
+import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { moveToSectionEntry, useSectionDialogs } from "./sidebar-sections.js";
 import { TaskStatusMark, taskCardOf } from "./task-card.js";
 
@@ -384,6 +385,8 @@ function useTaskMenu(
   const moving = useMoveTaskDialog(tasks, task);
   const copy = useCopyToast();
   const { open, drawn, close, trigger, contextMenu } = useMenu(tasks.shown && doors.drawn);
+  // The place the row stands in a list that reorders, which the menu moves it from under a finger; none for the toolbar's ⋯.
+  const place = useRowPlace();
   // Note that an archived task stands in no section, so it is offered none until it is brought back.
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
@@ -397,20 +400,23 @@ function useTaskMenu(
         label="Task actions"
         menu={drawn}
         footer={task === undefined ? undefined : <TaskMenuFooter tasks={tasks} task={task} />}
-        groups={taskActionGroups(tasks, taskId, {
-          rename: doors.rename,
-          askDelete: deletion.ask,
-          archive,
-          askMove: moving.ask,
-          copy,
-          section,
-          read: {
-            unread: doors.unread,
-            onMark: (unread) => {
-              if (task !== undefined) reads.mark(task, unread);
+        groups={withRowMoves(
+          taskActionGroups(tasks, taskId, {
+            rename: doors.rename,
+            askDelete: deletion.ask,
+            archive,
+            askMove: moving.ask,
+            copy,
+            section,
+            read: {
+              unread: doors.unread,
+              onMark: (unread) => {
+                if (task !== undefined) reads.mark(task, unread);
+              },
             },
-          },
-        })}
+          }),
+          place,
+        )}
         onClose={close}
       />
     );

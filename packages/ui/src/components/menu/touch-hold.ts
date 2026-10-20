@@ -1,5 +1,5 @@
 /**
- * touch-hold.ts -- a touch held still on an element with a context menu opens that menu, as a long press does on a phone: `menu.tsx`'s `useMenu` alone uses it.
+ * touch-hold.ts -- a touch held still on an element with a context menu opens that menu, as a long press does on a phone: `menu.tsx`'s `useMenu` uses it, and so does an app's hover hint over a control a tap presses.
  *
  * The one place in the menu that arms a raw timer, kept apart so the
  * repository's raw-timer allowlist (`tools/anti-slop/effect-edges.json`)
@@ -42,7 +42,7 @@ function refusesMenu(target: EventTarget, carrier: HTMLElement): boolean {
 }
 
 /**
- * A touch's long press on a context menu's element, `useMenu`'s alone; it
+ * A touch's long press on an element, a context menu's or a hint's; it
  * hands the point the touch went down at to `open` once the hold is done.
  *
  * Note that the touch is followed at the window's capture phase rather than

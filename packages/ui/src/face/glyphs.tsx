@@ -249,6 +249,26 @@ export function ArrowRightIcon(): React.JSX.Element {
   );
 }
 
+/** An arrow pointing up: a row moved one place up its list. */
+export function ArrowUpIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 19V5" />
+      <path d="m5.4 11.6 6.6-6.6 6.6 6.6" />
+    </Glyph>
+  );
+}
+
+/** An arrow pointing down: a row moved one place down its list. */
+export function ArrowDownIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 5v14" />
+      <path d="m5.4 12.4 6.6 6.6 6.6-6.6" />
+    </Glyph>
+  );
+}
+
 /** Sound leaving the machine: everything about how Luke is heard. */
 export function SpeakerIcon(): React.JSX.Element {
   return (

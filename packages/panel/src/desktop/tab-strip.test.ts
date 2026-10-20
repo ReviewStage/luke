@@ -7,7 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
-import { Tab, TabStrip } from "./tab-strip.js";
+import { MenuTab, Tab, TabStrip } from "./tab-strip.js";
 
 /**
  * tab-strip.test.ts -- however many tabs a strip holds and however it is
@@ -15,7 +15,9 @@ import { Tab, TabStrip } from "./tab-strip.js";
  * ones, and settles with no loop of renders; a tab chosen past its end, or
  * the one it opens on, is scrolled into its own place, the strip's scroll
  * alone; a dragged tab lands
- * where its place in the row says; and a tab names itself in its hint. The
+ * where its place in the row says, and under a finger, which drags nothing,
+ * its long press's menu moves it a place either way, which a mouse's menu
+ * leaves to its drag; and a tab names itself in its hint. The
  * plan's column and the side panel draw this one strip, so this holds for
  * both. jsdom lays nothing out, so a test that scrolls lays the strip's boxes
  * out itself. Synthetic throughout.
@@ -188,4 +190,92 @@ test("a tab other than the chosen one names itself in its hint, though its label
       ?.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   assert.equal(document.querySelector('[role="tooltip"]')?.textContent, "Tab 2");
+});
+
+/** A strip of three tabs with menus, each with a Close of its own, which may be moved. */
+function MenuStrip(): ReactNode {
+  return createElement(TabStrip, {
+    label: "Tabs",
+    onMove: (from: number, to: number) => moves.push([from, to]),
+    children: ["Plan", "Changes", "Terminal"].map((label, at) =>
+      createElement(MenuTab, {
+        key: label,
+        icon: createElement("svg"),
+        label,
+        selected: at === 0,
+        onSelect: ignore,
+        groups: [[{ label: "Close", onSelect: ignore }]],
+      }),
+    ),
+  });
+}
+
+/** The words of every item of the menus standing. */
+function menuWords(): string[] {
+  return [...document.querySelectorAll(".luke-menu-item-label")].map(
+    (each) => each.textContent ?? "",
+  );
+}
+
+/** The menu item named `label`. */
+function menuItem(label: string): HTMLElement {
+  const name = [...document.querySelectorAll(".luke-menu-item-label")].find(
+    (each) => each.textContent === label,
+  );
+  return name?.closest<HTMLElement>('[role="menuitem"]') ?? assert.fail(`no ${label} item`);
+}
+
+/** The strip of menu tabs drawn, and the tab named `label`'s button. */
+async function menuStripTab(label: string): Promise<HTMLElement> {
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  await act(async () => root.render(onRegistry(AtomRegistry.make(), createElement(MenuStrip))));
+  return pill(container, label).querySelector<HTMLElement>('[role="tab"]') ?? assert.fail("a tab");
+}
+
+const touch = (type: string) =>
+  new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    pointerId: 7,
+    pointerType: "touch",
+    isPrimary: true,
+    clientX: 10,
+    clientY: 10,
+  });
+
+test("under a finger, a tab held offers Move left and Move right, and Move right moves it a place along", async () => {
+  vi.spyOn(window, "matchMedia").mockImplementation(
+    (query) => ({ matches: query === "(pointer: coarse)" }) as MediaQueryList,
+  );
+  const tab = await menuStripTab("Changes");
+  vi.useFakeTimers();
+  try {
+    act(() => {
+      tab.dispatchEvent(touch("pointerdown"));
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+  act(() => {
+    tab.dispatchEvent(touch("pointerup"));
+  });
+
+  assert.deepEqual(menuWords(), ["Move left", "Move right", "Close"]);
+  act(() => menuItem("Move right").click());
+  assert.deepEqual(moves, [[1, 2]]);
+});
+
+test("with a mouse, a tab's menu offers no move, which its drag makes", async () => {
+  const tab = await menuStripTab("Changes");
+
+  act(() => {
+    tab.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+
+  assert.deepEqual(menuWords(), ["Close"]);
 });

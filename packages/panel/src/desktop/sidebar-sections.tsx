@@ -38,6 +38,7 @@ import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
+import { type RowPlace, RowPlaced, withRowMoves } from "./row-moves.js";
 import { SectionIconPicker, sectionGlyph } from "./section-icon-picker.js";
 import { archiveTasksQuestion, SidebarGroupHeader } from "./sidebar-group-header.js";
 import { useRowDrag } from "./use-row-drag.js";
@@ -369,23 +370,26 @@ function sectionActionGroups(
 function SidebarSection({
   drawn,
   context,
+  place,
 }: {
   drawn: DrawnSection;
   context: SectionContext;
+  /** Where the section stands among the sections, which its menu moves it from under a finger. */
+  place: RowPlace;
 }): React.JSX.Element {
   const { section } = drawn;
   const { tasks } = context;
   const folded = context.folded(section.id);
   const rows = folded ? drawn.tasks.filter((task) => context.current(task.id)) : drawn.tasks;
-  const drag = useRowDrag(
-    folded ? undefined : (from, to) => tasks.onWriteSections(placeWritesWithin(drawn, from, to)),
-    {
-      onDropOut: (from, zone, at) => {
-        const task = rows[from];
-        if (task !== undefined) context.onDropTask(task.id, zone, at);
-      },
+  const move = folded
+    ? undefined
+    : (from: number, to: number) => tasks.onWriteSections(placeWritesWithin(drawn, from, to));
+  const drag = useRowDrag(move, {
+    onDropOut: (from, zone, at) => {
+      const task = rows[from];
+      if (task !== undefined) context.onDropTask(task.id, zone, at);
     },
-  );
+  });
   const menu = useMenu(tasks.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   const reads = useReadMarks();
@@ -447,7 +451,7 @@ function SidebarSection({
         <ActionMenu
           label={`${section.title} actions`}
           menu={menu.drawn}
-          groups={groups}
+          groups={withRowMoves(groups, place)}
           onClose={menu.close}
         />
       )}
@@ -466,7 +470,14 @@ function SidebarSection({
           data-row-drop-rows={folded ? undefined : ""}
           onPointerDown={drag}
         >
-          {rows.map(context.row)}
+          {rows.map((task, at) => (
+            <RowPlaced
+              key={task.id}
+              place={move === undefined ? undefined : { at, count: rows.length, onMove: move }}
+            >
+              {context.row(task)}
+            </RowPlaced>
+          ))}
         </ul>
       )}
     </div>
@@ -493,16 +504,19 @@ export function SidebarSections({
   context: SectionContext;
 }): React.JSX.Element {
   const order = sections.map((drawn) => drawn.section);
-  const drag = useRowDrag(
-    (from, to) => context.tasks.onWriteSections(sectionMoveWrites(order, from, to)),
-    { handle: SECTION_HANDLE },
-  );
+  const move = (from: number, to: number) =>
+    context.tasks.onWriteSections(sectionMoveWrites(order, from, to));
+  const drag = useRowDrag(move, { handle: SECTION_HANDLE });
   return (
     <nav className="sidebar-group" aria-label="Sections">
       <ul className="sidebar-sections" onPointerDown={drag}>
-        {sections.map((drawn) => (
+        {sections.map((drawn, at) => (
           <li key={drawn.section.id} className="sidebar-sections-item">
-            <SidebarSection drawn={drawn} context={context} />
+            <SidebarSection
+              drawn={drawn}
+              context={context}
+              place={{ at, count: sections.length, onMove: move }}
+            />
           </li>
         ))}
       </ul>

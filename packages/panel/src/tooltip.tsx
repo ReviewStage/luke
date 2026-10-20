@@ -34,6 +34,14 @@
  * control giving its end up to those acts on hover never puts the card over
  * the row.
  *
+ * A finger has no hover to rest, so under one a hint is opened by hand,
+ * as a popover: a tap on what is no control of its own, a line of words or
+ * a mark, opens it at once and another tap closes it; on a control, whose
+ * tap is still its own press and a link's still goes where it leads, a long
+ * press opens it instead, and its release presses nothing. A control whose
+ * long press opens its context menu keeps that press for the menu. A tap
+ * anywhere but on the hint or its control, Escape, and a scroll close it.
+ *
  * Taken down once it has shown, a pill or a card is held drawn through its
  * exit, inert, and only then taken out; one taken down while it still
  * waited was never seen, and goes at once.
@@ -63,6 +71,7 @@ import {
   TooltipCard,
   type TooltipLeaving,
   TooltipPill,
+  useTouchHold,
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
@@ -72,10 +81,12 @@ import {
   cloneElement,
   createContext,
   type FocusEventHandler,
+  type MouseEventHandler,
   type PointerEventHandler,
   type ReactElement,
   type ReactNode,
   type RefObject,
+  type TouchEventHandler,
   useCallback,
   useContext,
   useEffect,
@@ -83,6 +94,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { coarsePointerNow } from "./coarse-pointer.js";
 import { rendererRuntime } from "./renderer-runtime.js";
 import { Shortcut } from "./shortcut.js";
 
@@ -100,6 +112,16 @@ const WARM_MS = MOTION_DELAY_MS.HINT;
  * and GitHub's hover cards wait.
  */
 const CARD_LINGER = Duration.millis(180);
+
+/**
+ * What a press may land on that is a control of its own: a tap works it
+ * rather than showing its hint, so its hint shows on a long press instead.
+ */
+const OWN_CONTROL =
+  "a[href], button, summary, input, textarea, select, label, [role='button'], [role='link'], [role='tab'], [role='switch'], [role='menuitem'], [contenteditable='true']";
+
+/** What carries a context menu, whose long press is the menu's rather than a hint's (`useMenu`'s `contextMenu`). */
+const LONG_PRESS_MENU = "[data-long-press]";
 
 /** Until when a newly rested-on control shows its pill at once: the window's one warm spell. */
 let warmUntil = 0;
@@ -150,17 +172,21 @@ const cardLingerAtom = Atom.family((_tooltip: string) =>
 interface AnchorProps {
   "aria-describedby"?: string | undefined;
   "aria-keyshortcuts"?: string | undefined;
+  "data-touch-hint"?: "" | undefined;
   onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
   onPointerLeave?: PointerEventHandler<HTMLElement> | undefined;
   onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  onClick?: MouseEventHandler<HTMLElement> | undefined;
+  onTouchEnd?: TouchEventHandler<HTMLElement> | undefined;
   onFocus?: FocusEventHandler<HTMLElement> | undefined;
   onBlur?: FocusEventHandler<HTMLElement> | undefined;
 }
 
 /**
  * A pill standing: the control it names, the row a card hung from it hangs
- * beside, when it began, whether it skipped the wait, and whether its label
- * says more than the control's own name.
+ * beside, when it began, whether it skipped the wait, whether its label
+ * says more than the control's own name, and whether a finger opened it,
+ * by a tap or a long press, rather than a pointer resting or the keyboard.
  */
 interface Shown {
   anchor: HTMLElement;
@@ -168,6 +194,7 @@ interface Shown {
   since: number;
   instant: boolean;
   describes: boolean;
+  touched: boolean;
 }
 
 /** A pill drawn: what it stands for, and the words it says, kept through its exit. */
@@ -322,7 +349,7 @@ export function Tooltip({
     linger(Atom.Interrupt);
     setShown(undefined);
   }, [latest, setShown, linger]);
-  const show = (anchor: HTMLElement) => {
+  const show = (anchor: HTMLElement, touched = false) => {
     if (label === undefined) return;
     // The pointer back on a lingering card's control keeps the card as it stands.
     if (latest()?.anchor === anchor) {
@@ -344,8 +371,9 @@ export function Tooltip({
       anchor,
       region: row,
       since: now,
-      instant: now < warmUntil,
+      instant: touched || now < warmUntil,
       describes: card !== undefined || name !== label,
+      touched,
     });
     standing.push({
       hide,
@@ -373,7 +401,11 @@ export function Tooltip({
       window.removeEventListener("pointerup", end, true);
       window.removeEventListener("pointercancel", end, true);
       pressingCard.current = false;
-      if (latest() !== undefined && !overCard.current) linger({ leave: hide });
+      // A card a finger opened stands until a tap elsewhere, as a popover does.
+      const stood = latest();
+      if (stood !== undefined && !stood.touched && !overCard.current) {
+        linger({ leave: hide });
+      }
     };
     window.addEventListener("pointerup", end, true);
     window.addEventListener("pointercancel", end, true);
@@ -428,8 +460,9 @@ export function Tooltip({
   useEffect(() => {
     const row = region();
     if (!up || row === undefined) return;
-    const out = () => {
-      if (!overCard.current) leave();
+    // Note that a finger lifted leaves the row too, which is no pointer moving on.
+    const out = (event: PointerEvent) => {
+      if (event.pointerType !== "touch" && !overCard.current) leave();
     };
     const back = () => linger(Atom.Interrupt);
     row.addEventListener("pointerleave", out);
@@ -442,10 +475,35 @@ export function Tooltip({
     };
   }, [up, region, leave, linger, hide]);
 
+  // A hint a finger opened is a popover: a press anywhere but on its
+  // control or on a card standing takes it down, as Escape and a scroll do
+  // (above). Its control's own press closes it again (`onPointerDown`).
+  const touchedUp = shown?.touched === true;
+  useEffect(() => {
+    if (!touchedUp) return;
+    const pressed = (event: PointerEvent) => {
+      const { target } = event;
+      if (!(target instanceof Node)) return;
+      if (latest()?.anchor.contains(target) === true) return;
+      if (standing.some((each) => each.holds(target))) return;
+      hide();
+    };
+    window.addEventListener("pointerdown", pressed, true);
+    return () => window.removeEventListener("pointerdown", pressed, true);
+  }, [touchedUp, latest, hide]);
+
+  // A finger's long press on a control, which opens its hint by hand.
+  const hold = useTouchHold();
+  // Whether the press now ending was a finger's, and whether its hint stood as it went down.
+  const fingerPress = useRef(false);
+  const shownAtPress = useRef(false);
+
   const own = children.props;
   const anchor = cloneElement(children, {
     ...(shown?.describes && label !== undefined ? { "aria-describedby": id } : undefined),
     ...(chord === undefined ? undefined : { "aria-keyshortcuts": shortcutAria(chord) }),
+    // Under a finger a held link opens its hint, not the system's own callout (tooltip.css).
+    ...(label !== undefined && coarsePointerNow() ? { "data-touch-hint": "" } : undefined),
     onPointerEnter: (event) => {
       own.onPointerEnter?.(event);
       // A touch has no hover to rest, so it shows nothing.
@@ -453,12 +511,38 @@ export function Tooltip({
     },
     onPointerLeave: (event) => {
       own.onPointerLeave?.(event);
+      // A finger lifted leaves its control too, which takes down nothing it opened.
+      if (event.pointerType === "touch") return;
       // A card hung from a row lingers once the pointer leaves the row instead.
       if (region() === undefined) leave();
     },
     onPointerDown: (event) => {
       own.onPointerDown?.(event);
+      fingerPress.current = event.pointerType === "touch";
+      shownAtPress.current = latest() !== undefined;
       hide();
+      const control = event.currentTarget;
+      if (!fingerPress.current || shownAtPress.current || label === undefined) return;
+      if (control.closest(OWN_CONTROL) === null || control.closest(LONG_PRESS_MENU) !== null) {
+        return;
+      }
+      hold.start(event, () => show(control, true));
+    },
+    onTouchEnd: (event) => {
+      own.onTouchEnd?.(event);
+      hold.touchEnd(event);
+    },
+    onClick: (event) => {
+      own.onClick?.(event);
+      const tapped = fingerPress.current && !shownAtPress.current;
+      fingerPress.current = false;
+      shownAtPress.current = false;
+      if (!tapped || label === undefined || event.defaultPrevented) return;
+      if (event.currentTarget.closest(OWN_CONTROL) !== null) return;
+      // Note that the tap is spent on the hint, so what holds the words, a
+      // message whose tap shows its actions, leaves them be.
+      event.preventDefault();
+      show(event.currentTarget, true);
     },
     onFocus: (event) => {
       own.onFocus?.(event);
@@ -468,8 +552,10 @@ export function Tooltip({
     },
     onBlur: (event) => {
       own.onBlur?.(event);
-      // A press on the card takes focus from its control, and leaves the card standing.
-      if (!overCard.current) hide();
+      // A press on the card takes focus from its control, and leaves the card
+      // standing, as does any press while a finger's hint stands, which a
+      // press elsewhere takes down itself.
+      if (!overCard.current && latest()?.touched !== true) hide();
     },
   });
   return (

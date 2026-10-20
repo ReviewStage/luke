@@ -34,6 +34,7 @@ export * from "./components/inline-ref/inline-ref.js";
 export * from "./components/layout/layout.js";
 export * from "./components/list-row/list-row.js";
 export * from "./components/menu/menu.js";
+export * from "./components/menu/touch-hold.js";
 export * from "./components/nav-item/nav-item.js";
 export * from "./components/one-line/one-line.js";
 export * from "./components/page-frame/page-frame.js";
