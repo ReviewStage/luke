@@ -48,6 +48,45 @@
   justify-content: center;
 }
 
+/* A finger works the board's controls, so each takes a finger's press:
+   Excalidraw sizes its buttons by its own `--default-button-size` and
+   `--lg-button-size`, and shrinks its toolbar's tools on a narrow screen and
+   the column of tools it stands at its right to fixed sizes of its own,
+   which here take the finger's size too. That column is drawn as a tab run
+   off the canvas's right edge, which on a phone's screen reads as cut off,
+   so there it stands whole inside the board, at the canvas's own inset, and
+   the toolbar's rows keep clear of it. A mouse keeps Excalidraw's sizes and
+   its tab. */
+@media (pointer: coarse) {
+  .task-board .excalidraw {
+    --default-button-size: 44px;
+    --lg-button-size: 44px;
+  }
+
+  .task-board .excalidraw .App-toolbar-container .ToolIcon__icon {
+    width: var(--lg-button-size);
+    height: var(--lg-button-size);
+  }
+
+  .task-board .excalidraw--mobile .mobile-misc-tools-container {
+    right: 0;
+    border-right-width: 1px;
+    border-right-style: solid;
+    border-right-color: var(--sidebar-border-color);
+    border-radius: var(--border-radius-lg);
+  }
+
+  .task-board .excalidraw--mobile .mobile-misc-tools-container .ToolIcon__icon,
+  .task-board .excalidraw--mobile .mobile-misc-tools-container .sidebar-trigger {
+    width: var(--default-button-size);
+    height: var(--default-button-size);
+  }
+
+  .task-board .excalidraw--mobile .App-top-bar > section {
+    padding-right: calc(var(--default-button-size) + 2px + var(--luke-space-8));
+  }
+}
+
 /* The document is the record: it reads as text and is selectable, so Cmd-C
    on a selection copies it. Note that it sets its own accent, because
    `--accent` is only ever set by a `data-state` ancestor and nothing above
