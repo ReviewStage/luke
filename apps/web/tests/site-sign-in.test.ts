@@ -165,7 +165,10 @@ test("a sign-in finished on the hand-off is identified and counted before the pa
   expect(identify.properties.distinct_id).toBe(ACCOUNT.id);
   expect(complete.properties.distinct_id).toBe(ACCOUNT.id);
   expect(complete.properties.$current_url).toBe("http://localhost:3000/desktop-session.html");
-  expect(JSON.stringify(events)).not.toMatch(/state-from-the-mac|challenge-from-the-mac|4810/);
+  // Note that the loopback's port is matched only after its host, plain or escaped, because a random id may hold its digits.
+  expect(JSON.stringify(events)).not.toMatch(
+    /state-from-the-mac|challenge-from-the-mac|127\.0\.0\.1(?::|%(?:25)?3A)4810/iu,
+  );
 });
 
 test("a hand-off whose session read stalls goes on to the Mac at its deadline, uncounted", async () => {
