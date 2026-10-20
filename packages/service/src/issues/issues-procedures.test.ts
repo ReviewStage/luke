@@ -186,33 +186,39 @@ it.layer(getTestDB())("the issues routes", (it) => {
     }),
   );
 
-  it.effect("a change lands, and the answer is the issue as kept", () =>
-    Effect.gen(function* () {
-      const { owner, workspaceId, ask } = yield* openAccounts;
-      const made = readAnswer(
-        issueAnswerSchema,
-        HOSTED_HTTP_STATUS.CREATED,
-        yield* ask("/api/issues", owner, { method: "POST", body: { workspaceId, title: "Bug" } }),
-      );
+  it.effect(
+    "a change lands, and the answer is the issue as kept with the transaction that wrote it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId, ask } = yield* openAccounts;
+        const made = readAnswer(
+          issueAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask("/api/issues", owner, { method: "POST", body: { workspaceId, title: "Bug" } }),
+        );
 
-      const changed = readAnswer(
-        issueAnswerSchema,
-        HOSTED_HTTP_STATUS.OK,
-        yield* ask(`/api/issues/${made.issue.id}`, owner, {
-          method: "PATCH",
-          body: { status: ISSUE_STATUS.IN_PROGRESS, priority: ISSUE_PRIORITY.HIGH },
-        }),
-      );
-      const read = readAnswer(
-        issueAnswerSchema,
-        HOSTED_HTTP_STATUS.OK,
-        yield* ask(`/api/issues/${made.issue.id}`, owner),
-      );
+        const changed = readAnswer(
+          issueAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(`/api/issues/${made.issue.id}`, owner, {
+            method: "PATCH",
+            body: { status: ISSUE_STATUS.IN_PROGRESS, priority: ISSUE_PRIORITY.HIGH },
+          }),
+        );
+        const read = readAnswer(
+          issueAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(`/api/issues/${made.issue.id}`, owner),
+        );
 
-      assert.equal(changed.issue.status, ISSUE_STATUS.IN_PROGRESS);
-      assert.equal(changed.issue.priority, ISSUE_PRIORITY.HIGH);
-      assert.deepEqual(read.issue, changed.issue);
-    }),
+        assert.equal(changed.issue.status, ISSUE_STATUS.IN_PROGRESS);
+        assert.equal(changed.issue.priority, ISSUE_PRIORITY.HIGH);
+        assert.deepEqual(read.issue, changed.issue);
+        // Note that each write answers the transaction that wrote it, and a read answers none.
+        assert.match(made.txid ?? "", /^[0-9]+$/u);
+        assert.match(changed.txid ?? "", /^[0-9]+$/u);
+        assert.equal(read.txid, undefined);
+      }),
   );
 
   it.effect("an archived issue leaves the list and stands in the archived one", () =>

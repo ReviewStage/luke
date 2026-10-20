@@ -99,6 +99,9 @@
         "updatedAt"
       ],
       "additionalProperties": false
+    },
+    "txid": {
+      "type": "string"
     }
   },
   "required": [

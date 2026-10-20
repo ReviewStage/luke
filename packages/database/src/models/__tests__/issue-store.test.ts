@@ -12,10 +12,12 @@ import { member, organization, user } from "../../schemas/auth.js";
 import { getTestDB } from "../../testing/index.js";
 import {
   beginIssueWork,
-  changeIssue,
-  createIssue,
+  changeIssue as changeIssueWritten,
+  createIssue as createIssueWritten,
+  type IssueChange,
   issuesLiveStatement,
   listIssues,
+  type NewIssue,
   readIssue,
 } from "../issue-store.js";
 
@@ -27,6 +29,20 @@ import {
  *
  * Synthetic accounts and workspaces throughout.
  */
+
+/** An issue filed, as kept, without the transaction that wrote it. */
+const createIssue = (userId: string, made: NewIssue) =>
+  Effect.map(
+    createIssueWritten(userId, made),
+    Option.map(({ issue }) => issue),
+  );
+
+/** An issue changed, as kept, without the transaction that wrote it. */
+const changeIssue = (userId: string, issueId: string, change: IssueChange) =>
+  Effect.map(
+    changeIssueWritten(userId, issueId, change),
+    Option.map(({ issue }) => issue),
+  );
 
 const openAccount = Effect.gen(function* () {
   const db = yield* Database;
@@ -406,5 +422,28 @@ it.layer(getTestDB())("work begun on an issue", (it) => {
         ISSUE_STATUS.BACKLOG,
       );
     }),
+  );
+
+  it.effect(
+    "a filing and a change each answer the transaction that wrote them, and a change of nothing answers none",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openAccount;
+        const outsider = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+
+        const filed = Option.getOrThrow(
+          yield* createIssueWritten(owner, { organizationId: workspace, title: "Flaky login" }),
+        );
+        const changed = Option.getOrThrow(
+          yield* changeIssueWritten(owner, filed.issue.id, { status: ISSUE_STATUS.DONE }),
+        );
+        const refused = yield* changeIssueWritten(outsider, filed.issue.id, { title: "Taken" });
+
+        assert.match(filed.txid, /^[0-9]+$/u);
+        assert.match(changed.txid, /^[0-9]+$/u);
+        assert.notEqual(filed.txid, changed.txid);
+        assert.ok(Option.isNone(refused));
+      }),
   );
 });

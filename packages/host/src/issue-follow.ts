@@ -32,6 +32,10 @@ export interface IssueFollowDependencies {
   readonly now: () => number;
   /** The list as it now stands, or why there is none, each time it moves. */
   readonly publish: (view: IssueListView) => void;
+  /** Handed the wait for a write's transaction on each subscription, as it is subscribed. */
+  readonly onSubscribed: (
+    awaitTxId: (txid: string, timeoutMillis: number) => Promise<void>,
+  ) => void;
 }
 
 /** A workspace's standing issues followed until interrupted, each change published. */
@@ -44,7 +48,12 @@ export function followIssues(dependencies: IssueFollowDependencies): Effect.Effe
       return yield* Effect.sleep(LIVE_RESTART);
     }
     const rows = liveRows(
-      { openLive: dependencies.openLive, reseal: dependencies.live, now: dependencies.now },
+      {
+        openLive: dependencies.openLive,
+        reseal: dependencies.live,
+        now: dependencies.now,
+        onSubscribed: dependencies.onSubscribed,
+      },
       sealed,
     );
     yield* Stream.runForEach(rows, (read) =>

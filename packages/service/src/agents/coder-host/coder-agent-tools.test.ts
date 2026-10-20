@@ -2649,7 +2649,7 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
         description: "Refund within thirty days.",
       }),
     ),
-  );
+  ).issue;
   const fromIssue = await database.run(
     createTask(teammates.userId, {
       organizationId: workspaceId,
@@ -2839,7 +2839,7 @@ test("list_issues, read_issue, create_issue, and update_issue keep the caller's 
     await database.run(
       createIssue(otherWorkspaces.userId, { organizationId: elsewhere, title: "Elsewhere" }),
     ),
-  );
+  ).issue;
   assert.deepEqual(await listedIds({}), [issue.id]);
   assert.deepEqual(await listedIds({ titleContains: "FLAKY" }), [issue.id]);
   assert.deepEqual(await listedIds({ status: "done" }), []);

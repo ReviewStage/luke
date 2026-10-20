@@ -6,7 +6,8 @@
  * `POST` files one and answers it as kept. `GET /api/issues/:id` reads one
  * issue and `PATCH` changes it, archiving it among the rest, and answers it
  * as kept, so the window draws the service's word rather than its own
- * guess. Every request resolves the bearer before it touches a row or reads
+ * guess; a write's answer carries the transaction that wrote it, which the
+ * desktop waits for on its live read before it draws the answer. Every request resolves the bearer before it touches a row or reads
  * its input, and the store gates every row on the account's membership of
  * the issue's workspace, so a workspace the account is not in, or an issue
  * of one, answers exactly as one that does not exist.
@@ -70,7 +71,7 @@ export function issuesProcedures(seams: IssuesProcedureSeams) {
       );
       if (Option.isNone(created)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       yield* recordServerEvent(SERVER_EVENT.ISSUE_CREATE, context.userId, {});
-      return { issue: created.value };
+      return created.value;
     }),
     read: issues.read.effect(function* ({ input, context }) {
       const id = yield* issueIdOf(input.id);
@@ -82,7 +83,7 @@ export function issuesProcedures(seams: IssuesProcedureSeams) {
       const id = yield* issueIdOf(input.params.id);
       const changed = yield* hostedStoreOrUnavailable(changeIssue(context.userId, id, input.body));
       if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return { issue: changed.value };
+      return changed.value;
     }),
   };
 }

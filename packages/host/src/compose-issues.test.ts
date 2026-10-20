@@ -50,7 +50,7 @@ const ISSUE = {
 } as const;
 
 /** The service as a script that writes down every ask it hears, as the ask runs. */
-function fakeService(options: { listLive?: IssuesLiveAnswer } = {}) {
+function fakeService(options: { listLive?: IssuesLiveAnswer; txid?: string } = {}) {
   const asked: unknown[] = [];
   const answer =
     <A>(name: string, value: A) =>
@@ -63,7 +63,10 @@ function fakeService(options: { listLive?: IssuesLiveAnswer } = {}) {
     list: answer("list", { issues: [ISSUE] }),
     read: answer("read", { failure: ISSUE_CALL_FAILURE.NOT_FOUND }),
     create: answer("create", { issue: ISSUE }),
-    change: answer("change", { issue: ISSUE }),
+    change: answer(
+      "change",
+      options.txid === undefined ? { issue: ISSUE } : { issue: ISSUE, txid: options.txid },
+    ),
     listLive: answer("listLive", options.listLive ?? { failure: ISSUE_CALL_FAILURE.UNANSWERED }),
   };
   return { client, asked };
@@ -91,6 +94,7 @@ function subject(
     signedIn?: boolean;
     sendsNetwork?: boolean;
     listLive?: IssuesLiveAnswer;
+    txid?: string;
     openLive?: (url: string) => LiveClient;
   } = {},
 ) {
@@ -201,6 +205,8 @@ const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
 
 /** Realtime as a script: each subscription by its capability, and a way to deliver its rows. */
 function fakeRealtime() {
+  /** Every transaction a write's answer waited for, in order. */
+  const awaited: string[] = [];
   const listeners = new Map<
     string,
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
@@ -212,6 +218,10 @@ function fakeRealtime() {
         return () => listeners.delete(query.capability);
       },
       renew: () => Promise.resolve(),
+      awaitTxId: (txid) => {
+        awaited.push(txid);
+        return Promise.resolve();
+      },
       unsubscribe: () => void listeners.delete(query.capability),
     }),
     close: () => undefined,
@@ -221,7 +231,7 @@ function fakeRealtime() {
     assert.ok(listener, `no subscription to ${capability}`);
     listener({ status: "live", data });
   };
-  return { open, deliver, subscribed: () => [...listeners.keys()] };
+  return { open, deliver, awaited, subscribed: () => [...listeners.keys()] };
 }
 
 /** A standing issue as its live row delivers it. */
@@ -348,5 +358,41 @@ it.effect(
 
       assert.deepEqual(realtime.subscribed(), []);
       assert.deepEqual(followed, []);
+    }),
+);
+
+it.effect(
+  "a write's answer waits for its transaction on the followed list, and one with no transaction, or of a workspace not followed, does not",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const listLive: IssuesLiveAnswer = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          issues: {
+            capability: "issues",
+            queryFingerprint: "issues",
+            expiresAt: LIVE_NOW + 60_000,
+          },
+        },
+      };
+      const change = { issueId: ISSUE_ID, change: { status: ISSUE_STATUS.DONE } };
+      const written = yield* subject({ listLive, txid: "742", openLive: realtime.open });
+
+      const unfollowed = yield* written.call(GATEWAY_METHOD.ISSUES_CHANGE, change);
+      yield* written.call(GATEWAY_METHOD.ISSUES_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      const followed = yield* written.call(GATEWAY_METHOD.ISSUES_CHANGE, change);
+
+      assert.deepEqual(unfollowed, { issue: ISSUE, txid: "742" });
+      assert.deepEqual(followed, { issue: ISSUE, txid: "742" });
+      assert.deepEqual(realtime.awaited, ["742"]);
+
+      const unchanged = fakeRealtime();
+      const plain = yield* subject({ listLive, openLive: unchanged.open });
+      yield* plain.call(GATEWAY_METHOD.ISSUES_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      yield* plain.call(GATEWAY_METHOD.ISSUES_CHANGE, change);
+      assert.deepEqual(unchanged.awaited, []);
     }),
 );

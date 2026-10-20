@@ -1109,8 +1109,9 @@ it.layer(getTestDB())("the plan routes", (it) => {
         const elsewhere = yield* openWorkspace(owner);
         const theirs = yield* openWorkspace(other);
         const filed = (userId: string, organizationId: string) =>
-          Effect.map(createIssue(userId, { organizationId, title: "Invites expire" }), (made) =>
-            Option.getOrElse(made, () => assert.fail("the issue was not filed")),
+          Effect.map(
+            createIssue(userId, { organizationId, title: "Invites expire" }),
+            (made) => Option.getOrElse(made, () => assert.fail("the issue was not filed")).issue,
           );
         const mine = yield* filed(owner, workspaceId);
         const another = yield* filed(owner, elsewhere);

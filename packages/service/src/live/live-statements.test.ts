@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
+import { issuesLiveStatement } from "@luke/database/models/issue-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
 import {
@@ -38,6 +39,7 @@ function liveStatements() {
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
     ...Object.fromEntries(Object.entries(task).map(([part, query]) => [`task.${part}`, query])),
     ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
+    issues: Option.getOrThrow(issuesLiveStatement(USER_ID, randomUUID())),
   };
 }
 

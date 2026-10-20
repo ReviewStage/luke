@@ -45,6 +45,8 @@ interface LiveSubscription {
     }) => void,
   ): () => void;
   renew(query: SealedLiveQueryWire): Promise<void>;
+  /** Settles once this subscription has applied the transaction, or fails past the timeout in milliseconds. */
+  awaitTxId(txid: string, timeout?: number): Promise<void>;
   unsubscribe(): void;
 }
 
@@ -135,6 +137,14 @@ export interface LiveFollowDependencies<Part extends string> {
   readonly reseal: () => Effect.Effect<SealedRead<Part> | { readonly failure: string }>;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
+  /**
+   * Handed, once the parts are subscribed, the wait for a transaction to be
+   * applied by every part, so a write's answer waits for its own change to
+   * arrive before it is drawn (Neon's "Optimistic mutations").
+   */
+  readonly onSubscribed?: (
+    awaitTxId: (txid: string, timeoutMillis: number) => Promise<void>,
+  ) => void;
 }
 
 /** The earliest any of the read's sealed statements expires, in epoch milliseconds. */
@@ -197,6 +207,11 @@ export function liveRows<Part extends string>(
             Effect.sync(() => {
               for (const [, subscription] of standing) subscription.unsubscribe();
             }),
+        );
+        dependencies.onSubscribed?.((txid, timeoutMillis) =>
+          Promise.all(
+            subscriptions.map(([, subscription]) => subscription.awaitTxId(txid, timeoutMillis)),
+          ).then(() => undefined),
         );
         let expiresAt = earliestExpiry(first);
         const renewal = Effect.gen(function* () {

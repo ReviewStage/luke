@@ -50,6 +50,15 @@ export interface NewIssue {
   readonly priority?: IssuePriority;
 }
 
+/** An issue as a write kept it, and the transaction that wrote it, which a live read is waited on for. */
+export interface IssueWritten {
+  readonly issue: Issue;
+  readonly txid: string;
+}
+
+/** The id of the transaction a write ran in, read in the write's own `RETURNING`. */
+const TXID = sql<string>`pg_current_xact_id()::text`;
+
 /** A change to an issue: any of its fields, and whether it is archived; a field left out stands as it was. */
 export interface IssueChange {
   readonly title?: string;
@@ -196,13 +205,13 @@ const insertIssue = SqlSchema.findOne({
     creatorId: Schema.String,
     now: Schema.Date,
   }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, txid: Schema.String }),
   execute: ({ now, ...made }) =>
     Database.use((db) =>
       db
         .insert(issue)
         .values({ ...made, createdAt: now, updatedAt: now })
-        .returning({ id: issue.id }),
+        .returning({ id: issue.id, txid: TXID }),
     ),
 });
 
@@ -227,7 +236,7 @@ const updateIssue = SqlSchema.findOneOption({
     archived: Schema.optionalKey(Schema.Boolean),
     now: Schema.Date,
   }),
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, txid: Schema.String }),
   execute: ({ userId, issueId, archived, now, ...fields }) =>
     Database.use((db) =>
       db
@@ -238,7 +247,7 @@ const updateIssue = SqlSchema.findOneOption({
           updatedAt: now,
         })
         .where(and(eq(issue.id, issueId), workspaceReachableBy(userId, issue.organizationId)))
-        .returning({ id: issue.id }),
+        .returning({ id: issue.id, txid: TXID }),
     ),
 });
 
@@ -332,13 +341,14 @@ export function readIssue(userId: string, issueId: string): IssueStoreEffect<Opt
 
 /**
  * Files an issue in the workspace under its next number, filed by the
- * account, and answers it as kept; nothing, with nothing written, where the
- * account is not a member of the workspace.
+ * account, and answers it as kept with the transaction that wrote it;
+ * nothing, with nothing written, where the account is not a member of the
+ * workspace.
  */
 export function createIssue(
   userId: string,
   made: NewIssue,
-): IssueStoreEffect<Option.Option<Issue>> {
+): IssueStoreEffect<Option.Option<IssueWritten>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -352,7 +362,7 @@ export function createIssue(
           Effect.catchTag("NoSuchElementError", Effect.die),
         );
         const now = yield* DateTime.nowAsDate;
-        const { id } = yield* insertIssue({
+        const { id, txid } = yield* insertIssue({
           organizationId: made.organizationId,
           number: next,
           title: made.title,
@@ -362,23 +372,23 @@ export function createIssue(
           creatorId: userId,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
-        return yield* readIssue(userId, id);
+        return Option.map(yield* readIssue(userId, id), (kept) => ({ issue: kept, txid }));
       }),
     ),
   );
 }
 
 /**
- * Changes an issue and answers it as kept: the fields named, its archive
- * stamped or cleared where `archived` says, and its change instant moved to
- * now; nothing, with nothing written, where it is gone or of a workspace the
- * account is not a member of.
+ * Changes an issue and answers it as kept with the transaction that wrote
+ * it: the fields named, its archive stamped or cleared where `archived`
+ * says, and its change instant moved to now; nothing, with nothing written,
+ * where it is gone or of a workspace the account is not a member of.
  */
 export function changeIssue(
   userId: string,
   issueId: string,
   change: IssueChange,
-): IssueStoreEffect<Option.Option<Issue>> {
+): IssueStoreEffect<Option.Option<IssueWritten>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -388,7 +398,8 @@ export function changeIssue(
         const now = yield* DateTime.nowAsDate;
         const changed = yield* updateIssue({ ...change, userId, issueId, now });
         if (Option.isNone(changed)) return Option.none();
-        return yield* readIssue(userId, issueId);
+        const { txid } = changed.value;
+        return Option.map(yield* readIssue(userId, issueId), (kept) => ({ issue: kept, txid }));
       }),
     ),
   );

@@ -339,7 +339,7 @@ it.layer(getTestDB())("a plan's brief", (it) => {
 const fileIssue = (userId: string, organizationId: string, title: string) =>
   Effect.map(
     createIssue(userId, { organizationId, title, description: "Steps to reproduce." }),
-    (made) => Option.getOrElse(made, () => assert.fail("the issue was not filed")),
+    (made) => Option.getOrElse(made, () => assert.fail("the issue was not filed")).issue,
   );
 
 it.layer(getTestDB())("a plan started from an issue", (it) => {

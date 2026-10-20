@@ -307,7 +307,7 @@ it.layer(getTestDB())("an agent started on a plan from one of the workspace's is
             description: "Draft.",
           }),
           () => assert.fail("the issue was not filed"),
-        );
+        ).issue;
         const fromIssue = yield* createTask(owner, {
           organizationId: workspaceId,
           name: "Invites expire too soon",
@@ -357,7 +357,7 @@ it.layer(getTestDB())("an agent started on a plan from one of the workspace's is
               title,
               ...(status === undefined ? undefined : { status }),
             }),
-            (made) => Option.getOrElse(made, () => assert.fail("the issue was not filed")),
+            (made) => Option.getOrElse(made, () => assert.fail("the issue was not filed")).issue,
           );
         const begun = yield* filed("Invites expire too soon");
         const done = yield* filed("Invites look wrong", ISSUE_STATUS.DONE);

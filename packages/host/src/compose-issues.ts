@@ -18,7 +18,7 @@ import {
 } from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, FiberMap, Result, type Schema, type Scope } from "effect";
+import { Duration, Effect, FiberMap, Result, type Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
@@ -62,6 +62,9 @@ export interface IssuesComposer extends Composer {
 
 const UNANSWERED = { failure: ISSUE_CALL_FAILURE.UNANSWERED } as const;
 
+/** How long a write's answer waits for its transaction to arrive on the followed list. */
+const TXID_TIMEOUT = Duration.seconds(5);
+
 export function composeIssues(
   dependencies: IssuesDependencies,
 ): Effect.Effect<IssuesComposer, never, Scope.Scope | HttpClient.HttpClient> {
@@ -79,6 +82,26 @@ function composed(
 ): IssuesComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+  /** Each followed workspace's wait for a transaction on its subscription, once it is subscribed. */
+  const awaiting = new Map<string, (txid: string, timeoutMillis: number) => Promise<void>>();
+
+  /**
+   * A write's answer, held until the followed list has applied the
+   * transaction that made it, so the window draws it once the push already
+   * holds it (Neon's "Optimistic mutations"). A write that changed nothing
+   * carries no transaction and is answered at once, as is one of a workspace
+   * no window follows; a wait past `TXID_TIMEOUT` lets the answer go anyway.
+   */
+  const applied = (answer: IssueView): Effect.Effect<IssueView> => {
+    if (!("issue" in answer) || answer.txid === undefined) return Effect.succeed(answer);
+    const { txid } = answer;
+    const wait = awaiting.get(answer.issue.workspaceId);
+    if (wait === undefined) return Effect.succeed(answer);
+    return Effect.as(
+      Effect.ignore(Effect.tryPromise(() => wait(txid, Duration.toMillis(TXID_TIMEOUT)))),
+      answer,
+    );
+  };
 
   /** The service asked behind the gate, over the host's own HTTP client. */
   const asked = <Answer>(
@@ -114,7 +137,7 @@ function composed(
           params,
           "an issue names its workspace and a title",
         );
-        return carried<IssueView>(yield* asked(client.create(made)));
+        return carried<IssueView>(yield* applied(yield* asked(client.create(made))));
       }),
     [GATEWAY_METHOD.ISSUES_CHANGE]: (params) =>
       Effect.gen(function* () {
@@ -123,7 +146,7 @@ function composed(
           params,
           "a change names an issue and what changes",
         );
-        return carried<IssueView>(yield* asked(client.change(change)));
+        return carried<IssueView>(yield* applied(yield* asked(client.change(change))));
       }),
     [GATEWAY_METHOD.ISSUES_FOLLOW]: (params) =>
       Effect.gen(function* () {
@@ -139,6 +162,7 @@ function composed(
           now: kernel.now,
           publish: (view) =>
             kernel.emit(GATEWAY_EVENT.ISSUES_CHANGED, carried({ workspaceId, view })),
+          onSubscribed: (wait) => awaiting.set(workspaceId, wait),
         });
         yield* FiberMap.run(follows, workspaceId, follow, { onlyIfMissing: true });
         return {};
@@ -150,10 +174,15 @@ function composed(
           params,
           "a follow names a workspace",
         );
+        awaiting.delete(workspaceId);
         yield* FiberMap.remove(follows, workspaceId);
         return {};
       }),
   };
 
-  return { methods, lifetime: Effect.void, reset: FiberMap.clear(follows) };
+  const reset = Effect.andThen(
+    Effect.sync(() => awaiting.clear()),
+    FiberMap.clear(follows),
+  );
+  return { methods, lifetime: Effect.void, reset };
 }

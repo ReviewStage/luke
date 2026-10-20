@@ -110,9 +110,13 @@ export const issueListAnswerSchema = EffectSchema.Struct({
   issues: EffectSchema.Array(issueSchema),
 });
 
-/** One issue, as a read or a write answers it. */
+/**
+ * One issue, as a read or a write answers it; a write's answer carries the
+ * id of the transaction that wrote it, which a live read is waited on for.
+ */
 export const issueAnswerSchema = EffectSchema.Struct({
   issue: issueSchema,
+  txid: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 /**

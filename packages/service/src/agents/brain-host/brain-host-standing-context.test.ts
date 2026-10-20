@@ -255,7 +255,7 @@ test("a plan started from one of the workspace's issues hands every turn the iss
     await database.run(
       createIssue(userId, { organizationId: plain.workspaceId, title: "Invites expire too soon" }),
     ),
-  );
+  ).issue;
   const task = await database.run(startTask(userId, { name: filed.title, issueId: filed.id }));
   await database.run(changeIssue(userId, filed.id, { description: "Steps to reproduce." }));
   const targetOf = async (taskId: string) => ({

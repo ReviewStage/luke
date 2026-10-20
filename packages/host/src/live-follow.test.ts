@@ -44,6 +44,7 @@ function scriptedClients() {
             return () => undefined;
           },
           renew: () => Promise.resolve(),
+          awaitTxId: () => Promise.resolve(),
           unsubscribe: () => undefined,
         };
       },

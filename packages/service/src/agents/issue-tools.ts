@@ -363,7 +363,7 @@ export function runCreateIssue(
       yield* recordServerEvent(SERVER_EVENT.ISSUE_CREATE, userId, {});
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        issue: fullIssueReading(filed.value, workspace.value),
+        issue: fullIssueReading(filed.value.issue, workspace.value),
       };
     }),
   );
@@ -397,7 +397,7 @@ export function runUpdateIssue(
       if (Option.isNone(changed)) return agentToolRejected(ISSUE_TOOL_REFUSAL.NO_ISSUE);
       return {
         status: ACTION_RESULT_STATUS.ACCEPTED,
-        issue: fullIssueReading(changed.value, workspace.value),
+        issue: fullIssueReading(changed.value.issue, workspace.value),
       };
     }),
   );
