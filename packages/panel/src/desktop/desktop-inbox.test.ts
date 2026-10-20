@@ -2993,6 +2993,41 @@ test("a settled item offers, over its box, the next item that needs you, by its 
   assert.equal(offered(), null);
 });
 
+test("Next follows the way the keys last went: after K it offers the nearest item above that needs you, by an arrow up and K, a press opening it; after J the one below, by J", async () => {
+  inboxes.set(BILLING.id, [
+    { ...THRESHOLD, updatedAt: 4_500 },
+    { ...RETRY, updatedAt: 2_000, settledAt: 2_000 },
+  ]);
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  const offered = () =>
+    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "▸ *Alert at 80%?",
+    "How is a failed email retried?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+
+  pressKey("j");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  assert.equal(wordsOf(offered()), "NextExpire after 7 days?J");
+  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
+
+  pressKey("j");
+  pressKey("k");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  const next = offered();
+  assert.ok(next, "the settled item offers the next");
+  assert.equal(wordsOf(next), "Next ↑Alert at 80%?K");
+  assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
+  act(() => next.click());
+  assert.equal(readTitle(page), "Alert at 80%?");
+  act(() => keys.unmount());
+});
+
 test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's top", async () => {
   const { page } = mount();
   await settle();
