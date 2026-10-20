@@ -44,7 +44,7 @@ export const LIVE_POLL_URL = "luke-poll:";
 export const LIVE_POLL = { QUERY: "poll", ON: "true" } as const;
 
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
-export const sealedLiveQuerySchema = EffectSchema.Struct({
+const sealedLiveQuerySchema = EffectSchema.Struct({
   capability: EffectSchema.String,
   queryFingerprint: EffectSchema.String,
   /** When the seal expires, in epoch milliseconds; the reader renews it before. */

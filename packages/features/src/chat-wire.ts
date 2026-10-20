@@ -62,23 +62,7 @@ export {
   /** @public */
   inboxBlockSchema as chatBlockSchema,
   /** @public */
-  inboxBlocksSchema as chatBlocksSchema,
-  /** @public */
-  inboxFieldSchema as chatFieldSchema,
-  /** @public */
-  inboxFieldValueSchema as chatFieldValueSchema,
-  /** @public */
-  inboxFormValueSchema as chatFormValueSchema,
-  /** @public */
-  inboxFormValuesSchema as chatFormValuesSchema,
-  /** @public */
   inboxImageTypeSchema as chatImageTypeSchema,
-  /** @public */
-  inboxKeySchema as chatKeySchema,
-  /** @public */
-  inboxOptionSchema as chatOptionSchema,
-  /** @public */
-  inboxPostBlockSchema as chatPostBlockSchema,
   /** @public */
   inboxPostBlocksSchema as chatPostBlocksSchema,
 } from "./inbox-wire.js";
@@ -566,7 +550,7 @@ export const editChannelInputSchema = EffectSchema.Struct({
  * whether it has left, an archived agent or plan, which is still named in
  * the messages it wrote.
  */
-export const chatMemberSchema = EffectSchema.Struct({
+const chatMemberSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(MEMBER_KIND)),
   /** The member's handle, which a person's window no longer names anyone by; absent from a service past it. */
@@ -584,7 +568,7 @@ export const chatMemberSchema = EffectSchema.Struct({
 export type ChatMember = typeof chatMemberSchema.Type;
 
 /** A channel as a reader sees one: its kind, its name, the plan it is of, the two members of a DM, and whether it is archived. */
-export const chatChannelSchema = EffectSchema.Struct({
+const chatChannelSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   kind: EffectSchema.Literals(Object.values(CHANNEL_KIND)),
   name: EffectSchema.optionalKey(EffectSchema.String),
@@ -604,7 +588,7 @@ export const chatChannelSchema = EffectSchema.Struct({
 export type ChatChannel = typeof chatChannelSchema.Type;
 
 /** An ask as a message carries it: its key and revision, where it stands, what it asks, the answer and its answerer, and why its poster resolved it. */
-export const chatMessageAskSchema = EffectSchema.Struct({
+const chatMessageAskSchema = EffectSchema.Struct({
   key: EffectSchema.String,
   revision: countedNumber,
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
@@ -622,7 +606,7 @@ export const chatMessageAskSchema = EffectSchema.Struct({
  * thread root it replies to, its author, its body, the members it mentions,
  * when it was posted, and the ask it carries.
  */
-export const chatMessageSchema = EffectSchema.Struct({
+const chatMessageSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   seq: countedNumber,
   touchedSeq: countedNumber,
@@ -666,7 +650,7 @@ export const CHAT_ATTACHMENT_QUERY = {
 export const chatCursorSchema = filledText(CHAT_BOUNDS.MAX_CURSOR_CHARS);
 
 /** How far the reader has read one channel on that channel's own cursor, where that is past its floor. */
-export const chatChannelReadSchema = EffectSchema.Struct({
+const chatChannelReadSchema = EffectSchema.Struct({
   channelId: wireUuidSchema,
   readSeq: countedNumber,
 });
@@ -783,7 +767,7 @@ function placedOnce(post: {
  * post, which a retry carries again. A member's mention link in the words
  * tells that member.
  */
-export const chatPostRequestSchema = EffectSchema.Struct({
+const chatPostRequestSchema = EffectSchema.Struct({
   text: EffectSchema.optionalKey(filledText(CHAT_BOUNDS.MAX_TEXT_CHARS)),
   blocks: EffectSchema.optionalKey(
     EffectSchema.Array(inboxWordBlockSchema).check(
@@ -807,7 +791,7 @@ export const chatPostRequestSchema = EffectSchema.Struct({
 export type ChatPostRequest = typeof chatPostRequestSchema.Type;
 
 /** A person's answer to an ask from the window: the ask by its place, the revision they saw, the answer, and the window's key for it. */
-export const chatAnswerRequestSchema = EffectSchema.Struct({
+const chatAnswerRequestSchema = EffectSchema.Struct({
   answer: EffectSchema.Struct({
     seq: countedNumber,
     revision: countedNumber,
@@ -817,7 +801,7 @@ export const chatAnswerRequestSchema = EffectSchema.Struct({
 });
 
 /** A person resolving an ask of their own from the window: the ask by its place, and why. */
-export const chatResolveRequestSchema = EffectSchema.Struct({
+const chatResolveRequestSchema = EffectSchema.Struct({
   resolve: EffectSchema.Struct({
     seq: countedNumber,
     reason: filledText(CHAT_BOUNDS.MAX_REASON_CHARS),
@@ -825,13 +809,13 @@ export const chatResolveRequestSchema = EffectSchema.Struct({
 });
 
 /** A person's window saying they have read to a place: in the channel shown, or every channel where it names none. */
-export const chatReadToRequestSchema = EffectSchema.Struct({
+const chatReadToRequestSchema = EffectSchema.Struct({
   readTo: countedNumber,
   channelId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 /** A person's window opening a topic channel under a name of its own, with what it is for. */
-export const chatOpenRequestSchema = EffectSchema.Struct({
+const chatOpenRequestSchema = EffectSchema.Struct({
   open: EffectSchema.Struct({
     name: chatChannelNameSchema,
     purpose: EffectSchema.optionalKey(chatPurposeSchema),
@@ -842,7 +826,7 @@ export const chatOpenRequestSchema = EffectSchema.Struct({
 export type ChatOpenRequest = typeof chatOpenRequestSchema.Type;
 
 /** A person's window renaming a topic channel, saying or clearing its purpose, or archiving it or bringing it back; each left out stays. */
-export const chatEditRequestSchema = EffectSchema.Struct({
+const chatEditRequestSchema = EffectSchema.Struct({
   edit: EffectSchema.Struct({
     channelId: wireUuidSchema,
     name: EffectSchema.optionalKey(chatChannelNameSchema),
@@ -873,7 +857,7 @@ export const chatWriteRequestSchema = EffectSchema.Union([
 export type ChatWriteRequest = typeof chatWriteRequestSchema.Type;
 
 /** Who a post came to, each member by its mention link or a plain name where none can be written: told now, held for their next read, left, and the labels of the links its words write that name no member. */
-export const chatReceiptSchema = EffectSchema.Struct({
+const chatReceiptSchema = EffectSchema.Struct({
   told: EffectSchema.Array(EffectSchema.String),
   held: EffectSchema.Array(EffectSchema.String),
   left: EffectSchema.Array(EffectSchema.String),
