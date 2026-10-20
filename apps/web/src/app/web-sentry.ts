@@ -56,6 +56,12 @@ export interface WebSentryReports {
 /** One report, said to the SDK once it stands. */
 type Report = (sentry: WebSentry) => void;
 
+/** Where reports are said before the SDK may stand, and when it has, or never will. */
+interface EarlyReports {
+  readonly say: (report: Report) => void;
+  readonly settled: Promise<void>;
+}
+
 /**
  * How many reports said before the SDK's chunk lands are kept for it; the
  * rest are dropped, so a tab failing in a loop while the chunk loads holds
@@ -124,10 +130,7 @@ async function loadedSentry(build: WebSentryBuild): Promise<WebSentry | undefine
  * stands, kept until then where it does not yet (the first
  * `EARLY_REPORTS_KEPT` of them), and dropped where it never will.
  */
-function reportsOnceStarted(started: Promise<WebSentry | undefined>): {
-  readonly say: (report: Report) => void;
-  readonly settled: Promise<void>;
-} {
+function reportsOnceStarted(started: Promise<WebSentry | undefined>): EarlyReports {
   let standing: WebSentry | undefined;
   let early: Report[] | undefined = [];
   const settled = started.then((sentry) => {

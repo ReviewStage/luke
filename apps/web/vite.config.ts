@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { sourceMapUploadToken } from "@luke/service/observability/source-maps";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -61,18 +60,23 @@ function sentrySourceMaps(authToken: string | undefined): PluginOption[] {
       org: "stage-review",
       project: "luke-web",
       authToken,
-      // The tab names its release itself, from the same commit, so nothing is written into the chunks for it.
-      release: {
-        ...(process.env.VERCEL_GIT_COMMIT_SHA ? { name: process.env.VERCEL_GIT_COMMIT_SHA } : {}),
-        inject: false,
-      },
+      // The release is the deployment's commit, which the plugin reads from
+      // Vercel's `VERCEL_GIT_COMMIT_SHA` as the tab does; the tab names it
+      // itself, so nothing is written into the chunks for it.
+      release: { inject: false },
       sourcemaps: { filesToDeleteAfterUpload: [join(SITE_DIRECTORY, "**", "*.map")] },
     }),
   ];
 }
 
 export default defineConfig(({ isSsrBuild }) => {
-  const sourceMapToken = isSsrBuild ? undefined : sourceMapUploadToken(process.env);
+  // The same gate as `sourceMapUploadToken` (`@luke/service/observability/source-maps`),
+  // spelled here because knip loads this file without resolving a workspace
+  // package's TypeScript source; `tests/web-source-maps.test.ts` holds it.
+  const sourceMapToken =
+    !isSsrBuild && process.env.VERCEL_ENV === "production"
+      ? process.env.SENTRY_AUTH_TOKEN || undefined
+      : undefined;
   return {
     define: WEB_DEPLOYMENT_DEFINES,
     plugins: [

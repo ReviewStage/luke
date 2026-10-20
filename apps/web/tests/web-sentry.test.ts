@@ -17,7 +17,8 @@ import { startWebSentry } from "../src/app/web-sentry";
 const { sentBodies } = vi.hoisted(() => {
   const sentBodies: string[] = [];
   globalThis.fetch = async (_input, init) => {
-    if (typeof init?.body === "string") sentBodies.push(init.body);
+    // Note that the SDK posts each envelope as its text, uncompressed.
+    if (init?.body !== undefined && init.body !== null) sentBodies.push(String(init.body));
     return new Response("{}", { status: 200 });
   };
   return { sentBodies };
