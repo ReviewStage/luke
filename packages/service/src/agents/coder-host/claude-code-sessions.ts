@@ -58,6 +58,7 @@ import {
 import {
   type CodingAgent,
   hasRepository,
+  readCodingAgent,
   readCodingAgentOfConversation,
   readCodingAgentRouting,
   recordCodingAgentRunnerToken,
@@ -101,6 +102,7 @@ import {
   agentRepositoryToken,
   type CheckoutServices,
   checkOutAgentRepository,
+  deepenAgentCheckout,
   openWorkingFolder,
 } from "./checkout.js";
 import { RunnerBundle } from "./runner-bundle.js";
@@ -416,6 +418,14 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
           : Effect.fail(new LaunchRefused({ reason: "no agent" })),
       );
 
+    /** Whether the agent a sandbox's tag names is one the account reaches. */
+    const ownsSandbox = (sandbox: ListedSandbox) => {
+      const agentId = sandbox.tags?.[RUNNER_TAG.AGENT];
+      return agentId === undefined
+        ? Effect.succeed(false)
+        : Effect.map(readCodingAgent(userId, agentId), Option.isSome);
+    };
+
     /** The repository's credential set at the running session's firewall again, minted afresh; an agent with no repository has none. */
     const renewCredential = (target: ConversationTarget, agent: CodingAgent, running: string) =>
       Effect.gen(function* () {
@@ -460,14 +470,45 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
           env: { ...SANDBOX_ENV, ...env, [RUNNER_ENV.BEARER]: bearer },
           sudo: true,
         });
-        const firstSequence = yield* options.nextSequence(agent.conversationId);
-        yield* api.updateTags(sandbox.name, {
-          [SESSION_TAG]: sessionId,
-          [RUNNER_TAG.AGENT]: agent.id,
-          [RUNNER_TAG.SANDBOX_SESSION]: sandbox.running,
-          [RUNNER_TAG.COMMAND]: commandId,
-          [RUNNER_TAG.FIRST_SEQUENCE]: String(firstSequence),
-        });
+        // A runner started but never configured is ended, and its tags cleared, so the next
+        // message relaunches whole rather than writing to a runner that waits for its config.
+        yield* Effect.gen(function* () {
+          const firstSequence = yield* options.nextSequence(agent.conversationId);
+          yield* api.updateTags(sandbox.name, {
+            [SESSION_TAG]: sessionId,
+            [RUNNER_TAG.AGENT]: agent.id,
+            [RUNNER_TAG.SANDBOX_SESSION]: sandbox.running,
+            [RUNNER_TAG.COMMAND]: commandId,
+            [RUNNER_TAG.FIRST_SEQUENCE]: String(firstSequence),
+          });
+          yield* configure(agent, sandbox.running, commandId, first, resume, firstSequence);
+        }).pipe(
+          Effect.tapError(() =>
+            Effect.ignore(
+              Effect.andThen(
+                api.kill(sandbox.running, commandId),
+                api.updateTags(sandbox.name, {
+                  [SESSION_TAG]: sessionId,
+                  [RUNNER_TAG.AGENT]: agent.id,
+                }),
+              ),
+            ),
+          ),
+        );
+      });
+
+    /** The started runner's config line and first message, written as one write. */
+    const configure = (
+      agent: CodingAgent,
+      running: string,
+      commandId: string,
+      first: InputLine,
+      resume: string | undefined,
+      firstSequence: number,
+    ) =>
+      Effect.gen(function* () {
+        const model = providerModelOf(agent.model);
+        if (model === undefined) return yield* Effect.fail(new LaunchRefused({ reason: "model" }));
         const effort = effortOf(agent.effort);
         const config: ClaudeCodeConfig = {
           harness: RUNNER_HARNESS.CLAUDE_CODE,
@@ -482,7 +523,7 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
           mcpUrl: options.mcpUrl,
           allowedDomains: [...ALLOWED_DOMAINS],
         };
-        yield* api.writeStdin(sandbox.running, commandId, `${line(config)}${line(first)}`);
+        yield* api.writeStdin(running, commandId, `${line(config)}${line(first)}`);
       });
 
     /** The message as a line, under Luke's id for it where the caller named one. */
@@ -536,12 +577,14 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
             const running = opened.currentSessionId;
             if (running === undefined) return yield* new SandboxUnavailable({});
             const repositorySandbox = repositorySandboxOver(api, running, options.run);
-            const credential = hasRepository(agent)
-              ? yield* checkOutAgentRepository(target, agent, repositorySandbox)
-              : yield* Effect.as(openWorkingFolder(repositorySandbox), undefined);
-            // The token is revealed only into the firewall rules set for GitHub.
-            if (credential !== undefined) {
-              yield* api.updateNetworkPolicy(running, credentialPolicy(credential));
+            // The checkout eve's sandbox makes, then at once what eve's first write does
+            // (`deepenAgentCheckout`): the write token at the firewall, the whole history, and the
+            // commit identity, since Claude Code's own shell has no hook for a first write.
+            if (hasRepository(agent)) {
+              yield* checkOutAgentRepository(target, agent, repositorySandbox);
+              yield* deepenAgentCheckout(target, agent, repositorySandbox);
+            } else {
+              yield* openWorkingFolder(repositorySandbox);
             }
             yield* launch(
               sessionId,
@@ -558,6 +601,12 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
         Effect.gen(function* () {
           const found = yield* sandboxOf(api, sessionId);
           if (Option.isNone(found)) return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+          // The session must be the conversation's own agent's, which the account reaches.
+          const agent = yield* agentOf(message.conversationId);
+          if (found.value.tags?.[RUNNER_TAG.AGENT] !== agent.id) {
+            return { outcome: EVE_SEND_OUTCOME.RETIRED } as const;
+          }
+          const target = { userId, conversationId: agent.conversationId };
           const sent = messageLine(message);
           const accepted = {
             outcome: EVE_SEND_OUTCOME.ACCEPTED,
@@ -566,15 +615,29 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
           } as const;
           const live = yield* liveRunner(api, found.value);
           if (live !== undefined) {
-            yield* api.writeStdin(live.sandboxSessionId, live.commandId, line(sent));
+            // The installation token lives an hour, so each message sets a fresh one; and the
+            // agent's model and effort as they stand now go ahead of the message, which a change
+            // since the launch takes effect from.
+            yield* renewCredential(target, agent, live.sandboxSessionId);
+            const effort = effortOf(agent.effort);
+            const model = providerModelOf(agent.model);
+            const choice: InputLine = {
+              type: INPUT_LINE.MODEL,
+              ...(model === undefined ? undefined : { model: model.modelId }),
+              ...(effort === undefined ? undefined : { effort }),
+            };
+            yield* api.writeStdin(
+              live.sandboxSessionId,
+              live.commandId,
+              `${line(choice)}${line(sent)}`,
+            );
             return accepted;
           }
           // The sandbox stopped or the runner ended: resumed, its credential set again, and the runner relaunched on the CLI's session.
-          const agent = yield* agentOf(message.conversationId);
           const resumed = yield* api.resume(found.value.name);
           const running = resumed.currentSessionId;
           if (running === undefined) return yield* new SandboxUnavailable({});
-          yield* renewCredential({ userId, conversationId: agent.conversationId }, agent, running);
+          yield* renewCredential(target, agent, running);
           const routing = yield* readCodingAgentRouting(userId, agent.id);
           const resume = Option.getOrUndefined(
             Option.flatMapNullishOr(routing, (read) => read.nativeSession),
@@ -586,7 +649,9 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
       cancel: (sessionId) =>
         Effect.gen(function* () {
           const found = yield* sandboxOf(api, sessionId);
-          const live = Option.isNone(found) ? undefined : yield* liveRunner(api, found.value);
+          const owned = Option.isSome(found) && (yield* ownsSandbox(found.value));
+          const live =
+            Option.isSome(found) && owned ? yield* liveRunner(api, found.value) : undefined;
           if (live === undefined) return { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN } as const;
           yield* api.writeStdin(
             live.sandboxSessionId,
@@ -598,9 +663,13 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
           Effect.catch((failure) =>
             Effect.as(Effect.logWarning(`A Claude Code cancel failed: ${failure._tag}`), {
               outcome: EVE_CANCEL_OUTCOME.FAILED,
-              status: failure.status ?? FAILED_STATUS.UNAVAILABLE,
+              status:
+                failure instanceof SandboxUnavailable
+                  ? (failure.status ?? FAILED_STATUS.UNAVAILABLE)
+                  : FAILED_STATUS.UNAVAILABLE,
             } as const),
           ),
+          Effect.provideContext(context),
         ),
 
       reset: (sessionId) =>
@@ -609,6 +678,7 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
           if (sandboxes.length === 0)
             return { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
           for (const sandbox of sandboxes) {
+            if (!(yield* ownsSandbox(sandbox))) continue;
             // The bearer goes first, so a runner still up is refused by Luke before its sandbox is gone.
             const agentId = sandbox.tags?.[RUNNER_TAG.AGENT];
             if (agentId !== undefined) yield* recordCodingAgentRunnerToken(userId, agentId, null);

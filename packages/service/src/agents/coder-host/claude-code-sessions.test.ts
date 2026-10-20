@@ -15,6 +15,7 @@ import {
   createCodingAgent,
   readCodingAgentRouting,
   recordCodingAgentNativeSession,
+  updateCodingAgentChoice,
 } from "@luke/database/models/coding-agent-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import { saveProviderKey } from "@luke/database/models/provider-key-store";
@@ -26,7 +27,13 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import { afterEach, vi } from "vitest";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../../environment.js";
-import { GITHUB_APP_WITH_TOKENS } from "../../testing/github-app-fake.js";
+import {
+  connectWorkspaceGitHub,
+  GITHUB_APP_WITH_TOKENS,
+  GITHUB_FIXTURE_INSTALLATION_TOKEN,
+  githubReaching,
+  type InstallationFixture,
+} from "../../testing/github-app-fake.js";
 import { sandboxListRefusal, sandboxStopRefusal } from "../../testing/vercel-sandbox-fake.js";
 import { AgentSandboxImage } from "../agent-sandbox-image.js";
 import {
@@ -64,6 +71,13 @@ const BUNDLE = new TextEncoder().encode("// the runner, bundled\nconsole.log('ru
 const TEST_KEY = "sk-ant-api03-fixture-test-mode-key";
 const PLAN_TOKEN = "sk-ant-oat01-fixture-plan-token";
 const RING = `1:${Buffer.alloc(32, 3).toString("base64")}`;
+const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
+const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
+const RELAY_INSTALLATION: InstallationFixture = {
+  id: 7,
+  login: RELAY.owner,
+  repositories: [RELAY],
+};
 const CLI_SESSION = "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d";
 
 /** An unsigned token naming the fixture's project and team, a year from expiring. */
@@ -125,6 +139,8 @@ function untar(archive: Uint8Array): Map<string, string> {
 /** Vercel Sandbox's REST API, as a store of the sandboxes and commands it was asked for. */
 function vercel() {
   const sandboxes: FakeSandbox[] = [];
+  /** How many stdin writes with data the API refuses next, as a passing outage. */
+  const failStdin = { remaining: 0 };
   const commands: FakeCommand[] = [];
   const uploads: Map<string, string>[] = [];
   const policies: { readonly session: string; readonly policy: unknown }[] = [];
@@ -140,7 +156,7 @@ function vercel() {
     currentSessionId: sandbox.currentSessionId,
     tags: sandbox.tags,
   });
-  const layer = fakeHttpClientLayer(async (url, init) => {
+  const respond = async (url: string, init: RequestInit): Promise<Response> => {
     const parsed = new URL(url);
     const path = parsed.pathname;
     const method = init.method ?? "GET";
@@ -208,7 +224,10 @@ function vercel() {
     }
     if (rest === "fs/write") {
       assert.equal(new Headers(init.headers).get("content-type"), "application/gzip");
-      uploads.push(untar(new Uint8Array(await new Response(init.body).arrayBuffer())));
+      // Note that an upload relayed as text through GitHub's fake is not an archive any more, and is not kept.
+      if (typeof init.body !== "string") {
+        uploads.push(untar(new Uint8Array(await new Response(init.body).arrayBuffer())));
+      }
       return Response.json({});
     }
     if (rest === "cmd") {
@@ -232,12 +251,20 @@ function vercel() {
       commands.push(command);
       return Response.json({ command: { id: command.id, exitCode: null } });
     }
-    const commandCall = /^cmd\/([^/]+)(\/stdin)?$/u.exec(rest);
+    const commandCall = /^cmd\/([^/]+)(\/stdin|\/kill)?$/u.exec(rest);
     assert.ok(commandCall !== null, `an unexpected call: ${method} ${path}`);
     const command = commands.find((each) => each.id === commandCall[1]);
     if (command === undefined) return new Response(null, { status: 404 });
+    if (commandCall[2] === "/kill") {
+      command.exitCode = command.exitCode ?? 143;
+      return Response.json({ command: { id: command.id, exitCode: command.exitCode } });
+    }
     if (commandCall[2] === "/stdin") {
       const asked = await body();
+      if (asked.data !== undefined && failStdin.remaining > 0) {
+        failStdin.remaining -= 1;
+        return new Response(null, { status: 502 });
+      }
       if (asked.data !== undefined) {
         const bytes = Buffer.from(command.stdin, "utf8");
         const data = Buffer.from(asked.data, "base64");
@@ -249,8 +276,17 @@ function vercel() {
       });
     }
     return Response.json({ command: { id: command.id, exitCode: command.exitCode } });
-  });
-  return { layer, sandboxes, commands, uploads, policies, runs };
+  };
+  return {
+    layer: fakeHttpClientLayer(respond),
+    respond,
+    sandboxes,
+    commands,
+    uploads,
+    policies,
+    runs,
+    failStdin,
+  };
 }
 
 const NO_KEYS: HostedEnvironmentValues = {
@@ -494,6 +530,10 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       const opened = yield* sessions.open(message(agent, "Fix the invitations."));
       assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
       const lineId = randomUUID();
+      yield* updateCodingAgentChoice(userId, agent.id, {
+        model: "anthropic/claude-sonnet-5.5",
+        effort: "low",
+      });
 
       const sent = yield* sessions.send(
         opened.sessionId,
@@ -509,6 +549,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
       assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.ACCEPTED);
       assert.equal(api.commands.length, 1);
       assert.deepEqual(linesOf(api.commands[0]).slice(2), [
+        // The agent's model and effort as they stand, ahead of the message, so a change since the launch holds.
+        { type: INPUT_LINE.MODEL, model: "claude-sonnet-5-5", effort: "low" },
         {
           type: INPUT_LINE.MESSAGE,
           uuid: lineId,
@@ -648,6 +690,115 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         assert.deepEqual(yield* sessions.send(opened.sessionId, message(agent, "Hello?")), {
           outcome: EVE_SEND_OUTCOME.RETIRED,
         });
+      }),
+  );
+
+  it.effect("a session of another agent takes nothing from this conversation's messages", () =>
+    Effect.gen(function* () {
+      vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+      const api = vercel();
+      const mine = yield* openAgent;
+      const theirs = yield* openAgent;
+      const theirSessions = yield* sessionsFor(theirs.userId, { next: 0 }).pipe(
+        Effect.provide(services(api)),
+      );
+      const opened = yield* theirSessions.open(message(theirs.agent, "Their work."));
+      assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+      const mySessions = yield* sessionsFor(mine.userId, { next: 0 }).pipe(
+        Effect.provide(services(api)),
+      );
+
+      const sent = yield* mySessions.send(opened.sessionId, message(mine.agent, "Not yours."));
+      const cancelled = yield* mySessions.cancel(opened.sessionId, "turn_0");
+      const reset = yield* mySessions.reset(opened.sessionId);
+
+      assert.deepEqual(sent, { outcome: EVE_SEND_OUTCOME.RETIRED });
+      assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
+      assert.equal(reset.outcome, EVE_RESET_OUTCOME.RESET);
+      assert.equal(api.sandboxes[0]?.deleted, false);
+      assert.equal(linesOf(api.commands[0]).length, 2);
+    }),
+  );
+
+  it.effect(
+    "a relaunch whose config never reached the runner ends that runner, and the next message relaunches whole",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel();
+        const { userId, agent } = yield* openAgent;
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(services(api)),
+        );
+        const opened = yield* sessions.open(message(agent, "Fix the invitations."));
+        assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
+        const first = api.commands[0];
+        assert.ok(first !== undefined);
+        first.exitCode = 0;
+        api.failStdin.remaining = 1;
+
+        const failed = yield* sessions.send(opened.sessionId, message(agent, "Again."));
+        const retried = yield* sessions.send(opened.sessionId, message(agent, "Again."));
+
+        assert.equal(failed.outcome, EVE_SEND_OUTCOME.FAILED);
+        assert.equal(retried.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        assert.equal(api.commands.length, 3);
+        assert.notEqual(api.commands[1]?.exitCode, null);
+        const [config, line] = linesOf(api.commands[2]) as [ClaudeCodeConfig, InputLine];
+        assert.equal(config.harness, RUNNER_HARNESS.CLAUDE_CODE);
+        assert.equal(line.type, INPUT_LINE.MESSAGE);
+      }),
+  );
+
+  it.effect(
+    "a repository agent's sandbox opens with the write token at its firewall, as eve's first write sets it, and never in a command",
+    () =>
+      Effect.gen(function* () {
+        vi.stubEnv("VERCEL_OIDC_TOKEN", fixtureToken());
+        const api = vercel();
+        const userId = `user-${randomUUID()}`;
+        yield* Effect.flatMap(Database, (db) =>
+          db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` }),
+        );
+        const task = yield* startTask(userId, { name: "Relay", repository: RELAY_FULL_NAME });
+        yield* connectWorkspaceGitHub(task.workspaceId, RELAY_INSTALLATION);
+        const started = yield* createCodingAgent(userId, {
+          taskId: task.id,
+          idempotencyKey: "start-1",
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          planSnapshot: "# Relay\n",
+          prompt: null,
+          repository: RELAY_FULL_NAME,
+        });
+        const agent = Option.getOrThrow(started).agent;
+        const github = githubReaching([RELAY_INSTALLATION], undefined, {}, (sent) =>
+          new URL(sent.url).hostname === "vercel.com"
+            ? api.respond(sent.url, { method: sent.method, headers: sent.headers, body: sent.body })
+            : undefined,
+        );
+        const sessions = yield* sessionsFor(userId, { next: 0 }).pipe(
+          Effect.provide(
+            Layer.mergeAll(
+              github.layer,
+              Layer.succeed(HostedEnvironment, NO_KEYS),
+              Layer.succeed(AgentSandboxImage, {
+                snapshotId: Effect.succeed(Option.some(SNAPSHOT)),
+              }),
+              Layer.succeed(RunnerBundle, { contents: Effect.succeed(BUNDLE) }),
+            ),
+          ),
+        );
+
+        const opened = yield* sessions.open(message(agent, "Push a branch."));
+
+        assert.equal(opened.outcome, EVE_SEND_OUTCOME.ACCEPTED);
+        const writeHeader = `Basic ${Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString("base64")}`;
+        assert.ok(JSON.stringify(api.policies.at(-1)?.policy).includes(writeHeader));
+        assert.equal(api.commands.length, 1);
+        const visible = JSON.stringify([api.commands, api.runs, api.sandboxes]);
+        assert.equal(visible.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
+        assert.equal(visible.includes(writeHeader), false);
       }),
   );
 });
