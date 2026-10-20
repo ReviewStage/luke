@@ -52,6 +52,7 @@ import { useCapability, useNativeAgentsAccess } from "../use-app-state.js";
 import { ApiKeysSection } from "./api-keys-section.js";
 import { ChaptersModelSection } from "./chapters-model-section.js";
 import { ChatGptPlanSection } from "./chatgpt-plan-section.js";
+import { ClaudePlanSection } from "./claude-plan-section.js";
 import { PickerRow } from "./picker-row.js";
 import { SwitchRow } from "./switch-row.js";
 
@@ -62,7 +63,9 @@ import { SwitchRow } from "./switch-row.js";
  * model, the model a Generate chapters runs on (`chapters-model-section.tsx`),
  * then the account's own API keys (`api-keys-section.tsx`); on the desktop,
  * for an account in the native-agents cohort, a fourth, Codex, connects the
- * account's ChatGPT plan (`chatgpt-plan-section.tsx`). The two
+ * account's ChatGPT plan (`chatgpt-plan-section.tsx`); for that cohort on
+ * any client, Claude Code connects its Claude plan with a pasted
+ * `claude setup-token` (`claude-plan-section.tsx`). The first two
  * share the one read of the keys, so a
  * key saved or removed below is what the model row says at once. The default model's one value is the account's, kept
  * on the service beside the settings preferences and written by this page
@@ -430,6 +433,7 @@ export function CodingAgentsPage({ signedIn }: { signedIn: boolean }): React.JSX
       <CodingAgentsSection signedIn={signedIn} ownKeys={ownKeys} keysAnswered={keysAnswered} />
       <ChaptersModelSection signedIn={signedIn} />
       <ApiKeysSection signedIn={signedIn} onKeys={onKeys} />
+      {inCohort ? <ClaudePlanSection signedIn={signedIn} /> : null}
       {chatGptOffered ? <ChatGptPlanSection signedIn={signedIn} /> : null}
     </>
   );
