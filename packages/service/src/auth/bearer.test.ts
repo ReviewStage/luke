@@ -67,22 +67,22 @@ function request(headers: Record<string, string> = {}): Request {
 
 /**
  * The deployment's auth service, faked at its boundary: Better Auth's own
- * userinfo answers the subject each token it holds names, refuses any other
- * as it refuses an unknown or revoked one, and counts each time it is asked.
- * A test issues and revokes tokens on `tokens` as it goes.
+ * userinfo answers the subject each token it holds names, and refuses any
+ * other as it refuses an unknown or revoked one. A test issues and revokes
+ * tokens on `tokens` as it goes; with `revokeAsAnswered`, a token is revoked
+ * the moment it is answered, so only the first ask for it ever names anyone.
  */
-function fakeAuthService(tokens: Map<string, string>) {
-  const asked = { count: 0 };
+function fakeAuthService(tokens: Map<string, string>, revokeAsAnswered = false) {
   vi.spyOn(auth.api, "oauth2UserInfo").mockImplementation(
     // SAFETY: `hostedUserInfo` reads `sub` alone, which the fake answers as the endpoint does.
     (async (context: { headers: Headers }) => {
-      asked.count += 1;
-      const sub = tokens.get(context.headers.get("authorization") ?? "");
+      const authorization = context.headers.get("authorization") ?? "";
+      const sub = tokens.get(authorization);
       if (sub === undefined) throw new Error("invalid_token");
+      if (revokeAsAnswered) tokens.delete(authorization);
       return { sub };
     }) as unknown as typeof auth.api.oauth2UserInfo,
   );
-  return asked;
 }
 
 /** The account a bearer names, resolved as the Mac's held read resolves it, on the instance's kept callers. */
@@ -331,33 +331,38 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const tokens = new Map([[ADA_BEARER, "user-ada"]]);
-      const asked = fakeAuthService(tokens);
+      fakeAuthService(tokens, true);
 
       assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
-      // The trade-off: a token revoked since still resolves on this instance until its TTL runs out.
-      tokens.delete(ADA_BEARER);
+      // The trade-off: the token, revoked as it was answered, still resolves on this instance until its TTL runs out.
       assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
-      assert.equal(
-        asked.count,
-        1,
-        "the second request within the TTL asks the auth service nothing",
-      );
-
       yield* TestClock.adjust(BEARER_CALLER_TTL);
       assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.none());
-      assert.equal(asked.count, 2);
     }).pipe(Effect.provide(bearerCallersLayer)),
+);
+
+it.effect("requests for one bearer that miss together share the one ask", () =>
+  Effect.gen(function* () {
+    const tokens = new Map([[ADA_BEARER, "user-ada"]]);
+    fakeAuthService(tokens, true);
+
+    const resolved = yield* Effect.all(
+      Array.from({ length: 5 }, () => bearerUserId(ADA_BEARER)),
+      { concurrency: "unbounded" },
+    );
+    assert.deepEqual(
+      resolved,
+      Array.from({ length: 5 }, () => Option.some("user-ada")),
+    );
+  }).pipe(Effect.provide(bearerCallersLayer)),
 );
 
 it.effect("a refused bearer is asked again every time, so a token issued since works at once", () =>
   Effect.gen(function* () {
     const tokens = new Map<string, string>();
-    const asked = fakeAuthService(tokens);
+    fakeAuthService(tokens);
 
     assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.none());
-    assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.none());
-    assert.equal(asked.count, 2);
-
     tokens.set(ADA_BEARER, "user-ada");
     assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
   }).pipe(Effect.provide(bearerCallersLayer)),
@@ -369,14 +374,14 @@ it.effect("two bearers never answer for each other on one instance", () =>
       [ADA_BEARER, "user-ada"],
       [GRACE_BEARER, "user-grace"],
     ]);
-    const asked = fakeAuthService(tokens);
+    fakeAuthService(tokens, true);
 
+    // The second round is answered from what the instance kept, the auth service having revoked both as it answered.
     for (const _round of [1, 2]) {
       assert.deepEqual(yield* bearerUserId(ADA_BEARER), Option.some("user-ada"));
       assert.deepEqual(yield* bearerUserId(GRACE_BEARER), Option.some("user-grace"));
       assert.deepEqual(yield* bearerUserId("Bearer oauth-token-of-nobody"), Option.none());
     }
-    assert.equal(asked.count, 4, "each known bearer asked once, the unknown one each time");
   }).pipe(Effect.provide(bearerCallersLayer)),
 );
 

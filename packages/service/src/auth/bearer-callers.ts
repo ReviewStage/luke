@@ -40,14 +40,23 @@ export class BearerCallers extends Context.Service<
   }
 >()("BearerCallers") {}
 
+/** The bearer an asking lookup is for, handed to it for the length of the ask alone. */
+class AskingBearer extends Context.Service<
+  AskingBearer,
+  { readonly input: { headers: Headers }; readonly ask: UserInfoEndpoint }
+>()("AskingBearer") {}
+
 /**
- * The kept callers, built once per instance. Only a subject the auth service
- * named is kept: a refusal, an answer naming nobody, and a failure of the
- * auth service are asked again on the next request, so a token issued a
- * moment ago works at once. Note that the cache is read and written by hand
- * rather than through its own lookup, because a lookup is handed only the
- * key, and the key is the digest: the token is never kept, as a key or in
- * the context of a kept lookup's fiber.
+ * The kept callers, built once per instance, in two caches keyed by the
+ * digest. `asking` joins every request for one bearer that misses while the
+ * auth service is still being asked into that one ask, and keeps nothing
+ * once it ends: its lookup reads the bearer from the asking request's
+ * context, so the entry holding that context is gone with the ask. `kept`
+ * holds the answers, written by hand rather than through a lookup, so no
+ * context of the bearer's stands in it for the TTL. Only a subject the auth
+ * service named is kept: a refusal, an answer naming nobody, and a failure
+ * of the auth service are asked again on the next request, so a token
+ * issued a moment ago works at once.
  */
 export const bearerCallersLayer = Layer.effect(
   BearerCallers,
@@ -60,6 +69,18 @@ export const bearerCallersLayer = Layer.effect(
           Exit.isSuccess(exit) && Option.isSome(exit.value) ? BEARER_CALLER_TTL : Duration.zero,
       },
     );
+    const asking = yield* Cache.makeWith(
+      (_digest: string) =>
+        Effect.gen(function* () {
+          const { input, ask } = yield* AskingBearer;
+          return yield* ask(input);
+        }),
+      {
+        capacity: BEARER_CALLER_CAPACITY,
+        requireServicesAt: "lookup",
+        timeToLive: () => Duration.zero,
+      },
+    );
     const through =
       (ask: UserInfoEndpoint): UserInfoEndpoint =>
       (input) =>
@@ -69,7 +90,9 @@ export const bearerCallersLayer = Layer.effect(
           const digest = bearerDigest(authorization);
           const standing = Option.flatten(yield* Cache.getSuccess(kept, digest));
           if (Option.isSome(standing)) return standing.value;
-          const answer = yield* ask(input);
+          const answer = yield* Cache.get(asking, digest).pipe(
+            Effect.provideService(AskingBearer, { input, ask }),
+          );
           if (answer?.sub) yield* Cache.set(kept, digest, Option.some(answer));
           return answer;
         });
