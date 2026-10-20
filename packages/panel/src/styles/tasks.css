@@ -6975,6 +6975,15 @@ button.picture-frame {
   font-weight: 560;
 }
 
+/* Under a finger, on a phone held at arm's length, a comment's time and the
+   line saying its words are gone are no smaller than 12px. */
+@media (pointer: coarse) {
+  .comment-time,
+  .comment-gone {
+    font-size: 12px;
+  }
+}
+
 .comment-gone svg {
   width: 13px;
   height: 13px;

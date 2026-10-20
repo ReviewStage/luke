@@ -181,6 +181,13 @@
     text-overflow: ellipsis;
   }
 
+  /* Under a finger, on a phone held at arm's length, no smaller than 12px. */
+  @media (pointer: coarse) {
+    .luke-menu-item-detail {
+      font-size: 12px;
+    }
+  }
+
   /* A row's shortcut at its end, the way a system menu prints a chord. */
   .luke-menu-item-hint {
     display: inline-flex;
