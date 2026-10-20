@@ -508,9 +508,19 @@ function waiting(tab: HTMLElement): string[] {
     .map((each) => each.textContent ?? "");
 }
 
-/** What the header says of where the pull request stands: its title row's first control's words. */
+/** The header's pill, which follows the title in its row's markup; none where the row holds none. */
+function pillOf(tab: HTMLElement): Element | undefined {
+  const next = tab.querySelector(
+    ".pull-request-title-row > .pull-request-title",
+  )?.nextElementSibling;
+  return next === null || next === undefined || next.matches(".pull-request-title-actions")
+    ? undefined
+    : next;
+}
+
+/** What the header says of where the pull request stands: its pill's words. */
 function standing(tab: HTMLElement): string | undefined {
-  return tab.querySelector(".pull-request-title-row")?.firstElementChild?.textContent ?? undefined;
+  return pillOf(tab)?.textContent ?? undefined;
 }
 
 /** The merge control at the title row's end, where one stands. */
@@ -1720,6 +1730,55 @@ test("a ⌘-click on the title opens the pull request on GitHub, and a plain one
   assert.deepEqual(opened, [PAGE]);
 });
 
+test("a screen reader meets the title before the pill, which comes after it in the title row's markup", async () => {
+  const tab = await draw(controlAnswering());
+  const title =
+    tab.querySelector(".pull-request-title-row > .pull-request-title") ??
+    assert.fail("the title stands in the title row");
+  const pill = pillOf(tab) ?? assert.fail("the pill stands in the title row");
+  assert.ok(
+    title.compareDocumentPosition(pill) & Node.DOCUMENT_POSITION_FOLLOWING,
+    "the pill follows the title",
+  );
+  assert.match(title.textContent ?? "", /#42/u);
+  assert.match(pill.textContent ?? "", /Open/u);
+});
+
+/** Scrolls `box` to `top` from wherever it stood, as a finger dragging it does. */
+function scrollTo(box: Element, top: number): void {
+  Object.defineProperty(box, "scrollTop", { configurable: true, value: top });
+  act(() => {
+    box.dispatchEvent(new Event("scroll"));
+  });
+}
+
+test("the header folds once the view under it is scrolled down, not by a sideways scroll, and unfolds back at its top or on another view", async () => {
+  const tab = await draw(controlAnswering());
+  const header = tab.querySelector(".pull-request-header") ?? assert.fail("the header stands");
+  const folded = () => header.hasAttribute("data-folded");
+  const conversation =
+    tab.querySelector("section[aria-label='Pull request conversation'] .luke-detail-page-main") ??
+    assert.fail("the conversation scrolls");
+  const sideways = tab.querySelector(".luke-choice-bar") ?? assert.fail("the tabs' row stands");
+
+  scrollTo(conversation, 20);
+  assert.equal(folded(), false, "a nudge folds nothing");
+  scrollTo(conversation, 400);
+  assert.equal(folded(), true, "scrolled down, the header folds");
+  act(() => {
+    sideways.dispatchEvent(new Event("scroll"));
+  });
+  assert.equal(folded(), true, "a sideways scroll leaves it folded");
+  scrollTo(conversation, 20);
+  assert.equal(folded(), true, "near the top it stays folded");
+  scrollTo(conversation, 0);
+  assert.equal(folded(), false, "at the top it unfolds");
+
+  scrollTo(conversation, 400);
+  await choose(tab, "Checks");
+  assert.equal(folded(), false, "another view starts unfolded");
+});
+
 test("an agent with no pull request yet says so", async () => {
   const none = await draw(
     controlAnswering({
@@ -1946,10 +2005,7 @@ test("the pill wears what was published of the checks only for the pull request 
     }),
   };
   const tab = await draw(control);
-  const mark =
-    tab
-      .querySelector(".pull-request-title-row")
-      ?.firstElementChild?.querySelector("[aria-label]") ?? assert.fail("a mark");
+  const mark = pillOf(tab)?.querySelector("[aria-label]") ?? assert.fail("a mark");
   assert.match(mark.getAttribute("aria-label") ?? "", /43/u);
   assert.doesNotMatch(
     mark.getAttribute("aria-label") ?? "",
@@ -1958,10 +2014,10 @@ test("the pill wears what was published of the checks only for the pull request 
   );
 });
 
-/** The header's pill, its title row's first control, as a press; nothing where it is no press. */
+/** The header's pill, as a press; nothing where it is no press. */
 function pillPress(tab: HTMLElement): HTMLButtonElement | undefined {
-  const first = tab.querySelector(".pull-request-title-row")?.firstElementChild;
-  return first instanceof HTMLButtonElement ? first : undefined;
+  const pill = pillOf(tab);
+  return pill instanceof HTMLButtonElement ? pill : undefined;
 }
 
 /** The header's pill, as a press. */

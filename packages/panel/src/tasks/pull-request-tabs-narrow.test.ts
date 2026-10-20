@@ -54,3 +54,45 @@ test("below 560px the tabs take their room in", () => {
   assert.deepEqual(rowAt(520), { fold: "tight", reviewWord: false });
   assert.deepEqual(rowAt(470), { fold: "tight", reviewWord: false });
 }, 60_000);
+
+/** The row's tabs as drawn in the room given at a phone's width, folded together as a row too short for their names folds them. */
+function phoneRowAt(room: "narrow" | "wide") {
+  laid?.remove();
+  laid = layContainersAt({ "pull-request-tab": 390 }, { touch: true });
+  document.body.innerHTML = [
+    `<div class="desktop-shell" data-room="${room}"><div class="file-view pull-request-tab">`,
+    '<div class="pull-request-tabs">',
+    '<div class="luke-choice-bar" role="tablist" data-look="fill" data-fold="together" data-folded="true">',
+    '<button class="luke-choice-bar-option" role="tab" aria-selected="true">',
+    '<span class="luke-choice-bar-icon"><svg></svg></span><span class="luke-choice-bar-label">Conversation</span>',
+    "</button></div></div>",
+    '<div class="pull-request-filters"><span class="pull-request-filter">Hide bots</span></div>',
+    "</div></div>",
+  ].join("");
+  const read = (selector: string) =>
+    getComputedStyle(document.querySelector(selector) ?? assert.fail(`${selector} stands`));
+  const label = read(".luke-choice-bar-label");
+  return {
+    named: label.position !== "absolute" && label.clipPath !== "inset(50%)",
+    glyph: read(".luke-choice-bar-icon").display !== "none",
+    filtersInset: read(".pull-request-filters").getPropertyValue("padding-inline"),
+  };
+}
+
+test("on a phone the tabs are named in words, their glyphs giving way, and the filters' switches stand in from the screen's edge as far as the words under them", () => {
+  const phone = phoneRowAt("narrow");
+  assert.equal(phone.named, true);
+  assert.equal(phone.glyph, false);
+  assert.equal(phone.filtersInset, "var(--content-inset)");
+}, 30_000);
+
+test("the desktop's tabs at that width fold to their glyphs as before, the switches at the row's own inset", () => {
+  const desktop = phoneRowAt("wide");
+  assert.equal(desktop.named, false);
+  assert.equal(desktop.glyph, true);
+  assert.notEqual(
+    desktop.filtersInset,
+    "var(--content-inset)",
+    "the switches keep the row's inset",
+  );
+}, 30_000);
