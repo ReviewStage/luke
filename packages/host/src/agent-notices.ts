@@ -166,7 +166,7 @@ export const NOTICE_KIND = {
  * whatever the words, so a browser's tabs can show it once
  * (`apps/web/src/app/web-notices.ts`).
  */
-export type NoticeSubject =
+type NoticeSubject =
   | {
       readonly kind: typeof NOTICE_KIND.AGENT_END;
       readonly agentId: string;
