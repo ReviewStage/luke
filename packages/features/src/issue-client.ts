@@ -1,4 +1,4 @@
-import { HTTP_METHOD, unparsedWire, type WireBoundaryInput } from "@luke/wire";
+import { HTTP_METHOD, HTTP_STATUS, unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
@@ -24,6 +24,7 @@ import {
   issueCreateParamsSchema,
 } from "./issue-view.js";
 import { ISSUE_LIST_QUERY } from "./issue-wire.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 import { HOSTED_API_ERROR, type HostedApiError, readServiceAnswer } from "./service-wire.js";
 
@@ -109,20 +110,33 @@ export class HostedIssueClient {
 
   /**
    * The workspace's standing issues sealed for following over Neon
-   * Realtime; unanswered for anything that went wrong, which the caller
-   * answers by asking again.
+   * Realtime for the account `userId` names: signed out where the session
+   * is no longer that account's, as Neon's guide says to ("When the session
+   * changes"); unanswered for anything else that went wrong, which the
+   * caller answers by asking again.
    */
   listLive(
     workspaceId: string,
-  ): Effect.Effect<IssuesLiveAnswer | Failed, never, HttpClient.HttpClient> {
-    const query = new URLSearchParams({ [ISSUE_LIST_QUERY.WORKSPACE_ID]: workspaceId });
+    userId: string,
+  ): Effect.Effect<
+    IssuesLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    const query = new URLSearchParams({
+      [ISSUE_LIST_QUERY.WORKSPACE_ID]: workspaceId,
+      [LIVE_USER_QUERY]: userId,
+    });
     const path = `${HOSTED_SERVICE_PATH.LIVE_ISSUES}?${query.toString()}`;
     return Effect.flatMap(this.#live.send({ method: HTTP_METHOD.GET, path }), (answer) => {
+      if (callAnswered(answer) && answer.response.status === HTTP_STATUS.UNAUTHORIZED) {
+        return Effect.succeed(LIVE_SIGNED_OUT);
+      }
       if (!callAnswered(answer) || !answer.response.ok) return Effect.succeed(UNANSWERED);
       const { response } = answer;
       return Effect.map(
         Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined)),
-        (body): IssuesLiveAnswer | Failed =>
+        (body): IssuesLiveAnswer | Failed | typeof LIVE_SIGNED_OUT =>
           Result.getOrUndefined(readServiceAnswer(issuesLiveAnswerSchema)(unparsedWire(body))) ??
           UNANSWERED,
       );

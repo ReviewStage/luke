@@ -7,6 +7,7 @@ import { accountBearer } from "./account-call.js";
 import { HostedIssueClient } from "./issue-client.js";
 import { ISSUE_CALL_FAILURE } from "./issue-view.js";
 import { ISSUE_PRIORITY, ISSUE_STATUS } from "./issue-wire.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 /**
@@ -198,5 +199,39 @@ it.effect(
 
       assert.deepEqual(listed, { issues: [ISSUE] });
       assert.equal(asked, 2);
+    }),
+);
+
+it.effect(
+  "the live list names the workspace and the account it is for, and a session of another account is signed out",
+  () =>
+    Effect.gen(function* () {
+      const refusing = fakeCloudApi({
+        "GET /api/live/issues": {
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_TOKEN }),
+          status: HTTP_STATUS.UNAUTHORIZED,
+        },
+      });
+      const unavailable = fakeCloudApi({
+        "GET /api/live/issues": {
+          answer: () => ({ error: HOSTED_API_ERROR.UNAVAILABLE }),
+          status: HTTP_STATUS.SERVER_ERROR,
+        },
+      });
+
+      const signedOut = yield* Effect.provide(
+        client().listLive(WORKSPACE_ID, "user-1"),
+        refusing.layer,
+      );
+      const failed = yield* Effect.provide(
+        client().listLive(WORKSPACE_ID, "user-1"),
+        unavailable.layer,
+      );
+
+      assert.deepEqual(signedOut, LIVE_SIGNED_OUT);
+      const asked = refusing.requests()[0]?.searchParams;
+      assert.equal(asked?.get(LIVE_USER_QUERY), "user-1");
+      assert.equal(asked?.get("workspaceId"), WORKSPACE_ID);
+      assert.deepEqual(failed, { failure: ISSUE_CALL_FAILURE.UNANSWERED });
     }),
 );
