@@ -34,11 +34,14 @@ function topicHead(room: string) {
   head.className = "desktop-toolbar chat-head";
   const back = head.appendChild(document.createElement("button"));
   back.setAttribute("aria-label", "Back to Chat");
-  head.appendChild(document.createElement("h2")).textContent = "#design";
-  const meta = head.appendChild(document.createElement("span"));
+  const heading = head.appendChild(document.createElement("div"));
+  heading.className = "desktop-toolbar-heading chat-head-heading";
+  heading.appendChild(document.createElement("h2")).textContent = "#design";
+  const meta = heading.appendChild(document.createElement("span"));
+  meta.className = "chat-head-meta";
   meta.textContent = "Where the design is talked through";
-  const actions = head.appendChild(document.createElement("span"));
-  actions.className = "chat-head-actions";
+  const actions = head.appendChild(document.createElement("div"));
+  actions.className = "desktop-toolbar-actions";
   const menu = actions.appendChild(document.createElement("button"));
   menu.setAttribute("aria-label", "#design actions");
   return { back, meta, menu };

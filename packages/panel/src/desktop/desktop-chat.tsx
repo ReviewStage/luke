@@ -1,4 +1,5 @@
 import { CHANNEL_KIND, type ChatChannel } from "@luke/features/chat-wire";
+import { LINK_PLACE } from "@luke/features/luke-link";
 import type { MentionPlace } from "@luke/features/mention-link";
 import { inPinOrder } from "@luke/features/pin-order";
 import { EXPERIMENT } from "@luke/settings";
@@ -38,7 +39,7 @@ import { sectionOrder, workspaceSections } from "@luke/ui/task-sections-model";
 import { AtSignIcon, HashIcon, MessagesSquareIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
-import { LinkWorkspaceProvider } from "../copy-link-item.js";
+import { agentPlace, LinkWorkspaceProvider, useCopyLinkItem } from "../copy-link-item.js";
 import { FoldingButton } from "../folding-button.js";
 import { MemberDirectory } from "../member-directory.js";
 import { hiddenColumns, SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -47,7 +48,7 @@ import { messagingAgentActor, useChatActor } from "../tasks/chat-actors.js";
 import { ChatPane } from "../tasks/chat-pane.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { useMinute } from "../tasks/task-time.js";
-import { useOpenLink } from "../tasks/use-open-link.js";
+import { useOpenLink, useOpenPlace } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
 import { useExperiment } from "../use-app-state.js";
@@ -588,11 +589,15 @@ function ChatView({
         openLink={openLink}
         onPost={view.onPost}
         onAnswer={view.onAnswer}
-        channelActions={(channel) =>
-          channel.kind === CHANNEL_KIND.TOPIC ? (
-            <TopicActions channel={channel} dialogs={dialogs} shown={view.open} />
-          ) : undefined
-        }
+        channelActions={(channel) => (
+          <ChannelActions
+            channel={channel}
+            label={channel.kind === CHANNEL_KIND.DM ? "Conversation" : `#${channel.name ?? ""}`}
+            dialogs={dialogs}
+            shown={view.open}
+          />
+        )}
+        pairActions={(pair) => <PairActions pair={pair} shown={view.open} />}
         readPicture={view.readPicture}
         lead={
           room === SHELL_ROOM.NARROW ? (
@@ -606,48 +611,119 @@ function ChatView({
   );
 }
 
-/** A topic's menu at its head's end: edit its name and purpose and archive it, or bring an archived one back. */
-function TopicActions({
+/** What a place's ⋯ menu is called, to a screen reader and in its hint. */
+const PLACE_ACTIONS = "More actions";
+
+/** A place's ⋯ at its head's end, as every page's toolbar ends, opening the menu of the groups given; nothing where there are none. */
+function PlaceMenu({
+  label,
+  groups,
+  shown,
+}: {
+  label: string;
+  groups: readonly (readonly MenuAction[])[];
+  shown: boolean;
+}): React.JSX.Element | null {
+  const menu = useMenu(shown);
+  const held = groups.filter((group) => group.length > 0);
+  if (held.length === 0) return null;
+  return (
+    <>
+      <Tooltip label={PLACE_ACTIONS}>
+        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
+      </Tooltip>
+      {menu.drawn === undefined ? null : (
+        <ActionMenu label={label} menu={menu.drawn} groups={held} onClose={menu.close} />
+      )}
+    </>
+  );
+}
+
+/**
+ * A channel's ⋯ menu: copy its link; a task's channel opens its task; and a
+ * topic is edited and archived there, or an archived one brought back.
+ */
+function ChannelActions({
   channel,
+  label,
   dialogs,
   shown,
 }: {
   channel: ChatChannel;
+  label: string;
   dialogs: ChannelDialogs;
   shown: boolean;
-}): React.JSX.Element {
-  const menu = useMenu(shown);
-  const label = `#${channel.name ?? ""} actions`;
-  const groups: MenuAction[][] = channel.archived
-    ? [
-        [
+}): React.JSX.Element | null {
+  const copyLink = useCopyLinkItem()({ kind: LINK_PLACE.CHAT, channelId: channel.id });
+  const openPlace = useOpenPlace();
+  const { planId } = channel;
+  const opens: MenuAction[] =
+    planId === undefined || openPlace === undefined
+      ? []
+      : [
           {
-            label: "Bring back channel",
-            icon: <UnarchiveIcon />,
-            onSelect: () => dialogs.askArchive(channel),
+            label: "Open task",
+            icon: <DocumentIcon />,
+            onSelect: () => openPlace({ kind: LINK_PLACE.TASK, planId }),
           },
-        ],
-      ]
-    : [
-        [{ label: "Edit channel", icon: <PencilIcon />, onSelect: () => dialogs.askEdit(channel) }],
-        [
-          {
-            label: "Archive channel",
-            icon: <ArchiveIcon />,
-            onSelect: () => dialogs.askArchive(channel),
-          },
-        ],
-      ];
+        ];
+  const topic: MenuAction[][] =
+    channel.kind !== CHANNEL_KIND.TOPIC
+      ? []
+      : channel.archived
+        ? [
+            [
+              {
+                label: "Bring back channel",
+                icon: <UnarchiveIcon />,
+                onSelect: () => dialogs.askArchive(channel),
+              },
+            ],
+          ]
+        : [
+            [
+              {
+                label: "Edit channel",
+                icon: <PencilIcon />,
+                onSelect: () => dialogs.askEdit(channel),
+              },
+            ],
+            [
+              {
+                label: "Archive channel",
+                icon: <ArchiveIcon />,
+                onSelect: () => dialogs.askArchive(channel),
+              },
+            ],
+          ];
   return (
-    <>
-      <Tooltip label="Channel actions">
-        <IconButton icon={<EllipsisIcon />} label={label} {...menu.trigger()} />
-      </Tooltip>
-      {menu.drawn === undefined ? null : (
-        <ActionMenu label={label} menu={menu.drawn} groups={groups} onClose={menu.close} />
-      )}
-    </>
+    <PlaceMenu
+      label={`${label} actions`}
+      groups={[opens, copyLink === undefined ? [] : [copyLink], ...topic]}
+      shown={shown}
+    />
   );
+}
+
+/** A pair of agents' ⋯ menu: open either agent, each by its mark and name. */
+function PairActions({
+  pair,
+  shown,
+}: {
+  pair: AgentPair;
+  shown: boolean;
+}): React.JSX.Element | null {
+  const openPlace = useOpenPlace();
+  const opens: MenuAction[] =
+    openPlace === undefined
+      ? []
+      : pair.agents.map((agent) => ({
+          label: `Open ${agent.name}`,
+          icon: <ActorMark actor={messagingAgentActor(agent)} size={ACTOR_SIZE.INLINE} />,
+          onSelect: () =>
+            openPlace(agentPlace({ id: agent.agentId, planId: agent.planId ?? null })),
+        }));
+  return <PlaceMenu label={`${agentPairLabel(pair)} actions`} groups={[opens]} shown={shown} />;
 }
 
 /** What the plan's Chat tab says where its plan has no channel yet. */

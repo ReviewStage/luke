@@ -608,28 +608,34 @@ test("two agents' direct lines read under Direct messages as one conversation na
     name,
     model: "anthropic/claude-opus-5.5",
   });
-  const page = mount((chat) => ({
-    ...chat,
-    answer: {
-      ...chat.answer,
-      agentMessages: [
-        {
-          id: "9f0a1b2c-3d4e-4f5a-8b6c-7d8e9f0a1b2c",
-          from: agent(BILLING, "Billing"),
-          to: agent(INVITES, "Invites"),
-          text: "Is the invite schema settled?",
-          sentAt: AT - 120_000,
-        },
-        {
-          id: "0a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
-          from: agent(INVITES, "Invites"),
-          to: agent(BILLING, "Billing"),
-          text: "Yes, **merged** an hour ago.",
-          sentAt: AT - 60_000,
-        },
-      ],
-    },
-  }));
+  const opened: ReadLink[] = [];
+  const page = mount(
+    (chat) => ({
+      ...chat,
+      answer: {
+        ...chat.answer,
+        agentMessages: [
+          {
+            id: "9f0a1b2c-3d4e-4f5a-8b6c-7d8e9f0a1b2c",
+            from: agent(BILLING, "Billing"),
+            to: agent(INVITES, "Invites"),
+            text: "Is the invite schema settled?",
+            sentAt: AT - 120_000,
+          },
+          {
+            id: "0a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+            from: agent(INVITES, "Invites"),
+            to: agent(BILLING, "Billing"),
+            text: "Yes, **merged** an hour ago.",
+            sentAt: AT - 60_000,
+          },
+        ],
+      },
+    }),
+    undefined,
+    undefined,
+    opened,
+  );
   const heard = rail(page);
   // Nothing the agents said waits on the developer, so For you holds what it held, and the pair's row ends the direct messages with no dot.
   assert.equal(heard[0], "▸ For you (4)");
@@ -640,8 +646,24 @@ test("two agents' direct lines read under Direct messages as one conversation na
   assert.deepEqual(stream(page), ["Billing", "Invites"]);
   assert.match(page.querySelector(".chat-stream")?.textContent ?? "", /Yes, merged an hour ago\./u);
   assert.equal(page.querySelector(".chat-composer"), null);
-  assert.equal(page.querySelector(".chat-stream button[aria-expanded]"), null);
+  assert.equal(page.querySelector(".chat-messages button[aria-expanded]"), null);
   assert.match(page.textContent ?? "", /Only Billing and Invites post in this conversation\./u);
+  // The head ends in the pair's ⋯ menu, as every page's toolbar does, which opens either agent.
+  const actions = page.querySelector<HTMLButtonElement>(
+    '.chat-head .desktop-toolbar-actions button[aria-label="Billing ↔ Invites actions"]',
+  );
+  assert.ok(actions, "the pair's head offers its actions");
+  act(() => actions.click());
+  const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  assert.deepEqual(
+    items.map((item) => item.textContent),
+    ["Open Billing", "Open Invites"],
+  );
+  act(() => items[1]?.click());
+  assert.deepEqual(
+    opened.map((link) => link.place),
+    [{ kind: LINK_PLACE.AGENT, agentId: INVITES }],
+  );
 });
 
 test("a # at the start of a word offers the channels, and the one chosen is written as its name, the box holding a microphone beside its send", () => {
@@ -1130,4 +1152,25 @@ test("each place's row says who spoke last and what, as an Inbox row previews it
   const count = tasks.querySelector<HTMLElement>(".luke-nav-item-count");
   assert.equal(count?.dataset.shown, "always", "the folded group's count stands at rest");
   assert.match(count?.textContent ?? "", /^1 unread/u);
+});
+
+test("a task's channel ends its head in a ⋯ menu that opens its task and copies its link, as every page's toolbar does", () => {
+  const opened: ReadLink[] = [];
+  const page = mount(undefined, ACME, undefined, opened);
+  act(() => railRow(page, "teammate-invitations").click());
+  const actions = page.querySelector<HTMLButtonElement>(
+    '.chat-head .desktop-toolbar-actions button[aria-label="#teammate-invitations actions"]',
+  );
+  assert.ok(actions, "the channel's head offers its actions");
+  act(() => actions.click());
+  const items = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  assert.deepEqual(
+    items.map((item) => item.textContent),
+    ["Open task", "Copy link"],
+  );
+  act(() => items[0]?.click());
+  assert.deepEqual(
+    opened.map((link) => link.place.kind),
+    [LINK_PLACE.TASK],
+  );
 });

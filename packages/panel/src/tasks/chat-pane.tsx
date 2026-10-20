@@ -18,7 +18,6 @@ import {
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
   TEXT_TONE,
-  TEXT_VARIANT,
   Text,
   TextButton,
 } from "@luke/ui";
@@ -45,11 +44,10 @@ import {
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
-import { useClipped } from "@luke/ui/use-clipped";
 import { AtSignIcon, HashIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
-import { FadingWords } from "../fading-words.js";
+import { FADING_ELEMENT, FadingWords } from "../fading-words.js";
 import { PictureBlock } from "../picture-block.js";
 import { SendingAgent } from "./agent-ref.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
@@ -101,9 +99,6 @@ const NOTHING_POSTED = "Nothing posted here yet.";
 /** What a channel no box is offered in says at its foot: an archived one, or a direct message between two others. */
 const ARCHIVED_CHANNEL = "This channel is archived.";
 const OTHERS_DM = (pair: string) => `Only ${pair} post in this conversation.`;
-
-/** What a pair of agents' head says beside their names. */
-const AGENT_PAIR_META = "Agent to agent";
 
 /** What a row says of a block this build does not know. */
 const NEWER_LUKE = "Open this in a newer Luke to see the rest.";
@@ -409,7 +404,11 @@ function whereWords(chat: ChatAnswer, names: ChatNames, entry: ForYouEntry): str
   return `in #${channelLabel(chat, names, entry.channel)}`;
 }
 
-/** The head over a place: its name, and what it says beside that. */
+/**
+ * The head over a place, as every page's toolbar is drawn: its name as the
+ * bar's title, faded where it runs out of room, what it says beside that,
+ * and the place's own presses at the bar's end.
+ */
 function PlaceHead({
   title,
   meta,
@@ -419,25 +418,23 @@ function PlaceHead({
   title: string;
   meta: string | undefined;
   lead: React.ReactNode;
-  /** The place's own presses at the head's end, a topic's menu. */
+  /** The place's own presses at the head's end, its ⋯ menu. */
   actions?: React.ReactNode;
 }): React.JSX.Element {
-  const [titleBox, titleClipped] = useClipped(title);
   return (
     <header className="desktop-toolbar chat-head">
       {lead}
-      {/* Note that the title's words are cut by a box of their own inside the heading, which fades them rather than ending them in the heading's ellipsis. */}
-      <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.DIALOG} truncate>
-        <span ref={titleBox} className="chat-head-title" data-overflow={String(titleClipped)}>
-          {title}
-        </span>
-      </Text>
-      {meta === undefined ? null : (
-        <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>
-          {meta}
-        </Text>
-      )}
-      {actions === undefined ? null : <span className="chat-head-actions">{actions}</span>}
+      <div className="desktop-toolbar-heading chat-head-heading">
+        <FadingWords as={FADING_ELEMENT.H2} className="desktop-toolbar-title" words={title} />
+        {meta === undefined ? null : (
+          <span className="chat-head-meta">
+            <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>
+              {meta}
+            </Text>
+          </span>
+        )}
+      </div>
+      {actions === undefined ? null : <div className="desktop-toolbar-actions">{actions}</div>}
     </header>
   );
 }
@@ -486,17 +483,19 @@ function AgentPairPane({
   pair,
   now,
   lead,
+  actions,
   hidden,
 }: {
   pair: AgentPair;
   now: number;
   lead: React.ReactNode;
+  actions: React.ReactNode;
   hidden: boolean | undefined;
 }): React.JSX.Element {
   const title = agentPairLabel(pair);
   return (
     <section className="chat-stream ph-no-capture" aria-label={title} hidden={hidden}>
-      <PlaceHead title={title} meta={AGENT_PAIR_META} lead={lead} />
+      <PlaceHead title={title} meta={undefined} lead={lead} actions={actions} />
       <ScrollArea>
         <div className="chat-stream-body">
           <ol className="chat-messages">
@@ -539,6 +538,7 @@ export function ChatPane({
   readPicture,
   lead,
   channelActions,
+  pairActions,
   hidden,
 }: {
   chat: ChatAnswer;
@@ -558,6 +558,8 @@ export function ChatPane({
   lead?: React.ReactNode;
   /** The presses a channel's head ends on, a topic's menu; none where the channel offers none. */
   channelActions?: ((channel: ChatChannel) => React.ReactNode) | undefined;
+  /** The presses a pair of agents' head ends on, its ⋯ menu; none where the place offers none. */
+  pairActions?: ((pair: AgentPair) => React.ReactNode) | undefined;
   /** Whether the pane is hidden, as a narrow room hides it behind the rail. */
   hidden?: boolean;
 }): React.JSX.Element {
@@ -578,7 +580,15 @@ export function ChatPane({
   };
   const pair = placeAgentPair(chat, place);
   if (pair !== undefined) {
-    return <AgentPairPane pair={pair} now={now} lead={lead} hidden={hidden} />;
+    return (
+      <AgentPairPane
+        pair={pair}
+        now={now}
+        lead={lead}
+        actions={pairActions?.(pair)}
+        hidden={hidden}
+      />
+    );
   }
   const channel = placeChannel(chat, place);
   if (place.kind === CHAT_PLACE.FOR_YOU || channel === undefined) {

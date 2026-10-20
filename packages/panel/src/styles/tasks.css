@@ -4307,8 +4307,7 @@ ol.transcript-list {
 .agent-servers-name[data-overflow="true"],
 .agent-servers-page-title[data-overflow="true"],
 .pull-request-label-name[data-overflow="true"],
-.attachment-viewer-title[data-overflow="true"],
-.chat-head-title[data-overflow="true"] {
+.attachment-viewer-title[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
@@ -4316,15 +4315,6 @@ ol.transcript-list {
    one is cut at its left and fades there. */
 .pull-request-label-name:dir(rtl)[data-overflow="true"] {
   mask-image: linear-gradient(to right, transparent, #000 var(--label-fade));
-}
-
-/* A place's name heads the chat (`chat-pane.tsx`) in a box of its own
-   inside the heading, so the heading's ellipsis never draws and the box's
-   fade (above) ends it. */
-.chat-head-title {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
 }
 
 .tool-subject[data-code] {

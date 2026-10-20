@@ -190,9 +190,9 @@ body,
 }
 
 /* A place standing alone in a narrow room leads its head with the way back,
-   so its name keeps the room left and what is said beside it gives way; a
-   topic's menu stays at the head's end, the only way to edit or archive it. */
-.desktop-shell[data-room="narrow"] .chat-head > h2 ~ :not(.chat-head-actions) {
+   so its name keeps the room left and what is said beside it gives way; its
+   ⋯ menu stays at the head's end, the only way to edit or archive a topic. */
+.desktop-shell[data-room="narrow"] .chat-head-meta {
   display: none;
 }
 
@@ -4999,10 +4999,18 @@ polygon.factory-campus-edge[data-edge="selected"] {
   padding-left: var(--column-inset);
 }
 
-/* A topic's menu stands at the head's end, past its name and purpose. */
-.chat-head-actions {
-  flex: none;
-  margin-inline-start: auto;
+/* A place's name and what it says beside it share the heading's one line,
+   on the title's baseline, the name giving way first, as a toolbar heading
+   with a tag beside its title does. */
+.chat-head-heading {
+  display: flex;
+  align-items: last baseline;
+  gap: var(--luke-space-8);
+}
+
+.chat-head-meta {
+  min-width: 0;
+  flex: 0 1 auto;
 }
 
 /* The stream's body, inside the `ScrollArea` that scrolls it. */
