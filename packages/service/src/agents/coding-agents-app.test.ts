@@ -7035,22 +7035,22 @@ it.layer(getTestDB())("telling a chat message to the agents it addresses", (it) 
   );
 
   it.effect(
-    "an agent whose session eve no longer runs is stamped as having left, and posts nothing more",
+    "an agent whose session eve no longer runs is told all the same, on a fresh session opened over its conversation, and stays in the chat",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve({ sends: EVE_SEND_OUTCOME.RETIRED });
         const chat = yield* openChat(eve);
+        const openedBefore = eve.opened.length;
         const toSecond = yield* chat.post(chat.person, `${chat.links.second} are you?`);
-        assert.deepEqual(toSecond.receipt.left, [chat.links.second]);
-        const left = (yield* roster(chat.owner, chat.workspace)).filter(
-          (row) => row.leftAt !== null,
+        assert.deepEqual([toSecond.receipt.told, toSecond.receipt.left], [[chat.links.second], []]);
+        assert.deepEqual(
+          eve.opened.slice(openedBefore).map((each) => each.message.conversationId),
+          [chat.second.target.conversationId],
         );
         assert.deepEqual(
-          left.map((row) => row.agentId),
-          [chat.second.agent.id],
+          (yield* roster(chat.owner, chat.workspace)).filter((row) => row.leftAt !== null),
+          [],
         );
-        const silenced = yield* chat.post(chat.second.member, "Still here.").pipe(Effect.result);
-        assert.ok(Result.isFailure(silenced));
       }),
   );
 

@@ -1,5 +1,17 @@
-/** The code extension's `apply_patch`, its paths resolved from the agent's checkout (`packages/service/src/agents/coder-host/files.ts`). */
+/** The code extension's `apply_patch`, its paths resolved from the agent's checkout (`packages/service/src/agents/coder-host/files.ts`), offered at each turn's start only to an agent working in a repository (`repositoryToolsOf`). */
 import { CODER } from "@luke/service/agents/coder-host/bounds";
 import { applyPatchIn } from "@luke/service/agents/coder-host/files";
+import { CODER_TOOL } from "@luke/service/agents/coder-host/tool-set";
+import { defineDynamic } from "eve/tools";
+import { offeredRepositoryTools } from "../host.js";
 
-export default applyPatchIn(CODER.CHECKOUT_PATH);
+const tool = applyPatchIn(CODER.CHECKOUT_PATH);
+
+export default defineDynamic({
+  events: {
+    "turn.started": async (_event, ctx) =>
+      (await offeredRepositoryTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.APPLY_PATCH)
+        ? tool
+        : null,
+  },
+});
