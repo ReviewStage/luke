@@ -24,11 +24,11 @@ import {
 } from "../../http/http-effect.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
+  type AgentSessions,
   describeUnreachable,
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
   type EveMount,
-  type EveSessions,
   eveSessions,
 } from "../brain-host/eve-sessions.js";
 import { deploymentEve } from "../deployment-eve.js";
@@ -65,9 +65,9 @@ export interface EveReach {
   /** The origin eve answers on; nothing where the deployment names none, which refuses every Start and Stop as unavailable. */
   eveOrigin: () => string | undefined;
   /** eve as the developer reaches it, over the request's own authorization; a test hands a fake, and the deployment composes eve's client over the ambient `HttpClient`. */
-  eve?: (authorization: Redacted.Redacted) => EveSessions;
+  eve?: (authorization: Redacted.Redacted) => AgentSessions;
   /** eve as the deployment reaches it acting for an account, for a request that carried the browser's session cookie and no bearer; a test hands a fake, and the deployment composes eve's client under its own secret. */
-  eveAs?: (account: string) => EveSessions;
+  eveAs?: (account: string) => AgentSessions;
 }
 
 /**
@@ -96,7 +96,7 @@ export function eveFor<Turn extends BrainHostTurn = never>(
   request: Request,
   account: string,
   mount: EveMount = EVE_MOUNT.CODER,
-): Effect.Effect<EveSessions<NoInfer<Turn>>, HostedRefusal, HttpClient.HttpClient> {
+): Effect.Effect<AgentSessions<NoInfer<Turn>>, HostedRefusal, HttpClient.HttpClient> {
   return Effect.gen(function* () {
     if (hostedCarriesBearer(request)) {
       const authorization = Redacted.make(request.headers.get("authorization") ?? "");
@@ -209,7 +209,7 @@ export const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
  * again as it first ran.
  */
 export const cancelledTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eveOf: Effect.Effect<Pick<EveSessions, "cancel">, HostedRefusal, HttpClient.HttpClient>,
+  eveOf: Effect.Effect<Pick<AgentSessions, "cancel">, HostedRefusal, HttpClient.HttpClient>,
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key?: string,

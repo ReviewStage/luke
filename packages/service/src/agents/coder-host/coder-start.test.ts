@@ -17,11 +17,11 @@ import {
   openGithubUser,
 } from "../../testing/github-app-fake.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "../brain-host/eve-sessions.js";
 import { ISSUE_LINKS_HEADING, type StartAsk, startCodingAgent } from "./start.js";
 
@@ -61,7 +61,7 @@ const TASK = "Find the flakiest test in CI this week and fix it.";
 /** eve's coding-agent service, writing down the first message of every session opened. */
 function fakeEve() {
   const opened: EveMessage[] = [];
-  const sessions: EveSessions = {
+  const sessions: AgentSessions = {
     open: (message) =>
       Effect.sync(() => {
         opened.push(message);

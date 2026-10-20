@@ -258,11 +258,11 @@ import { agentPullRequestProcedures } from "./agent-pull-request-procedures.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { BRAIN_HOST_TURN } from "./brain-host/bounds.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
   EveUnreachable,
 } from "./brain-host/eve-sessions.js";
 import { chatAttachmentApp } from "./chat-attachment-app.js";
@@ -462,7 +462,7 @@ function fakeEve(
   const resetAs: string[] = [];
   let sessions = 0;
   let deliveries = 0;
-  const eve = (authorization: string): EveSessions => ({
+  const eve = (authorization: string): AgentSessions => ({
     open: (message) =>
       Effect.suspend(() => {
         if (options.reachable === false) {
