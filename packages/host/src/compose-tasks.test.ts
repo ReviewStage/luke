@@ -95,6 +95,7 @@ import {
 } from "@luke/features/tasks-view";
 import type { TaskTranscript } from "@luke/features/transcript-wire";
 import type { WorkspaceInvitation } from "@luke/features/workspace-invitation-wire";
+import type { WorkspacesLiveAnswer } from "@luke/features/workspace-live";
 import {
   type FormerMember,
   WORKSPACE_PHOTO_TYPE,
@@ -117,6 +118,7 @@ import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { composeTasks, type TasksClient, type TasksConversationClient } from "./compose-tasks.js";
 import type { LiveClient } from "./live-follow.js";
+import { fakeRealtime as fakeServiceRealtime } from "./testing/fake-realtime.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const SECTION_ID = "3c9e1a2b-4d5f-4a6b-8c7d-9e0f1a2b3c4d";
@@ -239,12 +241,14 @@ interface FakeService extends TasksClient {
   memberships: Workspace[];
   /** The Luke GitHub App install address a connection answers. */
   installUrl: string;
-  /** Whether the workspaces list is refused, as a service that did not answer refuses it. */
+  /** Whether the workspaces are not sealed, as a service that did not answer. */
   workspacesFail: boolean;
   /** The name another Mac renames a workspace to just after this one's rename answers, where one does. */
   renamedAgain: string | undefined;
-  /** Where a workspaces read waits after reading the table and before answering, so a test can hold one on the wire. */
-  workspacesGate: Effect.Effect<void>;
+  /** Realtime as the service's deployment holds it: each subscription to the workspaces is told the table as it stands, and again on every change. */
+  realtime: ReturnType<typeof fakeServiceRealtime>;
+  /** Realtime's client as the host opens it at the workspaces' address, each subscription told the workspaces at once, as Realtime's first result. */
+  openLive: (url: string) => LiveClient;
   /** Each workspace's members, by its id. */
   members: Record<string, WorkspaceMember[]>;
   /** Who each workspace's work names but left, as the service answers beside its members. */
@@ -271,6 +275,8 @@ const PERSONAL: Workspace = {
   slug: "ada-lovelace",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
+  githubInstallations: [],
+  memberCount: 1,
 };
 const ACME: Workspace = {
   id: "workspace-acme",
@@ -278,6 +284,8 @@ const ACME: Workspace = {
   slug: "acme",
   role: WORKSPACE_ROLE.ADMIN,
   github: { login: "acme", active: true },
+  githubInstallations: [{ installationId: 7, login: "acme", active: true }],
+  memberCount: 3,
 };
 /** A workspace's photo as the window sends it: a WebP's `data:` URL. */
 const PHOTO_URL = "data:image/webp;base64,UklGRgAAAABXRUJQ";
@@ -287,7 +295,50 @@ const RELAY: Workspace = {
   slug: "relay-labs",
   role: WORKSPACE_ROLE.OWNER,
   github: null,
+  githubInstallations: [],
+  memberCount: 1,
 };
+
+/** The address the fake service seals the workspaces at, apart from any other read's. */
+const WORKSPACES_URL = "wss://workspaces.example/v1";
+
+/** The workspaces sealed for following, each part named by its capability, as `fakeRealtime` addresses it. */
+const WORKSPACES_SEALED: WorkspacesLiveAnswer = {
+  url: WORKSPACES_URL,
+  queries: {
+    workspaces: { capability: "capability-workspaces", queryFingerprint: "w", expiresAt: 1e15 },
+    installations: {
+      capability: "capability-installations",
+      queryFingerprint: "i",
+      expiresAt: 1e15,
+    },
+  },
+};
+
+/** The workspaces as the live statements' rows carry them, the account's own first one being Ada's. */
+function workspacesLiveRows(workspaces: readonly Workspace[]) {
+  return {
+    workspaces: workspaces.map((each) => ({
+      id: each.id,
+      name: each.name,
+      slug: each.slug ?? "",
+      own: each.id === PERSONAL.id,
+      personal: each.personal === true,
+      role: each.role,
+      linearActive: each.linear?.active ?? null,
+      memberCount: each.memberCount ?? 1,
+      photoVersion: each.photoVersion ?? null,
+      ownerImage: null,
+    })),
+    installations: workspaces.flatMap((each) =>
+      (each.githubInstallations ?? []).map((installation, linkedAt) => ({
+        workspaceId: each.id,
+        ...installation,
+        linkedAt,
+      })),
+    ),
+  };
+}
 const INSTALL_URL = "https://github.com/apps/luke/installations/new?state=intent-1";
 const LINEAR_SIGN_IN_URL = "https://vercel.com/connect/authorize/fixture";
 const ADA: WorkspaceMember = {
@@ -313,6 +364,21 @@ const NOT_PERMITTED_WORKSPACE = {
 const EDITED_AT = 7_000;
 
 function fakeService(tasks: Task[]): FakeService {
+  const realtime = fakeServiceRealtime();
+  let memberships: Workspace[] = [PERSONAL];
+  /** Each part's rows as the workspaces stand, as Realtime would deliver them. */
+  const rowsOf = (part: string) => {
+    const rows = workspacesLiveRows(memberships);
+    if (part === "capability-workspaces") return rows.workspaces;
+    return part === "capability-installations" ? rows.installations : undefined;
+  };
+  /** The workspaces told to every subscription that stands, as Realtime tells a change. */
+  const pushWorkspaces = () => {
+    if (!realtime.subscribed().includes("capability-workspaces")) return;
+    const rows = workspacesLiveRows(memberships);
+    realtime.deliver("workspaces", rows.workspaces);
+    realtime.deliver("installations", rows.installations);
+  };
   const service: FakeService = {
     tasks,
     threads: {},
@@ -443,11 +509,35 @@ function fakeService(tasks: Task[]): FakeService {
     pinsFail: false,
     sections: undefined,
     sectionWrites: [],
-    memberships: [PERSONAL],
+    get memberships() {
+      return memberships;
+    },
+    set memberships(next) {
+      memberships = next;
+      pushWorkspaces();
+    },
+    realtime,
+    openLive: (url) => {
+      const client = realtime.open(url);
+      return {
+        close: client.close,
+        subscribe: (query) => {
+          const subscription = client.subscribe(query);
+          return {
+            ...subscription,
+            onChange: (listener) => {
+              const off = subscription.onChange(listener);
+              const rows = rowsOf(query.capability);
+              if (rows !== undefined) listener({ status: "live", data: rows });
+              return off;
+            },
+          };
+        },
+      };
+    },
     installUrl: INSTALL_URL,
     workspacesFail: false,
     renamedAgain: undefined,
-    workspacesGate: Effect.void,
     members: {},
     former: {},
     linearIssues: {},
@@ -490,12 +580,24 @@ function fakeService(tasks: Task[]): FakeService {
     workspaces: {
       tokenRepositories: () => Effect.succeed(UNANSWERED_WORKSPACE),
       setTokenRepository: () => Effect.succeed(UNANSWERED_WORKSPACE),
-      list: () =>
-        Effect.gen(function* () {
-          service.reads.push("workspaces");
-          const answer = service.workspacesFail ? undefined : { workspaces: service.memberships };
-          yield* service.workspacesGate;
-          return answer;
+      // A poll answers each part's rows inline, as the service answers one while Realtime fails it.
+      live: (_userId, poll) =>
+        Effect.sync(() => {
+          service.reads.push(poll === true ? "workspaces-poll" : "workspaces-live");
+          if (service.workspacesFail) return UNANSWERED_WORKSPACE;
+          if (poll !== true) return { ok: true, answer: WORKSPACES_SEALED } as const;
+          const rows = workspacesLiveRows(service.memberships);
+          const { workspaces, installations } = WORKSPACES_SEALED.queries;
+          return {
+            ok: true,
+            answer: {
+              ...WORKSPACES_SEALED,
+              queries: {
+                workspaces: { ...workspaces, rows: rows.workspaces },
+                installations: { ...installations, rows: rows.installations },
+              },
+            },
+          } as const;
         }),
       create: (name) =>
         Effect.sync(() => {
@@ -544,7 +646,7 @@ function fakeService(tasks: Task[]): FakeService {
           if (service.notPermitted) return NOT_PERMITTED_WORKSPACE;
           const disconnected = service.memberships.find((each) => each.id === workspaceId);
           if (disconnected === undefined) return UNANSWERED_WORKSPACE;
-          const now = { ...disconnected, github: null };
+          const now = { ...disconnected, github: null, githubInstallations: [] };
           service.memberships = service.memberships.map((each) =>
             each.id === workspaceId ? now : each,
           );
@@ -1324,7 +1426,9 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
       conversations,
-      openLive: options.openLive ?? realtime.open,
+      // Note that the workspaces are always followed over the fake service's own Realtime, whatever a test hands for the board.
+      openLive: (url) =>
+        url === WORKSPACES_URL ? service.openLive(url) : (options.openLive ?? realtime.open)(url),
       accountId: options.accountId ?? (() => "user-dana"),
       endTaskCall: (taskId) =>
         Effect.gen(function* () {
@@ -1361,6 +1465,10 @@ function subject(
         realtime.deliverPart("agents", agents);
         yield* realtime.settled;
       });
+    /** The host's own fibers given their turn, so what Realtime told is drawn. */
+    const settled = Effect.gen(function* () {
+      for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+    });
     return {
       tasks,
       call,
@@ -1374,6 +1482,7 @@ function subject(
       conversations,
       realtime,
       listed,
+      settled,
     };
   });
 }
@@ -2310,88 +2419,110 @@ it.effect(
 );
 
 it.effect(
-  "the list read carries the account's workspaces with their GitHub organizations, and a sign-out clears them",
+  "the first refresh follows the account's workspaces with their GitHub organizations, and a sign-out clears them",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last, tasks } = yield* subject(service);
+      const { call, last, tasks, settled } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+      assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
 
       yield* tasks.reset;
       assert.deepEqual(last()?.workspaces, []);
+      assert.deepEqual(service.realtime.subscribed(), []);
     }),
 );
 
-it.effect("a workspaces read the service did not answer keeps the workspaces already read", () =>
-  Effect.gen(function* () {
-    const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-    service.memberships = [PERSONAL, ACME];
-    const { call, last } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-
-    service.workspacesFail = true;
-    service.tasks = [];
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-
-    assert.deepEqual(last()?.tasks, []);
-    assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
-  }),
-);
-
 it.effect(
-  "a workspaces read that did not answer says so, and the next refresh reads them again and says them read",
+  "a teammate's change reaches the view as Realtime tells it, and while Realtime fails them the workspaces are polled until they are subscribed again",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      service.workspacesFail = true;
-      const held = yield* Deferred.make<void>();
-      service.workspacesGate = Deferred.await(held);
-      const { call, last } = yield* subject(service);
+      service.memberships = [PERSONAL, ACME];
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
 
-      const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_REFRESH));
-      for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+      service.memberships = [PERSONAL, { ...ACME, name: "Acme Labs" }];
+      yield* settled;
+      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
+
+      service.realtime.fail("workspaces");
+      yield* settled;
+      service.memberships = [PERSONAL];
+      yield* TestClock.adjust(Duration.seconds(3));
+      yield* settled;
+      assert.deepEqual(last()?.workspaces, [PERSONAL], "a poll draws what Realtime missed");
+      assert.ok(service.reads.includes("workspaces-poll"));
+
+      yield* TestClock.adjust(Duration.seconds(15));
+      yield* settled;
+      assert.ok(service.realtime.subscribed().includes("capability-workspaces"));
+      service.memberships = [PERSONAL, RELAY];
+      yield* settled;
+      assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
+    }),
+);
+
+it.effect(
+  "while the service seals nothing the workspaces say reading and the tasks are drawn, and the seal is asked again after a pause until it answers",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      service.workspacesFail = true;
+      const { call, last, listed, settled } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
+      yield* settled;
+      assert.equal(last()?.listStatus, TASKS_READ.READY);
+      assert.deepEqual(
+        last()?.tasks.map((each) => each.id),
+        [invites.id],
+      );
       assert.equal(last()?.workspacesStatus, TASKS_READ.READING);
-      yield* Deferred.succeed(held, undefined);
-      yield* Fiber.join(refreshing);
-      assert.equal(last()?.workspacesStatus, TASKS_READ.FAILED);
       assert.deepEqual(last()?.workspaces, []);
 
       service.workspacesFail = false;
-      service.workspacesGate = Effect.void;
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* settled;
       assert.equal(last()?.workspacesStatus, TASKS_READ.READY);
       assert.deepEqual(last()?.workspaces, [PERSONAL]);
     }),
 );
 
 it.effect(
-  "a workspace made reaches the service and the view then holds it, the plans not read again",
+  "a workspace made reaches the service and the view then holds it over the follow, nothing read again",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
-      const { call, last } = yield* subject(service);
+      const { call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       const before = service.reads.length;
 
       const made = yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name });
+      yield* settled;
 
       assert.deepEqual(made, { workspace: RELAY });
       assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
-      assert.deepEqual(service.reads.slice(before), [`create:${RELAY.name}`, "workspaces"]);
+      assert.deepEqual(service.reads.slice(before), [`create:${RELAY.name}`]);
     }),
 );
 
 it.effect(
-  "a workspace renamed reaches the service and the view then holds its new name, the plans not read again, and a rename the role does not allow moves nothing",
+  "a workspace renamed reaches the service and the view then holds its new name, nothing read again, and a rename the role does not allow moves nothing",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last } = yield* subject(service);
+      const { call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
       const before = service.reads.length;
 
       const renamed = yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, {
@@ -2404,53 +2535,29 @@ it.effect(
         name: "Acme Research",
       });
 
+      yield* settled;
       assert.deepEqual(renamed, { workspace: { ...ACME, name: "Acme Labs" } });
       assert.deepEqual(refused, { failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED });
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
       assert.deepEqual(service.reads.slice(before), [
         `rename:${ACME.id}:Acme Labs`,
-        "workspaces",
         `rename:${ACME.id}:Acme Research`,
-        "workspaces",
       ]);
     }),
 );
 
 it.effect(
-  "a rename whose read after it fails still draws the new name the service answered, and the next refresh reads the workspaces again",
+  "a rename another Mac renames again just after draws the newer name the follow carries",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      service.workspacesFail = true;
-
-      yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
-      const drawn = last()?.workspaces;
-      service.workspacesFail = false;
-      const before = service.reads.length;
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-
-      assert.deepEqual(drawn, [PERSONAL, { ...ACME, name: "Acme Labs" }]);
-      assert.ok(
-        service.reads.slice(before).includes("workspaces"),
-        "the failed read is not taken as fresh",
-      );
-    }),
-);
-
-it.effect(
-  "a rename another Mac renames again before the read after it draws the newer name the read answers",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([]);
-      service.memberships = [PERSONAL, ACME];
-      const { call, last } = yield* subject(service);
+      const { call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       service.renamedAgain = "Acme Research";
 
       yield* call(GATEWAY_METHOD.WORKSPACES_RENAME, { workspaceId: ACME.id, name: "Acme Labs" });
+      yield* settled;
 
       assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, name: "Acme Research" }]);
     }),
@@ -2462,8 +2569,9 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last } = yield* subject(service);
+      const { call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
       const before = service.reads.length;
 
       const set = yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
@@ -2481,6 +2589,7 @@ it.effect(
         photo: PHOTO_URL,
       });
 
+      yield* settled;
       assert.deepEqual(set, { workspace: { ...ACME, photoVersion: PHOTO_URL } });
       assert.deepEqual(drawn, [PERSONAL, { ...ACME, photoVersion: PHOTO_URL }]);
       assert.deepEqual(removed, { workspace: ACME });
@@ -2488,41 +2597,28 @@ it.effect(
       assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
       assert.deepEqual(service.reads.slice(before), [
         `photoSet:${ACME.id}:${PHOTO_URL}`,
-        "workspaces",
         `photoSet:${ACME.id}:none`,
-        "workspaces",
         `photoSet:${ACME.id}:${PHOTO_URL}`,
-        "workspaces",
       ]);
     }),
 );
 
-it.effect(
-  "a photo whose read after it fails still draws the version the service answered, and an SVG is refused before the service",
-  () =>
-    Effect.gen(function* () {
-      const service = fakeService([]);
-      service.memberships = [PERSONAL, ACME];
-      const { call, last } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      service.workspacesFail = true;
-      const before = service.reads.length;
+it.effect("an SVG is refused as a workspace's photo before the service", () =>
+  Effect.gen(function* () {
+    const service = fakeService([]);
+    service.memberships = [PERSONAL, ACME];
+    const { call } = yield* subject(service);
 
-      yield* call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, { workspaceId: ACME.id, photo: PHOTO_URL });
-      const svg = yield* Effect.exit(
-        call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
-          workspaceId: ACME.id,
-          photo: "data:image/svg+xml;base64,PHN2Zy8+",
-        }),
-      );
+    const svg = yield* Effect.exit(
+      call(GATEWAY_METHOD.WORKSPACES_PHOTO_SET, {
+        workspaceId: ACME.id,
+        photo: "data:image/svg+xml;base64,PHN2Zy8+",
+      }),
+    );
 
-      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, photoVersion: PHOTO_URL }]);
-      assert.ok(Exit.isFailure(svg), "an SVG is no photo");
-      assert.deepEqual(service.reads.slice(before), [
-        `photoSet:${ACME.id}:${PHOTO_URL}`,
-        "workspaces",
-      ]);
-    }),
+    assert.ok(Exit.isFailure(svg), "an SVG is no photo");
+    assert.deepEqual(service.reads, []);
+  }),
 );
 
 it.effect(
@@ -2531,7 +2627,7 @@ it.effect(
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
-      const { call, last } = yield* subject(service);
+      const { call, last, settled } = yield* subject(service);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       const before = service.reads.length;
 
@@ -2541,12 +2637,13 @@ it.effect(
       });
 
       assert.deepEqual(begun, { url: INSTALL_URL });
-      assert.deepEqual(disconnected, { workspace: { ...ACME, github: null } });
-      assert.deepEqual(last()?.workspaces, [PERSONAL, { ...ACME, github: null }]);
+      yield* settled;
+      const unlinked = { ...ACME, github: null, githubInstallations: [] };
+      assert.deepEqual(disconnected, { workspace: unlinked });
+      assert.deepEqual(last()?.workspaces, [PERSONAL, unlinked]);
       assert.deepEqual(service.reads.slice(before), [
         `connect:${ACME.id}`,
         `disconnect:${ACME.id}`,
-        "workspaces",
       ]);
     }),
 );
@@ -2590,7 +2687,7 @@ it.effect(
 );
 
 it.effect(
-  "a workspace's members are read on the service with nothing else, and a removal reads the workspaces again and not the plans",
+  "a workspace's members are read on the service with nothing else, and a removal reads nothing after it",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2606,16 +2703,12 @@ it.effect(
 
       assert.deepEqual(members, { members: [ADA, GRACE] });
       assert.deepEqual(remaining, { members: [ADA] });
-      assert.deepEqual(service.reads, [
-        `members:${ACME.id}`,
-        `remove:${ACME.id}:${GRACE.userId}`,
-        "workspaces",
-      ]);
+      assert.deepEqual(service.reads, [`members:${ACME.id}`, `remove:${ACME.id}:${GRACE.userId}`]);
     }),
 );
 
 it.effect(
-  "a role changed and a handover each read the workspaces again and not the plans, so the account's own role after a handover arrives on the view",
+  "a role changed and a handover read nothing after them, and the account's own role after a handover arrives over the follow",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2623,7 +2716,10 @@ it.effect(
       const owner = { ...ADA, role: WORKSPACE_ROLE.OWNER };
       service.memberships = [PERSONAL, owned];
       service.members[ACME.id] = [owner, GRACE];
-      const { call, last } = yield* subject(service);
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
+      const before = service.reads.length;
 
       const changed = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
         workspaceId: ACME.id,
@@ -2635,6 +2731,7 @@ it.effect(
         workspaceId: ACME.id,
         userId: GRACE.userId,
       });
+      yield* settled;
       const toOwner = yield* Effect.exit(
         call(GATEWAY_METHOD.WORKSPACES_MEMBER_ROLE, {
           workspaceId: ACME.id,
@@ -2654,11 +2751,9 @@ it.effect(
         WORKSPACE_ROLE.ADMIN,
       );
       assert.ok(Exit.isFailure(toOwner), "an owner's role is no role a change gives");
-      assert.deepEqual(service.reads, [
+      assert.deepEqual(service.reads.slice(before), [
         `role:${ACME.id}:${GRACE.userId}:${WORKSPACE_ROLE.ADMIN}`,
-        "workspaces",
         `transfer:${ACME.id}:${GRACE.userId}`,
-        "workspaces",
       ]);
     }),
 );
@@ -2727,52 +2822,6 @@ it.effect(
     }),
 );
 
-it.effect("the plan list is drawn ready while the workspaces read is still out", () =>
-  Effect.gen(function* () {
-    const invites = task(INVITES, "Teammate invitations", "# Draft", 10);
-    const service = fakeService([invites]);
-    service.memberships = [PERSONAL, ACME];
-    const held = yield* Deferred.make<void>();
-    service.workspacesGate = Deferred.await(held);
-    const { call, last, listed } = yield* subject(service);
-
-    const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_REFRESH));
-    yield* listed();
-
-    assert.equal(last()?.listStatus, TASKS_READ.READY);
-    assert.deepEqual(
-      last()?.tasks.map((each) => each.id),
-      [invites.id],
-    );
-    assert.deepEqual(last()?.workspaces, []);
-
-    yield* Deferred.succeed(held, undefined);
-    yield* Fiber.join(refreshing);
-    assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
-  }),
-);
-
-it.effect("a stale workspaces read that answers after a workspace made does not draw over it", () =>
-  Effect.gen(function* () {
-    const service = fakeService([]);
-    const { call, last } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-    yield* TestClock.adjust(Duration.minutes(1));
-    const held = yield* Deferred.make<void>();
-    service.workspacesGate = Deferred.await(held);
-
-    const stale = yield* Effect.forkChild(call(GATEWAY_METHOD.WORKSPACES_REFRESH));
-    for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
-    service.workspacesGate = Effect.void;
-    yield* call(GATEWAY_METHOD.WORKSPACES_CREATE, { name: RELAY.name });
-    assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
-
-    yield* Deferred.succeed(held, undefined);
-    yield* Fiber.join(stale);
-    assert.deepEqual(last()?.workspaces, [PERSONAL, RELAY]);
-  }),
-);
-
 it.effect("the workspaces land on the view while the GitHub connection read is still out", () =>
   Effect.gen(function* () {
     const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
@@ -2780,10 +2829,10 @@ it.effect("the workspaces land on the view while the GitHub connection read is s
     service.connection = { connected: true, login: "ada" };
     const held = yield* Deferred.make<void>();
     service.githubGate = Deferred.await(held);
-    const { call, last } = yield* subject(service);
+    const { call, last, settled } = yield* subject(service);
 
-    const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.WORKSPACES_REFRESH));
-    for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+    const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_REFRESH));
+    yield* settled;
 
     assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
     assert.equal(last()?.github, undefined);
@@ -2795,32 +2844,30 @@ it.effect("the workspaces land on the view while the GitHub connection read is s
 );
 
 it.effect(
-  "the workspaces are read on the first refresh, again only once a minute has passed or after a sign-out, and never after a plan's own write",
+  "the workspaces are sealed once, on the first refresh, and followed rather than read again on a refresh, the panel coming forward, or a write, until a sign-out",
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
       const { call, tasks } = yield* subject(service);
-      const workspaceReads = () => service.reads.filter((read) => read === "workspaces").length;
+      const seals = () => service.reads.filter((read) => read === "workspaces-live").length;
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
       yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
       yield* call(GATEWAY_METHOD.TASKS_DELETE, { taskId: INVITES });
-      assert.equal(workspaceReads(), 1);
-
       yield* TestClock.adjust(Duration.minutes(1));
       yield* call(GATEWAY_METHOD.WORKSPACES_REFRESH);
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      assert.equal(workspaceReads(), 2);
+      assert.equal(seals(), 1);
 
       yield* tasks.reset;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      assert.equal(workspaceReads(), 3);
+      assert.equal(seals(), 2);
     }),
 );
 
 it.effect(
-  "the view carries whether GitHub is connected, read with the workspaces, and a read the service did not answer keeps it",
+  "the view carries whether GitHub is connected, read beside the workspaces, and a read the service did not answer keeps it",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2877,7 +2924,7 @@ it.effect(
 );
 
 it.effect(
-  "a workspaces read that saw GitHub connected before a disconnect answered does not put it back",
+  "a connection read that saw GitHub connected before a disconnect answered does not put it back",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
@@ -2941,10 +2988,11 @@ it.effect("leaving a workspace reaches the service and the view then holds it no
   Effect.gen(function* () {
     const service = fakeService([]);
     service.memberships = [PERSONAL, ACME];
-    const { call, last } = yield* subject(service);
+    const { call, last, settled } = yield* subject(service);
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
 
     const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
+    yield* settled;
 
     assert.deepEqual(left, { left: true });
     assert.deepEqual(last()?.workspaces, [PERSONAL]);
@@ -3030,14 +3078,16 @@ it.effect("leaving another workspace than the open plan's keeps the plan and its
 );
 
 it.effect(
-  "a removal or a leave the account's role does not allow answers not-permitted, and the view is read again",
+  "a removal or a leave the account's role does not allow answers not-permitted, and the view keeps the workspace",
   () =>
     Effect.gen(function* () {
       const service = fakeService([]);
       service.memberships = [PERSONAL, ACME];
       service.members[ACME.id] = [ADA, GRACE];
       service.notPermitted = true;
-      const { call, last } = yield* subject(service);
+      const { call, last, settled } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* settled;
 
       const removed = yield* call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
         workspaceId: ACME.id,

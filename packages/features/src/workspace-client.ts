@@ -14,9 +14,16 @@ import {
   callAnswered,
 } from "./account-call.js";
 import type { WorkspaceTokenRepository } from "./github-repositories-wire.js";
-import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+import {
+  askHosted,
+  askLive,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
 import { type ImageBody, imageBodyOf } from "./image-body.js";
 import type { LinearIssueSummary } from "./linear-wire.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import { workspacePhotoPath } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -35,6 +42,7 @@ import {
   workspaceInvitationCancelSchema,
   workspaceInviteRequestSchema,
 } from "./workspace-invitation-wire.js";
+import type { WorkspacesLiveAnswer } from "./workspace-live.js";
 import {
   type FormerMember,
   type LinearIssuesRequest,
@@ -125,6 +133,32 @@ function hostedResult<Answer, Picked>(
   });
 }
 
+/**
+ * A live read's answer as a result, as `hostedResult` reads one, but signed
+ * out where the service refused the session, as it answers a live read
+ * started for another account (`LIVE_SIGNED_OUT`).
+ */
+function liveResult<Answer>(
+  asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
+): Effect.Effect<
+  WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT,
+  never,
+  HttpClient.HttpClient
+> {
+  return Effect.match(asked, {
+    onSuccess: (answer): WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT => ({
+      ok: true,
+      answer,
+    }),
+    onFailure: (failed): WorkspaceCallResult<Answer> | typeof LIVE_SIGNED_OUT => {
+      if (failed._tag !== "HostedRefused") return UNANSWERED;
+      if (failed.refusal === HOSTED_API_ERROR.INVALID_TOKEN) return LIVE_SIGNED_OUT;
+      const failure = REFUSALS.get(failed.refusal);
+      return failure === undefined ? UNANSWERED : { ok: false, failure };
+    },
+  });
+}
+
 export class HostedWorkspaceClient {
   readonly #call: AccountCallEffects;
   /** The hosted contract's client under the account's credential. */
@@ -156,6 +190,26 @@ export class HostedWorkspaceClient {
     return Effect.orElseSucceed(
       askHosted(this.#hosted.workspaces.list, undefined),
       () => undefined,
+    );
+  }
+
+  /**
+   * The account's workspaces sealed for following over Neon Realtime, for
+   * the account named, or with their rows inline where `poll` asks for
+   * them, held by the service until they move past `after`; signed out
+   * where the session is another account's, or why not.
+   */
+  live(
+    userId: string,
+    poll = false,
+    after?: string,
+  ): Effect.Effect<
+    WorkspaceCallResult<WorkspacesLiveAnswer> | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
+    return liveResult(
+      askLive(this.#hosted.live.workspaces, { [LIVE_USER_QUERY]: userId }, poll, after),
     );
   }
 

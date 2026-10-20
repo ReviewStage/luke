@@ -31,6 +31,8 @@ export const workspacesLiveAnswerSchema = EffectSchema.Struct({
   }),
 });
 
+export type WorkspacesLiveAnswer = typeof workspacesLiveAnswerSchema.Type;
+
 /** One workspace as its row delivers it: what the wire leaves out where it holds nothing is null. */
 const workspaceLiveRowSchema = EffectSchema.Struct({
   id: EffectSchema.String,
