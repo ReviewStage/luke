@@ -169,7 +169,9 @@ import type { AgentModelControl } from "./use-agent-model.js";
  * (`new-task-composer.tsx`): its owner names what the box asks for and
  * calls its round button (`wording`), lays its issue over the words
  * (`above`), stands its repository and Issue chips after the "+" (`tools`)
- * and its Plan toggle before the model chip (`actions`), holds Start while
+ * and its Plan toggle before the model chip (`actions`), its File for later
+ * just before Start (`beforeSend`), each told whether the card is too narrow
+ * for its words, so on a phone both draw their marks alone, holds Start while
  * it cannot start (`sendable`), hears the keys the field leaves (`onKey`),
  * says what Escape does (`onLeave`), hands its workspace's mentions and
  * the chosen repository's skills to its `@` and `/` lists, and offers no MCP servers'
@@ -203,8 +205,8 @@ const BUTTON = {
 
 /**
  * The card widths below which a chip draws its mark alone: the branch's
- * chip first, then the owner's actions where they carry words (New task's
- * Plan toggle, at the step the ⋯ stands), then the model chip. Note that
+ * chip first, then the owner's presses where they carry words (New task's
+ * Plan toggle and File for later, at the step the ⋯ stands), then the model chip. Note that
  * they are steps of the same order as the stylesheet's (tasks.css's
  * `composer` queries, at 400 and 240), because the room each leaves is
  * counted on the steps before it.
@@ -399,8 +401,8 @@ export function AgentComposer({
   tools?: ReactNode;
   /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words: New task's Plan toggle. */
   actions?: ((narrow: boolean) => ReactNode) | undefined;
-  /** What stands just before the round button: New task's File for later. */
-  beforeSend?: ReactNode;
+  /** What stands just before the round button, handed whether the card is too narrow for its words, as `actions` is: New task's File for later. */
+  beforeSend?: ((narrow: boolean) => ReactNode) | undefined;
   /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
   /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
@@ -780,7 +782,7 @@ export function AgentComposer({
                 />
                 <DictateButton dictation={dictation} disabled={held || module === undefined} />
                 <ComposerMore foot={foot} offers={offers} />
-                {beforeSend}
+                {beforeSend?.(folds(FOLD_WIDTH.ACTIONS))}
                 {showsStop ? (
                   <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
                     <PromptInputSubmit

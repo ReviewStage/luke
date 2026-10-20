@@ -24,7 +24,9 @@ import {
   CHIP_WIDTH,
   Chip,
   ChipName,
+  IconButton,
   PencilIcon,
+  TaskStatusMark,
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
@@ -69,7 +71,9 @@ import type { NewTaskAgent, NewTaskStart, TasksControl } from "./use-tasks-tab.j
  * the "+" that attaches files, with an image pasted or files dropped taken
  * too, dictation, the model chip, and the round Start button, with the
  * Plan toggle at the foot's right, before the model chip, drawing its
- * pencil alone where the card is too narrow for its word, as on a phone.
+ * pencil alone where the card is too narrow for its word, as on a phone,
+ * where File for later draws the backlog's mark alone too and the model
+ * chip's words are cut short, so Start stays at the row's end in the card.
  * New task's own chips stand in a head row over the card where the owner
  * hands a title, as
  * the dialog does (`heading`): the title, then the repository the task is
@@ -594,17 +598,29 @@ export function NewTaskComposer({
           )
         }
         tools={heading === undefined ? chips : undefined}
-        beforeSend={
-          <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              size={BUTTON_SIZE.COMPACT}
-              disabled={starting || !filable}
-              onClick={file}
-            >
-              {COMPOSER_WORDS.FILE}
-            </Button>
-          </Tooltip>
+        beforeSend={(narrow) =>
+          // Note that a card too narrow for the words draws the backlog's mark in their place, still named, so Start keeps its room.
+          narrow ? (
+            <Tooltip label={COMPOSER_WORDS.FILE}>
+              <IconButton
+                icon={<TaskStatusMark status={TASK_STATUS.BACKLOG} />}
+                label={COMPOSER_WORDS.FILE}
+                disabled={starting || !filable}
+                onClick={file}
+              />
+            </Tooltip>
+          ) : (
+            <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                size={BUTTON_SIZE.COMPACT}
+                disabled={starting || !filable}
+                onClick={file}
+              >
+                {COMPOSER_WORDS.FILE}
+              </Button>
+            </Tooltip>
+          )
         }
         actions={(narrow) => (
           <span className="new-task-plan-toggle">

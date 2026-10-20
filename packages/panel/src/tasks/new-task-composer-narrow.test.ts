@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { LinearIssueSummary } from "@luke/features/linear-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
+import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
@@ -19,8 +22,10 @@ import { NewTaskComposer } from "./new-task-composer.js";
  * of its page, its `@` and `/` lists open under the caret's line, since a
  * list risen over the card is cut off under the page's head, while the
  * dialog's card keeps them over it; and a card too narrow for every press
- * has its Plan toggle draw its pencil alone, still named and still pressed,
- * so the round Start stands inside the card. jsdom lays nothing out, so the
+ * has its Plan toggle and File for later draw their marks alone, still named
+ * and still pressed, its microphone stand in the row in place of a ⋯ that
+ * would hold it alone, and its model chip's words give way, so the round
+ * Start stands inside the card, at the row's end. jsdom lays nothing out, so the
  * card's width is its form's, given as the window would lay it, and what is
  * drawn at a width is the stylesheets' container queries resolved for a card
  * that wide (`testing/container-width.ts`). Synthetic throughout.
@@ -173,4 +178,156 @@ test("on a phone-wide card the placeholder wraps in the card's five lines rather
   };
   assert.equal(await placeholder(CARD.PHONE), "normal");
   assert.equal(await placeholder(CARD.DESKTOP), "nowrap");
+});
+
+/** The model the account runs by default, whose name the chip draws. */
+const MODELS: readonly CatalogModel[] = [
+  {
+    id: "anthropic/claude-opus-5.5",
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  },
+];
+const DEFAULT_CHOICE: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
+
+/** The workspace's Linear issues, the first of which the card links. */
+const ISSUES: readonly LinearIssueSummary[] = [
+  {
+    id: "issue-1",
+    identifier: "ENG-1",
+    title: "Restack the deploy queue",
+    url: "https://linear.app/acme/issue/ENG-1",
+    state: "Todo",
+  },
+];
+
+/**
+ * Home's card at a width, with every chip chosen: its repository, the
+ * account's model, and a Linear issue picked from the Issue chip, and words
+ * typed, so Start and File for later both stand ready. Answers the card and
+ * the statuses each start asked for.
+ */
+async function mountChosen(width: number, touch: boolean) {
+  vi.spyOn(HTMLFormElement.prototype, "clientWidth", "get").mockReturnValue(width);
+  layContainersAt({ composer: width }, { touch });
+  const control = tasksControl();
+  const statuses: (TaskStatus | undefined)[] = [];
+  const container = document.body.appendChild(document.createElement("div"));
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      onRegistry(
+        AtomRegistry.make(),
+        createElement(NewTaskComposer, {
+          newTask: {
+            ...control.newTask,
+            workspaceId: "workspace-acme",
+            repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
+            models: MODELS,
+            readDefault: () => Promise.resolve({ choice: DEFAULT_CHOICE }),
+            linearIssuesIn: () => () => Promise.resolve(ISSUES),
+            start: (_name, _repository, _workspace, _withCall, from) => {
+              statuses.push(from?.status);
+              return Promise.resolve(undefined);
+            },
+          },
+          workspaceId: "workspace-acme",
+          onLeave: () => undefined,
+        }),
+      ),
+    ),
+  );
+  await settle();
+  const chip =
+    container.querySelector<HTMLButtonElement>('[aria-label="Choose an issue"]') ??
+    assert.fail("the Issue chip stands");
+  act(() => chip.click());
+  await settle();
+  const search =
+    document.querySelector<HTMLInputElement>('input[aria-label^="Search issues"]') ??
+    assert.fail("the Issue chip's search is open");
+  act(() => {
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+  assert.ok(container.textContent?.includes("ENG-1"), "the issue is linked over the words");
+  typeInComposer(container, "Reproduce it first.");
+  await settle();
+  return { container, statuses };
+}
+
+/** The presses drawn along the foot's right-hand row, in the order they stand, each by its name. */
+function rowPresses(container: HTMLElement): readonly HTMLButtonElement[] {
+  const row =
+    container.querySelector(".agent-composer-actions") ?? assert.fail("the foot's row stands");
+  return [...row.querySelectorAll<HTMLButtonElement>("button")].filter(shown);
+}
+
+function nameOf(press: HTMLButtonElement): string {
+  return press.getAttribute("aria-label") ?? press.textContent?.trim() ?? "";
+}
+
+/** Whether a press draws words of its own, rather than a mark alone named by its label. */
+function drawsWords(press: HTMLButtonElement): boolean {
+  const name = press.querySelector(".luke-chip-name");
+  if (name !== null) return getComputedStyle(name).width !== "1px";
+  return (press.textContent?.trim() ?? "") !== "";
+}
+
+test("on a phone-wide card with every chip chosen, Start stands last in the row, every press beside it but the model drawing its mark alone, and no ⋯ holding a single press", async () => {
+  const { container } = await mountChosen(CARD.PHONE, true);
+  const presses = rowPresses(container);
+
+  assert.deepEqual(presses.map(nameOf), [
+    MODE_TOGGLE,
+    "Opus 5.5 High",
+    "Dictate",
+    "File for later",
+    "Start agent",
+  ]);
+  assert.deepEqual(
+    presses.filter(drawsWords).map(nameOf),
+    ["Opus 5.5 High"],
+    "only the model chip draws words, which are what give way",
+  );
+  const model =
+    container.querySelector(".agent-model-chip") ?? assert.fail("the model chip stands");
+  assert.notEqual(getComputedStyle(model).flexShrink, "0", "the model chip gives way to Start");
+  assert.equal(presses.at(-1)?.disabled, false, "Start stands ready");
+});
+
+test("on a desktop-wide card with every chip chosen, the row reads as it always has: Plan and File for later in words, the microphone, and Start", async () => {
+  const { container } = await mountChosen(CARD.DESKTOP, false);
+  const presses = rowPresses(container);
+
+  assert.deepEqual(presses.map(nameOf), [
+    MODE_TOGGLE,
+    "Opus 5.5 High",
+    "Dictate",
+    "File for later",
+    "Start agent",
+  ]);
+  assert.deepEqual(presses.filter(drawsWords).map(nameOf), [
+    MODE_TOGGLE,
+    "Opus 5.5 High",
+    "File for later",
+  ]);
+  const model =
+    container.querySelector(".agent-model-chip") ?? assert.fail("the model chip stands");
+  assert.equal(getComputedStyle(model).flexShrink, "0", "the model's name stands whole");
+});
+
+test("on a phone-wide card File for later draws the backlog's mark alone, keeps its name, and still files the task in the backlog", async () => {
+  const { container, statuses } = await mountChosen(CARD.PHONE, true);
+  const file =
+    rowPresses(container).find((press) => press.getAttribute("aria-label") === "File for later") ??
+    assert.fail("File for later is named");
+
+  assert.equal(drawsWords(file), false, "its words are drawn nowhere");
+  assert.ok(file.querySelector(".luke-task-status-mark"), "it draws the backlog's mark");
+  act(() => file.click());
+  await settle();
+  assert.deepEqual(statuses, [TASK_STATUS.BACKLOG]);
 });
