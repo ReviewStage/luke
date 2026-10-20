@@ -8,10 +8,10 @@ import { fileURLToPath } from "node:url";
 import { emitJsonSchema } from "@luke/wire/effect";
 import type { Schema } from "effect";
 import { expect, test } from "vitest";
-import developerTools from "../../../../../apps/dev/tools/developer.js";
-import reachTools from "../../../../../apps/dev/tools/reach.js";
-import workspaceTools from "../../../../../apps/dev/tools/workspace.js";
-import { bundleAuthoredModuleCode } from "../../../node_modules/eve/dist/src/internal/authored-module-loader.js";
+import {
+  bundleAuthoredModuleCode,
+  loadAuthoredModuleNamespace,
+} from "../../../node_modules/eve/dist/src/internal/authored-module-loader.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import { INBOX_TOOLS } from "../coder-host/inbox.js";
 import { OPEN_PULL_REQUEST_TOOL } from "../coder-host/pull-request.js";
@@ -56,6 +56,24 @@ const SESSION_START = {
   channel: {},
   messages: [],
 } as const;
+
+/** One tool as a resolver answers it, read for what the model is told of it. */
+interface ResolvedTool {
+  readonly description: string;
+  readonly inputSchema: ReturnType<typeof emitJsonSchema>;
+}
+
+/** A tool file that resolves its tools as a session starts, as eve loads it. */
+interface SessionToolFile {
+  readonly default?: {
+    readonly events: {
+      readonly "session.started"?: (
+        event: undefined,
+        ctx: typeof SESSION_START,
+      ) => Promise<Readonly<Record<string, ResolvedTool>> | null>;
+    };
+  };
+}
 
 /** What each tool the agent is offered once its session starts is described by, as its own file once wrote it. */
 const SESSION_TOOL_DESCRIPTORS = new Map<
@@ -145,13 +163,16 @@ test("the coding agent's tool files offer each of its tools once, and nothing el
  * neighbour's.
  */
 test("each tool resolved at a session's start is described by its own descriptor", async () => {
-  const resolved = new Map(
-    Object.entries({
-      ...(await developerTools.events["session.started"]?.(undefined, SESSION_START)),
-      ...(await reachTools.events["session.started"]?.(undefined, SESSION_START)),
-      ...(await workspaceTools.events["session.started"]?.(undefined, SESSION_START)),
-    }),
-  );
+  const resolved = new Map<string, ResolvedTool>();
+  for (const file of toolFiles("tools")) {
+    if (!readFileSync(`${CODER_ROOT}${file}`, "utf8").includes('"session.started"')) continue;
+    // SAFETY: eve answers the file's namespace as it evaluates it to build the agent, and each file read here default-exports a `defineDynamic` whose `session.started` resolver answers a map of `defineTool`s and reads neither argument.
+    const loaded = (await loadAuthoredModuleNamespace(`${CODER_ROOT}${file}`, {
+      externalDependencies: AGENT_EXTERNAL_DEPENDENCIES,
+    })) as SessionToolFile;
+    const tools = await loaded.default?.events["session.started"]?.(undefined, SESSION_START);
+    for (const [name, tool] of Object.entries(tools ?? {})) resolved.set(name, tool);
+  }
 
   expect([...resolved.keys()].sort()).toEqual([...SESSION_TOOL_DESCRIPTORS.keys()].sort());
   for (const [name, descriptor] of SESSION_TOOL_DESCRIPTORS) {
@@ -162,7 +183,7 @@ test("each tool resolved at a session's start is described by its own descriptor
       inputSchema: emitJsonSchema(descriptor.inputSchema),
     });
   }
-});
+}, 120_000);
 
 /**
  * eve bundles and evaluates each authored file on its own as it builds, so
