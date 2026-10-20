@@ -201,17 +201,18 @@ const WEB_ROUTES = (vercel.services[SERVICE.WEB].routes ?? []) as readonly WebRo
 
 /**
  * What the web service answers a path with, read as Vercel reads its routes,
- * in order: each whose pattern matches the whole path lays its headers on the
- * answer, a later route's header standing in for an earlier one of the same
- * name; one that continues lets routing go on, and the first that does not
- * rewrites the path to its destination, the pattern's groups written in, or
- * redirects it. Where none does, the path is left to the build's own files.
+ * in order: each whose pattern matches the whole path, whatever its case,
+ * lays its headers on the answer, a later route's header standing in for an
+ * earlier one of the same name; one that continues lets routing go on, and
+ * the first that does not rewrites the path to its destination, the
+ * pattern's groups written in, or redirects it. Where none does, the path is
+ * left to the build's own files.
  */
 function servedBy(path: string): Served {
   const headers = new Map<string, string>();
   const named = new Map<string, string[]>();
   for (const route of WEB_ROUTES) {
-    const pattern = new RegExp(`^${route.src}$`, "u");
+    const pattern = new RegExp(`^${route.src}$`, "iu");
     if (!pattern.test(path)) continue;
     for (const [name, value] of Object.entries(route.headers ?? {})) {
       const key = name.toLowerCase();
@@ -388,6 +389,8 @@ test("every path the web app is served at sends its own Content Security Policy 
   for (const path of [
     "/app",
     "/app/",
+    // Vercel matches a route's pattern whatever the address's case.
+    "/App",
     "/acme/plan/p1",
     "/acme/inbox",
     "/acme/settings/coding-agents",

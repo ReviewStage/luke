@@ -680,7 +680,8 @@ headers on every other path and lets routing go on to the page rewrites and
 the built files, so no page is ever sent two policies to be enforced
 together. It stands after the generated `/api/` table, so an API answer's
 headers are only its handler's, and it leaves `/assets/` alone, since a
-worker runs under the policy its own script is sent with. The site's policy
+worker started from a script's address runs under the policy that script is
+sent with, and the app's chunks must never carry the site's. The site's policy
 admits PostHog's assets as a script source, because the analytics client
 (`src/analytics.ts`) loads its configuration and its recorder from there.
 `tests/vercel-services.test.ts` holds every page the build emits to these
