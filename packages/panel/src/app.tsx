@@ -365,7 +365,6 @@ export function App(): React.JSX.Element {
   useEffect(() => appBridge().onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
   const toast = useToast();
   // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = useMemo(
@@ -376,7 +375,6 @@ export function App(): React.JSX.Element {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
       factoryOn,
-      issuesOn,
     });
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
@@ -595,7 +593,7 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, an agent's or a person's page, Factory, the Automations page, or the Issues page, back to wherever it was
+      // time: Settings, a plan's version history, an agent's or a person's page, Factory, the Automations page, or the Board, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // task, then an open task back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
@@ -613,7 +611,6 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_PERSON_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
-      if (runAppCommand(APP_COMMAND.EXIT_ISSUES)) return;
       if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
       // An open task unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.

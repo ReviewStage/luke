@@ -26,7 +26,6 @@
     "./styles/base.css": "./src/styles/base.css",
     "./styles/call.css": "./src/styles/call.css",
     "./styles/desktop.css": "./src/styles/desktop.css",
-    "./styles/issues.css": "./src/styles/issues.css",
     "./styles/markdown.css": "./src/styles/markdown.css",
     "./styles/settings.css": "./src/styles/settings.css",
     "./styles/shortcut.css": "./src/styles/shortcut.css",

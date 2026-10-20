@@ -289,7 +289,6 @@ function HomeComposer({ tasks }: { tasks: TasksControl }): React.JSX.Element | n
     <NewTaskComposer
       newTask={{ ...tasks.newTask, preset: undefined }}
       workspaceId={tasks.newTask.workspaceId}
-      from={undefined}
       onLeave={letGoOfFocus}
     />
   );

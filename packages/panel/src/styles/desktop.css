@@ -710,16 +710,13 @@ body,
 
 /* View options wears a dot while the view leaves tasks out, so a filtered
    list never passes for the whole of it: drawn by the box around the
-   button, over its corner. The Issues page's View options wears the same
-   while its filter leaves issues out. */
-.sidebar-view-options,
-.issues-view-options {
+   button, over its corner. */
+.sidebar-view-options {
   position: relative;
   display: inline-flex;
 }
 
-.sidebar-view-options[data-filtered="true"]::after,
-.issues-view-options[data-filtered="true"]::after {
+.sidebar-view-options[data-filtered="true"]::after {
   position: absolute;
   top: var(--luke-space-4);
   right: var(--luke-space-4);
@@ -1297,8 +1294,7 @@ ul.actor-stack {
 
 /* A row's transform is a drag's (use-row-drag.ts): sliding aside for a row
    dragged past it on the motion tokens, and put back home the same way, so
-   reduced motion and a capture run hold it still. The sidebar's rows and
-   the Issues board's cards share it. */
+   reduced motion and a capture run hold it still. */
 .sidebar-tasks > li {
   position: relative;
   transition:
@@ -2463,7 +2459,7 @@ ul.actor-stack {
    The web's 24px holds neither, so its documents end a finger's target and a
    hair either side of it short of the column, whether or not a thread stands
    yet, as the desktop's inset does, so the words never move when the first
-   comment lands, and a plan, its versions, and an issue keep one width. */
+   comment lands, and a plan and its versions keep one width. */
 [data-luke-profile="web"] .desktop-document {
   --comment-gutter: calc(var(--luke-touch-target) + 2 * var(--luke-space-2));
 }
@@ -2496,8 +2492,8 @@ ul.actor-stack {
   line-height: var(--luke-type-reading-leading);
 }
 
-/* A document's blocks, and the sections of a text drawn inside one block (an
-   issue's description), stand a section's gap apart. */
+/* A document's blocks, and the sections of a text drawn inside one block,
+   stand a section's gap apart. */
 .desktop-document :is(.plan-body, .document-sections) > * + * {
   margin-top: 1.5em;
 }
@@ -3996,8 +3992,8 @@ ul.actor-stack {
   border-top: 1px solid var(--luke-color-border);
 }
 
-/* An issue board's card offers no Pin or Archive to give way to, so its
-   time stays put while the card is hovered or holds the keyboard. */
+/* A Factory row offers no Pin or Archive to give way to, so its time stays
+   put while the row is hovered or holds the keyboard. */
 .factory-row:hover .sidebar-task-time,
 .factory-row:has(:focus-visible) .sidebar-task-time {
   visibility: visible;
@@ -7025,7 +7021,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   white-space: nowrap;
 }
 
-/* A filled button's chord (a dialog's Send and Create issue, the home
+/* A filled button's chord (a dialog's Send, the home
    page's New task) a glyph's gap after its word, muted against the button's
    own fill rather than the ground around it. */
 .button-chord {
@@ -7147,7 +7143,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-left: auto;
 }
 
-/* A ListRow's metadata on Home, the Issues list, and a person's page: what
+/* A ListRow's metadata on Home and a person's page: what
    the row is about, a teammate's face, the row's mark, and its time, set
    apart by the line's own gap and centred on it. */
 .home-row-meta {
@@ -7226,7 +7222,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin: 0;
 }
 
-/* A section's name and count, as the Issues page heads a status's group. */
+/* A section's name and count. */
 .person-section-head {
   display: flex;
   align-items: baseline;
@@ -7277,17 +7273,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
   height: 34px;
 }
 
-/* New issue (`desktop/new-issue-dialog.tsx`), inside the shared dialog's
-   wide card: its one-line name in a well, its two chips, and its answers at
-   its foot, in one column the screen recording leaves out
-   (`ph-no-capture`). */
-.new-issue {
-  display: flex;
-  min-height: 0;
-  flex-direction: column;
-  gap: var(--luke-space-12);
-}
-
 /* New task (`new-task-dialog.tsx`), inside the shared dialog's wide card:
    its head and its composer card, in one column the screen recording leaves
    out (`ph-no-capture`). */
@@ -7329,11 +7314,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   max-width: min(400px, var(--settings-picker-width-max, 400px));
 }
 
-/* New task's and New issue's chips are Settings pickers
-   (`settings/picker-row.tsx`) standing alone at the head of their lines,
-   not in a column, so each is as wide as its value and gives way,
-   ellipsized, to a long one. */
-:is(.new-issue, .new-task) .settings-picker {
+/* New task's chips are Settings pickers (`settings/picker-row.tsx`)
+   standing alone at the head of their lines, not in a column, so each is as
+   wide as its value and gives way, ellipsized, to a long one. */
+.new-task .settings-picker {
   min-width: 0;
   flex-shrink: 1;
 }
@@ -7724,7 +7708,7 @@ body:has(.luke-dialog-backdrop) .toast[data-action="true"] .toast-dismiss {
 }
 
 /* The Board (`tasks-board.tsx`): the listed workspace's tasks on a column
-   for each status, boxed and headed as the Issues board's are. The board
+   for each status, each boxed under its heading. The board
    fills the page's height, so it never scrolls down and each column scrolls
    its own cards; its columns share the page's width, each at least a
    card's, past which the page scrolls sideways. */

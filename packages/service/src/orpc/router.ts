@@ -45,7 +45,6 @@ import {
   type WorkspaceLinearProcedureSeams,
   workspaceLinearProcedures,
 } from "../integrations/workspace-linear-procedures.js";
-import { type IssuesProcedureSeams, issuesProcedures } from "../issues/issues-procedures.js";
 import {
   type TaskSectionsProcedureSeams,
   taskSectionsProcedures,
@@ -60,7 +59,6 @@ export type HostedRouterSeams = AccountProcedureSeams &
   FactoryProcedureSeams &
   GitHubProcedureSeams &
   IntegrationsProcedureSeams &
-  IssuesProcedureSeams &
   MessagesProcedureSeams &
   ModelsProcedureSeams &
   RepositoryPinsProcedureSeams &
@@ -80,7 +78,6 @@ export function hostedRouter(seams: HostedRouterSeams) {
     factory: factoryProcedures(seams),
     github: githubProcedures(seams),
     integrations: integrationsProcedures(seams),
-    issues: issuesProcedures(seams),
     messages: messagesProcedures(seams),
     models: modelsProcedures(seams),
     plans: tasksProcedures(seams),

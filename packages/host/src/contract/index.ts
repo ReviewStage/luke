@@ -11,7 +11,6 @@ import { automationActsContract } from "./automations.js";
 import { avatarActsContract } from "./avatar.js";
 import { factoryActsContract } from "./factory.js";
 import { integrationActsContract } from "./integrations.js";
-import { issueActsContract } from "./issues.js";
 import type { PortActKind } from "./kinds.js";
 import { macTerminalActsContract } from "./mac-terminals.js";
 import { settingsActsContract } from "./settings.js";
@@ -40,7 +39,6 @@ export {
   AVATAR_ACT_KIND,
   FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
-  ISSUE_ACT_KIND,
   MAC_TERMINAL_ACT_KIND,
   PLATFORM_PORT_ACT_KIND,
   type PlatformPortActKind,
@@ -63,7 +61,6 @@ export const actContract = {
   ...avatarActsContract,
   ...factoryActsContract,
   ...integrationActsContract,
-  ...issueActsContract,
   ...macTerminalActsContract,
   ...settingsActsContract,
   ...tasksActsContract,

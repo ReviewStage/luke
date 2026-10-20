@@ -561,48 +561,12 @@ test("a press on Factory's row in a floating sidebar puts the sidebar away, as e
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
 });
 
-test("the Issues page's sidebar row and its command stand only while the account has its experiment on, and each opens the page", async () => {
-  let opens = 0;
-  const control = tasksControl();
-  const issuesView = { ...control.issuesView, onOpen: () => (opens += 1) };
-  handState({});
-  const off = mount(false, false, { issuesView });
+test("the sidebar offers no Issues row, with every experiment on, since Luke keeps no issues of its own", async () => {
+  handState(experimentsOn(...Object.values(EXPERIMENT)));
+  const page = mount(false);
   await settle();
-  assert.equal(placeRow(off, "Issues"), undefined);
-  assert.equal(runAppCommand(APP_COMMAND.ISSUES), false);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const on = mount(false, false, { issuesView });
-  await settle();
-  const issues = placeRow(on, "Issues");
-  assert.ok(issues, "the Issues row stands");
-  act(() => issues.click());
-  assert.equal(runAppCommand(APP_COMMAND.ISSUES), true);
-  assert.equal(opens, 2);
-});
-
-test("the side panel's toggle stands over the Issues list once an issue has been peeked there, as over the Inbox once an item is chosen", async () => {
-  const control = tasksControl();
-  const toggles = (container: HTMLElement) =>
-    [...container.querySelectorAll("button")].some((button) =>
-      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
-    );
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const unpeeked = mount(false, false, { issuesView: { ...control.issuesView, open: true } });
-  await settle();
-  const before = toggles(unpeeked);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  const peeked = mount(false, false, {
-    issuesView: { ...control.issuesView, open: true, peeked: "issue-1" },
-  });
-  await settle();
-
-  assert.equal(before, false, "nothing peeked, no panel to show");
-  assert.equal(toggles(peeked), true);
+  assert.ok(placeRow(page, "Automations"));
+  assert.equal(placeRow(page, "Issues"), undefined);
 });
 
 test("the Automations page's sidebar row and its command stand with no experiment on", async () => {

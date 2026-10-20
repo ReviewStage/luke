@@ -468,11 +468,11 @@ test("a task opened from a tab pinned to the sidebar is open still, so its row w
 /** The workspace New task starts its tasks in. */
 const WORKSPACE = "workspace-personal";
 
-/** New task's words as storage keeps them, in `workspaceId`, and on one of its issues where `issueId` names one. */
-function newTaskEntry(workspaceId: string, issueId?: string) {
+/** New task's words as storage keeps them, in `workspaceId`. */
+function newTaskEntry(workspaceId: string) {
   return {
     accountId: null,
-    place: { kind: "newTask", workspaceId, ...(issueId === undefined ? undefined : { issueId }) },
+    place: { kind: "newTask", workspaceId },
     text: "Expire invites after a week",
   };
 }
@@ -532,16 +532,6 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
     await newTaskDrafted(inWorkspace({ workspaceId: "workspace-team" })),
     false,
     "another workspace's New task starts from nothing of this one's",
-  );
-
-  window.localStorage.setItem(
-    "luke.composerDrafts",
-    JSON.stringify([newTaskEntry(WORKSPACE, "issue-invites")]),
-  );
-  assert.equal(
-    await newTaskDrafted(inWorkspace()),
-    false,
-    "a card opened on an issue keeps its words for that issue alone",
   );
 });
 

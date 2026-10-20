@@ -18,7 +18,6 @@ import {
   type AccountAskProceduresDependencies,
   type ActPortDependencies,
   createActPortHandler,
-  type IssueProceduresDependencies,
   type PlatformActProcedures,
   type TasksProceduresDependencies,
   type WorkspaceProceduresDependencies,
@@ -127,8 +126,6 @@ function windowPort(
       });
   // SAFETY: each fake answers what its test hands it; the port's output schema checks it.
   const host = Object.fromEntries(ACTS.map((act) => [act.ask, ask(act.ask)])) as HostAsk;
-  // SAFETY: no issue act is called here, so the issues' host is never reached.
-  const issues = { host: {} } as IssueProceduresDependencies;
   // SAFETY: no workspace act is called here, so the workspaces' host is never reached.
   const workspaces = { host: {} } as WorkspaceProceduresDependencies;
   // SAFETY: no platform act is called here, so no platform procedure is reached.
@@ -148,7 +145,7 @@ function windowPort(
     integrations: { host: {} },
   } as Pick<ActPortDependencies, "agents" | "automations" | "factory" | "integrations">;
   const handler = createActPortHandler(
-    { ...unreached, ...elsewhere, accountAsks: { host }, issues, tasks, workspaces },
+    { ...unreached, ...elsewhere, accountAsks: { host }, tasks, workspaces },
     platform,
   );
   const { port1, port2 } = new MessageChannel();

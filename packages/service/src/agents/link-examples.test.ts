@@ -62,7 +62,7 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
       const told = words.slice(words.indexOf("## What your messages are"));
       assert.deepEqual(
         drawnAs(told),
-        [...shared, ...(onTask ? own : []), MENTION_KIND.AGENT, MENTION_KIND.ISSUE],
+        [...shared, ...(onTask ? own : []), MENTION_KIND.AGENT],
         `${brief} ${onTask}`,
       );
       assert.deepEqual(

@@ -258,10 +258,6 @@
           "dest": "/api/default.js?route=automations/automation&route-path=automations/$1&id=$1"
         },
         {
-          "src": "/api/issues/([^/]+)",
-          "dest": "/api/default.js?route=issues/issue&route-path=issues/$1&id=$1"
-        },
-        {
           "src": "/api/account/delete",
           "dest": "/api/default.js?route=account/delete"
         },
@@ -404,10 +400,6 @@
         {
           "src": "/api/inbox",
           "dest": "/api/default.js?route=inbox"
-        },
-        {
-          "src": "/api/issues",
-          "dest": "/api/default.js?route=issues"
         },
         {
           "src": "/api/live/inbox",
@@ -558,7 +550,7 @@
           }
         },
         {
-          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person|issue)(?:/[^/]+)*/?",
+          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person)(?:/[^/]+)*/?",
           "dest": "/app.html",
           "headers": {
             "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",

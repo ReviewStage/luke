@@ -14,8 +14,6 @@
     "./automation-schedule": "./src/automation-schedule.js",
     "./automation-wire": "./src/automation-wire.js",
     "./automation-view": "./src/automation-view.js",
-    "./issue-wire": "./src/issue-wire.js",
-    "./issue-view": "./src/issue-view.js",
     "./avatar-grant": "./src/avatar-grant.js",
     "./sentry-breadcrumbs": "./src/sentry-breadcrumbs.js",
     "./sentry-reporting": "./src/sentry-reporting.js",
@@ -116,7 +114,6 @@
     "./terminal-entry": "./src/terminal-entry.js",
     "./terminal-model": "./src/terminal-model.js",
     "./automation-list-model": "./src/automation-list-model.js",
-    "./issue-list-model": "./src/issue-list-model.js",
     "./automation-draft-model": "./src/automation-draft-model.js",
     "./terminal-store": "./src/terminal-store.js"
   },

@@ -24,7 +24,6 @@ import {
   type TaskMentionsValue,
   tasklessMentions,
   useMentionAgentsReader,
-  useMentionIssuesReader,
 } from "../tasks/task-mentions.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import { useCodingAgents } from "../tasks/use-coding-agents.js";
@@ -60,7 +59,7 @@ import { useTabViews } from "./strip-tabs.js";
  * its id (`use-coding-agents.ts`'s `agentId`). ⌘F finds in it as in a
  * plan's column. An `@` in its box offers its repository's files, its
  * skills, and the servers, read through its workspace since no plan names
- * them (`tasklessMentions`), and its workspace's issues while Issues is on; a skill a message names is its chip, which
+ * them (`tasklessMentions`); a skill a message names is its chip, which
  * opens the skill's `SKILL.md` on GitHub, as a file it names does, since no
  * File tab reads a repository no plan names; and a dictation listens for its repository and
  * its title. A row of its inbox calls opens the window's Inbox, since the
@@ -223,8 +222,6 @@ export function DesktopAgentPage({
   );
   const readMentionAgents = useMentionAgentsReader(workspaceId, mentionTasks, agents.models);
   const listed = tasks.workspaces.find((each) => each.id === workspaceId);
-  // And its issues, while Issues is on.
-  const readMentionIssues = useMentionIssuesReader(listed);
   const workspace = workspaceId === undefined ? undefined : (listed ?? { id: workspaceId });
   // The words a dictation into the agent's box listens for: its repository and its title.
   const keywords = useMemo(
@@ -302,7 +299,6 @@ export function DesktopAgentPage({
           { workspace: listed?.slug ?? workspaceId, workspaceId, repository: agentRepository },
           tasks.onShowMention,
           readMentionAgents,
-          readMentionIssues,
         );
   const toolbar = (
     <header className="desktop-toolbar">

@@ -9,7 +9,7 @@
  * table exactly as its old group did (`packages/service/src/accounts/models-procedures.test.ts`
  * holds the signed-in read, which needs a catalog and a database), and a plan's routes refuse the
  * same way, an unsigned caller before its body is read (`tasks-app.test.ts` holds the signed-in
- * reads and writes), and one issue's path reaches its procedure the same way.
+ * reads and writes).
  */
 
 import assert from "node:assert/strict";
@@ -261,28 +261,4 @@ test("the GitHub routes refuse through the committed table, the dispatcher and t
   const read = await dispatched(new Request(`${ORIGIN}/api/github/connect`), routes);
   assert.equal(read.status, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED);
   assert.equal(await read.text(), '{"error":"method-not-allowed"}');
-});
-
-test("/api/issues/:id reaches its procedure through the committed table and the dispatcher at its public path, refusing an unsigned caller as its old group did", async () => {
-  const routes = new Map([["issues/issue", orpcRoute]]);
-  const path = "/api/issues/3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f60";
-  for (const method of [HTTP_METHOD.GET, HTTP_METHOD.PATCH]) {
-    const unsigned = await dispatched(
-      new Request(`${ORIGIN}${path}`, {
-        method,
-        headers: { "content-type": "application/json" },
-        ...(method === HTTP_METHOD.PATCH ? { body: JSON.stringify({ title: 7 }) } : undefined),
-      }),
-      routes,
-    );
-    assert.equal(unsigned.status, HOSTED_HTTP_STATUS.UNAUTHORIZED, method);
-    assert.equal(unsigned.headers.get("cache-control"), null);
-    assert.equal(await unsigned.text(), '{"error":"invalid-token"}');
-  }
-  const deleted = await dispatched(
-    new Request(`${ORIGIN}${path}`, { method: HTTP_METHOD.DELETE }),
-    routes,
-  );
-  assert.equal(deleted.status, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED);
-  assert.equal(await deleted.text(), '{"error":"method-not-allowed"}');
 });

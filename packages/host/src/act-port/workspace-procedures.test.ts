@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { WORKSPACE_CALL_FAILURE } from "@luke/features";
-import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
 import type { TasksWorkspaceGitHubConnectAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
 import { createORPCClient, ORPCError } from "@orpc/client";
@@ -25,7 +24,6 @@ import {
   type AccountAskProceduresDependencies,
   type ActPortDependencies,
   createActPortHandler,
-  type IssueProceduresDependencies,
   type PlatformActProcedures,
   type TasksProceduresDependencies,
   type WorkspaceProceduresDependencies,
@@ -173,16 +171,6 @@ afterEach(() => {
   for (const port of opened.splice(0)) port.close();
 });
 
-/** The issue procedures' host, never asked here. */
-const NO_ISSUES: IssueProceduresDependencies = {
-  host: {
-    issueList: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-    issueRead: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-    issueCreate: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-    issueChange: () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED }),
-  },
-};
-
 /**
  * A window's act port, opened as the bridge opens one, over a fake host
  * holding the Acme workspace with Grace in it: the window standing as
@@ -308,7 +296,6 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
       ...unreached,
       ...elsewhere,
       accountAsks,
-      issues: NO_ISSUES,
       tasks,
       workspaces: {
         host,

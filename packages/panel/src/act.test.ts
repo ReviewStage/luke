@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
-import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
+import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
 import {
   type ActPortDependencies,
   createActPortHandler,
@@ -25,10 +25,10 @@ import { installActPort } from "./app-bridge.js";
 const PANEL: ActSender = { sender: Symbol("window"), panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
-// SAFETY: these tests call the issue procedures alone, and building the others reads none of these.
+// SAFETY: these tests call the account's asks alone, and building the others reads none of these.
 const UNREACHED = { account: {}, settings: {} } as unknown as Omit<
   ActPortDependencies,
-  "accountAsks" | "issues"
+  "accountAsks"
 >;
 
 const opened: MessagePort[] = [];
@@ -37,12 +37,11 @@ afterEach(() => {
   for (const port of opened.splice(0)) port.close();
 });
 
-// SAFETY: this window calls the issue kinds alone, so no platform procedure is reached.
+// SAFETY: this window calls the account's asks alone, so no platform procedure is reached.
 const NO_PLATFORM_PROCEDURES = {} as PlatformActProcedures<unknown>;
 
 /** This window's act port, opened onto the port's server as the bridge opens it, standing as `actor`. */
 function openActPort(actor: ActSender): void {
-  const unanswered = () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED });
   const noKeys = () => Effect.succeed({ keys: [] });
   const notTemplated = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   // SAFETY: no agent, automation, factory, or integration act is called here, so their hosts are never reached.
@@ -69,14 +68,6 @@ function openActPort(actor: ActSender): void {
           dictationTranscribe: notTemplated,
         },
       },
-      issues: {
-        host: {
-          issueList: unanswered,
-          issueRead: unanswered,
-          issueCreate: unanswered,
-          issueChange: unanswered,
-        },
-      },
       // SAFETY: no test here calls a task kind, so no method of this host nor door of its own is ever read.
       tasks: { host: {} } as TasksProceduresDependencies,
       // SAFETY: no test here calls a workspace kind, so no method of this host is ever read.
@@ -100,18 +91,19 @@ it("a kind the port refuses rejects the caller with the sentence its row draws",
   openActPort(VOICE);
 
   await assert.rejects(
-    askAct(ACT_KIND.ISSUES_LIST, { workspaceId: "workspace-1" }),
+    askAct(ACT_KIND.PROVIDER_KEYS_REMOVE, { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }),
     (error) =>
-      error instanceof Error && error.message === "Could not read the issues on this system.",
+      error instanceof Error && error.message === "Could not remove your API key on this system.",
   );
 });
 
 it("a kind the port answers resolves the caller with the host's answer", async () => {
   openActPort(PANEL);
 
-  assert.deepEqual(await askAct(ACT_KIND.ISSUES_LIST, { workspaceId: "workspace-1" }), {
-    failure: ISSUE_CALL_FAILURE.UNANSWERED,
-  });
+  assert.deepEqual(
+    await askAct(ACT_KIND.PROVIDER_KEYS_REMOVE, { provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }),
+    { keys: [] },
+  );
 });
 
 it("a kind the port answers that carries nothing is asked with nothing and resolves the caller with the host's answer", async () => {

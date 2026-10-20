@@ -1,7 +1,6 @@
 import { useAtom } from "@effect/atom-react";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
-import { LINK_PLACE, readLink } from "@luke/features/luke-link";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
 import { CHIP_LOOK, CHIP_WIDTH, Chip, ChipName, ProviderMark } from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
@@ -14,25 +13,22 @@ import { rendererRuntime } from "../renderer-runtime.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
 import { PICKER_ALIGN, type PickerAlign, usePickerPlacement } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
-import type { NewTaskIssue, TasksControl } from "./use-tasks-tab.js";
+import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
- * issue-picker-chip.tsx -- New task's Issue chip: a press away from one search over the workspace's own issues and, where it has Linear connected, its Linear issues.
+ * issue-picker-chip.tsx -- New task's Issue chip: a press away from one search over the workspace's Linear issues, where it has Linear connected.
  *
- * Drawn where the workspace the task starts in offers either, as an issue
- * glyph, "Issue", and a chevron, the chip opens the app's one searchable
- * menu, hung from its leading edge, or its trailing edge where it ends its
- * row as at the right of the New task dialog's head (`align`), and placed as
- * a Settings picker's is. The menu lists the workspace's own issues under
- * "Issues" and Linear's under "Linear", each heading only where both
- * stand. With nothing typed in the menu's field it lists every issue read as
- * the card opened, as each list came, newest changed first; as soon as
- * anything is typed, the issues of either whose title or key holds every
- * word stand nearest first, and once the typing rests Linear itself is
- * searched for the words, so a Linear issue older than those read is found
- * too; a Linear key typed whole or a link to a Linear issue pasted asks
- * Linear for that one issue instead, and a Luke link to one of the
- * workspace's own issues pasted offers that issue. ↑ and ↓ move the highlight, Return
+ * Drawn where the workspace the task starts in has Linear connected, as an
+ * issue glyph, "Issue", and a chevron, the chip opens the app's one
+ * searchable menu, hung from its leading edge, or its trailing edge where it
+ * ends its row as at the right of the New task dialog's head (`align`), and
+ * placed as a Settings picker's is. With nothing typed in the menu's field
+ * it lists every issue read as the card opened, newest changed first; as
+ * soon as anything is typed, the issues whose title or key holds every word
+ * stand nearest first, and once the typing rests Linear itself is searched
+ * for the words, so an issue older than those read is found too; a Linear
+ * key typed whole or a link to a Linear issue pasted asks Linear for that
+ * one issue instead. ↑ and ↓ move the highlight, Return
  * chooses the highlighted issue, and Escape closes the menu, not the card,
  * handing focus back to what opened it: the chip, or the field whose ⌘L
  * asked for it (`openRequest`). The issues are read as the chip first
@@ -49,8 +45,6 @@ const ISSUE_WORDS = {
   CHIP: "Issue",
   LABEL: "Choose an issue",
   MENU: "Issues",
-  OWN: "Issues",
-  LINEAR: "Linear",
   SEARCH: "Search issues, or paste a key or link",
   NONE: "No issues found",
 } as const;
@@ -59,8 +53,7 @@ const ISSUE_WORDS = {
 const SEARCH_PAUSE = Duration.millis(250);
 
 /**
- * The issues of the workspace the task starts in, its own or its Linear's,
- * read as the card opens and again for another workspace; none while they
+ * The Linear issues of the workspace the task starts in, read as the card opens and again for another workspace; none while they
  * are read, where the workspace offers none, or where the read was refused.
  */
 function useIssuesRead<Issue>(
@@ -167,55 +160,26 @@ function listedIssues(
   return offeredIssues(known, typed, found);
 }
 
-/**
- * The workspace's own issues the menu lists for the words typed so far:
- * every one read while nothing is typed, the one a pasted Luke link to it
- * names, and else those whose title or key holds the words, nearest first.
- */
-function ownOffered(issues: readonly NewTaskIssue[], typed: string): readonly NewTaskIssue[] {
-  const words = typed.trim();
-  if (words === "") return issues;
-  const place = readLink(words)?.place;
-  if (place?.kind === LINK_PLACE.ISSUE) return issues.filter((issue) => issue.id === place.issueId);
-  return offeredIssues(issues, typed);
-}
-
-/** One Linear issue as a row: its title, then its key and the state it stands in, under Linear's heading where one is drawn. */
-function linearRow(issue: LinearIssueSummary, section: string | undefined): MenuRow {
+/** One Linear issue as a row: its title, then its key and the state it stands in. */
+function linearRow(issue: LinearIssueSummary): MenuRow {
   return {
     id: issue.id,
     label: issue.title,
     icon: <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} />,
     detail: issue.state === undefined ? issue.identifier : `${issue.identifier} · ${issue.state}`,
-    section,
-  };
-}
-
-/** One of the workspace's own issues as a row: its title, then its key, under the Issues heading where one is drawn. */
-function ownRow(issue: NewTaskIssue, section: string | undefined): MenuRow {
-  return {
-    id: issue.id,
-    label: issue.title,
-    icon: <ListTodoIcon />,
-    detail: issue.identifier,
-    section,
   };
 }
 
 export function IssuePickerChip({
   linearIn,
-  issuesIn,
   workspaceId,
   disabled,
   openRequest,
   align = PICKER_ALIGN.START,
   onChoose,
-  onChooseOwn,
 }: {
   /** The read of a workspace's Linear issues, none where it has no Linear connected (`TasksControl`'s). */
   linearIn: TasksControl["newTask"]["linearIssuesIn"];
-  /** The read of a workspace's own issues, none where Issues are not on (`TasksControl`'s). */
-  issuesIn: TasksControl["newTask"]["issuesIn"];
   /** The workspace the task starts in, whose issues are listed. */
   workspaceId: string | undefined;
   disabled: boolean;
@@ -224,13 +188,9 @@ export function IssuePickerChip({
   /** Which of the chip's edges its menu hangs from: the leading one, or the trailing one where the chip ends its row. */
   align?: PickerAlign | undefined;
   onChoose: (issue: LinearIssueSummary) => void;
-  onChooseOwn: (issue: NewTaskIssue) => void;
 }): React.JSX.Element | null {
-  const linear = linearIn(workspaceId) !== undefined;
-  const own = issuesIn(workspaceId) !== undefined;
-  const connected = linear || own;
+  const connected = linearIn(workspaceId) !== undefined;
   const issues = useIssuesRead(linearIn, workspaceId);
-  const ownIssues = useIssuesRead(issuesIn, workspaceId);
   const [searched, searchLinear] = useLinearSearch(linearIn);
   const [typed, setTyped] = useState("");
   const [open, setOpen] = useState(false);
@@ -249,8 +209,8 @@ export function IssuePickerChip({
     setOpen(false);
     setTyped("");
   }
-  // Every source of issues let go while the menu stood closes it too, so
-  // one coming back draws nothing until the chip is pressed again.
+  // Linear let go while the menu stood closes it too, so its coming back
+  // draws nothing until the chip is pressed again.
   if (!connected && open) {
     setOpen(false);
     setTyped("");
@@ -271,14 +231,8 @@ export function IssuePickerChip({
 
   if (!connected) return null;
 
-  const listed = linear ? listedIssues(issues, searched, workspaceId, typed) : [];
-  const ownListed = ownOffered(ownIssues, typed);
-  // Note that each kind stands under its heading only where both may be listed.
-  const both = linear && own;
-  const rows = [
-    ...ownListed.map((issue) => ownRow(issue, both ? ISSUE_WORDS.OWN : undefined)),
-    ...listed.map((issue) => linearRow(issue, both ? ISSUE_WORDS.LINEAR : undefined)),
-  ];
+  const listed = listedIssues(issues, searched, workspaceId, typed);
+  const rows = listed.map(linearRow);
   // Note that we hand focus back to where it came from, the chip or the
   // field, as a native menu returns it to its trigger, because closing takes
   // the focused search away with it.
@@ -327,11 +281,9 @@ export function IssuePickerChip({
             searchLinear(words, workspaceId);
           }}
           onPick={(id) => {
-            const mine = ownListed.find((each) => each.id === id);
             const issue = listed.find((each) => each.id === id);
             close();
-            if (mine !== undefined) onChooseOwn(mine);
-            else if (issue !== undefined) onChoose(issue);
+            if (issue !== undefined) onChoose(issue);
           }}
           onClose={close}
           onLeave={(left) => {

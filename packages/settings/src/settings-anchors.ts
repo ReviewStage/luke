@@ -51,7 +51,6 @@ export const EXPERIMENT_ANCHOR = {
   [EXPERIMENT.FACTORY]: "experiment-factory",
   [EXPERIMENT.CODE_REVIEW]: "experiment-code-review",
   [EXPERIMENT.VIDEO_CALLS]: "experiment-video-calls",
-  [EXPERIMENT.ISSUES]: "experiment-issues",
   [EXPERIMENT.SECTIONS]: "experiment-sections",
   [EXPERIMENT.GITHUB_TOKEN]: "experiment-github-token",
 } as const satisfies Record<Experiment, string>;

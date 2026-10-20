@@ -465,7 +465,6 @@ function fullMenuTemplate(
       submenu: [
         commandItem(APP_COMMAND.HOME),
         commandItem(APP_COMMAND.INBOX),
-        commandItem(APP_COMMAND.ISSUES),
         commandItem(APP_COMMAND.AUTOMATIONS),
         SEPARATOR,
         commandItem(APP_COMMAND.BACK),

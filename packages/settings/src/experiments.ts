@@ -18,8 +18,6 @@ export const EXPERIMENT = {
   CODE_REVIEW: "code-review",
   /** Calls that open with Luke on video, a Keyframe avatar at the top of the Call tab. */
   VIDEO_CALLS: "video-calls",
-  /** A workspace's issues, each a title, a status, a priority, and a description, listed on their own page. */
-  ISSUES: "issues",
   /** Sections of your own in the sidebar, each a title and an icon, that tasks are dragged into. */
   SECTIONS: "sections",
   /** A member's own classic GitHub personal access token, for repositories the Luke GitHub App is not installed on. */
@@ -76,13 +74,6 @@ export const EXPERIMENTS = [
     key: EXPERIMENT.SECTIONS,
     name: "Sections",
     detail: "Keep tasks in sections of your own in the sidebar, each with a title and an icon.",
-    owner: "Charles",
-    since: "2026-10-16",
-  },
-  {
-    key: EXPERIMENT.ISSUES,
-    name: "Issues",
-    detail: "Track your workspace's issues on a page of their own, grouped by status.",
     owner: "Charles",
     since: "2026-10-16",
   },

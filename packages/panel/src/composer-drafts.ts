@@ -18,7 +18,7 @@ import { readKept, writeKept } from "./desktop/folded-groups.js";
  * Discord's, and GitHub's comments alike, and so does every box here that
  * sends somewhere: an agent's composer keeps its words per agent, a plan's
  * draft agent its first message per plan, New task its words per workspace
- * the task starts in, and per issue where it was opened on one, and an inbox
+ * the task starts in, and an inbox
  * card its answer per item, at the revision it was written against, the
  * options picked and the fields filled beside its note. A draft is known by where
  * it goes, a place named by the ids of what it goes to, never one key built
@@ -96,8 +96,6 @@ const draftPlaceSchema = Schema.Union([
     kind: Schema.Literal(DRAFT_PLACE.NEW_TASK),
     /** The workspace the task starts in; null before the workspaces are read. */
     workspaceId: Schema.NullOr(Schema.String),
-    /** The workspace's own issue New task was opened on, whose words are that issue's alone. */
-    issueId: Schema.optionalKey(Schema.String),
   }),
 ]);
 
@@ -469,18 +467,15 @@ export function usePlanDrafted(taskId: string): boolean {
 /**
  * Whether New task holds a draft in a workspace, none before the workspaces
  * are read, which the sidebar's New task row marks with the pencil
- * (`draft-mark.tsx`): the words its own card keeps there, never those of a
- * card opened on one of the workspace's issues, which that press alone
- * brings back. Note that it answers a boolean, so the row draws again only
- * as the draft comes or goes, never on each word typed.
+ * (`draft-mark.tsx`): the words its card keeps there. Note that it answers
+ * a boolean, so the row draws again only as the draft comes or goes, never
+ * on each word typed.
  */
 export function useNewTaskDrafted(workspaceId: string | undefined): boolean {
   return useAtomValue(draftsAtom, (drafts) =>
     drafts.some(
       ({ place }) =>
-        place.kind === DRAFT_PLACE.NEW_TASK &&
-        place.workspaceId === (workspaceId ?? null) &&
-        !("issueId" in place),
+        place.kind === DRAFT_PLACE.NEW_TASK && place.workspaceId === (workspaceId ?? null),
     ),
   );
 }

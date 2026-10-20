@@ -79,7 +79,6 @@ async function mount(heading?: ReactNode): Promise<HTMLElement> {
             repositoriesIn: () => ({ ...control.repositories, recent: ["acme/web"] }),
           },
           workspaceId: "workspace-acme",
-          from: undefined,
           onLeave: () => undefined,
           heading,
         }),

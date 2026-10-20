@@ -214,7 +214,6 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
     "/acme/factory",
     "/acme/settings/coding-agents",
     "/acme/person/user_9Fq2-x",
-    "/acme/issue/i1",
   ]) {
     assert.equal(servedFile(path), "/app.html", path);
   }
@@ -237,13 +236,14 @@ test("a link to any place in Luke, a plan's, a section's and a picture's among t
     assert.equal(served.searchParams.get("route"), route, path);
     assert.equal(served.searchParams.get("id"), path.split("/")[3], path);
   }
-  // The landing page, the sign-in, a static file, and a path naming no place are the build's own files.
+  // The landing page, the sign-in, a static file, and a path naming no place, an old issue's among them, are the build's own files.
   for (const path of [
     "/",
     "/sign-in.html",
     "/favicon.svg",
     "/app/fonts/x.woff2",
     "/acme/plans/x",
+    "/acme/issue/i1",
     "/acme",
     "/application",
   ]) {

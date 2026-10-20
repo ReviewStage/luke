@@ -51,7 +51,6 @@ import { askRecord } from "@luke/database/models/asks";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
 import { hostedStore } from "@luke/database/models/hosted-store";
-import { readIssue } from "@luke/database/models/issue-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
 import { conversationOwnerOf, standingSessionsNamed } from "@luke/database/models/recorded-session";
 import {
@@ -261,23 +260,6 @@ const startingLinearIssue = (organizationId: string, issueId: string) =>
   );
 
 /**
- * The workspace's own issue a plan starts from, where the account reads it
- * and it is an issue of the workspace the plan starts in; refused as not
- * found otherwise, before anything is written.
- */
-const startingIssue = Effect.fnUntraced(function* (
-  userId: string,
-  organizationId: string,
-  issueId: string,
-) {
-  const read = yield* hostedStoreOrUnavailable(readIssue(userId, issueId));
-  if (Option.isNone(read) || read.value.workspaceId !== organizationId) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  }
-  return read.value.id;
-});
-
-/**
  * The plan and the agent a start's earlier request made under the agent's
  * key: a retry after a lost answer is answered with them rather than with a
  * second plan. A key already spent on an agent anywhere else, on another
@@ -397,7 +379,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /**
      * A plan started with an empty document, its repository confirmed and
-     * its Linear issue and its own issue read first, and, where it names an
+     * its Linear issue read first, and, where it names an
      * agent, that agent started on it: a start naming an agent and no
      * repository is refused as an agent's Start on such a plan is, before
      * anything is written, and the agent's session is opened as the
@@ -428,10 +410,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         input.linearIssueId === undefined
           ? undefined
           : yield* startingLinearIssue(organizationId, input.linearIssueId);
-      const issueId =
-        input.issueId === undefined
-          ? undefined
-          : yield* startingIssue(userId, organizationId, input.issueId);
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
       const task = yield* hostedStoreOrUnavailable(
@@ -440,7 +418,6 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...(input.name === undefined ? undefined : { name: input.name }),
           repository,
           ...(issue === undefined ? undefined : { issueLinks: [issue] }),
-          ...(issueId === undefined ? undefined : { issueId }),
           ...(planning === undefined ? undefined : { planning }),
           ...(input.brief === undefined ? undefined : { brief: input.brief }),
           ...(input.status === undefined ? undefined : { status: input.status }),
@@ -449,7 +426,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
         source: SERVER_TASK_SOURCE.SIDEBAR,
-        has_issue: issue !== undefined || issueId !== undefined,
+        has_issue: issue !== undefined,
       });
       const answer: TaskStartAnswer =
         agent === undefined

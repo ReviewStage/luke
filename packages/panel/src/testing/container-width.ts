@@ -1,7 +1,6 @@
 import base from "@luke/panel/styles/base.css?raw";
 import call from "@luke/panel/styles/call.css?raw";
 import desktop from "@luke/panel/styles/desktop.css?raw";
-import issues from "@luke/panel/styles/issues.css?raw";
 import markdown from "@luke/panel/styles/markdown.css?raw";
 import settings from "@luke/panel/styles/settings.css?raw";
 import shortcut from "@luke/panel/styles/shortcut.css?raw";
@@ -55,7 +54,6 @@ const SHEETS = [
   signIn,
   tasks,
   desktop,
-  issues,
   call,
 ] as const;
 

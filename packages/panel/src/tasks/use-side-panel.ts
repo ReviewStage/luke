@@ -675,12 +675,6 @@ export interface OpenTask {
   holds: TaskHolds;
   /** Whether the panel draws none of the task's fixed tabs, standing beside the window's Inbox rather than the task's page, which draws what they show. */
   bare?: true | undefined;
-  /**
-   * Whether the page beside the panel draws the panel's one tab itself, as
-   * the Issues list draws the issue it peeked (`issue-peek.tsx`), so the
-   * panel stands while open though its strip holds no tab of its own.
-   */
-  drawsOwn?: true | undefined;
 }
 
 /** What the task holds for the tabs: its id and its kinds, its agents whose tabs are open, or nothing while unread, the brain's workers its work holds, by the call that started each, and the files shown on it. */
@@ -1721,8 +1715,7 @@ export function useSidePanel(
   const strip = useMemo(() => stripOf(state, drawn), [state, drawn]);
   // Open is the window's, so a plan whose strip is empty hides the panel
   // without forgetting it was open, and the next plan with a tab shows it.
-  const shown =
-    state.open && (task.drawsOwn === true || strip.length > 0 || emptyShownOn === taskId);
+  const shown = state.open && (strip.length > 0 || emptyShownOn === taskId);
   // A panel shut, by its toggle or by its last tab closing, or hidden by a
   // plan with no tab, shows again beside the document and with no ask of
   // its "+" standing; one shut, or whose plan was left, is shown empty only

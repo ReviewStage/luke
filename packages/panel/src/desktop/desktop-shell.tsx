@@ -38,7 +38,6 @@ import { useTaskLooks } from "../tasks/use-task-looks.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
-  ISSUES_PAGE,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
@@ -87,14 +86,6 @@ const AutomationsPage = lazy(() =>
   })),
 );
 
-/**
- * The Issues page, loaded as a chunk of its own the first time it opens,
- * as the Automations pages are and for the same reason.
- */
-const IssuesPage = lazy(() =>
-  import("./issues-page.js").then((loaded) => ({ default: loaded.IssuesPage })),
-);
-
 /** The Board, its own chunk, loaded the first time it is opened. */
 const TasksBoard = lazy(() =>
   import("./tasks-board.js").then((loaded) => ({ default: loaded.TasksBoard })),
@@ -118,16 +109,6 @@ function BoardLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
       loadingLabel="Reading tasks"
     />
   );
-}
-
-/**
- * What stands while the Issues page's chunk loads: its empty frame, and its
- * own way out, so Escape pressed in that frame closes Issues as the list
- * would rather than falling through to the plan behind it.
- */
-function IssuesLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_ISSUES, onExit);
-  return <section className="automations-view" aria-label="Issues" />;
 }
 
 /**
@@ -277,17 +258,6 @@ function usePlaceCommands(
         }
       : undefined,
   );
-  // The Issues page is an experiment on the same terms as Factory.
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
-  useAppCommand(
-    APP_COMMAND.ISSUES,
-    pastGate && tasks.signedIn && issuesOn
-      ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          tasks.issuesView.onOpen();
-        }
-      : undefined,
-  );
   // Factory is an experiment: offered nowhere, ⌘K, its chord, or the menu, while it is off.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   useAppCommand(
@@ -390,7 +360,6 @@ function titleSubject(
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
   if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
-  if (tasks.issuesView.open) return { signedIn, subject: "Issues", workspace: tasks.workspace };
   if (tasks.boardView.open) return { signedIn, subject: "Board", workspace: tasks.workspace };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
@@ -482,17 +451,12 @@ export function DesktopShell({
   useEffect(() => {
     if (chatShown && !chatOn) closeChat();
   }, [chatShown, chatOn, closeChat]);
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
-  const { open: issuesShown, onClose: closeIssues } = tasks.issuesView;
-  useEffect(() => {
-    if (issuesShown && !issuesOn) closeIssues();
-  }, [issuesShown, issuesOn, closeIssues]);
   const { region } = tasks;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
     shell,
     tasks.sidePanel.fullScreen,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.issuesView.open}:${tasks.boardView.open}:${sidebar.collapsed}`,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.boardView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
   // the Inbox, an agent's or a person's page, Factory, the Automations page, or Chat standing in its place is not the plan.
@@ -503,7 +467,6 @@ export function DesktopShell({
     tasks.factoryView.open ||
     tasks.automationsView.open ||
     tasks.chatView.open ||
-    tasks.issuesView.open ||
     tasks.boardView.open;
   const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
@@ -611,27 +574,18 @@ export function DesktopShell({
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then. Factory,
   // the Automations page, and Chat stand in the plan's place, so they draw
-  // no panel to toggle; an agent's page draws the agent's own, the Inbox
-  // the chosen item's task's, and the Issues list the issue it peeked.
+  // no panel to toggle; an agent's page draws the agent's own, and the Inbox
+  // the chosen item's task's.
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
   const factoryOpen = tasks.factoryView.open && factoryOn;
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
-  const issuesOpen = tasks.issuesView.open && issuesOn;
   const boardOpen = tasks.boardView.open;
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
-  // The Issues list draws the panel beside it once an issue has been peeked there, as the Inbox does once an item is chosen.
-  const issuePeeked =
-    issuesOpen &&
-    tasks.issuesView.place.kind === ISSUES_PAGE.LIST &&
-    tasks.issuesView.peeked !== undefined;
   const panelToggle =
-    planToggle ||
-    pageAgent !== undefined ||
-    (inboxOpen && tasks.inboxView.chosen !== undefined) ||
-    issuePeeked;
+    planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the task's column, call bar
   // and all, so the captions float in its place then.
@@ -694,12 +648,6 @@ export function DesktopShell({
             ) : factoryOpen ? (
               <PageFind page={FIND_PAGE.FACTORY} active={tasks.shown}>
                 <DesktopFactory tasks={tasks} />
-              </PageFind>
-            ) : issuesOpen ? (
-              <PageFind page={FIND_PAGE.ISSUES} active={tasks.shown}>
-                <Suspense fallback={<IssuesLoading onExit={tasks.issuesView.onClose} />}>
-                  <IssuesPage tasks={tasks} />
-                </Suspense>
               </PageFind>
             ) : boardOpen ? (
               <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>

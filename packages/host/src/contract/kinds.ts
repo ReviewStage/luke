@@ -155,14 +155,6 @@ export const INTEGRATION_ACT_KIND = {
   INTEGRATIONS_RENAME: "integrations.rename",
 } as const;
 
-/** The Issues page's asks: a workspace's issues listed, one read, one filed, and one changed. */
-export const ISSUE_ACT_KIND = {
-  ISSUES_LIST: "issues.list",
-  ISSUES_READ: "issues.read",
-  ISSUES_CREATE: "issues.create",
-  ISSUES_CHANGE: "issues.change",
-} as const;
-
 /** The settings writes: one setting, a page's settings reset, and one experiment turned on or off, each answering the settings as they then stand. */
 export const SETTINGS_ACT_KIND = {
   SETTING_UPDATE: "setting.update",
@@ -320,7 +312,6 @@ export const PORT_ACT_KIND = {
   ...AVATAR_ACT_KIND,
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
-  ...ISSUE_ACT_KIND,
   ...MAC_TERMINAL_ACT_KIND,
   ...SETTINGS_ACT_KIND,
   ...TASKS_ACT_KIND,

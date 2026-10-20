@@ -805,13 +805,13 @@ function tasksToolView(
       return answeredCall(CALL_KIND.MOVE_TASK, input, output, "task", "name");
     case AGENT_TOOL.UPDATE_TASK:
       return answeredCall(taskUpdateKind(input), input, output, "task", "name");
-    case AGENT_TOOL.LIST_ISSUES:
+    case RETIRED_TOOL.LIST_ISSUES:
       return namedCall(CALL_KIND.LIST_ISSUES, input, output, undefined);
-    case AGENT_TOOL.READ_ISSUE:
+    case RETIRED_TOOL.READ_ISSUE:
       return issueCall(CALL_KIND.READ_ISSUE, input, output);
-    case AGENT_TOOL.CREATE_ISSUE:
+    case RETIRED_TOOL.CREATE_ISSUE:
       return issueCall(CALL_KIND.CREATE_ISSUE, input, output);
-    case AGENT_TOOL.UPDATE_ISSUE:
+    case RETIRED_TOOL.UPDATE_ISSUE:
       return issueCall(CALL_KIND.UPDATE_ISSUE, input, output);
     case AGENT_TOOL.CREATE_TASK:
       return namedCall(CALL_KIND.CREATE_TASK, input, output, "name");

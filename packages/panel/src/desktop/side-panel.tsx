@@ -223,7 +223,7 @@ function documentReserve(area: HTMLElement): number {
 }
 
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
-export const PANEL_LEAVING = {
+const PANEL_LEAVING = {
   NONE: "none",
   CLOSE: "close",
   FULL_SCREEN: "full-screen",
@@ -2144,8 +2144,8 @@ export function SidePanel({
 }
 
 /**
- * The frame every side panel stands in, the task's, an agent's page's, the
- * Inbox's, and the Issues page's peek: the panel's pane at the window's
+ * The frame every side panel stands in, the task's, an agent's page's, and
+ * the Inbox's: the panel's pane at the window's
  * right, its width the window's, over its top row of `tabs`, the chosen
  * tab's `actions`, and its full-screen button, with what it shows under the
  * row and its resize edge at its left. Full screen, it covers what it stood
@@ -2155,7 +2155,7 @@ export function SidePanel({
  * screen it has neither the button nor the edge, and keeps no room. It plays its own exits (`playExit`);
  * its arrival is played by the pane motion around it (`pane-motion.tsx`).
  */
-export function PanelFrame({
+function PanelFrame({
   panel,
   leaving,
   onLeft,

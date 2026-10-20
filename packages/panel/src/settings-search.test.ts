@@ -179,7 +179,6 @@ test("an experiment is found by its name, what it brings, and what other apps ca
         "Code review",
         "Browser tab",
         "Sections",
-        "Issues",
         "Chat",
         "Video calls",
         "Factory",

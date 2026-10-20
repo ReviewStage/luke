@@ -235,7 +235,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
         automations: { host: operator.host },
         factory: { host: operator.host },
         integrations: { host: operator.host },
-        issues: { host: operator.host },
         settings: {
           host: operator.host,
           // The port names its window as an unknown sender; only a window of

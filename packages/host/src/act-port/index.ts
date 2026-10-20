@@ -21,7 +21,6 @@ import {
   type IntegrationProceduresDependencies,
   integrationProcedures,
 } from "./integration-procedures.js";
-import { type IssueProceduresDependencies, issueProcedures } from "./issue-procedures.js";
 import { type SettingsProceduresDependencies, settingsProcedures } from "./settings-procedures.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import {
@@ -43,7 +42,6 @@ export type { AgentProceduresDependencies } from "./agents-procedures.js";
 export type { AutomationProceduresDependencies } from "./automation-procedures.js";
 export { type ActPortContext, actPortFor } from "./base.js";
 export type { IntegrationProceduresDependencies } from "./integration-procedures.js";
-export type { IssueProceduresDependencies } from "./issue-procedures.js";
 export type {
   ClientSettingSideEffects,
   SettingsProceduresDependencies,
@@ -93,7 +91,6 @@ export interface ActPortDependencies {
   readonly automations: AutomationProceduresDependencies;
   readonly factory: FactoryProceduresDependencies;
   readonly integrations: IntegrationProceduresDependencies;
-  readonly issues: IssueProceduresDependencies;
   readonly settings: SettingsProceduresDependencies;
   readonly tasks: TasksProceduresDependencies;
   readonly workspaces: WorkspaceProceduresDependencies;
@@ -122,7 +119,6 @@ export function createActPortHandler<Sender>(
     ...automationProcedures(dependencies.automations),
     ...factoryProcedures(dependencies.factory),
     ...integrationProcedures(dependencies.integrations),
-    ...issueProcedures(dependencies.issues),
     ...settingsProcedures(dependencies.settings),
     ...tasksProcedures(dependencies.tasks),
     ...workspaceProcedures(dependencies.workspaces),

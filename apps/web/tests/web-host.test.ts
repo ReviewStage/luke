@@ -90,22 +90,6 @@ it.effect(
     ),
 );
 
-it.effect("an act that rides the act port reaches the service through the tab's own channel", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
-      installAppBridge(bridge);
-      installActPort(actPort);
-
-      const listed = yield* Effect.promise(() =>
-        askAct(ACT_KIND.ISSUES_LIST, { workspaceId: "workspace-ada" }),
-      );
-
-      assert.deepEqual(listed, { issues: [] });
-    }),
-  ),
-);
-
 it.effect("a workspace act rides the tab's act port to the service and back", () =>
   Effect.scoped(
     Effect.gen(function* () {

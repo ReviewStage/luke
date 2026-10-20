@@ -300,7 +300,6 @@ function portDependencies(
     automations: { host },
     factory: { host },
     integrations: { host },
-    issues: { host },
     settings: {
       host,
       reporterOf: (actor) => (actor.sender === window ? reporter : undefined),
