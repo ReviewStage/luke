@@ -46,6 +46,7 @@ import {
   initialAppState,
   linkClientNotices,
   linkNetworkWatch,
+  linkSessionReload,
   type OperatorClient,
 } from "@luke/host/client";
 import type { ActPortClient } from "@luke/host/contract";
@@ -406,6 +407,8 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       // No voice window and no talk key stand beside the panel.
       operator.link({ sendToVoice: () => undefined, reapplyTalkHotkey: () => undefined });
       yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
+      // A session that changes under the tab leaves it with a full page load (Neon's "When the session changes"), dropping the previous account's live reads.
+      yield* linkSessionReload({ state, reload: () => location.reload() });
 
       // The notices' toasts reach the panel through the bridge, which is built
       // after the notices, so they find it late.
