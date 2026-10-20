@@ -14,6 +14,7 @@ import {
   type CodingAgent,
   createCodingAgent,
   readCodingAgentRouting,
+  recordCodingAgentNativeSession,
 } from "@luke/database/models/coding-agent-store";
 import { parseKeyRing, sealProviderKey } from "@luke/database/models/provider-key-seal";
 import { saveProviderKey } from "@luke/database/models/provider-key-store";
@@ -37,7 +38,6 @@ import {
   type ClaudeCodeSessionsOptions,
   claudeCodeSessions,
   RUNNER_ENDED,
-  recordRunnerSession,
   runnerBearerDigest,
   runnerEnded,
 } from "./claude-code-sessions.js";
@@ -531,15 +531,8 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
         const opened = yield* sessions.open(message(agent, "Fix the invitations."));
         assert.ok(opened.outcome === EVE_SEND_OUTCOME.ACCEPTED);
         const target = { userId, conversationId: agent.conversationId };
-        // The runner reports the CLI's session in its init, and its run ends.
-        assert.equal(
-          yield* recordRunnerSession(userId, agent.id, {
-            type: "system",
-            subtype: "init",
-            session_id: CLI_SESSION,
-          } as never),
-          true,
-        );
+        // The events route records the CLI's session from the runner's init, and the run ends.
+        assert.equal(yield* recordCodingAgentNativeSession(userId, agent.id, CLI_SESSION), true);
         const firstBearer = api.commands[0]?.env[RUNNER_ENV.BEARER];
         sequence.next = 42;
 

@@ -6,8 +6,8 @@
  * the `sessionId` tag on the sandbox it opens, so the Terminal tab, the stop
  * and the cleanup sweep find the sandbox by it exactly as they find eve's
  * (`terminal/agent-sandbox.ts`, `session-sandboxes.ts`). The CLI's own
- * session id is the conversation's `native_session`, recorded once the runner
- * reports it (`recordRunnerSession`).
+ * session id is the conversation's `native_session`, which the events route
+ * records from the runner's `init`, and a relaunch resumes.
  *
  * `open` opens a sandbox from the coding agent's image (`agent-sandbox-image.ts`),
  * checks the agent's repository out into it exactly as eve's sandbox does
@@ -54,15 +54,12 @@ import {
   RUNNER_ENV,
   type ClaudeCodeConfig,
   RUNNER_HARNESS,
-  type RunnerMessage,
 } from "@luke/agent-runner/protocol";
-import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
   hasRepository,
   readCodingAgentOfConversation,
   readCodingAgentRouting,
-  recordCodingAgentNativeSession,
   recordCodingAgentRunnerToken,
 } from "@luke/database/models/coding-agent-store";
 import { openProviderKey, parseKeyRing } from "@luke/database/models/provider-key-seal";
@@ -673,15 +670,4 @@ export const runnerEnded = Effect.fn("web/claudeCodeRunnerEnded")(function* (end
   yield* Effect.ignore(api.updateNetworkPolicy(running, OPEN_INTERNET_POLICY));
   yield* api.stopSession(running);
   return RUNNER_ENDED.STOPPED;
-});
-
-/** The CLI's session id, recorded on the agent's conversation as the runner reports it in its `init`; answers whether this message was one. */
-export const recordRunnerSession = Effect.fn("web/claudeCodeRecordRunnerSession")(function* (
-  userId: string,
-  agentId: string,
-  message: RunnerMessage,
-): Effect.fn.Return<boolean, unknown, DatabaseServices> {
-  if (message.type !== "system" || !("subtype" in message) || message.subtype !== "init")
-    return false;
-  return yield* recordCodingAgentNativeSession(userId, agentId, message.session_id);
 });
