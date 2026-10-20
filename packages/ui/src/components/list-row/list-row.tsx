@@ -9,6 +9,8 @@ import {
   type RefCallback,
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
 } from "react";
 import { cssCustomProperties } from "../../css.js";
@@ -333,17 +335,21 @@ export function ListRow({
   const [descriptionMeasured, descriptionClipped] = useClipped(plainWords(description));
   // Note that only a dense row's description fades, so a fuller row's prose
   // is never measured; whether the row is dense is read where it stands, its
-  // list's density or its own, as the stylesheet reads it.
+  // list's density or its own, as the stylesheet reads it, after every render,
+  // so a list made dense or regular again measures its rows' descriptions or
+  // lets them go.
+  const descriptionBox = useRef<HTMLElement | null>(null);
   const [describedDense, setDescribedDense] = useState(false);
+  useLayoutEffect(() => {
+    setDescribedDense(descriptionBox.current?.closest(DENSE_ROW) != null);
+  });
   const described = useCallback(
     (element: HTMLElement | null) => {
-      if (element === null) return undefined;
-      const dense = element.closest(DENSE_ROW) !== null;
-      setDescribedDense(dense);
-      return dense ? descriptionMeasured(element) : undefined;
+      descriptionBox.current = element;
+      if (element === null || !describedDense) return undefined;
+      return descriptionMeasured(element);
     },
-    // Note that a row's own density is a dependency only so its change reads the row again.
-    [descriptionMeasured, density],
+    [descriptionMeasured, describedDense],
   );
   const [leadMeasured, leadClipped] = useClipped(lead?.label);
   const heading = (

@@ -700,6 +700,33 @@ test("a regular row's description, a preview's prose, keeps its ellipsis, while 
   });
 });
 
+test("a list made dense fades its rows' descriptions cut short, and made regular again gives them back their ellipsis", () => {
+  const resized = standInResizeObserver();
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(320);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+  const pages = (density: ListDensity) =>
+    createElement(List, {
+      label: "Pages",
+      density,
+      children: createElement(ListRow, {
+        title: "Invite funnel",
+        description: "The weekly invite funnel, by the workspace each invite was sent from",
+        onPress: () => undefined,
+      }),
+    });
+  const container = draw(pages(LIST_DENSITY.REGULAR));
+  const root = roots.at(-1);
+  const overflow = () =>
+    container.querySelector(".luke-list-row-description")?.getAttribute("data-overflow");
+  act(() => resized());
+  expect(overflow()).toBeNull();
+  act(() => root?.render(pages(LIST_DENSITY.DENSE)));
+  act(() => resized());
+  expect(overflow()).toBe("true");
+  act(() => root?.render(pages(LIST_DENSITY.REGULAR)));
+  expect(overflow()).toBeNull();
+});
+
 test("a title renamed longer or shorter is measured again, though its box keeps its width", async () => {
   const resized = standInResizeObserver();
   // Note that the box stands 200px wide whatever its words, as a row whose width its list sets does.
