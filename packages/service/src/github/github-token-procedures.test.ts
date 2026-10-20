@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
-import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { account, user } from "@luke/database/schemas/auth";
 import { githubPersonalToken } from "@luke/database/schemas/github-personal-token";
 import { getTestDB } from "@luke/database/testing";
@@ -12,7 +11,6 @@ import {
   type GitHubTokenAnswer,
   githubTokenAnswerSchema,
 } from "@luke/features/github-token-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { HTTP_STATUS, jsonResponse, recordingHttpClient } from "@luke/wire/testing";
@@ -105,11 +103,11 @@ function tokenRequest(
   });
 }
 
-/** A member with GitHub linked and the experiment on, another with it off, and the group answering both. */
+/** A member with GitHub linked and the group answering both. */
 const openMembers = Effect.gen(function* () {
   const db = yield* Database;
-  const [owner, off] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
-  for (const id of [owner, off]) {
+  const owner = `user-${randomUUID()}`;
+  for (const id of [owner]) {
     yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
   }
   yield* db.insert(account).values({
@@ -119,7 +117,6 @@ const openMembers = Effect.gen(function* () {
     userId: owner,
     updatedAt: new Date(0),
   });
-  yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.GITHUB_TOKEN]: true } });
   const fake = recordingHttpClient((request) =>
     github(request.authorization?.replace(/^Bearer /u, "") ?? ""),
   );
@@ -160,7 +157,7 @@ const openMembers = Effect.gen(function* () {
     });
   const ask = (userId: string | undefined, method = "GET", body?: WireBoundaryInput) =>
     send(tokenRequest(userId, method, body));
-  return { owner, off, ask, send, checks: fake.requests, logged };
+  return { owner, ask, send, checks: fake.requests, logged };
 });
 
 function answerOf(answered: { status: number; body: WireBoundaryInput }): GitHubTokenAnswer {
@@ -268,18 +265,6 @@ it.layer(getTestDB())("the GitHub token procedures", (it) => {
       }),
   );
 
-  it.effect("the path names nothing for a member without the experiment on", () =>
-    Effect.gen(function* () {
-      const { off, ask } = yield* openMembers;
-
-      const answered = yield* ask(off, "PUT", { token: TOKEN.GOOD });
-
-      assert.deepEqual(
-        { status: answered.status, body: answered.body },
-        { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
-      );
-    }),
-  );
   it.effect(
     "an unsigned caller is refused whatever it carries, and a method the path does not answer is not taken",
     () =>
@@ -336,7 +321,7 @@ it.layer(getTestDB())("the GitHub token procedures", (it) => {
     "no refusal of a save carries the token, in its body or anything logged, whichever check refused it",
     () =>
       Effect.gen(function* () {
-        const { owner, off, ask, send, logged } = yield* openMembers;
+        const { owner, ask, send, logged } = yield* openMembers;
         const tooLong = `${TOKEN.GOOD}${"x".repeat(300)}`;
         const padded = JSON.stringify({ token: `${TOKEN.GOOD}${" ".repeat(1_100)}` });
         const refusal = (status: number, error: string) => ({ status, body: { error } });
@@ -364,10 +349,6 @@ it.layer(getTestDB())("the GitHub token procedures", (it) => {
               }),
             ),
             refusal(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, HOSTED_API_ERROR.REQUEST_TOO_LARGE),
-          ],
-          [
-            yield* ask(off, "PUT", { token: TOKEN.GOOD }),
-            refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
           ],
           [
             yield* send(tokenRequest(owner, "PUT", { token: TOKEN.GOOD }), {
