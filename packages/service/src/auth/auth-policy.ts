@@ -115,6 +115,23 @@ export const DISABLED_AUTH_PATHS = [
 export const SESSION_BEARER = { requireSignature: true } as const;
 
 /**
+ * How long a browser's session is read from a cookie of its own rather than
+ * the account store: Better Auth's cookie cache
+ * (https://www.better-auth.com/docs/concepts/session-management#cookie-cache),
+ * a `session_data` cookie beside the session's own, encrypted under the
+ * deployment's secret (`jwe`: neither readable nor alterable by whoever holds
+ * it) and honoured only beside the signed session cookie it was minted for.
+ * Note that a session revoked elsewhere, or a role changed in the store,
+ * still reads as it was on a browser holding that cookie for up to
+ * `maxAge`, which Better Auth's docs name as the cost, so `maxAge` is the
+ * shortest they suggest. The Mac's session bearer carries no such cookie, so
+ * it is read from the store every time.
+ */
+export const SESSION_COOKIE_CACHE = {
+  cookieCache: { enabled: true, maxAge: 60, strategy: "jwe" },
+} as const;
+
+/**
  * The user's fields beyond Better Auth's own. Admin access is a plain-text
  * `role` on the user, managed by Better Auth: the migrations declared it on
  * the `user` table, and it is returned on the session so the dashboard reads

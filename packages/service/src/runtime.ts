@@ -9,6 +9,7 @@
 
 import { ConfigProvider, Effect, Layer, Logger } from "effect";
 import { FetchHttpClient } from "effect/http";
+import { bearerCallersLayer } from "./auth/bearer-callers.js";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./environment.js";
 import { productAnalyticsFromEnvironment } from "./events/server-events.js";
@@ -73,6 +74,10 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger, sentryL
  * `PullRequestLinks` is here on the same terms: one instance reads a pull
  * request a link draws once a minute, however many links ask for it.
  *
+ * `BearerCallers` keeps the caller each bearer resolved to for a minute
+ * (`auth/bearer-callers.ts`), so a held read and the polls inside it ask the
+ * auth service once a minute per bearer rather than on every request.
+ *
  * `@effect/platform-node` has no entry: a Vercel function's platform is the
  * Web `fetch` its runtime already carries, and a Node-reaching companion
  * behind this door would have to be traced into every bundle. `@effect/sql-pg`
@@ -89,6 +94,7 @@ export const webServices = Layer.mergeAll(
   workspaceLinearConnectFromEnvironment,
   webLogger,
   liveSealingFromEnvironment,
+  bearerCallersLayer,
   modelCatalogLayer.pipe(Layer.provide(Layer.merge(FetchHttpClient.layer, hostedEnvironment))),
   pullRequestLinksLayer,
   productAnalyticsFromEnvironment.pipe(
