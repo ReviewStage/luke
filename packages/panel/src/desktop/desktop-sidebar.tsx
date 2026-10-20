@@ -1418,7 +1418,6 @@ function SidebarColumn({
   // Factory and Chat are experiments: each row stands only while the account has it on.
   const chatOn = useChatOn();
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
-  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   // With the inbox-first sidebar on, the Inbox's items stand where the task list stood, under the pins, and the tasks are a page of their own.
   const listsInbox = inboxFirst && tasks.signedIn && inboxListing !== undefined;
@@ -1530,9 +1529,9 @@ function SidebarColumn({
       row.pin.at === chosenPin.at,
   );
   const markedPin = pinMarked?.kind === TASK_ROW.TASK ? pinMarked.pin : undefined;
-  // The account's own sections stand while its experiment is on, a workspace is listed, and the archived tasks are not shown.
+  // The account's own sections stand while a workspace is listed and the archived tasks are not shown.
   const sectionsShown =
-    sectionsOn && tasks.signedIn && tasks.workspace !== undefined && !archive.shown && !listsInbox;
+    tasks.signedIn && tasks.workspace !== undefined && !archive.shown && !listsInbox;
   const sectioned = sectionedTasks(
     tasks,
     sectionsShown ? tasks.workspace?.id : undefined,
