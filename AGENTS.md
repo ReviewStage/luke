@@ -76,10 +76,11 @@ Review places a module and a component alike under this rule.
   title, a downscaled screenshot and a text snapshot of its page then also
   reach that agent and its workers, the service and the model, and the agent's
   transcript, where the screenshot goes to the model and is left out of the
-  stored conversation, as `look_at_picture`'s is. Nothing else in the line
-  changes: none of it reaches a trace, a counted event, a fixture, app state,
-  or the voice window, and the screen recording still leaves it out. With the
-  switch off, the line stands as first written.
+  stored conversation, as `look_at_picture`'s is; to that extent "only to the
+  panel" and "never the service" above no longer hold. Everything else in the
+  line stays: none of it reaches a trace, a counted event, a fixture, app
+  state, or the voice window, and the screen recording still leaves it out.
+  With the switch off, the line stands as first written.
   And, approved by Charles on 2026-10-16: Sentry's SDKs run with their default
   data collection (`packages/service/src/observability/sentry.ts`, the eve
   roots' `instrumentation/sentry.ts`, the desktop's `Sentry.init`, and the web
