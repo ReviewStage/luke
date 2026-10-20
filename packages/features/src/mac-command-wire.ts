@@ -293,3 +293,18 @@ export const macBrowserSettleRequestSchema = EffectSchema.Struct({
 export const macCommandSettledAnswerSchema = EffectSchema.Struct({
   settled: EffectSchema.Literal(true),
 });
+
+/** One command the Mac heard of over Realtime, claimed by its id (POST). */
+export const macCommandClaimRequestSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+});
+
+/** The command claimed for this Mac, to run; `not-found` where another Mac took it, its call withdrew it, or it waited too long. */
+export const macCommandClaimAnswerSchema = EffectSchema.Struct({
+  command: macCommandSchema,
+});
+
+/** That the service counts this Mac listening now, for the kinds it named (POST). */
+export const macCommandListeningAnswerSchema = EffectSchema.Struct({
+  listening: EffectSchema.Literal(true),
+});

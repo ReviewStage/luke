@@ -14,6 +14,7 @@ import {
   accountTasklessEntrySchema,
 } from "./account-inbox-wire.js";
 import { codingAgentMessagesAnswerSchema } from "./coding-agent-wire.js";
+import { MAC_COMMAND_KIND, type MacCommand, macCommandSchema } from "./mac-command-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -411,3 +412,50 @@ export const transcriptNowAnswerSchema = EffectSchema.Struct({
 });
 
 export type TranscriptNowAnswer = typeof transcriptNowAnswerSchema.Type;
+
+/**
+ * The commands the account's agents queued for its Mac, of the kinds it
+ * runs, sealed for following: the address, and the commands no Mac has
+ * claimed yet as one statement. The Mac claims each it hears of
+ * (`mac-command-wire.ts`), on the service's clock, so a command left waiting
+ * too long is refused there.
+ */
+export const macCommandsLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ commands: sealedLiveQuerySchema }),
+});
+
+export type MacCommandsLiveAnswer = typeof macCommandsLiveAnswerSchema.Type;
+
+const [macShellCommandSchema, macBrowserCommandSchema] = macCommandSchema.members;
+
+/**
+ * One unclaimed command as its row delivers it: the command of its kind, and
+ * when it was queued in epoch milliseconds. Note that the column the other
+ * kind leaves null is read past, as every key a struct does not name is.
+ */
+const macCommandLiveRowSchema = EffectSchema.Union([
+  EffectSchema.Struct({ ...macShellCommandSchema.fields, queuedAt: countedNumber }),
+  EffectSchema.Struct({ ...macBrowserCommandSchema.fields, queuedAt: countedNumber }),
+]);
+
+/** The unclaimed commands as Realtime delivers them, decoded at the boundary before anything reads them. */
+export const macCommandsLiveRowsSchema = EffectSchema.Struct({
+  commands: EffectSchema.Array(macCommandLiveRowSchema),
+});
+
+/** The unclaimed commands, the earliest queued first, so the Mac claims them in the order they were asked for. */
+export function macCommandsOfLiveRows(
+  rows: typeof macCommandsLiveRowsSchema.Type,
+): readonly MacCommand[] {
+  return rows.commands
+    .toSorted((a, b) =>
+      a.queuedAt !== b.queuedAt ? a.queuedAt - b.queuedAt : a.id < b.id ? -1 : a.id > b.id ? 1 : 0,
+    )
+    .map(
+      (row): MacCommand =>
+        row.kind === MAC_COMMAND_KIND.SHELL
+          ? { id: row.id, kind: row.kind, command: row.command, timeoutSeconds: row.timeoutSeconds }
+          : { id: row.id, kind: row.kind, params: row.params, timeoutSeconds: row.timeoutSeconds },
+    );
+}
