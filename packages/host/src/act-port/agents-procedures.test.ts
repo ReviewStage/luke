@@ -360,6 +360,22 @@ it("a panel's ask reaches the host once with its payload, a kind that carries no
   );
 });
 
+it("a panel's Start from an agent on its own page reaches the host with no task, only the agent it starts from, and the press's own key", async () => {
+  const { call, asked } = windowPort(PANEL, {
+    answers: { codingAgentStart: () => Effect.succeed(STARTED) },
+  });
+
+  const started = await call(AGENT_ACT_KIND.CODING_AGENTS_START, {
+    idempotencyKey: "press-1",
+    from: { agentId: AGENT_ID },
+  });
+
+  assert.deepEqual(started, { answer: STARTED });
+  assert.deepEqual(asked, [
+    ["codingAgentStart", { idempotencyKey: "press-1", from: { agentId: AGENT_ID } }],
+  ]);
+});
+
 it("a panel's Start reaches the host with the plan and the press's own key, hears the agent, and the agent is noted", async () => {
   const { call, asked, noted } = windowPort(PANEL, {
     answers: { codingAgentStart: () => Effect.succeed(STARTED) },

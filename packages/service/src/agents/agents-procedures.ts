@@ -83,7 +83,12 @@ import {
   type PublishedReach,
 } from "./coder-host/published.js";
 import { productionSummaryModel, type SummaryModelOf } from "./coder-host/replay-summary.js";
-import { acceptedAgentChoice, placeOfAgent, startRequestedAgent } from "./coder-host/start.js";
+import {
+  acceptedAgentChoice,
+  placeOfAgent,
+  startedFromBefore,
+  startRequestedAgent,
+} from "./coder-host/start.js";
 import {
   codingAgentPage,
   codingAgentSummary,
@@ -304,6 +309,16 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const sourceId = yield* pathUuid(input.params.id);
       if (input.body.from?.agentId !== sourceId) {
         return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      }
+      // A retry is answered with the agent its key made before the source is read, which may be gone since.
+      const made = yield* startedFromBefore(
+        context.userId,
+        input.body.idempotencyKey,
+        sourceId,
+        undefined,
+      );
+      if (Option.isSome(made)) {
+        return startAnswer({ agent: yield* summaryOf(context.userId, made.value), created: false });
       }
       const { agent: source } = yield* reachedAgentById(context.userId, sourceId);
       const place = placeOfAgent(source);

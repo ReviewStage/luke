@@ -783,6 +783,29 @@ const madeInPlace = Effect.fnUntraced(function* (
   return yield* hostedStoreOrUnavailable(isWorkspaceMember(userId, place.organizationId));
 });
 
+/**
+ * The agent a Start from `sourceId` under `idempotencyKey` already made,
+ * where it stands in the place asked, or, with none asked, the one it stands
+ * in, and the account still reaches that place; none otherwise. Note that it
+ * reads the source not at all, because a retry is answered with the agent
+ * its key made though the source may be gone since: every Start from an
+ * agent asks this first, by its task or by the source's own path.
+ */
+export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  idempotencyKey: string,
+  sourceId: string,
+  place: StartWhere | undefined,
+): Effect.fn.Return<Option.Option<CodingAgent>, HostedRefusal, DatabaseServices> {
+  const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, idempotencyKey));
+  if (Option.isNone(made) || made.value.startedFrom?.agentId !== sourceId) return Option.none();
+  const where = place ?? placeOfAgent(made.value);
+  if (where === undefined || !(yield* madeInPlace(userId, made.value, where))) {
+    return Option.none();
+  }
+  return made;
+});
+
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
   eve: Effect.Effect<AgentSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
@@ -792,10 +815,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   // Note that a retry from another agent is answered before its source is read, because the source
   // may be gone since the first Start made the agent its key names.
   if (ask.from !== undefined) {
-    const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
-    if (Option.isSome(made) && (yield* madeInPlace(userId, made.value, ask))) {
-      return { agent: made.value, created: false };
-    }
+    const made = yield* startedFromBefore(userId, ask.idempotencyKey, ask.from.agentId, ask);
+    if (Option.isSome(made)) return { agent: made.value, created: false };
   }
   // A source is read against the place asked, and one that is not of it is refused, never dropped.
   const from =

@@ -9139,6 +9139,50 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
+    "a continue of a source on no task, keyed by that source, copies its checkout to a branch of its own as a task's continue does, checked against the repository the source's own place clones",
+    (t) =>
+      Effect.gen(function* () {
+        const { owner, task, ask, eve, source, checkout } = yield* copyScenario(t);
+        // An automation's run leaves an agent so: in its workspace, on no task, handed a prompt.
+        yield* Database.use((db) =>
+          db
+            .update(codingAgent)
+            .set({
+              taskId: null,
+              organizationId: task.workspaceId,
+              planSnapshot: null,
+              prompt: SNAPSHOT,
+            })
+            .where(eq(codingAgent.id, source.id)),
+        );
+
+        const started = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            request(AGENT_STARTS, owner, {
+              method: "POST",
+              id: source.id,
+              body: { idempotencyKey: randomUUID(), from: { agentId: source.id } },
+            }),
+          ),
+        ).agent;
+        const preamble = openedParts(eve).parts.replay?.preamble ?? "";
+
+        assert.equal(started.planId, null);
+        const branch = started.from?.branch ?? "";
+        assert.match(branch, /^luke\/teammate-invitations-continued-[0-9a-f]{8}$/u);
+        assert.ok(
+          preamble.includes(
+            `with what it had not committed or pushed recorded as one snapshot commit on top, is copied to the branch \`${branch}\`, made for you`,
+          ),
+        );
+        const fresh = fetchedAsHanded(checkout, preamble);
+        assert.equal(readFileSync(join(fresh, "invites.ts"), "utf8"), "export const ttl = 7;\n");
+      }),
+  );
+
+  it.effect(
     "a continue of a source whose pull request is still open is told to carry the copy onto that pull request's branch and open no second one, and the words it is handed bring the branch to the copy",
     (t) =>
       Effect.gen(function* () {
@@ -9516,7 +9560,7 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
   );
 
   it.effect(
-    "a Start keyed by an agent on no task continues it in its workspace on its repository and forks it at one of its messages there, a retry answering the agent it made; a body naming another source, an account outside the workspace, and a task's Start naming it start nothing",
+    "a Start keyed by an agent on no task continues it in its workspace on its repository and forks it at one of its messages there, a retry answering the agent it made, even once the source is gone; a body naming another source, an account outside the workspace, a task's Start naming it, and a source in no repository start nothing; and one keyed by an agent on a task starts on that task",
     () =>
       Effect.gen(function* () {
         const { owner, other, task, ask, eve } = yield* openTask();
@@ -9605,7 +9649,52 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
           "a task's Start refuses a source on no task rather than starting afresh",
         );
+        const bare = yield* createCodingAgent(owner, {
+          taskId: null,
+          organizationId: task.workspaceId,
+          planSnapshot: null,
+          prompt: "Talk the release through.",
+          idempotencyKey: randomUUID(),
+          model: SOL,
+          effort: "low",
+          repository: null,
+        });
+        const bareId = Option.getOrThrow(bare).agent.id;
+        assert.deepEqual(
+          yield* startFromAs(owner, bareId, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: bareId },
+          }),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
+          "a source on no task and in no repository has no checkout to go on from",
+        );
         assert.equal(eve.opened.length, before);
+
+        // The same path from an agent on a task starts on that task, as the task's own Start would.
+        const onTask = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, task.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const fromTask = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* startFromAs(owner, onTask.id, {
+            idempotencyKey: randomUUID(),
+            from: { agentId: onTask.id },
+          }),
+        ).agent;
+        assert.equal(fromTask.planId, task.id);
+        assert.equal(Option.getOrThrow(yield* readCodingAgent(owner, fromTask.id)).taskId, task.id);
+
+        // A retry is answered with the agent its key made though the source is gone since.
+        yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, source.id)));
+        const retried = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* startFromAs(owner, source.id, continueBody),
+        ).agent;
+        assert.equal(retried.id, continued.id);
       }),
   );
 
