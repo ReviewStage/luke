@@ -894,6 +894,13 @@ export const chatReceiptSchema = EffectSchema.Struct({
 });
 
 /**
+ * The transaction a write committed in, as Neon's mutations guide returns
+ * it, which a follower of the chat waits for on its live query; left out
+ * where the write changed no row.
+ */
+const writtenIn = { txid: EffectSchema.optionalKey(EffectSchema.String) };
+
+/**
  * What a write to the chat answers, one key for each kind of write: a post,
  * the message and who it came to, a repeat under its key finishing a
  * telling the first left undone and steering no one twice; an answer, the ask as it then stands and whether the answer was
@@ -903,14 +910,15 @@ export const chatReceiptSchema = EffectSchema.Struct({
  * channel opened or edited, the channel as it then stands.
  */
 export const chatWriteAnswerSchema = EffectSchema.Union([
-  EffectSchema.Struct({ posted: chatMessageSchema, receipt: chatReceiptSchema }),
-  EffectSchema.Struct({ ask: chatMessageSchema, taken: EffectSchema.Boolean }),
-  EffectSchema.Struct({ resolved: chatMessageSchema }),
+  EffectSchema.Struct({ posted: chatMessageSchema, receipt: chatReceiptSchema, ...writtenIn }),
+  EffectSchema.Struct({ ask: chatMessageSchema, taken: EffectSchema.Boolean, ...writtenIn }),
+  EffectSchema.Struct({ resolved: chatMessageSchema, ...writtenIn }),
   EffectSchema.Struct({
     readSeq: countedNumber,
     reads: EffectSchema.optionalKey(EffectSchema.Array(chatChannelReadSchema)),
+    ...writtenIn,
   }),
-  EffectSchema.Struct({ channel: chatChannelSchema }),
+  EffectSchema.Struct({ channel: chatChannelSchema, ...writtenIn }),
 ]);
 
 /** @public */

@@ -525,6 +525,9 @@
                 "unresolved"
               ],
               "additionalProperties": false
+            },
+            "txid": {
+              "type": "string"
             }
           },
           "required": [
@@ -1023,6 +1026,9 @@
             },
             "taken": {
               "type": "boolean"
+            },
+            "txid": {
+              "type": "string"
             }
           },
           "required": [
@@ -1518,6 +1524,9 @@
                 "postedAt"
               ],
               "additionalProperties": false
+            },
+            "txid": {
+              "type": "string"
             }
           },
           "required": [
@@ -1553,6 +1562,9 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "txid": {
+              "type": "string"
             }
           },
           "required": [
@@ -1611,6 +1623,9 @@
                 "archived"
               ],
               "additionalProperties": false
+            },
+            "txid": {
+              "type": "string"
             }
           },
           "required": [

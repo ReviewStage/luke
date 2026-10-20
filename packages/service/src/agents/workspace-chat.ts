@@ -271,6 +271,13 @@ function picturesOf(
   return pictures;
 }
 
+/** The transaction a write's row was written in, where it was; nothing for a row read rather than written. */
+function txidOf(row: {
+  readonly txid?: string | undefined;
+}): { readonly txid: string } | undefined {
+  return row.txid === undefined ? undefined : { txid: row.txid };
+}
+
 /** A person's post, told to the members it addresses: the message as the window reads it, and who it came to. */
 const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   telling: Effect.Effect<ChatTelling, HostedRefusal, HttpClient.HttpClient | HostedEnvironment>,
@@ -309,7 +316,7 @@ const postAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
       is_reply: post.replyTo !== undefined,
     });
   }
-  return { posted: messageOnWire(told.message), receipt: told.receipt };
+  return { posted: messageOnWire(told.message), receipt: told.receipt, ...txidOf(told.message) };
 });
 
 /**
@@ -360,7 +367,7 @@ const answerAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (taken && Option.isSome(posted) && ask.value.needsReply !== false) {
     yield* tellMessage(yield* telling, posted.value, []);
   }
-  return { ask: messageOnWire(now), taken };
+  return { ask: messageOnWire(now), taken, ...(taken ? txidOf(now) : undefined) };
 });
 
 /** A person's own ask resolved with why; not found where the place holds no ask of theirs. */
@@ -380,7 +387,7 @@ const resolveAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     resolveAsk(userId, organizationId, self.id, key.value, reason),
   );
   if (Option.isNone(resolved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return { resolved: messageOnWire(resolved.value) };
+  return { resolved: messageOnWire(resolved.value), ...txidOf(resolved.value) };
 });
 
 /**
@@ -395,16 +402,16 @@ const readToAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<ChatWriteAnswer, HostedRefusal, DatabaseServices> {
   const { userId, organizationId, self } = writer;
   if (channelId === undefined) {
-    const moved = yield* hostedStoreOrUnavailable(readAllTo(userId, organizationId, self.id, seq));
-    if (Option.isNone(moved)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  } else {
-    const read = yield* hostedStoreOrUnavailable(
-      readTo(userId, organizationId, self.id, channelId, seq),
-    );
-    if (!read) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const all = yield* hostedStoreOrUnavailable(readAllTo(userId, organizationId, self.id, seq));
+    if (Option.isNone(all)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return yield* hostedStoreOrUnavailable(readsOf(userId, organizationId, self.id));
   }
+  const moved = yield* hostedStoreOrUnavailable(
+    readTo(userId, organizationId, self.id, channelId, seq),
+  );
+  if (!moved) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const read = yield* hostedStoreOrUnavailable(readsOf(userId, organizationId, self.id));
-  return read;
+  return { ...read, ...txidOf(moved) };
 });
 
 /**
@@ -422,7 +429,7 @@ const openAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     openTopicChannel(userId, organizationId, open.name, self.id, open.purpose ?? null),
   );
   if (Result.isFailure(opened)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[opened.failure]);
-  return { channel: channelOnWire(opened.success) };
+  return { channel: channelOnWire(opened.success), ...txidOf(opened.success) };
 });
 
 /** A topic channel renamed, its purpose said or cleared, or archived or brought back by a person, as the store takes the edit. */
@@ -441,7 +448,7 @@ const editAsPerson = /* @__PURE__ */ Effect.fnUntraced(function* (
     editTopicChannel(userId, organizationId, self.id, channelId, change),
   );
   if (Result.isFailure(edited)) return yield* Effect.fail(HOSTED_OF_CHAT_REFUSAL[edited.failure]);
-  return { channel: channelOnWire(edited.success) };
+  return { channel: channelOnWire(edited.success), ...txidOf(edited.success) };
 });
 
 /** The person's own member of the workspace's chat and its `#general`, made where they are not yet; not found where the account is not in it. */

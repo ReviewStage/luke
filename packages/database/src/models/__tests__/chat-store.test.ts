@@ -307,7 +307,10 @@ it.layer(getTestDB())("the chat store's members and channels", (it) => {
         const contracts = yield* open("api-contracts");
         assert.ok(Result.isSuccess(contracts));
         assert.equal(contracts.success.createdByMemberId, opener.id);
-        assert.deepEqual(yield* open("api-contracts"), contracts);
+        // Opened again, it is answered as it stands, written in no transaction of its own.
+        const { txid, ...standing } = contracts.success;
+        assert.ok(txid !== undefined);
+        assert.deepEqual(yield* open("api-contracts"), Result.succeed(standing));
         assert.deepEqual(yield* open("general"), Result.fail(CHAT_REFUSAL.NAME_TAKEN));
         for (let topic = 1; topic < CHAT_BOUNDS.MAX_TOPIC_CHANNELS; topic += 1) {
           assert.ok(Result.isSuccess(yield* open(`topic-${topic}`)));
@@ -2008,15 +2011,11 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
         const last = yield* room.posted(room.first, "Last, for everyone.", {
           channelId: general.id,
         });
-        assert.equal(
-          yield* readTo(room.owner, room.workspace, room.second.id, general.id, later.seq),
-          true,
-        );
+        assert.ok(yield* readTo(room.owner, room.workspace, room.second.id, general.id, later.seq));
         assert.deepEqual(yield* counts(), [{ channelId: general.id, unread: 1 }]);
         // A place past the head reads to the head, so what is posted next is still unread.
-        assert.equal(
+        assert.ok(
           yield* readTo(room.owner, room.workspace, room.second.id, general.id, last.seq + 50),
-          true,
         );
         const next = yield* room.posted(room.first, "Next.", { channelId: general.id });
         assert.deepEqual(yield* unread(general.id), [next.id]);
@@ -2135,6 +2134,50 @@ it.layer(getTestDB())("a member's cursor in each channel", (it) => {
           channelId: general.id,
         });
         assert.equal(yield* notice(general.id, after.seq), true);
+      }),
+  );
+});
+
+it.layer(getTestDB())("the chat store's writes", (it) => {
+  it.effect(
+    "a write answers the transaction it committed in, which a follower of the chat waits for, and one that changed nothing answers none",
+    () =>
+      Effect.gen(function* () {
+        const room = yield* openRoom;
+        const post = {
+          authorMemberId: room.ada.id,
+          to: { channelId: room.channel.id },
+          blocks: words("Morning."),
+          mentions: [],
+          clientKey: randomUUID(),
+        };
+        const first = Result.getOrThrow(yield* postMessage(room.owner, room.workspace, post));
+        const again = Result.getOrThrow(yield* postMessage(room.owner, room.workspace, post));
+        assert.match(first.message.txid ?? "", /^\d+$/u);
+        assert.deepEqual([again.repeated, again.message.txid], [true, undefined]);
+
+        const readOn = () =>
+          readTo(room.owner, room.workspace, room.ada.id, room.channel.id, first.message.seq);
+        const read = yield* readOn();
+        assert.ok(read !== false && read.txid !== undefined);
+        assert.deepEqual(yield* readOn(), { txid: undefined });
+
+        const topic = Result.getOrThrow(
+          yield* openTopicChannel(room.owner, room.workspace, "launch", room.ada.id),
+        );
+        const edit = (change: { readonly name?: string; readonly purpose?: string }) =>
+          Effect.map(
+            editTopicChannel(room.owner, room.workspace, room.ada.id, topic.id, change),
+            Result.getOrThrow,
+          );
+        const unchanged = yield* edit({ name: "launch" });
+        const renamed = yield* edit({ name: "ship", purpose: "Release notes." });
+        assert.ok(topic.txid !== undefined);
+        assert.equal(unchanged.txid, undefined);
+        assert.deepEqual(
+          [renamed.name, renamed.purpose, renamed.txid !== undefined, renamed.txid === topic.txid],
+          ["ship", "Release notes.", true, false],
+        );
       }),
   );
 });
