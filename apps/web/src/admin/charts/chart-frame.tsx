@@ -33,9 +33,9 @@ import {
 
 /** The ink a trend's move is drawn in: a rise complete, a fall attention, no move muted. */
 const TREND_TONE = {
-  [TREND_DIRECTION.UP]: "text-complete",
-  [TREND_DIRECTION.DOWN]: "text-attention",
-  [TREND_DIRECTION.FLAT]: "text-muted-foreground",
+  [TREND_DIRECTION.UP]: "text-(--luke-color-complete)",
+  [TREND_DIRECTION.DOWN]: "text-(--luke-color-attention)",
+  [TREND_DIRECTION.FLAT]: "text-(--luke-color-text-muted)",
 } as const;
 
 /** The room an empty window's line stands in, about a short plot's height. */

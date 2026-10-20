@@ -116,7 +116,7 @@ const AUTOMATION_REASON_LABEL = {
 const NO_REASON_LABEL = "No reason recorded";
 
 const AGENT_FAILURES_SERIES: readonly BreakdownSeries[] = [
-  { key: "count", label: "Failed runs", color: "var(--luke-color-identity-2)" },
+  { key: "count", label: "Failed runs", color: "var(--luke-color-chart-2)" },
 ];
 
 const AUTOMATION_REASONS_SERIES: readonly BreakdownSeries[] = [
