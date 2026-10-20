@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
 import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
@@ -10,13 +10,14 @@ import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
-import { act, createElement } from "react";
+import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
+import { PublishedRow } from "./agent-published.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -32,7 +33,10 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * installation, and one the App answers nothing for stays as its address
  * says. A card names who opened it by their face, a pull request's by
  * its avatar, with how long ago it moved, its size, branches, labels, and
- * counts. Synthetic workspace, plan, pull requests, and issues.
+ * counts. A pull request's link standing alone in words drawn as a document
+ * is a row that hangs the same card, as is an agent's own pull request's
+ * row pinned over its box. Synthetic workspace, plan, pull
+ * requests, and issues.
  */
 
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
@@ -183,8 +187,13 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The words drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
-async function drawn(text: string, workspace: Workspace) {
+/** The words drawn on the plan's page in a window holding `workspace`, as a document where asked, and every act the window asked. */
+function drawn(text: string, workspace: Workspace, asDocument = false) {
+  return drawnOnPage(createElement(TranscriptWords, { text, asDocument }), workspace);
+}
+
+/** `children` drawn on the plan's page in a window holding `workspace`, and every act the window asked. */
+async function drawnOnPage(children: ReactNode, workspace: Workspace) {
   const asked: AnyAct[] = [];
   const state = stateWith(workspace);
   fakeActs({
@@ -218,7 +227,7 @@ async function drawn(text: string, workspace: Workspace) {
         AtomRegistry.make(),
         createElement(TaskMentions, {
           value: PAGE,
-          children: createElement(TranscriptWords, { text }),
+          children,
         }),
       ),
     ),
@@ -433,4 +442,69 @@ test("a pull request's card names its first six labels and counts the rest, so a
     "f",
     "+2",
   ]);
+});
+
+test("a pull request's link standing alone in words drawn as a document is a row hanging the card its chip hangs", async () => {
+  const chip = await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
+  const chipNotes = cardNotes(chip.container.querySelector("[data-mention-ref]") ?? undefined);
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+
+  const { container } = await drawn(MERGED, ACME_WITH_GITHUB, true);
+  const row = container.querySelector('[data-lone-link="pull-request"] button') ?? undefined;
+
+  assert.equal(container.querySelectorAll("[data-mention-ref]").length, 0, "the link is its row");
+  assert.deepEqual(cardNotes(row), chipNotes);
+  assert.deepEqual(cardNotes(row), [
+    "relay#42 · Merged · +120 −30 in 4 files",
+    "Opened by octo-dev · merged 2h ago",
+    "main ← invite-expiry",
+    "7 comments · 1 commit",
+  ]);
+});
+
+/** An agent's merged pull request's row pinned over its box. */
+function publishedRow(): ReactNode {
+  return createElement(PublishedRow, {
+    pullRequest: {
+      number: 42,
+      title: "Expire old invitations",
+      url: MERGED,
+      state: PULL_REQUEST_STATE.MERGED,
+      checks: CHECK_SUMMARY.PASSING,
+      additions: 120,
+      deletions: 30,
+      changedFiles: 4,
+    },
+    branch: "invite-expiry",
+    doors: { openGitHub: () => undefined, copy: () => undefined },
+  });
+}
+
+test("an agent's pull request's row pinned over its box hangs the card its chip hangs", async () => {
+  const chip = await drawn(`Lands after ${MERGED}.`, ACME_WITH_GITHUB);
+  const chipNotes = cardNotes(chip.container.querySelector("[data-mention-ref]") ?? undefined);
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+
+  const { container } = await drawnOnPage(publishedRow(), ACME_WITH_GITHUB);
+
+  assert.deepEqual(
+    cardNotes(container.querySelector(".agent-published button") ?? undefined),
+    chipNotes,
+  );
+});
+
+test("where GitHub answers nothing, an agent's pull request's row hangs a card naming its published title whole", async () => {
+  const { container } = await drawnOnPage(publishedRow(), ACME);
+  const row = container.querySelector(".agent-published button");
+  assert.ok(row, "the pull request's row stands");
+
+  act(() => {
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  const card = [...document.querySelectorAll(".luke-tooltip-card [data-mention-card]")].at(-1);
+  assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Expire old invitations");
 });
