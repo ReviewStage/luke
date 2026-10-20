@@ -56,6 +56,7 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  eveDeploymentSecret: undefined,
 };
 
 interface Answer {
