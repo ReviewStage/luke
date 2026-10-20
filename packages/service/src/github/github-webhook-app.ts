@@ -15,8 +15,9 @@ import {
   type HttpServerResponse,
 } from "effect/http";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
-import { EVE_MOUNT, eveSessions } from "../agents/brain-host/eve-sessions.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { agentPublished } from "../agents/coder-host/published.js";
+import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
 import { queueGithubRuns } from "../automations/automation-github.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import { HostedEnvironment } from "../environment.js";
@@ -317,20 +318,6 @@ const readAgainOnBranches = /* @__PURE__ */ Effect.fn("web/githubWebhookReadAgai
   return landed.filter(Boolean).length;
 });
 
-/**
- * eve's coding-agent service as the deployment acting for an account, as an
- * automation's run reaches it (`maintenance-app.ts`): under the deployment's
- * own eve secret, which the coder channel admits a deployment's message by;
- * a deployment without it, or without an origin for eve, tells nobody.
- */
-function eveForAccount(secret: Redacted.Redacted | undefined): EveForAccount {
-  const origin = deploymentEveOrigin();
-  return (account) =>
-    secret === undefined || origin === undefined
-      ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)
-      : eveSessions({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER });
-}
-
 /** POST: one delivery, its signature confirmed before anything of it is read. */
 const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
   function* (): Effect.fn.Return<
@@ -346,7 +333,7 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     if (request.method !== HTTP_METHOD.POST) {
       return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
     }
-    const { githubWebhookSecret, eveDeploymentSecret } = yield* HostedEnvironment;
+    const { githubWebhookSecret } = yield* HostedEnvironment;
     if (githubWebhookSecret === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     const body = yield* readBodyBytesEffect(MAXIMUM_DELIVERY_BYTES);
     const signature = request.headers[DELIVERY_HEADER.SIGNATURE] ?? null;
@@ -378,11 +365,17 @@ const deliveryEndpoint = /* @__PURE__ */ Effect.fn("web/githubWebhookEndpoint")(
     const target = deliveryTarget(event, payload);
     const read = target === undefined ? 0 : yield* readAgainOnBranches(target);
     const wake = agentWakeOf(event, payload, yield* Clock.currentTimeMillis);
+    // eve's coding-agent service as the deployment acting for each agent's owner, as an automation's
+    // run reaches it (`agents/deployment-eve.ts`); a deployment that cannot reach it tells nobody.
+    const eveForAccount: EveForAccount = yield* deploymentEveForAccounts<EveTypedTurn>(
+      deploymentEveOrigin(),
+      EVE_MOUNT.CODER,
+    );
     const told =
       wake === undefined
         ? 0
         : yield* wakeAgents(
-            eveForAccount(eveDeploymentSecret),
+            eveForAccount,
             wake,
             request.headers[DELIVERY_HEADER.DELIVERY] ?? "",
             agentLogin,

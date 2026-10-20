@@ -41,7 +41,7 @@ import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import type { HttpClient } from "effect/http";
-import { HostedEnvironment } from "../environment.js";
+import type { HostedEnvironment } from "../environment.js";
 import { recordServerEvent, SERVER_EVENT } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
 import {
@@ -49,7 +49,8 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
-import { EVE_MOUNT, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
+import type { BrainHostTurn } from "./brain-host/bounds.js";
+import { EVE_MOUNT, type EveSessions } from "./brain-host/eve-sessions.js";
 import { type ChatNamed, namedIn, subjectOf } from "./coder-host/chat-ask.js";
 import {
   CHAT_DOORS,
@@ -65,6 +66,7 @@ import {
   workspaceChatPast,
 } from "./coder-host/chat-page.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import { deploymentEve } from "./deployment-eve.js";
 
 /**
  * workspace-chat.ts -- a workspace's chat as the window reads it and writes to it.
@@ -155,9 +157,10 @@ export const readWorkspaceChat = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /**
  * eve as the deployment acting for the account an agent was started by,
- * under the deployment's own secret, since a notice steers the agent's turn
- * as its starter whoever posted and the request carries only the poster's
- * bearer; unavailable where the deployment names no secret or no origin.
+ * under the deployment's own secret (`deployment-eve.ts`), since a notice
+ * steers the agent's turn as its starter whoever posted and the request
+ * carries only the poster's bearer; unavailable where the deployment names
+ * no secret or no origin.
  */
 const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: ChatSeams,
@@ -167,13 +170,7 @@ const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
   HttpClient.HttpClient | HostedEnvironment
 > {
   if (seams.eveAs !== undefined) return seams.eveAs;
-  const secret = (yield* HostedEnvironment).eveDeploymentSecret;
-  const origin = seams.eveOrigin();
-  if (secret === undefined || origin === undefined) {
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  const compose = yield* eveSessionsComposer;
-  return (account) => compose({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER });
+  return yield* deploymentEve<BrainHostTurn>(seams.eveOrigin(), EVE_MOUNT.CODER);
 });
 
 /** What a door needs to tell the members a person's message addresses. */
