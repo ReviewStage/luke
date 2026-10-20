@@ -239,10 +239,15 @@ const tokenRepositoriesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const rows = yield* hostedStoreOrUnavailable(listWorkspaceTokenRepositories(userId, workspaceId));
   if (rows.length === 0) return { repositories: [] };
   const app = yield* GitHubApp;
-  // Note that a GitHub that does not answer hides nothing, because the list and its writes are the store's and must not wait on GitHub.
+  // Note that a GitHub that does not answer hides nothing, because the list and its writes are the store's and must not wait on GitHub;
+  // a store that cannot name the installations is the outage it is, so a row the App covers never shows on a guess.
   const throughApp = yield* app.workspaceRepositories(workspaceId).pipe(
     Effect.tapError(logWorkspaceReadFailure),
-    Effect.orElseSucceed(() => Option.none<readonly GitHubRepository[]>()),
+    Effect.catch((failure) =>
+      failure._tag === "GitHubAppNotConfigured" || failure._tag === "GitHubUnavailable"
+        ? Effect.succeed(Option.none<readonly GitHubRepository[]>())
+        : Effect.fail(HOSTED_REFUSAL.UNAVAILABLE),
+    ),
   );
   const reached = new Set(
     Option.getOrElse(throughApp, () => []).map((one) => nameKey(one.fullName)),
