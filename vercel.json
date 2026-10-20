@@ -2,8 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
     "deploymentEnabled": {
-      "gh-readonly-queue/**": false,
-      "luke/**": false
+      "gh-readonly-queue/**": false
     }
   },
   "services": {

@@ -260,14 +260,15 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "a decide and an answer wait on their answer unless the post says not, and a do only where it says so",
+    "a decide and an answer are always heard back, even where the post says not to wait, and a do only where it says so",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
         const cases = [
           ["decide", QUEUE.ask, undefined, true],
-          ["decide-quiet", QUEUE.ask, false, false],
+          ["decide-quiet", QUEUE.ask, false, true],
           ["answer", { type: INBOX_ASK.ANSWER }, undefined, true],
+          ["answer-quiet", { type: INBOX_ASK.ANSWER }, false, true],
           ["do", SETTINGS.ask, undefined, false],
           ["do-waits", SETTINGS.ask, true, true],
         ] as const;
@@ -284,7 +285,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "an ask its shape admits but cannot ask is refused, and a recommended value on a field is not kept",
+    "an ask its shape admits but cannot ask is refused, and a select field keeps the option it recommends",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -304,6 +305,21 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
           [answer([{ type: INBOX_FIELD.SELECT, label: "Channel" }]), INBOX_REFUSAL.SELECT_OPTIONS],
           [
             answer([
+              {
+                type: INBOX_FIELD.SELECT,
+                label: "Channel",
+                options: ["Email", "Slack"],
+                recommended: "SMS",
+              },
+            ]),
+            INBOX_REFUSAL.SELECT_RECOMMENDATION,
+          ],
+          [
+            answer([{ type: INBOX_FIELD.TEXT, label: "Channel", recommended: "Slack" }]),
+            INBOX_REFUSAL.SELECT_RECOMMENDATION,
+          ],
+          [
+            answer([
               { type: INBOX_FIELD.TEXT, label: "Channel" },
               { type: INBOX_FIELD.BOOLEAN, label: "Channel" },
             ]),
@@ -318,8 +334,13 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
         }
         assert.deepEqual(yield* taskInboxItems(agent.userId, agent.taskId), []);
 
-        const channel = { type: INBOX_FIELD.SELECT, label: "Channel", options: ["Email", "Slack"] };
-        yield* post(agent, answer([{ ...channel, recommended: "Slack" }]));
+        const channel = {
+          type: INBOX_FIELD.SELECT,
+          label: "Channel",
+          options: ["Email", "Slack"],
+          recommended: "Slack",
+        };
+        yield* post(agent, answer([channel]));
         const item = yield* onlyItem(agent);
         assert.deepEqual(item.response, { type: INBOX_RESPONSE.FORM, fields: [channel] });
       }),
