@@ -19,6 +19,7 @@
 
 import { Option, Schema } from "effect";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
+import { PANEL_PATH } from "./app/web-address";
 
 /** The broadcast channel a landing page and the app's tabs speak on. */
 export const CONNECT_CHANNEL = "luke:connect";
@@ -43,9 +44,6 @@ export const CONNECT_BOUND_MS = 30 * 60 * 1000;
  * every answer.
  */
 const LANDING = crypto.randomUUID();
-
-/** Where the web app's panel is served, the way back when no address was left. */
-const APP_PATH = "/app";
 
 /** The words every way back is offered in. */
 export const BACK_TO_LUKE = "Back to Luke";
@@ -96,21 +94,34 @@ function ownPath(address: string): string | undefined {
   return url.origin === location.origin ? `${url.pathname}${url.search}${url.hash}` : undefined;
 }
 
+/**
+ * This tab's session storage, or nothing where the browser blocks the site's
+ * storage, as it does for a site whose storage the person turned off: reading
+ * the property then throws, and a connect simply keeps nothing in the tab.
+ */
+function tabSession(): Storage | undefined {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The address a same-tab connect left, where it is this origin's and its connect is not yet abandoned. */
 function leftAddress(): string | undefined {
-  const left = decodeLeft(sessionStorage.getItem(RETURN_KEY) ?? "");
+  const left = decodeLeft(tabSession()?.getItem(RETURN_KEY) ?? "");
   if (Option.isNone(left) || Date.now() - left.value.at > CONNECT_BOUND_MS) return undefined;
   return ownPath(left.value.address);
 }
 
 /** The hand-off this tab was marked with, where the app opened it for a connect. */
 function markedHandoff(): string | undefined {
-  return sessionStorage.getItem(HANDOFF_KEY) ?? undefined;
+  return tabSession()?.getItem(HANDOFF_KEY) ?? undefined;
 }
 
 /** Keeps the address the app's tab leaves from, for the landing page it comes back through. */
 export function rememberReturn(address: string): void {
-  sessionStorage.setItem(RETURN_KEY, JSON.stringify({ address, at: Date.now() }));
+  tabSession()?.setItem(RETURN_KEY, JSON.stringify({ address, at: Date.now() }));
 }
 
 /**
@@ -132,8 +143,9 @@ export function markHandoff(
 
 /** Lets go of what a connect left in this tab, the address it left from and the hand-off it was marked as, as the app does once it stands in the tab again. */
 export function forgetReturn(): void {
-  sessionStorage.removeItem(RETURN_KEY);
-  sessionStorage.removeItem(HANDOFF_KEY);
+  const session = tabSession();
+  session?.removeItem(RETURN_KEY);
+  session?.removeItem(HANDOFF_KEY);
 }
 
 /** How this landing page goes back to Luke before any tab has answered. */
@@ -200,6 +212,6 @@ export function useConnectReturn(state: {
     if (answered && settled) window.close();
   }, [answered, settled]);
   if (!landed) return { back: { kind: CONNECT_RETURN.ELSEWHERE }, onBack: undefined };
-  if (answered) return { back: { kind: CONNECT_RETURN.APP, href: APP_PATH }, onBack: closeToApp };
+  if (answered) return { back: { kind: CONNECT_RETURN.APP, href: PANEL_PATH }, onBack: closeToApp };
   return { back: read, onBack: undefined };
 }

@@ -9,7 +9,7 @@ import {
 } from "@luke/features/analytics";
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import { WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
+import { CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
 import { MICROPHONE_STATUS, type MicrophoneRoute, type MicrophoneStatus } from "@luke/voice/audio";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
@@ -30,13 +30,6 @@ const MICROPHONE_STATUS_COUNTED_AS = {
   [MICROPHONE_STATUS.RESTRICTED]: undefined,
   [MICROPHONE_STATUS.UNKNOWN]: undefined,
 } satisfies Record<MicrophoneStatus, ProductPermissionResult | undefined>;
-
-/**
- * Where Contact us > Email writes to: the address the site's footer, the
- * privacy policy, and the security policy all name. Held here rather than
- * sent by the panel, so the act can open no other address.
- */
-const CONTACT_MAILTO = "mailto:founders@stagereview.app";
 
 interface WindowSurfaceDependencies {
   panels: Pick<PanelManager, "displayIdFor" | "focusIfExpanded">;

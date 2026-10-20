@@ -15,14 +15,8 @@ import type { AppPlatform } from "@luke/panel/app-platform";
 import type { ShellBundles } from "@luke/panel/shell-bundles";
 import { NOTIFICATIONS_GRANTOR } from "@luke/voice/settings-controls";
 import { browserLinkPlatform } from "./mac-app-handoff";
+import { PANEL_ASSET_BASE } from "./web-address";
 import { askNotificationsPermission } from "./web-notices";
-
-/**
- * Where the web serves the panel's static files, Excalidraw's fonts and the
- * harness marks, which the build emits there (`scripts/panel-build.ts`'s
- * `PANEL_ASSET_BASE`).
- */
-const ASSET_BASE = "/app/";
 
 /** What every agent's page frame shows until pages have a sandboxed origin of their own (`public/page-in-mac-app.html`). */
 const PAGE_IN_MAC_APP = "/page-in-mac-app.html";
@@ -127,7 +121,7 @@ export function webPlatform(
     saveFile: downloadText,
     focusPanel: () => window.focus(),
     pageFrameUrl: () => new URL(PAGE_IN_MAC_APP, location.origin).href,
-    assetBase: () => new URL(ASSET_BASE, location.origin).href,
+    assetBase: () => new URL(PANEL_ASSET_BASE, location.origin).href,
     onMenuCommand: () => ignore,
     setShortcutCapturing: ignore,
     recordSurfaceEvent: shell.recordSurfaceEvent,

@@ -20,6 +20,14 @@ import { actProcedure, exactInput } from "./base.js";
 import { WINDOW_SURFACE_ACT_KIND } from "./kinds.js";
 
 /**
+ * Where Contact us > Email writes to: the address the site's footer, the
+ * privacy policy, and the security policy all name. Held by whoever answers
+ * the act rather than sent by the panel, so the act can open no other
+ * address.
+ */
+export const CONTACT_MAILTO = "mailto:founders@stagereview.app";
+
+/**
  * The longest text a File tab copies or saves of its file: the service
  * reads a file of a megabyte at most, and its text, a character to a byte
  * at least, is no longer.

@@ -188,7 +188,9 @@ const standingHost = (service: ReturnType<typeof fakeService>) =>
     const built = yield* Layer.build(
       composeWeb({
         httpClient: service.layer,
-        run: (effect) => Effect.runPromiseWith(services)(effect),
+        fork: (effect) => {
+          Effect.runForkWith(services)(effect);
+        },
       }),
     );
     return Context.get(built, WebHostTag);

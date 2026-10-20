@@ -28,8 +28,10 @@ processes, the window and page roots, the Vercel function routes under
 `apps/web/server/routes/`, the deployment shell beside them, the agents' eve
 apps, `apps/luke` and `apps/dev`, and build and release scripts. A React component, hook, or
 DOM-free view model lives in `packages/ui` when more than one app can
-mount it, the hosted service's logic in `packages/service`, its contract
-and clients in `packages/features`, and a wire value in `packages/wire`. A
+mount it, the panel every client mounts, the desktop's panel window and the
+web's tab alike, in `packages/panel`, the hosted service's logic in
+`packages/service`, its contract and clients in `packages/features`, and a
+wire value in `packages/wire`. A
 `.ts` module whose imports name no module of its app and no platform
 library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
 `@vercel/*`) is logic and belongs in a package. The logic-lives-in-packages

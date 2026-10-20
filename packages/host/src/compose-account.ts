@@ -19,7 +19,8 @@ import {
   invalid,
   RefusedRefusal,
 } from "@luke/gateway";
-import { type OpenSocket, VoiceCapabilityAssembler } from "@luke/voice";
+import { VoiceCapabilityAssembler } from "@luke/voice";
+import type { OpenSocket } from "@luke/voice/live-socket";
 import { Config, Effect, Option, type Scope, Stream } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";

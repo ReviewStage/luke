@@ -83,16 +83,17 @@ export async function mountWebApp(
   // Never awaited: the SDK is a chunk of its own, and what is reported before it lands waits for it.
   const sentry = startWebSentry(build);
   const httpClient = options.httpClient ?? FetchHttpClient.layer;
-  // Note that an act runs only once the host stands, by which time the runtime is set.
+  // Note that a count is forked only once the host stands, by which time the runtime is set.
   let runtime: ManagedRuntime.ManagedRuntime<WebHostTag | HostTag, DuplicateGatewayMethod>;
-  // A defect in an act is reported, as the desktop's acts are.
-  const run = <A,>(effect: Effect.Effect<A>): Promise<A> =>
-    runtime.runPromise(Effect.withErrorReporting(effect, { defectsOnly: true }));
+  // A defect in a count is reported, as the desktop's acts are.
+  const fork = (effect: Effect.Effect<void>): void => {
+    runtime.runFork(Effect.withErrorReporting(effect, { defectsOnly: true }));
+  };
   // Sentry's reporter stands beneath the host, so every fiber it forks and every act reports through it.
   runtime = ManagedRuntime.make(
     Layer.provideMerge(
       // The release Sentry files reports under is the build's commit, which a tab left open across a release is reloaded off.
-      composeWeb({ httpClient, run, linkPlatform, release: build.release }),
+      composeWeb({ httpClient, fork, linkPlatform, release: build.release }),
       sentry.errorReporting,
     ),
   );
@@ -110,7 +111,7 @@ export async function mountWebApp(
     installed.push(installShellBundles(WEB_BUNDLES));
     // The panel's back and forward are the browser's own, each step in the tab's address.
     installed.push(installTabHistory(installWindowHistory, browserHistory()));
-    await Effect.runPromise(appStateFirstRead);
+    await runtime.runPromise(appStateFirstRead);
   } catch (error) {
     console.error("The tab's host could not stand or its state be read; nothing is drawn.", error);
     // A blank tab is a failure, so it is sent as an event, not only kept as the console's breadcrumb.

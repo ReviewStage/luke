@@ -2,7 +2,7 @@
  * web-host.ts -- the shared host composed in a browser tab: its seams answered by the tab, signed in by the service's cookie, and reached by the panel through the in-process bridge.
  *
  * The host is the desktop's own (`@luke/host`), assembled with no platform
- * concern: no commands or terminal on a Mac and no terminals, so nothing here
+ * concern: no terminals, neither the Mac's own nor an agent's, so nothing here
  * spawns a process or opens a terminal socket. What the desktop's seams read
  * from the machine the tab answers instead: the settings file in the
  * browser's storage, ids from `crypto`, the service at the origin that
@@ -18,7 +18,7 @@
  * notice is the panel's toast while the tab is shown and the browser's
  * notification while it is hidden (`web-notices.ts`). The composition is a
  * `Layer`, built by the tab's one runtime edge (`web-root.tsx`), whose close
- * is the host's drain; `run` is that runtime's, handed in so no act runs
+ * is the host's drain; `fork` is that runtime's, handed in so no count runs
  * anywhere else.
  */
 
@@ -46,7 +46,7 @@ import {
   linkNetworkWatch,
   type OperatorClient,
 } from "@luke/host/client";
-import { type ActPortClient, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
+import { type ActPortClient, CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
 import {
   AppIdentity,
   type CookieSessionDoor,
@@ -73,15 +73,16 @@ import { effectServiceLayer } from "@luke/host/service-layer";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import { showToast, TOAST_TONE, withdrawToast } from "@luke/panel/toast";
 import { HOST_CAPABILITY, SETTING_SIDE_EFFECT } from "@luke/settings";
-import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
+import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice/live-socket";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
-import { ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
+import { Cause, ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import packageJson from "../../package.json";
+import { version as appVersion } from "../../package.json";
 import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
-import { FILES_KEY, localStorageFileSystem } from "./local-storage-file-system";
+import { FILES_KEY, localStorageFileSystem, tabStorage } from "./local-storage-file-system";
 import { type PageLeave, tabLeave } from "./page-leave";
 import { backOnline, followRelease, pageShownAgain } from "./stale-release";
+import { addressHere } from "./web-address";
 import {
   notificationsOffered,
   notificationsStatusNow,
@@ -94,12 +95,8 @@ import { downloadText, openTab, webPlatform } from "./web-platform";
 /** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
 const STATE_ROOT = "/luke";
 
-/**
- * Where Contact us > Email writes to: the address the site's footer and the
- * desktop's own row name. Held here rather than sent by the panel, so the act
- * can open no other address.
- */
-const CONTACT_MAILTO = "mailto:founders@stagereview.app";
+/** The platform a tab names in app state, where the desktop names Node's `process.platform`. */
+const RUN_PLATFORM = { WEB: "web" } as const;
 
 /** The path feedback is posted to on the tab's own origin, which takes no credential (`server/feedback.mjs`). */
 const FEEDBACK_PATH = "/api/feedback";
@@ -129,8 +126,8 @@ export class WebHostTag extends Context.Service<WebHostTag, WebHost>()("@luke/we
 export interface WebHostOptions {
   /** The client every service call goes out on: the tab's same-origin fetch, which sends the cookie, or a test's. */
   readonly httpClient: Layer.Layer<HttpClient.HttpClient>;
-  /** Every act's Effect, run on the tab's one runtime. */
-  readonly run: <A>(effect: Effect.Effect<A>) => Promise<A>;
+  /** Forks an Effect nobody awaits, a surface event's count, on the tab's one runtime. */
+  readonly fork: (effect: Effect.Effect<void>) => void;
   /** The platform the tab runs on, which is offered the Mac app only where it is a Mac; the browser's own word where none is given. */
   readonly linkPlatform?: LinkPlatform;
   /** The commit this build is from, which a tab open across a release is reloaded off (`stale-release.ts`); empty or none where the build names none. */
@@ -167,7 +164,7 @@ function cookieDoor(tab: PageLeave): CookieSessionDoor {
   );
   const focused = Stream.fromEventListener(window, "focus");
   return {
-    currentAddress: () => `${location.pathname}${location.search}${location.hash}`,
+    currentAddress: addressHere,
     navigate: (url) => Effect.sync(() => tab.leave(() => location.assign(url))),
     revisits: Stream.as(Stream.merge(shown, focused), undefined),
   };
@@ -178,21 +175,20 @@ function cookieDoor(tab: PageLeave): CookieSessionDoor {
  * keeps, which the browser says as a `storage` event in every tab but the
  * writer's. A cleared storage (`key` null) is a change to them too.
  */
-function filesChangedElsewhere(): Stream.Stream<void> {
+function filesChangedElsewhere(storage: Storage): Stream.Stream<void> {
   const changed = Stream.filter(
     Stream.fromEventListener<StorageEvent>(window, "storage"),
-    (event) =>
-      event.storageArea === localStorage && (event.key === FILES_KEY || event.key === null),
+    (event) => event.storageArea === storage && (event.key === FILES_KEY || event.key === null),
   );
   return Stream.as(changed, undefined);
 }
 
 /** Every seam the host's kernel and assembly stand on, as the tab answers it. */
-function seamLayers() {
+function seamLayers(storage: Storage) {
   return Layer.mergeAll(
     Layer.succeed(StateRoot, STATE_ROOT),
     Layer.succeed(RunMode, runModeFor({ capture: false, fixture: false })),
-    Layer.succeed(AppIdentity, { appVersion: packageJson.version, packaged: true }),
+    Layer.succeed(AppIdentity, { appVersion, packaged: true }),
     // A tab has no environment to read an override from.
     Layer.succeed(Environment, ConfigProvider.fromEnv({ env: {} })),
     Layer.succeed(IdSource, { create: () => crypto.randomUUID() }),
@@ -200,7 +196,7 @@ function seamLayers() {
     Layer.succeed(ShutdownSignal, { notify: undefined }),
     Layer.succeed(ServiceOrigin, location.origin),
     Layer.succeed(VoiceSocket, refusedVoiceSocket),
-    Layer.succeed(SettingsChangedElsewhere, filesChangedElsewhere()),
+    Layer.succeed(SettingsChangedElsewhere, filesChangedElsewhere(storage)),
     // A phone drops the tab's sockets in the background, so its live follows start again as it returns.
     Layer.succeed(PageReturns, Stream.merge(pageShownAgain(), backOnline())),
   );
@@ -415,7 +411,7 @@ const servedActPort = (
 
 /** The host standing in the tab, its document, its bridge, and the platform beside it. */
 const composedWeb = (
-  run: WebHostOptions["run"],
+  fork: WebHostOptions["fork"],
   tab: PageLeave,
   linkPlatform: LinkPlatform | undefined,
   release: string,
@@ -431,9 +427,9 @@ const composedWeb = (
           {
             launch: { profile: RUN_PROFILE.IDLE, captureMode: false, fixtureMode: false },
             runMode: runModeFor({ capture: false, fixture: false }),
-            appVersion: packageJson.version,
+            appVersion,
             packaged: true,
-            platform: "web",
+            platform: RUN_PLATFORM.WEB,
           },
           false,
           // The tab's own offer beside the host's concerns: notifications, where the browser posts them.
@@ -482,7 +478,12 @@ const composedWeb = (
       }).pipe(Effect.provideService(AgentNoticeDoors, doors));
 
       const count: AppPlatform["recordSurfaceEvent"] = (name, properties) => {
-        void run(operator.host.recordEvent(name, properties));
+        // A count that fails is said on the console, never left as a rejection nobody hears.
+        fork(
+          Effect.catchCause(operator.host.recordEvent(name, properties), (cause) =>
+            Effect.sync(() => report(`A surface event was not counted: ${Cause.pretty(cause)}`)),
+          ),
+        );
       };
       const made = yield* createInProcessBridge({
         state,
@@ -519,14 +520,16 @@ const composedWeb = (
 export function composeWeb(
   options: WebHostOptions,
 ): Layer.Layer<WebHostTag | HostTag, DuplicateGatewayMethod> {
-  const { httpClient, run, linkPlatform, release = "" } = options;
+  const { httpClient, fork, linkPlatform, release = "" } = options;
   // The tab's one way out past the panel's leave guard, which the sign-in, a connect, and the platform share.
   const tab = tabLeave();
+  // Read once, so the files and the word of another tab's write are the same storage, in memory where the browser blocks it.
+  const storage = tabStorage();
   const assembly = Layer.provide(
     hostAssemblyLayer([]),
     Layer.mergeAll(
-      Layer.provideMerge(hostKernelLayer, seamLayers()),
-      localStorageFileSystem(),
+      Layer.provideMerge(hostKernelLayer, seamLayers(storage)),
+      localStorageFileSystem(storage),
       Path.layer,
       httpClient,
       Layer.provide(cookieAccountSourceLayer(cookieDoor(tab)), httpClient),
@@ -546,7 +549,7 @@ export function composeWeb(
     ),
   );
   return launched.pipe(
-    Layer.provideMerge(composedWeb(run, tab, linkPlatform, release)),
+    Layer.provideMerge(composedWeb(fork, tab, linkPlatform, release)),
     Layer.provideMerge(assembly),
     Layer.provide(httpClient),
   );

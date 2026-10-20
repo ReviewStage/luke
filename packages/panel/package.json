@@ -37,7 +37,6 @@
     "./testing/action-label": "./src/testing/action-label.js",
     "./testing/app-bridge": "./src/testing/app-bridge.js",
     "./testing/app-state": "./src/testing/app-state.js",
-    "./testing/container-width": "./src/testing/container-width.js",
     "./testing/copy-feedback": "./src/testing/copy-feedback.js",
     "./testing/match-media": "./src/testing/match-media.js",
     "./testing/resize-observer": "./src/testing/resize-observer.js",

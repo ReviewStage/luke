@@ -24,6 +24,7 @@ import {
   startBrowserTracingPageLoadSpan,
   withStreamedSpan,
 } from "@sentry/browser";
+import { PANEL_PATH } from "./web-address";
 import type { WebSentry, WebSentryBuild } from "./web-sentry";
 
 /** The SDK's client, as `getClient` answers it once `init` stands. */
@@ -31,9 +32,6 @@ type Client = NonNullable<ReturnType<typeof getClient>>;
 
 /** The mechanism a blank tab's report names, so Sentry's issue says which path caught it, as the desktop's first read does. */
 const BLANK_TAB_MECHANISM = { type: "auto.browser.web_root.first_read", handled: false } as const;
-
-/** The route every transaction of the tab is named under, as session replay names every address of it (`web-session-replay.ts`). */
-const PANEL_ROUTE = "/app";
 
 /**
  * What a span named by route says of its name, under Sentry's own attribute
@@ -53,7 +51,7 @@ const PAGELOAD_ORIGIN = "auto.pageload.browser";
  */
 function routeName(pathname: string): string {
   const link = readLink(`${LINK_ORIGIN}${pathname}`);
-  return link === undefined ? PANEL_ROUTE : `${PANEL_ROUTE}/${link.place.kind}`;
+  return link === undefined ? PANEL_PATH : `${PANEL_PATH}/${link.place.kind}`;
 }
 
 /** The path of an address the tab navigated to, or the tab's own where none is said. */

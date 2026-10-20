@@ -29,11 +29,14 @@
  * address is opened as a link instead (`load-link.ts`).
  */
 
-import type { HistoryAdapter, HistoryEntry, HistorySnapshot } from "@luke/ui/history-adapter";
+import {
+  HISTORY_LIMIT,
+  type HistoryAdapter,
+  type HistoryEntry,
+  type HistorySnapshot,
+} from "@luke/ui/history-adapter";
 import { Schema } from "effect";
-
-/** The most entries held, as the desktop's memory history holds; the browser keeps its own bound. */
-const HISTORY_LIMIT = 50;
+import { addressHere, PANEL_PATH } from "./web-address";
 
 const EMPTY: HistorySnapshot<never> = { entries: [], at: -1 };
 
@@ -51,9 +54,6 @@ interface SavedEntry<State> {
   readonly idx: number;
 }
 
-/** The address written for an entry whose own is not a path of this site, which the browser would refuse: the panel's own page, which names no place. */
-const PANEL_ADDRESS = "/app";
-
 /** A path of this site: one slash, then anything but a second, or a backslash a browser reads as one, which would name another host. */
 const SAME_ORIGIN_PATH = /^\/(?![/\\])/u;
 
@@ -70,14 +70,9 @@ function sameOriginPath(address: string): boolean {
   }
 }
 
-/** The entry as it is written: at its own address where that is a path of this site, else at the panel's page, so a bad address never throws. */
+/** The entry as it is written: at its own address where that is a path of this site, else at the panel's page, which names no place, so a bad address never throws. */
 function writable<State>(entry: HistoryEntry<State>): HistoryEntry<State> {
-  return sameOriginPath(entry.address) ? entry : { ...entry, address: PANEL_ADDRESS };
-}
-
-/** The address the tab stands at, as the panel writes one: its path, query, and fragment. */
-function addressHere(): string {
-  return `${location.pathname}${location.search}${location.hash}`;
+  return sameOriginPath(entry.address) ? entry : { ...entry, address: PANEL_PATH };
 }
 
 /** An entry's state as this history writes it, read back from the browser, which may hold anything there. */
@@ -111,7 +106,9 @@ export function savedEntry<State>(landing?: PopStateEvent): SavedEntry<State> | 
 }
 
 /**
- * The tab's history as the panel's adapter, holding at most `limit` entries.
+ * The tab's history as the panel's adapter, holding at most `limit` entries,
+ * as many as the desktop's memory history holds by default; the browser keeps
+ * its own bound.
  * `base` is the browser's index of the first entry held, so the entry at `n`
  * is the browser's `base + n`; an index never seen is minted past every one
  * that was, so an entry written after landing somewhere unknown never takes

@@ -27,9 +27,8 @@ import { Tooltip } from "../tooltip.js";
  * panel of fixed height, where the log and the messages are flex items of
  * definite size, that `height: 100%` resolved against the message's own
  * column, so every text part asked for the whole column and the parts
- * beside it were shrunk to slivers. The content stacks as blocks here, and
- * `apps/desktop/src/renderer/planning/transcript-layout.test.ts` holds the
- * rule. And one more: the registry's content clips with `overflow-hidden`,
+ * beside it were shrunk to slivers. The content stacks as blocks here.
+ * And one more: the registry's content clips with `overflow-hidden`,
  * which cut the keyboard's ring off every fold, tool line, picture, and chip
  * a reply holds, so it clips past the ring instead (base.css's room).
  */

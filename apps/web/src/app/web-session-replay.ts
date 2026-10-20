@@ -24,12 +24,11 @@ import {
   SESSION_REPLAY_APP,
   sessionReplay,
 } from "@luke/panel/session-replay";
+import { PANEL_PATH } from "./web-address";
+import { webDeployment } from "./web-sentry";
 
 /** The host's word on recording, as the panel hands it to the platform. */
 type SessionReplayBootstrap = Parameters<AppPlatform["applySessionReplay"]>[0];
-
-/** The path the web app is served at whatever it was opened on (`vercel.json`), which names nothing. */
-const APP_PATH = "/app";
 
 /**
  * A path on this origin, as the library reports one bare (`$pathname` and
@@ -65,20 +64,6 @@ const RECORDING_NOTICE = {
   ACCOUNT_DELETED: "account-deleted",
 } as const;
 
-/** Vercel's name for the deployment this build was made for, which `vite.config.ts` writes in. */
-declare const WEB_DEPLOYMENT: string | undefined;
-
-function deployment(): string {
-  try {
-    // SAFETY: Vite replaces this free identifier when it bundles the app; a
-    // module that never went through the bundler has no such global, and
-    // reading one throws rather than answering undefined.
-    return WEB_DEPLOYMENT ?? "";
-  } catch {
-    return "";
-  }
-}
-
 /**
  * The project the recording is filed under: the site's own, the one its
  * counting already uses (`src/analytics.ts`), and only in a build for the
@@ -87,7 +72,7 @@ function deployment(): string {
  * key does.
  */
 function projectApiKey(): string {
-  if (deployment() !== PRODUCTION_DEPLOYMENT) return "";
+  if (webDeployment() !== PRODUCTION_DEPLOYMENT) return "";
   return import.meta.env.VITE_POSTHOG_PROJECT_API_KEY ?? "";
 }
 
@@ -134,7 +119,7 @@ const importSessionRecorder: BundleImporter<unknown> = () => import("./session-r
 const recording: ApplySessionReplay = sessionReplay({
   appName: SESSION_REPLAY_APP.WEB,
   projectApiKey,
-  address: `${location.origin}${APP_PATH}`,
+  address: `${location.origin}${PANEL_PATH}`,
   namesOwnAddress: namesAddress,
   importRecorder: importSessionRecorder,
   storage: RECORDING_STORAGE,
