@@ -36,7 +36,9 @@ import type { RunMode } from "./run-mode.js";
  * (`issue-follow.ts`): over Neon Realtime, each change emitted as
  * `ISSUES_CHANGED`; following what is already followed does nothing, and
  * letting it go ends it. Behind a closed account gate, or on a run that
- * sends nothing, every ask answers unanswered and nothing is followed.
+ * sends nothing, every ask answers unanswered and nothing is followed, and
+ * the gate closing, a sign-out or an account switch, ends every follow, so
+ * the account that was signed in is subscribed to no more.
  */
 
 /** The service's side of the issues, as this concern asks it. */
@@ -53,7 +55,10 @@ export interface IssuesDependencies {
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
 
-export type IssuesComposer = Composer;
+export interface IssuesComposer extends Composer {
+  /** Every issue follow let go, as a sign-out or an account switch lets them go. */
+  readonly reset: Effect.Effect<void>;
+}
 
 const UNANSWERED = { failure: ISSUE_CALL_FAILURE.UNANSWERED } as const;
 
@@ -150,5 +155,5 @@ function composed(
       }),
   };
 
-  return { methods, lifetime: Effect.void };
+  return { methods, lifetime: Effect.void, reset: FiberMap.clear(follows) };
 }

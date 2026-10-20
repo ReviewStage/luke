@@ -279,6 +279,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* tasks.reset;
       yield* terminals.reset;
       yield* codingAgents.reset;
+      yield* issues.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });

@@ -108,7 +108,7 @@ function subject(
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { call, asked: service.asked, followed };
+    return { call, asked: service.asked, followed, reset: composer.reset };
   });
 }
 
@@ -320,4 +320,33 @@ it.effect("behind a closed account gate nothing is followed", () =>
     assert.deepEqual(asked, []);
     assert.deepEqual(followed, []);
   }),
+);
+
+it.effect(
+  "a sign-out ends every follow, so the account that was signed in is pushed no more of its issues",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const listLive: IssuesLiveAnswer = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          issues: {
+            capability: "issues",
+            queryFingerprint: "issues",
+            expiresAt: LIVE_NOW + 60_000,
+          },
+        },
+      };
+      const { call, followed, reset } = yield* subject({ listLive, openLive: realtime.open });
+
+      yield* call(GATEWAY_METHOD.ISSUES_FOLLOW, { workspaceId: WORKSPACE_ID });
+      yield* settled;
+      assert.deepEqual(realtime.subscribed(), ["issues"]);
+
+      yield* reset;
+      yield* settled;
+
+      assert.deepEqual(realtime.subscribed(), []);
+      assert.deepEqual(followed, []);
+    }),
 );
