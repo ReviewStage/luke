@@ -150,7 +150,8 @@ function page(
 }
 
 /** The card standing in the window once `row` is reached from the keyboard: its name, then its corner. */
-function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[] {
+/** What a row's card says: its name, its corner, and whether its tile wears the working mark. */
+function cardOn(row: HTMLElement | null): readonly (string | boolean | null | undefined)[] {
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
   act(() => row.blur());
@@ -160,6 +161,7 @@ function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[]
   return [
     card.querySelector(".luke-hover-card-name")?.textContent,
     card.querySelector(".luke-hover-card-corner")?.textContent,
+    card.querySelector('.actor-card-head .state-glyph[data-state="working"]') !== null,
   ];
 }
 
@@ -305,7 +307,7 @@ test("a message a page did not touch hangs the card the window hands now, and it
   const refused = () =>
     tab.container.querySelector<HTMLElement>('[data-call-id="call-refused"]')?.textContent ?? "";
   assert.match(refused(), /Invoice export/u);
-  const working = cardOn(row(DELEGATE_CALL))[1];
+  assert.equal(cardOn(row(DELEGATE_CALL))[2], true, "the worker's tile wears the working mark");
 
   // The window draws again with the other agent renamed, and no page has touched the earlier turn.
   act(() => drawOver("Invoice export, retried"));
@@ -320,7 +322,11 @@ test("a message a page did not touch hangs the card the window hands now, and it
     tab.container.querySelector('[data-message-id="newest"]')?.textContent ?? "",
     /Reading the retry audit\./u,
   );
-  assert.notEqual(cardOn(row(DELEGATE_CALL))[1], working);
+  assert.equal(
+    cardOn(row(DELEGATE_CALL))[2],
+    false,
+    "the finished worker's tile wears its harness",
+  );
 });
 
 test("a task renamed while its agent's tab stands names the plan's sender anew, hanging the task's new card", async () => {

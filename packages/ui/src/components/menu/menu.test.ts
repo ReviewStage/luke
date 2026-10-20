@@ -316,6 +316,28 @@ test("a submenu standing open checks what its owner holds now, though the owner 
   expect(checked).toEqual(["None"]);
 });
 
+test("a value that stays leaves its menu and submenu standing as it is chosen, where any other choice closes them", () => {
+  const chosen: Chosen = [];
+  const value = (label: string) => ({ ...action(label, chosen), checked: false, stays: true });
+  mount(
+    createElement(Harness, {
+      groups: [
+        [{ label: "Status", items: [value("Todo"), value("Done")] }],
+        [action("Clear filters", chosen)],
+      ],
+    }),
+  );
+  press(button("More"));
+  press(button("Status"));
+  press(button("Todo"));
+  press(button("Done"));
+  expect(chosen).toEqual(["Todo", "Done"]);
+  expect(openMenu("Status")).not.toBeNull();
+  expect(openMenu()).not.toBeNull();
+  press(button("Clear filters"));
+  expect(openMenu()).toBeNull();
+});
+
 test("the menu key or Shift-F10 on a row opens its menu under it on the first item", () => {
   function Row(): React.JSX.Element {
     const menu = useMenu(true);

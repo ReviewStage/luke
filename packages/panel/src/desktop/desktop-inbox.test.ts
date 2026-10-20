@@ -404,6 +404,7 @@ afterEach(() => {
   root = undefined;
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** What the Inbox was asked to open, leaving it. */
@@ -1811,6 +1812,72 @@ test("the pane's crumbs lead with their tabs' glyphs, the plan's document and th
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
+/** What an intersection observer reports of the heading it watches: in the thread's view, or scrolled up past its top. */
+type HeadingSeen = (entries: readonly Partial<IntersectionObserverEntry>[]) => void;
+
+/** The headings the pane's intersection observers watch, each with its observer's callback. */
+const headingsWatched = new Map<Element, HeadingSeen>();
+
+/** An intersection observer that reports nothing until a test scrolls the heading it watches. */
+class HeadingObserver {
+  readonly #callback: HeadingSeen;
+  constructor(callback: HeadingSeen) {
+    this.#callback = callback;
+  }
+  observe(target: Element): void {
+    headingsWatched.set(target, this.#callback);
+  }
+  disconnect(): void {
+    for (const [target, callback] of headingsWatched)
+      if (callback === this.#callback) headingsWatched.delete(target);
+  }
+}
+
+/** Scrolls the shown item's heading up out of the thread's view, or back into it, as its scroller would report it. */
+function scrollHeading(page: HTMLElement, away: boolean): void {
+  const heading =
+    page.querySelector(".inbox-view-items:not([hidden]) [data-inbox-title]") ??
+    assert.fail("the item's heading is drawn");
+  const seen = headingsWatched.get(heading) ?? assert.fail("the heading is watched");
+  const rootBounds = DOMRect.fromRect({ y: 100, width: 600, height: 500 });
+  const boundingClientRect = DOMRect.fromRect({ y: away ? 40 : 120, width: 600, height: 30 });
+  act(() => seen([{ isIntersecting: !away, rootBounds, boundingClientRect }]));
+}
+
+/** The words of the item's bar's path, crumb by crumb, as a reader meets them. */
+function pathWords(page: HTMLElement): (string | null)[] {
+  return [
+    ...page.querySelectorAll('.inbox-view-items:not([hidden]) nav[aria-label="Path"] li'),
+  ].map((crumb) => crumb.textContent);
+}
+
+test("once the item's heading scrolls out of the thread's view, its title joins the bar's path as its last words, the page the reader stands on, and leaves it again once the heading is back, so it never stands twice", async () => {
+  vi.stubGlobal("IntersectionObserver", HeadingObserver);
+  const { page } = mount();
+  await settle();
+  assert.deepEqual(pathWords(page), ["Billing usage alerts", "Alerts"], "the heading names it");
+
+  scrollHeading(page, true);
+  assert.deepEqual(pathWords(page), ["Billing usage alerts", "Alerts", "Alert at 80%?"]);
+  const title = page.querySelector(
+    '.inbox-view-items nav[aria-label="Path"] [aria-current="page"]',
+  );
+  assert.equal(title?.textContent, "Alert at 80%?", "the title is where the reader stands");
+  assert.equal(title?.closest("button"), null, "the title is words, not a press");
+
+  scrollHeading(page, false);
+  assert.deepEqual(pathWords(page), ["Billing usage alerts", "Alerts"]);
+
+  scrollHeading(page, true);
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  assert.deepEqual(
+    pathWords(page),
+    ["Billing usage alerts", "Alerts"],
+    "another item opens with its own heading in view",
+  );
+});
+
 test("an image an item shows is drawn, and a press opens it over the window", async () => {
   const shot = {
     type: INBOX_BLOCK.IMAGE,
@@ -2046,7 +2113,7 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
   assert.deepEqual(viewer(), ["Before.png", "1 of 4"]);
 });
 
-/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
+/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, nothing for an agent at work whose start is not known. */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 function openings(card: string): string[] {
   const standing = document.querySelector(`.luke-tooltip-card ${card}`);
@@ -2099,7 +2166,7 @@ test("the thread names its agent as one button wherever it does, its question's 
     "the agent's tile leads its comment",
   );
   reach(comment);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), [], "the name is the way to the tab");
   act(() => comment.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
@@ -2113,7 +2180,7 @@ test("the thread names its agent as one button wherever it does, its question's 
   assert.equal(sent.textContent, "Alerts");
   assert.ok(wearsAgentTile(sent), "the line names the agent by its tile too");
   reach(sent);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), []);
   act(() => sent.click());
   assert.deepEqual(asked.shownAgents, [
@@ -5935,7 +6002,7 @@ function subjectParts(pane: HTMLElement): (string | null)[] {
   return [...subject.children].map((part) => part.textContent);
 }
 
-/** Each ask's box on the thread: where it stands, then its head as a reader hears it, none for an answered card, whose controls say how it was answered. */
+/** Each ask's box on the thread: where it stands, then its head as a reader hears it; an answered ask's controls stand in its reply with no box, so they are none of these. */
 function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   return [...pane.querySelectorAll<HTMLElement>(".inbox-ask")].map((box) => [
     box.dataset.inboxAsk,
@@ -5943,11 +6010,13 @@ function askBoxes(pane: HTMLElement): (string | null | undefined)[][] {
   ]);
 }
 
-/** The answered ask's card heading a reply, as a reader hears it: its controls' words alone, with no head over them saying the ask's kind or how it was answered; none where the reply carries no card. */
+/** The answered ask's controls heading a reply, as a reader hears it: their words alone, standing in the reply's body beside its words with no card around them and no head over them; none where the reply carries none. */
 function answeredCard(reply: Element): string | null | undefined {
-  const card = reply.querySelector('.inbox-ask[data-inbox-ask="answered"]');
+  const card = reply.querySelector("[data-inbox-answered]");
   if (card === null) return undefined;
-  assert.equal(card.querySelector(".inbox-ask-head"), null, "the card has no head");
+  assert.equal(card.closest(".inbox-ask"), null, "no card stands around the controls");
+  assert.ok(card.parentElement?.matches(".inbox-comment-body"), "they stand in the reply's body");
+  assert.equal(card.querySelector(".inbox-ask-head"), null, "they have no head");
   return wordsOf(card);
 }
 
@@ -6419,7 +6488,7 @@ test("picking an option in the draft reply stands it picked, the foot no longer 
   assert.equal(reply.querySelector("[data-inbox-stamp]"), null, "the card marks the answer");
   assert.equal(asked?.querySelector(".inbox-ask"), null, "the ask's card left the agent's message");
   assert.equal(askMarker(pane), null, "and its marker");
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(subjectParts(pane), ["How long should invites last?"]);
   assert.deepEqual(draftReply(pane), ["Youdraft"], "the draft stands at the end, plain");
   assert.equal(composerEditor(pane).getAttribute("aria-label"), "Reply…");
@@ -6468,7 +6537,7 @@ test("an approve-or-request-changes ask is two small buttons in the draft reply:
     "Request changes",
     "the press given says how it was answered",
   );
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
 });
 
 test("a form's fields attach to the reply as they are filled, with no Submit, and a form filled in part sends what was filled, a required field left empty absent from it", async () => {
@@ -6700,8 +6769,8 @@ function answeredThread(
 function answeredBox(pane: HTMLElement): HTMLElement {
   return (
     pane.querySelector<HTMLElement>(
-      `[data-message-id="${ANSWER_ID}"] .inbox-ask[data-inbox-ask="answered"] [data-inbox-answered]`,
-    ) ?? assert.fail("the reply leads with the ask's card filled in")
+      `[data-message-id="${ANSWER_ID}"] .inbox-comment-body > [data-inbox-answered]`,
+    ) ?? assert.fail("the reply leads with the ask's controls filled in")
   );
 }
 
@@ -6725,7 +6794,7 @@ test("an answered decide's card leaves the agent's message for the head of the r
   ]);
   const pane = await mountThread({ ...shown, status: INBOX_STATUS.OPEN });
 
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.equal(askMarker(pane), "Waiting on you", "the later ask still waits");
   const asked =
     pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ?? assert.fail("the agent's message");
@@ -6771,7 +6840,7 @@ test("an answered yes-or-no heads its reply with its two small buttons, the one 
     ),
   );
 
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(answeredPresses(answeredBox(pane)), [
     ["Approve", false, undefined],
     ["Request changes", true, "back"],
@@ -6798,7 +6867,7 @@ test("an answered do heads its reply with its steps ticked as they were sent, ov
       return [step.textContent, tick.checked];
     });
 
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.deepEqual(steps(), [
     ["Open the repository's settings", true],
     ["Add the secret", false],
@@ -6868,7 +6937,7 @@ test("an answered form heads its reply with its fields, each holding what it was
   assert.equal(box.querySelector("[data-mention-ref]")?.textContent, "rollout-store.ts");
   assert.equal(box.querySelector(".inbox-ask-presses"), null, "no Submit stands");
   assert.equal(pane.querySelector("[data-inbox-values]"), null, "the reply lists no values");
-  assert.deepEqual(askBoxes(pane), [["answered", null]]);
+  assert.deepEqual(askBoxes(pane), []);
   assert.equal(pane.querySelector("[data-inbox-stamp]"), null);
 });
 

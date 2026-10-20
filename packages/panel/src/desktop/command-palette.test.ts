@@ -540,7 +540,11 @@ test("an agent's row hangs its tab's card beside it while the pointer rests on i
   });
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.equal(card?.querySelector(".luke-hover-card-name")?.textContent, "Invoice export");
-  assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, "Working…");
+  assert.equal(card?.querySelector(".luke-hover-card-corner")?.textContent, undefined);
+  assert.ok(
+    card?.querySelector('.actor-card-head .state-glyph[data-state="working"]'),
+    "the card's tile wears the working mark in its harness's place",
+  );
   press("Invoice export · Billing usage alerts");
   assert.deepEqual(shown, [["plan-1", "agent-7"]]);
 });

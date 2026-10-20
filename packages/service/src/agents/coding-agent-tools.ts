@@ -1296,11 +1296,19 @@ function agentLine(sender: CodingAgent, text: string): string {
   );
 }
 
-/** The note an agent a coding agent starts is handed: which agent started it and how to report back, then the note it was given. */
+/**
+ * The note an agent a coding agent starts is handed: which agent started it,
+ * how to report back, and that the developer's inbox is its starter's, so
+ * what it would post there goes to its starter, who relays what the
+ * developer must see, then the note it was given.
+ */
 function startedByNote(starter: CodingAgent, note: string | undefined): string {
   const lead =
     `You were started by another coding agent of your workspace, ${agentIntroduction(starter)}, ` +
-    `not by the developer. To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with that id.`;
+    `not by the developer. To report back to it, call ${AGENT_TOOL.MESSAGE_AGENT} with that id. ` +
+    "The developer's inbox is that agent's to keep: post nothing to it, and send that agent what " +
+    "you would have posted there instead, a pull request ready for review, a decision, a question, " +
+    "or something only the developer can do by hand.";
   return note === undefined ? lead : `${lead}\n\n${note}`;
 }
 
