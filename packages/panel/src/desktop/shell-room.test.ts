@@ -14,8 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
-import { useShellRoom } from "../shell-room.js";
-import { useStageWidth } from "../stage-width.js";
+import { useStageRoom } from "../stage-room.js";
 import { SIDE_PANEL_TAB, useSidePanel } from "../tasks/use-side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -132,9 +131,9 @@ function resizeStage(width: number): void {
 
 /** The window as the panel's root draws it: the stage measured, its room, and the real sidebar and side panel over the task open on its page. */
 function Window(): React.JSX.Element {
-  const stage = useStageWidth();
-  const room = useShellRoom(stage.width);
-  const sidebar = useSidebarCollapse(false, stage.width);
+  const stage = useStageRoom();
+  const room = stage.room;
+  const sidebar = useSidebarCollapse(false, stage.compact);
   const sidePanel = useSidePanel(undefined, OPEN_TASK, undefined, [], [], [], undefined, room);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.TASKS);
   const shell = createElement(DesktopShell, {

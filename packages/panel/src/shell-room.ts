@@ -1,7 +1,7 @@
 /**
  * shell-room.ts -- whether the panel's stage is wide enough for panes side by side, or so narrow, a phone's, that the panel stands as a single pane.
  *
- * The room is read off the stage's width (`stage-width.ts`), measured once at
+ * The room is read off the stage's width (`stage-room.ts`), measured once at
  * the shell's root and handed down from there, so every layout that answers
  * it answers the same room. A narrow room floats the sidebar as a drawer and
  * holds the side panel only full screen (`desktop-shell.tsx`,
@@ -11,8 +11,6 @@
  * The desktop's window is never narrower than its least width, wider than
  * either line here, so the desktop is always wide.
  */
-
-import { useState } from "react";
 
 /** How much room the stage gives the panel. */
 export const SHELL_ROOM = {
@@ -37,21 +35,8 @@ const SHELL_ROOM_NARROW = {
 } as const;
 
 /** Whether a stage this wide is narrow, given whether it was, so the line it crosses depends on the way it is crossed. */
-function narrowStage(width: number, was: boolean): boolean {
+export function narrowStage(width: number, was: boolean): boolean {
   return width < (was ? SHELL_ROOM_NARROW.LEAVE : SHELL_ROOM_NARROW.ENTER);
-}
-
-/**
- * The room the stage's width gives, from the `stageWidth` `useStageWidth`
- * measures; until it has measured, the room is wide. Note that the room
- * follows the width during the render that measured it, so a narrow stage
- * never paints a wide frame first.
- */
-export function useShellRoom(stageWidth: number | undefined): ShellRoom {
-  const [narrow, setNarrow] = useState(false);
-  const nowNarrow = stageWidth === undefined ? narrow : narrowStage(stageWidth, narrow);
-  if (nowNarrow !== narrow) setNarrow(nowNarrow);
-  return nowNarrow ? SHELL_ROOM.NARROW : SHELL_ROOM.WIDE;
 }
 
 /** Which of a list-and-item screen's two columns are hidden. */

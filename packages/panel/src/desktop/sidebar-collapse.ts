@@ -9,7 +9,7 @@
  * A stage narrower than {@link SIDEBAR_COMPACT} folds the sidebar whatever
  * the choice says, as Linear's and AppKit's sidebars fold, and writes nothing
  * over the choice, so widening it again hands back the sidebar as the
- * developer left it. The stage is the panel's root element (`stage-width.ts`):
+ * developer left it. The stage is the panel's root element (`stage-room.ts`):
  * the window itself on the desktop, the box the page gives the panel in a
  * browser. A folded sidebar floats open over the work rather than
  * beside it: peeked while the pointer rests at the window's left edge and
@@ -71,7 +71,7 @@ function clampWidth(width: number): number {
 }
 
 /** Whether a stage this wide is too narrow to pin the sidebar, given whether it was, so the line it crosses depends on the way it is crossed. */
-function compactStage(width: number, was: boolean): boolean {
+export function compactStage(width: number, was: boolean): boolean {
   return width < (was ? SIDEBAR_COMPACT.LEAVE : SIDEBAR_COMPACT.ENTER);
 }
 
@@ -109,17 +109,13 @@ export interface SidebarCollapse {
  * The collapse, the width, and the overlay. The chord is the sidebar toggle's
  * to offer, so it answers only while the toggle stands. The choice itself
  * outlives an absence: Settings hands back the sidebar the way it was left,
- * and so does a stage widened past the compact line, by the `stageWidth`
- * `useStageWidth` measures; until it has measured, the sidebar stands as
- * the choice says. The width outlives a fold, so the sidebar opens again as
+ * and so does a stage widened past the compact line, by the `compact`
+ * `useStageRoom` measures. The width outlives a fold, so the sidebar opens again as
  * wide as it closed. A fixture run starts open at the default width and
  * keeps nothing, so its frames never wear a developer's own fold or width. The overlay goes with the fold it floats
  * over, so a pinned sidebar folded again starts away.
  */
-export function useSidebarCollapse(
-  fixtureMode: boolean,
-  stageWidth: number | undefined,
-): SidebarCollapse {
+export function useSidebarCollapse(fixtureMode: boolean, compact: boolean): SidebarCollapse {
   // Note that the fixture run's fold is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
   // arrives, a render after the kept fold was read.
@@ -127,10 +123,6 @@ export function useSidebarCollapse(
   const [staged, setStaged] = useState(false);
   const [keptWidth, setKeptWidth] = useState(readWidth);
   const [stagedWidth, setStagedWidth] = useState<number>(SIDEBAR_WIDTH.DEFAULT);
-  const [compact, setCompact] = useState(false);
-  // Note that the fold follows the width during the render that measured it, so a stage never paints pinned for a frame first.
-  const nowCompact = stageWidth === undefined ? compact : compactStage(stageWidth, compact);
-  if (nowCompact !== compact) setCompact(nowCompact);
   const [overlay, setOverlay] = useState<SidebarOverlay>(SIDEBAR_OVERLAY.CLOSED);
   const collapsed = (fixtureMode ? staged : kept) || compact;
   const width = fixtureMode ? stagedWidth : keptWidth;
