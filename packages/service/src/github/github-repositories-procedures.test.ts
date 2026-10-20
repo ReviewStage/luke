@@ -1736,4 +1736,44 @@ it.layer(getTestDB())("the token repositories route", (it) => {
         );
       }),
   );
+
+  it.effect(
+    "a GitHub that does not answer the App's listing hides nothing: the list and a removal still answer from the store",
+    () =>
+      Effect.gen(function* () {
+        const github = tokenGitHub(7321);
+        const { bearers, member, workspace } = yield* openTokenWorkspace(github, 7321);
+        yield* askTokenRepositories(bearers, github, member, workspace, {
+          repository: "octo-member/side",
+          added: true,
+        });
+        const silent = githubReaching(
+          [{ id: 7321, login: "acme", repositories: [] }],
+          GITHUB_APP_WITH_TOKENS,
+          {},
+          (sent) =>
+            new URL(sent.url).pathname === "/installation/repositories"
+              ? Response.json({ message: "Server Error" }, { status: 502 })
+              : undefined,
+        );
+
+        const listedThen = readOf(
+          workspaceTokenRepositoriesAnswerSchema,
+          yield* askTokenRepositories(bearers, silent, member, workspace),
+        );
+        const removed = readOf(
+          workspaceTokenRepositoriesAnswerSchema,
+          yield* askTokenRepositories(bearers, silent, member, workspace, {
+            repository: "octo-member/side",
+            added: false,
+          }),
+        );
+
+        assert.deepEqual(
+          listedThen.repositories.map((one) => one.fullName),
+          ["octo-member/side"],
+        );
+        assert.deepEqual(removed.repositories, []);
+      }),
+  );
 });
