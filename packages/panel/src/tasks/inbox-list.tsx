@@ -14,9 +14,14 @@ import {
   COUNT_TONE,
   DocumentIcon,
   EmptyState,
+  HOVER_CARD_ROW_LOOK,
+  HoverCard,
+  HoverCardHead,
+  HoverCardRow,
   IconButton,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
+  LIST_ROW_INK,
   LIST_ROW_META,
   List,
   ListRow,
@@ -74,8 +79,14 @@ import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
-import { Tooltip } from "../tooltip.js";
-import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
+import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
+import {
+  AgentCard,
+  AgentMarkRef,
+  type AgentSubject,
+  lineSubject,
+  tasklessSubject,
+} from "./agent-ref.js";
 import { providerOf } from "./coding-agent-model.js";
 import { type InboxCloser, useInboxClose } from "./inbox-close.js";
 import {
@@ -367,11 +378,14 @@ export function ItemMark({
   agentId,
   models,
   readerId,
+  plain = false,
 }: {
   holder: InboxHolder;
   agentId: string;
   models: readonly CatalogModel[] | undefined;
   readerId: string | undefined;
+  /** Whether the tile hangs no card of its own, as a row's leading mark does, the row's own card naming the agent instead. */
+  plain?: boolean;
 }): React.JSX.Element {
   const subject = itemSubject(holder, agentId, models, readerId);
   if (subject === undefined) {
@@ -389,7 +403,78 @@ export function ItemMark({
       </ReadAgentModel>
     );
   }
-  return <AgentMarkRef subject={subject} models={models} />;
+  return plain ? (
+    <ActorMark actor={subject.tile} />
+  ) : (
+    <AgentMarkRef subject={subject} models={models} />
+  );
+}
+
+/** What an archived task's open item says of where it stands: put away with its task, waiting on nobody. */
+const ARCHIVED_WORDS = "Archived with its task";
+
+/** Where an item stands, as its row's card says it under its title. */
+function standingWords(listed: InboxListed, needsYou: boolean, starter: Actor | undefined): string {
+  const { holder, item } = listed;
+  if (needsYou) return NEEDS_YOU.LABEL;
+  if (item.status === INBOX_STATUS.OPEN) {
+    // Note that an archived task's open item waits on nobody, since nothing answers it until the task is back.
+    if (archivedHolder(holder)) return ARCHIVED_WORDS;
+    return starter === undefined ? "Waiting" : waitingOn(starter);
+  }
+  return item.status === INBOX_STATUS.ANSWERED ? "Answered" : "Closed";
+}
+
+/**
+ * An Inbox row's card, hung beside the row as a sidebar task's row hangs
+ * its task's, so the row's tile hangs none of its own: the card of the agent
+ * that asked, where the window names it (where its work stands, its model,
+ * who started it, its latest step), closed by the task or automation that
+ * holds the item and where the item stands. An agent the window names
+ * nothing of gets the item's own card instead: its title, when it last
+ * changed, its holder, and where it stands.
+ */
+function InboxItemCard({
+  listed,
+  now,
+  models,
+  readerId,
+  needsYou,
+  starter,
+}: {
+  listed: InboxListed;
+  now: number;
+  models: readonly CatalogModel[] | undefined;
+  readerId: string | undefined;
+  needsYou: boolean;
+  starter: Actor | undefined;
+}): React.JSX.Element {
+  const { holder, item } = listed;
+  const subject = itemSubject(holder, item.agentId, models, readerId);
+  const standing = standingWords(listed, needsYou, starter);
+  if (subject !== undefined) {
+    return (
+      <AgentCard subject={subject} models={models} foot={`${holderName(holder)} · ${standing}`} />
+    );
+  }
+  return (
+    <HoverCard data-inbox-row-card="">
+      <HoverCardHead
+        name={cardTitle(item.title)}
+        corner={<RelativeTime at={item.updatedAt} now={now} hint={false} />}
+      />
+      <HoverCardRow
+        look={HOVER_CARD_ROW_LOOK.DETAIL}
+        glyph={<HolderGlyph holder={holder} />}
+        label={holderName(holder)}
+      />
+      <HoverCardRow
+        look={HOVER_CARD_ROW_LOOK.DETAIL}
+        glyph={needsYou ? <AttentionMark /> : <InboxIcon />}
+        label={standing}
+      />
+    </HoverCard>
+  );
 }
 
 /**
@@ -506,108 +591,129 @@ export function InboxItemRow({
     close.action === undefined ? [] : [close.action],
   ].filter((group) => group.length > 0);
   const press = useRef<HTMLElement | null>(null);
+  // Note that the row's item is its press's parent, which its card counts as its control, as a sidebar task's row does.
+  const region = useRef<HTMLElement | null>(null);
   const hold = useCallback(
     (element: HTMLElement | null) => {
       press.current = element;
+      region.current = element?.parentElement ?? null;
       ref?.(element);
     },
     [ref],
   );
   return (
     <>
-      <ListRow
-        ref={hold}
-        leading={
-          <>
-            {/* Note that the gutter stands on every row, so the tiles line up whether a row wears the dot or not. */}
-            <span className="inbox-row-gutter">
-              {unread ? <span className="inbox-row-unread" /> : null}
-            </span>
-            <span className="inbox-row-mark">
-              <ItemMark
-                holder={holder}
-                agentId={item.agentId}
-                models={models}
-                readerId={readerId}
-              />
-            </span>
-          </>
+      <RowHintOptions
+        card={
+          <InboxItemCard
+            listed={listed}
+            now={now}
+            models={models}
+            readerId={readerId}
+            needsYou={needsYou}
+            starter={starter}
+          />
         }
-        title={title}
-        description={preview}
-        lead={
-          chip ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) } : undefined
-        }
-        attachments={
-          media === undefined || carried.length === 0 ? undefined : (
-            <RowMedia media={carried} reads={media} />
-          )
-        }
-        meta={
-          <span className="home-row-meta">
-            {unread ? <span className="visually-hidden">{UNREAD}</span> : null}
-            {context === undefined ? null : (
-              <FadingWords className="home-row-context" words={context} />
-            )}
-            {starter === undefined || !face ? null : (
-              <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
-            )}
-            {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
-              <span className="visually-hidden">{waitingOn(starter)}</span>
-            )}
-            {drafted ? <DraftMark /> : null}
-            {needsYou ? (
-              <span className="inbox-row-attention">
-                <AttentionMark />
-                <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
-              </span>
-            ) : null}
-            <RelativeTime at={item.updatedAt} now={now} hint={false} />
-          </span>
-        }
-        metaAt={LIST_ROW_META.TITLE}
-        actions={
-          read === undefined && close.action === undefined ? undefined : (
+        cardBeside
+        cardRegion={region}
+      >
+        <ListRow
+          ref={hold}
+          ink={LIST_ROW_INK.SIDEBAR}
+          leading={
             <>
-              {read === undefined ? null : (
-                <Tooltip label={read.label} command={read.command}>
-                  <IconButton
-                    icon={unread ? <MailOpenIcon /> : <MailIcon />}
-                    label={read.label}
-                    size={BUTTON_SIZE.COMPACT}
-                    onClick={read.onSelect}
-                  />
-                </Tooltip>
-              )}
-              {close.action === undefined ? null : (
-                <Tooltip label={close.action.label}>
-                  <IconButton
-                    icon={close.action.icon}
-                    label={close.action.label}
-                    size={BUTTON_SIZE.COMPACT}
-                    onClick={close.action.onSelect}
-                  />
-                </Tooltip>
-              )}
+              {/* Note that the gutter stands on every row, so the tiles line up whether a row wears the dot or not. */}
+              <span className="inbox-row-gutter">
+                {unread ? <span className="inbox-row-unread" /> : null}
+              </span>
+              {/* Note that the tile hangs no card of its own, as a sidebar task's mark hangs none: the row's card names the agent. */}
+              <span className="inbox-row-mark">
+                <ItemMark
+                  holder={holder}
+                  agentId={item.agentId}
+                  models={models}
+                  readerId={readerId}
+                  plain
+                />
+              </span>
             </>
-          )
-        }
-        actionsAt={LIST_ROW_ACTIONS.HOVER}
-        swipe={
-          onMark === undefined
-            ? undefined
-            : {
-                label: unread ? SWIPE_WORDS.READ : SWIPE_WORDS.UNREAD,
-                icon: unread ? <MailOpenIcon /> : <MailIcon />,
-                onAct: () => onMark(listed, !unread),
-              }
-        }
-        current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
-        unread={unread}
-        hint={{ Hint: Tooltip, label: title }}
-        onPress={() => onChoose(listed)}
-        contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
-      />
+          }
+          title={title}
+          description={preview}
+          lead={
+            chip ? { icon: <HolderGlyph holder={holder} />, label: holderName(holder) } : undefined
+          }
+          attachments={
+            media === undefined || carried.length === 0 ? undefined : (
+              <RowMedia media={carried} reads={media} />
+            )
+          }
+          meta={
+            <span className="home-row-meta">
+              {unread ? <span className="visually-hidden">{UNREAD}</span> : null}
+              {context === undefined ? null : (
+                <FadingWords className="home-row-context" words={context} />
+              )}
+              {starter === undefined || !face ? null : (
+                <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
+              )}
+              {starter === undefined || item.status !== INBOX_STATUS.OPEN ? null : (
+                <span className="visually-hidden">{waitingOn(starter)}</span>
+              )}
+              {drafted ? <DraftMark /> : null}
+              {needsYou ? (
+                <span className="inbox-row-attention">
+                  <AttentionMark />
+                  <span className="visually-hidden">{NEEDS_YOU.LABEL}</span>
+                </span>
+              ) : null}
+              <RelativeTime at={item.updatedAt} now={now} hint={false} />
+            </span>
+          }
+          metaAt={LIST_ROW_META.TITLE}
+          actions={
+            read === undefined && close.action === undefined ? undefined : (
+              <>
+                {read === undefined ? null : (
+                  <Tooltip label={read.label} command={read.command}>
+                    <IconButton
+                      icon={unread ? <MailOpenIcon /> : <MailIcon />}
+                      label={read.label}
+                      size={BUTTON_SIZE.COMPACT}
+                      onClick={read.onSelect}
+                    />
+                  </Tooltip>
+                )}
+                {close.action === undefined ? null : (
+                  <Tooltip label={close.action.label}>
+                    <IconButton
+                      icon={close.action.icon}
+                      label={close.action.label}
+                      size={BUTTON_SIZE.COMPACT}
+                      onClick={close.action.onSelect}
+                    />
+                  </Tooltip>
+                )}
+              </>
+            )
+          }
+          actionsAt={LIST_ROW_ACTIONS.HOVER}
+          swipe={
+            onMark === undefined
+              ? undefined
+              : {
+                  label: unread ? SWIPE_WORDS.READ : SWIPE_WORDS.UNREAD,
+                  icon: unread ? <MailOpenIcon /> : <MailIcon />,
+                  onAct: () => onMark(listed, !unread),
+                }
+          }
+          current={chosen ? LIST_ROW_CURRENT.PAGE : undefined}
+          unread={unread}
+          hint={{ Hint: RowHint, label: title }}
+          onPress={() => onChoose(listed)}
+          contextMenu={groups.length === 0 ? undefined : menu.contextMenu(press)}
+        />
+      </RowHintOptions>
       {menu.drawn === undefined || groups.length === 0 ? null : (
         <ActionMenu label={ITEM_ACTIONS} menu={menu.drawn} groups={groups} onClose={menu.close} />
       )}
