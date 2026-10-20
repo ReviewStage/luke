@@ -49,6 +49,7 @@ function mainProcess() {
     integrations: { host: {} },
     issues: { host: {} },
     settings: {},
+    taskIssues: { host: {} },
     tasks: { host: {} },
     workspaces: { host: {} },
   } as unknown as Omit<ActPortDependencies, "pushes">;
