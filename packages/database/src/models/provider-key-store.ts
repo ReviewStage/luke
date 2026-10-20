@@ -9,13 +9,13 @@ import {
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
 import { and, asc, eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
-import { SqlSchema } from "effect/sql";
-import { Database } from "../core/query.js";
-import { accountProviderKey } from "../schemas/account-provider-key.js";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/sql";
+import { Database, type DatabaseServices } from "../core/query.js";
+import { accountChatGptHost, accountProviderKey } from "../schemas/account-provider-key.js";
 import { InstantColumnSchema } from "./columns.js";
 import type { SealedProviderKey } from "./provider-key-seal.js";
-import type { TaskStoreEffect } from "./task-store.js";
+import type { TaskStoreEffect, TaskStoreFailure } from "./task-store.js";
 
 /**
  * provider-key-store.ts -- the rows of an account's own provider keys, sealed as `provider-key-seal.ts` seals them.
@@ -32,6 +32,13 @@ import type { TaskStoreEffect } from "./task-store.js";
  * before an agent runs on it. A provider holds one row of each kind, side by
  * side, and a save replaces only the row of its own kind. A status is written against the sealed key a step
  * ran on, so a step on a key since replaced marks nothing of its successor.
+ *
+ * A ChatGPT sign-in is a row of its own kind whose seal holds its tokens and
+ * whose `access_expires_at` says when its access token lapses. Its renewal
+ * runs under the row's lock (`withProviderKeyLocked`) and reseals the row in
+ * place, so two renewals of one sign-in run one after the other and the
+ * second reads what the first wrote. The account's ChatGPT host id stands in
+ * a table of its own, minted once, so it outlives every sign-in.
  */
 
 const ProviderSchema = Schema.Literals(Object.values(PROVIDER_KEY_PROVIDER));
@@ -50,6 +57,7 @@ const SealedRowSchema = Schema.Struct({
   status: Schema.Literals(Object.values(PROVIDER_KEY_STATUS)),
   statusAt: InstantColumnSchema,
   fastAccess: Schema.NullOr(FastAccessSchema),
+  accessExpiresAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
 });
 
@@ -75,6 +83,7 @@ const ROW_COLUMNS = {
   status: accountProviderKey.status,
   statusAt: accountProviderKey.statusAt,
   fastAccess: accountProviderKey.fastAccess,
+  accessExpiresAt: accountProviderKey.accessExpiresAt,
   createdAt: accountProviderKey.createdAt,
 } as const;
 
@@ -118,6 +127,7 @@ const upsertRow = SqlSchema.void({
     sealedKey: Schema.String,
     hint: Schema.String,
     fastAccess: Schema.NullOr(FastAccessSchema),
+    accessExpiresAt: Schema.NullOr(Schema.Date),
     now: Schema.Date,
   }),
   execute: (write) => {
@@ -133,6 +143,7 @@ const upsertRow = SqlSchema.void({
           : PROVIDER_KEY_STATUS.UNVERIFIED,
       statusAt: write.now,
       fastAccess: write.fastAccess,
+      accessExpiresAt: write.accessExpiresAt,
       createdAt: write.now,
     };
     return Database.use((db) =>
@@ -145,6 +156,89 @@ const upsertRow = SqlSchema.void({
         }),
     );
   },
+});
+
+const lockRow = SqlSchema.findAll({
+  Request: KindKeySchema,
+  Result: SealedRowSchema,
+  execute: (key) =>
+    Database.use((db) =>
+      db
+        .select(ROW_COLUMNS)
+        .from(accountProviderKey)
+        .where(
+          and(
+            eq(accountProviderKey.userId, key.userId),
+            eq(accountProviderKey.provider, key.provider),
+            eq(accountProviderKey.kind, key.kind),
+          ),
+        )
+        .for("update"),
+    ),
+});
+
+/** The row's seal and expiry replaced where it still holds the seal it was read with. */
+const resealRow = SqlSchema.findAll({
+  Request: Schema.Struct({
+    ...KindKeySchema.fields,
+    fromSealedKey: Schema.String,
+    keyVersion: Schema.Int,
+    sealedDataKey: Schema.String,
+    sealedKey: Schema.String,
+    accessExpiresAt: Schema.NullOr(Schema.Date),
+  }),
+  Result: Schema.Struct({ provider: ProviderSchema }),
+  execute: (write) =>
+    Database.use((db) =>
+      db
+        .update(accountProviderKey)
+        .set({
+          keyVersion: write.keyVersion,
+          sealedDataKey: write.sealedDataKey,
+          sealedKey: write.sealedKey,
+          accessExpiresAt: write.accessExpiresAt,
+        })
+        .where(
+          and(
+            eq(accountProviderKey.userId, write.userId),
+            eq(accountProviderKey.provider, write.provider),
+            eq(accountProviderKey.kind, write.kind),
+            eq(accountProviderKey.sealedKey, write.fromSealedKey),
+          ),
+        )
+        .returning({ provider: accountProviderKey.provider }),
+    ),
+});
+
+const insertHost = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    extAgentHostId: Schema.String,
+    now: Schema.Date,
+  }),
+  execute: (write) =>
+    Database.use((db) =>
+      db
+        .insert(accountChatGptHost)
+        .values({
+          userId: write.userId,
+          extAgentHostId: write.extAgentHostId,
+          createdAt: write.now,
+        })
+        .onConflictDoNothing({ target: accountChatGptHost.userId }),
+    ),
+});
+
+const findHost = SqlSchema.findOne({
+  Request: Schema.String,
+  Result: Schema.Struct({ extAgentHostId: Schema.String }),
+  execute: (userId) =>
+    Database.use((db) =>
+      db
+        .select({ extAgentHostId: accountChatGptHost.extAgentHostId })
+        .from(accountChatGptHost)
+        .where(eq(accountChatGptHost.userId, userId)),
+    ),
 });
 
 const deleteRow = SqlSchema.void({
@@ -256,8 +350,69 @@ export function saveProviderKey(
   hint: string,
   fastAccess: FastAccess | null,
   now: Date,
+  accessExpiresAt: Date | null = null,
 ): TaskStoreEffect<void> {
-  return upsertRow({ userId, provider, kind, ...sealed, hint, fastAccess, now });
+  return upsertRow({ userId, provider, kind, ...sealed, hint, fastAccess, accessExpiresAt, now });
+}
+
+/**
+ * Runs `body` on the account's credential of this kind, or on none where it
+ * holds none, in one transaction with its row locked, so two renewals of one
+ * credential run one after the other and the second reads what the first
+ * wrote.
+ */
+export function withProviderKeyLocked<A, E, R>(
+  userId: string,
+  provider: ProviderKeyProvider,
+  kind: ProviderKeyKind,
+  body: (row: Option.Option<ProviderKeyRow>) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | TaskStoreFailure, R | DatabaseServices> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.flatMap(lockRow({ userId, provider, kind }), (rows) =>
+        body(Option.fromNullishOr(rows[0])),
+      ),
+    ),
+  );
+}
+
+/**
+ * Replaces the seal of the account's credential of this kind and when its
+ * access lapses, together, where the row still holds the seal it was read
+ * with; answers whether it did. Its status and when it was added stand.
+ */
+export function resealProviderKey(
+  userId: string,
+  provider: ProviderKeyProvider,
+  kind: ProviderKeyKind,
+  fromSealedKey: string,
+  sealed: SealedProviderKey,
+  accessExpiresAt: Date | null,
+): TaskStoreEffect<boolean> {
+  return Effect.map(
+    resealRow({ userId, provider, kind, fromSealedKey, ...sealed, accessExpiresAt }),
+    (moved) => moved.length > 0,
+  );
+}
+
+/**
+ * The account's ChatGPT host id: the one it holds, or `minted` kept as its
+ * own where it holds none. Two first reads at once keep one, and both
+ * answer it.
+ */
+export function ensureChatGptHostId(
+  userId: string,
+  minted: string,
+  now: Date,
+): TaskStoreEffect<string> {
+  return Effect.gen(function* () {
+    yield* insertHost({ userId, extAgentHostId: minted, now });
+    const host = yield* findHost(userId);
+    return host.extAgentHostId;
+  }).pipe(
+    // The insert above leaves a row for this account, so none here is the database breaking its own contract.
+    Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+  );
 }
 
 /** Removes the provider's credential of this kind from the account; removing one it does not hold moves nothing. */

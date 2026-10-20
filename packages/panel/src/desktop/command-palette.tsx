@@ -44,6 +44,7 @@
  * each row's words instead.
  */
 
+import type { TasklessAgent } from "@luke/features/coding-agent-wire";
 import { TASK_TREE_BOUNDS, TASK_TREE_ENTRY, type TaskSummary } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import type { Workspace, WorkspaceMember } from "@luke/features/workspace-wire";
@@ -82,7 +83,15 @@ import {
 } from "@luke/ui";
 import { memberActor, ROLE_WORDS, teammateCreator } from "@luke/ui/actor-model";
 import { matchesTokens, matchRanges, searchTokens } from "@luke/ui/search-tokens";
-import { orderTasks, TASK_ORDER } from "@luke/ui/task-list-model";
+import {
+  agentRow,
+  orderTaskRows,
+  TASK_ORDER,
+  TASK_ROW,
+  type TaskRow,
+  taskRow,
+  taskRowName,
+} from "@luke/ui/task-list-model";
 import { DOCUMENT_REGION, TASK_MARK } from "@luke/ui/tasks-model";
 import { Command, defaultFilter } from "cmdk";
 import { LinkIcon } from "lucide-react";
@@ -520,17 +529,20 @@ function taskDetail(task: TaskSummary, archived: boolean): string | undefined {
 }
 
 /**
- * Every plan, the pinned first, then the rest by their last activity
- * (`taskTime`), then the archived ones, each
- * in its tab's look, an archived one saying so in its detail. Within each,
- * the listed workspace's tasks come first and every other workspace's after
+ * Every plan and every agent with no task, as the sidebar lists them among
+ * each other (`task-list-model.ts`'s rows): the pinned first, then the rest
+ * by their last activity (`taskRowTime`), then the archived ones, each in
+ * its tab's look, an archived one saying so in its detail. Within each, the
+ * listed workspace's come first and every other workspace's tasks after
  * them, naming its workspace and found by its name, since opening one
- * switches the window to it.
+ * switches the window to it. An agent opens on its own page, as its
+ * sidebar row does.
  */
 function taskRows(
   tasks: TasksControl,
   members: readonly WorkspaceMember[] | undefined,
   open: (taskId: string) => void,
+  openAgent: (agentId: string) => void,
 ): readonly PaletteRow[] {
   const listedId = tasks.workspace?.id;
   // Note that only the listed workspace's members are read, so another workspace's creator stands by the wire's name, never as having left.
@@ -543,7 +555,7 @@ function taskRows(
     listedId === undefined || task.workspaceId === listedId
       ? undefined
       : tasks.workspaces.find((each) => each.id === task.workspaceId);
-  const row = (task: TaskSummary, archived: boolean): PaletteRow => {
+  const taskOf = (task: TaskSummary, archived: boolean): PaletteRow => {
     const elsewhere = elsewhereOf(task);
     const creator = creatorOf(task);
     const createdBy = task.createdBy?.name ?? null;
@@ -565,23 +577,52 @@ function taskRows(
       onChoose: () => open(task.id),
     };
   };
-  const listedFirst = (list: readonly TaskSummary[]) => [
-    ...list.filter((task) => listedId === undefined || task.workspaceId === listedId),
-    ...list.filter((task) => listedId !== undefined && task.workspaceId !== listedId),
-  ];
+  const agentOf = (agent: TasklessAgent, archived: boolean): PaletteRow => {
+    const name = taskRowName(agentRow(agent));
+    const words = [agent.repository, archived ? ARCHIVED_WORD : null].filter(
+      (word) => word !== null,
+    );
+    return {
+      ...tabLook({ kind: TAB_KIND.AGENT, name, agent }),
+      detail: words.length === 0 ? undefined : words.join(" · "),
+      endMark: agentEndMark(agent, archived),
+      terms: [name, agent.repository, agent.automationName ?? null].filter((term) => term !== null),
+      onChoose: () => openAgent(agent.id),
+    };
+  };
+  const rowOf = (row: TaskRow, archived: boolean): PaletteRow =>
+    row.kind === TASK_ROW.TASK ? taskOf(row.task, archived) : agentOf(row.agent, archived);
+  const listed = (task: TaskSummary) => listedId === undefined || task.workspaceId === listedId;
   // The pinned stand first, as the sidebar's; the rest by their last
   // activity, as the sidebar, Home's Recent, and the row's time read it.
-  const standing = [
-    ...tasks.tasks.filter((task) => task.pinnedAt !== undefined),
-    ...orderTasks(
-      tasks.tasks.filter((task) => task.pinnedAt === undefined),
+  const pinnedFirst = (rows: readonly TaskRow[]) => [
+    ...rows.filter((row) => taskRowPinnedAt(row) !== undefined),
+    ...orderTaskRows(
+      rows.filter((row) => taskRowPinnedAt(row) === undefined),
       TASK_ORDER.UPDATED,
     ),
   ];
-  return [
-    ...listedFirst(standing).map((task) => row(task, false)),
-    ...listedFirst(tasks.archived).map((task) => row(task, true)),
+  const { standing: agents, archived: archivedAgents } = tasks.listedAgents;
+  const here = [...tasks.tasks.filter(listed).map(taskRow), ...agents.map(agentRow)];
+  const elsewhere = tasks.tasks.filter((task) => !listed(task)).map(taskRow);
+  // The archived of the listed workspace, its agents among its tasks, by their last activity as the sidebar's Archived lists them.
+  const archived = [
+    ...orderTaskRows(
+      [...tasks.archived.filter(listed).map(taskRow), ...archivedAgents.map(agentRow)],
+      TASK_ORDER.UPDATED,
+    ),
+    ...tasks.archived.filter((task) => !listed(task)).map(taskRow),
   ];
+  return [
+    ...pinnedFirst(here).map((row) => rowOf(row, false)),
+    ...pinnedFirst(elsewhere).map((row) => rowOf(row, false)),
+    ...archived.map((row) => rowOf(row, true)),
+  ];
+}
+
+/** When the reader pinned a row's task or agent; undefined while they have not. */
+function taskRowPinnedAt(row: TaskRow): number | undefined {
+  return row.kind === TASK_ROW.TASK ? row.task.pinnedAt : row.agent.pinnedAt;
 }
 
 /** Shows one of the side panel's tabs, the version history put away first so the tab is not shown behind it. */
@@ -1241,7 +1282,14 @@ export function CommandPalette({
   const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, query, words);
   const tiersOf = {
     [PALETTE_FILTER.TASKS]: () => [
-      tasks.signedIn ? taskRows(tasks, members, (id) => onTasks(() => tasks.onSelect(id))) : [],
+      tasks.signedIn
+        ? taskRows(
+            tasks,
+            members,
+            (id) => onTasks(() => tasks.onSelect(id)),
+            (id) => onTasks(() => tasks.agentView.onOpen(id)),
+          )
+        : [],
     ],
     [PALETTE_FILTER.AGENTS]: () => [agentRows(tasks, chatOn, onTasks)],
     [PALETTE_FILTER.PEOPLE]: () => [

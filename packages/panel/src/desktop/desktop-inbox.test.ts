@@ -693,6 +693,35 @@ function toggleMediaPreviews(page: HTMLElement): string | null {
   return checked;
 }
 
+test("Second line in the view's menu, checked at first, makes every row one line once unchecked, its title alone, and the choice outlives a relaunch", async () => {
+  let { page } = mount();
+  await settle();
+  const described = (title: string) =>
+    rowNamed(page, title).querySelector(".luke-list-row-description") !== null;
+  assert.ok(described("Alert at 80%?"), "a row has its second line at first");
+  const toggle = () => {
+    const options = page.querySelector<HTMLButtonElement>('button[aria-label="View options"]');
+    act(() => options?.click());
+    const item = [
+      ...document.querySelectorAll<HTMLButtonElement>('[role="menuitemcheckbox"]'),
+    ].find((each) => each.textContent?.includes("Second line"));
+    assert.ok(item, "the view's menu offers Second line");
+    const checked = item.getAttribute("aria-checked");
+    act(() => item.click());
+    return checked;
+  };
+  assert.equal(toggle(), "true");
+  await settle();
+  assert.equal(described("Alert at 80%?"), false, "unchecked, the row is one line");
+  assert.equal(described("Expire after 7 days?"), false);
+
+  act(() => root?.unmount());
+  root = undefined;
+  ({ page } = mount());
+  await settle();
+  assert.equal(described("Alert at 80%?"), false, "the choice outlives a relaunch");
+});
+
 test("rows show no media until Media previews is checked in the view's menu, then the pictures and pages each item carries under its preview, and the choice outlives a relaunch", async () => {
   const shot = {
     type: INBOX_BLOCK.IMAGE,
@@ -2047,7 +2076,7 @@ test("a thread draws no strip of files over a comment's words: an agent's pictur
   assert.deepEqual(viewer(), ["Before.png", "1 of 4"]);
 });
 
-/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, such as "Working…". */
+/** The card standing in the window, as a reader hears it: the agent's name, then what its corner says, nothing for an agent at work whose start is not known. */
 /** The buttons of the card standing in the window that offer to open something, by what they say: none, since the control the card hangs from opens what it is about. */
 function openings(card: string): string[] {
   const standing = document.querySelector(`.luke-tooltip-card ${card}`);
@@ -2100,7 +2129,7 @@ test("the thread names its agent as one button wherever it does, its question's 
     "the agent's tile leads its comment",
   );
   reach(comment);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), [], "the name is the way to the tab");
   act(() => comment.click());
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
@@ -2114,7 +2143,7 @@ test("the thread names its agent as one button wherever it does, its question's 
   assert.equal(sent.textContent, "Alerts");
   assert.ok(wearsAgentTile(sent), "the line names the agent by its tile too");
   reach(sent);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.deepEqual(standingCard(), ["Alerts", undefined]);
   assert.deepEqual(openings("[data-tab-card]"), []);
   act(() => sent.click());
   assert.deepEqual(asked.shownAgents, [
@@ -2152,29 +2181,31 @@ test("an archived agent is still named by its name, its card saying it was archi
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
-test("an item's row hangs its agent's card beside it, as a sidebar task's row hangs its task's, its tile hanging none of its own; a press on the card chooses nothing, and a press on the row chooses the item", async () => {
+test("an item's row hangs the thread's card beside it, as a sidebar task's row hangs its task's, its tile hanging none of its own: its task, its title, where it stands, how it ended, and the agent that asked at its foot with the spinner while it works; a press on the card chooses nothing, and a press on the row chooses the item", async () => {
   const { page, asked } = mount();
   await settle();
   const row = rowNamed(page, "How is a failed email retried?");
   assert.equal(row.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
   assert.ok(wearsAgentTile(row), "the row wears the agent's tile");
-  act(() => {
-    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-  });
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
-  assert.match(
-    wordsOf(document.querySelector(".luke-tooltip-card [data-tab-card]")) ?? "",
-    /Billing usage alerts · Answered/u,
-    "the card's foot names the item's task and where the item stands",
+  const words = hoveredCard(row, "[data-inbox-row-card]") ?? "";
+  assert.match(words, /^Billing usage alerts/u, "the card leads with its task");
+  assert.match(words, /How is a failed email retried\?/u);
+  assert.match(words, /Answered/u);
+  assert.match(words, /Alerts$/u, "the agent that asked stands at its foot");
+  const card =
+    document.querySelector<HTMLElement>(".luke-tooltip-card [data-inbox-row-card]") ??
+    assert.fail("the thread's card is hung");
+  assert.ok(
+    card.querySelector('.luke-hover-card-row-end .state-glyph[data-state="working"]'),
+    "the spinner stands beside the agent at the card's foot, no words",
   );
   // A press on the card, as one selecting its words makes, leaves the row unchosen and the card standing.
-  const card = document.querySelector<HTMLElement>(".luke-tooltip-card [data-tab-card]");
   act(() => {
-    card?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
-    card?.click();
+    card.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    card.click();
   });
   assert.equal(row.getAttribute("aria-current"), null);
-  assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.ok(document.querySelector(".luke-tooltip-card [data-inbox-row-card]"));
   act(() => row.click());
   assert.equal(row.getAttribute("aria-current"), "page");
   assert.deepEqual(asked.shownAgents, [], "the press stays in the Inbox");
@@ -2182,31 +2213,19 @@ test("an item's row hangs its agent's card beside it, as a sidebar task's row ha
   assert.ok(wearsAgentTile(other), "a row whose plan names no agent still wears an agent's tile");
 });
 
-test("an item's row hangs a card naming the teammate who started its agent, as the plan's row names them, and no starter on the reader's own agent", async () => {
+test("an item's card says whom an open item waits on, the reader as Needs you and a teammate by name", async () => {
   const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-  /** The words of the card the row hangs, the task's row naming its agent as started by `starter`. */
-  const rowCard = async (starter: typeof CHARLES): Promise<string | null | undefined> => {
-    const { page } = mount();
-    await settle();
-    const line = BILLING.agents?.agents[0];
-    assert.ok(line && BILLING.agents, "the plan's row names its agent");
-    const agents = { ...BILLING.agents, agents: [{ ...line, startedBy: starter }] };
-    act(() => setTasks([{ ...BILLING, agents }, INVITES]));
-    const row = rowNamed(page, "How is a failed email retried?");
-    act(() => {
-      row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
-    });
-    const words = wordsOf(document.querySelector(".luke-tooltip-card [data-tab-card]"));
-    act(() => root?.unmount());
-    root = undefined;
-    document.body.innerHTML = "";
-    return words;
-  };
-
-  assert.match((await rowCard(CHARLES)) ?? "", /Started by Charles Pan/u);
-  const own = await rowCard(READER);
-  assert.match(own ?? "", /Alerts/u, "the reader's own agent's row still hangs its card");
-  assert.doesNotMatch(own ?? "", /Started by/u);
+  inboxes.set(INVITES.id, [{ ...EXPIRY, startedBy: CHARLES }]);
+  const { page } = mount();
+  await settle();
+  assert.match(
+    hoveredCard(rowNamed(page, "Alert at 80%?"), "[data-inbox-row-card]") ?? "",
+    /Needs you/u,
+  );
+  assert.match(
+    hoveredCard(rowNamed(page, "Expire after 7 days?"), "[data-inbox-row-card]") ?? "",
+    /Waiting on Charles Pan/u,
+  );
 });
 
 test("a plan main says changed is read again, so an item answered on another Mac lists as settled; the Needs you tab then lists only what still needs you until another tab is pressed, and outlives a relaunch", async () => {
@@ -3002,6 +3021,41 @@ test("a settled item offers, over its box, the next item that needs you, by its 
   act(() => next.click());
   assert.equal(readTitle(page), "Alert at 80%?");
   assert.equal(offered(), null);
+});
+
+test("Next follows the way the keys last went: after K it offers the nearest item above that needs you, by an arrow up and K, a press opening it; after J the one below, by J", async () => {
+  inboxes.set(BILLING.id, [
+    { ...THRESHOLD, updatedAt: 4_500 },
+    { ...RETRY, updatedAt: 2_000, settledAt: 2_000 },
+  ]);
+  const { page } = mount();
+  await settle();
+  const keys = standKeymap();
+  const offered = () =>
+    page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
+  assert.deepEqual(listed(page), [
+    "# Billing usage alerts",
+    "▸ *Alert at 80%?",
+    "How is a failed email retried?",
+    "# Invites",
+    "*Expire after 7 days?",
+  ]);
+
+  pressKey("j");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  assert.equal(wordsOf(offered()), "NextExpire after 7 days?J");
+  assert.equal(offered()?.getAttribute("aria-keyshortcuts"), "J");
+
+  pressKey("j");
+  pressKey("k");
+  assert.equal(readTitle(page), "How is a failed email retried?");
+  const next = offered();
+  assert.ok(next, "the settled item offers the next");
+  assert.equal(wordsOf(next), "Next ↑Alert at 80%?K");
+  assert.equal(next.getAttribute("aria-keyshortcuts"), "K");
+  act(() => next.click());
+  assert.equal(readTitle(page), "Alert at 80%?");
+  act(() => keys.unmount());
 });
 
 test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's top", async () => {
@@ -4010,8 +4064,8 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
   const mark = rowNamed(page, "Quarantine the flaky test?");
   assert.ok(wearsAgentTile(mark), "the planless agent's row wears its tile");
   assert.match(
-    hoveredCard(mark, "[data-tab-card]") ?? "",
-    /Sweep the flaky tests.*Started by Nightly flake sweep/u,
+    hoveredCard(mark, "[data-inbox-row-card]") ?? "",
+    /^Nightly flake sweep.*Sweep the flaky tests$/su,
   );
 
   act(() => rowNamed(page, "Quarantine the flaky test?").click());
@@ -4165,7 +4219,7 @@ test("an untitled agent an automation started goes by its automation's name in t
   await settle();
 
   const row = rowNamed(page, "Quarantine the flaky test?");
-  assert.match(hoveredCard(row, "[data-tab-card]") ?? "", /^Nightly flake sweep/u);
+  assert.match(hoveredCard(row, "[data-inbox-row-card]") ?? "", /Nightly flake sweep$/u);
 });
 
 test("an item's row offers Copy link on a right-click, copying the item's link under the task that holds it", async () => {
@@ -5270,6 +5324,7 @@ test("Mark all as read in the view's menu, under Group by, marks every unread it
     "—",
     "Whose",
     "—",
+    "Second line",
     "Media previews",
     "—",
     "Mark all as read",
@@ -6605,6 +6660,31 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
   );
 });
 
+test("a thread's form ask wears the Recommended badge on the option its select recommends and on no other, and picks nothing for the developer", async () => {
+  const pane = await mountThread(
+    threadItem([
+      askingMessage({
+        type: INBOX_ASK.ANSWER,
+        fields: [
+          {
+            type: INBOX_FIELD.SELECT,
+            label: "Channel",
+            options: ["Email", "Slack"],
+            recommended: "Slack",
+          },
+          { type: INBOX_FIELD.SELECT, label: "Severity", options: ["Low", "High"] },
+        ],
+      }),
+    ]),
+  );
+  assert.deepEqual(readSegmented(segmentedGroup(pane, "Channel")), {
+    options: ["Email", "SlackRecommended"],
+    checked: [],
+    tabStops: ["Email"],
+  });
+  assert.deepEqual(readSegmented(segmentedGroup(pane, "Severity")).options, ["Low", "High"]);
+});
+
 test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked and ticks every one, either press pressed again is let go, and Mark done sent carries every step; one naming no step stands its item's title as its one step", async () => {
   const shown = threadItem([
     askingMessage({
@@ -6673,7 +6753,7 @@ test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked
   );
 });
 
-test("a replaced ask is struck through and says so, a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
+test("a replaced ask draws no card, only a quiet marker ending the agent's message saying a newer question replaced it, or a newer message where none asks; a withdrawn one says why, and one withdrawn with no reason names the member who closed the item", async () => {
   const shown = threadItem(
     [
       askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
@@ -6694,7 +6774,6 @@ test("a replaced ask is struck through and says so, a withdrawn one says why, an
   const pane = await mountThread(shown);
 
   assert.deepEqual(askBoxes(pane), [
-    ["replaced", "Pick oneReplaced"],
     ["withdrawn", "Pick oneWithdrawn: Product picked 14 days."],
     ["withdrawn", "Pick oneCharles Pan · Resolved without an answer"],
   ]);
@@ -6704,6 +6783,37 @@ test("a replaced ask is struck through and says so, a withdrawn one says why, an
     "a settled ask offers nothing",
   );
   assert.equal(pane.querySelector("[data-inbox-waiting]"), null);
+  const replaced =
+    pane.querySelector(`[data-message-id="${ASKING_ID}"]`) ??
+    assert.fail("the replaced ask's message");
+  assert.equal(replaced.querySelector(".inbox-ask"), null, "the replaced ask draws no card");
+  assert.deepEqual(
+    [...replaced.querySelectorAll<HTMLElement>("[data-inbox-settled]")].map((marker) => [
+      marker.dataset.inboxSettled,
+      wordsOf(marker),
+    ]),
+    [["replaced", "Replaced by a newer question"]],
+    "the agent's message ends with the marker saying so",
+  );
+  assert.equal(
+    pane.querySelectorAll("[data-inbox-settled]").length,
+    1,
+    "no withdrawn ask wears the marker",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  const noticed = await mountThread(
+    threadItem([
+      askingMessage(EXPIRY_ASK, { status: INBOX_ASK_STATUS.REPLACED }),
+      threadMessage("e1b2c3d4-0000-4000-8000-000000000022", "agent", "Deploy finished.", 2_000),
+    ]),
+  );
+  assert.equal(
+    wordsOf(noticed.querySelector(`[data-message-id="${ASKING_ID}"] [data-inbox-settled]`)),
+    "Replaced by a newer message",
+    "an ask replaced by a message that asks nothing names no newer question",
+  );
 });
 
 /** The reader's reply answering the ask the thread opens with, as the service keeps it. */
@@ -7050,7 +7160,7 @@ test("a teammate's open ask says on its marker that it waits on them, rather tha
   assert.equal(quietWords(pane), null, "the picked answer says what is sent");
 });
 
-test("a thread's row leads with what its open ask asks, then its latest message: a pick, the steps the reader ticked in its box, fields, or words; a teammate's waits on them with no mark, and an answer reads as its stamp", async () => {
+test("a thread's row says the ask itself while one is open, led by its kind's glyph: the steps left and the next as the reader ticks them in its box, the fields, or an answer to write; a teammate's waits on them with no mark, and an answer reads as its stamp, led by a tick", async () => {
   const STEPS = threadItem([
     askingMessage({
       type: INBOX_ASK.DO,
@@ -7096,13 +7206,19 @@ test("a thread's row leads with what its open ask asks, then its latest message:
   ]);
   const { page } = mount();
   await settle();
-  const said = "Invites expire after 24 hours today, which trips up teams across time zones.";
-  assert.deepEqual(rowLines(page, STEPS.title), [true, `Steps · 0 of 3 · Agent: ${said}`]);
-  assert.deepEqual(rowLines(page, FIELDS.title), [true, `Fill in · Agent: ${said}`]);
-  assert.deepEqual(rowLines(page, EXPIRY.title), [true, `Your answer · Agent: ${said}`]);
+  assert.deepEqual(rowLines(page, STEPS.title), [true, "3 steps left · Open the settings"]);
+  assert.deepEqual(rowLines(page, FIELDS.title), [true, "Fill in Host"]);
+  assert.deepEqual(rowLines(page, EXPIRY.title), [true, "Write an answer"]);
   assert.deepEqual(rowLines(page, CHOSEN.title), [
     true,
     "You: Chose 7 days · and say so in the docs",
+  ]);
+  const glyphOf = (title: string) =>
+    rowNamed(page, title).querySelector(".inbox-row-line")?.getAttribute("data-line");
+  assert.deepEqual([STEPS.title, FIELDS.title, CHOSEN.title].map(glyphOf), [
+    "do",
+    "answer",
+    "settled",
   ]);
   assert.equal(needsYouMark(rowNamed(page, STEPS.title)), "*");
   assert.equal(needsYouMark(rowNamed(page, FIELDS.title)), "", "a teammate's ask needs them");
@@ -7120,7 +7236,38 @@ test("a thread's row leads with what its open ask asks, then its latest message:
   act(() => itemPane(page).querySelector<HTMLInputElement>("[data-inbox-step] input")?.click());
   act(() => rowNamed(page, CHOSEN.title).click());
   await settle();
-  assert.deepEqual(rowLines(page, STEPS.title), [true, `Steps · 1 of 3 · Agent: ${said}`]);
+  assert.deepEqual(rowLines(page, STEPS.title), [true, "2 steps left · Add the secret"]);
+
+  // Mark done pressed in the box ticks every step on the row and its card, as the box shows them.
+  act(() => rowNamed(page, STEPS.title).click());
+  await settle();
+  act(() => askPress(itemPane(page), "Mark done").click());
+  act(() => rowNamed(page, CHOSEN.title).click());
+  await settle();
+  assert.deepEqual(rowLines(page, STEPS.title), [true, "Every step ticked · Mark done"]);
+  hoveredCard(rowNamed(page, STEPS.title), "[data-inbox-row-card]");
+  assert.deepEqual(
+    [...document.querySelectorAll(".luke-tooltip-card .inbox-card-steps > li")].map((step) =>
+      step.getAttribute("data-done"),
+    ),
+    ["true", "true", "true"],
+  );
+});
+
+test("an item's card shows a to-do naming no steps of its own its title as its one step, as its box does", async () => {
+  const ROTATE = threadItem([askingMessage({ type: INBOX_ASK.DO, steps: [] })], {
+    title: "Rotate the deployment key",
+  });
+  inboxes = new Map([[BILLING.id, [ROTATE]]]);
+  const { page } = mount();
+  await settle();
+  hoveredCard(rowNamed(page, ROTATE.title), "[data-inbox-row-card]");
+  assert.deepEqual(
+    [...document.querySelectorAll(".luke-tooltip-card .inbox-card-steps > li")].map(
+      (step) => step.textContent,
+    ),
+    ["Rotate the deployment key"],
+  );
 });
 
 test("with the inbox-first sidebar the sidebar lists the Inbox's items, read once with the page, and the page shows the chosen item alone, a press on a row choosing it", async () => {

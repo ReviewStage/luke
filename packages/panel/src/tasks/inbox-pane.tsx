@@ -250,8 +250,8 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * its answer to the reply rather than sending it, and a press pressed
  * again takes it off. Answered, it leaves the agent's message
  * for the reply that answered it, or says "Answered" alone where that
- * reply is no longer read; replaced, it is struck through; withdrawn, it says why, or who
- * closed the item.
+ * reply is no longer read; replaced, it says it was replaced by a newer question, or message, alone;
+ * withdrawn, it says why, or who closed the item.
  *
  * Words selected in what the agent wrote, its question's Markdown, its
  * messages on the thread, and why it took the item back, stand Reply over
@@ -1765,8 +1765,16 @@ function Waiting({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element {
   );
 }
 
-/** What an ask's box says of an ask a newer one replaced. */
-const REPLACED = "Replaced";
+/**
+ * What ends an agent's message whose ask was replaced: by a newer question
+ * where a later message of the agent's on the thread asks one, and by a
+ * newer message otherwise, as a post that asks nothing from before
+ * version 5 replaces the ask it posts over.
+ */
+const REPLACED = {
+  BY_QUESTION: "Replaced by a newer question",
+  BY_MESSAGE: "Replaced by a newer message",
+} as const;
 
 /** What an ask's box says of an ask settled where the thread read no longer carries its answer. */
 const ANSWERED = "Answered";
@@ -2071,9 +2079,33 @@ function AnsweredCard({
  */
 function AnsweredMarker(): React.JSX.Element {
   return (
-    <span className="inbox-ask-settled" data-inbox-settled="">
+    <span className="inbox-ask-settled" data-inbox-settled="answered">
       <CheckIcon aria-hidden="true" />
       {ANSWERED}
+    </span>
+  );
+}
+
+/**
+ * What ends an agent's message whose ask was replaced: the same small
+ * pill, in the muted ink alone, saying what replaced it, a newer question
+ * where a later message of the agent's on the thread asks one and a newer
+ * message otherwise, with no card.
+ */
+function ReplacedMarker({
+  message,
+  thread,
+}: {
+  message: InboxMessage;
+  thread: readonly InboxMessage[];
+}): React.JSX.Element {
+  const at = thread.findIndex((said) => said.id === message.id);
+  const asked = thread
+    .slice(at + 1)
+    .some((said) => said.author === INBOX_MESSAGE_AUTHOR.AGENT && said.ask !== undefined);
+  return (
+    <span className="inbox-ask-settled" data-inbox-settled="replaced">
+      {asked ? REPLACED.BY_QUESTION : REPLACED.BY_MESSAGE}
     </span>
   );
 }
@@ -2138,8 +2170,9 @@ function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element {
  * of the reply that answered it (`AnsweredCard`), or, for an ask of words
  * alone, which draws no card, a small "Answered" marker (`AnsweredMarker`);
  * a card saying
- * "Answered" alone where the thread read no longer carries that reply; a
- * replaced ask's card struck through and marked so; a withdrawn one's with
+ * "Answered" alone where the thread read no longer carries that reply; for
+ * a replaced ask, no card, a small marker saying a newer question, or
+ * message, replaced it (`ReplacedMarker`); a withdrawn one's card with
  * why, or who closed the item; and an ask this build does not know a card
  * naming a newer Luke.
  */
@@ -2167,6 +2200,9 @@ function AskBox({
       </div>
     );
   }
+  if (ask.status === INBOX_ASK_STATUS.REPLACED) {
+    return <ReplacedMarker message={message} thread={thread} />;
+  }
   if (ask.status === INBOX_ASK_STATUS.OPEN) {
     return <AskMarker on={waitingOn} />;
   }
@@ -2180,8 +2216,6 @@ function AskBox({
     switch (ask.status) {
       case INBOX_ASK_STATUS.ANSWERED:
         return <span className="inbox-ask-standing">{ANSWERED}</span>;
-      case INBOX_ASK_STATUS.REPLACED:
-        return <span className="inbox-ask-standing">{REPLACED}</span>;
       case INBOX_ASK_STATUS.WITHDRAWN:
         return <WithdrawnLine item={item} reason={ask.withdrawnReason} />;
     }

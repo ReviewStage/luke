@@ -2,8 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
     "deploymentEnabled": {
-      "gh-readonly-queue/**": false,
-      "luke/**": false
+      "gh-readonly-queue/**": false
     }
   },
   "services": {
@@ -53,6 +52,10 @@
         {
           "src": "/api/account/integrations/connected",
           "dest": "/api/default.js?route=account/integrations/connected"
+        },
+        {
+          "src": "/api/agents/mcp",
+          "dest": "/api/default.js?route=agents/mcp"
         },
         {
           "src": "/api/github/install",

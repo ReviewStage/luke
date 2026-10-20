@@ -8,10 +8,6 @@ import {
   type Replay,
 } from "@luke/features/agent-replay";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -27,7 +23,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { codingAgentsControl } from "../testing/tasks-control.js";
+import { codingAgentsControl, pushedTranscripts } from "../testing/tasks-control.js";
 import { AgentTab, type TranscriptCards } from "./agent-tab.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import { OpenLinkProvider } from "./use-open-link.js";
@@ -128,24 +124,20 @@ async function drawn(
     },
     { id: "turn", role: MESSAGE_ROLE.ASSISTANT, parts: [{ type: "text", text: "On it." }] },
   ];
-  // Note that only the first read answers, because a read past the cursor waits on the service.
-  let reads = 0;
   const control = codingAgentsControl({
     agents: [agent],
     // An agent's own page lists that agent alone, and reads any other by its id.
     archived: listed ? [source] : [],
     readAgent: (agentId) => Promise.resolve(agentId === source.id ? source : undefined),
     me: DEAN.userId,
-    readTranscript: (): Promise<CodingAgentMessagesAnswerView> => {
-      reads += 1;
-      if (reads > 1) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-      return Promise.resolve({
+    transcripts: pushedTranscripts(() => [
+      {
         messages: [...messages],
         cursor: "2:0",
         status: CODING_AGENT_STATUS.COMPLETED,
         title: null,
-      });
-    },
+      },
+    ]),
     readPullRequest: () =>
       Promise.resolve({
         repository: "acme/app",

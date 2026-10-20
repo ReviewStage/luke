@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { createTask, readTask } from "@luke/database/models/task-store";
 import { getTestDB, joinWorkspace, linearIssueLink, openWorkspace } from "@luke/database/testing";
+import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_STATUS, type TaskStatus } from "@luke/features/task-wire";
@@ -319,6 +320,41 @@ it.layer(getTestDB())("an agent started on a task", (it) => {
         assert.equal(yield* statusOf(filed.id), TASK_STATUS.IN_PROGRESS);
         assert.equal(yield* statusOf(todo.id), TASK_STATUS.IN_PROGRESS);
         assert.equal(yield* statusOf(done.id), TASK_STATUS.DONE);
+      }),
+  );
+  it.effect(
+    "assigns its starter a task no one is assigned to when started by hand, and never one an automation's run starts or one already assigned",
+    () =>
+      Effect.gen(function* () {
+        const { owner, workspaceId } = yield* openConnectedWorkspace;
+        const made = (assigneeId?: string) =>
+          createTask(owner, {
+            organizationId: workspaceId,
+            name: "Invites",
+            repository: RELAY_REPOSITORY,
+            ...(assigneeId === undefined ? undefined : { assigneeId }),
+          });
+        const byHand = yield* made();
+        const byAutomation = yield* made();
+        const { eve } = fakeEve();
+
+        yield* startCodingAgent(eve, owner, taskAsk(byHand.id)).pipe(Effect.provide(services));
+        yield* startCodingAgent(eve, owner, {
+          ...taskAsk(byAutomation.id),
+          automationOrigin: {
+            name: "Nightly",
+            firing: { kind: AUTOMATION_FIRING.SCHEDULE, dueAt: 0 },
+            prompt: "Sweep it.",
+          },
+        }).pipe(Effect.provide(services));
+
+        const assigneeOf = (taskId: string) =>
+          Effect.map(
+            readTask(owner, taskId),
+            (read) => Option.getOrUndefined(read)?.task.assignee?.userId,
+          );
+        assert.equal(yield* assigneeOf(byHand.id), owner);
+        assert.equal(yield* assigneeOf(byAutomation.id), undefined);
       }),
   );
 });

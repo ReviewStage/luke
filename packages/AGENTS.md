@@ -21,12 +21,13 @@ The node a model is shown comes from wire's own emitter, never Effect's
 `JSONSchema.make`, which writes `title` and `description` onto every primitive
 and built-in filter.
 
-What a schema emits is pinned as byte goldens under `fixtures/json-schema/`,
-re-recorded only with `LUKE_UPDATE_FIXTURES=1`. **The bytes are the point** — a
-model provider keys its prompt cache on the text of a request, so a reordered
-key, a widened bound, or a reworded description costs every standing conversation
-its prefix. If a golden fails, that is what it is telling you. Biome is kept off
-those fixture trees for the same reason.
+What a schema emits is pinned as a byte golden under `fixtures/json-schema/`
+only where a model is shown it as a tool's input, re-recorded only with
+`LUKE_UPDATE_FIXTURES=1`. **The bytes are the point** — a model provider keys its
+prompt cache on the text of a request, so a reordered key, a widened bound, or a
+reworded description costs every standing conversation its prefix. If a golden
+fails, that is what it is telling you. Biome is kept off those fixture trees for
+the same reason. A schema no model is shown has no golden.
 
 ## A cycle means a module is in the wrong package
 

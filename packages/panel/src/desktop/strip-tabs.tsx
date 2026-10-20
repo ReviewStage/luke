@@ -201,9 +201,11 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
  * right-click that act on what it shows (`contentActions`), in the same
  * groups, after what its body hands up while it is drawn (`handed`), and
  * none of the tab's own keeping, Close, Close others, and Pin tab, which
- * stay on the right-click alone.
+ * stay on the right-click alone. An agent's own page offers the same in
+ * its toolbar's ⋯ (`desktop-agent-page.tsx`), so a taskless agent is acted
+ * on as a task's is.
  */
-function contentActionGroups(doors: TabDoors): MenuAction[][] {
+export function contentActionGroups(doors: TabDoors): MenuAction[][] {
   const { rename, terminal, copies, archive } = contentActions(doors);
   return [doors.handed ?? [], rename, terminal, copies, archive].filter(
     (group) => group.length > 0,

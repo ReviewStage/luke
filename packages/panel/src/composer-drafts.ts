@@ -489,17 +489,16 @@ export function useInboxItemDrafted(item: Pick<InboxItem, "id" | "revision" | "s
 }
 
 /**
- * The steps of an inbox thread's open `do` ask its draft ticks, as the box
- * reads it now (`draftOfItem`), which its row counts; none where no draft
- * stands. Note that it answers the draft's own list, so a row draws again
- * only as a tick changes, never on a word typed.
+ * The draft an inbox item's box holds as it now stands (`draftOfItem`), its
+ * steps ticked and the answer pressed, which its row and its card read to
+ * show the steps as the box does; none where no draft stands. Note that it
+ * answers the kept draft itself, the same until it changes.
  */
-export function useInboxItemTicked(
+export function useInboxItemDraft(
   item: Pick<InboxItem, "id" | "revision" | "status">,
-): readonly number[] | undefined {
-  return useAtomValue(
-    draftsAtom,
-    (drafts) => drafts.find((kept) => isInbox(kept) && draftOfItem(kept.place, item))?.steps,
+): KeptDraft | undefined {
+  return useAtomValue(draftsAtom, (drafts) =>
+    drafts.find((kept) => isInbox(kept) && draftOfItem(kept.place, item)),
   );
 }
 
