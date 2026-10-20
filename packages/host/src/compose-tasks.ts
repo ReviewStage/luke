@@ -14,9 +14,12 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
   type CodingAgentMessagesAnswerView,
+  codingAgentTranscriptKeySchema,
+  TRANSCRIPT_KIND,
 } from "@luke/features/coding-agent-view";
 import {
   applyMessagesPage,
+  CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
@@ -136,6 +139,7 @@ import {
   Effect,
   Exit,
   FiberHandle,
+  FiberMap,
   Option,
   Queue,
   Result,
@@ -457,6 +461,18 @@ export type TasksClient = Pick<
 /** The service's side of a task's conversation, read as an agent's transcript is. */
 export type TasksConversationClient = Pick<HostedCodingAgentClient, "taskMessages">;
 
+/** Which planning worker's transcript: the task's, by the call that started the worker. */
+class TaskWorkerKey extends Data.Class<{ readonly taskId: string; readonly callId: string }> {}
+
+/** How soon a planning worker's page the service did not answer is asked again. */
+const WORKER_RETRY = Duration.seconds(1);
+
+/** The statuses a planning worker may still write under, while its follow asks on. */
+const WORKER_WRITING: ReadonlySet<string> = new Set([
+  CODING_AGENT_STATUS.STARTING,
+  CODING_AGENT_STATUS.RUNNING,
+]);
+
 export interface TasksDependencies {
   kernel: Pick<HostKernel, "emit" | "report" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
@@ -660,6 +676,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
 
   /** The one read of the open task's conversation; running another interrupts it. */
   const conversationRead = yield* FiberHandle.make<void>();
+
+  /** The planning workers' transcripts main follows for its windows, one fiber each. */
+  const followedWorkers = yield* FiberMap.make<TaskWorkerKey>();
 
   /** The tasks whose call just said something, whose parked conversation read the loop below wakes. */
   const conversationWakes = yield* Queue.sliding<string>(1);
@@ -1387,6 +1406,48 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     });
   }
 
+  /** The planning worker's transcript a follow names, or the invalid-params refusal. */
+  function workerTranscriptOf(
+    params: Parameters<GatewayMethodTable[keyof GatewayMethodTable] & object>[0],
+  ) {
+    return Effect.gen(function* () {
+      const read = readEither(codingAgentTranscriptKeySchema)(unparsedWire(params));
+      if (Result.isFailure(read) || read.success.kind !== TRANSCRIPT_KIND.TASK_WORKER) {
+        return yield* invalid(
+          "following a planning worker's transcript names its task and its call",
+        );
+      }
+      return read.success;
+    });
+  }
+
+  /**
+   * A planning worker's transcript followed on the service's held read, each
+   * page told as it lands, the next asked past it, until the worker ends
+   * with nothing more on its page or the account no longer reaches it. A
+   * page the service did not answer is told and asked again a second later.
+   */
+  function followWorker(
+    taskId: string,
+    callId: string,
+    tell: (page: CodingAgentMessagesAnswerView) => Effect.Effect<void>,
+  ): Effect.Effect<void> {
+    return Effect.gen(function* () {
+      let after = CODING_AGENT_CURSOR_START;
+      while (true) {
+        const page = yield* served(conversations.taskMessages(taskId, { after }, callId));
+        yield* tell(page);
+        if ("failure" in page) {
+          if (page.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return;
+          yield* Effect.sleep(WORKER_RETRY);
+          continue;
+        }
+        after = page.cursor;
+        if (page.messages.length === 0 && !WORKER_WRITING.has(page.status)) return;
+      }
+    });
+  }
+
   const methods: GatewayMethodTable = {
     // The workspaces are read beside the tasks rather than before them, and
     // only where the last read is stale: the first refresh after a launch or
@@ -1485,6 +1546,27 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       }),
     // A file's window is answered to the File tab that asked, coloured here,
     // and held nowhere: the tab keeps the windows it has scrolled through.
+    // A planning worker's transcript is followed for main, each page told as an event.
+    [GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const transcript = yield* workerTranscriptOf(params);
+        const { taskId, callId } = transcript;
+        const tell = (page: CodingAgentMessagesAnswerView) =>
+          Effect.sync(() =>
+            kernel.emit(GATEWAY_EVENT.TRANSCRIPT_CHANGED, carried({ transcript, page })),
+          );
+        const follow = gate()
+          ? followWorker(taskId, callId, tell)
+          : tell({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+        yield* FiberMap.run(followedWorkers, new TaskWorkerKey({ taskId, callId }), follow);
+        return {};
+      }),
+    [GATEWAY_METHOD.TASKS_WORKER_TRANSCRIPT_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { taskId, callId } = yield* workerTranscriptOf(params);
+        yield* FiberMap.remove(followedWorkers, new TaskWorkerKey({ taskId, callId }));
+        return {};
+      }),
     [GATEWAY_METHOD.TASKS_FILE]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksFileParamsSchema)(unparsedWire(params));
@@ -2418,6 +2500,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(issueReads);
       yield* FiberHandle.clear(conversationRead);
       yield* FiberHandle.clear(boardFollow);
+      yield* FiberMap.clear(followedWorkers);
       yield* serial(
         Effect.sync(() => {
           workspacesAskedAt = undefined;
