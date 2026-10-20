@@ -1476,7 +1476,7 @@ test("a thread's row leads with what its open ask asks, as the ask's box says it
   );
 });
 
-test("a thread's row media are the pictures its messages' words draw by address and the pages they link to, in the order written, then their files' pictures, message by message, each once and four at most", () => {
+test("a thread's row media are the pictures its messages' words draw by address and the pages they link to, outside code, in the order written, then their files' pictures, message by message, each once and four at most", () => {
   const itemId = "a1b2c3d4-0000-4000-8000-0000000000f1";
   const task = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
   const place = { kind: LINK_PLACE.INBOX_ITEM, planId: task, itemId } as const;
@@ -1517,10 +1517,18 @@ test("a thread's row media are the pictures its messages' words draw by address 
   ]);
   const another = { ...place, itemId: "a1b2c3d4-0000-4000-8000-0000000000f2" };
   const foreign = `![Not ours](<${linkOf(another, "acme")}/files/${elsewhere}>)`;
+  const quoted = [
+    foreign,
+    `Write \`${picture(chart)}\` to draw it,`,
+    "```md",
+    picture(after),
+    "```",
+    `or link it bare: ${linkOf(place, "acme")}/files/${sent}`,
+  ].join("\n");
   assert.deepEqual(
-    inboxMedia({ ...threaded, thread: [{ ...asked, text: `${foreign} \`${picture(chart)}\`` }] }),
-    [{ kind: INBOX_MEDIA.IMAGE, attachmentId: chart }],
-    "another item's picture is none of this row's",
+    inboxMedia({ ...threaded, thread: [{ ...asked, text: quoted }] }),
+    [],
+    "another item's picture, one quoted in code, and a bare address draw no picture, so the row shows none",
   );
 });
 

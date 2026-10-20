@@ -1,6 +1,10 @@
 import type { FileChip } from "@luke/features/attachment-model";
 import type { CodingAgentAttachment } from "@luke/features/coding-agent-wire";
-import { inboxAttachmentIdsIn } from "@luke/features/inbox-attachment-link";
+import {
+  INBOX_PICTURE_IN_WORDS,
+  inboxAttachmentOf,
+  inboxPictureDestination,
+} from "@luke/features/inbox-attachment-link";
 import {
   codeLinesReadable,
   fieldValueWords,
@@ -34,7 +38,7 @@ import {
   knownResponse,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE, readLink } from "@luke/features/luke-link";
-import { linksIn } from "@luke/features/mention-link";
+import { insideCode, linksIn } from "@luke/features/mention-link";
 import type { TaskFileRequest, TaskSummary } from "@luke/features/task-wire";
 import type { TaskCode, TasksFileAnswer } from "@luke/features/tasks-view";
 import type { AppInboxTasklessItem } from "@luke/host/app-state";
@@ -1078,9 +1082,26 @@ export function inboxMedia(item: InboxItem): readonly InboxMedia[] {
 }
 
 /**
+ * The item's own pictures a message's words draw, where each is drawn: a
+ * picture, `![alt](address)`, whose address names one of the item's, as
+ * the pane draws it (`inbox-pictures.tsx`). Note that one written in code
+ * is code, which the pane draws as words, and a bare address is a link.
+ */
+function picturesDrawn(
+  text: string,
+  itemId: string,
+): readonly { readonly at: number; readonly attachmentId: string }[] {
+  return [...text.matchAll(INBOX_PICTURE_IN_WORDS)].flatMap((match) => {
+    if (insideCode(text, match.index)) return [];
+    const named = inboxAttachmentOf(inboxPictureDestination(match[2] ?? ""));
+    return named?.itemId === itemId ? [{ at: match.index, attachmentId: named.attachmentId }] : [];
+  });
+}
+
+/**
  * The media of an item drawn as its thread (`inboxMedia`): each message's
  * in turn, oldest first, the pictures its words draw by their addresses
- * (`inbox-attachment-link.ts`) and the pages it links to in the order its
+ * (`picturesDrawn`) and the pages it links to, outside code, in the order its
  * words name them, each once, then the pictures among its files.
  */
 function threadMedia(item: InboxItem, thread: readonly InboxMessage[]): readonly InboxMedia[] {
@@ -1098,8 +1119,7 @@ function threadMedia(item: InboxItem, thread: readonly InboxMessage[]): readonly
   };
   for (const message of thread) {
     const named: { readonly at: number; readonly media: InboxMedia }[] = [];
-    for (const attachmentId of inboxAttachmentIdsIn(message.text, item.id)) {
-      const at = message.text.indexOf(`/${attachmentId}`);
+    for (const { at, attachmentId } of picturesDrawn(message.text, item.id)) {
       named.push({ at, media: { kind: INBOX_MEDIA.IMAGE, attachmentId } });
     }
     for (const link of linksIn(message.text)) {
