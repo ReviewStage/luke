@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -111,9 +110,7 @@ function button(container: HTMLElement, words: string): HTMLButtonElement | unde
 }
 
 beforeEach(() => {
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

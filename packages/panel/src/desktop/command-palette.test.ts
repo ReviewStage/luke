@@ -14,7 +14,7 @@ import {
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
@@ -609,10 +609,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     createdAt: 1,
   } as const;
   const listed: (string | undefined)[] = [];
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       listed.push(payload.workspaceId);
@@ -1309,10 +1306,7 @@ async function settle(): Promise<void> {
 function membersAnswer(
   members: () => Promise<PortActResult<typeof ACT_KIND.WORKSPACE_MEMBERS_READ>>,
 ): void {
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: members });
 }
 

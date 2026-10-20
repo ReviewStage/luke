@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
@@ -18,6 +17,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { FAKE_ANSWER } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
@@ -117,7 +117,7 @@ beforeEach(() => {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
-      act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
+      act: () => Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT }),
       recordSurfaceEvent: () => undefined,
     },
   });

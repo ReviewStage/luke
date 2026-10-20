@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { Effect } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -46,9 +45,7 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   window.localStorage.setItem("luke.new-task-mode", "plan");
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

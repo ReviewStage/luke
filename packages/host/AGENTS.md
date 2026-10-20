@@ -79,7 +79,7 @@ and `settings` already reaches `features`. This is the lowest package holding bo
 renderer-and-main vocabulary, kept here because this is the lowest package that
 reaches every package they name (`@luke/gateway` cannot, since `@luke/voice`
 already depends on it), and `@luke/host/bridge` is the window's bridge contract
-built from those two, which the preload builds its bridge from and a web
+built from the app state, which the preload builds its bridge from and a web
 bridge will too; `@luke/host/contract` is the act port's oRPC contract that the
 window's client is typed by. The renderer may import only these four doors from this
 package, so they and everything they import stay free of Node.

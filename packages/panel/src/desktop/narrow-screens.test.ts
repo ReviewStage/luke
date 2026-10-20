@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR } from "@luke/features/task-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -153,9 +152,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   sheets = layContainersAt({});
 });
 

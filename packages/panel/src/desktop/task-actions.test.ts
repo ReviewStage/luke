@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task, type TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { DOCUMENT_REGION, TASKS_PAGE, type TaskMark } from "@luke/ui/tasks-model";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { act, createElement, type ReactElement } from "react";
@@ -452,9 +452,7 @@ test("no sidebar plan wears the attention mark where its own workspace reaches i
 /** Main's clipboard, keeping each copy the window asks of it. */
 function installClipboard(): string[] {
   const copied: string[] = [];
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   return copied;
 }
@@ -585,8 +583,6 @@ test("a task's card says you of the reader's own task outside a member directory
 function installMembers(members: readonly { userId: string; name: string }[] | undefined): void {
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." }),
   });
   fakeActPort({
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () =>

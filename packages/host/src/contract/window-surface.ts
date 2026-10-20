@@ -38,7 +38,7 @@ const savedFileName = EffectSchema.String.check(
 
 /**
  * A submission as its own domain's reader admits it (`feedbackSubmission`),
- * carried on as it arrived, as `app:act` carried it: the reader is the one
+ * carried on as it arrived: the reader is the one
  * statement of its bounds, so it is not restated as a struct here.
  */
 const feedbackSubmissionSchema = EffectSchema.declare(

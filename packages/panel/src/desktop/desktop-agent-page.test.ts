@@ -28,7 +28,7 @@ import {
 import type { Task } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -42,7 +42,8 @@ import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js"
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
-  type AnyActOutcome,
+  FAKE_ANSWER,
+  type FakeActAnswer,
   fakeActs,
   fakeAppBridge,
   fakeAppBridgeCalls,
@@ -185,18 +186,18 @@ beforeEach(() => {
   workspace = [];
   gitHub = new Map();
   fakeActs({
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: { automations: [SWEEP] },
         });
       }
       if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
         return Promise.resolve(
           members === undefined
-            ? { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }
-            : { status: ACT_OUTCOME_STATUS.DONE, value: members },
+            ? { status: FAKE_ANSWER.REFUSED, reason: "Not here." }
+            : { status: FAKE_ANSWER.DONE, value: members },
         );
       }
       told.push(request);
@@ -214,7 +215,7 @@ beforeEach(() => {
             ],
           },
         };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_ARCHIVE) {
         archives.push(request.payload);
@@ -226,45 +227,45 @@ beforeEach(() => {
         const value = archiveRefused
           ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
           : { agent: back };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_MESSAGES && transcript !== undefined) {
         // Note that only the first read answers, because a read past the cursor waits on the service, and one answered at once would be read again without end.
         const value = transcript;
         transcript = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION && earlier > 0) {
         const value = { pullRequest: { reviewers: [], conversation: [], earlier } };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_PULL_REQUEST && published !== undefined) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: published });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: published });
       }
       if (request.kind === ACT_KIND.GITHUB_OPEN) {
         openedOnGitHub.push(request.payload.url);
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: undefined });
       }
       if (request.kind === ACT_KIND.TASKS_PULL_REQUEST) {
         const { number } = request.payload;
         const held = gitHub.get(number);
         const value = held === undefined ? null : { number, author: "octo-dev", ...held };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { agents: workspace } });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agents: workspace } });
       }
       if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
         read.push(request.payload.agentId);
         const value = pages.length > 1 ? pages.shift() : pages[0];
         if (holdPage) {
           return new Promise((resolve) => {
-            answerHeld = () => resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+            answerHeld = () => resolve({ status: FAKE_ANSWER.DONE, value });
           });
         }
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+        return Promise.resolve({ status: FAKE_ANSWER.DONE, value });
       }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+      return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Not in this test." });
     },
   });
   handCapabilities(DESKTOP_CAPABILITIES);

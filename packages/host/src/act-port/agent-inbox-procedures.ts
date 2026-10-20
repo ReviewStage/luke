@@ -33,9 +33,8 @@ import type {
 } from "@luke/features/coding-agent-view";
 import type { InboxReadAllRequest } from "@luke/features/inbox-wire";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { AGENT_INBOX_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /** What the Inbox and chat procedures reach: the host's asks of the service. */
 export interface AgentInboxProceduresDependencies {

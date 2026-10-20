@@ -12,7 +12,7 @@ import {
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
@@ -20,7 +20,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { type AnyAct, type AnyActOutcome, fakeActs } from "../testing/app-bridge.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -133,11 +133,11 @@ afterEach(() => {
 });
 
 /** What the main process answers: a task's agents, and the workspace's searched or newest. */
-function answer(request: AnyAct): AnyActOutcome {
-  if (!answering) return { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not now." };
+function answer(request: AnyAct): FakeActAnswer {
+  if (!answering) return { status: FAKE_ANSWER.REFUSED, reason: "Not now." };
   if (request.kind === ACT_KIND.CODING_AGENTS_LIST) {
     const agents = request.payload.taskId === BILLING.id ? [PRORATE] : [];
-    return { status: ACT_OUTCOME_STATUS.DONE, value: { agents } };
+    return { status: FAKE_ANSWER.DONE, value: { agents } };
   }
   if (request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST) {
     const { words } = request.payload;
@@ -147,12 +147,12 @@ function answer(request: AnyAct): AnyActOutcome {
         : [SWEEPER, AUDITOR].filter((agent) =>
             agent.title?.toLowerCase().includes(words.toLowerCase()),
           );
-    return { status: ACT_OUTCOME_STATUS.DONE, value: { agents } };
+    return { status: FAKE_ANSWER.DONE, value: { agents } };
   }
   if (request.kind === ACT_KIND.CODING_AGENTS_PAGE) {
     return request.payload.agentId === ARCHIVIST.id
       ? {
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: {
             agent: {
               ...ARCHIVIST,
@@ -163,11 +163,11 @@ function answer(request: AnyAct): AnyActOutcome {
           },
         }
       : {
-          status: ACT_OUTCOME_STATUS.DONE,
+          status: FAKE_ANSWER.DONE,
           value: { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND },
         };
   }
-  return { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
+  return { status: FAKE_ANSWER.DONE, value: undefined };
 }
 
 /** Main's document as `STATE`, its billing row naming the prorater and its agents with no task the sweeper, as the plan list carries them. */
@@ -220,7 +220,7 @@ async function drawnElement(
   fakeActs({
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(state),
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       told.push(request);
       return Promise.resolve(answer(request));
     },

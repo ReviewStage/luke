@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import { LIVE_SESSION_PHASE } from "@luke/gateway";
 import {
-  type ActPortDependencies,
-  createActPortHandler,
-  type PlatformActProcedures,
+  type ActSender,
+  actPortHandlerOf,
+  pushProcedures,
   WindowPushes,
 } from "@luke/host/act-port";
-import type { ActSender } from "@luke/host/act-router";
 import { PUSH } from "@luke/host/contract";
 import { AVATAR_FEED_KIND } from "@luke/voice/avatar";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
@@ -38,23 +37,8 @@ afterEach(() => {
 /** Main's side of every window: the pushes it holds, and the port server each window's port is upgraded with. */
 function mainProcess() {
   const pushes = new WindowPushes();
-  // SAFETY: these tests open the push stream alone, so no act procedure's host is ever read.
-  const acts = {
-    account: {},
-    accountAsks: { host: {} },
-    agentInbox: { host: {} },
-    agents: { host: {}, notices: {} },
-    automations: { host: {} },
-    factory: { host: {} },
-    integrations: { host: {} },
-    settings: {},
-    taskIssues: { host: {} },
-    tasks: { host: {} },
-    workspaces: { host: {} },
-  } as unknown as Omit<ActPortDependencies, "pushes">;
-  // SAFETY: as above, no platform kind is called here.
-  const platform = {} as PlatformActProcedures<unknown>;
-  const handler = createActPortHandler({ ...acts, pushes }, platform);
+  // Note that these tests open the push stream alone, so the port serves its procedure and no act.
+  const handler = actPortHandlerOf(pushProcedures(pushes));
   /** One page of a window standing as `actor`: its act port opened, and its push stream on it. */
   const page = (actor: ActSender) => {
     const { port1, port2 } = new MessageChannel();

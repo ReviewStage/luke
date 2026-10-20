@@ -8,10 +8,9 @@ import type { AppSettings, SettingsUpdateResult } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import type { ORPCError } from "@orpc/server";
 import { Effect, Option } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { SETTINGS_ACT_KIND, type SettingUpdatePayload } from "../contract/index.js";
 import type { HostOperator } from "../host-operator.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /** What one client-side effect is handed: the snapshot, and whether to wait. */
 interface ClientSettingSideEffectContext {

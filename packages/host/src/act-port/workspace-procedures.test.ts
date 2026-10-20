@@ -7,10 +7,8 @@ import {
   type TasksWorkspaceGitHubConnectAnswer,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_PHOTO_TYPE, WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { createORPCClient, ORPCError } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
+import { ORPCError } from "@orpc/client";
+import { Effect } from "effect";
 import {
   ALREADY_INVITED_REFUSAL,
   LINEAR_UNAVAILABLE_REFUSAL,
@@ -24,15 +22,12 @@ import {
   type PortActResult,
   WORKSPACE_ACT_KIND,
 } from "../contract/index.js";
+import type { ActSender } from "./base.js";
+import { type TestActPort, testActPort } from "./testing.js";
 import {
-  type AccountAskProceduresDependencies,
-  type ActPortDependencies,
-  createActPortHandler,
-  type PlatformActProcedures,
-  type TasksProceduresDependencies,
-  WindowPushes,
   type WorkspaceProceduresDependencies,
-} from "./index.js";
+  workspaceProcedures,
+} from "./workspace-procedures.js";
 
 /**
  * The workspace acts, through the act port as a window calls them: only a
@@ -189,10 +184,10 @@ interface Script {
   linearConnectUrl: string;
 }
 
-const opened: MessagePort[] = [];
+const ports: TestActPort<unknown>[] = [];
 
 afterEach(() => {
-  for (const port of opened.splice(0)) port.close();
+  for (const port of ports.splice(0)) port.close();
 });
 
 /**
@@ -306,58 +301,17 @@ function windowPort(actor: ActSender, options: { trusted?: boolean } = {}) {
     workspaceInvitationCancel: (params) =>
       ask(`cancel:${params.workspaceId}:${params.invitationId}`, () => ({ invitations: [] })),
   };
-  // SAFETY: no account ask is called here, so the account asks' host is never reached.
-  const accountAsks = { host: {} } as AccountAskProceduresDependencies;
-  // SAFETY: no platform act is called here, so no platform procedure is reached.
-  const NO_PLATFORM = {} as PlatformActProcedures<unknown>;
-  // SAFETY: no task act is called here, so the tasks' host and doors are never reached.
-  const tasks = { host: {} } as TasksProceduresDependencies;
-  // SAFETY: no account or settings act is called here, so neither's dependencies are reached.
-  const unreached = { account: {}, settings: {} } as unknown as Pick<
-    ActPortDependencies,
-    "account" | "settings"
-  >;
-  // SAFETY: no agent, inbox, chat, automation, factory, integration, or task issue act is called here, so their hosts are never reached.
-  const elsewhere = {
-    agentInbox: { host: {} },
-    agents: { host: {}, notices: {} },
-    automations: { host: {} },
-    factory: { host: {} },
-    integrations: { host: {} },
-    taskIssues: { host: {} },
-  } as Pick<
-    ActPortDependencies,
-    "agentInbox" | "agents" | "automations" | "factory" | "integrations" | "taskIssues"
-  >;
-  const handler = createActPortHandler(
-    {
-      ...unreached,
-      ...elsewhere,
-      accountAsks,
-      pushes: new WindowPushes(),
-      tasks,
-      workspaces: {
-        host,
-        openExternal: (url) => {
-          browsed.push(url);
-          return Promise.resolve();
-        },
+  const port = testActPort(
+    workspaceProcedures({
+      host,
+      openExternal: (url) => {
+        browsed.push(url);
+        return Promise.resolve();
       },
-    },
-    NO_PLATFORM,
-  );
-  const { port1, port2 } = new MessageChannel();
-  opened.push(port1, port2);
-  handler.upgrade(port1, {
-    context: () => ({
-      actor,
-      trusted: options.trusted ?? true,
-      "effect/context": Context.empty(),
     }),
-  });
-  port1.start();
-  const client: ActPortClient = createORPCClient(new RPCLink({ port: port2 }));
-  port2.start();
+  );
+  ports.push(port);
+  const client = port.as(actor, { trusted: options.trusted ?? true });
   return { client, asked, browsed, script };
 }
 
@@ -617,7 +571,7 @@ it("a payload its kind's schema refuses is refused in the kind's own words, and 
   assert.deepEqual(asked, []);
 });
 
-it("a payload carrying a key its kind's schema does not name is refused, as app:act refused it, and the host is not asked", async () => {
+it("a payload carrying a key its kind's schema does not name is refused, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
 
   assert.deepEqual(

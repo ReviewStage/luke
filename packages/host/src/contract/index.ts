@@ -116,8 +116,3 @@ export type PortActPayload<Kind extends PortActKind> = InferContractRouterInputs
 export type PortActResult<Kind extends PortActKind> = InferContractRouterOutputs<
   typeof actContract
 >[Kind];
-
-/** Whether a kind rides the act port rather than `app:act`. */
-export function isPortActKind(kind: string): kind is PortActKind {
-  return Object.hasOwn(actContract, kind);
-}

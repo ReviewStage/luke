@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import type { Task } from "@luke/features/task-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { Editor, TiptapEditorHTMLElement } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { Effect } from "effect";
@@ -42,7 +41,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
   installEditorLayout();
-  fakeAppBridge({ act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }) });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

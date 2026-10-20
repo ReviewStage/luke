@@ -35,7 +35,6 @@ import {
 } from "@luke/features/tasks-view";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
 import {
   ACT_ERROR,
@@ -46,6 +45,7 @@ import {
   TASKS_ACT_KIND,
 } from "../contract/index.js";
 import { highlightSnippet } from "../task-code.js";
+import type { ActSender } from "./base.js";
 import { type TasksProceduresDependencies, tasksProcedures } from "./tasks-procedures.js";
 import { type TestActPort, testActPort } from "./testing.js";
 
@@ -645,7 +645,7 @@ it("a payload its kind's schema refuses is refused in the kind's own words, and 
   assert.deepEqual(asked, []);
 });
 
-it("a payload carrying a key its kind's schema does not name is refused, as app:act refused it, and the host is not asked", async () => {
+it("a payload carrying a key its kind's schema does not name is refused, and the host is not asked", async () => {
   const { client, asked } = windowPort(PANEL);
 
   assert.deepEqual(

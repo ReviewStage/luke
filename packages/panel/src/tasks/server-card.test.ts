@@ -21,7 +21,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { MENTION_KIND, type MentionPlace, mentionMarkdown } from "@luke/features/mention-link";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { SERVER_MENTION_NOTE } from "@luke/ui/agent-servers-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { Effect } from "effect";
@@ -102,10 +102,7 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   // The main process answers the panel where the integrations stand and Linear's tools; nothing else here.
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.INTEGRATIONS_STATUS]: () => Promise.resolve({ integrations: integrationStatuses() }),
     [ACT_KIND.INTEGRATIONS_TOOLS]: () => Promise.resolve({ tools: TOOLS }),

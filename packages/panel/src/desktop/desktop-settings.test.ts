@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   AGENT_ACT_KIND,
   AGENT_INBOX_ACT_KIND,
@@ -47,14 +47,14 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 /** The task kinds on the act port, which the call-card test's fake refuses. */
 const TASK_KINDS: ReadonlySet<string> = new Set(Object.values(TASKS_ACT_KIND));
 
-/** The platform's updater, Browser tab, and window acts, which this window's fake refuses as `app:act` refused them before they moved onto the port. */
+/** The platform's updater, Browser tab, and window acts, which this window's fake refuses. */
 const PLATFORM_KINDS: ReadonlySet<string> = new Set([
   ...Object.values(BROWSER_ACT_KIND),
   ...Object.values(UPDATE_ACT_KIND),
   ...Object.values(WINDOW_SURFACE_ACT_KIND),
 ]);
 
-/** Whether a port kind is one of the agents' reads, their Inbox's, or the chat's, which a window with no agents is refused as `app:act` refused it. */
+/** Whether a port kind is one of the agents' reads, their Inbox's, or the chat's, which a window with no agents is refused. */
 const isAgentRead = (kind: string): boolean =>
   Object.values<string>({ ...AGENT_ACT_KIND, ...AGENT_INBOX_ACT_KIND }).includes(kind) &&
   kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN;
@@ -245,9 +245,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeAppPlatform(QUIET_PANEL);
 });
 
@@ -673,14 +671,10 @@ test("the plan template's version history keeps a call's card at the foot of its
   const sent: string[] = [];
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: (request: { kind: string }) => {
-      sent.push(request.kind);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-    },
   });
   fakeActPortAnswering((request) => {
     sent.push(request.kind);
-    // A task kind is refused here as `app:act` refused it, since a task read answered nothing is no view.
+    // A task kind is refused here, since a task read answered nothing is no view.
     if (TASK_KINDS.has(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     if (PLATFORM_KINDS.has(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     if (isAgentRead(request.kind)) return Promise.reject(refusedOnPort("Not here."));
@@ -732,7 +726,6 @@ test("while the plan template is read its page stands its name over placeholder 
   const { promise: read, resolve: land } = Promise.withResolvers<void>();
   fakeAppBridge({
     ...fakeAppBridgeCalls(),
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
   fakeActPort({
     [ACT_KIND.PLAN_TEMPLATE_READ]: () =>

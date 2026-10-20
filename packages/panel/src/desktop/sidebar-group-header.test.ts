@@ -3,7 +3,6 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -35,9 +34,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

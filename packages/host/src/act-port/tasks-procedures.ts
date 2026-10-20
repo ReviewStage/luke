@@ -62,10 +62,9 @@ import {
   type TasksWriteSectionParams,
 } from "@luke/features/tasks-view";
 import { Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
 import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
 import { TASKS_ACT_KIND } from "../contract/index.js";
-import { actPort } from "./base.js";
+import { type ActSender, actPort } from "./base.js";
 
 /** What the task procedures are handed: the host, and the doors of the window's process they open or read. */
 export interface TasksProceduresDependencies {

@@ -24,7 +24,7 @@ import {
   type TaskIssueChoice,
 } from "@luke/features/task-issue-wire";
 import { TASK_STATUS, TASK_TREE_ENTRY, type TaskStatus } from "@luke/features/task-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
 import { Effect } from "effect";
@@ -35,7 +35,8 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
 import {
   type AnyAct,
-  type AnyActOutcome,
+  FAKE_ANSWER,
+  type FakeActAnswer,
   fakeActPort,
   fakeActs,
   fakeAppBridge,
@@ -100,9 +101,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
   fakeActPort({});
 });
 
@@ -429,12 +428,12 @@ test("Shift+Return is a new line, and the agent is handed both lines", async () 
 test("once a repository is chosen, an @ offers its files, read through the workspace, and the row chosen is drawn as its chip and handed to the agent as its link", async () => {
   const told: AnyAct[] = [];
   fakeActs({
-    act: (request: AnyAct): Promise<AnyActOutcome> => {
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
       told.push(request);
       return Promise.resolve(
         request.kind === ACT_KIND.TASKS_TREE
           ? {
-              status: ACT_OUTCOME_STATUS.DONE,
+              status: FAKE_ANSWER.DONE,
               value: {
                 folder: {
                   path: "",
@@ -445,7 +444,7 @@ test("once a repository is chosen, an @ offers its files, read through the works
                 },
               },
             }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+          : { status: FAKE_ANSWER.UNKNOWN_ACT },
       );
     },
   });

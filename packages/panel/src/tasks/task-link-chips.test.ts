@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
-import { ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { Effect } from "effect";
 import { act, createElement, type ReactNode } from "react";
@@ -51,9 +50,7 @@ beforeAll(() => Effect.runPromise(editorBundleLanded));
 
 beforeEach(() => {
   installEditorLayout();
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

@@ -12,7 +12,6 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { MESSAGE_ROLE } from "@luke/wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -223,9 +222,7 @@ async function forkedAtInTab(
   status: CodingAgentStatus,
   messages: readonly CodingAgentMessage[],
 ): Promise<readonly Omit<AgentFork, "agentId" | "opening">[]> {
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   const agent = summary(SOURCE, { status, brief: CODING_AGENT_BRIEF.PROMPT });
   // Note that only the first read answers, because a read past the cursor waits on the service.
   let reads = 0;

@@ -9,7 +9,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import type { Failure } from "@luke/features/failure-remedy";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { ACT_KIND, type ActKind } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActPayload } from "@luke/host/contract";
 import type { WireBoundaryInput } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -42,8 +42,8 @@ interface Standing {
   archived?: boolean;
 }
 
-/** Any kind the hook asks: one `app:act` carries, or one the act port answers. */
-type AnyKind = ActKind | PortActKind;
+/** Any kind the hook asks. */
+type AnyKind = PortActKind;
 
 /** One act as the hook asked it. */
 interface Asked {

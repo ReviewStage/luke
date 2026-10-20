@@ -19,7 +19,7 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -182,9 +182,7 @@ beforeEach(() => {
   automationReads = [];
   installScrollIntoView();
   installEditorLayout();
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: ({ agentId }) => {
       const value: CodingAgentInboxAnswerView = {

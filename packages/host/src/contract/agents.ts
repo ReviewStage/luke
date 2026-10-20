@@ -2,7 +2,7 @@
  * agents.ts -- the Tasks tab's core asks of the host about a task's coding agents, as procedures.
  *
  * A kind that carries nothing takes `undefined` alone, so a window calls it
- * with no payload and one sent anything is refused, as `app:act` refused it.
+ * with no payload and one sent anything is refused.
  * Each output is its view schema flipped, so oRPC's output check encodes the
  * row's value into what crosses the port, as every act contract's does. What an
  * agent published is read here too: its pull request, its changes, its Pull
