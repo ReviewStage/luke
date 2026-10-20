@@ -57,3 +57,25 @@ describe("writeSettingsFileAtomic", () => {
     ),
   );
 });
+
+describe("a write that cannot land", () => {
+  it.effect("leaves no temporary file behind when its rename fails", () =>
+    withDirectory((directory) =>
+      Effect.gen(function* () {
+        const fileSystem = yield* FileSystem.FileSystem;
+        // A folder that holds a file where the settings file goes: no rename can replace it.
+        yield* fileSystem.makeDirectory(path.join(directory, SETTINGS_FILE_NAME, "held"), {
+          recursive: true,
+        });
+
+        const failed = yield* Effect.flip(
+          writeSettingsFileAtomic(directory, '{"version":3}\n', "tab-1"),
+        );
+
+        assert.equal(failed._tag, "PlatformError");
+        const entries = yield* fileSystem.readDirectory(directory);
+        assert.deepEqual([...entries].sort(), [SETTINGS_FILE_NAME]);
+      }),
+    ),
+  );
+});
