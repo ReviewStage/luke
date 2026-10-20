@@ -1953,7 +1953,9 @@ ul.actor-stack {
    measure in the middle of the column, as they keep to it in a wide side
    panel, so the list's card and the composer's share both edges. The
    Inbox's pane is laid out the same way, its thread at that measure, the
-   box flowing at the thread's end, and what stands docked under it too. */
+   box flowing at the thread's end, and what stands docked under it too.
+   The thread's log is named by both its classes, so it keeps this inset
+   over the one a side panel gives a transcript's log. */
 .desktop-agent,
 .desktop-inbox {
   --reading-room: calc((100% - var(--luke-page-measure)) / 2);
@@ -1969,7 +1971,7 @@ ul.actor-stack {
 .desktop-agent .agent-published-dock,
 .desktop-agent .draft-fork-dock,
 .desktop-agent .agent-composer,
-.desktop-inbox .inbox-board,
+.desktop-inbox .conversation-log.inbox-board,
 .desktop-inbox > .agent-composer,
 .desktop-inbox .inbox-next-dock {
   padding-inline: max(var(--content-inset), var(--reading-room));
@@ -2140,9 +2142,10 @@ ul.actor-stack {
   white-space: pre;
 }
 
-/* The transcript's way back to its newest line stands on the column's own
-   ground rather than the panel's. */
-.desktop-agent .conversation-scroll {
+/* The transcript's way back to its newest line, and an Inbox thread's,
+   stands on the column's own ground rather than the panel's. */
+.desktop-agent .conversation-scroll,
+.desktop-inbox .conversation-scroll {
   --luke-button-ground: var(--luke-color-ground);
 }
 

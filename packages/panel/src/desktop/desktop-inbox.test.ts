@@ -59,7 +59,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, onTestFinished, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { DRAFT_WORD } from "../draft-mark.js";
@@ -2993,16 +2993,15 @@ test("a settled item offers, over its box, the next item that needs you, by its 
   assert.equal(offered(), null);
 });
 
-test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's top", async () => {
+test("Next hands the keyboard to the item it opens, its way back one column wide and its row split, and the item opens at its thread's newest message, wherever the last was scrolled", async () => {
+  layOutBoards({ height: 1200 });
   const { page } = mount();
   await settle();
   const next = () =>
     page.querySelector<HTMLButtonElement>('.inbox-view-items [aria-label="Next item"] button');
   act(() => rowNamed(page, "How is a failed email retried?").click());
-  // Note that the thread's scroller is the area its board stands in.
-  const board = page.querySelector<HTMLElement>(".inbox-view-items .inbox-board")?.parentElement;
-  assert.ok(board, "the item's thread");
-  board.scrollTop = 600;
+  const board = boardOf(itemPane(page));
+  scrollBoard(board, 200);
   next()?.focus();
   act(() => next()?.click());
   assert.equal(readTitle(page), "Alert at 80%?");
@@ -3010,7 +3009,8 @@ test("Next hands the keyboard to the item it opens, its way back one column wide
     document.activeElement === rowNamed(page, "Alert at 80%?"),
     "split, the keyboard is on its row",
   );
-  assert.equal(board.scrollTop, 0, "the next item opens at its top");
+  assert.equal(board.scrollTop, 800, "the next item opens at its newest message");
+  assert.equal(scrollButton(itemPane(page)), null, "at its end, no way back is offered");
 
   layOut(page, 800);
   act(() => backToList(page).click());
@@ -5815,83 +5815,121 @@ async function mountThread(shown: InboxItem): Promise<HTMLElement> {
   return itemPane(page);
 }
 
-/** Where the thread's question stands under the board, 400px tall at the window's top, as the test lays it. */
-let questionAt = { y: 900, height: 300 };
+/** How tall the room is that a thread's board shows, as the tests below lay it out. */
+const BOARD_ROOM = 400;
 
-/** Opens `shown` in an Inbox standing in a shell of the room given, its thread taller than its board and its question at `questionAt`, answering the board. */
-async function openInRoom(room: string, shown: InboxItem, question: string): Promise<HTMLElement> {
-  inboxes = new Map([
-    [BILLING.id, [RETRY, shown]],
-    [INVITES.id, [EXPIRY]],
-  ]);
-  // The shell the Inbox stands in says its room, as the window's does.
-  document.body.className = "desktop-shell";
-  document.body.dataset.room = room;
-  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-    if (this.querySelector(":scope > .inbox-board") !== null) {
-      return DOMRect.fromRect({ y: 0, height: 400 });
-    }
-    if (this.matches(question)) return DOMRect.fromRect(questionAt);
-    return DOMRect.fromRect();
-  });
-  const { page } = mount();
-  await settle();
-  act(() => rowNamed(page, shown.title).click());
-  await settle();
-  return (
-    itemPane(page).querySelector<HTMLElement>(".inbox-board")?.parentElement ??
-    assert.fail("the thread")
+/** The scroll measures jsdom gives no element, which `layOutBoards` stands in for. */
+const SCROLL_MEASURES = ["scrollHeight", "clientHeight", "scrollTop"] as const;
+
+/**
+ * Lays out every thread's board (the pane's log) as the window would:
+ * `layout.height` tall, read anew each time, in a room `BOARD_ROOM` tall,
+ * its scroll held between its top and its end as a browser holds it. Any
+ * other element keeps jsdom's own measures. Taken down as the test ends.
+ */
+function layOutBoards(layout: { height: number }): void {
+  const tops = new WeakMap<Element, number>();
+  const board = (element: Element) =>
+    element.getAttribute("role") === "log" && element.closest(".inbox-view-items") !== null;
+  const jsdoms = SCROLL_MEASURES.map(
+    (name) => [name, Object.getOwnPropertyDescriptor(Element.prototype, name)] as const,
   );
+  const jsdom = (name: (typeof SCROLL_MEASURES)[number]) =>
+    jsdoms.find(([held]) => held === name)?.[1] ?? assert.fail(`jsdom's ${name}`);
+  Object.defineProperties(Element.prototype, {
+    scrollHeight: {
+      configurable: true,
+      get(this: Element) {
+        return board(this) ? layout.height : jsdom("scrollHeight").get?.call(this);
+      },
+    },
+    clientHeight: {
+      configurable: true,
+      get(this: Element) {
+        return board(this) ? BOARD_ROOM : jsdom("clientHeight").get?.call(this);
+      },
+    },
+    scrollTop: {
+      configurable: true,
+      get(this: Element) {
+        return board(this) ? (tops.get(this) ?? 0) : jsdom("scrollTop").get?.call(this);
+      },
+      set(this: Element, to: number) {
+        if (!board(this)) return jsdom("scrollTop").set?.call(this, to);
+        tops.set(this, Math.max(0, Math.min(to, layout.height - BOARD_ROOM)));
+      },
+    },
+  });
+  onTestFinished(() => {
+    for (const [name, descriptor] of jsdoms) {
+      if (descriptor !== undefined) Object.defineProperty(Element.prototype, name, descriptor);
+    }
+  });
 }
 
-/** Takes down the Inbox and the shell `openInRoom` stood it in. */
-function leaveRoom(): void {
-  vi.restoreAllMocks();
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-  document.body.removeAttribute("class");
-  delete document.body.dataset.room;
-  questionAt = { y: 900, height: 300 };
+/** The pane's thread, its board, which scrolls. */
+function boardOf(pane: HTMLElement): HTMLElement {
+  return pane.querySelector<HTMLElement>('[role="log"]') ?? assert.fail("the thread's board");
+}
+
+/** Scrolls `board` to `top` as the reader would, so the pane hears it. */
+function scrollBoard(board: HTMLElement, top: number): void {
+  board.scrollTop = top;
+  act(() => {
+    board.dispatchEvent(new Event("scroll", { bubbles: true }));
+  });
+}
+
+/** The transcript's way back to the newest line, where the pane shows it. */
+function scrollButton(pane: HTMLElement): HTMLButtonElement | null {
+  return pane.querySelector<HTMLButtonElement>('button[aria-label="Scroll to the newest line"]');
 }
 
 /** The reader's draft reply at the thread's end, which holds the box and the open question's controls. */
 const DRAFT_REPLY = '[data-inbox-comment="draft"]';
 
-test("an item waiting on an answer opens at its thread's end, its draft reply holding the ask's controls standing just over the board's foot, in a narrow room and on the desktop's width alike", async () => {
-  for (const room of ["narrow", "wide"]) {
-    const board = await openInRoom(room, threadItem([askingMessage(EXPIRY_ASK)]), DRAFT_REPLY);
-    assert.equal(board.scrollTop, 800, room);
-    leaveRoom();
+test("a long thread opens at its newest message, its draft reply just over the board's foot, whether its question waits on an answer or nothing is asked", async () => {
+  layOutBoards({ height: 1200 });
+  for (const shown of [
+    threadItem([askingMessage(EXPIRY_ASK)]),
+    { ...THRESHOLD, title: "Alert at 90%?" },
+    threadItem([
+      threadMessage("e1b2c3d4-0000-4000-8000-000000000040", "agent", "Shipped the fix.", 1_000),
+    ]),
+  ]) {
+    const pane = await mountThread(shown);
+    assert.equal(boardOf(pane).scrollTop, 800, shown.title);
+    assert.equal(scrollButton(pane), null, "at its end, no way back is offered");
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
   }
 });
 
-test("an older item waiting on an answer opens at its thread's end too, on the draft reply holding its answer's controls, as a thread's ask does", async () => {
-  const board = await openInRoom("wide", { ...THRESHOLD, title: "Alert at 90%?" }, DRAFT_REPLY);
-  assert.equal(board.scrollTop, 800);
-  leaveRoom();
+test("a thread scrolled up offers the transcript's way back to its newest message, which takes it to its end and goes", async () => {
+  layOutBoards({ height: 1200 });
+  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
+  const board = boardOf(pane);
+  scrollBoard(board, 300);
+  const back = scrollButton(pane) ?? assert.fail("scrolled up, the way back is offered");
+
+  act(() => back.click());
+  assert.equal(board.scrollTop, 800, "the thread is at its newest message again");
+  assert.equal(scrollButton(pane), null, "at its end, the way back goes");
 });
 
-test("a thread with no open ask opens at its top, its plain draft reply waiting at the end", async () => {
-  const shown = threadItem([
-    threadMessage("e1b2c3d4-0000-4000-8000-000000000040", "agent", "Shipped the fix.", 1_000),
-  ]);
-  const board = await openInRoom("wide", shown, DRAFT_REPLY);
-  assert.equal(board.scrollTop, 0);
-  leaveRoom();
-});
-
-test("a picture landing above the open ask stands the draft reply over the board's foot again, until the reader moves the thread", async () => {
-  const board = await openInRoom("narrow", threadItem([askingMessage(EXPIRY_ASK)]), DRAFT_REPLY);
-  assert.equal(board.scrollTop, 800);
-  // A picture read late pushes the ask 200px further down.
-  questionAt = { y: 300, height: 300 };
+test("a thread that grows while the reader is at its end, a message or a picture landing late, keeps to its end; scrolled up, the reader is left where they are", async () => {
+  const layout = { height: 1200 };
+  layOutBoards(layout);
+  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)]));
+  const board = boardOf(pane);
+  layout.height = 1400;
   act(() => relayout());
-  assert.equal(board.scrollTop, 1000, "the ask stands over the box again");
+  assert.equal(board.scrollTop, 1000, "at its end, it keeps to its end");
 
-  board.dispatchEvent(new Event("touchstart"));
+  scrollBoard(board, 300);
+  layout.height = 1600;
   act(() => relayout());
-  assert.equal(board.scrollTop, 1000, "once the reader moves the thread it is theirs");
-  leaveRoom();
+  assert.equal(board.scrollTop, 300, "scrolled up, the reader's place stands");
 });
 
 /** Everything the thread's subject draws, a part a child: its title alone. */

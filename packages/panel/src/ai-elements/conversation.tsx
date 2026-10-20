@@ -75,12 +75,25 @@ function useConversation(): ConversationScroll {
   return context;
 }
 
-export type ConversationProps = ComponentProps<"div">;
+export type ConversationProps = ComponentProps<"div"> & {
+  /** What the log is of, such as an Inbox item: a new one opens the log at its newest line again, as a log drawn anew opens. */
+  subject?: string | undefined;
+  /** The scroll box's ref, where the caller reads the box too; one of the log's own where none is handed. */
+  list?: RefObject<HTMLDivElement | null> | undefined;
+};
 
-export function Conversation({ className, children, ...props }: ConversationProps): ReactNode {
-  const list = useRef<HTMLDivElement>(null);
+export function Conversation({
+  className,
+  children,
+  subject,
+  list: handed,
+  ...props
+}: ConversationProps): ReactNode {
+  const own = useRef<HTMLDivElement>(null);
+  const list = handed ?? own;
   const following = useRef(true);
   const [isAtBottom, setAtBottom] = useState(true);
+  const opened = useRef(subject);
   // What the last render left observed: the scroll box, and how many lines
   // stood in it ending in which, so a render that changed none of them
   // touches no layout.
@@ -107,6 +120,17 @@ export function Conversation({ className, children, ...props }: ConversationProp
       }),
   );
   useEffect(() => () => resized.disconnect(), [resized]);
+  // Note that a new subject reuses the box, scrolled wherever the reader
+  // left the last, so it is taken to its newest line here, before the paint,
+  // even where its lines happen to number and end as the last subject's did.
+  useLayoutEffect(() => {
+    if (opened.current === subject) return;
+    opened.current = subject;
+    following.current = true;
+    setAtBottom(true);
+    const element = list.current;
+    if (element !== null) element.scrollTop = element.scrollHeight;
+  }, [subject, list]);
   // Note that this runs after every render but reads no layout unless the
   // lines changed, because a re-render with the same lines (any app-state
   // patch) has nothing new to scroll to, and a line that grew is the
@@ -130,14 +154,14 @@ export function Conversation({ className, children, ...props }: ConversationProp
     setAtBottom(true);
     const element = list.current;
     if (element !== null) element.scrollTop = element.scrollHeight;
-  }, []);
+  }, [list]);
   const onScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
     following.current = followsNewest(event.currentTarget);
     setAtBottom(following.current);
   }, []);
   const scroll = useMemo<ConversationScroll>(
     () => ({ isAtBottom, list, scrollToBottom, onScroll }),
-    [isAtBottom, scrollToBottom, onScroll],
+    [isAtBottom, list, scrollToBottom, onScroll],
   );
   return (
     <ConversationContext.Provider value={scroll}>
