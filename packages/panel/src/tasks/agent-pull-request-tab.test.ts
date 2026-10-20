@@ -1578,6 +1578,13 @@ test("the Conversation scrolls in a box whose fade begins beneath a band, each s
     "Hide resolved0",
     "Hide bots0",
   ]);
+  for (const chip of sectionHead(tab, "Conversation").querySelectorAll<HTMLElement>(
+    ".pull-request-section-end button",
+  )) {
+    // Drawn as the tasks board's view filter in its toolbar: a filter chip at the control's size, never a reaction's compact pill.
+    assert.equal(chip.dataset.look, "filter");
+    assert.equal(chip.dataset.size, undefined, `${chip.textContent} stands at the control's size`);
+  }
   assert.equal(sectionHead(tab, "Description").querySelector(".pull-request-section-end"), null);
   assert.equal(tab.querySelector(".pull-request-filters"), null, "no row of filters stands");
 });

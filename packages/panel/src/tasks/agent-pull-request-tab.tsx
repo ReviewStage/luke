@@ -40,10 +40,10 @@ import {
   Avatar,
   Badge,
   CHIP_LOOK,
-  CHIP_SIZE,
   CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
   Chip,
+  ChipName,
   ChoiceBar,
   type ChoiceItem,
   COUNT_TONE,
@@ -1653,7 +1653,7 @@ function tabsOf(
   ];
 }
 
-/** One of the conversation's filters: a compact chip pressed while it is on, its word and how many it would leave out once the conversation is read. */
+/** One of the conversation's filters, drawn as the tasks board's view filter in its toolbar is (`tasks-board.tsx`): a filter chip pressed while it is on, its word and how many it would leave out once the conversation is read. */
 function ConversationFilter({
   label,
   count,
@@ -1674,13 +1674,12 @@ function ConversationFilter({
     <span className="pull-request-filter">
       <Chip
         look={CHIP_LOOK.FILTER}
-        size={CHIP_SIZE.COMPACT}
         aria-label={label}
         aria-pressed={on}
         aria-describedby={note === undefined ? undefined : noteId}
         onClick={() => onChange(!on)}
       >
-        {label}
+        <ChipName>{label}</ChipName>
         {count === undefined ? null : (
           <span className="pull-request-filter-count" aria-hidden="true">
             {count.toLocaleString()}

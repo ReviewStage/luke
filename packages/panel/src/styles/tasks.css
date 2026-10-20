@@ -2916,8 +2916,9 @@
    scroller's band (`SCROLL_FADE_INSET.BAND`), as a call's checkpoint is
    (`.checkpoint-log`), because the fade begins beneath that band: taller,
    it would slice what passes under its foot, and shorter, it would fade
-   its own. The whole row presses, the chevron leading at the content inset
-   and what it holds at its end keeping their own presses. */
+   its own. The whole row presses as a `DisclosureSummary` does: the chevron
+   leading at its inset, the row filled under the pointer, and what it holds
+   at its end keeping their own presses. */
 .pull-request-section-head,
 .pull-request-page .pull-request-comment-box > .pull-request-heading {
   position: sticky;
@@ -2938,9 +2939,28 @@
   align-items: center;
   gap: var(--luke-icon-gap);
   min-width: 0;
-  padding-inline: var(--row-inset);
+  padding-inline: var(--luke-space-4);
   color: var(--luke-color-text-muted);
   white-space: nowrap;
+}
+
+/* The fill under the pointer, a disclosure row's (disclosure.css) at the
+   control's height and corner, drawn inside the band rather than on it, so
+   the band stays opaque to its corners while what scrolls passes under it.
+   Note that it sits under the row's words, the band being a stacking
+   context of its own, and lights only while the pointer is on the row
+   rather than on what stands at its end. */
+.pull-request-section-head::before {
+  position: absolute;
+  z-index: -1;
+  inset: calc((var(--luke-scroll-band) - var(--luke-control-height)) / 2) 0;
+  border-radius: var(--luke-control-radius);
+  content: "";
+  transition: background-color var(--luke-duration-hover) ease;
+}
+
+.pull-request-section-head:hover:not(:has(.pull-request-section-end:hover))::before {
+  background: var(--luke-color-fill-strong);
 }
 
 .pull-request-section-head > .pull-request-heading {
@@ -2953,7 +2973,8 @@
   transition: color var(--luke-duration-hover) ease;
 }
 
-.pull-request-section-head:hover > .pull-request-heading {
+.pull-request-section-head:hover:not(:has(.pull-request-section-end:hover))
+  > .pull-request-heading {
   color: var(--luke-color-text);
 }
 
@@ -2964,13 +2985,14 @@
 }
 
 /* What the heading holds at its end, Hide resolved and Hide bots on the
-   Conversation's: compact chips, each its word and the quiet count of what
-   it leaves out, pressed while on. */
+   Conversation's: filter chips as the tasks board's toolbar draws its view
+   filter, each its word and the quiet count of what it leaves out, pressed
+   while on. */
 .pull-request-section-end {
   display: flex;
   flex: none;
   align-items: center;
-  gap: var(--luke-space-6);
+  gap: var(--luke-control-gap);
 }
 
 .pull-request-filter {
