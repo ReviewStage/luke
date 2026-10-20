@@ -246,6 +246,8 @@ const withdrawUnlessInUse = <R>(api: VercelSandboxApi, session: string, ask: Sna
     if (yield* ask.keepUp) return;
     yield* api.updateNetworkPolicy(session, OPEN_INTERNET_POLICY);
   }).pipe(
+    // Note that a finalizer runs uninterruptibly, so the bound can cut the withdrawal off only once it is made interruptible.
+    Effect.interruptible,
     Effect.timeout(SNAPSHOT.STOP_TIMEOUT),
     Effect.catch((failure) =>
       Effect.logWarning(

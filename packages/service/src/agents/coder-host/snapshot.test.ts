@@ -401,6 +401,53 @@ it.effect(
 );
 
 it.effect(
+  "a withdrawal of a member's token Vercel never answers is given up at the stop's bound, and the copy still answers",
+  (t) =>
+    Effect.gen(function* () {
+      const sandbox = sourceSandbox(yield* checkoutFor(t), "running");
+      const logged: string[] = [];
+      let withdrawalSent = () => {};
+      const withdrawing = new Promise<void>((resolve) => {
+        withdrawalSent = resolve;
+      });
+      let withdrawalAbandoned = () => {};
+      const abandoned = new Promise<void>((resolve) => {
+        withdrawalAbandoned = resolve;
+      });
+
+      const copying = yield* Effect.forkChild(
+        copyOver(
+          async (url, init) => {
+            const sent = await sentOf(url, init);
+            const open = url.includes("/network-policy") && sent.body.includes("allow-all");
+            if (!open) return sandbox.answer(sent) ?? assert.fail(`no Vercel answer for ${url}`);
+            // Vercel took the withdrawal, and never answered it.
+            withdrawalSent();
+            return new Promise<Response>((_, reject) => {
+              init.signal?.addEventListener("abort", () => {
+                withdrawalAbandoned();
+                reject(new Error("aborted"));
+              });
+            });
+          },
+          Effect.succeed(false),
+          CREDENTIAL.MEMBER,
+        ).pipe(logging(logged)),
+      );
+      yield* Effect.promise(() => withdrawing);
+      yield* TestClock.adjust(Duration.sum(SNAPSHOT.STOP_TIMEOUT, Duration.seconds(1)));
+      const outcome = yield* Fiber.join(copying);
+      yield* Effect.promise(() => abandoned);
+
+      assert.ok(outcome.copied);
+      assert.ok(
+        logged.some((line) => line.startsWith("a member's token was not taken off")),
+        logged.join("\n"),
+      );
+    }),
+);
+
+it.effect(
   "a wake that never answers is given up at the bound, and the sandbox it was waking is stopped again",
   (t) =>
     Effect.gen(function* () {
