@@ -8,7 +8,11 @@ import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
-import { readNativeSequence, withNativeProjection } from "../native-projection-store.js";
+import {
+  readNativeProjection,
+  readNativeSequence,
+  withNativeProjection,
+} from "../native-projection-store.js";
 
 /**
  * Where a native harness's projection keeps its place, over a real dialect:
@@ -50,6 +54,37 @@ it.layer(getTestDB())("the native projection's place", (it) => {
       assert.deepEqual(sequence, Option.some(3));
       assert.deepEqual(Option.getOrThrow(after), { sequence: 3, projection: { turn: "t1" } });
     }),
+  );
+
+  it.effect(
+    "the saved projection reads back to the account that holds the conversation, and to no other",
+    () =>
+      Effect.gen(function* () {
+        const target = yield* openConversation;
+        const stranger = yield* openConversation;
+        const before = yield* readNativeProjection(target);
+        yield* withNativeProjection(target, target.digest, () =>
+          Effect.succeed({
+            result: undefined,
+            saved: { sequence: 2, projection: { turn: { servers: ["linear"] } } },
+          }),
+        );
+
+        assert.equal(Option.isNone(before), true);
+        assert.deepEqual(
+          yield* readNativeProjection(target),
+          Option.some({ turn: { servers: ["linear"] } }),
+        );
+        assert.equal(
+          Option.isNone(
+            yield* readNativeProjection({
+              userId: stranger.userId,
+              conversationId: target.conversationId,
+            }),
+          ),
+          true,
+        );
+      }),
   );
 
   it.effect("an application that fails keeps nothing it wrote or asked to save", () =>

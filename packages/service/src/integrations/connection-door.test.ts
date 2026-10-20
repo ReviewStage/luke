@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { RUNNER_END, RUNNER_EVENT, type RunnerEvent } from "@luke/agent-runner/protocol";
 import { Database } from "@luke/database/core/query";
 import {
   createCodingAgent,
+  dispatchMentioningServers,
   recordCodingAgentRunnerToken,
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
@@ -12,8 +14,11 @@ import { CONVERSATION_RUNTIME } from "@luke/database/storage-vocabulary";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_PAYER } from "@luke/features/coding-agent-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import { Effect, Layer, Logger, Option, Redacted } from "effect";
+import { Clock, Effect, Layer, Logger, Option, Redacted } from "effect";
+import { HttpRouter } from "effect/http";
+import { SqlClient } from "effect/sql";
 import { admitRunnerBearer, runnerTokenDigest } from "../agents/luke-mcp/bearer.js";
+import { RUNNER_EVENTS_PATH, runnerEventsApp } from "../agents/native-events/runner-events-app.js";
 import { NO_GITHUB } from "../testing/github-app-fake.js";
 import { firstIntegrationAccount } from "../testing/integration-connect.js";
 import {
@@ -68,7 +73,7 @@ const memberWithLinear = Effect.gen(function* () {
   );
   assert.equal(yield* completeIntegrationSignIn(userId, LINEAR, `state-${userId}`), true);
   const admitted = Option.getOrThrow(yield* admitRunnerBearer(bearer));
-  return { userId, agentId: agent.id, admitted };
+  return { userId, agentId: agent.id, admitted, bearer };
 });
 
 /** The door's services: the store, the fake Connect, GitHub as the App, and Linear's server; every line logged is kept. */
@@ -80,6 +85,31 @@ function doorServices(bearer: string, heard: Heard, logged: string[]) {
     Logger.layer([Logger.make(({ message }) => logged.push(JSON.stringify(message)))]),
   );
 }
+
+/** The runner's events posted under its bearer to the events route, as a function answers them. */
+const postEvents = (bearer: string, events: readonly RunnerEvent[]) =>
+  Effect.gen(function* () {
+    const services = Layer.mergeAll(
+      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(Database, yield* Database),
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+    );
+    const web = HttpRouter.toWebHandler(
+      runnerEventsApp({}).pipe(HttpRouter.provideRequest(services)),
+      { disableLogger: true },
+    );
+    const response = yield* Effect.promise(() =>
+      web.handler(
+        new Request(`https://luke.test${RUNNER_EVENTS_PATH}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${bearer}` },
+          body: JSON.stringify({ events }),
+        }),
+      ),
+    );
+    yield* Effect.promise(() => web.dispose());
+    assert.equal(response.status, 200);
+  });
 
 function hearing(): Heard {
   return { calls: [], bearers: [] };
@@ -263,6 +293,43 @@ it.layer(getTestDB())("the integrations' door", (it) => {
           "error" in switchedOff &&
             switchedOff.error.startsWith('Connection "linear" is not available.'),
         );
+      }),
+  );
+
+  it.effect(
+    "a connection switched off but mentioned to the agent is handed to the native turn that starts next, and to that turn alone, as an eve turn takes its mentions",
+    () =>
+      Effect.gen(function* () {
+        const member = yield* memberWithLinear;
+        const services = doorServices(linearTokenOf(member.userId), hearing(), []);
+        const listIssues = runConnectionExecute(member.admitted, {
+          connection: LINEAR,
+          tool: "list_issues",
+          input: { team: "ENG" },
+        }).pipe(Effect.provide(services));
+        yield* updateCodingAgentServers(member.userId, member.agentId, [LINEAR]);
+        // The developer's message mentions @Linear, which its hand-over writes on the agent's row.
+        yield* dispatchMentioningServers(
+          member.userId,
+          member.agentId,
+          [LINEAR],
+          Effect.succeed(true),
+        );
+
+        const beforeTheTurn = yield* listIssues;
+        yield* postEvents(member.bearer, [
+          { sequence: 0, message: { type: RUNNER_EVENT.ACCEPTED, uuid: randomUUID() } },
+        ]);
+        const inTheTurn = yield* listIssues;
+        yield* postEvents(member.bearer, [
+          { sequence: 1, message: { type: RUNNER_EVENT.END, reason: RUNNER_END.TURN_ENDED } },
+          { sequence: 2, message: { type: RUNNER_EVENT.ACCEPTED, uuid: randomUUID() } },
+        ]);
+        const inTheNextTurn = yield* listIssues;
+
+        assert.equal(beforeTheTurn.status, "rejected");
+        assert.notEqual(inTheTurn.status, "rejected");
+        assert.equal(inTheNextTurn.status, "rejected");
       }),
   );
 
