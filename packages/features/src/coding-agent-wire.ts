@@ -143,6 +143,22 @@ export const CODING_AGENT_AUTHOR = {
 
 export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING_AGENT_AUTHOR];
 
+/**
+ * Who pays for a coding agent's model calls, recorded as the agent starts
+ * and never moved after: the starter's Claude plan or ChatGPT plan, which
+ * run the provider's own harness, the starter's own API key, or Luke's key.
+ * A plan that runs out pauses the agent rather than falling through to
+ * another payer.
+ */
+export const CODING_AGENT_PAYER = {
+  CLAUDE_PLAN: "claude_plan",
+  CHATGPT_PLAN: "chatgpt_plan",
+  API_KEY: "api_key",
+  LUKE: "luke",
+} as const;
+
+export type CodingAgentPayer = (typeof CODING_AGENT_PAYER)[keyof typeof CODING_AGENT_PAYER];
+
 /** What an agent was handed as its first message: the task's document, or a prompt the developer wrote in its place. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",
