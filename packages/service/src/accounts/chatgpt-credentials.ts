@@ -24,6 +24,11 @@
  * it rotated the refresh token, and marks the row invalid as well. An access
  * token's expiry is the earlier of its lifetime and its own `exp` claim.
  *
+ * A sign-in is kept only once its ID token checks out against OpenAI's
+ * published keys (`verifyChatGptIdToken`): signed by OpenAI for the issued
+ * client, unexpired, and naming the account handed over. Its nonce is the
+ * desktop's to check, since only the desktop that began the sign-in holds it.
+ *
  * Removing the sign-in revokes its renewable session at OpenAI's revocation
  * endpoint, which must be on OpenAI's own authorization server, first, under the same lock, retrying a failure to connect or a
  * server error a few times, and removes the row whether or not OpenAI
@@ -34,7 +39,7 @@
  * answered: a refusal is read for its OAuth error code alone.
  */
 
-import { randomUUID } from "node:crypto";
+import { createPublicKey, randomUUID, verify } from "node:crypto";
 import {
   type KeyRing,
   openProviderKey,
@@ -128,6 +133,40 @@ const RefreshAnswerSchema = Schema.Struct({
 const OAuthErrorSchema = Schema.Struct({ error: Schema.String });
 
 const DiscoverySchema = Schema.Struct({ revocation_endpoint: Schema.String });
+
+const KeysDiscoverySchema = Schema.Struct({ jwks_uri: Schema.String });
+
+/** One of OpenAI's published signing keys, as far as an RS256 check reads it. */
+const SigningKeySchema = Schema.Struct({
+  kid: Schema.String,
+  kty: Schema.Literal("RSA"),
+  n: Schema.String,
+  e: Schema.String,
+});
+
+type SigningKey = typeof SigningKeySchema.Type;
+
+/** OpenAI's JWKS: the keys of another type it may publish are passed over. */
+const JwksSchema = Schema.Struct({ keys: Schema.Array(Schema.Unknown) });
+
+const IdTokenHeaderJson = Schema.fromJsonString(
+  Schema.Struct({ alg: Schema.String, kid: Schema.String }),
+);
+
+const IdTokenClaimsJson = Schema.fromJsonString(
+  Schema.Struct({
+    iss: Schema.String,
+    aud: Schema.Union([Schema.String, Schema.Array(Schema.String)]),
+    exp: Schema.Number,
+    sub: Schema.NonEmptyString,
+  }),
+);
+
+/** How long OpenAI's published keys are reused before they are read again; a key they do not name is read again at once. */
+const SIGNING_KEYS_CACHE_FOR = Duration.hours(1);
+
+/** How far past its expiry an ID token is still taken, for the two clocks' difference. */
+const ID_TOKEN_LEEWAY = Duration.minutes(5);
 
 /** The one claim of an access token read: when it expires, in Unix seconds. */
 const AccessClaimsJson = Schema.fromJsonString(Schema.Struct({ exp: Schema.Number }));
@@ -238,6 +277,120 @@ export function sealChatGptCredentials(
   const accessExpiresAt = accessExpiryOf(request.accessToken, now, request.expiresInSeconds);
   return { sealed, accessExpiresAt, hint: CHATGPT_HINT };
 }
+
+/** What a sign-in's ID token check answers. */
+export const CHATGPT_ID_TOKEN = {
+  VERIFIED: "verified",
+  /** Not signed by OpenAI for the issued client, expired, or another account's than the one handed over. */
+  UNVERIFIED: "unverified",
+  /** OpenAI's published keys could not be read; the same sign-in may be tried again. */
+  UNREACHABLE: "unreachable",
+} as const;
+
+/** OpenAI's published signing keys as last read, kept per instance. */
+export interface ChatGptSigningKeys {
+  held: { readonly keys: readonly SigningKey[]; readonly readAt: number } | undefined;
+}
+
+/** An empty cache of OpenAI's signing keys, for one instance of the routes. */
+export function chatGptSigningKeys(): ChatGptSigningKeys {
+  return { held: undefined };
+}
+
+/** OpenAI's published signing keys, read through its discovery document; nothing where either cannot be read or the keys are off OpenAI's own server. */
+const readSigningKeys = /* @__PURE__ */ Effect.fnUntraced(function* () {
+  const client = yield* HttpClient.HttpClient;
+  const readJson = (url: string) =>
+    client.get(url).pipe(
+      Effect.flatMap((response) => response.json),
+      Effect.scoped,
+      Effect.timeout(CALL_TIMEOUT),
+      Effect.option,
+    );
+  const discovered = Option.flatMap(
+    yield* readJson(CHATGPT_OAUTH.DISCOVERY_URL),
+    Schema.decodeUnknownOption(KeysDiscoverySchema),
+  );
+  if (Option.isNone(discovered) || !onIssuer(discovered.value.jwks_uri)) return Option.none();
+  const published = Option.flatMap(
+    yield* readJson(discovered.value.jwks_uri),
+    Schema.decodeUnknownOption(JwksSchema),
+  );
+  return Option.map(published, ({ keys }) =>
+    keys.flatMap((key) => Option.toArray(Schema.decodeUnknownOption(SigningKeySchema)(key))),
+  );
+});
+
+/** Whether a JWT's RS256 signature verifies under a published key. */
+function signedBy(token: string, key: SigningKey): boolean {
+  const [header, payload, signature] = token.split(".");
+  if (header === undefined || payload === undefined || signature === undefined) return false;
+  try {
+    const publicKey = createPublicKey({
+      key: { kty: key.kty, n: key.n, e: key.e },
+      format: "jwk",
+    });
+    return verify(
+      "RSA-SHA256",
+      Buffer.from(`${header}.${payload}`),
+      publicKey,
+      Buffer.from(signature, "base64url"),
+    );
+  } catch {
+    // Note that a key that is no RSA key, or a signature of the wrong size, is the one answer: not signed by it.
+    return false;
+  }
+}
+
+/** A JWT part decoded from base64url text, or nothing where it is none. */
+function jwtPart(token: string, index: number): string | undefined {
+  const part = token.split(".")[index];
+  return part === undefined ? undefined : Buffer.from(part, "base64url").toString("utf8");
+}
+
+/**
+ * The sign-in's ID token checked as OpenAI's guide asks, all but its nonce,
+ * which only the desktop that began the sign-in holds: its RS256 signature
+ * against OpenAI's published keys, its issuer, its audience as the issued
+ * client, its expiry, and its subject as the account handed over. The keys
+ * are reused for an hour and read again at once for a key they do not name.
+ */
+export const verifyChatGptIdToken = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: ChatGptCredentialsSaveRequest,
+  cache: ChatGptSigningKeys,
+) {
+  const header = Schema.decodeUnknownOption(IdTokenHeaderJson)(jwtPart(request.idToken, 0));
+  const claims = Schema.decodeUnknownOption(IdTokenClaimsJson)(jwtPart(request.idToken, 1));
+  if (Option.isNone(header) || Option.isNone(claims) || header.value.alg !== "RS256") {
+    return CHATGPT_ID_TOKEN.UNVERIFIED;
+  }
+  const { kid } = header.value;
+  const now = (yield* DateTime.nowAsDate).getTime();
+  const held = cache.held;
+  const fresh =
+    held !== undefined &&
+    now - held.readAt < Duration.toMillis(SIGNING_KEYS_CACHE_FOR) &&
+    held.keys.some((key) => key.kid === kid);
+  let keys = fresh ? held.keys : undefined;
+  if (keys === undefined) {
+    const read = yield* readSigningKeys();
+    if (Option.isNone(read)) return CHATGPT_ID_TOKEN.UNREACHABLE;
+    cache.held = { keys: read.value, readAt: now };
+    keys = read.value;
+  }
+  const key = keys.find((one) => one.kid === kid);
+  if (key === undefined || !signedBy(request.idToken, key)) return CHATGPT_ID_TOKEN.UNVERIFIED;
+  const { iss, aud, exp, sub } = claims.value;
+  const audiences = [aud].flat();
+  const unexpired =
+    Duration.toMillis(Duration.seconds(exp)) + Duration.toMillis(ID_TOKEN_LEEWAY) > now;
+  return iss === CHATGPT_OAUTH.ISSUER &&
+    audiences.includes(request.clientId) &&
+    unexpired &&
+    sub === request.accountId
+    ? CHATGPT_ID_TOKEN.VERIFIED
+    : CHATGPT_ID_TOKEN.UNVERIFIED;
+});
 
 /** The account's ChatGPT host id, minted the first time it is asked for and the same ever after. */
 export const chatGptHostId = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string) {

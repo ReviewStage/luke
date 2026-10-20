@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { generateKeyPairSync, type KeyObject, randomUUID, sign } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { listProviderKeyRows } from "@luke/database/models/provider-key-store";
@@ -67,6 +67,41 @@ const PROVIDER_URL = {
 /** OpenAI's authorization server, which a ChatGPT sign-in's removal reaches. */
 const AUTH_ORIGIN = "https://auth.openai.com";
 const REVOCATION_URL = `${AUTH_ORIGIN}/oauth/revoke`;
+const DISCOVERY_URL = `${AUTH_ORIGIN}/.well-known/openid-configuration`;
+const JWKS_URL = `${AUTH_ORIGIN}/.well-known/jwks.json`;
+
+/** A signing key of the fake OpenAI's, generated for this file: its id, its private half, and its public half as a JWK. */
+function signingKey(kid: string) {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const { kty = "", n = "", e = "" } = publicKey.export({ format: "jwk" });
+  return { kid, privateKey, jwk: { kty, n, e, kid, alg: "RS256" } };
+}
+
+const OPENAI_KEY = signingKey("openai-key-1");
+const ROTATED_KEY = signingKey("openai-key-2");
+const FORGED_KEY = signingKey("openai-key-1");
+
+/** An RS256 JWT of the claims, signed by the key given and naming its id. */
+function signedJwt(
+  claims: Record<string, WireBoundaryInput>,
+  key: { kid: string; privateKey: KeyObject },
+) {
+  const part = (value: WireBoundaryInput) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  const signed = `${part({ alg: "RS256", kid: key.kid, typ: "JWT" })}.${part(claims)}`;
+  return `${signed}.${sign("RSA-SHA256", Buffer.from(signed), key.privateKey).toString("base64url")}`;
+}
+
+/** OpenAI's authorization server as a save and a removal reach it: discovery, the published keys, and a revocation that succeeds. */
+const openAiAuth =
+  (published: readonly { jwk: Record<string, string> }[] = [OPENAI_KEY]) =>
+  (request: RecordedRequest): Response => {
+    if (request.url === DISCOVERY_URL) {
+      return jsonResponse({ revocation_endpoint: REVOCATION_URL, jwks_uri: JWKS_URL });
+    }
+    if (request.url === JWKS_URL) return jsonResponse({ keys: published.map(({ jwk }) => jwk) });
+    return new Response(null, { status: HTTP_STATUS.OK });
+  };
 
 /** Where Anthropic is asked whether a key's organization may run fast mode. */
 const FAST_CHECK_URL = "https://api.anthropic.com/v1/messages";
@@ -146,7 +181,7 @@ const openAccounts = (
     const answers = options.provider ?? ACCEPTING;
     const provider = recordingHttpClient((request) =>
       new URL(request.url).origin === AUTH_ORIGIN
-        ? (options.auth?.(request) ?? jsonResponse({}, HTTP_STATUS.SERVER_ERROR))
+        ? (options.auth ?? openAiAuth())(request)
         : request.url === FAST_CHECK_URL
           ? (options.fast?.get(keyOf(request.headers))?.clone() ?? jsonResponse({}))
           : jsonResponse({}, answers.get(keyOf(request.headers)) ?? HTTP_STATUS.UNAUTHORIZED),
@@ -232,13 +267,24 @@ const saveToken = (userId: string, provider: ProviderKeyProvider, key: string) =
     body: { provider, key, kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN },
   });
 
-/** A ChatGPT sign-in as the desktop hands one over, synthetic throughout. */
+const ISSUED_CLIENT = "oaiapp_test_client";
+const CHATGPT_SUBJECT = "chatgpt-subject-0000";
+
+/** An ID token's claims as OpenAI issues them for the sign-in below, expiring long after any test's clock. */
+const ID_CLAIMS = {
+  iss: AUTH_ORIGIN,
+  aud: ISSUED_CLIENT,
+  sub: CHATGPT_SUBJECT,
+  exp: 4_000_000_000,
+} as const;
+
+/** A ChatGPT sign-in as the desktop hands one over, synthetic throughout, its ID token signed by the fake OpenAI. */
 const SIGN_IN = {
-  clientId: "oaiapp_test_client",
-  accountId: "chatgpt-subject-0000",
+  clientId: ISSUED_CLIENT,
+  accountId: CHATGPT_SUBJECT,
   accessToken: "test-access-token-000000000000000000acc",
   refreshToken: "test-refresh-token-0000000000000000000ref",
-  idToken: "test-id-token-00000000000000000000000idt",
+  idToken: signedJwt(ID_CLAIMS, OPENAI_KEY),
   expiresInSeconds: 3600,
   scopes: ["chatgpt.tokens.use.direct", "offline_access", "openid"],
 } as const;
@@ -708,7 +754,12 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           ],
         });
         assert.deepEqual(othersRead, { keys: [] });
-        assert.deepEqual(checks, [], "nothing is sent to OpenAI on a save");
+        assert.ok(
+          checks.every(
+            (check) => check.method === "GET" && [DISCOVERY_URL, JWKS_URL].includes(check.url),
+          ),
+          "a save only reads OpenAI's published keys, and sends it no credential",
+        );
         const rows = yield* db
           .select()
           .from(accountProviderKey)
@@ -797,7 +848,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           auth: (incoming) =>
             incoming.url === REVOCATION_URL
               ? new Response(null, { status: revocationStatus })
-              : jsonResponse({ revocation_endpoint: REVOCATION_URL }),
+              : openAiAuth()(incoming),
         });
         keysOf(yield* ask(saveSignIn(owner)));
 
@@ -819,6 +870,69 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           keys: [],
           revocationUnconfirmed: true,
         });
+      }),
+  );
+
+  it.effect(
+    "a sign-in whose ID token OpenAI did not sign for its issued client, has expired, or names another account keeps nothing and says it is unverified",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
+        yield* TestClock.adjust("1 day");
+        const withToken = (idToken: string, overrides: Record<string, WireBoundaryInput> = {}) =>
+          Effect.map(ask(saveSignIn(owner, { idToken, ...overrides })), keysOf);
+
+        const refused = [
+          yield* withToken(signedJwt(ID_CLAIMS, FORGED_KEY)),
+          yield* withToken(signedJwt({ ...ID_CLAIMS, aud: "oaiapp_another_client" }, OPENAI_KEY)),
+          yield* withToken(signedJwt({ ...ID_CLAIMS, iss: "https://issuer.test" }, OPENAI_KEY)),
+          yield* withToken(signedJwt({ ...ID_CLAIMS, exp: 60 }, OPENAI_KEY)),
+          yield* withToken(signedJwt(ID_CLAIMS, OPENAI_KEY), { accountId: "another-subject" }),
+          yield* withToken(signedJwt(ID_CLAIMS, { ...OPENAI_KEY, kid: "unpublished" })),
+          yield* withToken("not-a-jwt-000000000000000000000000000"),
+        ];
+
+        assert.deepEqual(
+          refused.map((answered) => [answered.rejected, answered.subscriptions]),
+          refused.map(() => [PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN, undefined]),
+        );
+        // An audience listing the issued client among others is the issued client's.
+        const listed = yield* withToken(
+          signedJwt({ ...ID_CLAIMS, aud: ["oaiapp_another_client", ISSUED_CLIENT] }, OPENAI_KEY),
+        );
+        assert.equal(listed.rejected, undefined);
+      }),
+  );
+
+  it.effect(
+    "a sign-in is checked against OpenAI's keys as they are published now, and one whose keys cannot be read keeps nothing and may be tried again",
+    () =>
+      Effect.gen(function* () {
+        let published = [OPENAI_KEY];
+        let reachable = true;
+        const { owner, ask } = yield* openAccounts({
+          ring: KEK.ONE,
+          auth: (incoming) =>
+            reachable
+              ? openAiAuth(published)(incoming)
+              : jsonResponse({}, HTTP_STATUS.SERVER_ERROR),
+        });
+
+        assert.equal(keysOf(yield* ask(saveSignIn(owner))).rejected, undefined);
+        // OpenAI rotates its key: a token signed by the new one is checked against the keys read anew.
+        published = [ROTATED_KEY];
+        const rotated = keysOf(
+          yield* ask(saveSignIn(owner, { idToken: signedJwt(ID_CLAIMS, ROTATED_KEY) })),
+        );
+        assert.equal(rotated.rejected, undefined);
+
+        reachable = false;
+        const unreachable = keysOf(
+          yield* ask(
+            saveSignIn(owner, { idToken: signedJwt(ID_CLAIMS, { ...OPENAI_KEY, kid: "next" }) }),
+          ),
+        );
+        assert.equal(unreachable.rejected, PROVIDER_KEY_REJECTION.UNREACHABLE);
       }),
   );
 });

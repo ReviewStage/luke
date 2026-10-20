@@ -24,7 +24,8 @@
  * pasted key: the desktop hands it over on its own route, after signing in
  * under the account's host id, which a route of its own mints once and
  * serves. It is braked and sealed as a key is and never sent to OpenAI on
- * its save; removing it revokes its renewable session at OpenAI first
+ * its save, though its ID token is checked against OpenAI's published keys
+ * and must name the issued client and the account handed over; removing it revokes its renewable session at OpenAI first
  * (`chatgpt-credentials.ts`), and the answer says where OpenAI did not
  * confirm that.
  *
@@ -83,10 +84,13 @@ import {
   providerKeyHint,
 } from "../providers/provider-key-check.js";
 import {
+  CHATGPT_ID_TOKEN,
   chatGptCredentialsRefusal,
   chatGptHostId,
+  chatGptSigningKeys,
   removeChatGptCredentials,
   sealChatGptCredentials,
+  verifyChatGptIdToken,
 } from "./chatgpt-credentials.js";
 
 const SAVE_BRAKE = {
@@ -198,6 +202,7 @@ function subscriptionShapeOf(
 /** The provider keys' procedures, braked per instance, each to a signed-in caller on a deployment that holds a ring. */
 export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
   const brake = makeRateBrake(SAVE_BRAKE);
+  const signingKeys = chatGptSigningKeys();
   const keyed = hosted.account.use(accountMiddleware(seams.resolveUserId)).use(keyRingMiddleware);
   return {
     providerKeys: keyed.providerKeys.effect(function* ({ context }) {
@@ -280,7 +285,7 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
       return { extAgentHostId };
     }),
 
-    /** A ChatGPT sign-in the desktop completed, braked and kept sealed, replacing the one the account held; nothing is sent to OpenAI. */
+    /** A ChatGPT sign-in the desktop completed, braked, its ID token checked against OpenAI's published keys, and kept sealed, replacing the one the account held; no credential is sent to OpenAI. */
     saveChatGptCredentials: keyed.saveChatGptCredentials.effect(function* ({ context, input }) {
       const { userId, ring } = context;
       // Note that nothing of the body is ever logged or answered, because every field but the scopes is a credential or names one.
@@ -289,6 +294,13 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
       }
       const refused = chatGptCredentialsRefusal(input);
       if (refused !== undefined) return yield* keysAnswer(userId, ring, refused);
+      const checked = yield* verifyChatGptIdToken(input, signingKeys);
+      if (checked === CHATGPT_ID_TOKEN.UNVERIFIED) {
+        return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.UNVERIFIED_SIGN_IN);
+      }
+      if (checked === CHATGPT_ID_TOKEN.UNREACHABLE) {
+        return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.UNREACHABLE);
+      }
       const now = yield* DateTime.nowAsDate;
       const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(ring, userId, input, now);
       const kept = yield* hostedStoreOrUnavailable(

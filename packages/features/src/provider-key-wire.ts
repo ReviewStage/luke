@@ -95,6 +95,12 @@ export const PROVIDER_KEY_REJECTION = {
   TOO_MANY_TRIES: "too_many_tries",
   /** The account holds the provider's other kind of credential, which a save never replaces; it is removed first. */
   OTHER_KIND_HELD: "other_kind_held",
+  /**
+   * A ChatGPT sign-in whose ID token is not one OpenAI signed for its issued
+   * client, has expired, or names another account than the one handed over;
+   * nothing was kept.
+   */
+  UNVERIFIED_SIGN_IN: "unverified_sign_in",
 } as const;
 
 export type ProviderKeyRejection =
