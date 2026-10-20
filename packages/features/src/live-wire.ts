@@ -63,8 +63,6 @@ export const accountInboxLiveAnswerSchema = EffectSchema.Struct({
   }),
 });
 
-export type AccountInboxLiveAnswer = typeof accountInboxLiveAnswerSchema.Type;
-
 /** An item of an agent with no plan as its row delivers it: the workspace as the column holds it, null for none. */
 const tasklessLiveRowSchema = EffectSchema.Struct({
   ...accountTasklessEntrySchema.fields,
@@ -202,20 +200,4 @@ export function accountInboxOfLiveRows(
     chat: chatOfLiveRows(rows.chatAsks, rows.chatNotices),
   };
   return { ...answer, cursor: liveCursorOf(answer), readAt: now };
-}
-
-/**
- * When the earliest failed run the rows carry at `now` ages out of the last
- * week, in epoch milliseconds; none where they carry none. Nothing a live
- * statement delivers says so, since Realtime follows no clock, so the
- * follower publishes again then.
- */
-export function nextFailedRunExpiry(
-  failedRuns: readonly AccountFailedRun[],
-  now: number,
-): number | undefined {
-  const expiries = failedRuns
-    .map((run) => run.failedAt + FAILED_RUN_WINDOW_MILLIS)
-    .filter((expiry) => expiry > now);
-  return expiries.length === 0 ? undefined : Math.min(...expiries);
 }

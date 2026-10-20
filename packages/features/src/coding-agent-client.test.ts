@@ -608,40 +608,28 @@ it.effect(
 );
 
 it.effect(
-  "the account inbox sealed for following is read as the service answers it, and a refusal or a body that is no answer is unanswered",
+  "reads what waits across the account past a cursor, held, listing the archived tasks for the Archived tab, and a refusal or a body that is no answer is unanswered",
   () =>
     Effect.gen(function* () {
-      const sealed = {
-        capability: "capability-1",
-        queryFingerprint: "fingerprint-1",
-        expiresAt: 1_800_000_060_000,
-      };
-      const live = {
-        url: "wss://realtime.example/v1",
-        queries: {
-          items: sealed,
-          planless: sealed,
-          plans: sealed,
-          automations: sealed,
-          failedRuns: sealed,
-          chatAsks: sealed,
-          chatNotices: sealed,
-        },
-      };
+      const inbox = { items: [], plans: [], cursor: "9", readAt: 1_800_000_060_000 };
       const answering = (answer: JsonValue, status: number = HTTP_STATUS.OK) =>
-        fakeCloudApi({ "GET /api/live/inbox": { answer: () => answer, status } });
+        fakeCloudApi({ "GET /api/inbox": { answer: () => answer, status } });
 
-      const read = yield* Effect.provide(client().accountInboxLive(), answering(live).layer);
+      const api = answering(inbox);
+      const read = yield* Effect.provide(client().accountInbox("3"), api.layer);
       const refused = yield* Effect.provide(
-        client().accountInboxLive(),
+        client().accountInbox("3"),
         answering({ error: HOSTED_API_ERROR.UNAVAILABLE }, 503).layer,
       );
       const unread = yield* Effect.provide(
-        client().accountInboxLive(),
-        answering({ url: live.url }).layer,
+        client().accountInbox("3"),
+        answering({ cursor: "9" }).layer,
       );
 
-      assert.deepEqual(read, live);
+      assert.deepEqual(read, inbox);
+      const query = api.requests()[0]?.searchParams;
+      assert.equal(query?.get("after"), "3");
+      assert.equal(query?.get("archived"), "include");
       assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
       assert.deepEqual(unread, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
     }),

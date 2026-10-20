@@ -26,9 +26,7 @@ type NoticeHost = Pick<
   | "codingAgentList"
   | "codingAgentPage"
   | "codingAgentPullRequest"
-  | "codingAgentAccountInboxFollow"
-  | "codingAgentAccountInboxUnfollow"
-  | "onAccountInboxChanged"
+  | "codingAgentAccountInbox"
   | "onAccountChanged"
   | "tasksRefresh"
   | "workspacesRefresh"
@@ -100,9 +98,7 @@ export const linkClientNotices = /* @__PURE__ */ Effect.fn("client/linkClientNot
     onTaskAgentsMoved: () => {
       forkReported(host.tasksRefresh(), "the task list refresh");
     },
-    followAccountInbox: () => host.codingAgentAccountInboxFollow(),
-    unfollowAccountInbox: () => host.codingAgentAccountInboxUnfollow(),
-    onAccountInboxChanged: (listener) => host.onAccountInboxChanged(listener),
+    readAccountInbox: (after) => host.codingAgentAccountInbox({ after }),
     accounts: Stream.map(state.changes, (document) => accountKey(document.account)),
     onInboxChanged: (inbox) => state.update({ inbox }),
     chatOn: () =>

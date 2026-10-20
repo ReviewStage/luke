@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import { chatAnswerSchema, chatWriteAnswerSchema, chatWriteRequestSchema } from "./chat-wire.js";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -515,6 +516,21 @@ export type CodingAgentInboxReadStateView = typeof codingAgentInboxReadStateView
 export const codingAgentInboxReadAllViewSchema = EffectSchema.Union([inboxReadAllSchema, failed]);
 
 export type CodingAgentInboxReadAllView = typeof codingAgentInboxReadAllViewSchema.Type;
+
+/** What waits across the account past a cursor, as main asks it: where it stands. */
+export const codingAgentAccountInboxParamsSchema = EffectSchema.Struct({
+  after: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentAccountInboxParams = typeof codingAgentAccountInboxParamsSchema.Type;
+
+/** What waits across the account, as main hears it: every open item and the cursor to read on from, or why there is none. */
+export const codingAgentAccountInboxAnswerViewSchema = EffectSchema.Union([
+  accountInboxAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentAccountInboxAnswerView = typeof codingAgentAccountInboxAnswerViewSchema.Type;
 
 /** One image of an inbox item, as the window asks it: the item and the attachment its block names. */
 export const codingAgentInboxAttachmentParamsSchema = EffectSchema.Struct({
