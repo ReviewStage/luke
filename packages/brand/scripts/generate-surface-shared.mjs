@@ -17,7 +17,7 @@
 // The React that traces the marks, and the rules that consume the tokens, stay
 // in each app: a shared component would pull desktop-only code into the web
 // bundle. Emitting the data from here keeps the second copy from being a
-// second source. `repository-checks.sh` runs this with `--check`.
+// second source. `--check` reports drift when run by hand.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";

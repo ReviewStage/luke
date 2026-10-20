@@ -14,8 +14,7 @@ import {
  * external imports in the committed map. The map is the review moment a
  * bundle's graph otherwise lacks: a diff line saying which function now loads
  * which package is a question a reviewer can ask, where a silently widened
- * bundle is not. The build enforces the map itself — `bundle-functions.ts`
- * fails on drift.
+ * bundle is not. `tests/vercel-functions.test.ts` fails on drift.
  */
 const WEB = join(import.meta.dirname, "..");
 const MODE = { WRITE: "--write" } as const;

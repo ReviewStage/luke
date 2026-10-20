@@ -36,11 +36,9 @@
       "dependsOn": ["^transit"],
       "outputs": []
     },
-    // One workspace's tests. apps/web reads beyond its own graph in one test,
-    // tests/api-callers.test.ts, which walks every client in the repository;
-    // its check is the one scripts/repository-checks.sh runs on every
-    // check.sh and in CI outside the cache, so web's tests do not hash the
-    // whole repository for its sake.
+    // One workspace's tests. The check that walks every /api/ client in the
+    // repository runs in scripts/repository-checks.sh, outside the cache, so
+    // no workspace's tests read beyond their own graph.
     "test:vitest": {
       "dependsOn": ["^transit"],
       "outputs": []

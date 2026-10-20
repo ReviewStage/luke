@@ -47,9 +47,7 @@ value and upload nothing, and neither does a rehearsal (below).
 
 1. **Prepare and merge the version PR.** Bump `apps/desktop/package.json` and add the
    release's entry to `CHANGELOG.md` at the repository root in the same change. The
-   landing page renders that file at `/changelog`, and `scripts/repository-checks.sh`
-   refuses a desktop version the changelog does not name, so a bump cannot land without
-   its notes. Every bullet and feature section links the pull request or
+   landing page renders that file at `/changelog`. Every bullet and feature section links the pull request or
    requests that made it, in the form the comment atop `CHANGELOG.md` gives.
    A feature section's screenshot is taken on a Mac from the release's own build
    with mock data staged for it, and framed by `scripts/changelog-screenshot.sh` on
