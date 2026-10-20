@@ -15,10 +15,11 @@ import { conversations } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
 import { taskPin } from "../../schemas/task-pin.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
-import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
+import { getTestDB, joinWorkspace, leaveWorkspace, openWorkspace } from "../../testing/index.js";
 import { VOICE_CLOSE_REASON } from "../../voice-vocabulary.js";
 import { archiveCodingAgent, readCodingAgent } from "../coding-agent-store.js";
 import {
+  assignUnassignedTask,
   beginTaskWork,
   createTask,
   createTaskOnce,
@@ -30,6 +31,8 @@ import {
   readTaskHeader,
   readTaskWorkspace,
   TaskArchived,
+  TaskAssigneeNotMember,
+  unassignFormerMember,
   updateTask,
 } from "../task-store.js";
 import { voiceSessionRecord } from "../voice-session-record.js";
@@ -61,7 +64,7 @@ const openSharedTask = Effect.gen(function* () {
   const workspace = yield* openWorkspace(dean);
   yield* joinWorkspace(workspace, charles);
   const { id: taskId } = yield* createTask(dean, { ...SHARED_TASK, organizationId: workspace });
-  return { dean, charles, taskId };
+  return { dean, charles, taskId, workspace };
 });
 
 /** The plan's line in the account's list, archived ones among the rest, failing the test where it has none. */
@@ -697,6 +700,155 @@ it.layer(getTestDB())("a task's status and priority", (it) => {
         status: TASK_STATUS.DONE,
         priority: TASK_PRIORITY.URGENT,
       });
+    }),
+  );
+});
+
+/** Who the task is assigned to, by id, as the account reads it in the list and opened alike, which must agree. */
+const assigneeReadBy = (userId: string, taskId: string) =>
+  Effect.gen(function* () {
+    const listed = (yield* listedTask(userId, taskId)).assignee?.userId;
+    const opened = yield* readTask(userId, taskId);
+    assert.equal(Option.getOrUndefined(opened)?.task.assignee?.userId, listed);
+    return listed;
+  });
+
+it.layer(getTestDB())("a task's assignee", (it) => {
+  it.effect("starts with no one, or the member the start names, named as their account is", () =>
+    Effect.gen(function* () {
+      const { dean, charles, workspace: organizationId } = yield* openSharedTask;
+
+      const plain = yield* createTask(dean, { organizationId });
+      const assigned = yield* createTask(dean, { organizationId, assigneeId: charles });
+      const once = yield* createTaskOnce(dean, {
+        organizationId,
+        id: randomUUID(),
+        text: "",
+        assigneeId: charles,
+      });
+
+      assert.equal(plain.assignee, undefined);
+      assert.deepEqual(assigned.assignee, { userId: charles, name: "Test User" });
+      assert.equal(Option.getOrUndefined(once)?.assignee?.userId, charles);
+      assert.equal(yield* assigneeReadBy(charles, assigned.id), charles);
+    }),
+  );
+
+  it.effect("refuses a start that names someone who is no member of the workspace", () =>
+    Effect.gen(function* () {
+      const dean = yield* openAccount;
+      const outsider = yield* openAccount;
+      const organizationId = yield* openWorkspace(dean);
+
+      const refused = yield* Effect.result(
+        createTask(dean, { organizationId, name: "Refused", assigneeId: outsider }),
+      );
+      const refusedOnce = yield* Effect.result(
+        createTaskOnce(dean, { organizationId, id: randomUUID(), text: "", assigneeId: outsider }),
+      );
+
+      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskAssigneeNotMember);
+      assert.ok(
+        Result.isFailure(refusedOnce) && refusedOnce.failure instanceof TaskAssigneeNotMember,
+      );
+      assert.deepEqual(yield* listTasks(dean), []);
+    }),
+  );
+
+  it.effect("changes for every member, clears with null, and refuses an outsider as assignee", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId } = yield* openSharedTask;
+      const outsider = yield* openAccount;
+
+      yield* updateTask(charles, taskId, { assigneeId: dean });
+      assert.equal(yield* assigneeReadBy(charles, taskId), dean);
+
+      const refused = yield* Effect.result(updateTask(dean, taskId, { assigneeId: outsider }));
+      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskAssigneeNotMember);
+      assert.equal(yield* assigneeReadBy(dean, taskId), dean);
+      assert.equal(
+        Option.isNone(yield* updateTask(outsider, taskId, { assigneeId: outsider })),
+        true,
+      );
+
+      yield* updateTask(dean, taskId, { assigneeId: null });
+      assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
+    }),
+  );
+
+  it.effect("is refused while the task is archived, unless the same change brings it back", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId } = yield* openSharedTask;
+      yield* updateTask(dean, taskId, { archived: true });
+
+      const refused = yield* Effect.result(updateTask(dean, taskId, { assigneeId: charles }));
+      yield* updateTask(dean, taskId, { archived: false, assigneeId: charles });
+
+      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskArchived);
+      assert.equal(yield* assigneeReadBy(dean, taskId), charles);
+    }),
+  );
+
+  it.effect("goes unassigned when the task moves where its assignee is no member", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId } = yield* openSharedTask;
+      const initech = yield* openWorkspace(dean);
+      const shared = yield* openWorkspace(dean);
+      yield* joinWorkspace(shared, charles);
+      const staying = yield* createTask(dean, { organizationId: initech, assigneeId: dean });
+      yield* updateTask(dean, taskId, { assigneeId: charles });
+
+      yield* updateTask(dean, staying.id, { organizationId: shared });
+      yield* updateTask(dean, taskId, { organizationId: initech });
+
+      assert.equal(yield* assigneeReadBy(dean, staying.id), dean);
+      assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
+      const refused = yield* Effect.result(
+        updateTask(dean, staying.id, { organizationId: initech, assigneeId: charles }),
+      );
+      assert.ok(Result.isFailure(refused) && refused.failure instanceof TaskAssigneeNotMember);
+    }),
+  );
+
+  it.effect("lets a former member's tasks of that workspace go, and no other workspace's", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId, workspace } = yield* openSharedTask;
+      const elsewhere = yield* openWorkspace(dean);
+      yield* joinWorkspace(elsewhere, charles);
+      const other = yield* createTask(dean, { organizationId: elsewhere, assigneeId: charles });
+      yield* updateTask(dean, taskId, { assigneeId: charles });
+
+      yield* leaveWorkspace(workspace, charles);
+      yield* unassignFormerMember(charles, workspace);
+
+      assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
+      assert.equal(yield* assigneeReadBy(dean, other.id), charles);
+    }),
+  );
+
+  it.effect("goes unassigned, and the task stands, when the assignee's account is deleted", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId } = yield* openSharedTask;
+      yield* updateTask(dean, taskId, { assigneeId: charles });
+
+      yield* Database.use((db) => db.delete(user).where(eq(user.id, charles)));
+
+      assert.equal(yield* assigneeReadBy(dean, taskId), undefined);
+    }),
+  );
+
+  it.effect("is the starter of an agent on a task no one is assigned to, and only then", () =>
+    Effect.gen(function* () {
+      const { dean, charles, taskId, workspace } = yield* openSharedTask;
+      const outsider = yield* openAccount;
+      const taken = yield* createTask(dean, { organizationId: workspace, assigneeId: dean });
+
+      assert.equal(yield* assignUnassignedTask(outsider, taskId), false);
+      assert.equal(yield* assignUnassignedTask(charles, taskId), true);
+      assert.equal(yield* assignUnassignedTask(dean, taskId), false);
+      assert.equal(yield* assignUnassignedTask(charles, taken.id), false);
+      assert.equal(yield* assigneeReadBy(dean, taskId), charles);
+      assert.equal(yield* assigneeReadBy(dean, taken.id), dean);
     }),
   );
 });

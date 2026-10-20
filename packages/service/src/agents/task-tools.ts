@@ -41,6 +41,7 @@ import {
   taskStandingOf,
   workedRepository,
 } from "./coding-agent-tools.js";
+import { assigneeIdOf, TASK_ASSIGNEE_INPUT } from "./task-assignee.js";
 import {
   issueChoicesOf,
   issuesAnswered,
@@ -139,7 +140,7 @@ export function runReadTask(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         task: {
           id: task.id,
-          ...taskStandingOf(task, name),
+          ...taskStandingOf(task, { step, name }),
           name: task.name,
           repository: task.repository ?? null,
           startedBy: task.createdBy?.name ?? null,
@@ -170,8 +171,11 @@ export const CREATE_TASK_REFUSAL = {
     `${TASK_BOUNDS.MAX_BRIEF_CHARS} characters or none, a plan of at most ` +
     `${TASK_BOUNDS.MAX_BODY_CHARS} characters or none, a status ` +
     `(${Object.values(TASK_STATUS).join(", ")}) or none, a priority ` +
-    `(${Object.values(TASK_PRIORITY).join(", ")}) or none, and at most ${TASK_BOUNDS.MAX_ISSUES} ` +
-    "issues to link or none.",
+    `(${Object.values(TASK_PRIORITY).join(", ")}) or none, an assignee as a member's mention ` +
+    `link or none, and at most ${TASK_BOUNDS.MAX_ISSUES} issues to link or none.`,
+  NOT_MEMBER:
+    "Not made: that assignee is no member of the workspace, or names no person; name a member by " +
+    "the mention link read_chat hands you, or leave it out for no one.",
 } as const;
 
 const CREATE_TASK_INPUT = Schema.Struct({
@@ -208,6 +212,7 @@ const CREATE_TASK_INPUT = Schema.Struct({
     ),
   ),
   priority: Schema.optionalKey(describeWire(taskPrioritySchema, TASK_PRIORITY_WORDS)),
+  assignee: Schema.optionalKey(TASK_ASSIGNEE_INPUT),
   issues: Schema.optionalKey(TASK_ISSUES_TO_LINK),
 });
 
@@ -222,8 +227,9 @@ export const CREATE_TASK_TOOL = {
     "agent on it. Make one for a separate piece of work that should stand as a task of its own, " +
     "where the developer asked for it or you " +
     `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
-    "Give it a status and a priority where the developer said them. Answers `accepted` with the " +
-    "task's id, key, name, status, priority, repository, mention, and the issues it links, or " +
+    "Give it a status, a priority, and an assignee where the developer said them. Answers " +
+    "`accepted` with the task's id, key, name, status, priority, assignee, repository, mention, " +
+    "and the issues it links, or " +
     "`rejected` and why.",
   inputSchema: CREATE_TASK_INPUT,
 } as const;
@@ -255,7 +261,12 @@ export function runCreateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { name, brief, plan, status, priority, issues = [] } = asked.success;
+  const { name, brief, plan, status, priority, assignee, issues = [] } = asked.success;
+  const assigneeId =
+    assignee === undefined || assignee === null ? undefined : assigneeIdOf(assignee);
+  if (assignee !== undefined && assignee !== null && assigneeId === undefined) {
+    return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.NOT_MEMBER));
+  }
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
@@ -269,7 +280,7 @@ export function runCreateTask(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         task: {
           id: task.id,
-          ...taskStandingOf(task, naming.name),
+          ...taskStandingOf(task, naming),
           name: task.name,
           repository: task.repository ?? null,
           mention: writtenMention(
@@ -309,6 +320,7 @@ export function runCreateTask(
               ...(brief === undefined ? undefined : { brief }),
               ...(status === undefined ? undefined : { status }),
               ...(priority === undefined ? undefined : { priority }),
+              ...(assigneeId === undefined ? undefined : { assigneeId }),
             });
             if (Option.isSome(once)) {
               for (const link of read.success) {
@@ -337,7 +349,11 @@ export function runCreateTask(
             return once;
           }),
         ),
+      ).pipe(
+        // An assignee who is no member of the workspace makes no task, nothing written.
+        Effect.catchTag("TaskAssigneeNotMember", () => Effect.succeed(undefined)),
       );
+      if (made === undefined) return agentToolRejected(CREATE_TASK_REFUSAL.NOT_MEMBER);
       if (Option.isNone(made)) {
         // A run of the same call made it meanwhile, which this one answers.
         const raced = yield* readTask(userId, id);

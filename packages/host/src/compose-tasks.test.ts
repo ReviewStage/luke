@@ -855,12 +855,19 @@ function fakeService(tasks: Task[]): FakeService {
         );
         return renamed;
       }),
-    // The service sets the status and the priority named, and leaves the other standing.
-    setStanding: (taskId, standing) =>
+    // The service sets the status, the priority, and the assignee named, naming the assignee by
+    // their account, and leaves the rest standing; null assigns the task to no one.
+    setStanding: (taskId, { assigneeId, ...standing }) =>
       Effect.sync(() => {
         const found = service.tasks.find((candidate) => candidate.id === taskId);
         if (found === undefined) return undefined;
-        const changed = { ...found, ...standing };
+        const { assignee: _standingAssignee, ...rest } = found;
+        const changed =
+          assigneeId === undefined
+            ? { ...found, ...standing }
+            : assigneeId === null
+              ? { ...rest, ...standing }
+              : { ...rest, ...standing, assignee: { userId: assigneeId, name: "Ada Lovelace" } };
         service.tasks = service.tasks.map((candidate) =>
           candidate.id === taskId ? changed : candidate,
         );
@@ -3129,6 +3136,39 @@ it.effect(
         open?.status === TASKS_READ.READY ? open.task?.status : undefined,
         TASK_STATUS.DONE,
       );
+    }),
+);
+
+it.effect(
+  "a plan's assignee set on the service lands in the list and the open document in place, and null assigns it to no one",
+  () =>
+    Effect.gen(function* () {
+      const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const { call, last } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      const openAssignee = () => {
+        const open = last()?.document;
+        return open?.status === TASKS_READ.READY ? open.task?.assignee : undefined;
+      };
+
+      const assigned = yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, {
+        taskId: INVITES,
+        assigneeId: "user-ada",
+      });
+      assert.deepEqual(assigned, { changed: true });
+      assert.deepEqual(
+        last()?.tasks.map((each) => each.assignee?.userId),
+        ["user-ada"],
+      );
+      assert.equal(openAssignee()?.userId, "user-ada");
+
+      yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, { taskId: INVITES, assigneeId: null });
+      assert.deepEqual(
+        last()?.tasks.map((each) => each.assignee),
+        [undefined],
+      );
+      assert.equal(openAssignee(), undefined);
     }),
 );
 

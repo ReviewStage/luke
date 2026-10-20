@@ -6,7 +6,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { TaskKeyLine, TaskStandingChips } from "./task-standing.js";
+import { assigneeRows, TaskKeyLine, TaskStandingChips } from "./task-standing.js";
 
 /**
  * task-standing.test.ts -- a task's head names it by its key and says where
@@ -91,8 +91,63 @@ test("the chips take no pick without a door to send it, and a task from a servic
   const archived = drawn(TASK, undefined);
   assert.equal(chip(archived, "Status").disabled, true);
   assert.equal(chip(archived, "Priority").disabled, true);
+  assert.equal(chip(archived, "Assignee").disabled, true);
 
   const { status: _status, priority: _priority, number: _number, ...older } = TASK;
   const before = drawn(older, () => undefined);
   assert.equal(before.textContent, "");
+});
+
+test("the assignee chip names who the task is assigned to, or no one, and No assignee picked is handed to the page as null", () => {
+  const sent: TaskStanding[] = [];
+  const unassigned = drawn(TASK, (standing) => sent.push(standing));
+  assert.ok(chip(unassigned, "Assignee").textContent?.includes("No assignee"));
+
+  const assigned = drawn(
+    { ...TASK, assignee: { userId: "user-ada", name: "Ada Lovelace" } },
+    (standing) => sent.push(standing),
+  );
+  assert.ok(chip(assigned, "Assignee").textContent?.includes("Ada Lovelace"));
+  const pickNoAssignee = (host: HTMLElement) => {
+    act(() => chip(host, "Assignee").click());
+    const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
+      each.textContent?.includes("No assignee"),
+    );
+    act(() => (row ?? assert.fail("no No assignee row")).click());
+  };
+  pickNoAssignee(unassigned);
+  pickNoAssignee(assigned);
+
+  assert.deepEqual(sent, [{ assigneeId: null }]);
+});
+
+test("the assignee's menu lists No assignee, then the reader, then every other member by name, each searchable by email", () => {
+  const member = (userId: string, name: string) => ({
+    userId,
+    name,
+    email: `${userId}@acme.test`,
+    role: "member" as const,
+  });
+  const rows = assigneeRows(
+    [
+      member("user-grace", "Grace Hopper"),
+      member("user-dean", "Dean"),
+      member("user-ada", "Ada Lovelace"),
+    ],
+    "user-dean",
+  );
+
+  assert.deepEqual(
+    rows.map((row) => [row.id, row.label, row.detail, row.terms]),
+    [
+      ["no-assignee", "No assignee", undefined, undefined],
+      ["user-dean", "Dean", "You", ["user-dean@acme.test"]],
+      ["user-ada", "Ada Lovelace", "user-ada@acme.test", ["user-ada@acme.test"]],
+      ["user-grace", "Grace Hopper", "user-grace@acme.test", ["user-grace@acme.test"]],
+    ],
+  );
+  assert.deepEqual(
+    assigneeRows(undefined, "user-dean").map((row) => row.id),
+    ["no-assignee"],
+  );
 });

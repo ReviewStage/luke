@@ -467,18 +467,23 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
-      const task = yield* hostedStoreOrUnavailable(
-        createTask(userId, {
-          organizationId,
-          ...(input.name === undefined ? undefined : { name: input.name }),
-          repository: reached.repository,
-          githubAccess: reached.githubAccess,
-          ...(issueLinks.length === 0 ? undefined : { issueLinks }),
-          ...(planning === undefined ? undefined : { planning }),
-          ...(input.brief === undefined ? undefined : { brief: input.brief }),
-          ...(input.status === undefined ? undefined : { status: input.status }),
-          ...(input.priority === undefined ? undefined : { priority: input.priority }),
-        }),
+      const task = yield* createTask(userId, {
+        organizationId,
+        ...(input.name === undefined ? undefined : { name: input.name }),
+        repository: reached.repository,
+        githubAccess: reached.githubAccess,
+        ...(issueLinks.length === 0 ? undefined : { issueLinks }),
+        ...(planning === undefined ? undefined : { planning }),
+        ...(input.brief === undefined ? undefined : { brief: input.brief }),
+        ...(input.status === undefined ? undefined : { status: input.status }),
+        ...(input.priority === undefined ? undefined : { priority: input.priority }),
+        ...(input.assigneeId === undefined ? undefined : { assigneeId: input.assigneeId }),
+      }).pipe(
+        Effect.catch((failure) =>
+          failure._tag === "TaskAssigneeNotMember"
+            ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
+            : hostedStoreOrUnavailable(Effect.fail(failure)),
+        ),
       );
       yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
         source: SERVER_TASK_SOURCE.SIDEBAR,
@@ -501,7 +506,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /**
      * The plan's name, its repository, its pin, its archive, its workspace,
-     * or any of them changed, answered with its document. A repository and a
+     * where it stands, its assignee, or any of them changed, answered with
+     * its document; an assignee who is no member of the plan's workspace, or
+     * of the one it moves to, is refused as an invalid request. A repository and a
      * move are confirmed before the row is touched, so a refused one leaves
      * the rest unchanged too; a repository named beside a move is confirmed
      * in the workspace the plan moves to, and a move confirms the repository
@@ -568,6 +575,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ...("archived" in changes ? { archived: changes.archived } : undefined),
           ...(changes.status === undefined ? undefined : { status: changes.status }),
           ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
+          ...(changes.assigneeId === undefined ? undefined : { assigneeId: changes.assigneeId }),
         },
         organizationId === undefined ? undefined : movedRepositoryReached(organizationId, userId),
         archiving ? standsStopped : undefined,
@@ -577,7 +585,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
             ? Effect.fail(failure.refusal)
             : failure._tag === "TaskAgentUnstopped"
               ? Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY)
-              : hostedStoreOrArchived(Effect.fail(failure)),
+              : failure._tag === "TaskAssigneeNotMember"
+                ? Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)
+                : hostedStoreOrArchived(Effect.fail(failure)),
         ),
       );
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
