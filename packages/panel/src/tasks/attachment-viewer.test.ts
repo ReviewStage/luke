@@ -11,6 +11,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { relayout } from "../testing/resize-observer.js";
 import { AttachmentViewer } from "./attachment-viewer.js";
+import { IMAGE_OPENING, type ImageOpening } from "./use-image-zoom.js";
 
 /**
  * attachment-viewer.test.ts -- a picture opened over the window zooms as
@@ -19,7 +20,9 @@ import { AttachmentViewer } from "./attachment-viewer.js";
  * bare zoom keys and the header's buttons step it, the zoom belongs to the
  * picture rather than its place among the files, a resized frame holds its
  * edges again, and a mouse counting its wheel in lines zooms as one counting
- * pixels does. jsdom lays nothing out, so each picture is
+ * pixels does. Two fingers on a touch screen pinch it about the point
+ * between them, and a picture asked to open at its own pixels does so from
+ * its top left corner once it loads. jsdom lays nothing out, so each picture is
  * given the 800 by 400 its frame of 800 by 500 would fit a 2400 by 1200
  * screenshot to.
  */
@@ -65,7 +68,7 @@ interface ViewerState {
 }
 
 /** The viewer open on the two screenshots, at `at`, and the ways to reach the picture shown. */
-function opened() {
+function opened(opening: ImageOpening = IMAGE_OPENING.FITTED) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -88,6 +91,7 @@ function opened() {
             onClose: () => {
               state.closed = true;
             },
+            opening,
           }),
         ),
       ),
@@ -120,6 +124,13 @@ function opened() {
   const fire = (target: Element, event: Event) => act(() => target.dispatchEvent(event));
   const pointer = (type: string, x: number, y: number, buttons: number) =>
     new MouseEvent(type, { bubbles: true, clientX: x, clientY: y, button: 0, buttons });
+  /** A finger, told apart from any other by `id`, as a touch screen's pointer events carry it. */
+  const finger = (type: string, id: number, x: number, y: number) => {
+    const event = pointer(type, x, y, type === "pointerup" ? 0 : 1);
+    Object.defineProperty(event, "pointerId", { value: id });
+    Object.defineProperty(event, "pointerType", { value: "touch" });
+    return event;
+  };
   const key = (key: string) =>
     fire(card(), new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
   const press = (label: string) => {
@@ -134,7 +145,7 @@ function opened() {
     state.at = at;
     draw();
   };
-  return { state, picture, fire, pointer, key, press, show };
+  return { state, picture, fire, pointer, finger, key, press, show };
 }
 
 /** How far the picture is drawn zoomed and moved, read off its transform. */
@@ -166,6 +177,36 @@ test("a pinch on the picture zooms it about the fingers, and one the other way f
   assert.ok(apart.defaultPrevented, "the window itself is not zoomed by it");
   for (let each = 0; each < 5; each += 1) viewer.fire(image, pinch(40));
   assert.equal(drawn(image).scale, 1, "a pinch together fits it again");
+});
+
+test("two fingers spread on a touch screen zoom the picture about the point between them, the release is no press, and pinched together they fit it again", () => {
+  const viewer = opened();
+  const image = viewer.picture();
+  viewer.fire(image, viewer.finger("pointerdown", 1, 500, 250));
+  viewer.fire(image, viewer.finger("pointerdown", 2, 700, 250));
+  viewer.fire(image, viewer.finger("pointermove", 2, 900, 250));
+  const spread = drawn(image);
+  assert.equal(spread.scale, 2, "fingers twice as far apart zoom it twice");
+  assert.ok(spread.x < 0, "toward the point between the fingers, right of centre");
+  viewer.fire(image, viewer.finger("pointerup", 2, 900, 250));
+  viewer.fire(image, viewer.finger("pointerup", 1, 500, 250));
+  viewer.fire(image, viewer.pointer("click", 500, 250, 0));
+  assert.deepEqual(drawn(image), spread, "lifting the fingers neither zooms nor moves it");
+  viewer.fire(image, viewer.finger("pointerdown", 3, 300, 250));
+  viewer.fire(image, viewer.finger("pointerdown", 4, 700, 250));
+  viewer.fire(image, viewer.finger("pointermove", 4, 400, 250));
+  assert.deepEqual(drawn(image), { scale: 1, x: 0, y: 0 }, "pinched together it fits again");
+});
+
+test("a picture asked to open at its own pixels is drawn so once it loads, its top left corner in sight", () => {
+  const viewer = opened(IMAGE_OPENING.OWN_PIXELS);
+  const image = viewer.picture();
+  assert.equal(drawn(image).scale, 1, "fitted until it has loaded");
+  viewer.fire(image, new Event("load"));
+  const own = drawn(image);
+  assert.equal(own.scale, 3, "a 2400-pixel picture drawn 800 wide is drawn three times over");
+  assert.equal(own.x, 800, "its left edge at the frame's");
+  assert.equal(own.y, 350, "its top edge at the frame's");
 });
 
 test("a press zooms a fitted picture to its own pixels and a second fits it again, the viewer open throughout", () => {

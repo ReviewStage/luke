@@ -15,12 +15,14 @@ import {
   FITTED_VIEW,
   type FramePoint,
   type ImageFrame,
+  type ImageSize,
   type ImageView,
   isZoomed,
   pannedBy,
   pressedAt,
   zoomedByStep,
   zoomedByWheel,
+  zoomedTo,
 } from "@luke/ui/image-zoom";
 import { useCallback, useRef, useState } from "react";
 
@@ -36,6 +38,7 @@ const ZOOM_KEY = {
 
 /** A press on the picture while it is held: where it began and where the pointer was last. */
 interface Press {
+  readonly pointerId: number;
   readonly startX: number;
   readonly startY: number;
   x: number;
@@ -49,6 +52,20 @@ const WHEEL_DELTA = {
   LINE: 1,
   PAGE: 2,
 } as const;
+
+/** Where a pointer on the frame stood last, in the page's pixels. */
+interface Spot {
+  readonly x: number;
+  readonly y: number;
+}
+
+/** How the picture is first drawn: fitted to the frame, or at its own pixels from its top left corner, as a diagram too fine to read fitted opens. */
+export const IMAGE_OPENING = {
+  FITTED: "fitted",
+  OWN_PIXELS: "own-pixels",
+} as const;
+
+export type ImageOpening = (typeof IMAGE_OPENING)[keyof typeof IMAGE_OPENING];
 
 /** The CSS pixels a wheel's line stands for. */
 const WHEEL_LINE_PX = 16;
@@ -108,6 +125,39 @@ function sameView(first: ImageView, second: ImageView): boolean {
   return first.scale === second.scale && first.x === second.x && first.y === second.y;
 }
 
+/** The point halfway between two spots. */
+function between(first: Spot, second: Spot): Spot {
+  return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
+}
+
+/**
+ * `view` as two fingers moved it: one finger from `was` to `now` while the
+ * other held at `held`, scaled by how far apart they moved about the point
+ * between them, and moved as that point moved, so what was under each finger
+ * stays under it. Points are the frame's, from its centre.
+ */
+function pinched(
+  view: ImageView,
+  sizes: ImageFrame,
+  fingers: { readonly was: FramePoint; readonly now: FramePoint; readonly held: FramePoint },
+): ImageView {
+  const { was, now, held } = fingers;
+  const apartBefore = Math.hypot(was.x - held.x, was.y - held.y);
+  if (apartBefore === 0) return view;
+  const apartAfter = Math.hypot(now.x - held.x, now.y - held.y);
+  const from = between(was, held);
+  const to = between(now, held);
+  const zoomed = zoomedTo(view, sizes, (view.scale * apartAfter) / apartBefore, from);
+  return pannedBy(zoomed, sizes, to.x - from.x, to.y - from.y);
+}
+
+/** The view a picture opening at its own pixels is drawn at: its own size over its fitted one, its top left corner where the fitted picture's stood. */
+function ownPixels(view: ImageView, sizes: ImageFrame, natural: ImageSize): ImageView {
+  if (sizes.fitted.width <= 0) return view;
+  const corner = { x: -sizes.fitted.width / 2, y: -sizes.fitted.height / 2 };
+  return zoomedTo(view, sizes, natural.width / sizes.fitted.width, corner);
+}
+
 /** Where a pointer at `clientX`, `clientY` stands from the frame's centre. */
 function pointIn(frame: HTMLElement, clientX: number, clientY: number): FramePoint {
   const box = frame.getBoundingClientRect();
@@ -116,12 +166,18 @@ function pointIn(frame: HTMLElement, clientX: number, clientY: number): FramePoi
 
 /**
  * The zoom of the file named `name` at `url`, fitted until a gesture says
- * otherwise. Note that the zoom belongs to the picture rather than to its
+ * otherwise, or at its own pixels once it has loaded where `opening` asks.
+ * Two fingers on the frame pinch it about the point between them, as a
+ * trackpad's pinch does, and move it as that point moves. Note that the zoom belongs to the picture rather than to its
  * place among the files, so another picture shown, however it came to be,
  * opens fitted, and the same picture moved along the files as an earlier one
  * lands keeps its zoom.
  */
-export function useImageZoom(name: string, url: string): ImageZoom {
+export function useImageZoom(
+  name: string,
+  url: string,
+  opening: ImageOpening = IMAGE_OPENING.FITTED,
+): ImageZoom {
   const [stored, setShown] = useState<Shown>({
     subject: { name, url },
     view: FITTED_VIEW,
@@ -134,6 +190,8 @@ export function useImageZoom(name: string, url: string): ImageZoom {
   const frame = useRef<HTMLDivElement | null>(null);
   const image = useRef<HTMLImageElement | null>(null);
   const press = useRef<Press | undefined>(undefined);
+  // Every pointer down on the frame, by its id, where it stood last.
+  const fingers = useRef(new Map<number, Spot>());
 
   // Note that every change measures the frame as it lands, because the
   // window may have changed size since the last one.
@@ -176,10 +234,41 @@ export function useImageZoom(name: string, url: string): ImageZoom {
       );
       resized.observe(element);
       if (image.current !== null) resized.observe(image.current);
+      const down = (event: PointerEvent) => {
+        fingers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      };
+      // Note that a finger is heard on the frame rather than the picture, so
+      // a pinch begun on the frame's ground around a small picture still
+      // zooms it, and before the picture's own handlers, which leave a pinch alone.
+      const move = (event: PointerEvent) => {
+        const was = fingers.current.get(event.pointerId);
+        if (was === undefined) return;
+        const now = { x: event.clientX, y: event.clientY };
+        fingers.current.set(event.pointerId, now);
+        if (fingers.current.size !== 2) return;
+        const held = [...fingers.current].find(([id]) => id !== event.pointerId)?.[1];
+        if (held === undefined) return;
+        const at = (spot: Spot) => pointIn(element, spot.x, spot.y);
+        change(false, (view, sizes) =>
+          pinched(view, sizes, { was: at(was), now: at(now), held: at(held) }),
+        );
+      };
+      const up = (event: PointerEvent) => {
+        fingers.current.delete(event.pointerId);
+      };
       element.addEventListener("wheel", wheel, { passive: false });
+      element.addEventListener("pointerdown", down);
+      element.addEventListener("pointermove", move);
+      element.addEventListener("pointerup", up);
+      element.addEventListener("pointercancel", up);
       return () => {
         resized.disconnect();
         element.removeEventListener("wheel", wheel);
+        element.removeEventListener("pointerdown", down);
+        element.removeEventListener("pointermove", move);
+        element.removeEventListener("pointerup", up);
+        element.removeEventListener("pointercancel", up);
+        fingers.current.clear();
       };
     },
     [change],
@@ -209,9 +298,23 @@ export function useImageZoom(name: string, url: string): ImageZoom {
       },
       "data-zoom": isZoomed(view) ? "zoomed" : "fitted",
       "data-glide": String(glide),
+      onLoad: (event) => {
+        if (opening !== IMAGE_OPENING.OWN_PIXELS) return;
+        const natural = {
+          width: event.currentTarget.naturalWidth,
+          height: event.currentTarget.naturalHeight,
+        };
+        change(false, (view, sizes) => (isZoomed(view) ? view : ownPixels(view, sizes, natural)));
+      },
       onPointerDown: (event) => {
         if (event.button !== 0) return;
+        // A second finger down makes the press a pinch, which is no press.
+        if (fingers.current.size > 1) {
+          if (press.current !== undefined) press.current.moved = true;
+          return;
+        }
         press.current = {
+          pointerId: event.pointerId,
           startX: event.clientX,
           startY: event.clientY,
           x: event.clientX,
@@ -223,6 +326,16 @@ export function useImageZoom(name: string, url: string): ImageZoom {
       onPointerMove: (event) => {
         const held = press.current;
         if (held === undefined || (event.buttons & 1) === 0) return;
+        // A pinch zooms on the frame (above); the finger that began the press
+        // keeps its place, so lifting the other drags on from where it stands.
+        if (fingers.current.size > 1 || event.pointerId !== held.pointerId) {
+          held.moved = true;
+          if (event.pointerId === held.pointerId) {
+            held.x = event.clientX;
+            held.y = event.clientY;
+          }
+          return;
+        }
         const dx = event.clientX - held.x;
         const dy = event.clientY - held.y;
         held.x = event.clientX;

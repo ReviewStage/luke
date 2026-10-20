@@ -438,19 +438,23 @@ function TaskBox({
   checked: boolean;
   toggle: TaskToggler;
 }): React.JSX.Element {
+  // Note that the box stands in a label, as the editor's does, so a finger's
+  // press around it, wider than the box draws, ticks it (`markdown.css`).
   return (
-    <input
-      key={String(checked)}
-      type="checkbox"
-      aria-label={item.label}
-      defaultChecked={checked}
-      onChange={(event) => {
-        const box = event.currentTarget;
-        toggle(item.at).then((saved) => {
-          if (!saved) box.checked = checked;
-        });
-      }}
-    />
+    <label className="task-list-box">
+      <input
+        key={String(checked)}
+        type="checkbox"
+        aria-label={item.label}
+        defaultChecked={checked}
+        onChange={(event) => {
+          const box = event.currentTarget;
+          toggle(item.at).then((saved) => {
+            if (!saved) box.checked = checked;
+          });
+        }}
+      />
+    </label>
   );
 }
 

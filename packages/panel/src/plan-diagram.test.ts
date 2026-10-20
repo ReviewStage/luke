@@ -34,7 +34,10 @@ import { landedBundles, onSideBundles } from "./testing/side-bundles.js";
  * and every other fence, and every fence where the words are not a plan's,
  * stays code. Mermaid cannot lay out under jsdom, so the bundle stands in at
  * its one boundary, the bundle's importer, answering a picture named by the
- * code and the appearance it was asked in. Synthetic plan.
+ * code and the appearance it was asked in. On a finger's device, or in a
+ * phone's narrow room, a tap on a diagram opens it over the window, which
+ * its Close or Escape shuts; with a mouse in a wide room a tap opens nothing.
+ * Synthetic plan.
  */
 
 /** The code the stand-in refuses, as Mermaid refuses code it cannot parse. */
@@ -66,15 +69,19 @@ beforeAll(async () => {
 /** Whether the window is in its dark appearance, and who hears it flip. */
 const appearance = { dark: false, listeners: new Set<() => void>() };
 
+/** Whether the window is worked by a finger, which a press on a diagram asks as it lands. */
+const device = { finger: false };
+
 const roots: Root[] = [];
 
 beforeEach(() => {
   appearance.dark = false;
+  device.finger = false;
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
-    value: () => ({
+    value: (query: string) => ({
       get matches() {
-        return appearance.dark;
+        return query.includes("pointer: coarse") ? device.finger : appearance.dark;
       },
       addEventListener: (_type: string, listener: () => void) => appearance.listeners.add(listener),
       removeEventListener: (_type: string, listener: () => void) =>
@@ -246,4 +253,71 @@ test("a version draws a fence it left alone as its diagram, and one whose code i
       ["INS", "Accept"],
     ],
   );
+});
+
+/** The diagram opened over the window, if it is. */
+function viewer(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(".attachment-viewer");
+}
+
+/** The diagram's picture on the page. */
+function picture(container: HTMLElement): HTMLImageElement {
+  return (
+    container.querySelector<HTMLImageElement>(".plan-diagram-picture") ??
+    assert.fail("the diagram is drawn")
+  );
+}
+
+test("on a finger's device a tap on a diagram opens it over the window at its own pixels, and Close shuts it", async () => {
+  device.finger = true;
+  const code = "flowchart LR\n  Invite --> Join";
+  const page = await drawn(
+    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
+  );
+
+  act(() => picture(page).click());
+
+  const open = viewer() ?? assert.fail("the diagram opens over the window");
+  assert.equal(open.dataset.opening, "own-pixels");
+  assert.equal(
+    open.querySelector(".attachment-viewer-image")?.getAttribute("src"),
+    pictureOf(code, DIAGRAM_APPEARANCE.LIGHT),
+  );
+  const close =
+    open.querySelector<HTMLButtonElement>('button[aria-label="Close"]') ??
+    assert.fail("the viewer offers Close");
+  act(() => close.click());
+  assert.equal(viewer(), null);
+});
+
+test("in a phone's narrow room a tap on a diagram opens it, and Escape shuts it", async () => {
+  const code = "flowchart LR\n  Invite --> Join";
+  const room = document.body.appendChild(document.createElement("div"));
+  room.className = "desktop-shell";
+  room.dataset.room = "narrow";
+  const page = await drawn(
+    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
+  );
+  room.append(page);
+
+  act(() => picture(page).click());
+
+  const card =
+    document.querySelector<HTMLElement>('[role="dialog"]') ??
+    assert.fail("the diagram opens over the window");
+  act(() => {
+    card.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(viewer(), null);
+});
+
+test("with a mouse in a wide room a tap on a diagram opens nothing over the window", async () => {
+  const code = "flowchart LR\n  Invite --> Join";
+  const page = await drawn(
+    createElement(PlanBody, { task: taskWith(mermaidFence(code)), live: false }),
+  );
+
+  act(() => picture(page).click());
+
+  assert.equal(viewer(), null);
 });

@@ -14,6 +14,7 @@ import { layContainersAt } from "../testing/container-width.js";
  * site's full roles on a touch screen, 44px controls and 16px words, so a
  * field never makes iOS zoom, and keeps its compact ones with a mouse; the
  * desktop's roles stand as they are. A sidebar row's mark, a section's ⋯,
+ * a plan's task box, read or edited, the plan byline's person and time,
  * and a toolbar's glyph button each take a press at least 44px across around
  * what they draw on a touch screen; a close beside the words it closes, the
  * tab's × and a toast's, a press 44px tall and no wider than it draws, so a
@@ -136,6 +137,13 @@ function drawn(node: ReactNode, className = ""): HTMLElement {
   return container;
 }
 
+/** `html` laid in the document as the component draws it, answering the element `selector` finds in it. */
+function markup(html: string, selector: string): Element {
+  const container = document.body.appendChild(document.createElement("div"));
+  container.innerHTML = html;
+  return container.querySelector(selector) ?? assert.fail(`${selector} is drawn`);
+}
+
 /** The button drawn in `container`. */
 function buttonIn(container: Element): HTMLButtonElement {
   const button = container.querySelector("button");
@@ -152,6 +160,34 @@ function smallTargets(): ReadonlyMap<string, Element> {
     [
       "a section's ⋯",
       buttonIn(drawn(createElement(IconButton, { icon: "⋯", label: "More" }), "plan-unit-more")),
+    ],
+    [
+      "a plan's task box",
+      markup(
+        '<ul class="markdown"><li class="task-list-item"><label class="task-list-box"><input type="checkbox"></label></li></ul>',
+        ".task-list-box",
+      ),
+    ],
+    [
+      "a task box in the plan's editor",
+      markup(
+        '<ul class="plan-document-text"><li data-checked="false"><label><input type="checkbox"></label><div></div></li></ul>',
+        "label",
+      ),
+    ],
+    [
+      "the plan byline's person",
+      markup(
+        '<p class="plan-byline"><span class="actor-line">Created by <button class="luke-inline-ref" data-actor-ref="">you</button></span></p>',
+        "[data-actor-ref]",
+      ),
+    ],
+    [
+      "the plan byline's time",
+      markup(
+        '<p class="plan-byline"><span class="actor-line">Last edited · <button class="luke-text-button">2h ago</button></span></p>',
+        ".luke-text-button",
+      ),
     ],
     [
       "a toolbar's glyph button",
