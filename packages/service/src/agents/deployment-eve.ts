@@ -1,3 +1,4 @@
+// deployment-eve.ts -- eve as the deployment reaches it acting for an account, under its own secret.
 import { Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
@@ -6,8 +7,6 @@ import type { BrainHostTurn } from "./brain-host/bounds.js";
 import { type EveMount, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
 
 /**
- * deployment-eve.ts -- eve as the deployment reaches it acting for an account, under its own secret.
- *
  * Every web function that reaches eve for an account whose bearer it does
  * not hold composes the deployment's caller here and nowhere else: a
  * cookie request's `eveFor` (`coder-host/stop.ts`), a chat notice to an
