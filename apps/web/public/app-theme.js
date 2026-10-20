@@ -9,19 +9,23 @@
 // the site palette's own (`@luke/ui`'s `palettes.css`), which a test holds
 // this file to.
 //
-// It reads too how the shell last drew its sidebar in this browser, which
-// the panel keeps in this same storage (`@luke/panel`'s
+// It reads too whether the tab last read someone signed in here
+// (`src/app/first-frame-hint.tsx`), and how the shell last drew its sidebar,
+// which the panel keeps in this same storage (`@luke/panel`'s
 // `sidebar-collapse.ts`): pinned, and how wide, so the frame app.html draws
-// before the panel stands it the same. A browser that never drew the
-// signed-in shell keeps no such choice and draws no sidebar in the frame.
+// before the panel stands it the same. A browser signed out, or one that
+// never signed in, draws no sidebar in the frame, since the sign-in gate
+// stands none.
 (() => {
   const GROUND = { light: "#fbfbfa", dark: "#08090b" };
   const SIDEBAR_WIDTH = { MIN: 200, MAX: 400 };
   let chosen = null;
+  let signedIn = null;
   let sidebarCollapsed = null;
   let sidebarWidth = null;
   try {
     chosen = localStorage.getItem("luke.theme");
+    signedIn = localStorage.getItem("luke.signed-in-here");
     sidebarCollapsed = localStorage.getItem("luke.sidebar-collapsed");
     sidebarWidth = localStorage.getItem("luke.sidebar-width");
   } catch {
@@ -36,7 +40,7 @@
   const root = document.documentElement;
   root.setAttribute("data-luke-theme", theme);
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", GROUND[theme]);
-  if (sidebarCollapsed === "false") {
+  if (signedIn === "true" && sidebarCollapsed === "false") {
     root.setAttribute("data-luke-boot-sidebar", "pinned");
     const width = Number(sidebarWidth);
     if (sidebarWidth !== null && sidebarWidth.trim() !== "" && Number.isFinite(width)) {

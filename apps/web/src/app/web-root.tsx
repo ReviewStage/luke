@@ -15,7 +15,8 @@
  * Until the panel draws, the tab shows the shell's frame app.html stands in
  * the root element, which the root's first render replaces; a tab that can
  * draw nothing takes the frame down, so it is never left looking as though
- * the panel were still coming.
+ * the panel were still coming. What the next load's frame needs to know of
+ * this one is kept as the panel draws (`first-frame-hint.tsx`).
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -34,6 +35,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import { createRoot } from "react-dom/client";
 import { type BrowserHistory, browserHistory } from "./browser-history";
+import { FirstFrameHint } from "./first-frame-hint";
 import { withLoadLink } from "./load-link";
 import { browserLinkPlatform, browserLoadedFresh, handOffToMacApp } from "./mac-app-handoff";
 import { WebAppearance } from "./web-appearance";
@@ -131,6 +133,7 @@ export async function mountWebApp(
   root.render(
     <RegistryContext.Provider value={rendererRegistry}>
       <WebAppearance />
+      <FirstFrameHint />
       <App />
     </RegistryContext.Provider>,
   );

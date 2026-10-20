@@ -13,8 +13,9 @@ import { afterEach, beforeEach, test, vi } from "vitest";
  * machine's; and the browser's chrome is tinted with that theme's own
  * ground, as the palette names it, so a dark tab never opens light. And the
  * shell's frame app.html draws stands its sidebar as the shell last drew it
- * here: pinned, at the width kept, as the panel bounds it, and none where the
- * shell kept it folded or never drew it.
+ * here: pinned, at the width kept, as the panel bounds it, where the tab
+ * last read someone signed in, and none where the shell kept it folded or
+ * never drew it, or the tab last read nobody signed in.
  */
 
 const BOOT = readFileSync(join(import.meta.dirname, "..", "public", "app-theme.js"), "utf8");
@@ -113,6 +114,7 @@ test("the frame pins the sidebar as the shell last drew it here, at the width ke
     [undefined, undefined],
     ["wide", undefined],
   ] as const) {
+    localStorage.setItem("luke.signed-in-here", "true");
     localStorage.setItem("luke.sidebar-collapsed", "false");
     if (kept === undefined) localStorage.removeItem("luke.sidebar-width");
     else localStorage.setItem("luke.sidebar-width", kept);
@@ -122,12 +124,21 @@ test("the frame pins the sidebar as the shell last drew it here, at the width ke
   }
 });
 
-test("a sidebar the shell kept folded, or never drew in this browser, stands in no frame", () => {
-  for (const collapsed of ["true", undefined]) {
+test("a sidebar kept folded or never drawn, or a browser not signed in here, stands no sidebar in the frame", () => {
+  for (const [signedIn, collapsed] of [
+    ["true", "true"],
+    ["true", undefined],
+    [undefined, "false"],
+  ] as const) {
     localStorage.clear();
+    if (signedIn !== undefined) localStorage.setItem("luke.signed-in-here", signedIn);
     if (collapsed !== undefined) localStorage.setItem("luke.sidebar-collapsed", collapsed);
     localStorage.setItem("luke.sidebar-width", "300");
 
-    assert.deepEqual(frameSidebar(), { pinned: false, width: undefined }, `kept ${collapsed}`);
+    assert.deepEqual(
+      frameSidebar(),
+      { pinned: false, width: undefined },
+      `signed in ${signedIn}, folded ${collapsed}`,
+    );
   }
 });

@@ -28,14 +28,19 @@
 /* The shell's frame app.html draws before the panel stands, of the shell's
    own classes, so its columns are the shell's; only what makes it a frame is
    here. Its sidebar stands where the shell's would stand pinned: where this
-   browser last drew it pinned (`data-luke-boot-sidebar`, at the width it
-   kept, both of which `public/app-theme.js` reads), on a stage as wide as
-   `@luke/panel`'s `sidebar-collapse.ts` pins one at (`SIDEBAR_COMPACT.ENTER`).
-   Its places are rows with nothing in them yet. Where no sidebar stands, a
-   phone's or a first visit's, the frame is the work column alone, and Luke's
+   browser last read someone signed in and drew the sidebar pinned
+   (`data-luke-boot-sidebar`, at the width it kept, all of which
+   `public/app-theme.js` reads), on a stage as wide as `@luke/panel`'s
+   `sidebar-collapse.ts` pins one at (`SIDEBAR_COMPACT.ENTER`). The stage is
+   the container measured, as the panel measures it (`stage-room.ts`), so a
+   screen's side insets, which the stage keeps off, count here as they do
+   there. Its places are rows with nothing in them yet. Where no sidebar
+   stands, a phone's, a signed-out browser's, or a first visit's, the frame
+   is the work column alone, and Luke's
    face comes up in its middle once the wait has run long enough to notice
    (`--luke-hint-delay`), so a quick load never flashes it. */
 .boot-frame {
+  container-type: inline-size;
   --sidebar-width: var(--luke-boot-sidebar-width, var(--sidebar-width-default));
 }
 
@@ -47,7 +52,7 @@
   display: none;
 }
 
-@media (width >= 1120px) {
+@container (width >= 1120px) {
   :root[data-luke-boot-sidebar="pinned"] .boot-frame .desktop-shell {
     grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   }
