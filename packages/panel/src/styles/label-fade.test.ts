@@ -17,8 +17,9 @@ import { layContainersAt } from "../testing/container-width.js";
  * its end, as a browser's tab title does, rather than ending in an
  * ellipsis, and one that fits ends on its last letter, neither faded nor
  * cut: a call's verb in a transcript, an MCP server's name in its row,
- * and a pull request's label pill. jsdom lays nothing out, so the panel's sheets are
- * laid (`testing/container-width.ts`), a box is stood in for as 120px wide
+ * and a pull request's label pill, whose name, standing in its own
+ * direction, fades at its left where it reads right to left. jsdom lays
+ * nothing out, so the panel's sheets are laid (`testing/container-width.ts`), a box is stood in for as 120px wide
  * and its words as 8px a letter, and the observer reports each box once as
  * a first layout would.
  */
@@ -147,4 +148,15 @@ test("a pull request's label pill keeps its own edge and fill whole while its na
   const pill = name.closest<HTMLElement>(".pull-request-label") ?? assert.fail("the pill");
   assert.equal(ending(name).fades, true);
   assert.equal(ending(pill).fades, false);
+});
+
+test("a pull request's label named right to left fades at its left, where its words are cut, and one left to right at its right", () => {
+  const towards = (words: string) => {
+    const name = SITES[2]?.draw(words) ?? assert.fail("the pill's name");
+    return getComputedStyle(name)
+      .getPropertyValue("mask-image")
+      .match(/to (left|right)/)?.[1];
+  };
+  assert.equal(towards("مراجعة التصميم مطلوبة قبل نافذة الدمج"), "right");
+  assert.equal(towards(LONG), "left");
 });

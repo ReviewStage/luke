@@ -4244,6 +4244,12 @@ ol.transcript-list {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
+/* A label's name stands in its own direction (`<bdi>`), so a right-to-left
+   one is cut at its left and fades there. */
+.pull-request-label-name:dir(rtl)[data-overflow="true"] {
+  mask-image: linear-gradient(to right, transparent, #000 var(--label-fade));
+}
+
 /* A place's name heads the chat (`chat-pane.tsx`) in a box of its own
    inside the heading, so the heading's ellipsis never draws and the box's
    fade (above) ends it. */
