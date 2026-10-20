@@ -59,6 +59,7 @@ import { Shortcut } from "../shortcut.js";
 import { commandKeyshortcuts } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
+import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
@@ -264,6 +265,7 @@ export function DesktopSettings({
   const marked = opened?.page === settings.view ? opened.id : undefined;
   const edge = useSidebarEdge(sidebar);
   const hidden = hiddenColumns(room, step.listed);
+  const screen = useNarrowFocus(room, step.listed);
   const bar = <PageBar onList={room === SHELL_ROOM.NARROW ? step.onList : undefined} />;
   // The page with a search of its own takes Command-F while it shows; a page hidden behind the list does not.
   const pageSearched =
@@ -286,7 +288,7 @@ export function DesktopSettings({
     );
   }
   return (
-    <div className="desktop-settings">
+    <div ref={screen} className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} />

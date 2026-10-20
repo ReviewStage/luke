@@ -73,6 +73,7 @@ import { useVersionRestore, VersionSkeleton, VersionView } from "../tasks/versio
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
+import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 
 /**
@@ -734,9 +735,10 @@ export function DesktopVersionHistory({
   );
   useOpenedRowShown(versions.selected, rows, log);
   const hidden = hiddenColumns(room, versions.listed);
+  const screen = useNarrowFocus(room, versions.listed);
 
   return (
-    <div className="desktop-version-history">
+    <div ref={screen} className="desktop-version-history">
       <nav className="version-log ph-no-capture" aria-label="Versions" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
         <HistoryButtons history={history} />
