@@ -1,8 +1,8 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "1a458861-59b5-4163-90ee-14dbe33b68d2",
-  "prevIds": ["5fa5daab-4d97-4053-ac58-0f92993e6f3f", "b0e6702e-ccd3-46ff-8753-e1d1d7e3f939"],
+  "id": "aacdd2b7-6672-462a-8926-838af13c30d1",
+  "prevIds": ["46dd2e13-923b-48c9-b128-52fa6235669b"],
   "ddl": [
     {
       "isRlsEnabled": false,
@@ -6576,6 +6576,19 @@
       "generated": null,
       "identity": null,
       "name": "coding_agent_context_window",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "account_preference"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "chapters_model",
       "entityType": "columns",
       "schema": "public",
       "table": "account_preference"
