@@ -27,7 +27,7 @@ import {
  * narrower than its own figure.
  */
 const METRIC_CARD_GROUPED =
-  "bg-(--luke-color-surface) px-5 py-4 min-[720px]:flex-1 min-[720px]:basis-36";
+  "bg-(--luke-color-surface) px-(--luke-card-inset) py-(--luke-card-inset-compact) min-[720px]:flex-1 min-[720px]:basis-36";
 
 /**
  * A figure stands on one line, never broken inside a number: a line that
