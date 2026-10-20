@@ -221,6 +221,11 @@ function sectionBlocks(doc: PmNode, section: number): { first: number; next: num
   return first === undefined ? undefined : { first, next: starts[section + 1] ?? doc.childCount };
 }
 
+/** Whether a text node stands in a code block. */
+function inCode(text: Node): boolean {
+  return text.parentElement?.closest("pre") != null;
+}
+
 /**
  * Where the words a click landed on stand in the editor: in the same
  * section, the node of the same words as many such nodes in, at the same
@@ -241,7 +246,7 @@ function wordsAt(editor: Editor, words: PlacedWords): number | undefined {
       text !== null && found === undefined;
       text = walker.nextNode()
     ) {
-      if (text.textContent !== words.text) continue;
+      if (text.textContent !== words.text || inCode(text) !== words.code) continue;
       if (seen === words.occurrence)
         found = view.posAtDOM(text, Math.min(words.offset, words.text.length));
       seen += 1;

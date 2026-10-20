@@ -137,6 +137,11 @@ function lineTop(range: Range, words: Text): number {
   return box?.top ?? words.parentElement?.getBoundingClientRect().top ?? 0;
 }
 
+/** Whether a text node stands in a code block, as `PlacedWords` counts it. */
+function inCode(text: Node): boolean {
+  return text.parentElement?.closest("pre") != null;
+}
+
 /**
  * The words a click at a point landed on in a section's drawn block, as the
  * editor finds them again (`PlacedWords`); none where it landed on no words.
@@ -151,12 +156,13 @@ function wordsUnder(
   const words = range?.startContainer;
   if (range == null || !(words instanceof Text) || !block.contains(words)) return undefined;
   const text = words.data;
+  const code = inCode(words);
   let occurrence = 0;
   const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
   for (let at = walker.nextNode(); at !== null && at !== words; at = walker.nextNode()) {
-    if (at.textContent === text) occurrence += 1;
+    if (at.textContent === text && inCode(at) === code) occurrence += 1;
   }
-  return { section, text, occurrence, offset: range.startOffset, top: lineTop(range, words) };
+  return { section, text, occurrence, offset: range.startOffset, code, top: lineTop(range, words) };
 }
 
 /** Where a text's words stand in the window. */
@@ -797,7 +803,8 @@ export function PlanDocumentEditor({
   useLayoutEffect(() => {
     if (kept.current || !ready) return;
     kept.current = true;
-    const place = editing.placement;
+    // Note that a press on the room while the bundle loaded is where the editor opens, which keeps no words.
+    const place = pending ?? editing.placement;
     const words = place !== undefined && "words" in place ? place.words : undefined;
     const column = scroller?.current;
     const top = handle.current?.caretTop();

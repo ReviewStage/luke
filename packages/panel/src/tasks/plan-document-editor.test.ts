@@ -571,7 +571,7 @@ test("a click hands the editor the words it landed on, so the caret finds them h
   assert.deepEqual(open().placement, {
     x: 60,
     y: 310,
-    words: { section: 0, text: "Ship it.", occurrence: 1, offset: 5, top: 300 },
+    words: { section: 0, text: "Ship it.", occurrence: 1, offset: 5, code: false, top: 300 },
   });
 });
 
@@ -592,4 +592,38 @@ test("the words a click opened the editor on stay where they stood, the column s
   }
 
   assert.equal(scroller.scrollTop, 559);
+});
+
+test("a press on the room after a click while the editor's bundle loads opens the editor where the room says, scrolling nothing for the click's words", async () => {
+  layTextOut();
+  const landed = bundles;
+  const gate = Promise.withResolvers<PlanEditorModule>();
+  bundles = sideBundles({ planEditor: () => gate.promise });
+  try {
+    const { container } = mount();
+    const scroller = scrollerOf(container);
+    scroller.scrollTop = 500;
+    pointLandsOn(wordsNode(block(container, "Goal"), "Invites land by email."), 3, 300);
+    try {
+      act(() => {
+        block(container, "Goal").dispatchEvent(
+          new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }),
+        );
+      });
+    } finally {
+      Reflect.deleteProperty(document, "caretRangeFromPoint");
+    }
+    pressAt(scroller, 300, 500);
+    caretLine = 700;
+    await act(async () => {
+      gate.resolve(STAND_IN);
+      await gate.promise;
+    });
+    await settle();
+
+    assert.deepEqual(open().placement, PLACEMENT_END);
+    assert.equal(scroller.scrollTop, 500);
+  } finally {
+    bundles = landed;
+  }
 });

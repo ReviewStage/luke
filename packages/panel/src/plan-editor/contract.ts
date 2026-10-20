@@ -25,6 +25,12 @@ export interface PlacedWords {
   readonly text: string;
   readonly occurrence: number;
   readonly offset: number;
+  /**
+   * Whether the words stand in a code block, and so are counted only among
+   * code's. Note that the two are counted apart, because the text draws a
+   * diagram's code as its picture, while the editor keeps the code.
+   */
+  readonly code: boolean;
   /** Where their line stood in the window as they were clicked, which the panel keeps them at as the editor opens. */
   readonly top: number;
 }

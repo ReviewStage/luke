@@ -75,7 +75,7 @@ test("an empty text says the placeholder it was given, and the plan's own withou
 
 test("an editor opened on the words a click landed on stands its caret in them, in their section, as many alike in, at the offset", () => {
   const text = "## Goal\n\nShip it.\n\n## Risks\n\nShip it.\n\nShip it.\n";
-  const words = { section: 1, text: "Ship it.", occurrence: 1, offset: 5, top: 0 };
+  const words = { section: 1, text: "Ship it.", occurrence: 1, offset: 5, code: false, top: 0 };
   const { finished, element } = mount(text, { x: 0, y: 0, words });
   const selection = window.getSelection();
   const risks = [...element.querySelectorAll("p")];
@@ -88,4 +88,18 @@ test("an editor opened on the words a click landed on stands its caret in them, 
   assert.equal(selection?.anchorOffset, 5);
   pressEscape(element);
   assert.deepEqual(finished, [1]);
+});
+
+test("words a click landed on outside code are not found in a diagram's code of the same words, which the text drew as its picture", () => {
+  const text = "## Flow\n\n```mermaid\nShip it.\n```\n\nShip it.\n";
+  const words = { section: 0, text: "Ship it.", occurrence: 0, offset: 2, code: false, top: 0 };
+  const { element } = mount(text, { x: 0, y: 0, words });
+  const selection = window.getSelection();
+
+  assert.equal(
+    selection?.anchorNode,
+    element.querySelector("p")?.firstChild,
+    "the paragraph, not the code",
+  );
+  assert.equal(selection?.anchorOffset, 2);
 });
