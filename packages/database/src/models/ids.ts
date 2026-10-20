@@ -49,6 +49,7 @@ const ID_KIND = {
   SENT: "sent",
   CHAT_NOTICE: "chat-notice",
   CHAT_ATTACHMENT: "chat-attachment",
+  NATIVE_TURN: "native-turn",
 } as const;
 
 /**
@@ -78,6 +79,18 @@ export function receivedMessageId(sessionId: string, eveTurnId: string, ordinal 
 /** The developer's line sent to a coding agent, under the key the client made for the send, which is how a send repeated after a lost answer finds the row it already wrote. */
 export function sentLineId(clientKey: string): string {
   return nameBasedUuid(BRAIN_HOST_ID_NAMESPACE, coordinate([ID_KIND.SENT, clientKey]));
+}
+
+/**
+ * The store's id for one turn of a native harness's conversation, by the
+ * number of the runner event that opened it, which no other turn of the
+ * conversation shares, so a batch posted again opens the same turn.
+ */
+export function nativeTurnId(conversationId: string, openingSequence: number): string {
+  return nameBasedUuid(
+    BRAIN_HOST_ID_NAMESPACE,
+    coordinate([ID_KIND.NATIVE_TURN, conversationId, String(openingSequence)]),
+  );
 }
 
 /** The client id of the assistant message a turn completes; the turn's id is its journal's client id already, so this is another. */

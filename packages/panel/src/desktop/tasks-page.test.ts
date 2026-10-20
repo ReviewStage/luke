@@ -28,8 +28,10 @@ import { TasksPage } from "./tasks-page.js";
  * tasks-page.test.ts -- the Tasks page the sidebar's Tasks row opens: its List runs the pinned tasks first, then the rest under
  * their status from the work under way, the settled left out until asked;
  * each row says how many Inbox threads of its task wait on the reader; a
- * press opens the task; the switch beside the title shows the Board, and
- * both the view and the List's filter are kept on this Mac.
+ * press opens the task; the switch beside the title shows the Board; the
+ * Filter narrows the tasks and its chips lift it; View options groups them,
+ * shows the settled, and draws a row's properties; and the view, the
+ * filter, and the display are kept on this Mac.
  */
 
 const DEAN = "user-dean";
@@ -41,6 +43,8 @@ const ACME = {
   github: null,
   memberCount: 1,
 } as const satisfies Workspace;
+
+const BETA = { ...ACME, id: "workspace-beta", name: "Beta" } as const satisfies Workspace;
 
 const MEMBERS: readonly WorkspaceMember[] = [
   { userId: DEAN, name: "Dean Stratakos", email: "dean@acme.dev", role: "owner" },
@@ -125,27 +129,30 @@ async function mountPage(): Promise<HTMLElement> {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const control = tasksControl({
-    tasks: [...TASKS],
-    inbox: WAITING,
-    workspace: ACME,
-    workspaces: [ACME],
-    me: DEAN,
-    listRead: true,
-    onSelect: (taskId) => opened.push(taskId),
-    boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
-  });
-  act(() =>
+  const registry = AtomRegistry.make();
+  const draw = (workspace: Workspace) => {
+    const control = tasksControl({
+      tasks: TASKS.map((each) => ({ ...each, workspaceId: workspace.id })),
+      inbox: WAITING,
+      workspace,
+      workspaces: [ACME, BETA],
+      me: DEAN,
+      listRead: true,
+      onSelect: (taskId) => opened.push(taskId),
+      boardView: { open: true, onOpen: () => undefined, onClose: () => (closed += 1) },
+    });
     root.render(
-      onRegistry(
-        AtomRegistry.make(),
-        createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE }),
-      ),
-    ),
-  );
+      onRegistry(registry, createElement(TasksPage, { tasks: control, room: SHELL_ROOM.WIDE })),
+    );
+  };
+  listWorkspace = (workspace) => act(() => draw(workspace));
+  act(() => draw(ACME));
   await act(async () => undefined);
   return container;
 }
+
+/** Lists another workspace on the page last mounted, as the sidebar's switcher does. */
+let listWorkspace: (workspace: Workspace) => void = () => undefined;
 
 /** Each group of the List: its name and its rows' keys, in order. */
 function groups(page: HTMLElement): [string, string[]][] {
@@ -198,15 +205,125 @@ test("a press on a row opens its task", async () => {
   assert.deepEqual(opened, ["t-40"]);
 });
 
-test("Done shows its group once asked for, kept on this Mac", async () => {
+/** The toolbar's button named `label`, Filter or View options, pressed. */
+function openOptions(page: HTMLElement, label: string): void {
+  const button = page.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  assert.ok(button, `${label} is offered`);
+  act(() => button.click());
+}
+
+/** Presses the open menus' items named `names`, in order: a submenu, then its items. */
+function choose(...names: string[]): void {
+  for (const name of names) {
+    const item = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="menu"]:not([data-leaving]) .luke-menu-item',
+      ),
+    ].find((each) => each.querySelector(".luke-menu-item-label")?.textContent === name);
+    assert.ok(item, `${name} is in the menu`);
+    act(() => item.click());
+  }
+}
+
+/** Closes whatever menus stand, a submenu and then its menu, as Escape does each. */
+function closeMenus(): void {
+  while (document.querySelector('[role="menu"]:not([data-leaving])') !== null) {
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+  }
+}
+
+test("Done shows its group once the View options ask for it, kept on this Mac", async () => {
   const page = await mountPage();
-  act(() => buttonNamed(page, "Done").click());
+  openOptions(page, "View options");
+  choose("Done tasks");
   assert.deepEqual(groups(page).at(-1), ["Done", ["ACME-35"]]);
 
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
   assert.deepEqual((await mountPage()).querySelectorAll(".tasks-list-group").length, 5);
+});
+
+test("the Filter narrows the List to the values chosen, several in one visit, a chip says so and its × lifts it, and it is kept on this Mac", async () => {
+  const page = await mountPage();
+  openOptions(page, "Filter");
+  choose("Priority", "High", "Urgent");
+  closeMenus();
+
+  assert.deepEqual(groups(page), [
+    ["In progress", ["ACME-42"]],
+    ["Todo", ["ACME-40", "ACME-39"]],
+  ]);
+  assert.match(page.textContent ?? "", /Priority: Urgent, High/);
+  assert.equal(
+    page.querySelector("[data-filtered='true'] button")?.getAttribute("aria-label"),
+    "Filter",
+  );
+
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  const again = await mountPage();
+  assert.equal(groups(again).length, 2, "the filter is kept");
+  const lift = again.querySelector<HTMLButtonElement>(
+    "button[aria-label='Clear the priority filter']",
+  );
+  assert.ok(lift, "the chip lifts its filter");
+  act(() => lift.click());
+  assert.equal(groups(again).length, 4);
+  assert.equal(again.querySelector("[data-filtered='true']"), null);
+});
+
+test("a filter chosen here keeps another workspace's filter that another tab kept meanwhile", async () => {
+  const page = await mountPage();
+  const elsewhere = { "workspace-beta": { priority: [TASK_PRIORITY.LOW] } };
+  window.localStorage.setItem("luke.tasksFilter", JSON.stringify(elsewhere));
+  openOptions(page, "Filter");
+  choose("Priority", "High");
+  closeMenus();
+
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.tasksFilter") ?? "{}"), {
+    ...elsewhere,
+    [ACME.id]: { priority: [TASK_PRIORITY.HIGH] },
+  });
+});
+
+test("with storage refusing every write, each workspace's filter still stands while the page does", async () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("quota");
+  });
+  const page = await mountPage();
+  openOptions(page, "Filter");
+  choose("Priority", "Urgent");
+  closeMenus();
+  listWorkspace(BETA);
+  openOptions(page, "Filter");
+  choose("Priority", "Low");
+  closeMenus();
+  listWorkspace(ACME);
+
+  assert.deepEqual(groups(page), [["Todo", ["ACME-40"]]]);
+});
+
+test("grouped by priority, the pins not leading, the List runs from the most pressing, and a property turned off leaves every row", async () => {
+  const page = await mountPage();
+  openOptions(page, "View options");
+  choose("Group by", "Priority");
+  openOptions(page, "View options");
+  choose("Pinned and sections first", "Properties", "Repository");
+  closeMenus();
+
+  assert.deepEqual(groups(page), [
+    ["Urgent", ["ACME-40"]],
+    ["High", ["ACME-39", "ACME-42"]],
+    ["Low", ["ACME-44"]],
+    ["No priority", ["ACME-36"]],
+  ]);
+  assert.doesNotMatch(page.querySelector(".tasks-list")?.textContent ?? "", /acme\/web/);
 });
 
 test("the switch beside the title shows the Board, kept on this Mac", async () => {

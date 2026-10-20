@@ -1,5 +1,13 @@
 import type { HostedMacCommandClient } from "@luke/features";
-import type { MacCommand, MacCommandResult } from "@luke/features/mac-command-wire";
+import {
+  isMacShellCommand,
+  MAC_COMMAND_KIND,
+  type MacCommandKind,
+  type MacCommandRead,
+  type MacCommandRefusal,
+  type MacCommandResult,
+  type MacShellResult,
+} from "@luke/features/mac-command-wire";
 import { Config, Duration, Effect, FiberSet, Option } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { ChildProcessSpawner } from "effect/process";
@@ -11,14 +19,17 @@ import { type MacShell, runMacCommand } from "./mac-command-runner.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-mac-commands.ts -- runs on this Mac the shell commands the account's agents queue for it, for as long as an account is signed in and Settings lets agents run commands here.
+ * compose-mac-commands.ts -- runs on this Mac the commands the account's agents queue for it, for as long as an account is signed in and Settings lets agents run commands here.
  *
  * Nothing asks the developer first: Dean's call, with the setting the one
  * brake, on by default. While the gate stands, one held read after another
- * takes every command waiting for the account (`HostedMacCommandClient`);
- * each runs on a fiber of its own in the concern's scope, in the login shell
- * from the home folder (`mac-command-runner.ts`), and its result is posted
- * back, so a long command holds up neither the next read nor the others.
+ * takes every command waiting for the account of the kinds this Mac runs,
+ * which each read names (`HostedMacCommandClient`); each runs on a fiber of
+ * its own in the concern's scope, by its kind: a shell command in the
+ * login shell from the home folder (`mac-command-runner.ts`), and a
+ * command of a kind this Mac cannot run answered with a refusal rather
+ * than spoiling the read. Its result is posted back, so a long command
+ * holds up neither the next read nor the others.
  * A Mac holding the read is what the service counts as listening, so the
  * setting switched off, a sign-out, or a run that sends nothing stops the
  * reads and the agents' calls are told no Mac listens, and stops every
@@ -36,6 +47,9 @@ const DEFAULT_SHELL = "/bin/zsh";
 
 const VARIABLE = { HOME: "HOME", SHELL: "SHELL" } as const;
 
+/** The kinds of command this Mac runs, which every read names: shell alone, for now. */
+const RUNS: readonly MacCommandKind[] = [MAC_COMMAND_KIND.SHELL];
+
 /** The service's side of the commands, as this concern asks it. */
 export type MacCommandClient = Pick<HostedMacCommandClient, "waiting" | "settle">;
 
@@ -50,7 +64,7 @@ export interface MacCommandsDependencies {
 export type MacCommandsComposer = Composer;
 
 /** What a command taken as the setting was switched off, or the account signed out, answers. */
-const SWITCHED_OFF: MacCommandResult = {
+const SWITCHED_OFF: MacShellResult = {
   exitCode: null,
   stdout: "",
   stderr: "Not run: commands on this Mac were switched off as it arrived.",
@@ -58,8 +72,15 @@ const SWITCHED_OFF: MacCommandResult = {
   timedOut: false,
 };
 
+/** What a command of a kind this Mac cannot run answers, such as one a newer service queued. */
+const CANNOT_RUN: MacCommandRefusal = {
+  refused:
+    "Not run: Luke on the developer's Mac cannot run this kind of command; updating Luke there " +
+    "may let it.",
+};
+
 /** What a command answers where the environment names no home folder to run it from. */
-const NO_HOME: MacCommandResult = {
+const NO_HOME: MacShellResult = {
   exitCode: null,
   stdout: "",
   stderr: "Luke could not start the command: this Mac names no home folder.",
@@ -94,15 +115,20 @@ export function composeMacCommands(
     const asked = <A>(call: Effect.Effect<A, never, HttpClient.HttpClient>) =>
       Effect.provideService(call, HttpClient.HttpClient, http);
 
+    /** What one command comes to, by its kind: a shell command run, and any other kind refused. */
+    const ran = (command: MacCommandRead): Effect.Effect<MacCommandResult> => {
+      if (!isMacShellCommand(command)) return Effect.succeed(CANNOT_RUN);
+      return Option.match(shell, {
+        onNone: () => Effect.succeed(NO_HOME),
+        onSome: (where) => runMacCommand(command, where),
+      }).pipe(Effect.provideContext(services));
+    };
+
     /** One command run and its result posted back; a result the service did not take is let go, its call already given up. */
-    const run = (command: MacCommand) =>
-      Effect.flatMap(
-        Option.match(shell, {
-          onNone: () => Effect.succeed(NO_HOME),
-          onSome: (where) => runMacCommand(command, where),
-        }),
-        (result) => Effect.asVoid(asked(client.settle(command.id, result))),
-      ).pipe(Effect.provideContext(services));
+    const run = (command: MacCommandRead) =>
+      Effect.flatMap(ran(command), (result) =>
+        Effect.asVoid(asked(client.settle(command.id, result))),
+      );
 
     /** Whether the Mac takes commands now: an account signed in, a run that sends, and the setting on. */
     const gateOpen = Effect.map(
@@ -123,7 +149,7 @@ export function composeMacCommands(
           yield* FiberSet.clear(running);
           return yield* Effect.sleep(IDLE);
         }
-        const commands = yield* asked(client.waiting());
+        const commands = yield* asked(client.waiting(RUNS));
         // Note that an unanswered read rests before the next, so a service that is down is not asked in a tight loop.
         if (commands === undefined) return yield* Effect.sleep(IDLE);
         if (!(yield* gateOpen)) {
