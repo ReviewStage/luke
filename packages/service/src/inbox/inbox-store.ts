@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import {
   LIVE_COUNT,
   type LiveStatement,
@@ -416,8 +417,27 @@ type MessageRow = typeof MessageRowSchema.Type;
 /** Where an item stands, as each ask of its thread is read against it. */
 interface AskStanding {
   readonly status: InboxItem["status"];
+  readonly response: InboxResponse;
   readonly openAskMessageId: string | null;
   readonly closedReason: string | null;
+}
+
+/**
+ * Whether the item's response still stands for the ask: the ask a response
+ * maps to is the ask itself, a to-do any `do` ask, whose steps its blocks
+ * carry. A post from before version 5 rewrites the response and not the
+ * thread, so an ask it posted over stands for it no longer.
+ */
+function askStandsFor(response: InboxResponse, ask: InboxAsk): boolean {
+  const asked = inboxResponseAsk(response);
+  if (asked === undefined || asked.type !== ask.type) return false;
+  return asked.type === INBOX_ASK.DO || isDeepStrictEqual(asked, ask);
+}
+
+/** Whether the ask held open is still the one the item asks: an ask of a type a newer deployment wrote is taken at its word. */
+function askStillAsked(response: InboxResponse, ask: InboxReadAsk): boolean {
+  const known = knownAsk(ask);
+  return known === undefined || askStandsFor(response, known);
 }
 
 /**
@@ -425,7 +445,8 @@ interface AskStanding {
  * the item no longer holds it open, which a deployment from before version
  * 5 leaves by closing the item without a word to the ask; then withdrawn
  * with the item's reason where the item closed on it, answered where the
- * item was answered on it, and replaced where the item holds another.
+ * item was answered on it, and replaced where the item holds another or,
+ * posted over from before version 5, asks something else.
  * Note that an ask withdrawn with no reason is a member's close without an
  * answer, the item's `closedBy` naming the member while the close stands,
  * because an agent's close always says why: a reader tells the two closes
@@ -433,10 +454,11 @@ interface AskStanding {
  */
 function standingAsk(ask: InboxReadAsk, messageId: string, item: AskStanding): InboxReadAsk {
   if (ask.status !== INBOX_ASK_STATUS.OPEN) return ask;
-  if (messageId !== item.openAskMessageId) return { ...ask, status: INBOX_ASK_STATUS.REPLACED };
+  const replaced = { ...ask, status: INBOX_ASK_STATUS.REPLACED };
+  if (messageId !== item.openAskMessageId) return replaced;
   switch (item.status) {
     case INBOX_STATUS.OPEN:
-      return ask;
+      return askStillAsked(item.response, ask) ? ask : replaced;
     case INBOX_STATUS.ANSWERED:
       return { ...ask, status: INBOX_ASK_STATUS.ANSWERED };
     case INBOX_STATUS.CLOSED:
@@ -788,14 +810,18 @@ const holdAsk = SqlSchema.void({
     ),
 });
 
-/** The ask the item holds open, by its message, where the account reaches the item and it stands open: the ask an answer settles. */
+/** The ask the item holds open, by its message, with the response the item asks, where the account reaches the item and it stands open: the ask an answer settles. */
 const findOpenAsk = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, itemId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, ask: inboxReadAskSchema }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    ask: inboxReadAskSchema,
+    response: inboxResponseSchema,
+  }),
   execute: ({ userId, itemId }) =>
     Database.use((db) =>
       db
-        .select({ id: inboxMessage.id, ask: inboxMessage.ask })
+        .select({ id: inboxMessage.id, ask: inboxMessage.ask, response: inboxItem.response })
         .from(inboxMessage)
         .innerJoin(inboxItem, eq(inboxItem.openAskMessageId, inboxMessage.id))
         .where(
@@ -2026,7 +2052,9 @@ export function postInboxItem(
       Effect.gen(function* () {
         const locked = yield* lockAgent(agent);
         if (Option.isNone(locked)) return Result.fail(INBOX_POST_REFUSAL.NO_AGENT);
-        if (!(yield* roomToAsk(agent, post.key))) {
+        const ask = inboxResponseAsk(post.response);
+        // A post that asks nothing waits on nobody, so it takes no place among the open items.
+        if (ask !== undefined && !(yield* roomToAsk(agent, post.key))) {
           return Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN);
         }
         const now = yield* DateTime.nowAsDate;
@@ -2047,7 +2075,6 @@ export function postInboxItem(
           response: post.response,
           needsReply: post.needsReply ?? true,
         };
-        const ask = inboxResponseAsk(post.response);
         const body = (addressOf: PictureAddress) => bodyOfBlocks(blocks, addressOf);
         const write = { key: post.key, view, body, ask, pictures };
         return Result.succeed(yield* keepPost(agent, locked.value, write, now));
@@ -2592,6 +2619,23 @@ interface AnswerWrite {
 }
 
 /**
+ * The member's message that carries an answer, written under the answer's
+ * key; the caller found no message under it first, so one standing there
+ * now is a race that rolls the answer back rather than leaving it unheard.
+ */
+function answeringMessage(
+  message: typeof MessageWriteSchema.Type,
+): InboxStoreEffect<Option.Option<{ readonly id: string }>> {
+  return insertMessage(message).pipe(
+    Effect.flatMap((written) =>
+      Option.isSome(written)
+        ? Effect.succeed(written)
+        : Effect.die(new Error("a message took the answer's key while it was written")),
+    ),
+  );
+}
+
+/**
  * What an answer taken writes beside the item: the ask it settles stood
  * answered, and the member's message carrying the answer, under the
  * answer's key, with the answer's words and its files; or, for an answer to
@@ -2611,7 +2655,7 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
     const written =
       write.answers === undefined
         ? Option.none()
-        : yield* insertMessage({
+        : yield* answeringMessage({
             itemId,
             author: INBOX_MESSAGE_AUTHOR.MEMBER,
             userId: write.userId,
@@ -2640,6 +2684,11 @@ function keepAnswer(write: AnswerWrite): InboxStoreEffect<void> {
   });
 }
 
+/** Whether a message of the item's thread stands under the key. */
+function keyTaken(itemId: string, clientKey: string): InboxStoreEffect<boolean> {
+  return Effect.map(findKeyedMessage({ itemId, clientKey }), Option.isSome);
+}
+
 /**
  * The developer's answer taken on the item at the revision named, under
  * the key the client sent it with, as a desktop before version 5 answers,
@@ -2662,6 +2711,8 @@ export function answerInboxItem(
     client.withTransaction(
       Effect.gen(function* () {
         const now = yield* DateTime.nowAsDate;
+        // A key another message of the thread holds would leave the answer with no message to carry it.
+        if (yield* keyTaken(itemId, answerKey)) return Option.none();
         const asking = yield* findOpenAsk({ userId, itemId });
         const answered = yield* answerItem({
           userId,
@@ -2675,13 +2726,24 @@ export function answerInboxItem(
         if (Option.isNone(answered)) return Option.none();
         // The member's own answer leaves the item read for them, and unread for every other member.
         yield* upsertRead({ userId, itemId });
-        const ask = Option.isSome(asking) ? knownAsk(asking.value.ask) : undefined;
-        const askId = Option.isSome(asking) ? asking.value.id : undefined;
+        const held = Option.getOrUndefined(asking);
+        // Note that an ask a post from before version 5 posted over is not what this answer answers, so it stands replaced and the answer is the item's own.
+        const current =
+          held !== undefined && askStillAsked(held.response, held.ask) ? held : undefined;
+        if (held !== undefined && current === undefined) {
+          yield* standAsk({
+            messageId: held.id,
+            status: INBOX_ASK_STATUS.REPLACED,
+            withdrawnReason: null,
+          });
+        }
+        const ask = current === undefined ? undefined : knownAsk(current.ask);
         const answers =
-          ask === undefined || askId === undefined
+          current === undefined || ask === undefined
             ? undefined
-            : inboxReplyAnswers({ id: askId, ask }, answer);
+            : inboxReplyAnswers({ id: current.id, ask }, answer);
         const words = answer.note ?? "";
+        const askId = current?.id;
         yield* keepAnswer({ userId, itemId, answerKey, words, files, askId, answers, now });
         return Option.map(yield* findItem({ userId, itemId }), (row) => storedItem(row).item);
       }),
@@ -2743,8 +2805,15 @@ export function answerInboxAsk(
             ...(refusal === undefined ? undefined : { refusal }),
           });
         if (found.value.answerKey === sent.clientKey) return standing(INBOX_ASK_ANSWER.REPEATED);
+        if (yield* keyTaken(itemId, sent.clientKey)) {
+          return standing(INBOX_ASK_ANSWER.REFUSED, "The key names another message of the thread.");
+        }
         const asking = yield* findOpenAsk({ userId, itemId });
-        if (Option.isNone(asking) || asking.value.id !== sent.answers.ask) {
+        if (
+          Option.isNone(asking) ||
+          asking.value.id !== sent.answers.ask ||
+          !askStillAsked(asking.value.response, asking.value.ask)
+        ) {
           return standing(INBOX_ASK_ANSWER.NOT_OPEN);
         }
         const ask = knownAsk(asking.value.ask);
@@ -2757,7 +2826,7 @@ export function answerInboxAsk(
         const answered = yield* answerItem({
           userId,
           itemId,
-          revision: null,
+          revision: found.value.revision,
           askId: asking.value.id,
           answer: answerView(found.value.response, sent.answers, sent.text),
           answerKey: sent.clientKey,

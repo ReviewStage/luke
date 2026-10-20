@@ -17,6 +17,7 @@ import {
   INBOX_ASK,
   INBOX_ASK_STATUS,
   INBOX_BLOCK,
+  INBOX_BOUNDS,
   INBOX_FIELD,
   INBOX_IMAGE_TYPE,
   INBOX_MESSAGE_AUTHOR,
@@ -844,6 +845,121 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
           status: INBOX_ASK_STATUS.WITHDRAWN,
           withdrawnReason: "Did it by hand.",
         });
+      }),
+  );
+
+  it.effect(
+    "an ask a post from before threads posted over reads replaced and takes no answer by its message, while an answer by the new revision is the item's own",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const asked = posted(yield* postInboxItem(agent, REGION));
+        const ask = asked.thread?.[0]?.id ?? "";
+        // As a deployment from before threads posts under the key: the item's row alone, its thread and open ask untouched.
+        yield* Database.use((db) =>
+          db
+            .update(inboxItem)
+            .set({
+              title: "Deploy the preview to iad1?",
+              blocks: [],
+              response: { type: INBOX_RESPONSE.APPROVAL },
+              revision: sql`${inboxItem.revision} + 1`,
+            })
+            .where(eq(inboxItem.id, asked.id)),
+        );
+
+        const read = Option.getOrThrow(yield* readInboxItem(agent.userId, asked.id)).item;
+        assert.equal(read.thread?.[0]?.ask?.status, INBOX_ASK_STATUS.REPLACED);
+        const byAsk = Option.getOrThrow(
+          yield* answerInboxAsk(agent.userId, asked.id, {
+            answers: { ask, reply: INBOX_REPLY.CHOSE, choices: ["iad1"] },
+            text: "",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(byAsk.outcome, INBOX_ASK_ANSWER.NOT_OPEN);
+
+        yield* later;
+        const answered = Option.getOrThrow(
+          yield* answerInboxItem(
+            agent.userId,
+            asked.id,
+            2,
+            { reply: INBOX_REPLY.APPROVED },
+            randomUUID(),
+          ),
+        );
+        assert.deepEqual(
+          [answered.status, answered.answer, answered.thread?.length],
+          [INBOX_STATUS.ANSWERED, { reply: INBOX_REPLY.APPROVED }, 1],
+          "the approval the item asks is answered as its own, and the region ask is not",
+        );
+        assert.equal(answered.thread?.[0]?.ask?.status, INBOX_ASK_STATUS.REPLACED);
+      }),
+  );
+
+  it.effect(
+    "an answer under a key a message of the thread already holds is not taken, so no answer stands without the message that carries it",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const asked = posted(yield* postInboxItem(agent, REGION));
+        const key = randomUUID();
+        yield* later;
+        yield* postInboxMessage(agent.userId, asked.id, {
+          text: "Which is cheaper?",
+          clientKey: key,
+        });
+
+        assert.ok(
+          Option.isNone(
+            yield* answerInboxItem(
+              agent.userId,
+              asked.id,
+              1,
+              { reply: INBOX_REPLY.CHOSE, choices: ["iad1"] },
+              key,
+            ),
+          ),
+        );
+        const byAsk = Option.getOrThrow(
+          yield* answerInboxAsk(agent.userId, asked.id, {
+            answers: {
+              ask: asked.thread?.[0]?.id ?? "",
+              reply: INBOX_REPLY.CHOSE,
+              choices: ["iad1"],
+            },
+            text: "",
+            clientKey: key,
+          }),
+        );
+        assert.equal(byAsk.outcome, INBOX_ASK_ANSWER.REFUSED);
+        const read = Option.getOrThrow(yield* readInboxItem(agent.userId, asked.id)).item;
+        assert.deepEqual(
+          [read.status, read.thread?.[0]?.ask?.status],
+          [INBOX_STATUS.OPEN, INBOX_ASK_STATUS.OPEN],
+        );
+      }),
+  );
+
+  it.effect(
+    "a post that asks nothing takes no place among the open items, so an agent holding as many as it may still posts one",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        for (let at = 0; at < INBOX_BOUNDS.MAX_OPEN_PER_AGENT; at += 1) {
+          posted(yield* postInboxItem(agent, { ...SETTINGS, key: `open-${at}` }));
+        }
+
+        const refused = yield* postInboxItem(agent, { ...SETTINGS, key: "one-more" });
+        const note = yield* postInboxItem(agent, {
+          key: "preview-up",
+          title: "The preview is up",
+          response: { type: INBOX_RESPONSE.NONE },
+        });
+
+        assert.ok(Result.isFailure(refused));
+        assert.equal(posted(note).status, INBOX_STATUS.ANSWERED);
       }),
   );
 
