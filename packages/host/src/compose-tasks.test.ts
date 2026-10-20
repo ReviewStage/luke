@@ -2859,7 +2859,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      const { call, tasks, viewLands, conversations, realtime } = yield* subject(service);
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* conversations.nextAsk;
@@ -2878,7 +2878,8 @@ it.effect(
       yield* saved;
 
       service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Resend daily.", 30)];
-      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.AFTER, "1:1"]);
+      yield* realtime.deliver([markRow(2, "running")]);
+      assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.LOOK, "1:1"]);
       const after = yield* viewLands(
         (view) =>
           view.document?.status === TASKS_READ.READY &&
@@ -2897,7 +2898,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      const { call, tasks, viewLands, conversations, realtime } = yield* subject(service);
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* conversations.nextAsk;
@@ -2912,6 +2913,7 @@ it.effect(
         conversationPage([planEditing("turn-1")], "1:1", CODING_AGENT_STATUS.RUNNING),
       );
       yield* writing;
+      yield* realtime.deliver([markRow(2, "running")]);
       yield* conversations.nextAsk;
       // The turn is stopped with its save still in its step, so the plan reads unsaved as the turn ends.
       service.tasks = [task(INVITES, "Teammate invitations", "# Draft\n\n- Stopped.", 20)];
