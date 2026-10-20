@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { BUTTON_SIZE, IconButton, INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
+import {
+  BUTTON_SIZE,
+  IconButton,
+  INLINE_EDIT_LOOK,
+  InlineEdit,
+  MARK_PROVIDER,
+  PROVIDER_BUTTON_SIZE,
+  ProviderButton,
+} from "@luke/ui";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
@@ -19,7 +27,11 @@ import { layContainersAt } from "../testing/container-width.js";
  * what they draw on a touch screen; a close beside the words it closes, the
  * tab's × and a toast's, a press 44px tall and no wider than it draws, so a
  * near miss on the label closes nothing; a resize edge one across both
- * columns' gutters; and none takes one past its own box with a mouse. jsdom answers no media query,
+ * columns' gutters; and none takes one past its own box with a mouse. A
+ * sign-in's provider button, the Inbox's tabs, and a chat thread's Reply
+ * stand a finger tall on a touch screen, the Reply giving back its reach
+ * so its line lays out as before; and no small words there, a menu row's
+ * detail, a hover card's lines, a comment's time, are under 12px. jsdom answers no media query,
  * no `var()`, and no pseudo-element, so the sheets are laid for the device
  * (`testing/container-width.ts`) and a `::before` hit area is read from the
  * rules laid that match the element, its lengths resolved from the root.
@@ -434,5 +446,161 @@ test("with a mouse a transcript's rows keep their compact heights", () => {
   layFor(false, { "data-luke-profile": "desktop" });
   for (const [name, row] of transcriptRows()) {
     assert.ok((leastPixels(getComputedStyle(row).minHeight) ?? 0) < FINGER, name);
+  }
+});
+
+/** The least size words are drawn at on a touch screen, in pixels, read at arm's length on a phone. */
+const LEGIBLE = 12;
+
+/** A length with every \`var()\` in it read off \`element\`, where it sets the property itself, else off the root. */
+function resolvedOn(element: Element, length: string): string {
+  const once = length.replace(/var\((--[\w-]+)\)/g, (_, name: string) => {
+    const own = getComputedStyle(element).getPropertyValue(name).trim();
+    return own === "" ? role(name) : own;
+  });
+  return once === length ? once : resolvedOn(element, once);
+}
+
+/**
+ * A length in pixels as the browser would compute it: every \`var()\` read off
+ * \`element\` or the root, then its \`calc()\`, \`max()\`, and \`min()\` worked out
+ * over pixels.
+ */
+function pixels(length: string, element: Element = document.documentElement): number {
+  const sum = resolvedOn(element, length)
+    .replace(/calc\(/g, "(")
+    .replace(/max\(/g, "Math.max(")
+    .replace(/min\(/g, "Math.min(")
+    .replace(/(\d+(?:\.\d+)?)px/g, "$1");
+  assert.match(
+    sum,
+    /^[\d\s.+\-*/(),]*(?:Math\.(?:max|min)[\d\s.+\-*/(),]*)*$/u,
+    `${length} is arithmetic`,
+  );
+  return Number(new Function(`return ${sum};`)());
+}
+
+/** A sign-in gate's provider button, drawn. */
+function providerButton(): HTMLButtonElement {
+  return buttonIn(
+    drawn(
+      createElement(ProviderButton, {
+        provider: MARK_PROVIDER.GITHUB,
+        name: "GitHub",
+        size: PROVIDER_BUTTON_SIZE.GATE,
+        pendingLabel: "Opening GitHub",
+        onPress: () => undefined,
+      }),
+    ),
+  );
+}
+
+/** One of the Inbox's tabs, in the markup \`inbox-list.tsx\`'s ShowTabs draws through the compact fill ChoiceBar. */
+function inboxTab(): HTMLElement {
+  return built(
+    '<div class="inbox-show-tabs"><div class="luke-choice-bar" data-look="fill" data-size="compact" role="tablist"><button class="luke-choice-bar-option" role="tab">Needs you</button></div></div>',
+    ".luke-choice-bar-option",
+  );
+}
+
+/** A chat thread's press, Reply at a quiet message's byline or how many replied under one, by what the developer calls it. */
+function threadPresses(): ReadonlyMap<string, HTMLElement> {
+  return new Map([
+    [
+      "a quiet message's Reply",
+      built(
+        '<div class="chat-byline"><span class="chat-byline-action"><button class="luke-text-button">Reply</button></span></div>',
+        "button",
+      ),
+    ],
+    [
+      "a thread's replies",
+      built(
+        '<div class="chat-thread"><p class="chat-thread-toggle"><button class="luke-text-button">2 replies</button></p></div>',
+        "button",
+      ),
+    ],
+  ]);
+}
+
+/** The press a box takes up and down: its line and its padding. */
+function pressHeight(element: Element): number {
+  const style = getComputedStyle(element);
+  return (
+    pixels(style.lineHeight, element) +
+    pixels(style.paddingTop, element) +
+    pixels(style.paddingBottom, element)
+  );
+}
+
+test("on a touch screen a sign-in's provider button and the Inbox's tabs are a finger tall, and keep their heights with a mouse", () => {
+  layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
+  assert.ok(pixels(getComputedStyle(providerButton()).height) >= FINGER, "the provider button");
+  assert.ok(pixels(getComputedStyle(inboxTab()).height) >= FINGER, "an Inbox tab");
+  laid?.remove();
+  document.body.replaceChildren();
+  layFor(false, { "data-luke-profile": "web", "data-luke-density": "compact" });
+  assert.equal(pixels(getComputedStyle(providerButton()).height), 40, "the provider button");
+  assert.equal(pixels(getComputedStyle(inboxTab()).height), 28, "an Inbox tab");
+});
+
+test("on a touch screen a chat thread's Reply takes a press a finger tall and wider than its words, and gives the room back so its line lays out as before; with a mouse it takes none", () => {
+  layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
+  for (const [name, press] of threadPresses()) {
+    const style = getComputedStyle(press);
+    assert.ok(pressHeight(press) >= FINGER, `${name} is a finger tall`);
+    const length = (value: string) => pixels(value, press);
+    assert.ok(
+      length(style.paddingLeft) > 0 && length(style.paddingRight) > 0,
+      `${name} reaches past its words`,
+    );
+    assert.equal(
+      length(style.marginTop),
+      -length(style.paddingTop),
+      `${name} gives back its height`,
+    );
+    assert.equal(
+      length(style.marginLeft),
+      -length(style.paddingLeft),
+      `${name} gives back its width`,
+    );
+  }
+  laid?.remove();
+  document.body.replaceChildren();
+  layFor(false, { "data-luke-profile": "desktop" });
+  for (const [name, press] of threadPresses()) {
+    assert.equal(pixels(getComputedStyle(press).paddingTop, press), 0, `${name} takes no reach`);
+  }
+});
+
+/** The small words a touch screen draws, each by what the developer calls it. */
+function smallWords(): ReadonlyMap<string, HTMLElement> {
+  return new Map([
+    [
+      "a menu row's detail",
+      built('<span class="luke-menu-item-detail">acme/web</span>', ".luke-menu-item-detail"),
+    ],
+    [
+      "a hover card's line under its name",
+      built('<span class="luke-hover-card-sub">Running</span>', ".luke-hover-card-sub"),
+    ],
+    [
+      "a hover card's corner",
+      built('<span class="luke-hover-card-corner">2m</span>', ".luke-hover-card-corner"),
+    ],
+    ["a hover card's code", built('<p class="luke-hover-card-note"><code>exp</code></p>', "code")],
+    ["a comment's time", built('<span class="comment-time">2m</span>', ".comment-time")],
+    [
+      "a comment whose words are gone",
+      built('<div class="comment-gone">The words are gone</div>', ".comment-gone"),
+    ],
+  ]);
+}
+
+test("on a touch screen no small words are under 12px: a menu row's detail, a hover card's lines and code, a comment's time", () => {
+  layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
+  for (const [name, words] of smallWords()) {
+    const size = pixels(getComputedStyle(words).fontSize);
+    assert.ok(size >= LEGIBLE, `${name} is ${size}px`);
   }
 });

@@ -782,6 +782,53 @@ test("a long swipe, past 60% of the row, arms it and acts on release with no cli
   expect(standing(back.item)).toEqual(["open", "72px", false]);
 });
 
+/** How wide a phone's row stands, in CSS pixels, from the window's left edge: its act's line at 60% is 216px, further than a thumb reaches from mid-row. */
+const PHONE_ROW = 360;
+
+/** A swiped row on a phone, `PHONE_ROW` wide, swiped by a `pointerType` from `from` to `to` and let go there; what it acted and where it stands. */
+function swipedOnPhone(pointerType: string, from: number, to: number) {
+  const { item, press, acted } = swiped();
+  vi.spyOn(item, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 0, width: PHONE_ROW, height: 56 }),
+  );
+  const at = (type: string, x: number) =>
+    stamped(
+      new PointerEvent(type, {
+        bubbles: true,
+        button: 0,
+        clientX: x,
+        clientY: 10,
+        pointerId: 1,
+        pointerType,
+      }),
+      1,
+    );
+  act(() => {
+    press.dispatchEvent(at("pointerdown", from));
+  });
+  for (const x of [from + 8, (from + to) / 2, to]) {
+    act(() => {
+      press.dispatchEvent(at("pointermove", x));
+    });
+  }
+  act(() => {
+    press.dispatchEvent(at("pointerup", to));
+    press.dispatchEvent(pointerClick());
+  });
+  return { acted, state: item.dataset.swipe };
+}
+
+test("on a phone a finger's full swipe acts, from mid-row to the row's edge though short of 60% of it, while a partial one rests open; a mouse dragged as far only opens it", () => {
+  const full = swipedOnPhone("touch", 180, 345);
+  expect(full).toEqual({ acted: ["Read"], state: "rest" });
+  const partial = swipedOnPhone("touch", 180, 260);
+  expect(partial).toEqual({ acted: [], state: "open" });
+  const nearEdge = swipedOnPhone("touch", 300, 360);
+  expect(nearEdge).toEqual({ acted: [], state: "open" });
+  const mouse = swipedOnPhone("mouse", 180, 345);
+  expect(mouse).toEqual({ acted: [], state: "open" });
+});
+
 test("a swipe let go short of 24px, swiped left, or pressed up or down closes without acting, and a press that never moved is a click on the row", () => {
   const short = swiped();
   drag(short.press, 10, 20);

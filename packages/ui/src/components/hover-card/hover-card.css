@@ -104,6 +104,16 @@
     font-size: 11px; /* off-scale: code a size under the note */
   }
 
+  /* Under a finger, on a phone held at arm's length, no line of the card is
+     smaller than 12px. */
+  @media (pointer: coarse) {
+    .luke-hover-card-sub,
+    .luke-hover-card-corner,
+    .luke-hover-card-note code {
+      font-size: 12px;
+    }
+  }
+
   /* A name or a note on one line (`one-line.css`) fades where it is cut
      short, rather than clamping. */
   :is(.luke-hover-card-name, .luke-hover-card-note).luke-one-line {

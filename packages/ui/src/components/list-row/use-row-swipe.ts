@@ -21,7 +21,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  * on the act's button, which a click presses; let go past `SWIPE.ACT_SHARE`
  * of the row, the act is done with no click, and while the row stands past
  * that line it is armed, the button brighter and its label riding the
- * row's edge a beat behind. Where a release lands is carried along the
+ * row's edge a beat behind. Under a finger the line comes nearer, at three
+ * quarters of the room the finger had to the row's far edge where that is
+ * shorter, though never under `SWIPE.TOUCH_ACT_LEAST`, so a thumb's full
+ * swipe acts from wherever on the row it began and a partial one still
+ * opens; a mouse and a trackpad keep the row's share. Where a release lands is carried along the
  * hand's speed, so a flick right acts or opens and one back closes. Let go
  * short of both, it closes. A press anywhere but the open row, a wheel
  * elsewhere, a click on the row itself, or swiping it back closes it.
@@ -48,6 +52,14 @@ const SWIPE = {
   REST: 72,
   /** Past this share of the row's width, a release does the act. */
   ACT_SHARE: 0.6,
+  /**
+   * On a touch screen, past this share of the room the finger had from where
+   * it went down to the row's far edge, a release does the act too, so a
+   * thumb that swipes to the edge from mid-row acts, as a mail app's does.
+   */
+  TOUCH_REACH_SHARE: 0.75,
+  /** The nearest a touch's act line comes, so a short swipe still leaves the row resting open: past where it rests, by as far again as a swipe must go to open it. */
+  TOUCH_ACT_LEAST: 96,
   /** Past this share of the row's width, the row goes on with a third of the hand's travel, as a held edge gives. */
   GIVE_SHARE: 0.85,
   /** How much of the hand's travel the row keeps past the give. */
@@ -103,9 +115,10 @@ interface RowSwipe {
   readonly onPress: () => void;
 }
 
-/** A press under way: where it began, where the row stood, the act it began on, and whether it is a swipe yet. */
+/** A press under way: which pointer, where it began, where the row stood, the act it began on, and whether it is a swipe yet. */
 interface Press {
   readonly pointerId: number;
+  readonly pointerType: string;
   readonly x: number;
   readonly y: number;
   readonly from: number;
@@ -152,9 +165,22 @@ interface Wheel {
 /** What a press lands on that is a control of its own rather than the row's face: the act's button, or one of the row's acts. */
 const ROW_CONTROLS = "[data-swipe-act], .luke-list-row-actions";
 
-/** Whether a release at `offset` on a row `width` wide acts. */
-function acts(offset: number, width: number): boolean {
-  return width > 0 && offset >= width * SWIPE.ACT_SHARE;
+/** Whether a release at `offset` acts, against the act line `line` the swipe measured (`actLine`); none where the row has no width. */
+function acts(offset: number, line: number): boolean {
+  return line > 0 && offset >= line;
+}
+
+/**
+ * Where a swipe acts, in CSS pixels from rest, on a row `row` wide whose
+ * far edge stands `reach` past where a finger went down: `SWIPE.ACT_SHARE`
+ * of the row, and for a finger nearer still where its reach is short, never
+ * under `SWIPE.TOUCH_ACT_LEAST`. A mouse and a trackpad, which give no
+ * reach, keep the row's share.
+ */
+function actLine(row: number, reach: number | undefined): number {
+  const share = row * SWIPE.ACT_SHARE;
+  if (row <= 0 || reach === undefined) return share;
+  return Math.min(share, Math.max(SWIPE.TOUCH_ACT_LEAST, reach * SWIPE.TOUCH_REACH_SHARE));
 }
 
 /** Where the act's label stands: centred in the button while it shows, riding the row's edge once armed; and how much of it shows. */
@@ -211,6 +237,8 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
   // Note that the offset and the row's width are held in refs too, so a release reads them as the last move left them rather than as the last render drew them.
   const at = useRef(0);
   const width = useRef(0);
+  // Note that the act line is measured with the width, as a swipe begins, since a finger's depends on where it went down.
+  const line = useRef(0);
   const moving = useRef(false);
   /** Where the row is put at rest, open, or home: drawn by a render, as the row settles on the stylesheet's timing. */
   const setOffset = (next: number) => {
@@ -227,7 +255,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
   const follow = (next: number) => {
     at.current = next;
     moving.current = true;
-    const armed = acts(next, width.current);
+    const armed = acts(next, line.current);
     const item = ref.current;
     if (item !== null) {
       const label = labelAt(next, armed);
@@ -277,7 +305,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
   const settle = (began: string, samples: readonly Sample[]) => {
     if (latest.current.act !== began) return close();
     const landed = projected(at.current, samples);
-    if (acts(landed, width.current)) {
+    if (acts(landed, line.current)) {
       latest.current.onAct();
       return close();
     }
@@ -289,8 +317,12 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
     }
     close();
   };
-  const measure = () => {
-    width.current = ref.current?.getBoundingClientRect().width ?? 0;
+  // A finger's swipe hands where it went down, for the room it had to the row's far edge.
+  const measure = (touchedAt?: number) => {
+    const box = ref.current?.getBoundingClientRect();
+    width.current = box?.width ?? 0;
+    const reach = box === undefined || touchedAt === undefined ? undefined : box.right - touchedAt;
+    line.current = actLine(width.current, reach);
   };
 
   // A row open, or out on a trackpad's swipe, closes on a press or a wheel anywhere else, as another row's swipe begins.
@@ -442,6 +474,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
         if (event.target instanceof Element && event.target.closest(ROW_CONTROLS) !== null) return;
         press.current = {
           pointerId: event.pointerId,
+          pointerType: event.pointerType,
           x: event.clientX,
           y: event.clientY,
           from: at.current,
@@ -463,7 +496,7 @@ export function useRowSwipe(act: string | undefined, onAct: () => void): RowSwip
             return;
           }
           held.swiping = true;
-          measure();
+          measure(held.pointerType === "touch" ? held.x : undefined);
           ref.current?.setPointerCapture?.(event.pointerId);
           setState(SWIPE_STATE.MOVING);
         }
