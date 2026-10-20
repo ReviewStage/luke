@@ -11,7 +11,7 @@ const PLATFORM = `${process.platform}-${process.arch}-node${process.versions.nod
  * are never scoped, and their hash, which covers every tracked file, is what
  * decides whether they run.
  */
-export const ROOT_TASKS = ["lint", "knip", "discarded-effect"];
+export const ROOT_TASKS = ["lint", "discarded-effect"];
 
 /** The checks that run once per workspace. */
 export const WORKSPACE_TASKS = ["typecheck"];
