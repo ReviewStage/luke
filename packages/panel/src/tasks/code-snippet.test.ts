@@ -209,7 +209,7 @@ test("with Minimize inline comments on, the note is a chip on its line until the
   const container = await draw(codeTab());
   const chip = container.querySelector<HTMLElement>(".code-snippet .diff-thread-chip");
   assert.ok(chip, "the chip stands in the note's place");
-  assert.equal(chip.getAttribute("aria-label"), "Luke's note, show");
+  assert.equal(chip.getAttribute("aria-label"), "Luke's note on lines 13–14, show");
   assert.equal(
     chip.closest(".diff-note")?.parentElement?.getAttribute("slot"),
     "annotation-additions-14",
@@ -220,7 +220,7 @@ test("with Minimize inline comments on, the note is a chip on its line until the
   assert.equal(chip.closest("details")?.hasAttribute("open"), true, "the chip shows the note");
   assert.equal(
     container.querySelector(".diff-thread-chip")?.getAttribute("aria-label"),
-    "Luke's note, hide",
+    "Luke's note on lines 13–14, hide",
   );
 });
 
