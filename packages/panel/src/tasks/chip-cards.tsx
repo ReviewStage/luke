@@ -7,7 +7,7 @@ import { createContext, type ReactNode, useContext } from "react";
 import { AutomationCard, actorCard } from "../actor-ref.js";
 import { AutomationDirectory, useAutomation } from "../automation-directory.js";
 import { MemberDirectory, useMemberDirectory, usePerson } from "../member-directory.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { useMentionedReader } from "./mentioned-agent-card.js";
 import { PageCard } from "./page-card.js";
 import { RelativeTime } from "./relative-time.js";
@@ -72,7 +72,7 @@ const WAITING_WORDS = "Waiting for an answer";
  */
 function useSectionHeading(taskId: string, anchor: string): string | undefined {
   const page = useTaskMentions();
-  const opened = useAppState()?.tasks?.document.task;
+  const opened = useAppSlice(APP_SLICE.TASKS)?.document.task;
   const text =
     page?.taskId === taskId
       ? page.text()
@@ -155,7 +155,7 @@ export function PageChipCard({
   pageId: string;
   fallback: ReactNode;
 }): ReactNode {
-  const tasks = useAppState()?.tasks;
+  const tasks = useAppSlice(APP_SLICE.TASKS);
   const page =
     tasks?.activeTaskId === taskId ? tasks.pages?.find((each) => each.id === pageId) : undefined;
   if (page === undefined) return fallback;
@@ -164,7 +164,7 @@ export function PageChipCard({
 
 /** The workspace a link was written under, by its slug, or its id where it has none, as the account holds it; none where it holds no such workspace. */
 function useLinkWorkspace(written: string): Workspace | undefined {
-  return useAppState()?.tasks?.workspaces.find(
+  return useAppSlice(APP_SLICE.TASKS)?.workspaces.find(
     (each) => each.slug === written || each.id === written,
   );
 }
@@ -233,7 +233,7 @@ export function InboxItemChipCard({
   itemId: string;
   fallback: ReactNode;
 }): ReactNode {
-  const inbox = useAppState()?.inbox;
+  const inbox = useAppSlice(APP_SLICE.INBOX);
   const now = useMinute();
   const item = [
     ...(inbox?.waiting ?? []).flatMap((task) => task.items),
@@ -286,7 +286,9 @@ export function AutomationChipCard({
   fallback: ReactNode;
 }): ReactNode {
   const named = useLinkWorkspace(slug);
-  const words = useAppState()?.tasks?.workspaces.find((each) => each.id === wordsWorkspaceId);
+  const words = useAppSlice(APP_SLICE.TASKS)?.workspaces.find(
+    (each) => each.id === wordsWorkspaceId,
+  );
   const workspace = named ?? words;
   return (
     <AutomationDirectory workspace={workspace} wanted onOpen={OPEN_NOTHING}>

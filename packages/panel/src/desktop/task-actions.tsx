@@ -62,7 +62,7 @@ import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
-import { useAppState, useExperiment } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
@@ -290,7 +290,7 @@ function TaskMenuFooter({
 }): React.JSX.Element {
   const now = useMinute();
   const reader = useEditReader({ readerId: tasks.me });
-  const account = useAppState()?.account;
+  const account = useAppSlice(APP_SLICE.ACCOUNT);
   const you = account?.status === ACCOUNT_STATUS.SIGNED_IN ? accountActor(account) : undefined;
   const { region } = tasks;
   const opened = region.kind === DOCUMENT_REGION.READY && region.task.id === task.id;

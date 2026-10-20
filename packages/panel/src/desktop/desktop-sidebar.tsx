@@ -79,7 +79,7 @@ import {
   SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
 import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
@@ -1882,8 +1882,14 @@ function SidebarColumn({
  * face on a row, a creator's group's header, and the order of those groups
  * by the names their headers say. Its links are written under that
  * workspace, which is every row's.
+ *
+ * A memo boundary: the shell drawn again over the same tasks, history, and
+ * fold, as a setting that moves draws it, leaves the sidebar and every row
+ * of it as they were.
  */
-export function DesktopSidebar(props: DesktopSidebarProps): React.JSX.Element {
+export const DesktopSidebar = memo(function DesktopSidebar(
+  props: DesktopSidebarProps,
+): React.JSX.Element {
   const { workspace } = props.tasks;
   return (
     <LinkWorkspaceProvider value={workspace?.slug ?? workspace?.id}>
@@ -1892,4 +1898,4 @@ export function DesktopSidebar(props: DesktopSidebarProps): React.JSX.Element {
       </MemberDirectory>
     </LinkWorkspaceProvider>
   );
-}
+});

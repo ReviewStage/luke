@@ -16,12 +16,11 @@ import { useAtomMount, useAtomSet, useAtomValue } from "@effect/atom-react/Hooks
 import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { callTabVideoStatus } from "@luke/ui/call-card-model";
-import { AVATAR_OFF } from "@luke/voice/avatar";
 import { Option } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
 import { useAct } from "../act.js";
-import { useAppState, useExperiment } from "../use-app-state.js";
-import { useVoiceView } from "../use-voice-view.js";
+import { useExperiment } from "../use-app-state.js";
+import { useVoiceAvatar, useVoiceView } from "../use-voice-view.js";
 import { avatarViewShareAtom } from "./avatar-view.js";
 import {
   type CallAvatarTracks,
@@ -66,9 +65,8 @@ export function PanelAvatarVoice(): React.JSX.Element {
  */
 export function CallTabVideo({ taskId }: { taskId: string }): React.JSX.Element | null {
   const { tell } = useAct();
-  const state = useAppState();
   const { view } = useVoiceView();
-  const avatar = state?.voice.avatar ?? AVATAR_OFF;
+  const avatar = useVoiceAvatar();
   const videoCalls = useExperiment(EXPERIMENT.VIDEO_CALLS);
   return (
     <CallVideoTile

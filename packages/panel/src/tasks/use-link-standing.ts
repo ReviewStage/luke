@@ -15,9 +15,10 @@ import { MENTION_KIND, type Mention } from "@luke/features/mention-link";
 import type { TasksView } from "@luke/features/tasks-view";
 import type { Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import * as Atom from "effect/reactivity/Atom";
 import { createContext, useContext, useEffect, useState } from "react";
 import { useAct } from "../act.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 
 /**
  * use-link-standing.ts -- a Linear issue, or a GitHub pull request or issue, a link in Luke's words names, as its chip says it: its key, its title, where it stands, who it is with, and a pull request's lines added and removed, read through the workspace's own connection.
@@ -295,9 +296,24 @@ function connectedFor(asked: Asked, workspace: Workspace | undefined): boolean {
     : workspace.github?.active === true;
 }
 
+/** What of the tasks a chip's workspace is found by: the workspaces, and the tasks that name theirs. */
+type WorkspacePlaces = Pick<TasksView, "workspaces" | "tasks">;
+
+/**
+ * The workspaces and tasks of the document, which tells the chips only as
+ * either moves, so a transcript of chips is not drawn again for each word an
+ * agent streams into the slice beside them.
+ */
+const workspacePlacesAtom: Atom.Atom<WorkspacePlaces | undefined> = Atom.withEquality(
+  Atom.map(APP_SLICE.TASKS, (planning) =>
+    planning === undefined ? undefined : { workspaces: planning.workspaces, tasks: planning.tasks },
+  ),
+  (held, next) => held?.workspaces === next?.workspaces && held?.tasks === next?.tasks,
+);
+
 /** The workspace the words a chip stands in are of: the plan's, else the one the place drawing them names, else the one their mentions are written under; none where they name none. */
 function wordsWorkspace(
-  planning: TasksView | undefined,
+  planning: WorkspacePlaces | undefined,
   where: ChipWhere,
   namedId: string | undefined,
 ): Workspace | undefined {
@@ -312,14 +328,19 @@ function wordsWorkspace(
 
 /** The id of the workspace the words a chip stands in are of (`wordsWorkspace`); none where they name none. */
 export function useWordsWorkspaceId(where: ChipWhere): string | undefined {
-  return wordsWorkspace(useAppState()?.tasks, where, useContext(WordsWorkspaceContext))?.id;
+  return wordsWorkspace(useAppSlice(workspacePlacesAtom), where, useContext(WordsWorkspaceContext))
+    ?.id;
 }
 
 /** What the provider answers for the page a link mention names, through the workspace `where` stands in; none for any other mention, while unread, refused, or unconnected. */
 export function useLinkStanding(mention: Mention, where: ChipWhere): LinkStanding | undefined {
   const { act } = useAct();
   const asked = askedOf(mention);
-  const workspace = wordsWorkspace(useAppState()?.tasks, where, useContext(WordsWorkspaceContext));
+  const workspace = wordsWorkspace(
+    useAppSlice(workspacePlacesAtom),
+    where,
+    useContext(WordsWorkspaceContext),
+  );
   const workspaceId = workspace?.id;
   const connected = asked !== undefined && connectedFor(asked, workspace);
   const [read, setRead] = useState<{
