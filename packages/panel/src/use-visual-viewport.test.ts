@@ -36,7 +36,7 @@ class FakeVisualViewport extends EventTarget {
   }
 
   /** The window's size as its engine answers it. */
-  get window(): { readonly width: number; readonly height: number } {
+  get window() {
     const shrink = this.engine === ENGINE.WEBKIT ? this.scale : 1;
     return { width: WINDOW_WIDTH / shrink, height: this.layoutHeight / shrink };
   }
