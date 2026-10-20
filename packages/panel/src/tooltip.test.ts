@@ -5,6 +5,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
+import { Message, MessageContent } from "./ai-elements/message.js";
 import { onRegistry } from "./testing/copy-feedback.js";
 import { Tooltip } from "./tooltip.js";
 
@@ -16,13 +17,16 @@ import { Tooltip } from "./tooltip.js";
  * control opens their card, and a tap elsewhere or Escape closes it, while a
  * mouse's click opens nothing; a link's tap still goes where it leads, and
  * a long press opens its card instead, its release pressing nothing; and a
- * control whose long press opens its menu keeps it for the menu.
+ * control whose long press opens its menu keeps it for the menu. A tap on a
+ * control inside hinted words is the control's alone, a finger's scroll
+ * opens nothing, and a tap spent on a hint shows no message's actions.
  */
 
 const roots: Root[] = [];
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
 });
@@ -260,4 +264,68 @@ test("a control whose long press opens its context menu shows no hint for the ho
   longPress(page.querySelector("button") ?? assert.fail("the row"));
 
   assert.equal(cardStands(), false);
+});
+
+test("a tap on a control inside hinted words works the control alone, and opens no hint", () => {
+  const chosen: string[] = [];
+  const page = mount(
+    createElement(Tooltip, {
+      label: "Relation",
+      children: createElement(
+        "span",
+        { "aria-describedby": undefined },
+        createElement(
+          "button",
+          { type: "button", onClick: () => chosen.push("Part of") },
+          "Part of",
+        ),
+      ),
+    }),
+  );
+
+  tap(page.querySelector("button") ?? assert.fail("the choice"));
+
+  assert.deepEqual(chosen, ["Part of"]);
+  assert.equal(document.querySelector(".luke-tooltip") === null, true, "no hint stands");
+});
+
+test("a finger that scrolls from a link, which the browser takes over, opens no card however long it stays down", () => {
+  const page = mount(
+    createElement(Tooltip, {
+      label: "Fix the refresh",
+      card: createElement("p", null, "acme/relay#42"),
+      children: createElement("a", { href: "https://example.com/pull/42" }, "#42"),
+    }),
+  );
+  const link = page.querySelector("a") ?? assert.fail("the link");
+
+  vi.useFakeTimers();
+  press(link, "pointerdown", "touch");
+  press(link, "pointercancel", "touch");
+  act(() => {
+    vi.advanceTimersByTime(2000);
+  });
+  vi.useRealTimers();
+
+  assert.equal(cardStands(), false);
+});
+
+test("on a screen with no hover, a tap spent opening a hint in a message shows none of the message's actions", () => {
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(hover: none)" }));
+  const page = mount(
+    createElement(
+      Message,
+      { from: "assistant" },
+      createElement(MessageContent, null, "Rerunning the spec on WebKit."),
+      WORKED,
+    ),
+  );
+  const message = page.querySelector(".transcript-message") ?? assert.fail("the message");
+
+  tap(page.querySelector("[data-worked]") ?? assert.fail("the line"));
+  assert.equal(cardStands(), true);
+  assert.equal(message.hasAttribute("data-actions-shown"), false);
+
+  tap(page.querySelector(".message-content") ?? assert.fail("the words"));
+  assert.equal(message.getAttribute("data-actions-shown"), "true", "a tap on its words still does");
 });

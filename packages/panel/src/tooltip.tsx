@@ -534,7 +534,10 @@ export function Tooltip({
       fingerPress.current = false;
       shownAtPress.current = false;
       if (!tapped || label === undefined || event.defaultPrevented) return;
-      if (event.currentTarget.closest(OWN_CONTROL) !== null) return;
+      // Note that a control inside the words, a choice bar the hint names, takes its own tap too.
+      const { target } = event;
+      const onControl = target instanceof Element && target.closest(OWN_CONTROL) !== null;
+      if (onControl || event.currentTarget.closest(OWN_CONTROL) !== null) return;
       // Note that the tap is spent on the hint, so what holds the words, a
       // message whose tap shows its actions, leaves them be.
       event.preventDefault();
