@@ -6,7 +6,7 @@ import { it } from "@effect/vitest";
 import type { OpenConsent } from "@luke/credentials";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
 import { HOSTED_SERVICE_PATH, VOICE_SERVICE_PATH } from "@luke/features";
-import { PRODUCT_ACCOUNT_ACTION } from "@luke/features/analytics";
+import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@luke/features/analytics";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -332,7 +332,7 @@ const browserAccount = (service: TabService) =>
     const launched = yield* Effect.forkScoped(account.lifetime);
     yield* settings.lifetime;
     const gateway = gatewayHost({ methods: account.methods, client: BROWSER_CONTEXT });
-    return { account, gateway, events, departures, launched };
+    return { account, settings, gateway, events, departures, launched };
   });
 
 /** `body` over a tab whose every request, the settings' own counts among them, reaches `service`. */
@@ -415,7 +415,7 @@ it.effect(
       }),
     });
     return Effect.gen(function* () {
-      const { account, events, launched } = yield* browserAccount(service);
+      const { account, settings, events, launched } = yield* browserAccount(service);
       yield* until(() => service.sent.includes("/api/auth/get-session"));
 
       // A sign-in lands elsewhere, and a refused call's re-read settles on it while the launch's read is held.
@@ -432,6 +432,10 @@ it.effect(
         );
       yield* until(changed);
       assert.equal(changed(), true);
+      // The session is the launch's own account, so, as for a launch that read it itself, no sign-in is counted.
+      yield* settings.flushProductEvents;
+      assert.ok(service.counts.length > 0, "the launch's counts were sent");
+      assert.ok(service.counts.every((batch) => !batch.includes(PRODUCT_EVENT.ACCOUNT_SIGN_IN)));
     }).pipe((body) => inTab(service, body));
   },
 );
