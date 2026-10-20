@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
 import { ChevronRightIcon } from "../../face/glyphs.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
+import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 
 /**
  * nav-item.tsx -- a place in a column of places: its glyph, its name, and what stands at its end, a count, a mark, or its chord.
@@ -161,6 +162,15 @@ function Glyph({ icon, folds }: { icon: ReactNode; folds: boolean }): React.JSX.
   );
 }
 
+/** Its name on one line, fading out at its end while the row cuts it short, as a browser's tab does. */
+function Name({ children }: { children: ReactNode }): React.JSX.Element {
+  return (
+    <ClippedLine className="luke-nav-item-name" as={ONE_LINE_ELEMENT.SPAN} end={ONE_LINE_END.FADE}>
+      {children}
+    </ClippedLine>
+  );
+}
+
 /** What stands at rest: the mark, then the count, read with its noun. */
 function AtRest({ mark, count }: { mark: ReactNode; count: NavCount | undefined }) {
   const counted = count !== undefined && count.value > 0;
@@ -219,7 +229,7 @@ export function NavItemLink({
       onClick={onClick}
     >
       {said(icon) ? <Glyph icon={icon} folds={false} /> : null}
-      <span className="luke-nav-item-name">{children}</span>
+      <Name>{children}</Name>
     </a>
   );
 }
@@ -268,7 +278,7 @@ export function NavItem({
       onKeyDown={props.onKeyDown}
     >
       {said(icon) ? <Glyph icon={icon} folds={folds} /> : null}
-      <span className="luke-nav-item-name">{children}</span>
+      <Name>{children}</Name>
       {said(detail) ? <span className="luke-nav-item-detail">{detail}</span> : null}
       <AtRest mark={mark} count={count} />
       {said(shortcut) ? <span className="luke-nav-item-shortcut">{shortcut}</span> : null}
