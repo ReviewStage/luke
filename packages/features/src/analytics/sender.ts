@@ -88,6 +88,14 @@ export interface ProductEventSenderOptions {
    * account a once-a-day count is kept for.
    */
   credential: CallCredential;
+  /**
+   * Settles the credential on the account the service names now, before a
+   * batch's day marks are read against its holder, for a credential whose
+   * account can change without this sender hearing of it (a cookie another
+   * tab signed in under). One whose account changes only through its own
+   * host omits it.
+   */
+  confirmAccount?: (() => Effect.Effect<void>) | undefined;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The running build's version, as the packaged app reports it. */
@@ -144,6 +152,7 @@ export class ProductEventSender {
   readonly #flushIntervalMs: number;
   readonly #queueLimit: number;
   readonly #readHolder: () => Effect.Effect<string | undefined>;
+  readonly #confirmAccount: () => Effect.Effect<void>;
   readonly #keptDays: RecordedDayStore;
   readonly #queue: QueuedEvent[] = [];
   /**
@@ -208,6 +217,7 @@ export class ProductEventSender {
       Effect.flatMap(credential, (current) =>
         current.holder === undefined ? Effect.succeed(UNNAMED_ACCOUNT) : current.holder(),
       );
+    this.#confirmAccount = options.confirmAccount ?? (() => Effect.void);
     this.#keptDays = options.recordedDays ?? UNKEPT_DAYS;
     this.#flushIntervalMs = positiveInteger(
       options.flushIntervalMs,
@@ -344,6 +354,7 @@ export class ProductEventSender {
   #flushEffect(): Effect.Effect<void, never, HttpClient.HttpClient> {
     return Effect.gen({ self: this }, function* () {
       if (this.#queue.length === 0) return;
+      yield* this.#confirmAccount();
       const holder = yield* this.#readHolder();
       // Gone whatever becomes of the request, save for the one end that never
       // authenticated at all.

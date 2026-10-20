@@ -344,9 +344,24 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
 
   // No header at all: the cookie rides the request, a refusal re-reads the
   // session, and the holder is the person the session named when the call began.
-  const credential: CallCredential = {
+  const signedInCredential: CallCredential = {
     renew: token.refreshAccount,
     holder: () => Effect.sync(() => signedInId(account)),
+  };
+  // Note that signed out, the call has nothing to go under, which an
+  // authorization that reads nothing says: the call answers no credential
+  // without going out, so a sender keeps what it queued for the sign-in, and
+  // a renewal still re-reads the session.
+  const signedOutCredential: CallCredential = {
+    authorization: () => Effect.succeed(undefined),
+    renew: token.refreshAccount,
+    holder: () => Effect.succeed(undefined),
+  };
+  const credential: CallCredential = {
+    resolve: () =>
+      Effect.sync(() =>
+        signedInId(account) === undefined ? signedOutCredential : signedInCredential,
+      ),
   };
 
   /**
