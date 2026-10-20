@@ -151,8 +151,42 @@ const ENDED_WORD = {
   [CODING_AGENT_STATUS.FAILED]: "failed",
 } as const;
 
-/** The notification as the OS posts it: what it says, and what its click does. */
+/** What kind of event a notice tells of. */
+export const NOTICE_KIND = {
+  AGENT_END: "agent-end",
+  INBOX_ITEM: "inbox-item",
+  FAILED_RUN: "failed-run",
+  CHAT_MESSAGE: "chat-message",
+  TEST: "test",
+} as const;
+
+/**
+ * The event a notice tells of, by the identifiers that name it: the same in
+ * every window that hears it, and different for every other event,
+ * whatever the words, so a browser's tabs can show it once
+ * (`apps/web/src/app/web-notices.ts`).
+ */
+type NoticeSubject =
+  | {
+      readonly kind: typeof NOTICE_KIND.AGENT_END;
+      readonly agentId: string;
+      /** The turn that ended; null where the agent ended before its first turn was read. */
+      readonly turnId: string | null;
+      readonly status: CodingAgentStatus;
+    }
+  | {
+      readonly kind: typeof NOTICE_KIND.INBOX_ITEM;
+      readonly itemId: string;
+      readonly revision: number;
+    }
+  | { readonly kind: typeof NOTICE_KIND.FAILED_RUN; readonly runId: string }
+  | { readonly kind: typeof NOTICE_KIND.CHAT_MESSAGE; readonly messageId: string }
+  /** Settings' test, one press of it: each press is an event of its own. */
+  | { readonly kind: typeof NOTICE_KIND.TEST; readonly pressId: string };
+
+/** The notification as the OS posts it: the event it tells of, what it says, and what its click does. */
 export interface AgentNotice {
+  subject: NoticeSubject;
   title: string;
   body: string;
   onClick: () => void;
@@ -235,6 +269,38 @@ export interface AgentNoticeDoorsSurface {
 export class AgentNoticeDoors extends Context.Service<AgentNoticeDoors, AgentNoticeDoorsSurface>()(
   "@luke/desktop/AgentNoticeDoors",
 ) {}
+
+/**
+ * The doors as the notices call them: one that throws is reported and its
+ * notice dropped. Note that the throw never reaches the caller, because the
+ * doors are called from the loop that announces each end and from the
+ * inbox's answers, and a throw there would end the loop, and every notice
+ * after it, for the rest of the run.
+ */
+function guardedDoors(
+  doors: AgentNoticeDoorsSurface,
+  report: (message: string) => void,
+): AgentNoticeDoorsSurface {
+  const guarded =
+    <Said>(door: string, say: (said: Said) => void) =>
+    (said: Said): void => {
+      try {
+        say(said);
+      } catch (defect) {
+        report(
+          `the notice's ${door} door failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+        );
+      }
+    };
+  return {
+    post: guarded("post", (notice: AgentNotice) => doors.post(notice)),
+    toast: guarded("toast", (end: AgentEndToast) => doors.toast(end)),
+    toastInbox: guarded("inbox toast", (item: InboxItemToast) => doors.toastInbox(item)),
+    toastFailedRun: guarded("failed-run toast", (run: FailedRunToast) => doors.toastFailedRun(run)),
+    toastChat: guarded("chat toast", (message: ChatMessageToast) => doors.toastChat(message)),
+    badge: guarded("badge", (count: number) => doors.badge(count)),
+  };
+}
 
 export interface AgentNoticesDependencies {
   /** The plan's agents with their status, as the host answers them: the watch's read of a plan's agents. */
@@ -583,7 +649,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     dependencies: AgentNoticesDependencies,
   ): Effect.fn.Return<AgentNotices, never, Scope.Scope | AgentNoticeDoors> {
     const { listAgents, readPullRequest, taskName, open, onUnseenChanged, report } = dependencies;
-    const doors = yield* AgentNoticeDoors;
+    const doors = guardedDoors(yield* AgentNoticeDoors, report);
     const ledger = new Map<string, HeldAgent>();
     /** What each agent with no plan is announced under, by agent: its automation's name, or its repository where the reader may not read the automation. */
     const tasklessSubjects = new Map<string, string>();
@@ -691,7 +757,18 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         });
         return;
       }
-      if (dependencies.notifying()) doors.post({ ...text, onClick: () => open(place) });
+      if (dependencies.notifying()) {
+        doors.post({
+          ...text,
+          subject: {
+            kind: NOTICE_KIND.AGENT_END,
+            agentId: end.agentId,
+            turnId: end.agent.turnId,
+            status: end.agent.status,
+          },
+          onClick: () => open(place),
+        });
+      }
     });
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
@@ -736,6 +813,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         const text = tasklessNoticeText(item, models);
         doors.post({
           ...text,
+          subject: { kind: NOTICE_KIND.INBOX_ITEM, itemId: item.id, revision: item.revision },
           onClick: () =>
             dependencies.openTasklessItem({
               agentId: item.agentId,
@@ -756,6 +834,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       }
       if (dependencies.notifying()) {
         doors.post({
+          subject: { kind: NOTICE_KIND.FAILED_RUN, runId: run.id },
           title: run.automationName,
           body: words,
           onClick: () => dependencies.openFailedRun(place),
@@ -781,7 +860,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         return;
       }
       if (dependencies.notifying()) {
-        doors.post({ ...text, onClick: () => dependencies.openChat(entry.workspaceId) });
+        doors.post({
+          ...text,
+          subject: { kind: NOTICE_KIND.CHAT_MESSAGE, messageId: entry.messageId },
+          onClick: () => dependencies.openChat(entry.workspaceId),
+        });
       }
     }
 
@@ -799,7 +882,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         return;
       }
       if (dependencies.notifying()) {
-        doors.post({ ...text, onClick: () => dependencies.openInbox(item.planId) });
+        doors.post({
+          ...text,
+          subject: { kind: NOTICE_KIND.INBOX_ITEM, itemId: item.id, revision: item.revision },
+          onClick: () => dependencies.openInbox(item.planId),
+        });
       }
     }
 

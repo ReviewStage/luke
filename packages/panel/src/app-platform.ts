@@ -66,6 +66,14 @@ export interface AppPlatform {
    * Mac app, leaves this out.
    */
   notificationsGrantor?(): NotificationsGrantor;
+  /**
+   * Asks the shell's grantor for permission where it was never answered,
+   * called in the press's own handler before Settings' test leaves for the
+   * host, because a browser such as Safari prompts only for an ask made
+   * inside the press. A shell whose grant is macOS's, the Mac app, leaves
+   * this out.
+   */
+  askNotificationsPermission?(): void;
 }
 
 let installed: AppPlatform | undefined;
