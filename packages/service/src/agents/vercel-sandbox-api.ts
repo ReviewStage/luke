@@ -127,12 +127,12 @@ export interface CommandAsk {
  * open for `writeStdin`. Its `env` is handed to it by the API alone, so a
  * secret in it reaches no argv and no file.
  */
-export interface DetachedCommandAsk extends CommandAsk {
+interface DetachedCommandAsk extends CommandAsk {
   readonly sudo: boolean;
 }
 
 /** A sandbox opened from a snapshot: its name, its tags, how long it may run and how large, and how many of its snapshots Vercel keeps. */
-export interface SandboxCreate {
+interface SandboxCreate {
   readonly name: string;
   readonly snapshotId: string;
   readonly tags: Readonly<Record<string, string>>;
@@ -147,7 +147,7 @@ export interface SandboxCreate {
 }
 
 /** A file written into a sandbox: its absolute path, its bytes, and its mode. */
-export interface SandboxFile {
+interface SandboxFile {
   readonly path: string;
   readonly contents: Uint8Array;
   readonly mode: number;

@@ -116,7 +116,7 @@ export type ClaudeCodeServices =
   | HostedEnvironment;
 
 /** Runs one effect on the edge's runtime; the checkout reaches the sandbox through promises (`repository-shell.ts`). */
-export type SandboxRunner = <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
+type SandboxRunner = <A, E>(effect: Effect.Effect<A, E>) => Promise<A>;
 
 export interface ClaudeCodeSessionsOptions {
   /** The account the sessions act for: the agent's starter, whose conversation and key they read. */
@@ -229,7 +229,7 @@ export function runnerBearerDigest(bearer: string): string {
 }
 
 /** A message's content as the runner's lines carry it: words as text, an image as an image block, any other file named. */
-export function runnerContent(message: string | UserContent): readonly ContentBlock[] {
+function runnerContent(message: string | UserContent): readonly ContentBlock[] {
   if (typeof message === "string") return [{ type: "text", text: message }];
   return message.flatMap((part): ContentBlock[] => {
     if (part.type === "text") return [{ type: "text" as const, text: part.text }];
@@ -652,7 +652,6 @@ export const RUNNER_ENDED = {
   /** The END is from a launch a newer one replaced, or the sandbox is gone or already down. */
   STALE: "stale",
 } as const;
-export type RunnerEnded = (typeof RUNNER_ENDED)[keyof typeof RUNNER_ENDED];
 
 /**
  * A launch's end, as its END event tells it: the sandbox stopped, its

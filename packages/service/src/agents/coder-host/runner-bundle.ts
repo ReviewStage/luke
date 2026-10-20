@@ -16,7 +16,7 @@ import { Context, Data, Effect, Layer } from "effect";
 export const RUNNER_BUNDLE_FILE = "agent-runner.mjs";
 
 /** The bundle could not be read where the build should have left it. */
-export class RunnerBundleMissing extends Data.TaggedError("RunnerBundleMissing") {}
+class RunnerBundleMissing extends Data.TaggedError("RunnerBundleMissing") {}
 
 export interface RunnerBundleService {
   /** The bundle's bytes. */
