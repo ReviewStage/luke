@@ -115,15 +115,7 @@ const SCOPED_AFTER = {
   brief: ["packages/service/src/agents/coder-host/start.ts"],
   chars: ["packages/service/src/agents/mentioned-context.ts"],
   // The plan's tools, offered to an agent on a task: its notes, its pages, and its comments.
-  tools: [
-    "apps/dev/host.ts",
-    "apps/dev/tools/edit_plan.ts",
-    "apps/dev/tools/show_page.ts",
-    "apps/dev/tools/read_comments.ts",
-    "apps/dev/tools/reply_to_comment.ts",
-    "apps/dev/tools/resolve_thread.ts",
-    "apps/dev/tools/reopen_thread.ts",
-  ],
+  tools: ["apps/dev/host.ts", "apps/dev/tools/plan.ts"],
   // The plan editor's own `@`, and the words it shows in an empty plan.
   mentions: ["packages/panel/src/plan-editor/", "packages/panel/src/plan-editor/"],
   placeholder: ["packages/panel/src/plan-editor/", "packages/panel/src/plan-editor/"],
