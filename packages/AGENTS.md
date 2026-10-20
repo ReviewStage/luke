@@ -81,7 +81,7 @@ carry a Node-reaching layer a few files deep.
 
 A door is not what keeps `effect` out of a bundle generally; `@luke/wire`'s
 barrel resolves `Schema` beneath it. Root AGENTS.md's "Effect idioms" section
-records that cost against the renderer bundle budget: one copy per bundle,
+records that cost against the renderer bundle: one copy per bundle,
 paid once. What a door still keeps out is a Node-reaching companion like
 `@effect/platform-node`.
 

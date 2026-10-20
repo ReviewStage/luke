@@ -281,7 +281,7 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * The Chapters view, loaded as a chunk of its own the first time it is
  * shown rather than with the window, as Settings is, because the renderer
  * bundle is parsed at every window open and the view, its rail, and the
- * chapter logic are opened seldom (`bundle-budget.json`). What stands while
+ * chapter logic are opened seldom. What stands while
  * the chunk loads is the view's own wait, for a frame.
  */
 const AgentChaptersTab = lazy(() =>
