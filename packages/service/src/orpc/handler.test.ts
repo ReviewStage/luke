@@ -202,6 +202,29 @@ it.effect("a defect is a bare 500, as the platform's web handler answered one", 
 );
 
 it.effect(
+  "every answer, a success, a refusal, a defect, a path under another method and a path no procedure serves alike, is never sniffed and is no other site's to load",
+  () =>
+    Effect.gen(function* () {
+      // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
+      const services = Context.empty() as Context.Context<WebServices>;
+      const handle = hostedFetch(testRouter);
+      for (const [path, status] of [
+        ["/api/test/ABC/when", HOSTED_HTTP_STATUS.OK],
+        [REACH_PATH, HOSTED_HTTP_STATUS.FORBIDDEN],
+        [DEFECT_PATH, HOSTED_HTTP_STATUS.INTERNAL_ERROR],
+        [ITEMS_PATH, HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED],
+        ["/api/test/nowhere", HOSTED_HTTP_STATUS.NOT_FOUND],
+      ] as const) {
+        const request = new Request(new URL(path, ORIGIN), { method: HTTP_METHOD.GET });
+        const answered = yield* Effect.promise(() => handle(request, services));
+        assert.equal(answered.status, status, path);
+        assert.equal(answered.headers.get("x-content-type-options"), "nosniff", path);
+        assert.equal(answered.headers.get("cross-origin-resource-policy"), "same-origin", path);
+      }
+    }),
+);
+
+it.effect(
   "a body past the handler's ceiling is refused as too large while it streams in, with no length stated, as readBodyBytesEffect refused one",
   () =>
     Effect.gen(function* () {

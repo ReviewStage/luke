@@ -164,9 +164,11 @@ const decodeApiRewrites = Schema.decodeUnknownSync(
 /**
  * A route of the web service as `vercel.json` writes it: a rewrite, and the
  * response headers a page route sends beside it, as the app's routes send
- * its Content Security Policy; or a redirect, its status and its `Location`
- * header, as the app's built file name sends the browser to `/app`. A
- * generated `/api/` rewrite carries neither.
+ * its Content Security Policy; a redirect, its status and its `Location`
+ * header, as the app's built file name sends the browser to `/app`; or
+ * headers alone, which routing carries on past (`continue`) to whichever
+ * later route or built file answers, as every page of the site wears its
+ * security headers. A generated `/api/` rewrite carries none of them.
  */
 const WebRouteSchema = Schema.Union([
   Schema.Struct({
@@ -178,6 +180,11 @@ const WebRouteSchema = Schema.Union([
     src: Schema.String,
     status: Schema.Number,
     headers: Schema.Struct({ Location: Schema.String }),
+  }),
+  Schema.Struct({
+    src: Schema.String,
+    headers: Schema.Record(Schema.String, Schema.String),
+    continue: Schema.Literal(true),
   }),
 ]);
 

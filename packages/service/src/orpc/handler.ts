@@ -12,6 +12,9 @@
  * would answer it unmatched; and a defect is a bare 500 with no body, as the
  * platform's web handler answered one, where oRPC would describe it.
  *
+ * Every answer, a refusal and an unmatched path's among them, is also marked
+ * as this origin's alone (`SAME_ORIGIN_ANSWER`), which no old group said.
+ *
  * Every body is counted once, as it is read, against the matched
  * procedure's own cap (`bodyCap` in `@luke/features/contract`), or the
  * platform's ceiling for a procedure that names none: a `content-length`
@@ -47,6 +50,20 @@ export type HostedFetch = (
 
 const CACHE_CONTROL = "cache-control";
 const HOSTED_CACHE_CONTROL = "private, no-store";
+
+/**
+ * The headers every answer carries: its type is never sniffed for another,
+ * and no other site's page may load it as a resource (an `<img>` or a
+ * `<script>` naming an `/api/` path), since a browser would send the session
+ * cookie of whoever is looking with it (`auth/bearer.ts`'s
+ * `resolveHostedUserId`). Every reader is same-origin: the web app's tab and
+ * the site's pages `fetch` this origin, and the Mac's host calls from its
+ * main process with its bearer.
+ */
+const SAME_ORIGIN_ANSWER = {
+  "x-content-type-options": "nosniff",
+  "cross-origin-resource-policy": "same-origin",
+} as const;
 
 /**
  * The most any request's body may carry, in bytes: Vercel's own limit on a
@@ -154,6 +171,14 @@ function settled(response: Response): Response {
   return response;
 }
 
+/** An answer marked as this origin's alone (`SAME_ORIGIN_ANSWER`). */
+function sameOriginOnly(response: Response): Response {
+  for (const [name, value] of Object.entries(SAME_ORIGIN_ANSWER)) {
+    response.headers.set(name, value);
+  }
+  return response;
+}
+
 /** The handler over the router, and the one fetch every migrated route answers through. */
 export function hostedFetch(router: HostedRouter): HostedFetch {
   const handler = new OpenAPIHandler<HostedContext>(router, {
@@ -177,13 +202,15 @@ export function hostedFetch(router: HostedRouter): HostedFetch {
     const { matched, response } = await handler.handle(request, {
       context: { "effect/context": services, "effect/wrap": hostedRefusalWrap, request },
     });
-    if (matched) return settled(response);
-    return (await servedUnderAnotherMethod(request))
-      ? refusalResponse(
-          request,
-          HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-          HOSTED_REFUSAL.METHOD_NOT_ALLOWED,
-        )
-      : refusalResponse(request, HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_REFUSAL.NOT_FOUND);
+    if (matched) return sameOriginOnly(settled(response));
+    return sameOriginOnly(
+      (await servedUnderAnotherMethod(request))
+        ? refusalResponse(
+            request,
+            HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+            HOSTED_REFUSAL.METHOD_NOT_ALLOWED,
+          )
+        : refusalResponse(request, HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_REFUSAL.NOT_FOUND),
+    );
   };
 }
