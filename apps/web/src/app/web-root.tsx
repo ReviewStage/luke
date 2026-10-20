@@ -8,6 +8,7 @@
  * runs on, and runs the panel's first read. The tab is drawn in the
  * account's Theme setting beside the panel (`web-appearance.tsx`). It starts
  * the tab's Sentry first (`web-sentry.ts`), where the build carries a DSN,
+ * stands the runtime on its reporter, as the desktop's main stands its own,
  * and reports through it a tab that could draw nothing, as the desktop's
  * window root does.
  */
@@ -23,7 +24,7 @@ import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { installShellBundles } from "@luke/panel/shell-bundles";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import type { HistoryAdapter } from "@luke/ui/history-adapter";
-import { Effect, type Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import { createRoot } from "react-dom/client";
@@ -76,13 +77,18 @@ export async function mountWebApp(
 ): Promise<WebApp | undefined> {
   // The address the tab loaded at, read before the panel's history writes its own steps into it.
   const loadedAt = location.href;
-  // Never awaited before drawing: the SDK is a chunk of its own, and the panel does not wait on it.
+  // Never awaited: the SDK is a chunk of its own, and what is reported before it lands waits for it.
   const sentry = startWebSentry(options.sentry ?? webSentryBuild());
   const httpClient = options.httpClient ?? FetchHttpClient.layer;
   // Note that an act runs only once the host stands, by which time the runtime is set.
   let runtime: ManagedRuntime.ManagedRuntime<WebHostTag | HostTag, DuplicateGatewayMethod>;
-  const run = <A,>(effect: Effect.Effect<A>): Promise<A> => runtime.runPromise(effect);
-  runtime = ManagedRuntime.make(composeWeb({ httpClient, run }));
+  // A defect in an act is reported, as the desktop's acts are.
+  const run = <A,>(effect: Effect.Effect<A>): Promise<A> =>
+    runtime.runPromise(Effect.withErrorReporting(effect, { defectsOnly: true }));
+  // Sentry's reporter stands beneath the host, so every fiber it forks and every act reports through it.
+  runtime = ManagedRuntime.make(
+    Layer.provideMerge(composeWeb({ httpClient, run }), sentry.errorReporting),
+  );
   // What the tab installed, taken down again in the reverse order as it closes.
   const installed: (() => void)[] = [];
   const uninstall = () => {
@@ -101,7 +107,7 @@ export async function mountWebApp(
   } catch (error) {
     console.error("The tab's host could not stand or its state be read; nothing is drawn.", error);
     // A blank tab is a failure, so it is sent as an event, not only kept as the console's breadcrumb.
-    (await sentry)?.reportBlankTab(error instanceof Error ? error : new Error(String(error)));
+    sentry.reportBlankTab(error instanceof Error ? error : new Error(String(error)));
     uninstall();
     await runtime.dispose();
     return undefined;
