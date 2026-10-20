@@ -83,10 +83,9 @@ the check names. A component is placed by review under the same rule.
   (`packages/panel/src/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
   would change that.
-- Never push PR media to a branch but `pr-assets`, under `pr-<number>/`
-  (`docs/WORKFLOW.md` step 7). A fresh `pr-assets-<topic>` branch mails a
-  failed Vercel Preview on every push; a push refused because another workspace
-  got there first is fetched, rebased, and pushed again.
+- Never push PR media to a branch but `pr-assets`, under `pr-<number>/`, if
+  you add any; a fresh `pr-assets-<topic>` branch mails a failed Vercel Preview
+  on every push. PR media is not required.
 - Never add to this file (`AGENTS.md`, which `CLAUDE.md` links to) unless the
   user explicitly approved the addition.
 
@@ -409,8 +408,8 @@ while CI runs, before arming auto-merge, and while a PR waits in the queue.
 Restacking a stack onto the PR beneath it after that PR changed is the one
 routine rebase.
 
-To merge a PR, run `gh pr merge --auto` right away, once any manual pre-merge
-step (`docs/WORKFLOW.md` step 3's preview run) is done; the merge queue waits
+Open a PR ready for review, never as a draft, so CI and review start on it at
+once. To merge a PR, run `gh pr merge --auto` right away; the merge queue waits
 on CI, so do not wait on it yourself, and do not update the branch first. In a
 stack, arm a PR only once it targets `main`.
 
