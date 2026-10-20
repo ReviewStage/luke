@@ -149,6 +149,18 @@ const keysAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
+/** Whether the account holds a subscription credential of any kind for the provider. */
+const subscriptionHeld = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  provider: ProviderKeyProvider,
+) {
+  for (const kind of SUBSCRIPTION_KINDS) {
+    const rows = yield* hostedStoreOrUnavailable(listProviderKeyRows(userId, kind));
+    if (rows.some((row) => row.provider === provider)) return true;
+  }
+  return false;
+});
+
 /** Whether a subscription credential is saved for the provider its kind belongs to and spelled as one of its kind; nothing is asked of the provider. */
 function subscriptionShapeOf(
   provider: ProviderKeyProvider,
@@ -183,10 +195,10 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
       if (!(yield* brake.check(userId))) {
         return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
       }
-      const now = yield* DateTime.nowAsDate;
       if (kind !== PROVIDER_KEY_KIND.API_KEY) {
         const refused = subscriptionShapeOf(provider, kind, key);
         if (refused !== undefined) return yield* keysAnswer(userId, ring, refused);
+        const now = yield* DateTime.nowAsDate;
         const sealed = sealProviderKey(ring, { userId, provider, kind }, key);
         const kept = yield* hostedStoreOrUnavailable(
           saveProviderKey(userId, provider, kind, sealed, providerKeyHint(key), null, now),
@@ -194,6 +206,10 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
         return kept
           ? yield* keysAnswer(userId, ring)
           : yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
+      }
+      // A key the store would refuse beside a subscription is refused before the provider is asked, so the checks bill nothing for it; the save's own condition still guards a subscription saved meanwhile.
+      if (yield* subscriptionHeld(userId, provider)) {
+        return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
       }
       // An Anthropic key is asked about fast mode beside the check, which the catalog offers by; OpenAI has none Luke runs.
       const [checked, fastAccess] = yield* Effect.all(
@@ -207,6 +223,7 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
       );
       if (checked !== PROVIDER_KEY_CHECK.ACCEPTED) return yield* keysAnswer(userId, ring, checked);
       const sealed = sealProviderKey(ring, { userId, provider, kind }, key);
+      const now = yield* DateTime.nowAsDate;
       const kept = yield* hostedStoreOrUnavailable(
         saveProviderKey(
           userId,

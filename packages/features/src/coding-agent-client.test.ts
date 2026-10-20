@@ -10,6 +10,7 @@ import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
 import { INBOX_REPLY } from "./inbox-wire.js";
 import {
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
@@ -182,11 +183,18 @@ it.effect(
         client().removeProviderKey({ provider: PROVIDER_KEY_PROVIDER.ANTHROPIC }),
         api.layer,
       );
+      yield* Effect.provide(
+        client().removeProviderKey({
+          provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          kind: PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+        }),
+        api.layer,
+      );
 
       assert.deepEqual(read, { keys: [kept] });
       assert.deepEqual(saved, { keys: [], rejected: PROVIDER_KEY_REJECTION.INVALID });
       assert.deepEqual(removed, { keys: [] });
-      const [, save, removal] = api.requests();
+      const [, save, removal, tokenRemoval] = api.requests();
       assert.deepEqual(JSON.parse(save?.body ?? "{}"), {
         provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
         key,
@@ -194,6 +202,10 @@ it.effect(
       assert.equal(
         removal?.url,
         `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
+      );
+      assert.equal(
+        tokenRemoval?.url,
+        `https://tryluke.dev/api/account/provider-keys?provider=${PROVIDER_KEY_PROVIDER.ANTHROPIC}&kind=${PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN}`,
       );
     }),
 );

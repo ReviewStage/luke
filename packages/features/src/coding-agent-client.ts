@@ -492,14 +492,17 @@ export class HostedCodingAgentClient {
     return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
   }
 
-  /** One provider's key removed, answering the keys as they then stand. */
+  /** One provider's key of the kind named, an API key where none is, removed, answering the keys as they then stand. */
   removeProviderKey(
     params: ProviderKeyRemoveParams,
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
     // The provider rides in the query, since a DELETE carries no body.
     return hostedAnswer(
       askHosted(this.#hosted.account.removeProviderKey, {
-        query: { [PROVIDER_KEY_QUERY.PROVIDER]: params.provider },
+        query: {
+          [PROVIDER_KEY_QUERY.PROVIDER]: params.provider,
+          ...(params.kind === undefined ? undefined : { [PROVIDER_KEY_QUERY.KIND]: params.kind }),
+        },
       }),
       {},
     );

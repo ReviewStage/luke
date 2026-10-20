@@ -572,9 +572,10 @@ it.layer(getTestDB())("the provider keys route", (it) => {
     "a setup-token is refused over an Anthropic API key and an API key over a setup-token, each left as it stood, and one spelled as no setup-token or saved for OpenAI keeps nothing",
     () =>
       Effect.gen(function* () {
-        const { owner, other, ask, logged } = yield* openAccounts({ ring: KEK.ONE });
+        const { owner, other, ask, checks, logged } = yield* openAccounts({ ring: KEK.ONE });
         keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)));
         keysOf(yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)));
+        const checksBefore = checks.length;
 
         const tokenOverKey = keysOf(
           yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)),
@@ -582,6 +583,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         const keyOverToken = keysOf(
           yield* ask(save(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)),
         );
+        const checksAfter = checks.length;
         const apiKeyAsToken = keysOf(
           yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)),
         );
@@ -596,6 +598,11 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         );
         assert.equal(tokenOverKey.subscriptions, undefined);
         assert.deepEqual(keyOverToken.rejected, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
+        assert.equal(
+          checksAfter,
+          checksBefore,
+          "no provider is asked about a key refused beside a token",
+        );
         assert.deepEqual(keyOverToken.keys, []);
         assert.deepEqual(
           keyOverToken.subscriptions?.map(({ kind, hint }) => [kind, hint]),
