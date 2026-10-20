@@ -198,3 +198,36 @@ test("a read that went unanswered offers Try again in place of Add, which reads 
   await settle();
   button("Add");
 });
+
+test("the row reads the token again when Profile is drawn for another account", async () => {
+  stored = KEPT;
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const draw = (id: string) =>
+    act(() =>
+      root.render(
+        createElement(AccountSection, {
+          account: {
+            status: ACCOUNT_STATUS.SIGNED_IN,
+            id,
+            email: `${id}@example.com`,
+            name: id,
+            provider: ACCOUNT_PROVIDER.GOOGLE,
+          },
+          onSignOut: () => Promise.resolve(),
+          onDeleteAccount: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+        }),
+      ),
+    );
+  draw("ada");
+  await settle();
+  button("Manage");
+
+  stored = null;
+  draw("bea");
+  await settle();
+  button("Add");
+  assert.ok(!(container.textContent ?? "").includes("octo-member"), "Ada's token is gone");
+});
