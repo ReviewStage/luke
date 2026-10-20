@@ -59,7 +59,7 @@ import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
 import * as AtomRegistryModule from "effect/reactivity/AtomRegistry";
 import { TestClock } from "effect/testing";
 import { act, createElement, Fragment, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
 import {
@@ -269,8 +269,10 @@ function mount(
   document.body.append(container);
   // The window's toast stands beside the tab, as the app draws it.
   const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
+  const root = createRoot(container);
+  roots.push(root);
   act(() => {
-    createRoot(container).render(registry === undefined ? surface : onRegistry(registry, surface));
+    root.render(registry === undefined ? surface : onRegistry(registry, surface));
   });
   return {
     told,
@@ -295,8 +297,22 @@ function mount(
   };
 }
 
-afterEach(() => {
+/**
+ * Every root a test mounted. Note that each is unmounted inside `act` before
+ * its page is cleared, because a root left standing keeps React's scheduler
+ * working after the file ends, and its next tick, landing after the
+ * environment is torn down, throws `window is not defined` outside any test.
+ */
+const roots: Root[] = [];
+
+/** Takes down every tab mounted so far and clears the page: the window closed, as a quit or the test's end leaves it. */
+function closeWindow(): void {
+  for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+}
+
+afterEach(() => {
+  closeWindow();
   window.localStorage.clear();
   vi.restoreAllMocks();
 });
@@ -1939,7 +1955,7 @@ test("newer plans on repositories a workspace does not reach crowd out none it d
   });
   act(() => active.control().onChooseWorkspace(ACME.id));
   const reached = active.control().repositories.recent;
-  document.body.innerHTML = "";
+  closeWindow();
 
   const suspended = mount({
     shown: true,
@@ -1958,7 +1974,7 @@ test("newer plans on repositories a workspace does not reach crowd out none it d
 test("a workspace chosen is chosen again on the next launch, and one the account is no longer in gives way to the first one", () => {
   const first = mount({ shown: true, tasks: TWO_WORKSPACES });
   act(() => first.control().onChooseWorkspace(ACME.id));
-  document.body.innerHTML = "";
+  closeWindow();
 
   const relaunched = mount({ shown: true, tasks: TWO_WORKSPACES });
   const kept = relaunched.control().workspace?.id;
@@ -2123,8 +2139,10 @@ test("the repository chip's list for a workspace with GitHub connected is its re
   );
   installScrollIntoView();
   const chip = document.body.appendChild(document.createElement("div"));
+  const chipRoot = createRoot(chip);
+  roots.push(chipRoot);
   act(() =>
-    createRoot(chip).render(
+    chipRoot.render(
       createElement(RepositoryChip, {
         value: null,
         chooser: tab.control().newTask.repositoriesIn(ACME.id),
@@ -2388,7 +2406,7 @@ test("a plan archived or deleted since the quit, or kept by another account, lea
     tab.stand({ tasks: listRead(tasks) });
     assert.deepEqual(selected(tab), [], why);
     assert.equal(tab.control().restoring, false, why);
-    document.body.innerHTML = "";
+    closeWindow();
     window.localStorage.clear();
   }
 });
@@ -2446,7 +2464,7 @@ test("a launch whose list read failed rests on the home page, and opens the plan
 
 test("another account signing in after a sign-out keeps its own plan, and has it opened", () => {
   quitWithTaskOpen("other@example.com");
-  document.body.innerHTML = "";
+  closeWindow();
   const tab = mount(
     { shown: true, tasks: { ...OPEN, tasks: [listed()] } },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -3118,7 +3136,7 @@ test("an agent's title first landing on a task still Untitled reads the tasks ag
   act(() => tab.control().agents.onTitle(AGENT_ID, "Fix token refresh"));
   await settle();
   const landed = refreshes(tab) - before;
-  document.body.innerHTML = "";
+  closeWindow();
 
   const named = mount(
     { shown: true, tasks: OPEN },
