@@ -11,14 +11,12 @@ import { isPointed } from "@luke/voice/code-pane-model";
 import { type CSSProperties, Fragment, memo, type ReactNode, type Ref } from "react";
 import { type CodeType, FONT_STACK, LIGATURES, LINE_HEIGHT_RATIO } from "../code-type.js";
 import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
-import { useFileViewSettings } from "./file-view-settings.js";
 
 /**
- * code-lines.tsx -- numbered code lines: a Code card's, and filling their place and scrolling there, the lines Luke showed of a file a File tab cannot read, and a text file opened over the window.
+ * code-lines.tsx -- numbered code lines filling their place and scrolling there: a text file opened over the window.
  *
  * Each line is numbered from where it sits in its file, its runs coloured
- * in both appearances, the lines pointed at lit; a Code card draws its rows
- * alone (`CodeLineRows`), and every other place draws them filling it and
+ * in both appearances, the lines pointed at lit, drawn filling the place and
  * scrolling in a `ScrollArea` of `@luke/ui` (`CodeLinesView`), never an
  * `overflow` of its own. Wrapped, they scroll up and down alone.
  * Unwrapped, they scroll on both axes together, every line as wide as the
@@ -28,10 +26,11 @@ import { useFileViewSettings } from "./file-view-settings.js";
  * lines stand in a frame as wide as the place, which a note measures itself
  * by, because the lines themselves are as wide as the longest so a note can
  * stay stuck in view across the whole of them. Whether they wrap and number
- * is the caller's: the lines Luke showed in a File tab follow the File tabs'
- * settings (`useLinesLook`), a text file opened over the window always wraps
- * and numbers. A File tab's file and a page's source are drawn whole by
- * Pierre's diffs instead (`whole-file.tsx`).
+ * is the caller's: a text file opened over the window always wraps and
+ * numbers. A File tab's file and a page's source are drawn whole by
+ * Pierre's diffs instead (`whole-file.tsx`), and a Code card's lines and
+ * the lines Luke showed of a file a File tab cannot read as a snippet
+ * (`code-snippet.tsx`).
  */
 
 /**
@@ -148,21 +147,6 @@ export interface LinesLook {
   readonly wrap: boolean;
   /** The type the lines are set in, as View settings sets it; the window's code type where none is named. */
   readonly type?: CodeType | undefined;
-}
-
-/** The look every File tab's lines, and a page's source, are drawn in: the File tabs' settings (`file-view-settings.ts`). */
-export function useLinesLook(): LinesLook {
-  const { settings } = useFileViewSettings();
-  return {
-    lineNumbers: settings.lineNumbers,
-    wrap: settings.wordWrap,
-    type: {
-      font: settings.diffFont,
-      fontSize: settings.diffFontSize,
-      lineHeight: settings.diffLineHeight,
-      ligatures: settings.diffLigatures,
-    },
-  };
 }
 
 /** A run's type as its box's custom properties, which the stylesheet sets its lines in (`.code-lines`); none for the window's own. */
