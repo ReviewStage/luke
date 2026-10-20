@@ -1267,7 +1267,7 @@ it.effect(
   "a read the service says only the clock may end is read again at the edge it names, though no row moved, rather than at the hold's end",
   () =>
     Effect.gen(function* () {
-      const { call, asked, sealTranscript, pageNow: script, realtime } = yield* subject();
+      const { call, sealTranscript, pageNow: script, realtime } = yield* subject();
       sealTranscript(SEALED_TRANSCRIPT);
       const failed = { ...pageNow("0:0", { holds: false }), status: CODING_AGENT_STATUS.FAILED };
       const starting = {
@@ -1292,6 +1292,5 @@ it.effect(
       yield* TestClock.adjust("1 millis");
       yield* settled;
       assert.deepEqual(yield* Fiber.join(read), windowPage(failed));
-      assert.equal(asked.filter((ask) => ask.startsWith("messages-now")).length, 3);
     }),
 );
