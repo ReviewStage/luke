@@ -1,5 +1,5 @@
 /**
- * production.ts -- the terminal relay's dependencies as the deployment stands them: the agent read by the one rule, its sandbox over Vercel's REST API, the PTY reached by WebSocket, and the lease in the store.
+ * production.ts -- the terminal relay's dependencies as the deployment stands them: the agent read by the one rule, its sandbox over Vercel's REST API, the PTY reached by WebSocket (`sandbox-pty.ts`), and the lease in the store.
  *
  * Each dependency answers over the services the function's runtime holds,
  * captured once as the relay stands, so the relay itself requires none. A
@@ -18,64 +18,18 @@ import {
   releaseCredentialRenewal,
 } from "@luke/database/models/sandbox-terminal-lease";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { Duration, Effect, Option, Redacted, Schedule } from "effect";
+import { Effect, Option } from "effect";
 import { HttpClient } from "effect/http";
-import { WebSocket } from "ws";
 import { controlsAgent } from "../agents/agent-reach.js";
 import { agentRepositoryToken } from "../agents/coder-host/checkout.js";
 import { agentTurnUnderWay } from "../agents/coder-host/snapshot.js";
+import { connectPty } from "../agents/sandbox-pty.js";
 import { AgentSandbox, agentSandboxLayer } from "../agents/terminal/agent-sandbox.js";
-import { type InteractiveShell, SandboxUnavailable } from "../agents/vercel-sandbox-api.js";
 import type { GitHubApp } from "../github/github-app.js";
-import { voiceSocket } from "../voice/socket.js";
 import type { RelayDependencies } from "./relay.js";
 
 /** What the relay's dependencies answer over. */
 export type RelayServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
-
-const PTY_CONNECT = {
-  /** How long the PTY's socket may take to open. */
-  OPEN_TIMEOUT: Duration.seconds(10),
-  /** How many times the PTY server's health is asked before the socket opens, as Vercel's own CLI asks it. */
-  HEALTH_RETRIES: 5,
-  HEALTH_SPACING: Duration.millis(100),
-} as const;
-
-/** The PTY's socket opened under its minted token, once its server answers healthy. */
-function connectPty(shell: InteractiveShell, client: HttpClient.HttpClient) {
-  return Effect.gen(function* () {
-    const address = new URL(shell.url);
-    const health = new URL("/health", `https://${address.host}`);
-    yield* client.get(health).pipe(
-      Effect.flatMap((response) =>
-        response.status >= 200 && response.status < 300
-          ? Effect.void
-          : Effect.fail(new SandboxUnavailable({ status: response.status })),
-      ),
-      Effect.scoped,
-      Effect.retry({
-        schedule: Schedule.spaced(PTY_CONNECT.HEALTH_SPACING),
-        times: PTY_CONNECT.HEALTH_RETRIES,
-      }),
-      Effect.mapError(() => new SandboxUnavailable({})),
-    );
-    address.searchParams.set("token", Redacted.value(shell.token));
-    const socket = yield* Effect.acquireRelease(
-      Effect.sync(() => new WebSocket(address)),
-      (open) => Effect.sync(() => open.close()),
-    );
-    yield* Effect.callback<void, SandboxUnavailable>((resume) => {
-      socket.once("open", () => resume(Effect.void));
-      socket.once("error", () => resume(Effect.fail(new SandboxUnavailable({}))));
-    }).pipe(
-      Effect.timeoutOrElse({
-        duration: PTY_CONNECT.OPEN_TIMEOUT,
-        orElse: () => Effect.fail(new SandboxUnavailable({})),
-      }),
-    );
-    return yield* voiceSocket(socket);
-  });
-}
 
 /** The relay's dependencies over the services the runtime holds now. */
 export const relayDependencies: Effect.Effect<RelayDependencies, never, RelayServices> = Effect.gen(
