@@ -795,7 +795,6 @@ test("a line a chat notice wrote draws as a card from its sender, naming the cha
   assert.ok(card, "the notice draws as a card");
   assert.equal(card.dataset.messageId, "notice", "a link to the line finds its card");
   assert.equal(container.querySelector(".is-user"), null);
-  // The sender is named as Chat names them, by who they are rather than by the notice's handle.
   assert.equal(card.querySelector(".chat-notice-from")?.textContent, "Invite emails");
   assert.match(
     card.querySelector(".chat-notice-place")?.textContent ?? "",
