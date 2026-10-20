@@ -361,7 +361,8 @@ const TITLE_WORDS = {
 } as const;
 
 /**
- * The pull request's title and number, its pencil opening a field over the
+ * The pull request's title and number, the number wrapping with the
+ * title's last word, its pencil opening a field over the
  * title where its words may be changed: kept on Enter, or as the focus
  * leaves, where they changed and are not empty, and given up on Escape.
  * The title stands as it was until GitHub answers with the new one, its
@@ -418,9 +419,10 @@ export function PullRequestTitle({
       data-overflow={String(titleClipped)}
       onClick={open}
     >
-      {title}{" "}
-      {/* Note that the number and the pencil wrap as one, because a pencil wrapped alone would spend a line of its own. */}
+      {title}
+      {/* Note that the space before the number stands inside the end that never wraps, so the number and the pencil keep to the title's last word, and the number never stands alone on a line. */}
       <span className="pull-request-title-end">
+        {" "}
         {onOpen === undefined ? (
           numberWords
         ) : (

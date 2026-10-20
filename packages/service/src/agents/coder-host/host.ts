@@ -71,11 +71,11 @@ import {
   SESSION_STANDING,
 } from "../brain-host/conversation.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
-  type EveSessions,
   type EveSessionsComposer,
   eveSessionsComposer,
 } from "../brain-host/eve-sessions.js";
@@ -547,7 +547,7 @@ export type ChatCall =
  * addresses, whose notice could not be handed over, reads it when it next
  * reads, as one whose steer eve refused does (`chat-notify.ts`).
  */
-const EVE_UNREACHED: EveSessions = {
+const EVE_UNREACHED: AgentSessions = {
   open: () =>
     Effect.succeed({
       outcome: EVE_SEND_OUTCOME.FAILED,

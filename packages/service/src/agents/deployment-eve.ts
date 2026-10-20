@@ -4,7 +4,11 @@ import type { HttpClient } from "effect/http";
 import { HostedEnvironment } from "../environment.js";
 import { HOSTED_REFUSAL, type HostedRefusal } from "../http/http-effect.js";
 import type { BrainHostTurn } from "./brain-host/bounds.js";
-import { type EveMount, type EveSessions, eveSessionsComposer } from "./brain-host/eve-sessions.js";
+import {
+  type AgentSessions,
+  type EveMount,
+  eveSessionsComposer,
+} from "./brain-host/eve-sessions.js";
 
 /**
  * The web functions that reach eve, over the web runtime's own
@@ -38,7 +42,7 @@ import { type EveMount, type EveSessions, eveSessionsComposer } from "./brain-ho
 export function deploymentEve<Turn extends BrainHostTurn = never>(
   origin: string | undefined,
   mount: EveMount,
-): Effect.Effect<(account: string) => EveSessions<Turn>, HostedRefusal, HttpClient.HttpClient> {
+): Effect.Effect<(account: string) => AgentSessions<Turn>, HostedRefusal, HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const environment = yield* Effect.serviceOption(HostedEnvironment);
     const secret = Option.getOrUndefined(environment)?.eveDeploymentSecret;
@@ -60,7 +64,7 @@ export function deploymentEveForAccounts<Turn extends BrainHostTurn = never>(
   origin: string | undefined,
   mount: EveMount,
 ): Effect.Effect<
-  (account: string) => Effect.Effect<EveSessions<Turn>, HostedRefusal>,
+  (account: string) => Effect.Effect<AgentSessions<Turn>, HostedRefusal>,
   never,
   HttpClient.HttpClient
 > {

@@ -178,6 +178,10 @@
 }
 
 .desktop-sidebar {
+  /* A row that swipes (an Inbox item's) slides its face over the sidebar's
+     own ground rather than the window's, so it reads as the rows around it. */
+  --luke-list-row-ground: var(--luke-color-sidebar);
+
   display: flex;
   min-height: 0;
   flex-direction: column;

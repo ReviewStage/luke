@@ -18,8 +18,8 @@ import { CONFIRM_STAGE } from "@luke/ui/confirm-state";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { FoldingButton } from "../folding-button.js";
 import { PopoverPanel } from "../popover-panel.js";
-import { Tooltip } from "../tooltip.js";
 import type { PendingReview } from "./line-comment.js";
 import { MarkdownField } from "./markdown-field.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
@@ -273,29 +273,30 @@ export function PullRequestReview({
 
   return (
     <div className="pull-request-review" ref={root}>
-      {/* Note that a narrow row draws the glyph and the count alone, so the word stands in the hint and the name. */}
-      <Tooltip label={REVIEW_WORDS.OPEN}>
-        <Button
-          ref={trigger}
-          icon={<MessageSquarePlusIcon aria-hidden="true" />}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-controls={open ? panelId : undefined}
-          label={
-            pending == null || pending.comments === 0
-              ? REVIEW_WORDS.OPEN
-              : REVIEW_WORDS.openWith(pending.comments)
-          }
-          onClick={() => setOpen(!open)}
-        >
-          <span className="pull-request-review-words">{REVIEW_WORDS.OPEN}</span>
-          {pending == null || pending.comments === 0 ? null : (
-            <span className="pull-request-review-count" aria-hidden="true">
-              {pending.comments}
-            </span>
-          )}
-        </Button>
-      </Tooltip>
+      {/* Note that a narrow row folds the press to a square around its glyph, which wears the count at its corner, so the word stands in the hint and the name. */}
+      <FoldingButton
+        ref={trigger}
+        label={REVIEW_WORDS.OPEN}
+        icon={
+          <span className="pull-request-review-mark">
+            <MessageSquarePlusIcon aria-hidden="true" />
+            {pending == null || pending.comments === 0 ? null : (
+              <span className="pull-request-review-count" aria-hidden="true">
+                {pending.comments}
+              </span>
+            )}
+          </span>
+        }
+        name={
+          pending == null || pending.comments === 0
+            ? undefined
+            : REVIEW_WORDS.openWith(pending.comments)
+        }
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? panelId : undefined}
+        onClick={() => setOpen(!open)}
+      />
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END} width={PANEL_WIDTH}>
           <ReviewPanel

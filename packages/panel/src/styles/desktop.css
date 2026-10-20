@@ -767,9 +767,9 @@ ul.actor-stack {
   box-shadow: none;
 }
 
-/* A pile whose faces wear badges stands them apart, so each badge reads clear of the next face. */
-.actor-stack:has(.actor-stack-badge) > .actor-stack-face {
-  margin-left: var(--luke-space-4);
+/* A pile whose faces wear badges stands them apart, its count too, so each badge reads clear of what comes next. */
+.actor-stack:has(.actor-stack-badge) > :is(.actor-stack-face, .actor-stack-more) {
+  margin-left: var(--luke-space-6);
 }
 
 .actor-stack:has(.actor-stack-badge) > .actor-stack-face:first-child {
@@ -797,11 +797,11 @@ ul.actor-stack {
 .actor-stack-badge {
   position: absolute;
   z-index: 1;
-  right: -3px;
-  bottom: -3px;
+  right: -4px;
+  bottom: -4px;
   display: grid;
-  width: 10px;
-  height: 10px;
+  width: 13px;
+  height: 13px;
   place-items: center;
   border-radius: 50%;
   background: var(--actor-stack-ground, var(--luke-color-ground));

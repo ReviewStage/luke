@@ -19,7 +19,7 @@ import {
 import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
-import type { EveSessions } from "../agents/brain-host/eve-sessions.js";
+import type { AgentSessions } from "../agents/brain-host/eve-sessions.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
 import { hostedLiveRecord } from "./live-record.js";
 import { observedSideband } from "./live-sideband.js";
@@ -64,7 +64,7 @@ export interface HostedLiveExchangeOptions {
    * the deployment's secret and this account, composed by the caller, so neither the secret nor eve's origin enters
    * here and a test hands in a fake. It sends a spoken ask and nothing else.
    */
-  readonly eve: EveSessions<typeof BRAIN_HOST_TURN.SPOKEN>;
+  readonly eve: AgentSessions<typeof BRAIN_HOST_TURN.SPOKEN>;
   readonly createId: () => string;
   readonly report: (message: string) => void;
   /** What the voice and the brain are doing, told whole on each change; the device is shown it. */

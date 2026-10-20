@@ -5,7 +5,7 @@ import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
- * pull-request-tabs-narrow.test.ts -- the Pull request tab's row of tabs gives way in steps as the tab narrows: Review's word first, then the tabs' room; the tabs fold only once their names no longer fit (`choice-bar.test.ts`).
+ * pull-request-tabs-narrow.test.ts -- the Pull request tab's row of tabs gives way in steps as the tab narrows: Review folding to its glyph first, then the tabs' room; the tabs fold only once their names no longer fit (`choice-bar.test.ts`).
  *
  * jsdom lays nothing out and answers no container query, so the window's
  * stylesheets are laid for a tab of each width (`testing/container-width.ts`)
@@ -28,17 +28,17 @@ function rowAt(width: number) {
     '<div class="file-view pull-request-tab">',
     '<div class="pull-request-tabs">',
     '<div class="luke-choice-bar" role="tablist" data-look="fill" data-fold="together"></div>',
-    '<div class="pull-request-review"><button class="luke-button">',
-    '<span class="pull-request-review-words">Review</span>',
-    "</button></div>",
+    '<div class="pull-request-review"><span class="luke-folding-button"><button class="luke-button">',
+    '<span class="luke-button-words">Review</span>',
+    "</button></span></div>",
     "</div></div>",
   ].join("");
   const row = document.querySelector(".pull-request-tabs") ?? assert.fail("the row stands");
-  const words =
-    document.querySelector(".pull-request-review-words") ?? assert.fail("Review's word");
+  const review =
+    document.querySelector(".luke-folding-button") ?? assert.fail("Review's press stands");
   return {
     fold: getComputedStyle(row).getPropertyValue("--luke-fold").trim(),
-    reviewWord: getComputedStyle(words).display !== "none",
+    reviewWord: getComputedStyle(review).getPropertyValue("--luke-fold").trim() !== "folded",
   };
 }
 
@@ -46,7 +46,7 @@ test("a roomy tab names Review and keeps the tabs' room", () => {
   assert.deepEqual(rowAt(700), { fold: "", reviewWord: true });
 }, 30_000);
 
-test("at 600px Review draws its glyph alone and the tabs keep their room", () => {
+test("at 600px Review folds to a square around its glyph, as every folding button does, and the tabs keep their room", () => {
   assert.deepEqual(rowAt(600), { fold: "", reviewWord: false });
 }, 30_000);
 

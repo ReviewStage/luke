@@ -51,6 +51,29 @@
     mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
   }
 
+  /* Words cut in their middle keep their end whole and give way from the
+     end of their start, at an ellipsis rather than the fade, so the cut
+     reads as one with the words after it. */
+  .luke-chip-name[data-cut="middle"] {
+    display: inline-flex;
+    min-width: 0;
+    mask-image: none;
+  }
+
+  /* Note that each part keeps its spaces, because a flex item drops one
+     at its edge, which would close up the words either side of the cut. */
+  .luke-chip-name-start {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre;
+  }
+
+  .luke-chip-name-end {
+    flex: none;
+    white-space: pre;
+  }
+
   /* Words naming code, a branch, read in the code face at a caption's
      size, as a terminal would print them. */
   .luke-chip-name[data-mono="true"] {

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { BUTTON_SHAPE } from "@luke/ui";
 import { AVATAR_STATUS } from "@luke/voice/avatar";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -155,4 +156,9 @@ test("the avatar's voice is let go of once its track is", () => {
   act(() => root.render(voice({ audio: undefined })));
   assert.equal(container.querySelector("audio"), audio);
   assert.equal(playing(audio), undefined);
+});
+
+test("Video off over the tile is a round button, so no square fill stands inside its round ground", () => {
+  const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
+  assert.equal(button(container, CALL_VIDEO_LABEL.VIDEO_OFF)?.dataset.shape, BUTTON_SHAPE.ROUND);
 });

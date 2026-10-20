@@ -50,7 +50,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 import type { BrainHostTurn } from "./brain-host/bounds.js";
-import { EVE_MOUNT, type EveSessions } from "./brain-host/eve-sessions.js";
+import { type AgentSessions, EVE_MOUNT } from "./brain-host/eve-sessions.js";
 import { type ChatNamed, namedIn, subjectOf } from "./coder-host/chat-ask.js";
 import {
   CHAT_DOORS,
@@ -104,7 +104,7 @@ export interface ChatSeams {
   /** The origin eve answers on; nothing where the deployment names none, which refuses every post and answer as unavailable. */
   eveOrigin: () => string | undefined;
   /** eve as the deployment reaches it for the account an agent was started by; a test hands a fake, and the deployment composes eve's client under its own secret. */
-  eveAs?: (starterUserId: string) => EveSessions;
+  eveAs?: (starterUserId: string) => AgentSessions;
 }
 
 /** What a read or a write of the chat may require. */
@@ -165,7 +165,7 @@ export const readWorkspaceChat = /* @__PURE__ */ Effect.fnUntraced(function* (
 const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: ChatSeams,
 ): Effect.fn.Return<
-  (starterUserId: string) => EveSessions,
+  (starterUserId: string) => AgentSessions,
   HostedRefusal,
   HttpClient.HttpClient | HostedEnvironment
 > {
