@@ -258,6 +258,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           },
           callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
         },
+        taskIssues: { host: operator.host },
         workspaces: { host: operator.host, openExternal: config.openExternal },
       },
       platformProcedures,

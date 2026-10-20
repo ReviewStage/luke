@@ -4,12 +4,23 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, readLink } from "@luke/features/luke-link";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutAria } from "@luke/settings/shortcuts";
-import { BADGE_TONE, Badge, CHIP_LOOK, CHIP_WIDTH, Chip, ChipName, ProviderMark } from "@luke/ui";
+import {
+  BADGE_TONE,
+  Badge,
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
+  CHIP_LOOK,
+  CHIP_WIDTH,
+  Chip,
+  ChipName,
+  ProviderMark,
+} from "@luke/ui";
 import { type LinearIssuesAsk, linearIssuesAskOf, offeredIssues } from "@luke/ui/tasks-model";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
-import { CircleDotIcon, ExternalLinkIcon, ListTodoIcon } from "lucide-react";
+import { CircleDotIcon, ExternalLinkIcon, ListTodoIcon, PlusIcon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { rendererRuntime } from "../renderer-runtime.js";
@@ -62,6 +73,11 @@ import type { NewTaskIssue, TasksControl } from "./use-tasks-tab.js";
  * stands and again for another workspace, which closes the menu. Nothing
  * typed in the menu's field names the task; choosing an issue is the
  * owner's to act on.
+ *
+ * A task's page opens the same menu from its Linked issues box
+ * (`task-issue-links.tsx`), drawn as a button that names what it does
+ * (`trigger`) in the chip's place, over the task's own repository, the
+ * issues the task links standing dimmed as linked.
  */
 
 /** The chord that opens the menu from the card's own field. */
@@ -331,6 +347,7 @@ export function IssuePickerChip({
   disabled,
   openRequest,
   align = PICKER_ALIGN.START,
+  trigger,
   onChoose,
   onChooseOwn,
   onChooseGitHub,
@@ -354,6 +371,8 @@ export function IssuePickerChip({
   openRequest?: number | undefined;
   /** Which of the chip's edges its menu hangs from: the leading one, or the trailing one where the chip ends its row. */
   align?: PickerAlign | undefined;
+  /** The words of a button drawn in the chip's place, as a task page's "Link issue"; the chip where none are given. */
+  trigger?: string | undefined;
   onChoose: (issue: LinearIssueSummary) => void;
   onChooseOwn: (issue: NewTaskIssue) => void;
   onChooseGitHub: (issue: GitHubIssuePick) => void;
@@ -380,8 +399,8 @@ export function IssuePickerChip({
   const drawn = useDisclosure(open);
   const menuId = useId();
   const box = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const placement = usePickerPlacement(open, trigger, align);
+  const button = useRef<HTMLButtonElement>(null);
+  const placement = usePickerPlacement(open, button, align);
   /** What held focus as the menu opened, which closing hands it back to. */
   const opener = useRef<HTMLElement | null>(null);
   // A switch of workspace closes the menu, in the render that brings it,
@@ -441,7 +460,7 @@ export function IssuePickerChip({
     opener.current?.focus();
   };
   const press = () => {
-    opener.current = trigger.current;
+    opener.current = button.current;
     setTyped("");
     if (!open) setOpenings(openings + 1);
     setOpen(!open);
@@ -449,24 +468,40 @@ export function IssuePickerChip({
 
   return (
     <div className="issue-picker-chip" data-align={align} {...placement} ref={box}>
-      <Tooltip label={ISSUE_WORDS.LABEL} chord={ISSUE_CHORD}>
-        <Chip
-          ref={trigger}
-          look={CHIP_LOOK.FIELD}
-          width={CHIP_WIDTH.AUTO}
-          chevron
-          aria-label={ISSUE_WORDS.LABEL}
-          aria-keyshortcuts={shortcutAria(ISSUE_CHORD)}
+      {trigger !== undefined ? (
+        <Button
+          ref={button}
+          variant={BUTTON_VARIANT.OUTLINE}
+          size={BUTTON_SIZE.COMPACT}
+          icon={<PlusIcon />}
           aria-haspopup="dialog"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
           disabled={disabled}
           onClick={press}
         >
-          <ListTodoIcon />
-          <ChipName>{ISSUE_WORDS.CHIP}</ChipName>
-        </Chip>
-      </Tooltip>
+          {trigger}
+        </Button>
+      ) : (
+        <Tooltip label={ISSUE_WORDS.LABEL} chord={ISSUE_CHORD}>
+          <Chip
+            ref={button}
+            look={CHIP_LOOK.FIELD}
+            width={CHIP_WIDTH.AUTO}
+            chevron
+            aria-label={ISSUE_WORDS.LABEL}
+            aria-keyshortcuts={shortcutAria(ISSUE_CHORD)}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-controls={open ? menuId : undefined}
+            disabled={disabled}
+            onClick={press}
+          >
+            <ListTodoIcon />
+            <ChipName>{ISSUE_WORDS.CHIP}</ChipName>
+          </Chip>
+        </Tooltip>
+      )}
       {drawn.mounted ? (
         <SearchableMenu
           leaving={drawn.leaving}

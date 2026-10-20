@@ -325,3 +325,52 @@ test("a replay longer than the card draws at first is copied whole, every kept s
     );
   }
 });
+
+test("an agent's inbox posts and withdrawals from version 5 are copied as the rows the tab draws, never as their inputs' JSON, and a post from before it as it was", () => {
+  const call = (name: string, tool: string, input: WireRecord): WireRecord => ({
+    type: `tool-${tool}`,
+    toolCallId: `call-${name}`,
+    state: "output-available",
+    input,
+    output: { status: "accepted", inbox: [] },
+  });
+  const messages: readonly CodingAgentMessage[] = [
+    said("task", MESSAGE_ROLE.USER, "Ask about invites."),
+    {
+      id: "journal",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        STEP,
+        call("post", "post_to_inbox", {
+          key: "invite-ttl",
+          title: "7 days or 14?",
+          body: "The plan leaves this open.",
+          ask: { type: "decide", options: [{ label: "7 days" }, { label: "14 days" }] },
+        }),
+        call("withdraw", "withdraw_ask", { key: "invite-ttl", reason: "The plan says 7." }),
+        call("old", "post_to_inbox", {
+          key: "invite-ttl",
+          title: "Still 7 days?",
+          response: { type: "approval" },
+        }),
+      ],
+    },
+  ];
+  const copied = agentTranscript({
+    title: "Invites",
+    messages,
+    brief: CODING_AGENT_BRIEF.PROMPT,
+    chatOn: true,
+  });
+  const markdown = transcriptMarkdown(copied, TRANSCRIPT_COPY.CONCISE);
+  assert.ok(
+    markdown.includes(
+      "- Posted to your inbox: 7 days or 14?\n- Withdrew an ask in your inbox: invite-ttl\n- Posted to your inbox: Still 7 days?",
+    ),
+    markdown,
+  );
+  const full = transcriptMarkdown(copied, TRANSCRIPT_COPY.FULL);
+  assert.ok(full.includes("The plan leaves this open.\nPick one\n- 7 days\n- 14 days"), full);
+  assert.ok(full.includes("The plan says 7."), full);
+  assert.ok(!full.includes('"body"'), "no input is copied as its JSON");
+});

@@ -856,3 +856,106 @@ test("a post into the plan's own channel opens the plan's Chat tab, and a post e
     [undefined, undefined, undefined, undefined, undefined, undefined],
   );
 });
+
+test("a post from version 5 is a row naming its thread's title, or its key where it names none, over its message's first line and its ask's kind with what it offers, never its input as JSON", () => {
+  const view = toolCallView({
+    tool: "post_to_inbox",
+    input: {
+      key: "invite-ttl",
+      title: "Invite links expire after **7 days** or 14?",
+      body: "\nThe plan leaves this open.\n\nI set 7 days, its assumption.",
+      ask: {
+        type: "decide",
+        options: [{ label: "7 days", detail: "Matches password resets." }, { label: "14 days" }],
+        recommended: "7 days",
+      },
+      waits: true,
+    },
+    output: { status: "accepted", inbox: [] },
+  });
+  assert.equal(view.kind, CALL_KIND.INBOX_POST);
+  assert.equal(view.subject, "Invite links expire after 7 days or 14?");
+  assert.deepEqual(view.input, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "The plan leaves this open.\nPick one\n- 7 days (recommended) -- Matches password resets.\n- 14 days",
+  });
+  assert.equal(view.output, undefined);
+
+  const steps = toolCallView({
+    tool: "post_to_inbox",
+    input: {
+      key: "postmark-token",
+      body: "Staging needs the token.",
+      ask: { type: "do", steps: ["Open the settings", "Add `POSTMARK_SERVER_TOKEN`"] },
+    },
+    output: { status: "accepted", inbox: [] },
+  });
+  assert.equal(steps.subject, "postmark-token", "a later post names no title, so its key stands");
+  assert.deepEqual(steps.input, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Staging needs the token.\nSteps\n- Open the settings\n- Add `POSTMARK_SERVER_TOKEN`",
+  });
+
+  const fields = toolCallView({
+    tool: "post_to_inbox",
+    input: {
+      key: "smtp",
+      body: "Which relay?",
+      ask: { type: "answer", fields: [{ type: "text", label: "Host", required: true }] },
+    },
+    output: undefined,
+  });
+  assert.deepEqual(fields.input, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Which relay?\nFill in\n- Host (text, required)",
+  });
+  const words = toolCallView({
+    tool: "post_to_inbox",
+    input: { key: "smtp", body: "What should the page offer?", ask: { type: "answer" } },
+    output: undefined,
+  });
+  assert.deepEqual(words.input, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "What should the page offer?\nYour answer",
+  });
+  const note = toolCallView({
+    tool: "post_to_inbox",
+    input: { key: "smtp", body: "Shipped it." },
+    output: { status: "rejected", reason: "No thread of yours is under the key smtp." },
+  });
+  assert.deepEqual(note.input, { kind: TOOL_BLOCK.TEXT, text: "Shipped it." });
+  assert.deepEqual(note.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "No thread of yours is under the key smtp.",
+  });
+});
+
+test("withdraw_ask is a row naming the thread's key and saying why, opening the Inbox, and the retired reply_inbox and close_inbox_item still draw as they did", () => {
+  const call = {
+    tool: "withdraw_ask",
+    callId: "call-1",
+    input: { key: "invite-ttl", reason: "The plan now says 7 days." },
+    output: { status: "accepted", inbox: [] },
+  };
+  const withdrawn = toolCallView(call);
+  assert.deepEqual(toolTarget(call), { kind: TOOL_TARGET.INBOX });
+  assert.equal(withdrawn.kind, CALL_KIND.INBOX_WITHDRAW);
+  assert.equal(withdrawn.subject, "invite-ttl");
+  assert.deepEqual(withdrawn.input, { kind: TOOL_BLOCK.TEXT, text: "The plan now says 7 days." });
+  assert.equal(withdrawn.output, undefined);
+
+  const replied = toolCallView({
+    tool: "reply_inbox",
+    input: { key: "invite-ttl", text: "Done." },
+    output: { status: "accepted", inbox: [] },
+  });
+  assert.equal(replied.kind, CALL_KIND.INBOX_REPLY);
+  assert.equal(replied.subject, "invite-ttl");
+  const closed = toolCallView({
+    tool: "close_inbox_item",
+    input: { key: "invite-ttl", reason: "Settled." },
+    output: { status: "accepted", inbox: [] },
+  });
+  assert.equal(closed.kind, CALL_KIND.INBOX_CLOSE);
+  assert.deepEqual(closed.input, { kind: TOOL_BLOCK.TEXT, text: "Settled." });
+});

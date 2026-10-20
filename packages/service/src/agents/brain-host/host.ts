@@ -27,6 +27,7 @@ import {
 import type { GitHubApp } from "../../github/github-app.js";
 import { taskWorkspace } from "../../github/workspace-repository.js";
 import { logStoreFailure } from "../../http/store-failure.js";
+import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import { type ModelCatalog, providerModelOf } from "../../providers/model-catalog.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { PLAN_SAVE_REFUSAL } from "../../tasks/plan-notes.js";
@@ -201,7 +202,7 @@ export interface BrainHost extends HostAdmission {
   ): Effect.Effect<
     WireRecord,
     QueryError | Schema.SchemaError,
-    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog
+    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | WorkspaceLinearConnect
   >;
   /**
    * The model one inference runs on and the effort it is asked for, as a

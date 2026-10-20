@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "relation": {
+      "type": "string",
+      "enum": [
+        "closes",
+        "part_of"
+      ]
+    }
+  },
+  "required": [
+    "relation"
+  ],
+  "additionalProperties": false
+}

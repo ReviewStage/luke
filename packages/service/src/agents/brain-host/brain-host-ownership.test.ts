@@ -20,6 +20,7 @@ import { modelCatalogOf } from "../../providers/model-catalog.js";
 import { HOSTED_TOOL_SET } from "../../tasks/brain-tool-set.js";
 import { QUEUE_QUESTION_TOOL } from "../../tasks/queue-question.js";
 import { NO_GITHUB } from "../../testing/github-app-fake.js";
+import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { DEPLOYMENT_PRESENCE } from "./auth.js";
 import {
   BRAIN_HOST_ATTRIBUTE,
@@ -293,7 +294,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
           question,
           toolContext(sessionId, auth),
         )
-        .pipe(Effect.provide(Layer.merge(NO_GITHUB, modelCatalogOf([])))),
+        .pipe(Effect.provide(Layer.mergeAll(NO_GITHUB, modelCatalogOf([]), NO_WORKSPACE_LINEAR))),
     );
 
   assert.equal(await start(host, seat, SESSION.OLDER), true);
@@ -405,7 +406,7 @@ test("a member of the plan's workspace is admitted to the conversation a teammat
           question,
           toolContext(SESSION.OLDER, auth),
         )
-        .pipe(Effect.provide(Layer.merge(NO_GITHUB, modelCatalogOf([])))),
+        .pipe(Effect.provide(Layer.mergeAll(NO_GITHUB, modelCatalogOf([]), NO_WORKSPACE_LINEAR))),
     );
   assert.deepEqual(await call(speaking(teammate)), { status: ACTION_RESULT_STATUS.ACCEPTED });
   assert.deepEqual(await call(speaking(stranger)), {

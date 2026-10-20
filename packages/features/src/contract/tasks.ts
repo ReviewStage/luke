@@ -1,5 +1,5 @@
 /**
- * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its board, its edit, its history, its transcript and work, and Luke's Stop.
+ * tasks.ts -- the account's plans and each one's own reads and writes: the list, a start, one plan opened, changed, or deleted, its board, its edit, its history, its transcript and work, its linked issues, and Luke's Stop.
  *
  * Every path names the plan by its id (`{id}`), which the handler reads as
  * the old routes read it: an id that is no UUID names no plan, and answers
@@ -16,6 +16,14 @@ import { boardAnswerSchema, boardSaveRequestSchema } from "../board-wire.js";
 import { planEditAnswerSchema, planEditRequestSchema } from "../plan-edit.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { wireUuidSchema } from "../service-wire.js";
+import {
+  taskIssueChoiceSchema,
+  taskIssueLinkAnswerSchema,
+  taskIssueLinkChangedAnswerSchema,
+  taskIssueLinksAnswerSchema,
+  taskIssueRelateRequestSchema,
+  taskIssueUnlinkAnswerSchema,
+} from "../task-issue-wire.js";
 import {
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
@@ -35,9 +43,14 @@ import { exactBodyInput, exactInput, hostedProcedure } from "./base.js";
 const PLAN = `${HOSTED_SERVICE_PATH.TASKS}/{id}` as const;
 const REVISIONS = `${PLAN}/revisions` as const;
 const REVISION = `${REVISIONS}/{seq}` as const;
+const ISSUES = `${PLAN}/issues` as const;
+const ISSUE = `${ISSUES}/{link}` as const;
 
 /** The plan a path names, as text: the handler reads it as a UUID, so one that is none answers as no plan rather than as a request that does not read. */
 const taskParams = { id: EffectSchema.String };
+
+/** One link of a plan a path names, as text: the handler reads it as a UUID, so one that is none answers as no link. */
+const linkParams = { ...taskParams, link: EffectSchema.String };
 
 /** A revision's number as a path or a query carries it, read as the whole number from one it must be. */
 const revisionSeqText = EffectSchema.NumberFromString.pipe(
@@ -133,6 +146,26 @@ export const tasksContract = {
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${REVISION}/restore` }))
     .input(EffectSchema.Struct({ ...taskParams, seq: revisionSeqText }))
     .output(EffectSchema.flip(taskAnswerSchema)),
+  /** The issues the plan links, each with where it stands now, read live from its provider. */
+  issues: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: ISSUES }))
+    .input(EffectSchema.Struct(taskParams))
+    .output(EffectSchema.flip(taskIssueLinksAnswerSchema)),
+  /** An issue linked to the plan, read from its provider first, or why none was. */
+  linkIssue: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.POST, path: ISSUES, inputStructure: "detailed" }))
+    .input(exactBodyInput(EffectSchema.Struct(taskParams), taskIssueChoiceSchema))
+    .output(EffectSchema.flip(taskIssueLinkAnswerSchema)),
+  /** Which keyword the plan's pull requests write of a link. */
+  relateIssue: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.PATCH, path: ISSUE, inputStructure: "detailed" }))
+    .input(exactBodyInput(EffectSchema.Struct(linkParams), taskIssueRelateRequestSchema))
+    .output(EffectSchema.flip(taskIssueLinkChangedAnswerSchema)),
+  /** A link let go; the issue itself is the provider's and stands as it was. */
+  unlinkIssue: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.DELETE, path: ISSUE }))
+    .input(EffectSchema.Struct(linkParams))
+    .output(EffectSchema.flip(taskIssueUnlinkAnswerSchema)),
   /** Luke's turn on the plan stopped. */
   stop: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.POST, path: `${PLAN}/stop` }))

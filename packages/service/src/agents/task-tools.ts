@@ -1,5 +1,6 @@
 import type { DatabaseServices } from "@luke/database/core/query";
 import { recordRevision } from "@luke/database/models/plan-revisions";
+import { linkTaskIssue, listTaskIssues } from "@luke/database/models/task-issue-store";
 import { createTaskOnce, readTask } from "@luke/database/models/task-store";
 import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
 import { issueIdentifier } from "@luke/features/issue-list-model";
@@ -42,6 +43,12 @@ import {
   taskStandingOf,
   workedRepository,
 } from "./coding-agent-tools.js";
+import {
+  issueChoicesOf,
+  issuesAnswered,
+  readIssueChoices,
+  TASK_ISSUES_TO_LINK,
+} from "./task-issue-tools.js";
 import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
 
 /**
@@ -63,7 +70,9 @@ import { workspaceNamingOf, writtenMention } from "./written-mentions.js";
  * repository named, the one the caller works in where none is, or none,
  * confirmed through the workspace's installation as a task's repository is,
  * with the developer's brief and a plan to start from where they are given,
- * and no agent on it; `start_agent` starts one on it by its id. It is made
+ * the issues named linked to it, each read from GitHub or Linear first
+ * (`task-issue-tools.ts`), and no agent on it; `start_agent` starts one on
+ * it by its id. It is made
  * under an id drawn from eve's key for the call (`called-id.ts`), so a call
  * run again answers the task it made and makes no second.
  * Every answer is data the model reads, never a credential.
@@ -171,8 +180,9 @@ export const CREATE_TASK_REFUSAL = {
     `owner/name, null for none, or none for the one you work in, a brief of at most ` +
     `${TASK_BOUNDS.MAX_BRIEF_CHARS} characters or none, a plan of at most ` +
     `${TASK_BOUNDS.MAX_BODY_CHARS} characters or none, a status ` +
-    `(${Object.values(TASK_STATUS).join(", ")}) or none, and a priority ` +
-    `(${Object.values(TASK_PRIORITY).join(", ")}) or none.`,
+    `(${Object.values(TASK_STATUS).join(", ")}) or none, a priority ` +
+    `(${Object.values(TASK_PRIORITY).join(", ")}) or none, and at most ${TASK_BOUNDS.MAX_ISSUES} ` +
+    "issues to link or none.",
 } as const;
 
 const CREATE_TASK_INPUT = Schema.Struct({
@@ -209,6 +219,7 @@ const CREATE_TASK_INPUT = Schema.Struct({
     ),
   ),
   priority: Schema.optionalKey(describeWire(taskPrioritySchema, TASK_PRIORITY_WORDS)),
+  issues: Schema.optionalKey(TASK_ISSUES_TO_LINK),
 });
 
 const readCreateAsked = Schema.decodeUnknownResult(CREATE_TASK_INPUT);
@@ -218,11 +229,13 @@ export const CREATE_TASK_TOOL = {
   description:
     "Make a task in your workspace for the developer you work for, as the sidebar's New task " +
     "would: owned by them, on the repository named or the one you work in, with their brief " +
-    "and a plan to start from where given, and no agent on it. Make one for a separate piece " +
-    "of work that should stand as a task of its own, where the developer asked for it or you " +
+    "and a plan to start from where given, linked to the GitHub or Linear issues named, and no " +
+    "agent on it. Make one for a separate piece of work that should stand as a task of its own, " +
+    "where the developer asked for it or you " +
     `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
     "Give it a status and a priority where the developer said them. Answers `accepted` with the " +
-    "task's id, key, name, status, priority, repository, and mention, or `rejected` and why.",
+    "task's id, key, name, status, priority, repository, mention, and the issues it links, or " +
+    "`rejected` and why.",
   inputSchema: CREATE_TASK_INPUT,
 } as const;
 
@@ -253,7 +266,7 @@ export function runCreateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(CREATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { name, brief, plan, status, priority } = asked.success;
+  const { name, brief, plan, status, priority, issues = [] } = asked.success;
   return orStoreRefusal(
     Effect.gen(function* () {
       const workspace = yield* callerWorkspace(call.caller);
@@ -263,7 +276,7 @@ export function runCreateTask(
       const userId = callerUserId(call.caller);
       const id = calledId(userId, call.clientKey);
       const naming = yield* workspaceNamingOf(userId, workspace.value);
-      const answer = (task: Task) => ({
+      const answer = (task: Task, links: Parameters<typeof issuesAnswered>[0]) => ({
         status: ACTION_RESULT_STATUS.ACCEPTED,
         task: {
           id: task.id,
@@ -275,17 +288,23 @@ export function runCreateTask(
             task.name,
             naming.step,
           ),
+          ...(issues.length === 0 ? undefined : { issues: issuesAnswered(links) }),
         },
       });
       // The call run again finds the task it made, and makes no second.
       const before = yield* readTask(userId, id);
-      if (Option.isSome(before)) return answer(before.value.task);
+      if (Option.isSome(before)) return answer(before.value.task, before.value.issueLinks);
       const named =
         asked.success.repository === undefined
           ? yield* workedRepository(call.caller)
           : asked.success.repository;
       const reached = yield* reachedRepository(workspace.value, named, userId);
       if (Result.isFailure(reached)) return agentToolRejected(reached.failure);
+      // Every issue is read from its provider before anything is written, so one refused makes no task.
+      const choices = issueChoicesOf(issues, reached.success.repository);
+      if (Result.isFailure(choices)) return agentToolRejected(choices.failure);
+      const read = yield* readIssueChoices(userId, workspace.value, issues, choices.success);
+      if (Result.isFailure(read)) return agentToolRejected(read.failure);
       const text = planTextOf(plan ?? "");
       // The make and its plan's first revision are one write, so a call run again at once makes one task.
       const made = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -302,6 +321,19 @@ export function runCreateTask(
               ...(status === undefined ? undefined : { status }),
               ...(priority === undefined ? undefined : { priority }),
             });
+            if (Option.isSome(once)) {
+              for (const link of read.success) {
+                // Note that two names may read as one issue, a key and its link, which links once; a
+                // task just made, named at most as many issues as it links, is neither full nor archived.
+                yield* linkTaskIssue(userId, id, link).pipe(
+                  Effect.catchTags({
+                    TaskIssueLinked: () => Effect.succeed(Option.none()),
+                    TaskIssuesFull: Effect.die,
+                    TaskArchived: Effect.die,
+                  }),
+                );
+              }
+            }
             if (Option.isSome(once) && text !== "") {
               yield* recordRevision({
                 taskId: id,
@@ -321,13 +353,13 @@ export function runCreateTask(
         // A run of the same call made it meanwhile, which this one answers.
         const raced = yield* readTask(userId, id);
         if (Option.isNone(raced)) return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.STORE);
-        return answer(raced.value.task);
+        return answer(raced.value.task, raced.value.issueLinks);
       }
       yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
         source: SERVER_TASK_SOURCE.AGENT,
-        has_issue: false,
+        has_issue: read.success.length > 0,
       });
-      return answer(made.value);
+      return answer(made.value, yield* listTaskIssues(userId, id));
     }),
   );
 }

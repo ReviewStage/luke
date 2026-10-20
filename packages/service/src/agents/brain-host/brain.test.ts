@@ -55,6 +55,7 @@ import {
   NO_GITHUB,
   openGithubUser,
 } from "../../testing/github-app-fake.js";
+import { NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
 import type { RepositorySandboxDoor } from "../repository-shell.js";
 import {
@@ -327,7 +328,7 @@ const brainTurn = (
             unparsedWire(call.input as WireBoundaryInput),
             toolContext(session, call.toolName),
           )
-          .pipe(Effect.provide(Layer.merge(services, modelCatalogOf([]))));
+          .pipe(Effect.provide(Layer.mergeAll(services, modelCatalogOf([]), NO_WORKSPACE_LINEAR)));
         yield* relay({
           type: "action.result",
           data: {
