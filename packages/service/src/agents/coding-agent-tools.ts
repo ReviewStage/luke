@@ -317,8 +317,7 @@ export const UPDATE_TASK_REFUSAL = {
     `${AGENT_TOOL.LIST_TASKS} names them, the archived ones too with includeArchived.`,
   ARCHIVED:
     "Not changed: that task is archived, so it takes no new name, repository, status, priority, " +
-    "section, or issue; bring " +
-    "it back in the same call with archived false, or leave it as it is.",
+    "section, or issue; bring it back in the same call with archived false, or leave it as it is.",
   AGENTS_WORKING:
     "Not archived: an agent on that task is still starting or working, and archiving the task " +
     "archives its agents with it, which would stop a turn no one gets back. Wait until they are " +
@@ -791,12 +790,12 @@ export const UPDATE_TASK_TOOL = {
   description:
     "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
     "of the developer you work for: rename it, set or clear its repository, set where it stands " +
-    "(its status) or how much it matters (its priority), pin or unpin it in " +
-    "their sidebar, archive it or bring it back, or link, unlink, or relate its GitHub or Linear " +
-    "issues, each issue to link read from its provider first; name at least one change, and " +
-    "several go in one call. An archived task leaves the sidebar and every list but the archived ones, its plan " +
-    "takes no edit, and its agents take no message and start no new turn, while everything on it " +
-    "is kept and any member can bring it back. Like the menu, an archive asks no one and stops no " +
+    "(its status) or how much it matters (its priority), pin or unpin it in their sidebar, " +
+    "archive it or bring it back, or link, unlink, or relate its GitHub or Linear issues, each " +
+    "issue to link read from its provider first; name at least one change, and several go in " +
+    "one call. An archived task leaves the sidebar and every list but the archived ones, its " +
+    "plan takes no edit, and its agents take no message and start no new turn, while " +
+    "everything on it is kept and any member can bring it back. Like the menu, an archive asks no one and stops no " +
     "agent: one still working on the task finishes the turn it is on. Archive a task whose work is " +
     "done, such as one whose pull requests merged, or one the developer asked you to clean up; " +
     "never a teammate's task still in use unless the developer asked for it. The task you work on " +

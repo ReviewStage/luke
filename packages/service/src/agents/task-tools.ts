@@ -230,8 +230,8 @@ export const CREATE_TASK_TOOL = {
     "Make a task in your workspace for the developer you work for, as the sidebar's New task " +
     "would: owned by them, on the repository named or the one you work in, with their brief " +
     "and a plan to start from where given, linked to the GitHub or Linear issues named, and no " +
-    "agent on it. Make one for a separate piece " +
-    "of work that should stand as a task of its own, where the developer asked for it or you " +
+    "agent on it. Make one for a separate piece of work that should stand as a task of its own, " +
+    "where the developer asked for it or you " +
     `work on no task; then start an agent on it with ${AGENT_TOOL.START_AGENT}'s taskId. ` +
     "Give it a status and a priority where the developer said them. Answers `accepted` with the " +
     "task's id, key, name, status, priority, repository, mention, and the issues it links, or " +
