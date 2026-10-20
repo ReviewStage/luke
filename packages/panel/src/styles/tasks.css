@@ -72,8 +72,8 @@
     right: 0;
     border-right-width: 1px;
     border-right-style: solid;
-    border-right-color: var(--sidebar-border-color);
-    border-radius: var(--border-radius-lg);
+    border-right-color: var(--sidebar-border-color, var(--luke-color-border));
+    border-radius: var(--border-radius-lg, var(--luke-radius-8));
   }
 
   .task-board .excalidraw--mobile .mobile-misc-tools-container .ToolIcon__icon,
