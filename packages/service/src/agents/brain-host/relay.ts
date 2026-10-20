@@ -461,11 +461,15 @@ function keepDraft(store: RelayStateStore, eveTurnId: string, key: string, draft
 }
 
 /** The events that end a turn, whose own write carries whatever the turn held. */
-const TURN_END_EVENTS: ReadonlySet<MessageStreamEvent["type"]> = new Set([
-  "turn.completed",
-  "turn.failed",
-  "turn.cancelled",
-]);
+const TURN_END_EVENT = {
+  COMPLETED: "turn.completed",
+  FAILED: "turn.failed",
+  CANCELLED: "turn.cancelled",
+} as const;
+
+const TURN_END_EVENTS: ReadonlySet<MessageStreamEvent["type"]> = new Set(
+  Object.values(TURN_END_EVENT),
+);
 
 /** One call a request of eve's asks for, as the record names it. */
 interface RequestedCall {
