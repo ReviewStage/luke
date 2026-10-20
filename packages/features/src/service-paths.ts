@@ -25,6 +25,14 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
   /**
+   * The account's ChatGPT sign-in for Luke's hosted runtime, as the desktop
+   * hands it over (PUT); its removal is `ACCOUNT_PROVIDER_KEYS`'s DELETE with
+   * its kind. The answer is the provider keys' and never carries a token.
+   */
+  ACCOUNT_CHATGPT_CREDENTIALS: "/api/account/chatgpt/credentials",
+  /** The `ext_agent_host_id` the desktop signs in to ChatGPT for Luke's hosted runtime under (GET). */
+  ACCOUNT_CHATGPT_HOST: "/api/account/chatgpt/host",
+  /**
    * The Markdown the account's new tasks start from: read it (GET), or keep
    * one verbatim or go back to the default (PUT).
    * `plan-document-template.ts` declares both bodies.
