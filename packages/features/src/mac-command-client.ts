@@ -3,9 +3,10 @@ import type * as HttpClient from "effect/http/HttpClient";
 import type { CallCredential } from "./account-call.js";
 import { askHosted, HOSTED_DEADLINE, type HostedClient, hostedClient } from "./hosted-link.js";
 import {
+  type MacBrowserResult,
   type MacCommandKind,
   type MacCommandRead,
-  type MacCommandResult,
+  type MacCommandSettleResult,
   macCommandKindsQuery,
 } from "./mac-command-wire.js";
 
@@ -18,7 +19,8 @@ import {
  * nothing waits, so it is asked under the held deadline, which outlasts the
  * hold. Neither call fails: a read the service did not answer is nothing,
  * which the caller rests after, and a result it did not take is false,
- * since its call has already given up on it.
+ * since its call has already given up on it. A browser command's result,
+ * which may carry an image, is posted to its own route.
  */
 
 export interface HostedMacCommandClientOptions {
@@ -55,9 +57,20 @@ export class HostedMacCommandClient {
   /** One command's result posted back; whether the service took it. */
   settle(
     id: string,
-    result: MacCommandResult,
+    result: MacCommandSettleResult,
   ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
     return askHosted(this.#hosted.macCommands.settle, { id, result }).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false),
+    );
+  }
+
+  /** One browser command's result, image and all, posted back; whether the service took it. */
+  settleBrowser(
+    id: string,
+    result: MacBrowserResult,
+  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return askHosted(this.#hosted.macCommands.settleBrowser, { id, result }).pipe(
       Effect.as(true),
       Effect.orElseSucceed(() => false),
     );

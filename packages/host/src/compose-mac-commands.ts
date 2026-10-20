@@ -15,6 +15,7 @@ import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import { Environment, Reporter } from "./effect/seams.js";
 import type { HOST_PLATFORM_CONCERN, PlatformConcernMethods } from "./host-concerns.js";
+import { type MacCommandSettleClient, settleMacCommandResult } from "./mac-browser-result.js";
 import { type MacShell, runMacCommand } from "./mac-command-runner.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -28,8 +29,9 @@ import type { RunMode } from "./run-mode.js";
  * its own in the concern's scope, by its kind: a shell command in the
  * login shell from the home folder (`mac-command-runner.ts`), and a
  * command of a kind this Mac cannot run answered with a refusal rather
- * than spoiling the read. Its result is posted back, so a long command
- * holds up neither the next read nor the others.
+ * than spoiling the read. Its result is posted back by the route its kind
+ * takes (`mac-browser-result.ts`), so a long command holds up neither the
+ * next read nor the others.
  * A Mac holding the read is what the service counts as listening, so the
  * setting switched off, a sign-out, or a run that sends nothing stops the
  * reads and the agents' calls are told no Mac listens, and stops every
@@ -51,7 +53,7 @@ const VARIABLE = { HOME: "HOME", SHELL: "SHELL" } as const;
 const RUNS: readonly MacCommandKind[] = [MAC_COMMAND_KIND.SHELL];
 
 /** The service's side of the commands, as this concern asks it. */
-export type MacCommandClient = Pick<HostedMacCommandClient, "waiting" | "settle">;
+export type MacCommandClient = Pick<HostedMacCommandClient, "waiting"> & MacCommandSettleClient;
 
 export interface MacCommandsDependencies {
   kernel: { runMode: Pick<RunMode, "sendsNetwork"> };
@@ -127,7 +129,7 @@ export function composeMacCommands(
     /** One command run and its result posted back; a result the service did not take is let go, its call already given up. */
     const run = (command: MacCommandRead) =>
       Effect.flatMap(ran(command), (result) =>
-        Effect.asVoid(asked(client.settle(command.id, result))),
+        Effect.asVoid(asked(settleMacCommandResult(client, command.id, result))),
       );
 
     /** Whether the Mac takes commands now: an account signed in, a run that sends, and the setting on. */

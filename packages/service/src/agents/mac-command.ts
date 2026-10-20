@@ -13,6 +13,7 @@ import type { TaskStoreEffect } from "@luke/database/models/task-store";
 import {
   MAC_COMMAND_BOUNDS,
   MAC_COMMAND_KIND,
+  type MacBrowserResult,
   type MacCommand,
   type MacCommandKind,
   type MacCommandResult,
@@ -109,9 +110,17 @@ const MAC_COMMAND_KIND_REFUSAL = {
   { readonly NO_MAC: string; readonly UNREADABLE: string }
 >;
 
+/**
+ * What a call answers: what a shell command did, what a browser command
+ * did, its image among it where it carried one, or why nothing ran. Note
+ * that a browser command's image is its base64 as the Mac sent it, which
+ * the tool that asked hands the model as an image and keeps out of what
+ * the conversation stores, as `look_at_picture` does (`tasks/picture-look.ts`).
+ */
 // A type rather than an interface, so a result is a `WireRecord` the model is handed as it stands.
 export type MacCommandAnswer =
   | ({ readonly status: typeof MAC_COMMAND_STATUS.RAN } & MacShellResult)
+  | ({ readonly status: typeof MAC_COMMAND_STATUS.RAN } & MacBrowserResult)
   | { readonly status: typeof MAC_COMMAND_STATUS.NOT_RUN; readonly reason: string };
 
 /**
@@ -187,7 +196,7 @@ function macListening(userId: string, kind: MacCommandKind): TaskStoreEffect<boo
   );
 }
 
-/** What a call answers for what the Mac said: what a shell command did, or why the Mac ran nothing. */
+/** What a call answers for what the Mac said: what a shell or a browser command did, or why the Mac ran nothing. */
 function answered(result: MacCommandResult): MacCommandAnswer {
   if ("refused" in result) return notRun(result.refused);
   return { status: MAC_COMMAND_STATUS.RAN, ...result };

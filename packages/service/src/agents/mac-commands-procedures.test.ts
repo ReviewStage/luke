@@ -6,7 +6,10 @@
  * posts is kept for the agent's call. An older Mac's read, naming no kinds,
  * is handed shell commands alone; a browser call no listening Mac can run
  * is answered not run at once, and one the Mac refuses is answered not run
- * with the Mac's reason. Only the Mac's bearer is read, never a cookie,
+ * with the Mac's reason. A browser command's result, image and all, is
+ * posted to its own route and answered to the call, whose row is gone once
+ * it took it; an image past its bound is refused as it arrives. Only the
+ * Mac's bearer is read, never a cookie,
  * and before anything the body says. Each refusal answers what the old
  * group answered.
  *
@@ -22,12 +25,17 @@ import {
   queueMacCommand,
 } from "@luke/database/models/mac-command-store";
 import { user } from "@luke/database/schemas/auth";
+import { macCommand } from "@luke/database/schemas/mac-command";
 import { getTestDB } from "@luke/database/testing";
 import {
+  MAC_COMMAND_BOUNDS,
+  MAC_COMMAND_IMAGE_TYPE,
   MAC_COMMAND_KIND,
+  type MacBrowserResult,
   type MacCommand,
   type MacCommandResult,
 } from "@luke/features/mac-command-wire";
+import { eq } from "drizzle-orm";
 import { Clock, type Context, Effect, Fiber, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { TestClock } from "effect/testing";
@@ -39,6 +47,7 @@ import { macCommandsProcedures } from "./mac-commands-procedures.js";
 
 const ORIGIN = "https://luke.test";
 const MAC_COMMANDS = "/api/mac-commands";
+const BROWSER_RESULTS = "/api/mac-commands/browser";
 const JSON_TYPE = "application/json";
 
 const COMMAND: MacCommand = {
@@ -68,6 +77,21 @@ const RESULT: MacCommandResult = {
   timedOut: false,
 };
 
+/** A JPEG's first bytes, which is what the image's type is read off. */
+const JPEG_SIGNATURE = [0xff, 0xd8, 0xff, 0xe0];
+
+/** A JPEG of the bytes given, its signature first, in base64. */
+function jpeg(bytes: number): string {
+  const image = new Uint8Array(bytes);
+  image.set(JPEG_SIGNATURE);
+  return Buffer.from(image).toString("base64");
+}
+
+const BROWSER_RESULT: MacBrowserResult = {
+  output: { address: "http://localhost:3000/", title: "Preview", snapshot: 'heading "Hello"' },
+  image: { mediaType: MAC_COMMAND_IMAGE_TYPE.JPEG, data: jpeg(4_096) },
+};
+
 /** The answer as it left the handler: its status, the two headers a caller reads, and its bytes. */
 interface Bytes {
   readonly status: number;
@@ -94,6 +118,7 @@ function request(
     body?: string;
     length?: number;
     kinds?: string;
+    path?: string;
   } = {},
 ): Request {
   const headers: Record<string, string> = {};
@@ -101,7 +126,7 @@ function request(
   if (init.cookie === true) headers.cookie = "session=s1";
   if (init.body !== undefined) headers["content-type"] = JSON_TYPE;
   if (init.length !== undefined) headers["content-length"] = String(init.length);
-  const url = new URL(MAC_COMMANDS, ORIGIN);
+  const url = new URL(init.path ?? MAC_COMMANDS, ORIGIN);
   if (init.kinds !== undefined) url.searchParams.set("kinds", init.kinds);
   return new Request(url, {
     method: init.method ?? "GET",
@@ -253,6 +278,106 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
         status: MAC_COMMAND_STATUS.NOT_RUN,
         reason: refused,
       });
+    }),
+  );
+
+  it.effect(
+    "a browser command's result, image and all, is answered to its call, and its row is gone once the call took it",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        yield* account("user-browser");
+        yield* emptyRead(request({ userId: "user-browser", kinds: NEWER_KINDS }));
+
+        const call = yield* Effect.forkChild(
+          askMac("user-browser", { kind: MAC_COMMAND_KIND.BROWSER, params: BROWSER_PARAMS }),
+        );
+        yield* untilQueued("user-browser");
+        const [taken] = commandsOf(
+          yield* bytes(request({ userId: "user-browser", kinds: NEWER_KINDS })),
+        );
+        const posted = JSON.stringify({ id: taken?.id, result: BROWSER_RESULT });
+        const settled = yield* bytes(
+          request({ method: "POST", path: BROWSER_RESULTS, userId: "user-browser", body: posted }),
+        );
+        yield* TestClock.adjust("1 second");
+        const answer = yield* Fiber.join(call);
+        const left = yield* db
+          .select()
+          .from(macCommand)
+          .where(eq(macCommand.userId, "user-browser"));
+
+        assert.equal(settled.text, '{"settled":true}');
+        assert.deepEqual(answer, { status: MAC_COMMAND_STATUS.RAN, ...BROWSER_RESULT });
+        assert.deepEqual(left, [], "nothing of the image is kept once the call took it");
+      }),
+  );
+
+  it.effect("a browser result is refused where its image is past its bound, or not its type", () =>
+    Effect.gen(function* () {
+      yield* account("user-oversize");
+      const browser = { ...BROWSER_COMMAND, id: "55555555-5555-4555-8555-555555555555" };
+      yield* queueMacCommand("user-oversize", browser);
+      yield* bytes(request({ userId: "user-oversize", kinds: NEWER_KINDS }));
+      const post = (result: unknown, length?: number) =>
+        bytes(
+          request({
+            method: "POST",
+            path: BROWSER_RESULTS,
+            userId: "user-oversize",
+            body: JSON.stringify({ id: browser.id, result }),
+            ...(length === undefined ? undefined : { length }),
+          }),
+        );
+      const invalid = refused(HOSTED_HTTP_STATUS.BAD_REQUEST, "invalid-request");
+      const oversize = {
+        ...BROWSER_RESULT,
+        image: { ...BROWSER_RESULT.image, data: jpeg(MAC_COMMAND_BOUNDS.MAX_IMAGE_BYTES + 1) },
+      };
+      const mislabelled = {
+        ...BROWSER_RESULT,
+        image: { ...BROWSER_RESULT.image, mediaType: MAC_COMMAND_IMAGE_TYPE.PNG },
+      };
+
+      assert.deepEqual(yield* post(oversize), invalid);
+      assert.deepEqual(yield* post(mislabelled), invalid);
+      assert.deepEqual(
+        yield* post(BROWSER_RESULT, 4_000_000),
+        refused(HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE, "request-too-large"),
+      );
+      assert.deepEqual(yield* macCommandResult("user-oversize", browser.id), Option.none());
+    }),
+  );
+
+  it.effect("a browser result finds only a browser command, and only its own route takes it", () =>
+    Effect.gen(function* () {
+      yield* account("user-kinds");
+      const shell = { ...COMMAND, id: "66666666-6666-4666-8666-666666666666" };
+      yield* queueMacCommand("user-kinds", shell);
+      yield* bytes(request({ userId: "user-kinds" }));
+
+      const browserOnShell = yield* bytes(
+        request({
+          method: "POST",
+          path: BROWSER_RESULTS,
+          userId: "user-kinds",
+          body: JSON.stringify({ id: shell.id, result: BROWSER_RESULT }),
+        }),
+      );
+      const browserOnShellRoute = yield* bytes(
+        request({
+          method: "POST",
+          userId: "user-kinds",
+          body: JSON.stringify({ id: shell.id, result: BROWSER_RESULT }),
+        }),
+      );
+
+      assert.deepEqual(browserOnShell, refused(HOSTED_HTTP_STATUS.NOT_FOUND, "not-found"));
+      assert.deepEqual(
+        browserOnShellRoute,
+        refused(HOSTED_HTTP_STATUS.BAD_REQUEST, "invalid-request"),
+        "the commands' own route takes no browser result",
+      );
     }),
   );
 
