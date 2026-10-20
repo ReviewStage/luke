@@ -982,9 +982,16 @@ the addresses of requests it made),
 the headers, bodies, and query parameters of requests Luke made, Electron,
 operating-system, runtime, and device context, and your Mac's IP address.
 Sentry replaces a value whose name looks like a credential, such as an
-authorization header or a token parameter, before it is sent, and Luke drops
-any report that names a call's avatar access token. Luke does not attach your
-Luke account, and does not enable Sentry Replay, screenshots, or profiling.
+authorization header or a token parameter, before it is sent. Luke drops any
+error report or breadcrumb that names a call's avatar access token, and any
+traced step whose name or request address names that token as it starts; in
+the rest of a trace, a name or a value that names the token is replaced. In
+the address of a request or of the page that a trace carries, the value of
+each query parameter and the fragment are replaced, and so is any part of its
+path shaped like a credential, such as a long token; the scheme, the host, the
+rest of the path, and the parameters' names are sent as they were. Luke does
+not attach your Luke account, and does not enable Sentry Replay, screenshots,
+or profiling.
 Fixture and evidence runs send nothing to Sentry.
 
 **Error, performance, and agent reports from our service.** Our service and

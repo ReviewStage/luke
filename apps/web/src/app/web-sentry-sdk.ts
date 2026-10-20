@@ -10,7 +10,8 @@ import { LINK_ORIGIN } from "@luke/features/link-home";
 import { readLink } from "@luke/features/luke-link";
 import {
   eventWithoutAccessTokens,
-  transactionWithoutAccessTokens,
+  SPANS_NAMING_ACCESS_TOKENS,
+  spanWithoutAccessTokens,
   withoutAccessTokens,
 } from "@luke/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
@@ -21,6 +22,7 @@ import {
   getClient,
   init,
   startBrowserTracingPageLoadSpan,
+  withStreamedSpan,
 } from "@sentry/browser";
 import type { WebSentry, WebSentryBuild } from "./web-sentry";
 
@@ -89,9 +91,10 @@ function nameByRoute(client: Client): void {
 /**
  * Starts the SDK with its default data collection, under the build's DSN,
  * environment, and release, and the desktop renderer's filters: a
- * breadcrumb, an event, or a trace that names an access token is dropped
- * whole (`@luke/features/sentry-breadcrumbs`). Each page load and
- * navigation is named by the kind of place it opens, never its path.
+ * breadcrumb or an event that names an access token is dropped whole, and
+ * so is a span that names one as it starts, while every span sent has its
+ * addresses scrubbed (`@luke/features/sentry-breadcrumbs`). Each page load
+ * and navigation is named by the kind of place it opens, never its path.
  */
 export function initWebSentry(build: WebSentryBuild): WebSentry {
   init({
@@ -105,7 +108,8 @@ export function initWebSentry(build: WebSentryBuild): WebSentry {
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
-    beforeSendTransaction: transactionWithoutAccessTokens,
+    ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
+    beforeSendSpan: withStreamedSpan(spanWithoutAccessTokens),
   });
   const client = getClient();
   if (client !== undefined) nameByRoute(client);

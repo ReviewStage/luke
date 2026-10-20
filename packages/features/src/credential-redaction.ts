@@ -1,8 +1,9 @@
 /**
- * credentials.ts -- credential-shaped runs of text, replaced before the text is kept: in a row, a log line, or a report to Sentry.
+ * credential-redaction.ts -- credential-shaped runs of text, replaced before the text is kept: in a row, a log line, or a report to Sentry.
  *
- * Note that this module imports nothing, because Sentry's options
- * (`sentry.ts`) reach it, and an eve root loads those before its agent.
+ * Note that this module imports nothing, because Sentry's options reach it
+ * (`sentry-addresses.ts`, beneath the service's `sentry.ts` and every
+ * client's `Sentry.init`), and an eve root loads those before its agent.
  */
 
 /**

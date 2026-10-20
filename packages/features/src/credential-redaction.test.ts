@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "vitest";
-import { redactCredentials } from "./credentials.js";
+import { redactCredentials } from "./credential-redaction.js";
 
 it("a failure message keeps its words and loses every run shaped like a credential", () => {
   assert.equal(
