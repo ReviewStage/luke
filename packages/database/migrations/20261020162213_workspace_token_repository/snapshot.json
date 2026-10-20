@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "aacdd2b7-6672-462a-8926-838af13c30d1",
+  "id": "9de3d6c2-4178-408b-87c0-a270696457f8",
   "prevIds": ["46dd2e13-923b-48c9-b128-52fa6235669b"],
   "ddl": [
     {
@@ -11978,8 +11978,8 @@
           "opclass": null
         },
         {
-          "value": "repository",
-          "isExpression": false,
+          "value": "lower(\"repository\")",
+          "isExpression": true,
           "asc": true,
           "nullsFirst": false,
           "opclass": null

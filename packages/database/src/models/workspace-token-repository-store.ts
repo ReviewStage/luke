@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, type SQL, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
@@ -13,7 +13,8 @@ import { workspaceReachableBy } from "./workspace-store.js";
  * Every function is an effect over the ambient `SqlClient`, keyed by the
  * account asking and the workspace, and touches a row only where the
  * account is a member of that workspace, so no account reads or changes
- * another workspace's. Adding a repository already added keeps the first
+ * another workspace's. A repository is one however its name's letters are
+ * cased, as GitHub's names are: adding one already added keeps the first
  * add, and removing one that is gone moves nothing. Who may remove one, its
  * adder or a workspace's owner or admin, is the caller's to decide; the
  * store answers who added it.
@@ -31,6 +32,11 @@ export interface WorkspaceTokenRepositoryRow {
   readonly addedByUserId: string;
   /** Epoch milliseconds. */
   readonly addedAt: number;
+}
+
+/** The row naming the repository however its letters are cased, since GitHub's names ignore case. */
+function namedRepository(repository: string): SQL {
+  return sql`lower(${workspaceTokenRepository.repository}) = lower(${repository})`;
 }
 
 const PlaceSchema = Schema.Struct({ userId: Schema.String, organizationId: Schema.String });
@@ -70,7 +76,7 @@ const findAdder = SqlSchema.findOneOption({
         .where(
           and(
             eq(workspaceTokenRepository.organizationId, key.organizationId),
-            eq(workspaceTokenRepository.repository, key.repository),
+            namedRepository(key.repository),
             workspaceReachableBy(key.userId, workspaceTokenRepository.organizationId),
           ),
         ),
@@ -94,7 +100,7 @@ const insertRow = SqlSchema.void({
 });
 
 const deleteRow = SqlSchema.void({
-  Request: KeySchema,
+  Request: Schema.Struct({ ...KeySchema.fields, addedByUserId: Schema.String }),
   execute: (key) =>
     Database.use((db) =>
       db
@@ -102,7 +108,8 @@ const deleteRow = SqlSchema.void({
         .where(
           and(
             eq(workspaceTokenRepository.organizationId, key.organizationId),
-            eq(workspaceTokenRepository.repository, key.repository),
+            namedRepository(key.repository),
+            eq(workspaceTokenRepository.addedByUserId, key.addedByUserId),
             workspaceReachableBy(key.userId, workspaceTokenRepository.organizationId),
           ),
         ),
@@ -149,11 +156,16 @@ export function workspaceTokenRepositoryAdder(
   );
 }
 
-/** Removes the repository from the workspace, where the account is a member of it. */
+/**
+ * Removes the repository from the workspace, where the account is a member
+ * of it and it is still the adder's the caller checked, so a row added
+ * again by someone else since is left standing.
+ */
 export function removeWorkspaceTokenRepository(
   userId: string,
   organizationId: string,
   repository: string,
+  addedByUserId: string,
 ): TaskStoreEffect<void> {
-  return deleteRow({ userId, organizationId, repository });
+  return deleteRow({ userId, organizationId, repository, addedByUserId });
 }

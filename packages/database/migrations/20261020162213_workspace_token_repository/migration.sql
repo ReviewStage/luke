@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS "workspace_token_repository" (
 	"added_at" timestamp with time zone NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "workspace_token_repository_organization_repository" ON "workspace_token_repository" ("organization_id","repository");
+CREATE UNIQUE INDEX IF NOT EXISTS "workspace_token_repository_organization_repository" ON "workspace_token_repository" ("organization_id",lower("repository"));
 --> statement-breakpoint
 ALTER TABLE "workspace_token_repository" DROP CONSTRAINT IF EXISTS "workspace_token_repository_organization_id_organization_id_fkey";
 --> statement-breakpoint

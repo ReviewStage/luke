@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
@@ -29,9 +30,10 @@ export const workspaceTokenRepository = pgTable(
     addedAt: timestamptz("added_at").notNull(),
   },
   (table) => [
+    // One row per repository however its name is cased, since GitHub's names ignore case.
     uniqueIndex("workspace_token_repository_organization_repository").on(
       table.organizationId,
-      table.repository,
+      sql`lower(${table.repository})`,
     ),
   ],
 );

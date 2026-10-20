@@ -50,12 +50,15 @@ export interface TokenRepositories {
 export function useTokenRepositories(workspaceId: string): TokenRepositories {
   const { act } = useAct();
   const [listed, setListed] = useState<readonly WorkspaceTokenRepository[]>([]);
+  // Whether a change has answered since the read began, whose list is newer than the read's.
+  const changed = useRef(false);
   useEffect(() => {
     let live = true;
+    changed.current = false;
     // A read that fails lists none, as a workspace with none does: the list holds no state of its own to lose.
     act(ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ, { workspaceId }).then(
       (read) => {
-        if (live) setListed(read);
+        if (live && !changed.current) setListed(read);
       },
       () => undefined,
     );
@@ -67,6 +70,7 @@ export function useTokenRepositories(workspaceId: string): TokenRepositories {
     (repository: string, added: boolean) =>
       act(ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET, { workspaceId, repository, added }).then(
         (now) => {
+          changed.current = true;
           setListed(now);
           return undefined;
         },

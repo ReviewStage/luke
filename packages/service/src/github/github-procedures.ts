@@ -130,7 +130,11 @@ import {
   ISSUE_ACCESS,
   markRefusedToken,
 } from "./github-app.js";
-import { githubReachOrRefusal, githubReadOrRefusal } from "./github-refusal.js";
+import {
+  githubReachOrRefusal,
+  githubReadOrRefusal,
+  logWorkspaceReadFailure,
+} from "./github-refusal.js";
 import type { GitHubUnlink } from "./github-unlink.js";
 import { issueByNumber, issuePick, openIssues, searchIssues } from "./issues.js";
 import { PullRequestLinkKey, PullRequestLinks } from "./pull-request-links.js";
@@ -222,8 +226,9 @@ function pickedRepositories(
  * The repositories members added to the workspace on their tokens, as
  * Settings › Workspace lists them to a member of it, each removable by its
  * adder or a workspace's owner or admin; one the workspace's installation
- * reaches is left out, its row kept, since the App wins. A workspace the
- * account is not in is not found.
+ * reaches is left out, its row kept, since the App wins, and a GitHub that
+ * does not answer leaves nothing out. A workspace the account is not in is
+ * not found.
  */
 const tokenRepositoriesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -234,7 +239,11 @@ const tokenRepositoriesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   const rows = yield* hostedStoreOrUnavailable(listWorkspaceTokenRepositories(userId, workspaceId));
   if (rows.length === 0) return { repositories: [] };
   const app = yield* GitHubApp;
-  const throughApp = yield* githubReadOrRefusal(app.workspaceRepositories(workspaceId));
+  // Note that a GitHub that does not answer hides nothing, because the list and its writes are the store's and must not wait on GitHub.
+  const throughApp = yield* app.workspaceRepositories(workspaceId).pipe(
+    Effect.tapError(logWorkspaceReadFailure),
+    Effect.orElseSucceed(() => Option.none<readonly GitHubRepository[]>()),
+  );
   const reached = new Set(
     Option.getOrElse(throughApp, () => []).map((one) => nameKey(one.fullName)),
   );
@@ -287,7 +296,9 @@ const removeTokenRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (adder.value !== userId && !managesWorkspace(workspace.value)) {
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   }
-  yield* hostedStoreOrUnavailable(removeWorkspaceTokenRepository(userId, workspaceId, repository));
+  yield* hostedStoreOrUnavailable(
+    removeWorkspaceTokenRepository(userId, workspaceId, repository, adder.value),
+  );
 });
 
 /**

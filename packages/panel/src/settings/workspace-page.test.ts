@@ -152,6 +152,8 @@ let repositoriesHeld: Promise<void> | undefined;
 let tokenReach: string[] = [];
 /** The repositories members added to the workspace on their tokens, as the service lists them to the reader. */
 let tokenRepositories: WorkspaceTokenRepository[] = [];
+/** While set, the token repositories' read waits on it before answering what it read. */
+let tokenReadHeld: Promise<void> | undefined;
 /** The automations the workspace holds, as the list answers them; absent, the list is not answered. */
 let automations: { name: string; mine?: boolean }[] | undefined;
 
@@ -362,8 +364,12 @@ function answer(request: Asked): Promise<Answered> {
     }
     case ACT_KIND.WORKSPACE_LEAVE:
       return Promise.resolve(done(undefined));
-    case ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ:
-      return Promise.resolve(done(tokenRepositories));
+    case ACT_KIND.WORKSPACE_TOKEN_REPOSITORIES_READ: {
+      const read = tokenRepositories;
+      const held = tokenReadHeld;
+      tokenReadHeld = undefined;
+      return (held ?? Promise.resolve()).then(() => done(read));
+    }
     case ACT_KIND.WORKSPACE_TOKEN_REPOSITORY_SET: {
       const { repository, added } = request.payload;
       tokenRepositories = added
@@ -432,6 +438,7 @@ beforeEach(() => {
   repositoriesHeld = undefined;
   tokenReach = [];
   tokenRepositories = [];
+  tokenReadHeld = undefined;
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
   fakeAppBridge({});
   fakeActPort({
@@ -1611,6 +1618,31 @@ test("Add repository offers the repositories the reader's own token may push to 
   assert.equal(
     rowNamed(githubGroup(page), "octo-member/side").querySelector(".luke-badge")?.textContent,
     "Token",
+  );
+});
+
+test("a token repositories read that lands after an add does not take back what the add answered", async () => {
+  tokenReach = ["octo-member/side"];
+  let release: () => void = () => undefined;
+  tokenReadHeld = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+  const side =
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (one) => one.textContent === "octo-member/side",
+    ) ?? assert.fail("octo-member/side is not offered");
+  act(() => side.click());
+  await settle();
+  release();
+  await settle();
+
+  assert.deepEqual(
+    integrationRows(page).map(([name]) => name),
+    ["GitHub", "acme-org", "acme-labs", "octo-member/side"],
   );
 });
 
