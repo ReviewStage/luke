@@ -749,11 +749,6 @@ export function answerOf(
   return thread.find((message) => message.answers?.ask === messageId);
 }
 
-/** How many messages a thread's line counts, "1 message", "6 messages". */
-export function messagesWords(count: number): string {
-  return counted(count, "message");
-}
-
 /**
  * The two ways an approval and a to-do are decided, the one that holds
  * back and the one that goes ahead, and the nod a note is answered by:
