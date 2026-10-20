@@ -3,9 +3,13 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { archiveCodingAgent, createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { recordRepositoryReads } from "@luke/database/models/github-repository-reads";
+import { readGitHubTokenRow } from "@luke/database/models/github-token-store";
 import { claimRuntimeSession } from "@luke/database/models/recorded-session";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { createTask } from "@luke/database/models/task-store";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { HOSTED_API_ERROR } from "@luke/features";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import {
   SANDBOX_STATE,
   type SandboxState,
@@ -16,7 +20,7 @@ import { Clock, type Context, Effect, Layer, Option, Result } from "effect";
 import { SqlClient } from "effect/sql";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
-import { openGithubUser } from "../testing/github-app-fake.js";
+import { openGithubUser, openTokenMember } from "../testing/github-app-fake.js";
 import { agentsProcedures } from "./agents-procedures.js";
 import { AgentSandbox, type AgentSandboxService, SHELL_REFUSAL } from "./terminal/agent-sandbox.js";
 import { SandboxUnavailable } from "./vercel-sandbox-api.js";
@@ -29,7 +33,10 @@ import { SandboxUnavailable } from "./vercel-sandbox-api.js";
  * agent is gone, and a list answers the sandbox's shells and where it
  * stands; a shell is refused in a stopped sandbox, and only the resume path
  * wakes one; and a sandbox that did not answer is the upstream's
- * failure, apart from the service's own. Synthetic accounts, tasks, and sessions throughout.
+ * failure, apart from the service's own. An agent on its starter's own
+ * GitHub token gives its sandbox to its starter alone: a teammate who sees it
+ * is refused, and one who does not reads it as none. Synthetic accounts,
+ * tasks, and sessions throughout.
  */
 
 const ORIGIN = "https://luke.test";
@@ -93,6 +100,46 @@ const openAgent = Effect.gen(function* () {
     new Date(yield* Clock.currentTimeMillis),
   );
   return { userId, agent, sessionId };
+});
+
+/**
+ * An agent on its starter's own GitHub token, its session claimed, in a
+ * workspace with a teammate whose own verified token reads its repository
+ * and one who keeps no token.
+ */
+const openTokenAgent = Effect.gen(function* () {
+  const userId = yield* openGithubUser();
+  const reader = yield* openTokenMember({ token: "fixture-reader-token" });
+  const tokenless = yield* openGithubUser();
+  const workspace = yield* openWorkspace(userId);
+  for (const each of [reader, tokenless]) yield* joinWorkspace(workspace, each);
+  const now = new Date(yield* Clock.currentTimeMillis);
+  const sealed = (yield* readGitHubTokenRow(reader))?.sealedToken ?? "";
+  const side = [{ repository: "octo-member/side", readable: true }];
+  yield* recordRepositoryReads(reader, sealed, side, now);
+  const task = yield* createTask(userId, {
+    organizationId: workspace,
+    repository: "octo-member/side",
+    githubAccess: GITHUB_ACCESS.TOKEN,
+  });
+  const started = yield* createCodingAgent(userId, {
+    taskId: task.id,
+    idempotencyKey: `start-${randomUUID()}`,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    planSnapshot: "# Side\n",
+    prompt: null,
+    repository: "octo-member/side",
+    githubAccess: GITHUB_ACCESS.TOKEN,
+  });
+  assert.ok(Option.isSome(started));
+  const { agent } = started.value;
+  yield* claimRuntimeSession(
+    { userId, conversationId: agent.conversationId },
+    `wrun_${randomUUID()}`,
+    now,
+  );
+  return { userId, reader, tokenless, agent };
 });
 
 /** The agents procedures over the test's store and the sandbox given, each bearer answering for the account it maps to. */
@@ -209,6 +256,42 @@ it.layer(getTestDB())("the agent terminals procedures", (it) => {
         assert.equal(woken, false, "nothing but the resume path wakes the sandbox");
         assert.deepEqual(resumed.body, { sandbox: SANDBOX_STATE.RUNNING });
         assert.deepEqual(sandbox.asked.at(-1), { what: "resume", sessionId });
+      }),
+  );
+
+  it.effect(
+    "an agent on its starter's own GitHub token gives its shells to its starter alone: a teammate who sees it is refused, and one who does not reads it as none",
+    () =>
+      Effect.gen(function* () {
+        const { userId, reader, tokenless, agent } = yield* openTokenAgent;
+        const sandbox = scriptedSandbox(SANDBOX_STATE.RUNNING);
+        const call = yield* standing(
+          new Map([
+            ["Bearer owner", userId],
+            ["Bearer reader", reader],
+            ["Bearer tokenless", tokenless],
+          ]),
+          sandbox.layer,
+        );
+        const refused = { status: 403, body: { error: HOSTED_API_ERROR.NOT_PERMITTED } };
+
+        assert.equal((yield* call(terminalsOf(agent.id), "Bearer owner")).status, 200);
+        assert.equal(
+          (yield* call(terminalsOf(agent.id), "Bearer owner", { method: "POST", body: {} })).status,
+          201,
+        );
+        const asked = sandbox.asked.length;
+        assert.deepEqual(yield* call(terminalsOf(agent.id), "Bearer reader"), refused);
+        assert.deepEqual(
+          yield* call(terminalsOf(agent.id), "Bearer reader", { method: "POST", body: {} }),
+          refused,
+        );
+        assert.deepEqual(
+          yield* call(resumeOf(agent.id), "Bearer reader", { method: "POST" }),
+          refused,
+        );
+        assert.equal((yield* call(terminalsOf(agent.id), "Bearer tokenless")).status, 404);
+        assert.equal(sandbox.asked.length, asked, "no refused call reaches the sandbox");
       }),
   );
 

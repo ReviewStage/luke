@@ -102,6 +102,7 @@ import {
   validateModelChoice,
 } from "../providers/model-catalog.js";
 import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
+import { agentStarterName, controlsAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
@@ -1488,6 +1489,9 @@ export function runMessageAgent(
       const { agent } = found.value;
       if (agent.archivedAt !== null)
         return agentToolRejected(CODING_AGENT_TOOL_REFUSAL.AGENT_ARCHIVED);
+      if (!controlsAgent(callerUserId(caller), agent)) {
+        return agentToolRejected(`Not sent: only ${yield* agentStarterName(agent)} can do this.`);
+      }
       const sent = yield* steerCodingAgent(eve, call.writer, callerUserId(caller), agent, {
         ...line,
         clientKey: call.clientKey,
@@ -1559,6 +1563,9 @@ const sourceLanding = (
     const found = yield* workspaceAgentOf(caller, from.agentId);
     if (Option.isNone(found)) return Result.fail(START_CODING_AGENT_REFUSAL.NO_SOURCE);
     const { agent: source, task, workspaceId } = found.value;
+    if (!controlsAgent(callerUserId(caller), source)) {
+      return Result.fail(`Not started: only ${yield* agentStarterName(source)} can do this.`);
+    }
     if (source.taskId === null) return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_NO_TASK);
     if (named !== undefined && named !== source.taskId) {
       return Result.fail(START_CODING_AGENT_REFUSAL.SOURCE_OTHER_TASK);
@@ -1898,7 +1905,7 @@ interface RecordedRepository {
 export const reachedRepository = (
   workspaceId: string,
   repository: string | null,
-  member: string,
+  member: string | undefined,
 ) =>
   repository === null
     ? Effect.succeed<Result.Result<RecordedRepository, string>>(
@@ -1962,10 +1969,12 @@ export function runUpdateTask(
       if (placing !== undefined && Result.isFailure(placing)) {
         return agentToolRejected(placing.failure);
       }
+      // Note that a teammate names a repository on the App alone, never their own token, because a task on a token is its owner's.
+      const owner = read.value.ownerId === userId ? userId : undefined;
       const repository =
         changes.repository === undefined
           ? undefined
-          : yield* reachedRepository(workspace.value, changes.repository, userId);
+          : yield* reachedRepository(workspace.value, changes.repository, owner);
       if (repository !== undefined && Result.isFailure(repository)) {
         return agentToolRejected(repository.failure);
       }

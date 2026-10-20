@@ -38,6 +38,7 @@ import {
   type HostedRefusal,
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
+import { controlsAgent } from "../agent-reach.js";
 import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
@@ -75,8 +76,9 @@ import { codingAgentStatusOf } from "./status.js";
  * a sign-in that lapsed is refused here rather than failing the turn's
  * first step. The caller is any member of the agent's workspace, whose task
  * read gates the send, or for an agent with no task whose membership of its
- * workspace does, and whose standing with GitHub is asked, while the
- * line lands in the agent's conversation under the member who started it,
+ * workspace does, and whose standing with GitHub is asked (the starter
+ * alone, for an agent on its starter's own GitHub token), while the line
+ * lands in the agent's conversation under the member who started it,
  * naming what sent it: the member, Luke from a call, or an automation's run.
  * Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
@@ -208,6 +210,8 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   HostedRefusal,
   DatabaseServices | HttpClient.HttpClient | GitHubApp
 > {
+  // An agent on its starter's own GitHub token takes words from its starter alone.
+  if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   // The line is written in the agent's conversation, which is its starter's whichever member sends it.
   const target = { userId: agent.userId, conversationId: agent.conversationId };
   const repeated = yield* hostedStoreOrUnavailable(

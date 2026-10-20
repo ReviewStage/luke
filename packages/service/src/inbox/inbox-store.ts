@@ -23,6 +23,7 @@ import { InstantColumnSchema } from "@luke/database/models/columns";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
+  agentSeenBy,
   taskReachableBy,
   workspaceReachableBy,
 } from "@luke/database/models/workspace-store";
@@ -93,6 +94,7 @@ import {
   count,
   desc,
   eq,
+  exists,
   getTableName,
   isNotNull,
   isNull,
@@ -566,9 +568,20 @@ const AgentKeySchema = Schema.Struct({ userId: Schema.String, agentId: Schema.St
 /** An item row's workspace: the column itself, never null since `20261015062923_organization_not_null`, so a membership check reaches its indexes. */
 const ITEM_WORKSPACE = sql<string>`${inboxItem.organizationId}`;
 
-/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task. */
+/** The condition that the item a statement reads names no agent, or one the account sees as its GitHub access allows (`agentSeenBy`). */
+function itemAgentSeenBy(userId: string): SQL {
+  const seen = exists(
+    queryBuilder
+      .select({ one: codingAgent.id })
+      .from(codingAgent)
+      .where(and(eq(codingAgent.id, inboxItem.agentId), agentSeenBy(userId))),
+  );
+  return sql`(${isNull(inboxItem.agentId)} or ${seen})`;
+}
+
+/** The condition that the account is a member of the workspace of the item a statement reads, an item of an agent with no task as much as one on a task, and sees the agent that posted it. */
 function itemReachableBy(userId: string): SQL {
-  return workspaceReachableBy(userId, ITEM_WORKSPACE);
+  return sql`(${workspaceReachableBy(userId, ITEM_WORKSPACE)} and ${itemAgentSeenBy(userId)})`;
 }
 
 /** The step a link names the agent's workspace by: its slug, or its id where it has none, as a plan's picture names it. */
@@ -1128,6 +1141,7 @@ const findSettledStamps = SqlSchema.findAll({
 function accountWaiting(userId: string) {
   return and(
     taskReachableBy(userId),
+    itemAgentSeenBy(userId),
     eq(inboxItem.status, INBOX_STATUS.OPEN),
     isNull(task.archivedAt),
   );

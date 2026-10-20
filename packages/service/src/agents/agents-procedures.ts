@@ -67,7 +67,7 @@ import {
 } from "../http/http-effect.js";
 import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelChoiceRefused } from "../providers/model-catalog.js";
-import { pathUuid, reachedAgentById } from "./agent-reach.js";
+import { controlsAgent, pathUuid, reachedAgentById } from "./agent-reach.js";
 import { askedPullRequest, githubReadRefusal, pullRequestNumberOf } from "./asked-pull-request.js";
 import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import {
@@ -149,13 +149,15 @@ const changedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
 /**
  * The agent the path names, still standing, and the eve session its sandbox
  * is tagged with, or none where the agent has not run yet. An archived agent
- * is gone, as its tab is.
+ * is gone, as its tab is, and one on its starter's own GitHub token gives its
+ * sandbox to its starter alone.
  */
 const reachedSession = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   id: string,
 ): Effect.fn.Return<string | undefined, HostedRefusal, DatabaseServices> {
   const { agent } = yield* reachedAgentById(userId, id);
+  if (!controlsAgent(userId, agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_PERMITTED);
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_RETIRED);
   const [session] = yield* hostedStoreOrUnavailable(
     standingSessionsOf(agent.userId, [agent.conversationId]),

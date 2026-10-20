@@ -40,6 +40,7 @@
     "./models/task-store": "./src/models/task-store.js",
     "./models/provider-key-seal": "./src/models/provider-key-seal.js",
     "./models/provider-key-store": "./src/models/provider-key-store.js",
+    "./models/github-repository-reads": "./src/models/github-repository-reads.js",
     "./models/github-token-store": "./src/models/github-token-store.js",
     "./models/pull-request-chapters-store": "./src/models/pull-request-chapters-store.js",
     "./models/quota": "./src/models/quota.js",

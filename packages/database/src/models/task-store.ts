@@ -133,6 +133,8 @@ export interface StoredTask {
   readonly task: Task;
   /** The account that started the task, the one that may move it to another workspace. */
   readonly ownerId: string;
+  /** How the task's repository was reached as it was named: the workspace's GitHub App, or its owner's own token. */
+  readonly githubAccess: GitHubAccess;
   /** The plan's whole text. */
   readonly text: string;
   readonly agentEdits: readonly LabelledAgentEdit[];
@@ -210,6 +212,7 @@ const TASK_SUMMARY_COLUMNS = {
   status: task.status,
   priority: task.priority,
   repository: task.repository,
+  githubAccess: task.githubAccess,
   archivedAt: task.archivedAt,
   createdAt: task.createdAt,
   updatedAt: task.updatedAt,
@@ -233,6 +236,7 @@ const TaskSummaryRowSchema = Schema.Struct({
   status: taskStatusSchema,
   priority: taskPrioritySchema,
   repository: Schema.NullOr(Schema.String),
+  githubAccess: GitHubAccessSchema,
   archivedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -437,6 +441,7 @@ function storedTaskOf(userId: string, row: TaskRow): TaskStoreEffect<StoredTask>
         sectionEdits: sectionWriters.map((writer) => sectionEditOf(writer, labels)),
       },
       ownerId: row.userId,
+      githubAccess: row.githubAccess,
       text: row.document,
       agentEdits,
       conversationId: row.conversationId ?? undefined,

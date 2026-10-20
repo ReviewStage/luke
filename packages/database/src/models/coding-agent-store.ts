@@ -69,6 +69,7 @@ import { TaskArchived } from "./task-store.js";
 import {
   AGENT_WORKSPACE,
   agentReachableBy,
+  agentSeenBy,
   reachableTask,
   taskReachableBy,
   workspaceReachableBy,
@@ -867,10 +868,11 @@ const AgentsOfTaskSchema = Schema.Struct({
   includeArchived: Schema.Boolean,
 });
 
-/** The condition that an agent stands on the task the account reaches, archived only where asked for; read joined to its task. */
+/** The condition that an agent stands on the task the account reaches, and is one the account sees as its GitHub access allows, archived only where asked for; read joined to its task. */
 function ofReachedTask({ userId, taskId, includeArchived }: typeof AgentsOfTaskSchema.Type) {
   return and(
     reachableTask(userId, taskId),
+    agentSeenBy(userId),
     includeArchived ? undefined : isNull(codingAgent.archivedAt),
   );
 }
@@ -1123,6 +1125,7 @@ const findAgentsOfTasks = SqlSchema.findAll({
           and(
             inArray(task.id, [...taskIds]),
             taskReachableBy(userId),
+            agentSeenBy(userId),
             includeArchived ? undefined : isNull(codingAgent.archivedAt),
           ),
         )
