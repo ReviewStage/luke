@@ -23,8 +23,8 @@ export const IDLE_TIMEOUT_MS = {
  * whichever comes first; the call is cancelled where the component leaves
  * first. A new `work` before then replaces the old one without restarting the wait.
  *
- * A browser with no `requestIdleCallback` (Safari) runs it after the next
- * frame has painted, the nearest thing it has to the first paint being done.
+ * A browser with no `requestIdleCallback` (Safari) runs it after the first
+ * frame has painted, or at once in a hidden tab, which paints none.
  */
 export function useWhenIdle(work: () => void, timeoutMs: number): void {
   const latest = useRef(work);
@@ -37,7 +37,24 @@ export function useWhenIdle(work: () => void, timeoutMs: number): void {
       const handle = globalThis.requestIdleCallback(run, { timeout: timeoutMs });
       return () => globalThis.cancelIdleCallback(handle);
     }
-    const frame = globalThis.requestAnimationFrame(run);
-    return () => globalThis.cancelAnimationFrame(frame);
+    let cancelled = false;
+    const go = () => {
+      if (!cancelled) run();
+    };
+    // A hidden tab paints no frames, so waiting for one would hold the work until it is looked at; nobody is waiting on that tab's first paint, so it runs at once.
+    if (document.visibilityState === "hidden") {
+      queueMicrotask(go);
+      return () => {
+        cancelled = true;
+      };
+    }
+    // Two frames on: the first runs before the paint it belongs to, the second after it.
+    let frame = globalThis.requestAnimationFrame(() => {
+      frame = globalThis.requestAnimationFrame(go);
+    });
+    return () => {
+      cancelled = true;
+      globalThis.cancelAnimationFrame(frame);
+    };
   }, [timeoutMs]);
 }

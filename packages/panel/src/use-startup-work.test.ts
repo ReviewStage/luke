@@ -170,3 +170,30 @@ test("leaving before the renderer is idle starts nothing", () => {
   assert.equal(editorImports, 0);
   assert.ok(idle.length > 0 && idle.every((each) => each.cancelled));
 });
+
+test("a browser with no requestIdleCallback starts the work after a frame has painted, or at once in a hidden tab", async () => {
+  // jsdom has no requestIdleCallback, as Safari has none: the stand-ins go.
+  vi.unstubAllGlobals();
+  const frames: (() => void)[] = [];
+  vi.stubGlobal("requestAnimationFrame", (run: () => void) => frames.push(run));
+  vi.stubGlobal("cancelAnimationFrame", () => undefined);
+
+  draw(delivery({ permitted: true, halted: false }));
+  assert.deepEqual(heard, []);
+  // The first frame runs before the paint, so nothing has started; the frames each asks for next are the paint's.
+  const first = frames.splice(0);
+  act(() => {
+    for (const run of first) run();
+  });
+  assert.deepEqual(heard, []);
+  act(() => {
+    for (const run of frames.splice(0)) run();
+  });
+  assert.equal(heard.length, 1);
+
+  const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  draw(delivery({ permitted: true, halted: false, accountId: "user-3" }));
+  await act(() => Promise.resolve());
+  assert.equal(heard.length, 2);
+  visibility.mockRestore();
+});
