@@ -30,7 +30,11 @@ import {
   type InboxItem,
 } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
-import type { AccountInboxLiveAnswer, ScopeInboxLiveAnswer } from "@luke/features/live-wire";
+import {
+  type AccountInboxLiveAnswer,
+  LIVE_SIGNED_OUT,
+  type ScopeInboxLiveAnswer,
+} from "@luke/features/live-wire";
 import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -226,7 +230,7 @@ function fakeService() {
   const asked: string[] = [];
   /** The account each live read named, in order. */
   const liveUsers: string[] = [];
-  let live: AccountInboxLiveAnswer | undefined;
+  let live: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined;
   let scope: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined;
   let cursor = CODING_AGENT_CURSOR_START;
   const client: CodingAgentClient = {
@@ -521,7 +525,7 @@ function fakeService() {
     asked,
     liveUsers,
     /** What the service seals for following the account's inbox; none answers unanswered. */
-    seal: (next: AccountInboxLiveAnswer | undefined) => {
+    seal: (next: AccountInboxLiveAnswer | typeof LIVE_SIGNED_OUT | undefined) => {
       live = next;
     },
     /** What the service seals for following a plan's or an agent's inbox, or that the account reaches none; none answers unanswered. */
@@ -531,7 +535,9 @@ function fakeService() {
   };
 }
 
-function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
+function subject(
+  options: { signedIn?: boolean; sendsNetwork?: boolean; accountId?: string | undefined } = {},
+) {
   return Effect.gen(function* () {
     const service = fakeService();
     const realtime = fakeRealtime();
@@ -545,7 +551,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
         now: () => NOW + elapsed,
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
-      accountId: () => ((options.signedIn ?? true) ? SIGNED_IN_ID : undefined),
+      accountId: () => ("accountId" in options ? options.accountId : SIGNED_IN_ID),
       client: service.client,
       openLive: realtime.open,
     }).pipe(Effect.provide(noNetwork));
@@ -1213,6 +1219,27 @@ it.effect(
       yield* TestClock.adjust("5 seconds");
       yield* settled;
       assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+    }),
+);
+
+it.effect(
+  "a seal the service refused as signed out is never asked for again, nor is one where nobody is signed in",
+  () =>
+    Effect.gen(function* () {
+      const refused = yield* subject();
+      refused.seal(LIVE_SIGNED_OUT);
+      yield* refused.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+      yield* TestClock.adjust("1 minute");
+      yield* settled;
+      assert.deepEqual(refused.asked, ["account-inbox-live"]);
+      assert.deepEqual(refused.realtime.opened, []);
+
+      const nobody = yield* subject({ accountId: undefined });
+      yield* nobody.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* TestClock.adjust("1 minute");
+      yield* settled;
+      assert.deepEqual(nobody.asked, []);
     }),
 );
 

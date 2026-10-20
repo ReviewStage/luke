@@ -1,4 +1,4 @@
-import type { SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { Cause, Data, Duration, Effect, Queue, Stream } from "effect";
 
 /**
@@ -23,6 +23,13 @@ const RENEW_RETRY = Duration.seconds(1);
 
 /** A subscription that stopped for good: Realtime's client did not load, Realtime said so, a renewal was refused, or a row did not decode. */
 export class LiveBroken extends Data.TaggedError("LiveBroken")<{ readonly reason: string }> {}
+
+/**
+ * A renewal the service refused as signed out: the session is no longer the
+ * account's the read started for. Never asked again, as Neon's guide says
+ * ("When the session changes"): the follow is left, not retried.
+ */
+export class LiveSignedOut extends Data.TaggedError("LiveSignedOut") {}
 
 /** One part's subscription, the slice of Realtime's client this reads. */
 interface LiveSubscription {
@@ -124,75 +131,78 @@ function earliestExpiry<Part extends string>(read: SealedRead<Part>): number {
 /**
  * Every part's rows, whole and undecoded, each time any part changes once
  * every part has its first result, for as long as the subscriptions stand.
- * It fails where a subscription stops for good or a renewal is refused.
+ * It fails where a subscription stops for good or a renewal is refused, and
+ * as signed out, renewing no more, where the service refused the session.
  */
 export function liveRows<Part extends string>(
   dependencies: LiveFollowDependencies<Part>,
   first: SealedRead<Part>,
-): Stream.Stream<Readonly<Record<Part, readonly unknown[]>>, LiveBroken> {
+): Stream.Stream<Readonly<Record<Part, readonly unknown[]>>, LiveBroken | LiveSignedOut> {
   const parts = Object.keys(first.queries).filter((part): part is Part => part in first.queries);
-  return Stream.callback<Readonly<Record<Part, readonly unknown[]>>, LiveBroken>((queue) =>
-    Effect.gen(function* () {
-      const client = yield* Effect.acquireRelease(
-        Effect.tryPromise({
-          try: async () => dependencies.openLive(first.url),
-          catch: () => new LiveBroken({ reason: "Realtime's client did not load" }),
-        }),
-        (opened) => Effect.sync(() => opened.close()),
-      );
-      const rows = new Map<Part, readonly unknown[]>();
-      const broken = (reason: string) =>
-        Queue.failCauseUnsafe(queue, Cause.fail(new LiveBroken({ reason })));
-      const subscriptions = yield* Effect.acquireRelease(
-        Effect.sync(() =>
-          parts.map((part) => {
-            const subscription = client.subscribe(first.queries[part]);
-            subscription.onChange((snapshot) => {
-              if (snapshot.status === "error") {
-                broken("the subscription stopped");
-                return;
-              }
-              if (snapshot.data === undefined) return;
-              rows.set(part, snapshot.data);
-              if (rows.size < parts.length) return;
-              const whole = Object.fromEntries(rows);
-              // SAFETY: `rows` holds every part once its size is the parts', and only parts.
-              Queue.offerUnsafe(queue, whole as Readonly<Record<Part, readonly unknown[]>>);
-            });
-            return [part, subscription] as const;
+  return Stream.callback<Readonly<Record<Part, readonly unknown[]>>, LiveBroken | LiveSignedOut>(
+    (queue) =>
+      Effect.gen(function* () {
+        const client = yield* Effect.acquireRelease(
+          Effect.tryPromise({
+            try: async () => dependencies.openLive(first.url),
+            catch: () => new LiveBroken({ reason: "Realtime's client did not load" }),
           }),
-        ),
-        (standing) =>
-          Effect.sync(() => {
-            for (const [, subscription] of standing) subscription.unsubscribe();
-          }),
-      );
-      let expiresAt = earliestExpiry(first);
-      const renewal = Effect.gen(function* () {
-        const wait = expiresAt - Duration.toMillis(RENEW_EARLY) - dependencies.now();
-        yield* Effect.sleep(Duration.millis(Math.max(0, wait)));
-        let next = yield* dependencies.reseal();
-        while ("failure" in next) {
-          yield* Effect.sleep(RENEW_RETRY);
-          next = yield* dependencies.reseal();
-        }
-        const renewed = next;
-        yield* Effect.forEach(
-          subscriptions,
-          ([part, subscription]) =>
-            Effect.tryPromise({
-              try: () => subscription.renew(renewed.queries[part]),
-              catch: () => new LiveBroken({ reason: "a renewal was refused" }),
-            }),
-          { discard: true },
+          (opened) => Effect.sync(() => opened.close()),
         );
-        expiresAt = earliestExpiry(renewed);
-      });
-      yield* Effect.forkScoped(
-        Effect.forever(renewal).pipe(
-          Effect.catch((failure) => Effect.sync(() => broken(failure.reason))),
-        ),
-      );
-    }),
+        const rows = new Map<Part, readonly unknown[]>();
+        const broken = (failure: LiveBroken | LiveSignedOut) =>
+          Queue.failCauseUnsafe(queue, Cause.fail(failure));
+        const subscriptions = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            parts.map((part) => {
+              const subscription = client.subscribe(first.queries[part]);
+              subscription.onChange((snapshot) => {
+                if (snapshot.status === "error") {
+                  broken(new LiveBroken({ reason: "the subscription stopped" }));
+                  return;
+                }
+                if (snapshot.data === undefined) return;
+                rows.set(part, snapshot.data);
+                if (rows.size < parts.length) return;
+                const whole = Object.fromEntries(rows);
+                // SAFETY: `rows` holds every part once its size is the parts', and only parts.
+                Queue.offerUnsafe(queue, whole as Readonly<Record<Part, readonly unknown[]>>);
+              });
+              return [part, subscription] as const;
+            }),
+          ),
+          (standing) =>
+            Effect.sync(() => {
+              for (const [, subscription] of standing) subscription.unsubscribe();
+            }),
+        );
+        let expiresAt = earliestExpiry(first);
+        const renewal = Effect.gen(function* () {
+          const wait = expiresAt - Duration.toMillis(RENEW_EARLY) - dependencies.now();
+          yield* Effect.sleep(Duration.millis(Math.max(0, wait)));
+          let next = yield* dependencies.reseal();
+          while ("failure" in next) {
+            if (next.failure === LIVE_SIGNED_OUT.failure) return yield* new LiveSignedOut();
+            yield* Effect.sleep(RENEW_RETRY);
+            next = yield* dependencies.reseal();
+          }
+          const renewed = next;
+          yield* Effect.forEach(
+            subscriptions,
+            ([part, subscription]) =>
+              Effect.tryPromise({
+                try: () => subscription.renew(renewed.queries[part]),
+                catch: () => new LiveBroken({ reason: "a renewal was refused" }),
+              }),
+            { discard: true },
+          );
+          expiresAt = earliestExpiry(renewed);
+        });
+        yield* Effect.forkScoped(
+          Effect.forever(renewal).pipe(
+            Effect.catch((failure) => Effect.sync(() => broken(failure))),
+          ),
+        );
+      }),
   );
 }

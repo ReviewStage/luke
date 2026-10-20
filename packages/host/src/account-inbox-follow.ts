@@ -4,10 +4,11 @@ import {
   type AccountInboxLiveRows,
   accountInboxLiveRowSchemas,
   accountInboxOfLiveRows,
+  LIVE_SIGNED_OUT,
   nextFailedRunExpiry,
 } from "@luke/features/live-wire";
 import { Duration, Effect, Option, Schema, Stream } from "effect";
-import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
+import { LiveBroken, type LiveClient, type LiveSignedOut, liveRows } from "./live-follow.js";
 
 /**
  * account-inbox-follow.ts -- what waits on the developer across the account, followed over Neon Realtime as Neon's guide says to.
@@ -21,7 +22,10 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
  * published.
  *
  * A seal the service did not answer is asked for again, and a subscription
- * that stops for good started again, after `LIVE_RESTART`.
+ * that stops for good started again, after `LIVE_RESTART`. A seal or a
+ * renewal refused as signed out is never asked again, as Neon's guide says
+ * ("When the session changes"): the follow waits to be let go, which a
+ * sign-out or another account's sign-in does.
  */
 
 /** How long after a seal went unanswered, or a subscription stopped for good, it is asked again. */
@@ -80,7 +84,7 @@ function answersOf(
 function liveAnswers(
   dependencies: AccountInboxFollowDependencies,
   first: AccountInboxLiveAnswer,
-): Stream.Stream<AccountInboxAnswer, LiveBroken> {
+): Stream.Stream<AccountInboxAnswer, LiveBroken | LiveSignedOut> {
   const decode = Schema.decodeUnknownOption(LiveRowsSchema);
   return liveRows(
     { openLive: dependencies.openLive, reseal: dependencies.live, now: dependencies.now },
@@ -104,10 +108,16 @@ export function followAccountInbox(
 ): Effect.Effect<never> {
   const attempt = Effect.gen(function* () {
     const sealed = yield* dependencies.live();
-    if ("failure" in sealed) return yield* Effect.sleep(LIVE_RESTART);
+    if ("failure" in sealed) {
+      if (sealed.failure === LIVE_SIGNED_OUT.failure) return yield* Effect.never;
+      return yield* Effect.sleep(LIVE_RESTART);
+    }
     yield* Stream.runForEach(liveAnswers(dependencies, sealed), (answer) =>
       Effect.sync(() => dependencies.publish(answer)),
-    ).pipe(Effect.catch(() => Effect.sleep(LIVE_RESTART)));
+    ).pipe(
+      Effect.catchTag("LiveSignedOut", () => Effect.never),
+      Effect.catch(() => Effect.sleep(LIVE_RESTART)),
+    );
   });
   return Effect.forever(attempt);
 }

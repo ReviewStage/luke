@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
+import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+import { Cause, Effect, Exit, Fiber, Option, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
-import { type LiveClient, shareLiveClients } from "./live-follow.js";
+import {
+  type LiveClient,
+  LiveSignedOut,
+  liveRows,
+  type SealedRead,
+  shareLiveClients,
+} from "./live-follow.js";
 
 /**
  * Every read the host follows at one address shares one Realtime client and
@@ -33,6 +43,15 @@ function scriptedClients() {
   };
   return { open, opened, closed, subscribed };
 }
+
+/** Every step the read has to take, taken. */
+const settled = Effect.repeat(
+  Effect.andThen(
+    Effect.yieldNow,
+    Effect.promise(() => Promise.resolve()),
+  ),
+  { times: 20 },
+);
 
 const sealed = (capability: string) => ({ capability, queryFingerprint: capability, expiresAt: 0 });
 
@@ -78,3 +97,48 @@ test("a client that failed to load is opened afresh by the next read", async () 
   await open("wss://realtime.example/v1");
   assert.deepEqual(clients.opened, ["wss://realtime.example/v1"]);
 });
+
+it.effect(
+  "a renewal refused as signed out ends the read as signed out and is never asked again, where an unanswered one is asked again a second later",
+  () =>
+    Effect.gen(function* () {
+      const clients = scriptedClients();
+      const answers: (SealedRead<"items"> | { readonly failure: string })[] = [
+        { failure: "unanswered" },
+        LIVE_SIGNED_OUT,
+      ];
+      let asked = 0;
+      const first: SealedRead<"items"> = {
+        url: "wss://realtime.example/v1",
+        queries: { items: { capability: "items", queryFingerprint: "items", expiresAt: 20_000 } },
+      };
+      const reading = yield* Effect.forkChild(
+        Stream.runDrain(
+          liveRows(
+            {
+              openLive: clients.open,
+              reseal: () =>
+                Effect.sync(() => {
+                  asked += 1;
+                  return answers.shift() ?? { failure: "unanswered" };
+                }),
+              now: () => 0,
+            },
+            first,
+          ),
+        ),
+      );
+      yield* settled;
+      yield* TestClock.adjust("10 seconds");
+      yield* settled;
+      assert.equal(asked, 1);
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      assert.equal(asked, 2);
+      const ended = yield* Fiber.await(reading);
+      assert.ok(Exit.isFailure(ended));
+      assert.deepEqual(Cause.findErrorOption(ended.cause), Option.some(new LiveSignedOut()));
+      yield* TestClock.adjust("1 minute");
+      assert.equal(asked, 2, "signed out, it renews no more");
+    }),
+);
