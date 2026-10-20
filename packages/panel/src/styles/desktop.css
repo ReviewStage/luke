@@ -5959,8 +5959,12 @@ polygon.factory-campus-edge[data-edge="selected"] {
 /* The archived agents, folded under Archived at the foot of Coding agents
    (`agent-archive.tsx`) behind the sidebar's own group header, and each
    archived agent muted, its Unarchive at its end in the sidebar rows' Pin
-   and Archive style, shown while the row is hovered or reached from the
-   keyboard. */
+   and Archive style (`list-row.css`): at rest it takes no room and no
+   press, the name running the row's full width; while the row is hovered
+   or reached from the keyboard it comes in over the row's end in the
+   failed mark's place, and the name gives that room up, cut where the
+   button begins and fading out there. It goes at once as the row is let
+   go, so the words coming back never show through it. */
 .task-summary-archived {
   margin-top: var(--luke-list-gap);
 }
@@ -5970,7 +5974,6 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 .task-summary-archived-agent > .task-summary-row {
-  padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
   color: var(--luke-color-text-muted);
 }
 
@@ -5986,35 +5989,54 @@ polygon.factory-campus-edge[data-edge="selected"] {
   height: var(--luke-control-height);
   align-items: center;
   opacity: 0;
+  pointer-events: none;
+}
+
+.task-summary-archived-agent:has(:focus-visible) > .task-summary-row {
+  padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
 }
 
 .task-summary-archived-agent:has(:focus-visible) > .task-summary-marks {
   opacity: 1;
+  pointer-events: auto;
+  transition: opacity var(--duration-hover) ease;
 }
 
 .task-summary-archived-agent:has(:focus-visible) .failed-mark {
-  visibility: hidden;
+  display: none;
 }
 
 @media (hover: hover) {
+  .task-summary-archived-agent:hover > .task-summary-row {
+    padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
+  }
+
   .task-summary-archived-agent:hover > .task-summary-marks {
     opacity: 1;
+    pointer-events: auto;
+    transition: opacity var(--duration-hover) ease;
   }
 
   .task-summary-archived-agent:hover .failed-mark {
-    visibility: hidden;
+    display: none;
   }
 }
 
 /* A screen with no hover shows each archived agent's Unarchive at rest, in
-   place of its failed mark, rather than leaving a press nobody can see. */
+   place of its failed mark and in the room it takes while hovered, rather
+   than leaving a press nobody can see. */
 @media (hover: none) {
+  .task-summary-archived-agent > .task-summary-row {
+    padding-right: calc(var(--row-inset) + var(--sidebar-plan-mark));
+  }
+
   .task-summary-archived-agent > .task-summary-marks {
     opacity: 1;
+    pointer-events: auto;
   }
 
   .task-summary-archived-agent .failed-mark {
-    visibility: hidden;
+    display: none;
   }
 }
 
