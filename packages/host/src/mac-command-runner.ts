@@ -1,13 +1,13 @@
 import {
   MAC_COMMAND_BOUNDS,
-  type MacCommand,
-  type MacCommandResult,
+  type MacShellCommand,
+  type MacShellResult,
 } from "@luke/features/mac-command-wire";
 import { Duration, Effect, Fiber, Option, Ref, Stream } from "effect";
 import { ChildProcess, type ChildProcessSpawner } from "effect/process";
 
 /**
- * mac-command-runner.ts -- one command an agent asked of this Mac, run in the developer's login shell from their home folder, and what it printed.
+ * mac-command-runner.ts -- one shell command an agent asked of this Mac, run in the developer's login shell from their home folder, and what it printed.
  *
  * The command is handed to the shell whole as its `-c` argument, never
  * spliced into shell text, under the app's own environment with no pager
@@ -88,9 +88,9 @@ function drainInto<E>(stream: Stream.Stream<Uint8Array, E>, into: Ref.Ref<Captur
 
 /** The command run whole under its timeout, its group killed as the scope closes on a timeout. */
 function runned(
-  command: MacCommand,
+  command: MacShellCommand,
   shell: MacShell,
-): Effect.Effect<MacCommandResult, unknown, ChildProcessSpawner.ChildProcessSpawner> {
+): Effect.Effect<MacShellResult, unknown, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* ChildProcess.make(shell.path, ["-l", "-c", command.command], {
@@ -128,9 +128,9 @@ function runned(
 
 /** One command run on this Mac, answering what it did; one that could not be started answers why. */
 export function runMacCommand(
-  command: MacCommand,
+  command: MacShellCommand,
   shell: MacShell,
-): Effect.Effect<MacCommandResult, never, ChildProcessSpawner.ChildProcessSpawner> {
+): Effect.Effect<MacShellResult, never, ChildProcessSpawner.ChildProcessSpawner> {
   return Effect.catch(runned(command, shell), (error) =>
     Effect.succeed({
       exitCode: null,

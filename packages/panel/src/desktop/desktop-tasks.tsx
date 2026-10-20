@@ -77,7 +77,7 @@ import { useMinute } from "../tasks/task-time.js";
 import { CallBar } from "../tasks/tasks-parts.js";
 import { TerminalCommands } from "../tasks/terminal-commands.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
-import { useInboxReadMarks, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
+import { useInboxReadMarks, useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
 import { OpenHereProvider, openPullRequestsHere, useOpenLink } from "../tasks/use-open-link.js";
 import type { PlanEditDoor } from "../tasks/use-plan-editing.js";
@@ -275,12 +275,15 @@ function TaskInboxTab({
     choose(listed);
     columns.onOpen(listed.item.id);
   };
+  const opened = shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen : undefined;
   useReadOnOpen({
-    shown: shown && columns.shown !== INBOX_COLUMNS.LIST ? chosen?.item : undefined,
+    shown: opened?.item,
     chosen: chosen?.item,
     active: shown,
     onMark: marks.onMark,
   });
+  // A notice of the reader's own is acknowledged as it opens, as the window's Inbox acknowledges it.
+  useNodOnOpen({ shown: opened, readerId: tasks.me, control: inbox });
   const { pager, direction } = useInboxPager(steps, list, chosen?.item.id, choose, {
     shown,
     folded: NO_FOLDS,

@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
 } from "@luke/features/coding-agent-view";
 import {
@@ -339,6 +340,10 @@ async function narrowTaskInbox(
   later: Promise<CodingAgentInboxAnswerView> = new Promise(() => undefined),
   /** What the first read answers, where a test holds it open; else the items given. */
   first: Promise<CodingAgentInboxAnswerView> = Promise.resolve({ items, cursor: "1" }),
+  /** The account reading, none where a test does not say, and where its answers go. */
+  reader: Pick<TasksControl, "me"> & Partial<Pick<TasksControl["agents"], "answerInbox">> = {
+    me: undefined,
+  },
 ) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -369,8 +374,12 @@ async function narrowTaskInbox(
               strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
               tab: SIDE_PANEL_TAB.INBOX,
             },
+            me: reader.me,
             agents: codingAgentsControl({
               agentIds: ["8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"],
+              ...(reader.answerInbox === undefined
+                ? undefined
+                : { answerInbox: reader.answerInbox }),
               readInbox: ({ after }) =>
                 after === INBOX_CURSOR_START
                   ? first
@@ -1005,6 +1014,48 @@ test("a plan's own Inbox marks the item it shows read as it opens it, and its ro
   await act(async () => mark.click());
   assert.deepEqual(marked, [`read:${SHIP.id}`, `read:${ROLL.id}`]);
   assert.equal(dot("Roll back?"), false);
+  inbox.unmount();
+});
+
+test("a plan's own Inbox acknowledges the reader's own notice as it opens it, and leaves a teammate's open", async () => {
+  // Note that the Inbox opens on All, since To do leaves the teammate's notice out.
+  window.localStorage.clear();
+  showEverything();
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: ({ itemId, unread }) =>
+      Promise.resolve({ id: itemId, unread }),
+  });
+  const notice = (id: string, title: string, at: number): InboxItem => ({
+    ...approvalItem(id, title, at),
+    response: { type: INBOX_RESPONSE.NONE },
+    needsReply: false,
+    revision: 3,
+  });
+  const OWN = notice("a1b2c3d4-0000-4000-8000-0000000000b1", "The preview is up", 2);
+  const THEIRS = {
+    ...notice("a1b2c3d4-0000-4000-8000-0000000000b2", "The migration ran", 1),
+    startedBy: { userId: "user-teammate", name: "Charles Pan" },
+  };
+  const answered: CodingAgentInboxAnswerParams[] = [];
+  const inbox = await narrowTaskInbox([OWN, THEIRS], 1400, undefined, undefined, {
+    me: "user-reader",
+    answerInbox: (params) => {
+      answered.push(params);
+      return new Promise(() => undefined);
+    },
+  });
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+  assert.equal(inbox.title(), "The preview is up");
+  const sent = () => answered.map(({ itemId, revision, reply }) => ({ itemId, revision, reply }));
+  assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
+
+  await act(async () => inbox.row("The migration ran")?.click());
+  assert.equal(inbox.title(), "The migration ran");
+  assert.deepEqual(sent(), [{ itemId: OWN.id, revision: 3, reply: INBOX_REPLY.ACKNOWLEDGED }]);
+  window.localStorage.clear();
   inbox.unmount();
 });
 

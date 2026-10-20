@@ -91,6 +91,10 @@ export const conversations = pgTable(
     nativeSession: text("native_session"),
     /** The digest of the bearer the conversation's runner presents at Luke's MCP server, never the bearer itself; null where no runner holds one. */
     runnerTokenHash: text("runner_token_hash"),
+    /** The number of the last runner event projected into the conversation, so a batch the runner posts again applies nothing twice; null before a runner's first event. */
+    nativeSequence: bigint("native_sequence", { mode: "number" }),
+    /** What the projection of a native harness's events holds between the runner's batches: the turn under way and its step's words so far; null before the first batch. */
+    nativeProjection: jsonb("native_projection"),
   },
   (table) => [
     // One main stands per account at a time: Clear stamps the old one and opens the next in one

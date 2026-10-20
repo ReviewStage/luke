@@ -38,7 +38,7 @@ import { useMinute } from "../tasks/task-time.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
 import { type InboxListing, useInboxListing } from "../tasks/use-inbox-listing.js";
-import { useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
+import { useNodOnOpen, useReadOnOpen } from "../tasks/use-inbox-read-marks.js";
 import { type OpenHere, OpenHereProvider, useOpenLink } from "../tasks/use-open-link.js";
 import { PULL_REQUEST_VIEW, type SidePanelControl } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
@@ -274,15 +274,18 @@ function InboxShown({
   // The panel holds the keys while the focus went into it last, or while it fills the window over the Inbox.
   const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
   // The item shown is read as it opens, and U marks it, only while the Inbox holds the keys and the panel does not cover it.
+  const opened =
+    tasks.shown && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST
+      ? chosen
+      : undefined;
   useReadOnOpen({
-    shown:
-      tasks.shown && !sidePanel.fullScreen && columns.shown !== INBOX_COLUMNS.LIST
-        ? chosen?.item
-        : undefined,
+    shown: opened?.item,
     chosen: chosen?.item,
     active: tasks.shown && !sideFocused,
     onMark: markItem,
   });
+  // A notice of the reader's own is acknowledged as it opens, on the same terms, once its holder's held read holds it.
+  useNodOnOpen({ shown: opened, readerId: tasks.me, control: live });
   // The panel stands for the item asked for, by its task, or its agent where it has none (`use-tasks-tab.ts`).
   const panelFor = taskId ?? chosenAgentId;
   const pullRequests = [...named.pullRequests].map(([agentId, opened]) => ({

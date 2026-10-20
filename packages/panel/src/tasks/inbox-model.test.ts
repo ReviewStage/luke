@@ -26,6 +26,7 @@ import {
   codeNotice,
   codeReadOf,
   codeWindow,
+  doDecision,
   EMPTY_INBOX_DRAFT,
   EVERYONES,
   firstChoice,
@@ -71,6 +72,7 @@ import {
   tasklessGroups,
   withChoice,
   withDecision,
+  withDoPress,
   withStep,
   withValue,
 } from "./inbox-model.js";
@@ -1510,6 +1512,88 @@ test("Mark done ticks every step of a to-do, ticked by hand or not, while Couldn
   const titled = { type: INBOX_ASK.DO, steps: [] } as const;
   assert.deepEqual(shownTicks(titled, done), [0], "the title standing as the one step is ticked");
   assert.deepEqual(inboxThreadSend([asking(titled)], done)?.answers?.steps, []);
+});
+
+test("ticking every step by hand counts as Mark done, which letting one go takes back off, while a press given wins", () => {
+  const ask = { type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] } as const;
+  const steps = [asking(ask)];
+  const tick = (draft: InboxDraft, ...at: number[]) =>
+    at.reduce((held, each) => withStep(ask, held, each), draft);
+  const every = tick(EMPTY_INBOX_DRAFT, 2, 0, 1);
+  assert.equal(doDecision(ask, every), INBOX_REPLY.DONE, "Mark done stands pressed");
+  assert.deepEqual(inboxThreadSend(steps, every)?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.DONE,
+    steps: [0, 1, 2],
+  });
+
+  const letGo = withStep(ask, every, 1);
+  assert.equal(doDecision(ask, letGo), undefined, "letting a step go takes Mark done back off");
+  assert.deepEqual(shownTicks(ask, letGo), [0, 2]);
+
+  const failed = tick({ ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.NOT_DONE }, 0, 1, 2);
+  assert.equal(doDecision(ask, failed), INBOX_REPLY.NOT_DONE, "Couldn't do it pressed stands");
+  assert.deepEqual(inboxThreadSend(steps, failed)?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.NOT_DONE,
+    steps: [0, 1, 2],
+  });
+
+  const released = withDoPress(ask, every, INBOX_REPLY.DONE);
+  assert.equal(
+    doDecision(ask, released),
+    undefined,
+    "pressing the Mark done it stands for lets it go",
+  );
+  assert.deepEqual(shownTicks(ask, released), []);
+  const swapped = withDoPress(ask, every, INBOX_REPLY.NOT_DONE);
+  assert.equal(doDecision(ask, swapped), INBOX_REPLY.NOT_DONE);
+  assert.deepEqual(inboxThreadSend(steps, swapped)?.answers?.steps, [0, 1, 2]);
+  const pressed = withDoPress(ask, tick(EMPTY_INBOX_DRAFT, 1), INBOX_REPLY.DONE);
+  assert.equal(doDecision(ask, pressed), INBOX_REPLY.DONE);
+  assert.deepEqual(shownTicks(ask, withDoPress(ask, pressed, INBOX_REPLY.DONE)), [1]);
+
+  const titled = { type: INBOX_ASK.DO, steps: [] } as const;
+  const ticked = withStep(titled, EMPTY_INBOX_DRAFT, 0);
+  assert.equal(doDecision(titled, ticked), INBOX_REPLY.DONE, "ticking the title marks it done");
+  assert.deepEqual(inboxThreadSend([asking(titled)], ticked)?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.DONE,
+    steps: [],
+  });
+});
+
+test("steps ticked with neither press go with the reply as an answer deciding nothing, its stamp saying what was ticked; none ticked leaves the reply plain", () => {
+  const ask = { type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] } as const;
+  const steps = [asking(ask)];
+  const some = withStep(ask, withStep(ask, EMPTY_INBOX_DRAFT, 2), 0);
+  const answers = inboxThreadSend(steps, { ...some, note: "Stuck on two." })?.answers;
+  assert.deepEqual(answers, { ask: ASKING_ID, reply: INBOX_REPLY.ANSWERED, steps: [0, 2] });
+  assert.equal(doDecision(ask, some), undefined);
+  if (answers !== undefined) {
+    assert.deepEqual(sentStamp(answers, steps[0]?.ask), {
+      tone: ANSWER_TONE.AHEAD,
+      words: "Ticked 2/3",
+    });
+  }
+  assert.deepEqual(
+    inboxThreadSend(steps, { ...EMPTY_INBOX_DRAFT, note: "Later." }),
+    { text: "Later.", attachments: [] },
+    "a reply with nothing ticked is plain",
+  );
+  assert.deepEqual(
+    inboxThreadSend(steps, { ...EMPTY_INBOX_DRAFT, steps: [1], press: INBOX_REPLY.NOT_DONE })
+      ?.answers,
+    { ask: ASKING_ID, reply: INBOX_REPLY.NOT_DONE, steps: [1] },
+    "Couldn't do it carries the step ticked by hand",
+  );
+});
+
+test("an older to-do's single item ticked is its Mark done, and let go decides nothing", () => {
+  const task = item({ id: "task", response: { type: INBOX_RESPONSE.TODO } });
+  const ticked = numberedPick(task, EMPTY_INBOX_DRAFT, 1) ?? EMPTY_INBOX_DRAFT;
+  assert.deepEqual(inboxReply(task, ticked), { reply: INBOX_REPLY.DONE });
+  assert.equal(inboxReply(task, { ...ticked, choices: [] }), undefined);
 });
 
 test("a notice, open and asking nothing with no ask open on its thread, waits on the reader's nod, which Got it answers; a thread whose ask is open, or one settled, waits on none", () => {
