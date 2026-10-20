@@ -43,7 +43,12 @@ import type { SideBundles } from "../bundle-loader.js";
 import type { DiffListProps, DiffViewModule } from "../diff-view/contract.js";
 import type { FileMark, FileTreeModule, FileTreeProps } from "../file-tree/contract.js";
 import { findRanges, reveal } from "../find-matches.js";
-import { fakeActPort, fakeActPortCalls, fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeActPortCalls,
+  fakeAppBridge,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -1092,25 +1097,24 @@ function comeIntoView(): void {
   }
 }
 
+/** Every `app:act` this test does not answer, refused. */
+function refuseEveryAct(): Promise<ActOutcome> {
+  return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
+}
+
 /** The images the service was asked for, by address, each answered with a picture of its own. */
 function answerImages(refusing: Set<string> = new Set()): string[] {
   const asked: string[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_GITHUB_IMAGE) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      }
-      asked.push(request.payload.src);
-      if (refusing.has(request.payload.src)) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Unreachable." });
-      }
-      return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: { contentType: "image/png", base64: btoa(request.payload.src) },
-      });
+  fakeAppBridge({ act: refuseEveryAct });
+  handSettings();
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: ({ src }) => {
+      asked.push(src);
+      if (refusing.has(src)) return Promise.reject(refusedOnPort("Unreachable."));
+      return Promise.resolve({ contentType: "image/png", base64: btoa(src) });
     },
   });
-  handSettings();
   return asked;
 }
 
@@ -1359,16 +1363,15 @@ const MARKED: CodingAgentPullRequestViewedAnswerView = {
 /** Every mark asked of the service, answered as `answer` says. */
 function answerMarks(answer: () => PullRequestWriteAnswer): PullRequestActionRequest[] {
   const asked: PullRequestActionRequest[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      }
-      asked.push(request.payload.request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: answer() });
+  fakeAppBridge({ act: refuseEveryAct });
+  handSettings();
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+      asked.push(request);
+      return Promise.resolve(answer());
     },
   });
-  handSettings();
   return asked;
 }
 
@@ -1535,20 +1538,16 @@ function holdMarks(): Array<{
     readonly request: PullRequestActionRequest;
     readonly answer: (answer: PullRequestWriteAnswer) => void;
   }> = [];
-  fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind !== ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
-      }
-      const answered = Promise.withResolvers<ActOutcome>();
-      held.push({
-        request: request.payload.request,
-        answer: (value) => answered.resolve({ status: ACT_OUTCOME_STATUS.DONE, value }),
-      });
+  fakeAppBridge({ act: refuseEveryAct });
+  handSettings();
+  fakeActPort({
+    ...fakeActPortCalls(),
+    [ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: ({ request }) => {
+      const answered = Promise.withResolvers<PullRequestWriteAnswer>();
+      held.push({ request, answer: answered.resolve });
       return answered.promise;
     },
   });
-  handSettings();
   return held;
 }
 

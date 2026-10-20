@@ -1,5 +1,5 @@
 /**
- * agents-procedures.ts -- the Tasks tab's core asks of the host about a task's coding agents.
+ * agents-procedures.ts -- the Tasks tab's asks of the host about a task's coding agents and what they published.
  *
  * The one check these procedures make is who asked, as for every task act:
  * only a panel draws a task's agents, so every one refuses the takeover and
@@ -8,25 +8,39 @@
  * notices (`@luke/host/agent-notices`), which hold where each agent stands
  * so an end the panel is not looking at is still announced, and which
  * agent's tab, task's Inbox, and Chat the panel shows, so an item it is
- * looking at is not. Nothing else is held here.
+ * looking at is not; and an agent's own pull request, read, is noted as
+ * what it published. Nothing else is held here.
  */
 
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
+  type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
+  type CodingAgentGitHubImageParams,
+  type CodingAgentGitHubImageView,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
+  type CodingAgentOverviewChecksAnswerView,
+  type CodingAgentOverviewConversationAnswerView,
+  type CodingAgentOverviewPullRequestAnswerView,
   type CodingAgentPageAnswerView,
   type CodingAgentPageParams,
   type CodingAgentPinParams,
+  type CodingAgentPullRequestActionParams,
+  type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestParams,
+  type CodingAgentPullRequestReadParams,
+  type CodingAgentPullRequestViewedAnswerView,
+  type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentRenameParams,
+  type CodingAgentReviewOptionsAnswerView,
   type CodingAgentServersParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
@@ -63,8 +77,35 @@ export interface AgentProceduresDependencies {
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
     codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
+    codingAgentPullRequest(
+      params: CodingAgentPullRequestReadParams,
+    ): Effect.Effect<CodingAgentPullRequestAnswerView>;
+    codingAgentChanges(
+      params: CodingAgentPullRequestReadParams,
+    ): Effect.Effect<CodingAgentChangesAnswerView>;
+    codingAgentOverviewPullRequest(
+      params: CodingAgentPullRequestReadParams,
+    ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView>;
+    codingAgentReviewOptions(
+      params: CodingAgentPullRequestParams,
+    ): Effect.Effect<CodingAgentReviewOptionsAnswerView>;
+    codingAgentOverviewChecks(
+      params: CodingAgentPullRequestReadParams,
+    ): Effect.Effect<CodingAgentOverviewChecksAnswerView>;
+    codingAgentOverviewConversation(
+      params: CodingAgentPullRequestReadParams,
+    ): Effect.Effect<CodingAgentOverviewConversationAnswerView>;
+    codingAgentGitHubImage(
+      params: CodingAgentGitHubImageParams,
+    ): Effect.Effect<CodingAgentGitHubImageView>;
+    codingAgentPullRequestAction(
+      params: CodingAgentPullRequestActionParams,
+    ): Effect.Effect<CodingAgentPullRequestWriteAnswerView>;
+    codingAgentPullRequestViewed(
+      params: CodingAgentPullRequestReadParams,
+    ): Effect.Effect<CodingAgentPullRequestViewedAnswerView>;
   };
-  /** Where every answer's agents are noted, and which agent's tab the panel shows. */
+  /** Where every answer's agents and what an agent published are noted, and which agent's tab the panel shows. */
   notices: Pick<
     AgentNotices,
     | "observeAgents"
@@ -72,6 +113,7 @@ export interface AgentProceduresDependencies {
     | "observeTitle"
     | "observeMessaged"
     | "observeModels"
+    | "observePublished"
     | "observeTaskGone"
     | "shown"
     | "shownInbox"
@@ -218,5 +260,65 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
         return yield* host.codingAgentPage(input);
       },
     ),
+    [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      // Note that a read of another pull request by its number is no word on what the agent itself published.
+      return yield* noted(host.codingAgentPullRequest(input), (answer) => {
+        if ("pullRequest" in answer && input.number === undefined) {
+          notices.observePublished(input.agentId, answer.pullRequest);
+        }
+      });
+    }),
+    [AGENT_ACT_KIND.CODING_AGENTS_CHANGES]: actPort[AGENT_ACT_KIND.CODING_AGENTS_CHANGES].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.codingAgentChanges(input);
+      },
+    ),
+    [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.codingAgentOverviewPullRequest(input);
+    }),
+    [AGENT_ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.codingAgentReviewOptions(input);
+    }),
+    [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.codingAgentOverviewChecks(input);
+    }),
+    [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.codingAgentOverviewConversation(input);
+    }),
+    // Note that the image's answer, a failure among them, is the panel's to read, as an agent's picture's is.
+    [AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.codingAgentGitHubImage(input);
+    }),
+    [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.codingAgentPullRequestAction(input);
+    }),
+    [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: actPort[
+      AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.codingAgentPullRequestViewed(input);
+    }),
   };
 }

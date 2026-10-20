@@ -4,25 +4,41 @@
  * A kind that carries nothing takes `undefined` alone, so a window calls it
  * with no payload and one sent anything is refused, as `app:act` refused it.
  * Each output is its view schema flipped, so oRPC's output check encodes the
- * row's value into what crosses the port, as the issue acts' do.
+ * row's value into what crosses the port, as the issue acts' do. What an
+ * agent published is read here too: its pull request, its changes, its Pull
+ * request tab's overview, an image that overview names, and a change made to
+ * the pull request on GitHub.
  */
 
 import {
   codingAgentAgentAnswerSchema,
   codingAgentArchiveParamsSchema,
+  codingAgentChangesAnswerViewSchema,
   codingAgentChooseParamsSchema,
   codingAgentDefaultAnswerViewSchema,
   codingAgentDefaultWriteParamsSchema,
+  codingAgentGitHubImageParamsSchema,
+  codingAgentGitHubImageViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentMessagesParamsSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentOverviewChecksAnswerViewSchema,
+  codingAgentOverviewConversationAnswerViewSchema,
+  codingAgentOverviewPullRequestAnswerViewSchema,
   codingAgentPageAnswerViewSchema,
   codingAgentPageParamsSchema,
   codingAgentPinParamsSchema,
+  codingAgentPullRequestActionParamsSchema,
+  codingAgentPullRequestAnswerViewSchema,
+  codingAgentPullRequestParamsSchema,
+  codingAgentPullRequestReadParamsSchema,
+  codingAgentPullRequestViewedAnswerViewSchema,
+  codingAgentPullRequestWriteAnswerViewSchema,
   codingAgentRenameParamsSchema,
+  codingAgentReviewOptionsAnswerViewSchema,
   codingAgentServersParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
@@ -130,4 +146,49 @@ export const agentActsContract = {
   [AGENT_ACT_KIND.CODING_AGENTS_PAGE]: actProcedure("Could not read the agent on this system.")
     .input(exactInput(codingAgentPageParamsSchema))
     .output(EffectSchema.flip(codingAgentPageAnswerViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]: actProcedure(
+    "Could not read the agent's pull request on this system.",
+  )
+    .input(exactInput(codingAgentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(codingAgentPullRequestAnswerViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_CHANGES]: actProcedure(
+    "Could not read the agent's changes on this system.",
+  )
+    .input(exactInput(codingAgentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(codingAgentChangesAnswerViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_PULL_REQUEST]: actProcedure(
+    "Could not read the agent's pull request on this system.",
+  )
+    .input(exactInput(codingAgentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(codingAgentOverviewPullRequestAnswerViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_REVIEW_OPTIONS]: actProcedure(
+    "Could not read the repository's reviewers and labels on this system.",
+  )
+    .input(exactInput(codingAgentPullRequestParamsSchema))
+    .output(EffectSchema.flip(codingAgentReviewOptionsAnswerViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CHECKS]: actProcedure(
+    "Could not read the pull request's checks on this system.",
+  )
+    .input(exactInput(codingAgentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(codingAgentOverviewChecksAnswerViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_OVERVIEW_CONVERSATION]: actProcedure(
+    "Could not read the pull request's conversation on this system.",
+  )
+    .input(exactInput(codingAgentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(codingAgentOverviewConversationAnswerViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_GITHUB_IMAGE]: actProcedure(
+    "Could not read the pull request's image on this system.",
+  )
+    .input(exactInput(codingAgentGitHubImageParamsSchema))
+    .output(EffectSchema.flip(codingAgentGitHubImageViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_ACTION]: actProcedure(
+    "Could not change the pull request on this system.",
+  )
+    .input(exactInput(codingAgentPullRequestActionParamsSchema))
+    .output(EffectSchema.flip(codingAgentPullRequestWriteAnswerViewSchema)),
+  [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST_VIEWED]: actProcedure(
+    "Could not read which files you viewed on this system.",
+  )
+    .input(exactInput(codingAgentPullRequestReadParamsSchema))
+    .output(EffectSchema.flip(codingAgentPullRequestViewedAnswerViewSchema)),
 };

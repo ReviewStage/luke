@@ -270,7 +270,6 @@ function platformRows(
 function hostRowDependencies(
   operator: OperatorClient,
   state: AppStateStore,
-  notices: HostActDependencies["codingAgents"]["notices"],
   tabs: ConnectTabs,
 ): HostActDependencies {
   const host = operator.host;
@@ -286,7 +285,7 @@ function hostRowDependencies(
       callStanding: () => false,
       colourCode: highlightSnippet,
     },
-    codingAgents: { host, notices },
+    codingAgents: { host },
   };
 }
 
@@ -412,7 +411,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
 
       // The notices' toasts reach the panel through the bridge, which is built
-      // over the rows the notices are handed to, so they find it late.
+      // after the notices, so they find it late.
       let events: Effect.Success<ReturnType<typeof createInProcessBridge>>["events"] | undefined;
       const doors = yield* noticeDoors(state, () => events);
       const notices = yield* linkClientNotices({
@@ -436,7 +435,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
         sender: window,
         routerFor: () =>
           createHostActRouter(
-            hostRowDependencies(operator, state, notices, tabs),
+            hostRowDependencies(operator, state, tabs),
             platformRows(http, doors),
           ),
         run,

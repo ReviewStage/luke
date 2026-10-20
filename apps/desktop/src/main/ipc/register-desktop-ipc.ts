@@ -192,7 +192,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         callStanding: () => callInProgress(state.snapshot().voice.view ?? IDLE_VOICE_VIEW),
         colourCode: highlightSnippet,
       },
-      codingAgents: { host: operator.host, notices },
+      codingAgents: { host: operator.host },
     },
     platformRows,
   );
