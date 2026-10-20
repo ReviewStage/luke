@@ -241,8 +241,8 @@ export interface PlanEditorHandle {
   readonly markdown: () => string;
   /** The caret put where the placement says and the editor focused, as a press on the text's room does while it is open. */
   readonly focusAt: (placement: PlanEditorPlacement) => void;
-  /** Where the caret's line stands in the window, down from its top; none where it cannot be measured. */
-  readonly caretTop: () => number | undefined;
+  /** Where the line of the words a click opened the editor on stands in the window, down from its top; none where it opened elsewhere, the words not found, or the caret has since been put elsewhere, or where it cannot be measured. */
+  readonly wordsTop: () => number | undefined;
   /** Image files laid in as pictures after the block the caret stands in, each handed to the panel to keep. */
   readonly insertPictures: (files: readonly File[]) => void;
   /** The picture waiting on `upload` given its address, kept at last, which the text now names. */

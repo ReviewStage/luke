@@ -79,6 +79,9 @@ export const EDITOR_ROOM_CLASS = "plan-document-editor";
 /** What the text says while the editor's bundle could not be loaded. */
 const EDITOR_LOAD_FAILED = "The editor could not be loaded.";
 
+/** What the developer does that ends the editor keeping the words it opened on where they stood: a scroll, a press, or a key. */
+const KEEPING_ENDS = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+
 /** How long the typing pauses before the document hears the text. */
 const DRAFT_PAUSE = Duration.millis(150);
 
@@ -796,20 +799,33 @@ export function PlanDocumentEditor({
     },
   });
   // Note that the words a click opened the editor on are kept where they
-  // stood, once, since the editor may draw what stands above them at another
-  // height than the text did, a picture, a table or a diagram's preview say.
-  const kept = useRef(false);
+  // stood, since the editor may draw what stands above them at another
+  // height than the text did, a picture, a table or a diagram's preview say,
+  // and again each time the editor's height changes as what it draws later
+  // lands, a diagram's preview or a chip, until the developer scrolls,
+  // presses, or types.
   const ready = AsyncResult.isSuccess(module);
   useLayoutEffect(() => {
-    if (kept.current || !ready) return;
-    kept.current = true;
+    if (!ready) return;
     // Note that a press on the room while the bundle loaded is where the editor opens, which keeps no words.
     const place = pending ?? editing.placement;
-    const words = place !== undefined && "words" in place ? place.words : undefined;
+    const target = place !== undefined && "words" in place ? place.words?.top : undefined;
     const column = scroller?.current;
-    const top = handle.current?.caretTop();
-    if (words === undefined || column == null || top === undefined) return;
-    column.scrollTop += top - words.top;
+    const text = room.current;
+    if (target === undefined || column == null || text === null) return;
+    const keep = () => {
+      const top = handle.current?.wordsTop();
+      if (top !== undefined) column.scrollTop += top - target;
+    };
+    keep();
+    const observer = new ResizeObserver(keep);
+    observer.observe(text);
+    const release = () => {
+      observer.disconnect();
+      for (const kind of KEEPING_ENDS) column.removeEventListener(kind, release);
+    };
+    for (const kind of KEEPING_ENDS) column.addEventListener(kind, release, { passive: true });
+    return release;
   }, [ready]);
   // Note that a finish or a leaving waits for a picture still being kept, since only the open editor can lay in its address; it goes once none is.
   const held = useRef<(() => void) | undefined>(undefined);

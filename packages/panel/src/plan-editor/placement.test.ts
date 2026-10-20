@@ -103,3 +103,36 @@ test("words a click landed on outside code are not found in a diagram's code of 
   );
   assert.equal(selection?.anchorOffset, 2);
 });
+
+test("an editor opened on words it cannot find, in their section, an empty one, or one past the text's, falls back to the click's point and keeps no words", () => {
+  const text = "## Goal\n\nShip it.\n\n## Empty\n";
+  const words = (section: number, said: string) => ({
+    x: 0,
+    y: 0,
+    words: { section, text: said, occurrence: 0, offset: 2, code: false, top: 0 },
+  });
+  // Note that the click's point stands on nothing, as jsdom lays nothing out, so it puts the caret at the text's start.
+  Object.defineProperty(document, "elementFromPoint", { configurable: true, value: () => null });
+  try {
+    for (const placement of [words(0, "Not here."), words(1, "Ship it."), words(5, "Ship it.")]) {
+      const { handle, element } = mount(text, placement);
+      const selection = window.getSelection();
+
+      assert.equal(selection?.anchorNode, element.querySelector("h2")?.firstChild);
+      assert.equal(selection?.anchorOffset, 0);
+      assert.equal(handle.wordsTop(), undefined, "no words to keep under the finger");
+    }
+  } finally {
+    Reflect.deleteProperty(document, "elementFromPoint");
+  }
+});
+
+test("an editor opened on words it found measures their line until the caret is put elsewhere", () => {
+  const text = "## Goal\n\nShip it.\n";
+  const words = { section: 0, text: "Ship it.", occurrence: 0, offset: 2, code: false, top: 0 };
+  const { handle } = mount(text, { x: 0, y: 0, words });
+
+  assert.notEqual(handle.wordsTop(), undefined, "the words found are measured");
+  handle.focusAt(PLACEMENT_END);
+  assert.equal(handle.wordsTop(), undefined);
+});

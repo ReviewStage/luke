@@ -17,6 +17,7 @@ import {
   type PlanEditorProps,
 } from "../plan-editor/contract.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
+import { relayout } from "../testing/resize-observer.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { PlanBody } from "./plan-body.js";
@@ -40,8 +41,8 @@ const mounted: {
   placed: PlanEditorPlacement[];
 }[] = [];
 
-/** Where the stand-in's caret line stands in the window, as a laid-out editor answers; none, as jsdom's layout would, unless a test lays it out. */
-let caretLine: number | undefined;
+/** Where the line of the words the stand-in opened on stands in the window, as a laid-out editor answers; none, as when the words were not found, unless a test lays it out. */
+let wordsLine: (() => number) | undefined;
 
 /** The stand-in for the editor's bundle: it records what it is handed and takes a merged answer whole. */
 const STAND_IN: PlanEditorModule = {
@@ -60,7 +61,7 @@ const STAND_IN: PlanEditorModule = {
       focusAt: (placement) => {
         placed.push(placement);
       },
-      caretTop: () => caretLine,
+      wordsTop: () => wordsLine?.(),
       insertPictures: () => undefined,
       settlePicture: () => undefined,
       removePicture: () => undefined,
@@ -107,7 +108,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  caretLine = undefined;
+  wordsLine = undefined;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
@@ -575,14 +576,43 @@ test("a click hands the editor the words it landed on, so the caret finds them h
   });
 });
 
-test("the words a click opened the editor on stay where they stood, the column scrolled by as much as the editor moved them", () => {
+test("the words a click opened the editor on stay under the finger, as it opens and as what it draws later changes its height, until the developer scrolls", () => {
   const { container } = mount();
   const goal = block(container, "Goal");
   const scroller = scrollerOf(container);
   scroller.scrollTop = 500;
   pointLandsOn(wordsNode(goal, "Invites land by email."), 3, 300);
-  // The editor draws a picture above the words taller than the text drew it, so they stand 59 lower.
-  caretLine = 359;
+  // The words stand this far down the column in the editor: 59 lower than the text drew them, for a taller picture above.
+  let wordsDown = 859;
+  wordsLine = () => wordsDown - scroller.scrollTop;
+  try {
+    act(() => {
+      goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
+    });
+  } finally {
+    Reflect.deleteProperty(document, "caretRangeFromPoint");
+  }
+  assert.equal(wordsLine(), 300, "the words stand where they were clicked as the editor opens");
+
+  // A diagram's preview above them lands later, 200 tall.
+  wordsDown += 200;
+  act(() => relayout());
+  assert.equal(wordsLine(), 300, "and again once the preview has drawn");
+
+  act(() => {
+    scroller.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+  });
+  wordsDown += 100;
+  act(() => relayout());
+  assert.equal(wordsLine(), 400, "a scroll of the developer's lets the words go");
+});
+
+test("a click whose words the editor did not find scrolls nothing", () => {
+  const { container } = mount();
+  const goal = block(container, "Goal");
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  pointLandsOn(wordsNode(goal, "Invites land by email."), 3, 300);
   try {
     act(() => {
       goal.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: 60, clientY: 310 }));
@@ -591,7 +621,8 @@ test("the words a click opened the editor on stay where they stood, the column s
     Reflect.deleteProperty(document, "caretRangeFromPoint");
   }
 
-  assert.equal(scroller.scrollTop, 559);
+  assert.ok(open().placement !== undefined, "the editor opened");
+  assert.equal(scroller.scrollTop, 500);
 });
 
 test("a press on the room after a click while the editor's bundle loads opens the editor where the room says, scrolling nothing for the click's words", async () => {
@@ -614,7 +645,7 @@ test("a press on the room after a click while the editor's bundle loads opens th
       Reflect.deleteProperty(document, "caretRangeFromPoint");
     }
     pressAt(scroller, 300, 500);
-    caretLine = 700;
+    wordsLine = () => 700;
     await act(async () => {
       gate.resolve(STAND_IN);
       await gate.promise;

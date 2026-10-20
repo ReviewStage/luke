@@ -255,14 +255,22 @@ function wordsAt(editor: Editor, words: PlacedWords): number | undefined {
   return found;
 }
 
-/** Where the caret goes as the editor opens. */
+/** Where the caret goes as the editor opens on the words a click landed on, where it finds them; none where it does not. */
+function placedOnWords(
+  editor: Editor,
+  placement: PlanEditorPlacement | undefined,
+): Selection | undefined {
+  const words = placement !== undefined && "words" in placement ? placement.words : undefined;
+  const at = words === undefined ? undefined : wordsAt(editor, words);
+  return at === undefined ? undefined : TextSelection.near(editor.state.doc.resolve(at));
+}
+
+/** Where the caret goes as the editor opens, the words a click landed on aside. */
 function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Selection {
   const { doc } = editor.state;
   if (placement === undefined) return Selection.atStart(doc);
   if ("end" in placement) return Selection.atEnd(doc);
   if ("x" in placement) {
-    const at = placement.words === undefined ? undefined : wordsAt(editor, placement.words);
-    if (at !== undefined) return TextSelection.near(doc.resolve(at));
     const point = editor.view.posAtCoords({ left: placement.x, top: placement.y });
     return point === null ? Selection.atStart(doc) : TextSelection.near(doc.resolve(point.pos));
   }
@@ -372,7 +380,10 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   laying = false;
   if (picking !== undefined) editor.registerPlugin(picking.plugin);
   held = sourcesOf(editor.state.doc, opened);
-  editor.view.dispatch(editor.state.tr.setSelection(placed(editor, placement)));
+  // Whether the caret stands on the words a click opened the editor on, until it is put elsewhere.
+  const onWords = placedOnWords(editor, placement);
+  let keepsWords = onWords !== undefined;
+  editor.view.dispatch(editor.state.tr.setSelection(onWords ?? placed(editor, placement)));
   if (focus) editor.view.focus();
   return {
     take: (sent, merged) => {
@@ -383,10 +394,13 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
     chooseMention: (mention) => picking?.choose(editor, mention),
     markdown: () => documentMarkdown(manager, editor.state.doc, held),
     focusAt: (placement) => {
-      editor.view.dispatch(editor.state.tr.setSelection(placed(editor, placement)));
+      keepsWords = false;
+      const selection = placedOnWords(editor, placement) ?? placed(editor, placement);
+      editor.view.dispatch(editor.state.tr.setSelection(selection));
       editor.view.focus();
     },
-    caretTop: () => {
+    wordsTop: () => {
+      if (!keepsWords) return undefined;
       try {
         return editor.view.coordsAtPos(editor.state.selection.head).top;
       } catch {
