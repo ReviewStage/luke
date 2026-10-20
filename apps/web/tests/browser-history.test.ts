@@ -5,7 +5,7 @@ import type { ReadLink } from "@luke/features/luke-link";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import { Effect } from "effect";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { browserHistory, savedEntry } from "../src/app/browser-history";
 import { withLoadLink } from "../src/app/load-link";
 import {
@@ -27,7 +27,10 @@ import {
  * tab, and jsdom keeps the history and fires `popstate` as a browser does.
  */
 
-afterEach(unmountPanels);
+afterEach(() => {
+  unmountPanels();
+  vi.restoreAllMocks();
+});
 
 /** The links the tab's address is said as, to one subscriber of the bridge. */
 function linksSaid(): ReadLink[] {
@@ -124,6 +127,67 @@ test("a move made while another of the panel's still travels waits for it, so th
   await travel(() => window.history.back());
   assert.equal(addressBar(), "/acme/inbox");
   assert.equal(history.current().at, 0, "the browser's own Back is heard again");
+});
+
+test("the browser landing elsewhere than a move of the panel's went, as when the person presses Back as it travels, ends the move on where it landed, and the history is followed and written again", async () => {
+  openAt("/app");
+  const history = browserHistory<string>();
+  history.push({ address: "/acme/inbox", state: "inbox" });
+  history.push({ address: "/acme/settings", state: "settings" });
+  history.push({ address: "/acme/chat", state: "chat" });
+  const browserGo = window.history.go.bind(window.history);
+  // The person's own Back lands with the panel's, so the browser goes one further than asked.
+  vi.spyOn(window.history, "go").mockImplementationOnce((delta = 0) => browserGo(delta - 1));
+
+  await travel(() => history.go(-1));
+
+  assert.equal(addressBar(), "/acme/inbox");
+  assert.equal(history.current().entries[history.current().at]?.state, "inbox");
+  history.push({ address: "/acme/automations", state: "automations" });
+  assert.equal(addressBar(), "/acme/automations", "a write is not left waiting");
+  await travel(() => window.history.back());
+  assert.equal(
+    history.current().entries[history.current().at]?.state,
+    "inbox",
+    "the browser's Back is followed",
+  );
+});
+
+test("a write the browser refuses, as Safari does past a hundred in ten seconds, throws nothing, and the history goes on being written and followed", async () => {
+  openAt("/app");
+  const history = browserHistory<string>();
+  history.push({ address: "/acme/inbox", state: "inbox" });
+  vi.spyOn(window.history, "pushState").mockImplementationOnce(() => {
+    throw new DOMException(
+      "Attempt to use history.pushState() more than 100 times per 10 seconds",
+      "SecurityError",
+    );
+  });
+
+  assert.doesNotThrow(() => history.push({ address: "/acme/settings", state: "settings" }));
+  history.push({ address: "/acme/chat", state: "chat" });
+  assert.equal(addressBar(), "/acme/chat");
+
+  await travel(() => history.go(-1));
+  assert.equal(addressBar(), "/acme/inbox", "the browser never held the refused entry");
+  assert.equal(history.current().entries[history.current().at]?.state, "inbox");
+  history.push({ address: "/acme/automations", state: "automations" });
+  assert.equal(addressBar(), "/acme/automations", "a write is not left waiting");
+});
+
+test("a disposed history no longer follows the browser", async () => {
+  openAt("/app");
+  const history = browserHistory<string>();
+  history.push({ address: "/acme/inbox", state: "inbox" });
+  history.push({ address: "/acme/settings", state: "settings" });
+  const heard: number[] = [];
+  history.subscribe(() => heard.push(history.current().at));
+
+  history.dispose();
+  await travel(() => window.history.back());
+
+  assert.deepEqual(heard, []);
+  assert.equal(history.current().at, 1);
 });
 
 test("a tab reloaded on an entry the history saved starts on it, and learns the entry behind it as the browser lands there", async () => {

@@ -22,9 +22,12 @@ export interface ShellBundles {
 
 let installed: ShellBundles | undefined;
 
-/** Installs how this window's shell reaches its bundles; its root does this once, before anything is drawn. */
-export function installShellBundles(bundles: ShellBundles): void {
+/** Installs how this window's shell reaches its bundles; its root does this once, before anything is drawn, and calls what it answers as it closes. */
+export function installShellBundles(bundles: ShellBundles): () => void {
   installed = bundles;
+  return () => {
+    if (installed === bundles) installed = undefined;
+  };
 }
 
 /** How this window's root said its shell's bundles are reached. */

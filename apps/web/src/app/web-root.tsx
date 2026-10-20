@@ -22,11 +22,12 @@ import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { installShellBundles } from "@luke/panel/shell-bundles";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
+import type { HistoryAdapter } from "@luke/ui/history-adapter";
 import { Effect, type Layer, ManagedRuntime } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import { createRoot } from "react-dom/client";
-import { browserHistory } from "./browser-history";
+import { type BrowserHistory, browserHistory } from "./browser-history";
 import { withLoadLink } from "./load-link";
 import { browserLinkPlatform, handOffToMacApp } from "./mac-app-handoff";
 import { WebAppearance } from "./web-appearance";
@@ -51,6 +52,18 @@ export interface WebApp {
   readonly close: () => Promise<void>;
 }
 
+/** Installs the tab's own history as the panel's, answering how to take it down and stop it following the browser. */
+function installTabHistory<State>(
+  install: (history: HistoryAdapter<State>) => () => void,
+  history: BrowserHistory<State>,
+): () => void {
+  const uninstall = install(history);
+  return () => {
+    uninstall();
+    history.dispose();
+  };
+}
+
 /**
  * Composes the host in the tab, installs its doors, and draws the panel into
  * the element given once its document has been read. A tab whose host cannot
@@ -70,20 +83,26 @@ export async function mountWebApp(
   let runtime: ManagedRuntime.ManagedRuntime<WebHostTag | HostTag, DuplicateGatewayMethod>;
   const run = <A,>(effect: Effect.Effect<A>): Promise<A> => runtime.runPromise(effect);
   runtime = ManagedRuntime.make(composeWeb({ httpClient, run }));
+  // What the tab installed, taken down again in the reverse order as it closes.
+  const installed: (() => void)[] = [];
+  const uninstall = () => {
+    for (const undo of installed.splice(0).reverse()) undo();
+  };
   try {
     const web = await runtime.runPromise(WebHostTag);
     // The address the tab was opened at is said once, as the link it is.
-    installAppBridge(withLoadLink(web.bridge));
-    installActPort(web.actPort, web.actPortClient);
-    installAppPlatform(web.platform);
-    installShellBundles(WEB_BUNDLES);
+    installed.push(installAppBridge(withLoadLink(web.bridge)));
+    installed.push(installActPort(web.actPort, web.actPortClient));
+    installed.push(installAppPlatform(web.platform));
+    installed.push(installShellBundles(WEB_BUNDLES));
     // The panel's back and forward are the browser's own, each step in the tab's address.
-    installWindowHistory(browserHistory());
+    installed.push(installTabHistory(installWindowHistory, browserHistory()));
     await Effect.runPromise(appStateFirstRead);
   } catch (error) {
     console.error("The tab's host could not stand or its state be read; nothing is drawn.", error);
     // A blank tab is a failure, so it is sent as an event, not only kept as the console's breadcrumb.
     (await sentry)?.reportBlankTab(error instanceof Error ? error : new Error(String(error)));
+    uninstall();
     await runtime.dispose();
     return undefined;
   }
@@ -111,6 +130,7 @@ export async function mountWebApp(
   return {
     close: async () => {
       root.unmount();
+      uninstall();
       await runtime.dispose();
     },
   };

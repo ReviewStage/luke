@@ -28,6 +28,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { useAct } from "../act.js";
 import { runAppCommand } from "../app-commands.js";
 import { type CallCardInput, callControls } from "../call/call-card.js";
+import { MOUSE_BUTTON } from "../navigation-history.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
 import type { WorkspaceSettingsControl } from "../settings/workspace-page.js";
 import { SHELL_ROOM } from "../shell-room.js";
@@ -720,6 +721,41 @@ test("the plan template's version history keeps a call's card at the foot of its
   assert.ok(back);
   act(() => back.click());
   assert.deepEqual(sent, [ACT_KIND.CALL_SHOW_TASK]);
+});
+
+test("the mouse's Back button from the plan template's version history goes back to the template page and cancels the browser's own, so a browser tab takes no second step", async () => {
+  fakeAppBridge({
+    ...fakeAppBridgeCalls(),
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.PLAN_TEMPLATE_READ]: () =>
+      Promise.resolve({ template: "# Context\n", custom: false }),
+  });
+  const page = mount(createElement(SettingsHarness, { opensOn: SETTINGS_VIEW.PLAN_TEMPLATE }));
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+  const history = page.querySelector<HTMLButtonElement>('button[aria-label="Version history"]');
+  assert.ok(history, "the template page offers its version history");
+  act(() => history.click());
+  assert.ok(page.querySelector('nav[aria-label="Versions"]'), "the version history stands");
+
+  const release = new MouseEvent("mouseup", {
+    button: MOUSE_BUTTON.BACK,
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    document.body.dispatchEvent(release);
+  });
+
+  assert.equal(release.defaultPrevented, true);
+  assert.equal(
+    page.querySelector('nav[aria-label="Versions"]'),
+    null,
+    "Back left the version history",
+  );
 });
 
 test("while the plan template is read its page stands its name over placeholder blocks, and the template lands in their place", async () => {

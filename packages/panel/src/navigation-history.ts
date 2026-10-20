@@ -412,9 +412,12 @@ export function throughHistory(tasks: TasksControl, lists: ListBacks): TasksCont
   };
 }
 
-/** Installs the history this window keeps; its root does this once, before anything is drawn. */
-export function installWindowHistory(history: HistoryAdapter<Place>): void {
+/** Installs the history this window keeps; its root does this once, before anything is drawn, and calls what it answers as it closes. */
+export function installWindowHistory(history: HistoryAdapter<Place>): () => void {
   installed = history;
+  return () => {
+    if (installed === history) installed = undefined;
+  };
 }
 
 /** The history this window's root installed. */
@@ -894,15 +897,20 @@ export function useWindowHistory(input: {
 
 /**
  * The mouse's own back and forward buttons, the fourth and fifth, answered
- * while `enabled` as a browser answers them.
+ * while `enabled` as a browser answers them. Note that each press it answers
+ * is cancelled, because Chromium takes a Back or Forward of its own on that
+ * same release unless the page cancels it, and in a browser tab that would be
+ * a second step after the window's.
  */
 export function useHistoryMouseButtons(history: NavigationHistory, enabled: boolean): void {
   const { onBack, onForward } = history;
   useEffect(() => {
     if (!enabled) return;
     const handleUp = (event: MouseEvent) => {
+      if (event.button !== MOUSE_BUTTON.BACK && event.button !== MOUSE_BUTTON.FORWARD) return;
+      event.preventDefault();
       if (event.button === MOUSE_BUTTON.BACK) onBack();
-      if (event.button === MOUSE_BUTTON.FORWARD) onForward();
+      else onForward();
     };
     window.addEventListener("mouseup", handleUp);
     return () => window.removeEventListener("mouseup", handleUp);
