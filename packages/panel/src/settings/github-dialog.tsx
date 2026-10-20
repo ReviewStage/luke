@@ -19,6 +19,9 @@ import {
   DIALOG_SIZE,
   Dialog,
   ErrorState,
+  SCROLL_FADE,
+  SCROLL_SIZE,
+  ScrollArea,
   TEXT_ELEMENT,
   TEXT_FIELD_AUTO_COMPLETE,
   TEXT_FIELD_TYPE,
@@ -331,38 +334,40 @@ export function GitHubDialog({
         </Button>
       }
     >
-      <div className="github-dialog">
-        <section className="github-dialog-section">
-          <div className="github-dialog-head">
-            <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL}>
-              Luke GitHub App
-            </Text>
-            <Badge>Recommended</Badge>
-          </div>
-          <AppPanel connected={connected} onRefresh={onRefresh} />
-        </section>
-        <section className="github-dialog-section">
-          <div className="github-dialog-head">
-            <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL}>
-              Personal access token
-            </Text>
-            <span className="github-dialog-head-end">
-              <TextLink
-                look={TEXT_LINK_LOOK.UNDERLINED}
-                href={GITHUB_TOKEN_CREATE_URL}
-                external
-                onClick={(event) => {
-                  event.preventDefault();
-                  openLink(GITHUB_TOKEN_CREATE_URL);
-                }}
-              >
-                Create token
-              </TextLink>
-            </span>
-          </div>
-          <div className={NO_CAPTURE}>{tokenPanel}</div>
-        </section>
-      </div>
+      <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
+        <div className="github-dialog">
+          <section className="github-dialog-section">
+            <div className="github-dialog-head">
+              <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL}>
+                Luke GitHub App
+              </Text>
+              <Badge>Recommended</Badge>
+            </div>
+            <AppPanel connected={connected} onRefresh={onRefresh} />
+          </section>
+          <section className="github-dialog-section">
+            <div className="github-dialog-head">
+              <Text as={TEXT_ELEMENT.H3} variant={TEXT_VARIANT.LABEL}>
+                Personal access token
+              </Text>
+              <span className="github-dialog-head-end">
+                <TextLink
+                  look={TEXT_LINK_LOOK.UNDERLINED}
+                  href={GITHUB_TOKEN_CREATE_URL}
+                  external
+                  onClick={(event) => {
+                    event.preventDefault();
+                    openLink(GITHUB_TOKEN_CREATE_URL);
+                  }}
+                >
+                  Create token
+                </TextLink>
+              </span>
+            </div>
+            <div className={NO_CAPTURE}>{tokenPanel}</div>
+          </section>
+        </div>
+      </ScrollArea>
     </Dialog>
   );
 }
