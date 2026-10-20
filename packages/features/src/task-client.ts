@@ -34,7 +34,7 @@ import {
   hostedClient,
 } from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
-import type { TaskBoardLiveAnswer } from "./live-wire.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY, type TaskBoardLiveAnswer } from "./live-wire.js";
 import type { PageLine, PageVersion } from "./page-wire.js";
 import { pictureTypeSchema } from "./picture-wire.js";
 import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
@@ -172,8 +172,14 @@ const NOT_FOUND_REFUSAL = {
   [HOSTED_API_ERROR.NOT_FOUND]: TASK_CALL_FAILURE.NOT_FOUND,
 } as const;
 
+/** The refusals a live read names: the task gone, or a session that is no longer the account's the read names (`live-wire.ts`). */
+const LIVE_REFUSALS = {
+  ...NOT_FOUND_REFUSAL,
+  [HOSTED_API_ERROR.INVALID_TOKEN]: LIVE_SIGNED_OUT.failure,
+} as const;
+
 /** A procedure's answer as a result: its refusal where it is one the caller names, unanswered for everything else. */
-function hostedResult<Answer, Failure extends TaskCallFailure>(
+function hostedResult<Answer, Failure extends string>(
   asked: Effect.Effect<Answer, HostedFailure, HttpClient.HttpClient>,
   named: Readonly<Partial<Record<HostedApiError, Failure>>>,
 ): Effect.Effect<
@@ -410,22 +416,24 @@ export class HostedTaskClient {
   /**
    * Where one task's whiteboard stands, sealed for following over Neon
    * Realtime, or with `poll` its rows inline at the poll address, for a
-   * reader polling while Realtime fails it: not found where the account
-   * reaches no such task, unanswered for anything else, which the caller
-   * answers by sealing it again.
+   * reader polling while Realtime fails it, for the account `userId`
+   * names: not found where the account reaches no such task, signed out
+   * where the session is no longer that account's, unanswered for anything
+   * else, which the caller answers by sealing it again.
    */
   boardLive(
     taskId: string,
+    userId: string,
     poll = false,
     after?: string,
   ): Effect.Effect<
-    TaskCallResult<TaskBoardLiveAnswer, TaskCallFailure>,
+    TaskCallResult<TaskBoardLiveAnswer, TaskCallFailure | typeof LIVE_SIGNED_OUT.failure>,
     never,
     HttpClient.HttpClient
   > {
     return hostedResult(
-      askLive(this.#hosted.live.taskBoard, { id: taskId }, poll, after),
-      NOT_FOUND_REFUSAL,
+      askLive(this.#hosted.live.taskBoard, { id: taskId, [LIVE_USER_QUERY]: userId }, poll, after),
+      LIVE_REFUSALS,
     );
   }
 

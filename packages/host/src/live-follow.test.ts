@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
+import { LIVE_POLL_URL, LIVE_SIGNED_OUT, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { Clock, Duration, Effect, Exit, Fiber, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import {
@@ -324,5 +324,20 @@ it.effect("a poll that fails is asked again a second later, then longer, up to f
     assert.deepEqual(gaps.slice(0, 4), [1_000, 2_000, 4_000, 5_000]);
     assert.ok(gaps.every((gap) => gap <= 5_000));
     yield* Fiber.interrupt(following);
+  }),
+);
+
+it.effect("a read whose session the service refuses as signed out ends, and is asked no more", () =>
+  Effect.gen(function* () {
+    const exit = yield* liveRows<Part>(
+      {
+        openLive: () => fakeRealtime().client,
+        reseal: () => Effect.succeed(LIVE_SIGNED_OUT),
+        poll: () => Effect.succeed(LIVE_SIGNED_OUT),
+        now: () => 0,
+      },
+      { ...read(0, 0), url: LIVE_POLL_URL },
+    ).pipe(Stream.runDrain, Effect.exit);
+    assert.ok(Exit.isFailure(exit));
   }),
 );

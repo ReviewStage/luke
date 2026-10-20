@@ -8,7 +8,9 @@
  * workers' under `&call=`, as the statements its pages are read from. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
- * poll is held until the rows move past it, or answered unchanged. Each output is the wire schema flipped
+ * poll is held until the rows move past it, or answered unchanged. Each
+ * names the account it was started for under `?userId=`, and a session of
+ * any other is answered as signed out. Each output is the wire schema flipped
  * (`packages/service/src/orpc/base.ts`).
  */
 
@@ -19,6 +21,7 @@ import {
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
+  LIVE_USER_QUERY,
   taskBoardLiveAnswerSchema,
 } from "../live-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
@@ -30,10 +33,14 @@ const pollField = EffectSchema.optionalKey(EffectSchema.Literal(LIVE_POLL.ON));
 /** Where the rows stood when the reader last polled (`liveDigestOf`); the poll is held until they move past it. */
 const afterField = EffectSchema.optionalKey(EffectSchema.String);
 
+/** The account the reader started following for, which the session must be (`LIVE_USER_QUERY`). */
+const userField = EffectSchema.optionalKey(EffectSchema.String);
+
 /** A live read's own query: whether it polls. */
 const liveReadSchema = EffectSchema.Struct({
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
 });
 
 /** The task a live read is followed for; one that is no UUID is answered as not found, so it is read as text here. */
@@ -41,6 +48,7 @@ const liveTaskSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
 });
 
 /** The agent a transcript is followed for, and the delegation call of the worker where it is a worker's; each read as text, an id or call of no shape answered as not found. */
@@ -49,6 +57,7 @@ const liveTranscriptSchema = EffectSchema.Struct({
   call: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
 });
 
 export const liveContract = {
