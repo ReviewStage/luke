@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
+import { boardLiveStatement } from "@luke/database/models/board-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
 import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
@@ -29,6 +31,7 @@ function liveStatements() {
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
     ),
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
+    "task.board": Option.getOrThrow(boardLiveStatement(USER_ID, randomUUID())),
   };
 }
 

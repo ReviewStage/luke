@@ -10,7 +10,6 @@ import {
   type WorkspaceCallResult,
 } from "@luke/features";
 import { AGENT_TOOL } from "@luke/features/agent-tools";
-import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@luke/features/board-vocabulary";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentCallFailure,
@@ -141,11 +140,14 @@ import {
   Schema,
   type Scope,
   Semaphore,
+  Stream,
 } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
+import { boardMoves } from "./board-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
+import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
 
@@ -158,10 +160,10 @@ import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
  * drafts arrive on that call's own socket and are drawn in place: the list
  * and the open task are read when the Tasks tab shows, when a task opens, and
  * when one starts, and never on a clock. The open task's whiteboard is read
- * with its document, and again whenever the call's activity says a draw by
- * the brain just settled or the brain stopped working, since
- * a draw happens only inside its turn; the panel saves the board's scene
- * through here and the view takes the board as the service answered it. What
+ * with its document, and again whenever its mark moves on the Neon Realtime
+ * subscription the host holds while the task stands open
+ * (`board-follow.ts`); the panel saves the board's scene through here and
+ * the view takes the board as the service answered it. What
  * was said on the open task's calls is read with its document, and again
  * whenever a call about it ends, once at the end and once more when the
  * call's last words have had time to reach the record; while a call stands,
@@ -388,6 +390,7 @@ export type TasksClient = Pick<
   | "taskSections"
   | "writeTaskSection"
   | "readBoard"
+  | "boardLive"
   | "saveBoard"
   | "readTranscript"
   | "readWork"
@@ -450,10 +453,12 @@ export type TasksClient = Pick<
 export type TasksConversationClient = Pick<HostedCodingAgentClient, "taskMessages">;
 
 export interface TasksDependencies {
-  kernel: Pick<HostKernel, "emit" | "report"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "report" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: TasksClient;
   conversations: TasksConversationClient;
+  /** Realtime's client at an address, which the open task's board is followed over; Realtime's own outside a test. */
+  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
   /**
    * Ends the call standing about `taskId`, or whatever it is about
    * where none is named, and waits for it to end. A call about another task
@@ -501,6 +506,22 @@ export interface TasksComposer extends Composer {
 }
 
 /**
+ * How long the board's follow waits before sealing again after a seal the
+ * service did not answer, or a follow that stopped: the first wait, doubling
+ * on each that fails again, up to the longest.
+ */
+const BOARD_RESEAL = { FIRST: Duration.seconds(2), LONGEST: Duration.minutes(1) } as const;
+
+const BOARD_BACKOFF = Schedule.exponential(BOARD_RESEAL.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, BOARD_RESEAL.LONGEST)),
+  ),
+);
+
+/** Why a board follow is not sealed again: the task is no longer the open one, or the gate closed. */
+const BOARD_FOLLOW_ENDED = "ended";
+
+/**
  * The panel's tasks as one concern. The view is told to every client whole
  * whenever it moves, and exactly one task is active at a time: opening or
  * starting one replaces whichever was, and a read still out for the replaced
@@ -526,6 +547,12 @@ export interface TasksComposer extends Composer {
  * another task replaces it, and leaving the task or a sign-out stops it. A
  * read the service did not answer is asked again after a backoff; a task the
  * service no longer holds parks it.
+ *
+ * The open task's board is followed the same way, over Neon Realtime
+ * (`board-follow.ts`): the host subscribes while the task stands open and
+ * reads the board again once its mark moves, and on each seal's first
+ * delivery. Opening another task replaces the follow, and leaving the task
+ * or a sign-out stops it.
  */
 export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(function* (
   dependencies: TasksDependencies,
@@ -602,7 +629,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return rest;
   }
 
-  /** The tasks whose board a settled draw may have moved, read one at a time by the loop below. */
+  /** The one live follow of the open task's board; running another interrupts it. */
+  const boardFollow = yield* FiberHandle.make<void>();
+
+  /** The tasks whose board's mark moved, read one at a time by the loop below. */
   const boardReads = yield* Queue.sliding<string>(1);
 
   /** The tasks whose pages a settled `show_page` may have moved, read one at a time by the loop below. */
@@ -1073,6 +1103,72 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     return Effect.asVoid(FiberHandle.run(conversationRead, followConversation(taskId, true)));
   }
 
+  /**
+   * Follows `taskId`'s board live while it is the open task: the board read
+   * again once its mark moves, and on each seal's first delivery. A seal
+   * the service did not answer, or a follow that stops before it delivered,
+   * is sealed again on `BOARD_BACKOFF`; a follow that delivered and then
+   * stopped is sealed again after `BOARD_RESEAL.FIRST`, its backoff started
+   * over. A task the service no longer holds, or a gate that closed, ends it.
+   */
+  function followBoard(taskId: string) {
+    const following = () => gate() && view.activeTaskId === taskId;
+    const seal = () =>
+      Effect.map(served(client.boardLive(taskId)), (sealed) =>
+        sealed.ok ? sealed.answer : { failure: sealed.failure },
+      );
+    /** One seal followed until it stops: whether it delivered, or why it never did. */
+    const attempt = Effect.gen(function* () {
+      if (!following()) return yield* Effect.fail(BOARD_FOLLOW_ENDED);
+      const sealed = yield* seal();
+      if ("failure" in sealed) return yield* Effect.fail(sealed.failure);
+      let delivered = false;
+      const moves = boardMoves(
+        {
+          // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing it.
+          seal: () =>
+            following()
+              ? Effect.map(seal(), (renewed) =>
+                  "failure" in renewed && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
+                    ? { ...renewed, gone: true }
+                    : renewed,
+                )
+              : Effect.succeed({ failure: BOARD_FOLLOW_ENDED, gone: true }),
+          openLive: dependencies.openLive ?? openRealtimeClient,
+          now: kernel.now,
+        },
+        sealed,
+      );
+      yield* Stream.runForEach(moves, () =>
+        Effect.sync(() => {
+          delivered = true;
+          if (view.activeTaskId === taskId) Queue.offerUnsafe(boardReads, taskId);
+        }),
+      ).pipe(Effect.ignore);
+      if (!delivered) return yield* Effect.fail(TASK_CALL_FAILURE.UNANSWERED);
+      return true;
+    });
+    const followed = attempt.pipe(
+      Effect.retry({
+        schedule: BOARD_BACKOFF,
+        while: (why) =>
+          why !== TASK_CALL_FAILURE.NOT_FOUND && why !== BOARD_FOLLOW_ENDED && following(),
+      }),
+      Effect.option,
+    );
+    return Effect.asVoid(
+      Effect.repeat(followed, {
+        schedule: Schedule.spaced(BOARD_RESEAL.FIRST),
+        while: (delivered) => Option.isSome(delivered) && following(),
+      }),
+    );
+  }
+
+  /** Follows `taskId`'s board live, in place of any follow standing; with `standing`, only where none stands. */
+  function openBoard(taskId: string, standing?: { readonly onlyIfMissing: true }) {
+    return Effect.asVoid(FiberHandle.run(boardFollow, followBoard(taskId), standing));
+  }
+
   /** Wakes the open task's parked conversation read, where `taskId` is the open task. */
   function wakeConversation(taskId: string): void {
     if (view.activeTaskId !== taskId) return;
@@ -1108,12 +1204,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   }
 
   /**
-   * Shows the call's activity, and asks for the board again where it says a
-   * draw just settled: the brain's pending call was a draw and is
-   * not any more, or the brain stopped working, which also covers a
-   * draw that settled between two words about it. A look that just became
-   * the pending call asks too, because a draw made in the same step never
-   * shows as pending, and the look waits on the board holding it.
+   * Shows the call's activity, and asks for the pages again where it says a
+   * page the brain showed just settled or the brain stopped working; the
+   * board is read as its mark moves (`followBoard`).
    */
   function showActivity({ type: _type, planId: taskId, ...activity }: TaskActivityFrame): void {
     // The call's own copy is kept whatever task is open, for the floating
@@ -1124,14 +1217,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     }
     wakeConversation(taskId);
     const was = view.activity?.planner;
-    const drew = was?.action === DRAW_ON_BOARD_TOOL_NAME && activity.planner?.action !== was.action;
     const stopped = was !== undefined && activity.planner === undefined;
-    const looking =
-      activity.planner?.action === LOOK_AT_BOARD_TOOL_NAME &&
-      was?.action !== LOOK_AT_BOARD_TOOL_NAME;
     write({ activity, callActivity: activity });
-    if (drew || stopped || looking) Queue.offerUnsafe(boardReads, taskId);
-    // A page shown settles the same way a drawing does, and is read as the board is.
+    // A page shown settles once the brain's pending call is not the show any more.
     const paged = was?.action === SHOW_PAGE_TOOL_NAME && activity.planner?.action !== was.action;
     if (paged || stopped) Queue.offerUnsafe(pageReads, taskId);
   }
@@ -1301,6 +1389,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         if (!gate()) return {};
         const open = view.activeTaskId;
         if (open !== undefined) yield* openConversation(open);
+        if (open !== undefined) yield* openBoard(open, { onlyIfMissing: true });
         const tasks = serial(
           Effect.gen(function* () {
             yield* readList;
@@ -1342,6 +1431,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           publish();
         }
         yield* openConversation(taskId);
+        yield* openBoard(taskId);
         yield* serial(
           Effect.gen(function* () {
             yield* readDocument(taskId);
@@ -1688,6 +1778,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     [GATEWAY_METHOD.TASKS_CLOSE]: () =>
       Effect.gen(function* () {
         yield* FiberHandle.clear(conversationRead);
+        yield* FiberHandle.clear(boardFollow);
         yield* serial(
           Effect.sync(() => {
             const { activeTaskId: _closed, ...rest } = withoutActivity(view);
@@ -1720,6 +1811,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             };
             publish();
             yield* openConversation(task.id);
+            yield* openBoard(task.id);
             yield* readList;
             return carried<TasksStartAnswer>({
               planId: task.id,
@@ -1744,6 +1836,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             const tasks = view.tasks.filter((task) => task.id !== taskId);
             if (view.activeTaskId === taskId) {
               yield* FiberHandle.clear(conversationRead);
+              yield* FiberHandle.clear(boardFollow);
               const { activeTaskId: _deleted, ...rest } = withoutActivity(view);
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
             }
@@ -2192,6 +2285,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             Effect.gen(function* () {
               if (view.activeTaskId !== openTaskId) return;
               yield* FiberHandle.clear(conversationRead);
+              yield* FiberHandle.clear(boardFollow);
               const { activeTaskId: _left, ...rest } = withoutActivity(view);
               view = { ...rest, document: { status: TASKS_READ.IDLE } };
               publish();
@@ -2284,6 +2378,7 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       yield* Cache.invalidateAll(pullRequestReads);
       yield* Cache.invalidateAll(issueReads);
       yield* FiberHandle.clear(conversationRead);
+      yield* FiberHandle.clear(boardFollow);
       yield* serial(
         Effect.sync(() => {
           workspacesAskedAt = undefined;
@@ -2293,8 +2388,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         }),
       );
     }),
-    // The code a call shows, coloured in turn, the board and page reads a
-    // settled draw or page asks for, the document
+    // The code a call shows, coloured in turn, the board reads its followed
+    // mark asks for, the page reads a settled page asks for, the document
     // reads one of Luke's plan edits asks for, now and once a save cut off
     // with its turn has had time to land, the
     // transcript and work reads a call's end asks for, the list read a

@@ -209,3 +209,24 @@ it.effect(
       client.close();
     }),
 );
+
+it.effect("fails, rather than asking again, where a renewal finds the read gone", () =>
+  Effect.gen(function* () {
+    const realtime = fakeRealtime();
+    const clock = yield* Clock.Clock;
+    const start = clock.currentTimeMillisUnsafe();
+    const following = yield* Effect.forkChild(
+      liveRows<Part>(
+        {
+          openLive: () => realtime.client,
+          reseal: () => Effect.succeed({ failure: "not-found", gone: true }),
+          now: () => clock.currentTimeMillisUnsafe(),
+        },
+        read(0, start + 60_000),
+      ).pipe(Stream.runDrain),
+    );
+    yield* TestClock.adjust(Duration.seconds(55));
+    const exit = yield* Fiber.await(following);
+    assert.deepEqual(exit, Exit.fail(new LiveBroken({ reason: "the read is gone" })));
+  }),
+);

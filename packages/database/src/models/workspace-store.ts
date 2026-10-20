@@ -561,14 +561,18 @@ export function agentReachableBy(userId: string): SQL {
   return sql`(${memberOfWorkspace(userId, AGENT_WORKSPACE)} and ${agentSeenBy(userId)})`;
 }
 
-/** The condition that the account may read and write the task row a statement reads: it is a member of the task's workspace, and sees it as its GitHub access allows. */
-export function taskReachableBy(userId: string): SQL {
-  const seen = seenThroughGitHub(userId, {
+/** The condition that the account sees the task row as its GitHub access allows (`seenThroughGitHub`), for a statement that gates its workspace already. */
+export function taskSeenBy(userId: string): SQL {
+  return seenThroughGitHub(userId, {
     access: task.githubAccess,
     owner: task.userId,
     repository: task.repository,
   });
-  return sql`(${memberOfWorkspace(userId, task.organizationId)} and ${seen})`;
+}
+
+/** The condition that the account may read and write the task row a statement reads: it is a member of the task's workspace, and sees it as its GitHub access allows. */
+export function taskReachableBy(userId: string): SQL {
+  return sql`(${memberOfWorkspace(userId, task.organizationId)} and ${taskSeenBy(userId)})`;
 }
 
 /** The task under this id, where the account is a member of its workspace; any other id reads as no task. */

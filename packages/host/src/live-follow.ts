@@ -57,8 +57,14 @@ export interface SealedRead<Part extends string> {
 export interface LiveFollowDependencies<Part extends string> {
   /** Realtime's client at the address the service named, loaded where it must be. */
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
-  /** The read sealed again, for renewing; a failure where the service answered none. */
-  readonly reseal: () => Effect.Effect<SealedRead<Part> | { readonly failure: string }>;
+  /**
+   * The read sealed again, for renewing; a failure where the service
+   * answered none, asked again a second later, or `gone` where the read
+   * names nothing the account reaches any more, which stops the follow.
+   */
+  readonly reseal: () => Effect.Effect<
+    SealedRead<Part> | { readonly failure: string; readonly gone?: boolean }
+  >;
   /** Now, by the host's own clock, which renewals are timed by. */
   readonly now: () => number;
 }
@@ -122,6 +128,9 @@ export function liveRows<Part extends string>(
         yield* Effect.sleep(Duration.millis(Math.max(0, wait)));
         let next = yield* dependencies.reseal();
         while ("failure" in next) {
+          if (next.gone === true) {
+            return yield* Effect.fail(new LiveBroken({ reason: "the read is gone" }));
+          }
           yield* Effect.sleep(RENEW_RETRY);
           next = yield* dependencies.reseal();
         }
