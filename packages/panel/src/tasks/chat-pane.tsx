@@ -42,6 +42,7 @@ import {
   postsIn,
 } from "@luke/ui/chat-model";
 import { PICTURE_STATE, type PictureAnswer, usePicture } from "@luke/ui/picture-cache";
+import { useClipped } from "@luke/ui/use-clipped";
 import { AtSignIcon, HashIcon } from "lucide-react";
 import { useCallback, useState } from "react";
 import { ACTOR_SIZE, ActorMark, ActorRef, ActorStack } from "../actor-ref.js";
@@ -410,11 +411,15 @@ function PlaceHead({
   /** The place's own presses at the head's end, a topic's menu. */
   actions?: React.ReactNode;
 }): React.JSX.Element {
+  const [titleBox, titleClipped] = useClipped(title);
   return (
     <header className="desktop-toolbar chat-head">
       {lead}
+      {/* Note that the title's words are cut by a box of their own inside the heading, which fades them rather than ending them in the heading's ellipsis. */}
       <Text as={TEXT_ELEMENT.H2} variant={TEXT_VARIANT.DIALOG} truncate>
-        {title}
+        <span ref={titleBox} className="chat-head-title" data-overflow={String(titleClipped)}>
+          {title}
+        </span>
       </Text>
       {meta === undefined ? null : (
         <Text as={TEXT_ELEMENT.SPAN} tone={TEXT_TONE.MUTED} truncate>
