@@ -365,14 +365,14 @@ it.layer(getTestDB())("the coding agents' list lines", (it) => {
     () =>
       Effect.gen(function* () {
         const { userId, taskId } = yield* openTask;
-        const onPlan = started(
+        const snapshotted = started(
           yield* createCodingAgent(
             userId,
             start(taskId, { title: "Invite emails" }, { planSnapshot: LARGE_TEXT, prompt: null }),
           ),
         );
         yield* TestClock.adjust("1 minute");
-        const source = { agentId: onPlan.id, steps: 3, totalSteps: 5, branch: "luke/invite" };
+        const source = { agentId: snapshotted.id, steps: 3, totalSteps: 5, branch: "luke/invite" };
         const continued = started(
           yield* createCodingAgent(
             userId,
@@ -380,7 +380,7 @@ it.layer(getTestDB())("the coding agents' list lines", (it) => {
           ),
         );
         yield* TestClock.adjust("1 minute");
-        const workspaceId = onPlan.organizationId;
+        const workspaceId = snapshotted.organizationId;
         const taskless = started(
           yield* createCodingAgent(userId, {
             taskId: null,
@@ -399,14 +399,14 @@ it.layer(getTestDB())("the coding agents' list lines", (it) => {
             repository: "reviewstage/luke",
           }),
         );
-        const full = yield* Effect.forEach([onPlan, continued, taskless], (agent) =>
+        const full = yield* Effect.forEach([snapshotted, continued, taskless], (agent) =>
           Effect.map(readCodingAgent(userId, agent.id), Option.getOrThrow),
         );
-        const [planLine, continuedLine, tasklessLine] = full.map(codingAgentLineOf);
+        const [snapshotLine, continuedLine, tasklessLine] = full.map(codingAgentLineOf);
 
         const published = yield* listPublishedCodingAgents(userId, [taskId]);
         assert.deepEqual(published, [
-          { agent: planLine, published: null },
+          { agent: snapshotLine, published: null },
           { agent: continuedLine, published: null },
         ]);
         assert.deepEqual(
@@ -416,11 +416,14 @@ it.layer(getTestDB())("the coding agents' list lines", (it) => {
             [true, source],
           ],
         );
-        assert.deepEqual(yield* listCodingAgentLines(userId, taskId), [planLine, continuedLine]);
+        assert.deepEqual(yield* listCodingAgentLines(userId, taskId), [
+          snapshotLine,
+          continuedLine,
+        ]);
         assert.deepEqual(yield* listWorkspaceCodingAgentLines(userId, workspaceId, { limit: 10 }), [
           tasklessLine,
           continuedLine,
-          planLine,
+          snapshotLine,
         ]);
 
         const [listed] = yield* withTaskAgents(userId, yield* listTasks(userId));
@@ -428,7 +431,7 @@ it.layer(getTestDB())("the coding agents' list lines", (it) => {
           listed?.agents?.agents.map(({ id, title, model }) => ({ id, title, model })),
           [
             { id: continued.id, title: null, model: continued.model },
-            { id: onPlan.id, title: "Invite emails", model: onPlan.model },
+            { id: snapshotted.id, title: "Invite emails", model: snapshotted.model },
           ],
         );
         const [row, ...others] = yield* listTasklessAgents(userId, { includeArchived: false });

@@ -304,7 +304,7 @@ const CODING_AGENT_COLUMNS = {
  * started the agent, whose prompt and webhook body it carries, with whether
  * a prompt was handed and the run's automation name read in their place.
  * Note that the lists read these, because they read every agent of every
- * listed plan on every refresh, and the text columns are the bulk of a row.
+ * listed task on every refresh, and the text columns are the bulk of a row.
  */
 const CODING_AGENT_LINE_COLUMNS = {
   id: codingAgent.id,
