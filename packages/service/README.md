@@ -2610,6 +2610,9 @@ answers a server-to-server POST at the edge and never reaches eve (LUKE-250).
 Since a Preview's functions dial the Preview's own eve, both ends of a
 delegation read one environment's `EVE_DEPLOYMENT_SECRET`, so Production and
 Preview each hold a value of their own, and neither is `CRON_SECRET`'s.
+One set to the cron's value is read as unset (`environment.ts`), as a blank
+one is: the build logs that once, by the two names, and the admin
+dashboard's Reliability screen shows it as not configured.
 
 ### One connection is one invocation
 

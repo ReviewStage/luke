@@ -1,8 +1,8 @@
 import { recordVoiceSeconds, spendHostedMeter } from "@luke/database/models/quota";
 import { voiceSessionRecord } from "@luke/database/models/voice-session-record";
-import { BRAIN_HOST_ENVIRONMENT } from "@luke/service/agents/brain-host/bounds";
 import { deploymentEveOrigin } from "@luke/service/agents/brain-host/eve-origin";
 import { hostedUserInfo, userIdForAuthorization } from "@luke/service/auth/bearer";
+import { eveDeploymentSecretIn } from "@luke/service/environment";
 import { standReported } from "@luke/service/observability/sentry";
 import { HOSTED_OPENAI_ENVIRONMENT } from "@luke/service/providers/openai";
 import type { VoiceAccounts } from "@luke/service/voice/accounts";
@@ -99,7 +99,7 @@ export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
     record: voiceSessionRecord(),
     avatar: deploymentAvatar(),
     exchange: deploymentExchange({
-      deploymentSecret: () => configured(BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET),
+      deploymentSecret: () => eveDeploymentSecretIn(process.env),
       eveOrigin: deploymentEveOrigin,
       report: (message) =>
         standardOutputLog({ event: LOG_EVENT.EXCHANGE_REPORTED, reason: reportReason(message) }),

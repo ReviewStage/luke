@@ -35,7 +35,8 @@ is what the account's user token is sealed under.
 for an account under, and the one it sends when it acts for one itself, as
 the `dev` service's door and every web function calling eve do. It is never
 `CRON_SECRET`, the scheduler's bearer: without it the door admits no
-deployment request, and nothing falls back to the cron's.
+deployment request, and nothing falls back to the cron's. One that is blank,
+or that holds the cron's value, is read as unset.
 
 ## Evals
 
