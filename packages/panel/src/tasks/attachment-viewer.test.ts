@@ -198,6 +198,36 @@ test("two fingers spread on a touch screen zoom the picture about the point betw
   assert.deepEqual(drawn(image), { scale: 1, x: 0, y: 0 }, "pinched together it fits again");
 });
 
+test("a pinch whose second finger lands on the frame around the picture leaves it zoomed when either finger lifts first", () => {
+  for (const firstUp of [1, 2]) {
+    const viewer = opened();
+    const image = viewer.picture();
+    const frame = image.parentElement ?? assert.fail("the picture stands in its frame");
+    viewer.fire(image, viewer.finger("pointerdown", 1, 500, 250));
+    viewer.fire(frame, viewer.finger("pointerdown", 2, 700, 250));
+    viewer.fire(frame, viewer.finger("pointermove", 2, 900, 250));
+    const spread = drawn(image);
+    assert.equal(spread.scale, 2, "the pinch zooms it");
+    const lastUp = firstUp === 1 ? 2 : 1;
+    for (const id of [firstUp, lastUp]) {
+      viewer.fire(
+        id === 1 ? image : frame,
+        viewer.finger("pointerup", id, id === 1 ? 500 : 900, 250),
+      );
+    }
+    viewer.fire(image, viewer.pointer("click", 500, 250, 0));
+    assert.deepEqual(
+      drawn(image),
+      spread,
+      `lifting finger ${String(firstUp)} first leaves it zoomed`,
+    );
+    act(() => {
+      for (const root of roots.splice(0)) root.unmount();
+    });
+    document.body.innerHTML = "";
+  }
+});
+
 test("a picture asked to open at its own pixels is drawn so once it loads, its top left corner in sight", () => {
   const viewer = opened(IMAGE_OPENING.OWN_PIXELS);
   const image = viewer.picture();

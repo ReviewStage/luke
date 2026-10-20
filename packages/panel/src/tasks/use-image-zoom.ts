@@ -236,6 +236,8 @@ export function useImageZoom(
       if (image.current !== null) resized.observe(image.current);
       const down = (event: PointerEvent) => {
         fingers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        // A second finger, on the picture or the frame around it, makes the press a pinch, which is no press.
+        if (fingers.current.size > 1 && press.current !== undefined) press.current.moved = true;
       };
       // Note that a finger is heard on the frame rather than the picture, so
       // a pinch begun on the frame's ground around a small picture still
