@@ -97,6 +97,12 @@ export const githubRepositoriesAnswerSchema = EffectSchema.Struct({
   /** Whether the developer reaches any installation of the App at all; false is "Install Luke on GitHub". */
   installed: EffectSchema.Boolean,
   repositories: EffectSchema.Array(githubRepositorySchema),
+  /**
+   * The repositories the developer's own token may push to that the
+   * workspace lists nowhere yet, which Settings › Workspace's Add repository
+   * offers; absent from a service older than it.
+   */
+  addable: EffectSchema.optionalKey(EffectSchema.Array(githubRepositorySchema)),
   /** Where to send the developer to install the App, or to change which repositories it reaches. */
   installationUrl: EffectSchema.String,
 });
