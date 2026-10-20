@@ -140,3 +140,31 @@ export const RETIRED_TOOL = {
   CREATE_ISSUE: "create_issue",
   UPDATE_ISSUE: "update_issue",
 } as const;
+
+/**
+ * Claude Code's own tools, by the names its CLI calls them, which a coding
+ * agent running on Claude Code calls in place of Luke's shell, file, search,
+ * todo, delegation, skill, and web tools, and waits with (background Bash,
+ * `Monitor`, `ScheduleWakeup`). Its transcript stores each call under this
+ * name; a call to Luke's own MCP server is stored under Luke's tool's name
+ * (`CLAUDE_CODE_LUKE_TOOL_PREFIX`).
+ */
+export const CLAUDE_CODE_TOOL = {
+  BASH: "Bash",
+  READ: "Read",
+  EDIT: "Edit",
+  WRITE: "Write",
+  NOTEBOOK_EDIT: "NotebookEdit",
+  GLOB: "Glob",
+  GREP: "Grep",
+  WEB_FETCH: "WebFetch",
+  WEB_SEARCH: "WebSearch",
+  TODO_WRITE: "TodoWrite",
+  AGENT: "Agent",
+  SKILL: "Skill",
+  MONITOR: "Monitor",
+  SCHEDULE_WAKEUP: "ScheduleWakeup",
+} as const;
+
+/** What Claude Code puts before a tool of Luke's MCP server (`mcpServers.luke`): `mcp__luke__read_inbox` is Luke's `read_inbox`. */
+export const CLAUDE_CODE_LUKE_TOOL_PREFIX = "mcp__luke__";

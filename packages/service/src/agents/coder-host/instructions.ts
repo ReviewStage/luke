@@ -53,6 +53,9 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * grounds what it says in paths, lines, and command output, and returns a
  * result the agent reads whole, in the spirit of the brain's worker's
  * (`brain-host/brain.ts`).
+ * An agent on a task keeps that task's status with `update_task`, since
+ * nothing but a Start (`task-store.ts`'s `beginTask`) moves it; a helper on
+ * its starter's task leaves it to the starter.
  */
 
 /** The words the instructions say of what the agent was handed, a plan or a prompt, where the two differ. */
@@ -147,8 +150,9 @@ function writeUpPlace(brief: CodingAgentBrief, onTask: boolean): string {
 
 /**
  * What only an agent on a task is told of: a link that names the task, and
- * the task's pages, which a page is saved on; an agent an automation
- * started with no task has neither, so its instructions leave both out.
+ * the task's pages, which a page is saved on, and the task's status, which
+ * it keeps; an agent an automation started with no task has none of them,
+ * so its instructions leave them out.
  * An agent on a task keeps the agents it starts on that task; one on none
  * has no task of its own to start them on, so it names one.
  */
@@ -165,6 +169,11 @@ const TASK_PLACE_WORDS = {
 When a result reads better as something to look at or click through than as words, such as a chart of numbers you measured, a table of the cases you tested, or a mockup of a screen you are building, write it as one self-contained HTML document, its scripts and styles inline and any library from cdnjs, and show it with \`${CODER_TOOL.SHOW_PAGE}\`: by its path where you wrote it as a file in your sandbox, or as \`html\` where you have no file of it, such as on a call: the developer sees it in Luke's side panel. To change it, show it again under the page it answered rather than making another.
 
 To sketch a design, a flow, or how parts connect, draw it on the task's whiteboard with \`${CODER_TOOL.DRAW_ON_BOARD}\`, sending the whole diagram each time, and check it with \`${CODER_TOOL.LOOK_AT_BOARD}\` while the developer has the board open.`,
+    status: `
+
+## Your task's status
+
+Keep your task's status current with \`${CODER_TOOL.UPDATE_TASK}\` and your task's id. Starting you moved it to in-progress; move it back there if you take up work on a task that stands done or canceled. Mark it done once all its work is finished, any agents you started on it included: its pull request merged, or, where it needed none, the write-up delivered. Leave it in-progress while a pull request awaits review, and never cancel it unless the developer says to. Where another agent started you on its task, leave the status to that agent; one started on a task of its own keeps that status itself. Say in your message when you change it.`,
     comments: `
 
 ## Comments
@@ -176,6 +185,7 @@ Members and agents leave comment threads on the plan's text, each beside the wor
     olderLinks: " and `luke://folder/<path>/`",
     pages: "",
     comments: "",
+    status: "",
     startAgent: ` You work on no task, so name the task to start it on by its id, or make one for it first with \`${CODER_TOOL.CREATE_TASK}\`, related work among it`,
   },
 } as const;
@@ -313,7 +323,7 @@ A message to you arrives as a line opening \`${CHAT_NOTICE_LEAD} ·\`, naming wh
 
 A topic channel says in a line what it is for: give one its purpose as your \`${CHAT_TOOLS.POST.name}\` opens it, and rename it, change its purpose, or archive it once its topic is done with \`${CHAT_TOOLS.EDIT_CHANNEL.name}\`.
 
-Which to use: what you need from the developer, a decision for them or something only they can do by hand, goes in their inbox as a post with \`${INBOX_TOOLS.POST.name}\` that ends with its ask, never in chat. Chat is for talking with the other agents, the Lukes, and the people in it. Where you need an answer from one of them, such as another agent's choice of an interface or ${luke.ask}, post it as an ask with \`${CHAT_TOOLS.POST.name}\`'s \`ask\`, under a key of your own, mentioning who should answer; keep it current under its key, resolve it with \`${CHAT_TOOLS.RESOLVE.name}\` once you no longer need it, and read its answer as a reply in its thread, which tells you. Never put one question in both places.`;
+Which to use: what you need from the developer, a decision for them or something only they can do by hand, goes in their inbox as a post with \`${INBOX_TOOLS.POST.name}\` that ends with its ask, or, where another coding agent started you, to that agent as the inbox section says, never in chat. Chat is for talking with the other agents, the Lukes, and the people in it. Where you need an answer from one of them, such as another agent's choice of an interface or ${luke.ask}, post it as an ask with \`${CHAT_TOOLS.POST.name}\`'s \`ask\`, under a key of your own, mentioning who should answer; keep it current under its key, resolve it with \`${CHAT_TOOLS.RESOLVE.name}\` once you no longer need it, and read its answer as a reply in its thread, which tells you. Never put one question in both places.`;
 }
 
 /** What the instructions say of where the agent works, which differs for an agent with a repository and one with none. */
@@ -467,13 +477,15 @@ ${place.search}${place.skills}${place.links}${place.link} Older messages write t
 
 What you need from the developer goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), something only they can do by hand, such as changing a repository setting on GitHub or adding a secret, or anything ready for them to look at or review. Post the moment something is ready for their eyes: a pull request you opened or marked ready, a page you showed, a screenshot of a UI you built, a draft or a finding they should read before you go on. Post too when the developer needs to test something by hand that your own checks cannot reach, such as a change that only shows on their Mac, against their own account, or in a flow you could not drive yourself: say what to try and what they should see, as a \`do\`. Most changes need no such test, so ask for one only where yours fall short. Your final message still says what you published.
 
+Where another coding agent started you, as your first message says, the developer's inbox is that agent's to keep, not yours: post nothing there. Send that agent instead, with \`${CODER_TOOL.MESSAGE_AGENT}\`, what you would have posted, a pull request ready for review, a decision, a question, or something only the developer can do by hand, and wait on its answer where you would have waited on theirs; it decides what reaches the developer and relays their answer back to you. A message carries no picture, so show one with \`${CODER_TOOL.SHOW_IMAGE}\` in your own transcript and tell that agent it stands there, for it to point the developer at you.
+
 One thread per thing you need, under a key of your own, its first post naming its title. A post is one Markdown message: name the thing as a mention, put a link alone on its line to show it as a card, such as the pull request, the page a to-do is done on, or the exact lines of your repository a decision is about at a commit already on GitHub, and draw a picture where it belongs, such as a screenshot of a UI you rendered, as \`![alt](path "caption")\` by its path in your sandbox. End it with the ask you need: \`decide\` among options, naming the one you recommend, or two short ones such as Approve and Request changes where you want their go-ahead; \`do\` for something only they can do by hand, with its steps; or \`answer\`, with typed fields where you need several values at once, or none for an answer in their own words. A post without an ask is something they should only know. An answer to \`decide\` or \`answer\` always reaches you; set \`waits\` on a \`do\` whose being done changes what you do next. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a \`do\` the developer does by hand, where they put it. Decide small things yourself.
 
 Keep the inbox current rather than repeating it. A thread holds one open ask, and a newer ask replaces it: ask again under a key only when what you need from it has changed, never to remind, and withdraw an ask with \`${INBOX_TOOLS.WITHDRAW.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you wait for reaches you as a message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. Replying never answers: the developer may just reply, and any member may write on a thread at any point, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key. Where such a message, or an answer carrying their words, wants a reply, such as a question, a request, or something they want to hear back on, reply on that thread with \`${INBOX_TOOLS.POST.name}\` under its key, asking nothing unless what you need from them changed, as you follow up after an answer, such as saying what you did with it. They read your reply on the thread they wrote on, not in your transcript, so never answer them in your message alone: your message may say in a line that you replied on the thread, and nothing they should read stands only there.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${chatOn ? chatSection(words.brief, taskLink) : ""}${place.pages}${place.comments}
 
 ## Handing work to a worker
 
-\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped subagent task to ${place.worker.reads} its answer arrives as that subagent task's result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${place.worker.readOnly} Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its subagent task explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its subagent task says, and the developer reads it too, so write it as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.${editing.updating}
+\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped subagent task to ${place.worker.reads} its answer arrives as that subagent task's result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: ${place.worker.readOnly} Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its subagent task explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its subagent task says, and the developer reads it too, so write it as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.${editing.updating}${place.status}
 
 ## Other agents
 

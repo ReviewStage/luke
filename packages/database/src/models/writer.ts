@@ -375,11 +375,15 @@ type AwaitingLineWritten = Result.Result<
   typeof NO_CONVERSATION | MessageRefused
 >;
 
-/** The line a turn received, as the relay reads it off eve's stream: its text parts joined (`attached-files.ts`), and the turn that received it. */
-interface AwaitingLineTake {
-  readonly text: string;
-  readonly turnId: string;
-}
+/**
+ * The line a turn received and the turn that received it: as eve's relay
+ * reads it off eve's stream, by its text parts joined (`attached-files.ts`);
+ * or as a native harness's runner names it, by the client id of the row it
+ * was written under, which the runner was handed with the line.
+ */
+type AwaitingLineTake =
+  | { readonly text: string; readonly turnId: string }
+  | { readonly clientId: string; readonly turnId: string };
 
 /**
  * The longest the hand-over to eve inside an awaiting line's write may take
@@ -483,7 +487,8 @@ export interface StoreWriter {
    * reading from its revision sees the line again where it stands, now the
    * turn's, and keeps how many of the turn's steps had begun before it, so
    * a line that steered a turn under way is drawn among its work where it
-   * arrived rather than ahead of the turn. Answers the rows taken, or none where no such run awaits, which
+   * arrived rather than ahead of the turn. A take by client id takes the
+   * one awaiting row written under it. Answers the rows taken, or none where no such run awaits, which
    * is every line of a conversation that is no coding agent's.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
@@ -2122,11 +2127,15 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function*
  */
 const findAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, parts: StoredPartsColumnSchema }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    clientId: Schema.String,
+    parts: StoredPartsColumnSchema,
+  }),
   execute: (key) =>
     Database.use((db) =>
       db
-        .select({ id: messages.id, parts: messages.parts })
+        .select({ id: messages.id, clientId: messages.clientId, parts: messages.parts })
         .from(messages)
         .innerJoin(conversations, eq(conversations.id, messages.conversationId))
         .where(
@@ -2265,7 +2274,10 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<AwaitingLineTaken, WriteFailure, DatabaseServices> {
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
-  const run = coalescedRun(awaiting, take.text);
+  const run =
+    "clientId" in take
+      ? awaiting.filter((line) => line.clientId === take.clientId)
+      : coalescedRun(awaiting, take.text);
   const takenAfterStep = run.length === 0 ? null : yield* stepsBegun(context, take.turnId);
   for (const line of run) {
     yield* giveLineToTurn({

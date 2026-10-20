@@ -7,6 +7,7 @@
 
 import { accountContract } from "./account.js";
 import { adminContract } from "./admin.js";
+import { agentBrowserTabsContract } from "./agent-browser-tabs.js";
 import { agentPullRequestsContract } from "./agent-pull-requests.js";
 import { agentsContract } from "./agents.js";
 import { automationsContract } from "./automations.js";
@@ -43,6 +44,7 @@ export { TASK_START_STATUS } from "./tasks.js";
 export const hostedContract = {
   account: accountContract,
   admin: adminContract,
+  agentBrowserTabs: agentBrowserTabsContract,
   agentPullRequests: agentPullRequestsContract,
   agents: agentsContract,
   automations: automationsContract,

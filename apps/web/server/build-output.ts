@@ -66,6 +66,8 @@ export interface EmittedFunction {
   readonly contents: Uint8Array | string;
   /** The bound the plan gave the function; undefined leaves the platform's default. */
   readonly maxDuration: number | undefined;
+  /** Files the function reads beside its entry, by name, such as the runner it uploads to a sandbox. */
+  readonly files?: readonly { readonly name: string; readonly contents: Uint8Array }[];
 }
 
 interface FunctionConfig {
@@ -132,6 +134,7 @@ export async function emitBuildOutput(input: BuildOutputInput): Promise<readonly
     const directory = functionDirectory(input.outputDirectory, fn.path);
     await mkdir(directory, { recursive: true });
     await writeFile(functionEntryPath(input.outputDirectory, fn.path), fn.contents);
+    for (const file of fn.files ?? []) await writeFile(join(directory, file.name), file.contents);
     await writeFile(
       functionConfigPath(input.outputDirectory, fn.path),
       `${JSON.stringify(functionConfig(fn.maxDuration), null, 2)}\n`,

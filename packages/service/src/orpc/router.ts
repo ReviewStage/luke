@@ -21,6 +21,10 @@ import {
 } from "../accounts/workspaces-procedures.js";
 import { type AdminProcedureSeams, adminProcedures } from "../admin/admin-procedures.js";
 import {
+  type AgentBrowserTabsProcedureSeams,
+  agentBrowserTabsProcedures,
+} from "../agents/agent-browser-tabs-procedures.js";
+import {
   type AgentPullRequestProcedureSeams,
   agentPullRequestProcedures,
 } from "../agents/agent-pull-request-procedures.js";
@@ -85,6 +89,7 @@ import { hosted } from "./base.js";
 /** What the resources ask of the deployment: one line per resource, in alphabetical order. */
 export type HostedRouterSeams = AccountProcedureSeams &
   AdminProcedureSeams &
+  AgentBrowserTabsProcedureSeams &
   AgentPullRequestProcedureSeams &
   AgentsProcedureSeams &
   AutomationsProcedureSeams &
@@ -117,6 +122,7 @@ export function hostedRouter(seams: HostedRouterSeams) {
   return hosted.router({
     account: accountProcedures(seams),
     admin: adminProcedures(seams),
+    agentBrowserTabs: agentBrowserTabsProcedures(seams),
     agentPullRequests: agentPullRequestProcedures(published),
     agents: agentsProcedures(published),
     automations: automationsProcedures(seams),
