@@ -1,5 +1,10 @@
 import { Schema as EffectSchema } from "effect";
-import { codingAgentStatusAt, lineAwaitsTurn, type StatusTurn } from "./coding-agent-status.js";
+import {
+  codingAgentStatusAt,
+  lineAwaitsTurn,
+  type StatusTurn,
+  statusClockEdge,
+} from "./coding-agent-status.js";
 import {
   CODING_AGENT_ARCHIVER,
   CODING_AGENT_BRIEF,
@@ -365,4 +370,13 @@ export function taskListOfLiveRows(rows: TaskListLiveRows, now: number): TaskLis
       .toSorted(newestFirst)
       .map((agent) => tasklessAgentOf(agent, now)),
   };
+}
+
+/** The next instant past `now` the clock alone moves the list: the first agent whose starting grace or awaiting line's grace ends; none where none waits on one. */
+export function taskListGraceEdge(rows: TaskListLiveRows, now: number): number | undefined {
+  const edges = rows.agents.flatMap((row) => {
+    const edge = statusClockEdge(turnOf(row), standingOf(row, now));
+    return edge === undefined ? [] : [edge];
+  });
+  return edges.length === 0 ? undefined : Math.min(...edges);
 }

@@ -35,6 +35,7 @@ test("a plan's link opened on a Mac by an account that chose the Mac app is hand
 
   app = await mountWebApp(root, {
     httpClient: service.layer,
+    openLive: service.openLive,
     linkPlatform: LINK_PLATFORM.MAC,
     openMacApp: (link) => opened.push(link),
   });

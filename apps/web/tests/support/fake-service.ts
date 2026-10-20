@@ -7,13 +7,16 @@
  * every client reads as unanswered, so a test states only what it reads.
  * The session is the browser's cookie in a real tab: here it is whatever the
  * test last set, read on every `get-session`, so "the cookie changed" is
- * one call; a test that holds the session read answers it when it lets go.
+ * one call; a test that holds the session read answers it when it lets go. The task list is followed live, as the tab follows it: the fake seals
+ * it, and its Realtime delivers the listed task's row the moment the tab
+ * subscribes.
  */
 
 import type { LinkOpen } from "@luke/features/link-open";
+import type { LiveOpener } from "@luke/host/effect";
 import type { WireValue } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
-import type { Layer } from "effect";
+import type { Context, Layer } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 
 /** Who a signed-in session names. */
@@ -35,6 +38,37 @@ export const LISTED_TASK = {
   repository: null,
 } as const;
 
+/** The task list sealed for following, each statement named by the part it follows. */
+const SEALED_TASK_LIST = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    plans: { capability: "plans", queryFingerprint: "plans", expiresAt: 4_000_000_000_000 },
+    agents: { capability: "agents", queryFingerprint: "agents", expiresAt: 4_000_000_000_000 },
+  },
+} as const;
+
+/** The rows each part of the task list delivers: the listed task, owned by the signed-in user, and no agent. */
+const LIVE_ROWS: ReadonlyMap<string, readonly WireValue[]> = new Map<string, readonly WireValue[]>([
+  [
+    "plans",
+    [
+      {
+        ...LISTED_TASK,
+        ownerId: "user-ada",
+        ownerName: "Ada Lovelace",
+        pinnedAt: null,
+        pinPosition: null,
+        archivedAt: null,
+        issueId: null,
+        status: "todo",
+        priority: "none",
+        number: 1,
+      },
+    ],
+  ],
+  ["agents", []],
+]);
+
 /** Where the fake sends a browser to sign in to Notion. */
 export const NOTION_SIGN_IN = "https://notion.example/oauth/authorize";
 
@@ -49,6 +83,8 @@ interface SeenRequest {
 
 export interface FakeService {
   readonly layer: Layer.Layer<HttpClient.HttpClient>;
+  /** Realtime as the fake serves the task list over it, for the tab's host to open. */
+  readonly openLive: Context.Service.Shape<typeof LiveOpener>;
   /** What the cookie names from now on: the signed-in user, or nobody. */
   readonly setSession: (signedIn: boolean) => void;
   /** Each request the fake answered, in order. */
@@ -127,6 +163,9 @@ export function fakeService(options: FakeServiceOptions): FakeService {
       const linkOpen = options.linkOpen === undefined ? undefined : { linkOpen: options.linkOpen };
       return json({ preferences: {}, ...linkOpen });
     }
+    if (pathname === "/api/live/tasks" && method === "GET") {
+      return signedIn ? json(SEALED_TASK_LIST) : json({ error: "unauthorized" }, 401);
+    }
     if (pathname === "/api/plans" && method === "GET") {
       return signedIn ? json({ plans: [LISTED_TASK] }) : json({ error: "unauthorized" }, 401);
     }
@@ -134,6 +173,21 @@ export function fakeService(options: FakeServiceOptions): FakeService {
   });
   return {
     layer,
+    openLive: () => ({
+      subscribe: (query) => ({
+        onChange: (listener) => {
+          // The rows land a turn after the subscription, as Realtime's first result does.
+          queueMicrotask(() =>
+            listener({ status: "live", data: LIVE_ROWS.get(query.capability) ?? [] }),
+          );
+          return () => undefined;
+        },
+        awaitTxId: () => Promise.resolve(),
+        renew: () => Promise.resolve(),
+        unsubscribe: () => undefined,
+      }),
+      close: () => undefined,
+    }),
     setSession: (next) => {
       signedIn = next;
     },

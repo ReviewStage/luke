@@ -3,7 +3,7 @@ export type {
   AccountSourceHost,
   AccountSourceSeam,
 } from "../account-source.js";
-export { hostAssemblyLayer } from "../compose-host.js";
+export { hostAssemblyLayer, LiveOpener } from "../compose-host.js";
 export { DuplicateGatewayMethod } from "../composer.js";
 export {
   type CookieSessionDoor,

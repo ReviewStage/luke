@@ -23,7 +23,7 @@ import {
 } from "@luke/gateway";
 import { APP_SETTING_SCHEMA } from "@luke/settings";
 import { LIVE_SESSION_END_CAUSE } from "@luke/voice/live-session";
-import { Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as HttpClient from "effect/http/HttpClient";
 import type * as Path from "effect/Path";
@@ -61,6 +61,7 @@ import {
   unavailableConcern,
 } from "./host-concerns.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
+import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
 
@@ -102,6 +103,15 @@ interface PlatformConcernRequirements {
 }
 
 /**
+ * How the host opens a socket to Neon Realtime at the address a sealed read
+ * names: Realtime's own client, and a scripted one where a test hands it.
+ */
+export const LiveOpener = Context.Reference<(url: string) => LiveClient | PromiseLike<LiveClient>>(
+  "@luke/host/LiveOpener",
+  { defaultValue: () => openRealtimeClient },
+);
+
+/**
  * Every concern constructed, linked, and merged, with nothing yet begun: the
  * composers in the launch's order, the arming that follows the last of them,
  * and the drain. A method two concerns claim fails this build, so which
@@ -125,6 +135,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const shutdownSignal = yield* ShutdownSignal;
     const { report } = yield* Reporter;
     const openVoiceSocket = yield* VoiceSocket;
+    const openLive = yield* LiveOpener;
 
     const settings = yield* composeSettings();
     const account = yield* composeAccount({ settings, openSocket: openVoiceSocket });
@@ -183,12 +194,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
         },
       ),
       conversations: codingAgentClient,
+      openLive,
     });
     const codingAgents = yield* composeCodingAgents({
       kernel,
       account,
       accountId,
       client: codingAgentClient,
+      openLive,
     });
     const automations = yield* composeAutomations({
       kernel,

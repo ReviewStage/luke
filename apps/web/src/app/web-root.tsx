@@ -39,7 +39,7 @@ import { FirstFrameHint } from "./first-frame-hint";
 import { withLoadLink } from "./load-link";
 import { browserLinkPlatform, browserLoadedFresh, handOffToMacApp } from "./mac-app-handoff";
 import { WebAppearance } from "./web-appearance";
-import { composeWeb, WebHostTag } from "./web-host";
+import { composeWeb, type WebHostOptions, WebHostTag } from "./web-host";
 import { WEB_BUNDLES } from "./web-platform";
 import { startWebSentry, type WebSentryBuild, webSentryBuild } from "./web-sentry";
 
@@ -53,6 +53,8 @@ export interface WebAppOptions {
   readonly openMacApp?: (appLink: string) => void;
   /** Where the tab reports to Sentry; what the build carries where none is given. */
   readonly sentry?: WebSentryBuild;
+  /** How the host opens Neon Realtime at an address; Realtime's own client where none is given. */
+  readonly openLive?: WebHostOptions["openLive"];
 }
 
 /** The app as drawn: closing it takes the panel down and drains the host. */
@@ -98,7 +100,15 @@ export async function mountWebApp(
   };
   // Sentry's reporter stands beneath the host, so every fiber it forks and every act reports through it.
   runtime = ManagedRuntime.make(
-    Layer.provideMerge(composeWeb({ httpClient, fork, linkPlatform }), sentry.errorReporting),
+    Layer.provideMerge(
+      composeWeb({
+        httpClient,
+        fork,
+        linkPlatform,
+        ...(options.openLive === undefined ? undefined : { openLive: options.openLive }),
+      }),
+      sentry.errorReporting,
+    ),
   );
   // What the tab installed, taken down again in the reverse order as it closes.
   const installed: (() => void)[] = [];

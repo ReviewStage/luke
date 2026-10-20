@@ -61,7 +61,7 @@ test("the shell's frame stands while the session is read, and the signed-in pane
   const service = fakeService({ signedIn: true, sessionHeld: session.promise });
   const root = servedRoot();
 
-  const mounting = mountWebApp(root, { httpClient: service.layer });
+  const mounting = mountWebApp(root, { httpClient: service.layer, openLive: service.openLive });
 
   // The tab is waiting on the service: its session read has gone out and not come back.
   await vi.waitFor(() =>

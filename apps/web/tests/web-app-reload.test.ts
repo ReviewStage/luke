@@ -34,6 +34,7 @@ test("a plan's link reloaded on a Mac by an account that chose the Mac app is no
 
   app = await mountWebApp(root, {
     httpClient: service.layer,
+    openLive: service.openLive,
     linkPlatform: LINK_PLATFORM.MAC,
     openMacApp: (link) => opened.push(link),
   });

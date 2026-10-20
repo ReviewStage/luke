@@ -32,7 +32,7 @@ test("with the site's storage blocked, the tab still draws the sign-in", async (
   const root = document.createElement("div");
   document.body.append(root);
 
-  app = await mountWebApp(root, { httpClient: service.layer });
+  app = await mountWebApp(root, { httpClient: service.layer, openLive: service.openLive });
 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() =>

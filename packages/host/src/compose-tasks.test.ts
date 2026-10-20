@@ -50,6 +50,7 @@ import {
   TASK_ISSUE_RELATION,
   type TaskIssueLinkView,
 } from "@luke/features/task-issue-wire";
+import type { TaskListLiveAnswer } from "@luke/features/task-list-live";
 import {
   TASK_SECTION_WRITE,
   type TaskSection,
@@ -67,7 +68,6 @@ import {
   type TaskAgentsSummary,
   type TaskFileAnswer,
   type TaskSkillsAnswer,
-  type TaskSummary,
   type TaskTreeAnswer,
 } from "@luke/features/task-wire";
 import {
@@ -97,7 +97,7 @@ import {
   GATEWAY_METHOD,
   type GatewayMethod,
 } from "@luke/gateway";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { MESSAGE_ROLE, TURN_STATUS, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
@@ -129,15 +129,6 @@ function task(id: string, name: string, body: string, updatedAt: number): Task {
 /** The instant the fake service stamps every pin and archive with. */
 const MARKED_AT = 5_000;
 
-function summary({
-  document: _document,
-  agentEdits: _agentEdits,
-  lastEdit: _lastEdit,
-  ...rest
-}: Task): TaskSummary {
-  return rest;
-}
-
 /** The service as a table of tasks the test edits between beats. */
 interface FakeService extends TasksClient {
   tasks: Task[];
@@ -148,11 +139,10 @@ interface FakeService extends TasksClient {
   agents: Record<string, TaskAgentsSummary>;
   /** The agents with no plan the list carries beside the plans. */
   tasklessAgents: TasklessAgent[];
-  listFails: boolean;
+  /** What the service answers when the list is asked for sealed, to follow over Neon Realtime; sealed by default. */
+  liveList: TaskCallResult<TaskListLiveAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
   /** Whether a delete is refused, as a service that did not answer refuses it. */
   deleteFails: boolean;
-  /** Where a list read waits after reading the table and before answering, so a test can hold one on the wire. */
-  listGate: Effect.Effect<void>;
   createAnswer: TaskCallResult<TaskStarted, RepositoryCallFailure>;
   /** The repositories the account reaches, as the service answers them; a failure is the service refusing the read. */
   repositoriesAnswer: TaskCallResult<GitHubRepositoriesAnswer, typeof TASK_CALL_FAILURE.UNANSWERED>;
@@ -342,9 +332,8 @@ function fakeService(tasks: Task[]): FakeService {
       }),
     agents: {},
     tasklessAgents: [],
-    listFails: false,
+    liveList: { ok: true, answer: SEALED_LIST },
     deleteFails: false,
-    listGate: Effect.void,
     createAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     repositoriesAnswer: { ok: false, failure: TASK_CALL_FAILURE.UNANSWERED },
     repositoryUnreachable: false,
@@ -784,24 +773,7 @@ function fakeService(tasks: Task[]): FakeService {
         service.boards[taskId] = board;
         return board;
       }),
-    list: () =>
-      Effect.gen(function* () {
-        service.reads.push("list");
-        const answer = service.listFails
-          ? { ok: false as const, failure: TASK_CALL_FAILURE.UNANSWERED }
-          : {
-              ok: true as const,
-              answer: {
-                plans: service.tasks.map((each) => {
-                  const agents = service.agents[each.id];
-                  return agents === undefined ? summary(each) : { ...summary(each), agents };
-                }),
-                planlessAgents: service.tasklessAgents,
-              },
-            };
-        yield* service.listGate;
-        return answer;
-      }),
+    listLive: () => Effect.sync(() => service.liveList),
     open: (taskId) =>
       Effect.sync((): TaskCallResult<Task, TaskCallFailure> => {
         service.reads.push(`open:${taskId}`);
@@ -1030,6 +1002,7 @@ function subject(
     }[] = [];
     const standing = options.call ?? { about: undefined };
     const conversations = yield* fakeConversations();
+    const realtime = fakeRealtime();
     const tasks = yield* composeTasks({
       kernel: {
         runMode: { sendsNetwork: true },
@@ -1055,7 +1028,7 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
       conversations,
-      ...(options.openLive === undefined ? undefined : { openLive: options.openLive }),
+      openLive: options.openLive ?? realtime.open,
       accountId: () => "user-dana",
       endTaskCall: (taskId) =>
         Effect.gen(function* () {
@@ -1084,7 +1057,15 @@ function subject(
         waiters.push({ wanted, seen });
         return Deferred.await(seen);
       });
-    return { tasks, call, told, reported, last, viewWhere, viewLands, conversations };
+    /** The followed list delivered as the service holds it: a row for each of its tasks, and the agents given. */
+    const listed = (agents: readonly unknown[] = []) =>
+      Effect.gen(function* () {
+        yield* realtime.subscribed;
+        realtime.deliver("plans", service.tasks.map(rowOfTask));
+        realtime.deliver("agents", agents);
+        yield* realtime.settled;
+      });
+    return { tasks, call, told, reported, last, viewWhere, viewLands, conversations, listed };
   });
 }
 
@@ -1187,10 +1168,14 @@ it.effect("the window's refresh lists the plans and opening one draws its saved 
   Effect.gen(function* () {
     const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
     const billing = task(BILLING, "Billing export", "# Billing export", 20);
-    const { call, last, tasks } = yield* subject(fakeService([billing, invites]));
+    const { call, last, tasks, listed } = yield* subject(fakeService([billing, invites]));
 
     yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-    assert.deepEqual(last()?.tasks, [summary(billing), summary(invites)]);
+    yield* listed();
+    assert.deepEqual(
+      last()?.tasks.map((each) => each.name),
+      [billing.name, invites.name],
+    );
     assert.equal(last()?.listStatus, TASKS_READ.READY);
     assert.equal(last()?.activeTaskId, undefined);
 
@@ -1263,58 +1248,47 @@ it.effect("a refresh that reads what the view already holds tells the window not
 );
 
 it.effect(
-  "a refresh that lists another plan holds the plans it had already listed as the objects it held",
+  "a list that moves again holds the tasks it had already listed as the objects it held",
   () =>
     Effect.gen(function* () {
       const billing = task(BILLING, "Billing export", "# Billing export", 20);
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
       const service = fakeService([billing]);
-      const { call, tasks } = yield* subject(service);
+      const { call, tasks, listed } = yield* subject(service);
 
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      const listed = tasks.snapshot();
+      yield* listed();
+      const first = tasks.snapshot();
       service.tasks = [billing, invites];
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
 
-      assert.deepEqual(tasks.snapshot().tasks, [summary(billing), summary(invites)]);
-      assert.equal(tasks.snapshot().tasks[0], listed.tasks[0]);
-      assert.equal(tasks.snapshot().workspaces, listed.workspaces);
+      assert.deepEqual(
+        tasks.snapshot().tasks.map((each) => each.id),
+        [BILLING, INVITES],
+      );
+      assert.equal(tasks.snapshot().tasks[0], first.tasks[0]);
+      assert.equal(tasks.snapshot().workspaces, first.workspaces);
     }),
 );
 
-it.effect(
-  "the window's refresh lists the agents with no plan beside the plans, and a list read that fails keeps them",
-  () =>
-    Effect.gen(function* () {
-      const billing = task(BILLING, "Billing export", "# Billing export", 20);
-      const service = fakeService([billing]);
-      const triage: TasklessAgent = {
-        id: "6f1c1f9e-5a8e-4f52-9d6c-2b7a0d1e3c41",
-        planId: null,
-        model: "anthropic/claude-opus-5.5",
-        effort: "high",
-        title: "Triage overnight Sentry issues",
-        createdAt: 30,
-        status: CODING_AGENT_STATUS.COMPLETED,
-        turnId: null,
-        automationId: "0b9d6c7e-1f2a-4b3c-8d4e-5f6a7b8c9d0e",
-        automationName: "Morning Sentry triage",
-        workspaceId: ACME.id,
-        repository: "acme/api",
-        activityAt: 45,
-      };
-      service.tasklessAgents = [triage];
-      const { call, last } = yield* subject(service);
+it.effect("the window's refresh lists the agents with no task beside the tasks", () =>
+  Effect.gen(function* () {
+    const billing = task(BILLING, "Billing export", "# Billing export", 20);
+    const { call, last, listed } = yield* subject(fakeService([billing]));
+    const triage = agentRow(null, 60_000);
 
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
-      const read = [last()?.tasks, last()?.tasklessAgents];
-      service.listFails = true;
-      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+    yield* listed([triage]);
 
-      assert.deepEqual(read, [[summary(billing)], [triage]]);
-      assert.equal(last()?.listStatus, TASKS_READ.FAILED);
-      assert.deepEqual(last()?.tasklessAgents, [triage]);
-    }),
+    assert.deepEqual(
+      last()?.tasks.map((each) => each.id),
+      [BILLING],
+    );
+    assert.deepEqual(
+      last()?.tasklessAgents?.map((each) => each.id),
+      [triage.id],
+    );
+  }),
 );
 
 it.effect(
@@ -1809,9 +1783,16 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Untitled", "# Draft", 10)]);
-      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      const realtime = fakeRealtime();
+      const { call, tasks, viewLands, conversations } = yield* subject(service, {
+        openLive: realtime.open,
+      });
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.subscribed;
+      realtime.deliver("plans", service.tasks.map(rowOfTask));
+      realtime.deliver("agents", []);
+      yield* realtime.settled;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* conversations.nextAsk;
       yield* conversations.answer(
@@ -1824,7 +1805,7 @@ it.effect(
         conversationPage([journal("turn-1", "Done.")], "1:2", CODING_AGENT_STATUS.COMPLETED),
       );
       // The service names the task just after the turn settles.
-      service.tasks = [task(INVITES, "Fix invite emails", "# Draft", 10)];
+      realtime.deliver("plans", [rowOfTask(task(INVITES, "Fix invite emails", "# Draft", 10))]);
       const named = yield* viewLands(
         (view) =>
           view.tasks.some((row) => row.id === INVITES && row.name === "Fix invite emails") &&
@@ -1842,16 +1823,23 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const service = fakeService([task(INVITES, "Untitled", "# Draft", 10)]);
-      const { call, tasks, viewLands, conversations } = yield* subject(service);
+      const realtime = fakeRealtime();
+      const { call, tasks, viewLands, conversations } = yield* subject(service, {
+        openLive: realtime.open,
+      });
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.subscribed;
+      realtime.deliver("plans", service.tasks.map(rowOfTask));
+      realtime.deliver("agents", []);
+      yield* realtime.settled;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       yield* conversations.nextAsk;
       yield* conversations.answer(
         INVITES,
         conversationPage([journal("turn-1", "Done.")], "1:1", CODING_AGENT_STATUS.COMPLETED),
       );
-      service.tasks = [task(INVITES, "Fix invite emails", "# Draft", 10)];
+      realtime.deliver("plans", [rowOfTask(task(INVITES, "Fix invite emails", "# Draft", 10))]);
       const named = yield* viewLands((view) =>
         view.tasks.some((row) => row.id === INVITES && row.name === "Fix invite emails"),
       );
@@ -2359,13 +2347,16 @@ it.effect("the plan list is drawn ready while the workspaces read is still out",
     service.memberships = [PERSONAL, ACME];
     const held = yield* Deferred.make<void>();
     service.workspacesGate = Deferred.await(held);
-    const { call, last } = yield* subject(service);
+    const { call, last, listed } = yield* subject(service);
 
     const refreshing = yield* Effect.forkChild(call(GATEWAY_METHOD.TASKS_REFRESH));
-    for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+    yield* listed();
 
     assert.equal(last()?.listStatus, TASKS_READ.READY);
-    assert.deepEqual(last()?.tasks, [summary(invites)]);
+    assert.deepEqual(
+      last()?.tasks.map((each) => each.id),
+      [invites.id],
+    );
     assert.deepEqual(last()?.workspaces, []);
 
     yield* Deferred.succeed(held, undefined);
@@ -2585,8 +2576,9 @@ it.effect(
       service.memberships = [PERSONAL, ACME];
       service.notPermitted = true;
       const standing: StandingCall = { about: { taskId: INVITES } };
-      const { call, last } = yield* subject(service, { call: standing });
+      const { call, last, listed } = yield* subject(service, { call: standing });
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
 
       const refused = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
@@ -2621,8 +2613,9 @@ it.effect(
       const service = fakeService([acmeTask, personalTask]);
       service.memberships = [PERSONAL, ACME];
       const standing: StandingCall = { about: { taskId: INVITES } };
-      const { call, last } = yield* subject(service, { call: standing });
+      const { call, last, listed } = yield* subject(service, { call: standing });
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: BILLING });
 
       const left = yield* call(GATEWAY_METHOD.WORKSPACES_LEAVE, { workspaceId: ACME.id });
@@ -3080,8 +3073,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const { call, last } = yield* subject(fakeService([invites]));
+      const { call, last, listed } = yield* subject(fakeService([invites]));
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* listed();
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
 
       const moved = yield* call(GATEWAY_METHOD.TASKS_MOVE, {
@@ -3104,8 +3098,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const invites = task(INVITES, "Teammate invitations", "# Teammate invitations", 10);
-      const { call, last } = yield* subject(fakeService([invites]));
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(fakeService([invites]), { openLive: realtime.open });
       yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.subscribed;
+      realtime.deliver("plans", [rowOfTask(invites)]);
+      realtime.deliver("agents", []);
+      yield* realtime.settled;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
 
       const changed = yield* call(GATEWAY_METHOD.TASKS_SET_STANDING, {
@@ -3399,5 +3398,232 @@ it.effect(
       assert.deepEqual(realtime.subscribed(), []);
       yield* TestClock.adjust(Duration.hours(1));
       assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+/** The host's clock as the live list is read at: renewals are timed by it, and the list's own instants by the test's clock set to it. */
+const LIVE_NOW = 1_800_000_000_000;
+
+/** The plan list sealed as the service answers it, each statement named by the part it follows. */
+const SEALED_LIST: TaskListLiveAnswer = {
+  url: "wss://realtime.example/v1",
+  queries: {
+    plans: { capability: "plans", queryFingerprint: "plans", expiresAt: LIVE_NOW + 60_000 },
+    agents: { capability: "agents", queryFingerprint: "agents", expiresAt: LIVE_NOW + 60_000 },
+  },
+};
+
+/** Realtime as a script: each part's subscription by its capability, and a way to deliver rows to one or stop it for good. */
+function fakeRealtime() {
+  const listeners = new Map<
+    string,
+    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
+  >();
+  const open = (): LiveClient => ({
+    subscribe: (query) => ({
+      onChange: (listener) => {
+        listeners.set(query.capability, listener);
+        return () => listeners.delete(query.capability);
+      },
+      awaitTxId: () => Promise.resolve(),
+      renew: () => Promise.resolve(),
+      unsubscribe: () => void listeners.delete(query.capability),
+    }),
+    close: () => undefined,
+  });
+  /** Waits for both parts to be subscribed, as the follow forked from a refresh subscribes them. */
+  const subscribed = Effect.gen(function* () {
+    for (let turn = 0; turn < 100 && listeners.size < 2; turn += 1) yield* Effect.yieldNow;
+    assert.equal(listeners.size, 2, "both parts of the list are subscribed");
+  });
+  const deliver = (part: string, data: readonly unknown[]) => {
+    const listener = listeners.get(part);
+    assert.ok(listener, `no subscription to ${part}`);
+    listener({ status: "live", data });
+  };
+  const fail = (part: string) => listeners.get(part)?.({ status: "error", data: [] });
+  /** Lets what was delivered reach the view, through the fibers that carry it. */
+  const settled = Effect.gen(function* () {
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
+  });
+  return { open, subscribed, deliver, fail, settled };
+}
+
+/** One plan as the plans statement delivers its row. */
+function taskRow(id: string, name: string) {
+  return {
+    id,
+    workspaceId: "workspace-personal",
+    name,
+    repository: null,
+    ownerId: "user-dana",
+    ownerName: "Dana",
+    pinnedAt: null,
+    pinPosition: null,
+    archivedAt: null,
+    createdAt: 1_000,
+    updatedAt: 2_000,
+    issueId: null,
+    status: TASK_STATUS.TODO,
+    priority: TASK_PRIORITY.NONE,
+    number: 1,
+  };
+}
+
+/** One plan as the plans statement delivers the service's task. */
+function rowOfTask(each: Task) {
+  return {
+    ...taskRow(each.id, each.name),
+    workspaceId: each.workspaceId,
+    repository: each.repository,
+    createdAt: each.createdAt,
+    updatedAt: each.updatedAt,
+    status: each.status ?? TASK_STATUS.TODO,
+    priority: each.priority ?? TASK_PRIORITY.NONE,
+  };
+}
+
+/** One agent of the plan, or of none, as the agents statement delivers its row, started `ago` before the list is read, with no turn yet. */
+function agentRow(planId: string | null, ago: number) {
+  return {
+    id: "3f1d2c4b-5a6e-4f70-8a91-b2c3d4e5f607",
+    planId,
+    workspaceId: "workspace-personal",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    contextWindow: null,
+    title: "Invite flow",
+    prompted: false,
+    repository: "acme/relay",
+    starterId: "user-dana",
+    starterName: "Dana",
+    automationId: null,
+    automationName: null,
+    archivedAt: null,
+    archivedBy: null,
+    archiverName: null,
+    disabledServers: null,
+    published: null,
+    pinnedAt: null,
+    pinPosition: null,
+    createdAt: LIVE_NOW - ago,
+    turnId: null,
+    turnStatus: null,
+    cancelRequested: null,
+    queuedAt: null,
+    startedAt: null,
+    settledAt: null,
+    turnSessionEnded: null,
+    awaitingLineAt: null,
+  };
+}
+
+it.effect(
+  "the list is drawn from its live rows, and an agent with no turn reads failed once its grace ends with nothing read",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(LIVE_NOW);
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.liveList = { ok: true, answer: SEALED_LIST };
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(service, { openLive: realtime.open });
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.subscribed;
+      realtime.deliver("plans", [taskRow(INVITES, "Teammate invitations, live")]);
+      realtime.deliver("agents", [agentRow(INVITES, 60_000)]);
+      yield* realtime.settled;
+      const drawn = last()?.tasks[0];
+      assert.equal(drawn?.name, "Teammate invitations, live");
+      assert.deepEqual(
+        [drawn?.agents?.working, drawn?.agents?.agents.map((line) => line.status)],
+        [1, [CODING_AGENT_STATUS.STARTING]],
+      );
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* call(GATEWAY_METHOD.TASKS_DELETE, { taskId: BILLING });
+      yield* TestClock.adjust(Duration.minutes(5));
+      yield* realtime.settled;
+
+      const ended = last()?.tasks[0]?.agents;
+      assert.deepEqual(
+        [ended?.working, ended?.agents.map((line) => line.status)],
+        [0, [CODING_AGENT_STATUS.FAILED]],
+      );
+    }),
+);
+
+it.effect(
+  "an agent whose line no turn takes reads running in the live list until the line's grace ends, then failed with nothing read",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(LIVE_NOW);
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      service.liveList = { ok: true, answer: SEALED_LIST };
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(service, { openLive: realtime.open });
+
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.subscribed;
+      realtime.deliver("plans", [taskRow(INVITES, "Teammate invitations, live")]);
+      // A settled turn, and a line written after it that no turn has taken yet.
+      realtime.deliver("agents", [
+        {
+          ...agentRow(INVITES, 30 * 60_000),
+          turnId: "6a7b8c9d-0e1f-4a2b-9c3d-4e5f6a7b8c9d",
+          turnStatus: TURN_STATUS.SETTLED,
+          cancelRequested: false,
+          queuedAt: LIVE_NOW - 20 * 60_000,
+          startedAt: LIVE_NOW - 20 * 60_000,
+          settledAt: LIVE_NOW - 10 * 60_000,
+          turnSessionEnded: false,
+          awaitingLineAt: LIVE_NOW - 60_000,
+        },
+      ]);
+      yield* realtime.settled;
+      assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live", "the list is drawn live");
+      assert.deepEqual(
+        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        [CODING_AGENT_STATUS.RUNNING],
+      );
+      yield* TestClock.adjust(Duration.minutes(3));
+      yield* realtime.settled;
+      assert.deepEqual(
+        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        [CODING_AGENT_STATUS.RUNNING],
+        "inside the line's grace",
+      );
+      yield* TestClock.adjust(Duration.minutes(2));
+      yield* realtime.settled;
+      assert.deepEqual(
+        last()?.tasks[0]?.agents?.agents.map((line) => line.status),
+        [CODING_AGENT_STATUS.FAILED],
+        "the line's grace ran out with no row moving",
+      );
+    }),
+);
+
+it.effect(
+  "a list whose subscription stops for good is sealed and subscribed again after a pause, and drawn from the new rows",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(LIVE_NOW);
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Invites", 10)]);
+      const realtime = fakeRealtime();
+      const { call, last } = yield* subject(service, { openLive: realtime.open });
+      yield* call(GATEWAY_METHOD.TASKS_REFRESH);
+      yield* realtime.subscribed;
+      realtime.deliver("plans", [taskRow(INVITES, "Teammate invitations, live")]);
+      realtime.deliver("agents", []);
+      yield* realtime.settled;
+      assert.equal(last()?.tasks[0]?.name, "Teammate invitations, live");
+
+      realtime.fail("plans");
+      yield* realtime.settled;
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* realtime.subscribed;
+      realtime.deliver("plans", [taskRow(INVITES, "Teammate invitations, again")]);
+      realtime.deliver("agents", []);
+      yield* realtime.settled;
+      assert.equal(last()?.tasks[0]?.name, "Teammate invitations, again");
     }),
 );

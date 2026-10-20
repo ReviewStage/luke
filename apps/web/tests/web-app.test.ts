@@ -52,7 +52,11 @@ test("signed out, the panel draws its sign-in; a return after another tab signed
   const root = document.createElement("div");
   document.body.append(root);
 
-  app = await mountWebApp(root, { httpClient: service.layer, linkPlatform: LINK_PLATFORM.MAC });
+  app = await mountWebApp(root, {
+    httpClient: service.layer,
+    linkPlatform: LINK_PLATFORM.MAC,
+    openLive: service.openLive,
+  });
 
   assert.ok(app !== undefined, "the host stands");
   await vi.waitFor(() =>

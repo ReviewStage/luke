@@ -61,6 +61,7 @@ import {
   hostKernelLayer,
   hostStandingLayer,
   IdSource,
+  LiveOpener,
   RunMode,
   reporterLayer,
   ServiceOrigin,
@@ -122,6 +123,8 @@ export interface WebHostOptions {
   readonly fork: (effect: Effect.Effect<void>) => void;
   /** The platform the tab runs on, which is offered the Mac app only where it is a Mac; the browser's own word where none is given. */
   readonly linkPlatform?: LinkPlatform;
+  /** How the host opens Neon Realtime at an address; Realtime's own client where none is given, and a test's scripted one. */
+  readonly openLive?: Context.Service.Shape<typeof LiveOpener>;
 }
 
 /** The web host as built, with the operator its launch starts beside it. */
@@ -488,6 +491,7 @@ export function composeWeb(
   const assembly = Layer.provide(
     hostAssemblyLayer([]),
     Layer.mergeAll(
+      options.openLive === undefined ? Layer.empty : Layer.succeed(LiveOpener, options.openLive),
       Layer.provideMerge(hostKernelLayer, seamLayers(storage)),
       localStorageFileSystem(storage),
       Path.layer,
