@@ -2002,17 +2002,21 @@ test("an archived agent is still named by its name, its card saying it was archi
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
-test("an item's mark in the list hangs its agent's card where its plan's row names the agent, a press on the card choosing nothing, and a press on the mark chooses the item, as a press anywhere on its row does", async () => {
+test("an item's row hangs its agent's card beside it, as a sidebar task's row hangs its task's, its tile hanging none of its own; a press on the card chooses nothing, and a press on the row chooses the item", async () => {
   const { page, asked } = mount();
   await settle();
   const row = rowNamed(page, "How is a failed email retried?");
-  const mark = row.querySelector<HTMLElement>("[data-agent-ref]");
-  assert.ok(mark, "the row's mark is the agent's reference");
-  assert.ok(wearsAgentTile(mark), "the row's mark is the agent's tile");
+  assert.equal(row.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
+  assert.ok(wearsAgentTile(row), "the row wears the agent's tile");
   act(() => {
-    mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.match(
+    wordsOf(document.querySelector(".luke-tooltip-card [data-tab-card]")) ?? "",
+    /Billing usage alerts · Answered/u,
+    "the card's foot names the item's task and where the item stands",
+  );
   // A press on the card, as one selecting its words makes, leaves the row unchosen and the card standing.
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card [data-tab-card]");
   act(() => {
@@ -2021,32 +2025,26 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
   });
   assert.equal(row.getAttribute("aria-current"), null);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
-  act(() => mark.click());
+  act(() => row.click());
   assert.equal(row.getAttribute("aria-current"), "page");
   assert.deepEqual(asked.shownAgents, [], "the press stays in the Inbox");
   const other = rowNamed(page, "Expire after 7 days?");
-  assert.equal(
-    other.querySelector("[data-agent-ref]"),
-    null,
-    "a plan whose row names no agent leaves the mark bare",
-  );
-  assert.ok(wearsAgentTile(other), "a bare mark is still an agent's tile");
+  assert.ok(wearsAgentTile(other), "a row whose plan names no agent still wears an agent's tile");
 });
 
-test("an item's mark hangs a card naming the teammate who started its agent, as the plan's row names them, and no starter on the reader's own agent", async () => {
+test("an item's row hangs a card naming the teammate who started its agent, as the plan's row names them, and no starter on the reader's own agent", async () => {
   const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-  /** The words of the card the row's mark hangs, the task's row naming its agent as started by `starter`. */
-  const markCard = async (starter: typeof CHARLES): Promise<string | null | undefined> => {
+  /** The words of the card the row hangs, the task's row naming its agent as started by `starter`. */
+  const rowCard = async (starter: typeof CHARLES): Promise<string | null | undefined> => {
     const { page } = mount();
     await settle();
     const line = BILLING.agents?.agents[0];
     assert.ok(line && BILLING.agents, "the plan's row names its agent");
     const agents = { ...BILLING.agents, agents: [{ ...line, startedBy: starter }] };
     act(() => setTasks([{ ...BILLING, agents }, INVITES]));
-    const mark = rowNamed(page, "How is a failed email retried?").querySelector("[data-agent-ref]");
-    assert.ok(mark, "the row's mark is the agent's reference");
+    const row = rowNamed(page, "How is a failed email retried?");
     act(() => {
-      mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+      row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
     const words = wordsOf(document.querySelector(".luke-tooltip-card [data-tab-card]"));
     act(() => root?.unmount());
@@ -2055,9 +2053,9 @@ test("an item's mark hangs a card naming the teammate who started its agent, as 
     return words;
   };
 
-  assert.match((await markCard(CHARLES)) ?? "", /Started by Charles Pan/u);
-  const own = await markCard(READER);
-  assert.match(own ?? "", /Alerts/u, "the reader's own agent still hangs its card");
+  assert.match((await rowCard(CHARLES)) ?? "", /Started by Charles Pan/u);
+  const own = await rowCard(READER);
+  assert.match(own ?? "", /Alerts/u, "the reader's own agent's row still hangs its card");
   assert.doesNotMatch(own ?? "", /Started by/u);
 });
 
@@ -3837,8 +3835,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     "a group of agents wears the Factory's glyph, as the sidebar's row of every agent does",
   );
 
-  const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
-  assert.ok(mark, "the planless agent's row hangs its card");
+  const mark = rowNamed(page, "Quarantine the flaky test?");
   assert.ok(wearsAgentTile(mark), "the planless agent's row wears its tile");
   assert.match(
     hoveredCard(mark, "[data-tab-card]") ?? "",
@@ -3995,9 +3992,8 @@ test("an untitled agent an automation started goes by its automation's name in t
   const { page } = mount([waitingTaskless(QUARANTINE)]);
   await settle();
 
-  const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
-  assert.ok(mark, "the planless agent's row hangs its card");
-  assert.match(hoveredCard(mark, "[data-tab-card]") ?? "", /^Nightly flake sweep/u);
+  const row = rowNamed(page, "Quarantine the flaky test?");
+  assert.match(hoveredCard(row, "[data-tab-card]") ?? "", /^Nightly flake sweep/u);
 });
 
 test("an item's row offers Copy link on a right-click, copying the item's link under the task that holds it", async () => {
