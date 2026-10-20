@@ -314,7 +314,12 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
       const made = yield* startedFromBefore(
         context.userId,
         input.body.idempotencyKey,
-        sourceId,
+        {
+          agentId: sourceId,
+          ...(input.body.from.messageId === undefined
+            ? undefined
+            : { messageId: input.body.from.messageId }),
+        },
         undefined,
       );
       if (Option.isSome(made)) {

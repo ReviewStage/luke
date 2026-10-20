@@ -784,7 +784,8 @@ const madeInPlace = Effect.fnUntraced(function* (
 });
 
 /**
- * The agent a Start from `sourceId` under `idempotencyKey` already made,
+ * The agent a Start from `from`, its source and the message it forks at
+ * where it names one, under `idempotencyKey` already made,
  * where it stands in the place asked, or, with none asked, the one it stands
  * in, and the account still reaches that place; none otherwise. Note that it
  * reads the source not at all, because a retry is answered with the agent
@@ -794,11 +795,19 @@ const madeInPlace = Effect.fnUntraced(function* (
 export const startedFromBefore = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   idempotencyKey: string,
-  sourceId: string,
+  from: Pick<CodingAgentStartFrom, "agentId" | "messageId">,
   place: StartWhere | undefined,
 ): Effect.fn.Return<Option.Option<CodingAgent>, HostedRefusal, DatabaseServices> {
   const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, idempotencyKey));
-  if (Option.isNone(made) || made.value.startedFrom?.agentId !== sourceId) return Option.none();
+  // Note that only the same Start is answered: the same source, forked at the same message or continued.
+  const startedFrom = Option.isSome(made) ? made.value.startedFrom : null;
+  if (
+    Option.isNone(made) ||
+    startedFrom?.agentId !== from.agentId ||
+    startedFrom.messageId !== from.messageId
+  ) {
+    return Option.none();
+  }
   const where = place ?? placeOfAgent(made.value);
   if (where === undefined || !(yield* madeInPlace(userId, made.value, where))) {
     return Option.none();
@@ -815,8 +824,11 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   // Note that a retry from another agent is answered before its source is read, because the source
   // may be gone since the first Start made the agent its key names.
   if (ask.from !== undefined) {
-    const made = yield* startedFromBefore(userId, ask.idempotencyKey, ask.from.agentId, ask);
+    const made = yield* startedFromBefore(userId, ask.idempotencyKey, ask.from, ask);
     if (Option.isSome(made)) return { agent: made.value, created: false };
+    // A key that already names the agent of another Start is refused, never answered with that agent.
+    const other = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
+    if (Option.isSome(other)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   // A source is read against the place asked, and one that is not of it is refused, never dropped.
   const from =

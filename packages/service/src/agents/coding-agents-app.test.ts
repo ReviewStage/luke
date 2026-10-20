@@ -9615,6 +9615,14 @@ it.layer(getTestDB())("starting an agent from another", (it) => {
         ).agent;
         assert.equal(again.id, continued.id);
         assert.equal(eve.opened.length, opened, "a retry opens no session");
+        assert.deepEqual(
+          yield* startFromAs(owner, source.id, {
+            idempotencyKey: key,
+            from: { agentId: source.id, messageId: firstTurn },
+          }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "a key reused for another Start is refused, never answered with the first's agent",
+        );
 
         const forked = readAnswer(
           codingAgentAnswerSchema,
