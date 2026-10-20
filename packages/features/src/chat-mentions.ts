@@ -1,5 +1,7 @@
 import {
   decodeMention,
+  handedMentionsIn,
+  linkMention,
   MENTION_KIND,
   type Mention,
   mentionLinksIn,
@@ -83,17 +85,20 @@ export function chatTargetMember(target: string): ChatMemberMention | undefined 
 }
 
 /**
- * The words with each link naming a person, an agent, or a Luke written as
- * its label alone, every other link left as written: what a chat notice's
- * words mention beside the members it names, which are the chat's to name
- * and no one's pointing.
+ * The words with each person, agent, or Luke they name written as `@` and
+ * its name alone, whether by a mention link or by its address written bare,
+ * every other link left as written: what a chat notice's words mention
+ * beside the members it names, which are the chat's to name and no one's
+ * pointing.
  */
 export function withoutMemberLinks(text: string): string {
   let out = "";
   let at = 0;
-  for (const found of everyMention(text)) {
+  // Note that every link is read, past the cap a message's mentions are handed under, so none is left to be handed.
+  for (const found of handedMentionsIn(text, null, text.length)) {
     if (!addresses(found.mention)) continue;
-    out += text.slice(at, found.start) + found.label;
+    const name = linkMention(found.label, found.target, null)?.name ?? found.label;
+    out += `${text.slice(at, found.start)}@${name}`;
     at = found.end;
   }
   return out + text.slice(at);

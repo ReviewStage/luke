@@ -9160,11 +9160,18 @@ it.layer(getTestDB())("a person's chat from the window", (it) => {
           "Teammate invitations",
           { workspace: "acme", repository: null },
         );
-        yield* chat.wrote({ text: `${named} see ${plan}.`, clientKey: randomUUID() });
+        yield* chat.wrote({
+          text: `${named} see ${plan}, and ask https://tryluke.dev/acme/person/${chat.owner}.`,
+          clientKey: randomUUID(),
+        });
         assert.equal(eve.sent.length, 2);
         const handed = JSON.stringify(eve.sent[1]?.message.message);
         assert.ok(handed.includes(MENTIONED_HEADING), "the task is noted");
         assert.ok(!handed.includes("another coding agent"), "the agent named is not");
+        assert.ok(
+          !handed.includes("pointed you at Test User"),
+          "nor the person its bare address names",
+        );
       }),
   );
 

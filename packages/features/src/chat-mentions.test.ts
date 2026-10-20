@@ -49,9 +49,12 @@ test("a member named after many references is still read, however many reference
   );
 });
 
-test("a member's link is written as its label alone, and a link to anything else stays as written", () => {
+test("a member's link is written as its name alone, its address written bare too, and a link to anything else stays as written", () => {
   assert.equal(
     withoutMemberLinks(`${person}, ${agent} and ${luke}: see ${task}`),
     `@Ada Lovelace, @Invite emails and @Luke: see ${task}`,
   );
+  const bare = encodeMention({ kind: MENTION_KIND.PERSON, userId: USER }, PLACE);
+  const plan = encodeMention({ kind: MENTION_KIND.TASK, taskId: TASK }, PLACE);
+  assert.equal(withoutMemberLinks(`ask ${bare} about ${plan}`), `ask @Person about ${plan}`);
 });
