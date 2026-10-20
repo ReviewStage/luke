@@ -1927,6 +1927,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
           provider: params.provider,
+          ...(params.kind === undefined ? undefined : { kind: params.kind }),
           key: params.key,
         }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
