@@ -6,9 +6,10 @@ import type { ReactNode } from "react";
  * The words are the badge, and the colour says them again: a badge is never
  * a coloured dot alone, so a reader, a screenshot in grey, and an eye that
  * cannot tell the inks apart all read the same state. A glyph may stand
- * before the words where one says the state too. The ink is the tone's own
- * and the ground a tint of it, so the pair holds its contrast on either
- * theme's ground.
+ * before the words where one says the state too, in the tone's ink; a badge
+ * in a tone without one leads its words with a dot of it. The badge stands
+ * on the chip's own opaque face, its words in the text's ink, so they hold
+ * their contrast on any ground behind it.
  *
  * A badge naming something a provider colours, a GitHub label, wears that
  * colour as a dot before its words (`swatch`) rather than on them, because a
