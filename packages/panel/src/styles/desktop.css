@@ -2609,7 +2609,10 @@ ul.actor-stack {
    notch and the home indicator. */
 .desktop-shell[data-room="narrow"] > .voice-caption {
   bottom: calc(
-    min(var(--column-dock, 0px), var(--luke-stage-height) - 3 * var(--luke-control-height)) +
+    max(
+      0px,
+      min(var(--column-dock, 0px), var(--luke-stage-height) - 3 * var(--luke-control-height))
+    ) +
     var(--luke-space-12)
   );
   left: 50%;
@@ -7813,7 +7816,10 @@ polygon.factory-campus-edge[data-edge="selected"] {
   right: calc(var(--luke-space-8) + env(safe-area-inset-right, 0px));
   bottom: calc(
     max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px)) +
-    min(var(--column-dock, 0px), var(--luke-stage-height) - 3 * var(--luke-control-height)) +
+    max(
+      0px,
+      min(var(--column-dock, 0px), var(--luke-stage-height) - 3 * var(--luke-control-height))
+    ) +
     var(--luke-space-8)
   );
   width: min(

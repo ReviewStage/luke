@@ -30,6 +30,25 @@ const STAGED = new Map<string, { top: number; bottom: number }>([
   ["chat-composer foot", { top: 700, bottom: 800 }],
 ]);
 
+/** The Chat rail standing alone in a narrow room, the channel it left mounted in a pane hidden beside it. */
+function RailShell(): React.JSX.Element {
+  const shell = useRef<HTMLDivElement>(null);
+  useColumnDock(shell, false, "chat");
+  return createElement(
+    "div",
+    { ref: shell, className: "desktop-shell" },
+    createElement(
+      "div",
+      { className: "chat-view", "data-staged": "chat-view" },
+      createElement(
+        "div",
+        { hidden: true },
+        createElement("div", { className: "chat-composer", "data-compact": "false" }),
+      ),
+    ),
+  );
+}
+
 /** The Chat page as the shell draws it, a thread's reply open above the channel's composer. */
 function ChatShell(): React.JSX.Element {
   const shell = useRef<HTMLDivElement>(null);
@@ -54,15 +73,30 @@ function ChatShell(): React.JSX.Element {
   );
 }
 
-test("on the Chat page the dock is the channel's composer at its foot, not a thread's reply above it", () => {
+/** Lays each staged box where a phone does, and every box not staged as one drawn nowhere. */
+function stage(): void {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    const box = STAGED.get(this.dataset.staged ?? "") ?? { top: 0, bottom: 0 };
+    const box = STAGED.get(this.dataset.staged ?? "");
+    if (box === undefined) return DOMRect.fromRect({});
     return DOMRect.fromRect({ y: box.top, height: box.bottom - box.top, width: 390 });
   });
+}
+
+/** Draws `shell`, answering the dock it writes on the document's root. */
+function dockOf(shell: () => React.JSX.Element): string {
+  stage();
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(createElement(ChatShell)));
-  assert.equal(document.documentElement.style.getPropertyValue("--column-dock"), "100px");
+  act(() => root?.render(createElement(shell)));
+  return document.documentElement.style.getPropertyValue("--column-dock");
+}
+
+test("on the Chat page the dock is the channel's composer at its foot, not a thread's reply above it", () => {
+  assert.equal(dockOf(ChatShell), "100px");
+});
+
+test("on the Chat rail a channel's composer left in a hidden pane docks nothing", () => {
+  assert.equal(dockOf(RailShell), "0px");
 });

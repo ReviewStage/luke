@@ -19,7 +19,10 @@ function dockHeight(column: Element): number {
   const foot = column.getBoundingClientRect().bottom;
   let top = foot;
   for (const part of column.querySelectorAll(DOCKED)) {
-    top = Math.min(top, part.getBoundingClientRect().top);
+    const box = part.getBoundingClientRect();
+    // A part in a pane a narrow room hides draws no box, and docks nothing.
+    if (box.width === 0 && box.height === 0) continue;
+    top = Math.min(top, box.top);
   }
   return Math.max(0, foot - top);
 }
