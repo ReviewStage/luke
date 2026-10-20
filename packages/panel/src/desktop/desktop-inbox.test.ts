@@ -6482,6 +6482,31 @@ test("a form's fields attach to the reply as they are filled, with no Submit, an
   );
 });
 
+test("a thread's form ask wears the Recommended badge on the option its select recommends and on no other, and picks nothing for the developer", async () => {
+  const pane = await mountThread(
+    threadItem([
+      askingMessage({
+        type: INBOX_ASK.ANSWER,
+        fields: [
+          {
+            type: INBOX_FIELD.SELECT,
+            label: "Channel",
+            options: ["Email", "Slack"],
+            recommended: "Slack",
+          },
+          { type: INBOX_FIELD.SELECT, label: "Severity", options: ["Low", "High"] },
+        ],
+      }),
+    ]),
+  );
+  assert.deepEqual(readSegmented(segmentedGroup(pane, "Channel")), {
+    options: ["Email", "SlackRecommended"],
+    checked: [],
+    tabStops: ["Email"],
+  });
+  assert.deepEqual(readSegmented(segmentedGroup(pane, "Severity")).options, ["Low", "High"]);
+});
+
 test("a to-do's steps are ticked in the draft reply, Mark done needs none ticked and ticks every one, either press pressed again is let go, and Mark done sent carries every step; one naming no step stands its item's title as its one step", async () => {
   const shown = threadItem([
     askingMessage({

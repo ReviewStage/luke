@@ -96,7 +96,7 @@ export const INBOX_TOOLS = {
       "for a go-ahead on one step you propose, two short options such as Approve and Request changes), " +
       "do (a to-do: something only they can do by hand, such as changing a GitHub setting, adding a secret, or testing by hand what you could not test yourself; " +
       `its steps, at most ${INBOX_BOUNDS.MAX_STEPS}, say exactly what to do, and they tick each before they mark it done, or say they couldn't), ` +
-      `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options, or boolean, each named by its label and required where it must be filled; ` +
+      `or answer (one to ${INBOX_BOUNDS.MAX_FIELDS} typed fields, text, number, select with its options and the one you recommend, or boolean, each named by its label and required where it must be filled; ` +
       "or no fields for an answer in their own words); never ask for a credential or a secret in a form, since the answer reaches your transcript: " +
       "that is a do the developer does by hand. A post without ask asks nothing: something they should only know, or your reply on the thread. " +
       "It waits in their inbox until they acknowledge it, which never reaches you unless they write something; " +
@@ -201,6 +201,8 @@ export const INBOX_REFUSAL = {
   FIELD_LABELS: "Not posted: an answer names each field by a label of its own.",
   SELECT_OPTIONS:
     "Not posted: a select field offers its options, each once, and no other field offers options.",
+  SELECT_RECOMMENDATION:
+    "Not posted: a select field's recommended names one of its options, and no other field recommends one.",
   UNREADABLE_WITHDRAW: "Not withdrawn: name the thread's key and why you withdraw its ask.",
   NO_OPEN_ASK: "Not withdrawn: you have no thread under that key with an open ask.",
   NO_AGENT: "Not done: this conversation is no coding agent's.",
@@ -375,7 +377,7 @@ function distinct(labels: readonly string[]): boolean {
   return new Set(labels).size === labels.length;
 }
 
-/** An answer's fields' own refusal: a label used twice, a select with no options or one twice, or options on a field that takes none. */
+/** An answer's fields' own refusal: a label used twice, a select with no options or one twice, options on a field that takes none, or a recommendation naming none of a select's options. */
 function fieldsRefusal(fields: readonly InboxField[]): string | undefined {
   if (!distinct(fields.map((field) => field.label))) return INBOX_REFUSAL.FIELD_LABELS;
   for (const field of fields) {
@@ -383,6 +385,12 @@ function fieldsRefusal(fields: readonly InboxField[]): string | undefined {
     const select = field.type === INBOX_FIELD.SELECT;
     if (select ? options === undefined || !distinct(options) : options !== undefined) {
       return INBOX_REFUSAL.SELECT_OPTIONS;
+    }
+    if (
+      field.recommended !== undefined &&
+      !(select && options?.includes(field.recommended) === true)
+    ) {
+      return INBOX_REFUSAL.SELECT_RECOMMENDATION;
     }
   }
   return undefined;
