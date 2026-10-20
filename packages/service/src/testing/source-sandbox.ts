@@ -17,7 +17,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Deferred, Effect } from "effect";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-shell.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
 import { sandboxListRefusal, sandboxStopRefusal } from "./vercel-sandbox-fake.js";
 
 export const SOURCE_SANDBOX = {

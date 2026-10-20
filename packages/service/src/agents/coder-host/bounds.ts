@@ -1,5 +1,5 @@
 import { Duration } from "effect";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 
 /**
  * bounds.ts -- the bounds and names the coding-agent host runs under.

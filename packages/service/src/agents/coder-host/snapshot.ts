@@ -44,7 +44,7 @@ import { TURN_STATUS } from "@luke/wire";
 import { Clock, Duration, Effect, Option, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
   credentialPolicy,
   OPEN_INTERNET_POLICY,
