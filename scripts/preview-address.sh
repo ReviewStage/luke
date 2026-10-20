@@ -23,6 +23,10 @@ set -euo pipefail
 # for one page, because a preview behind Vercel Authentication redirects every
 # stranger to `vercel.com/sso-api`, and a Mac's own requests carry no Vercel
 # session, so such a preview is PROTECTED and useless to point a build at.
+# Note that Vercel deploys nothing from a coding agent's branch (`luke/**`) or
+# the merge queue's, which the root `vercel.json`'s `git.deploymentEnabled`
+# turns off, so a commit only ever pushed there has no record and ends in
+# NOT_READY; push it under another name to get a Preview.
 # Every read goes through `gh` and `curl`, so the test puts fakes on PATH.
 # Note that the parameters ride in the query string, because `gh api -f`
 # turns the call into a POST and GitHub answers 403 to a deployment create.

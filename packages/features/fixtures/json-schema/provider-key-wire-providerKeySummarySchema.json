@@ -21,7 +21,8 @@
         "verified",
         "invalid",
         "quota_exceeded",
-        "unreadable"
+        "unreadable",
+        "unverified"
       ]
     },
     "statusAt": {

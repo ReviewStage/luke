@@ -1138,7 +1138,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeTaskless: (agents) => {
         for (const agent of agents) {
           if (!heldHere(agent)) continue;
-          tasklessSubjects.set(agent.id, agent.automationName ?? agent.repository);
+          // An agent with neither an automation nor a repository is named by no subject.
+          const subject = agent.automationName ?? agent.repository;
+          if (subject !== null) tasklessSubjects.set(agent.id, subject);
           observe(agent.id, heldOf(agent));
         }
       },

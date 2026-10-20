@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
+import { boardLiveStatement } from "@luke/database/models/board-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
+import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
 import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
 import { LiveSealing, liveSealingFromEnvironment, REALTIME_ENVIRONMENT } from "./realtime.js";
 
@@ -23,12 +26,24 @@ const SEALING_ENVIRONMENT = {
 
 /** Every live statement the endpoints seal, by the part it answers. */
 function liveStatements() {
+  const parent = randomUUID();
+  const transcript = Option.getOrThrow(
+    transcriptLiveStatements(
+      { userId: USER_ID, conversationId: parent },
+      parent,
+      agentFollowedBy(USER_ID, parent, USER_ID),
+    ),
+  );
   const account = Option.getOrThrow(accountInboxLiveStatements(USER_ID));
   return {
     ...Object.fromEntries(
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
     ),
     "account.failedRuns": Option.getOrThrow(ownFailedRunsLiveStatement(USER_ID)),
+    "task.board": Option.getOrThrow(boardLiveStatement(USER_ID, randomUUID())),
+    ...Object.fromEntries(
+      Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
+    ),
   };
 }
 

@@ -97,11 +97,43 @@ export const githubRepositoriesAnswerSchema = EffectSchema.Struct({
   /** Whether the developer reaches any installation of the App at all; false is "Install Luke on GitHub". */
   installed: EffectSchema.Boolean,
   repositories: EffectSchema.Array(githubRepositorySchema),
+  /**
+   * The repositories the developer's own token may push to that the
+   * workspace lists nowhere yet, which Settings › Workspace's Add repository
+   * offers; absent from a service older than it.
+   */
+  addable: EffectSchema.optionalKey(EffectSchema.Array(githubRepositorySchema)),
   /** Where to send the developer to install the App, or to change which repositories it reaches. */
   installationUrl: EffectSchema.String,
 });
 
 export type GitHubRepositoriesAnswer = typeof githubRepositoriesAnswerSchema.Type;
+
+/**
+ * One repository a member added to a workspace on their own GitHub token,
+ * as Settings › Workspace lists it: its name, who added it and when, and
+ * whether the reader may remove it, its adder or a workspace's owner or
+ * admin. One the workspace's installation reaches is left out of the list,
+ * since the App wins.
+ */
+export const workspaceTokenRepositorySchema = EffectSchema.Struct({
+  /** `owner/name` as GitHub spelled it when it was added. */
+  fullName: githubRepositoryFullNameSchema,
+  /** The account that added it. */
+  addedBy: EffectSchema.String,
+  /** Epoch milliseconds it was added. */
+  addedAt: countedNumber,
+  removable: EffectSchema.Boolean,
+});
+
+export type WorkspaceTokenRepository = typeof workspaceTokenRepositorySchema.Type;
+
+/** A workspace's token repositories (GET), and the answer to an add or a removal (PUT): newest added first. */
+export const workspaceTokenRepositoriesAnswerSchema = EffectSchema.Struct({
+  repositories: EffectSchema.Array(workspaceTokenRepositorySchema),
+});
+
+export type WorkspaceTokenRepositoriesAnswer = typeof workspaceTokenRepositoriesAnswerSchema.Type;
 
 /** A pull request's number as the wire takes it: GitHub numbers a repository's issues and pull requests from one. */
 export const githubPullRequestNumberSchema = EffectSchema.Int.check(

@@ -50,11 +50,11 @@ import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@luke/wire";
 import { eq, inArray } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Result, Stream } from "effect";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import { steerCodingAgent } from "../agents/coder-host/steer.js";
 import { CODER_TOOL_SET } from "../agents/coder-host/tool-set.js";
@@ -128,7 +128,7 @@ interface Opened {
 function fakeEve() {
   const opened: Opened[] = [];
   const sent: { readonly sessionId: string; readonly message: EveMessage }[] = [];
-  const sessions = (account: string): EveSessions => ({
+  const sessions = (account: string): AgentSessions => ({
     open: (message) =>
       Effect.sync(() => {
         opened.push({ account, message });

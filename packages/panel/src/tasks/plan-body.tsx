@@ -17,11 +17,12 @@ import { Button, EllipsisIcon, IconButton, TextButton, useMenu } from "@luke/ui"
 import { actorName } from "@luke/ui/actor-model";
 import { commentSpansIn, usePlanCommentsControl } from "@luke/ui/plan-comments";
 import { LinkIcon } from "lucide-react";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActorStack } from "../actor-ref.js";
 import { LINK_COPY, useCopyToast } from "../copy-feedback.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { VERSION_HISTORY } from "../desktop/pages-on-demand.js";
+import { useEditedLinksHost } from "../link-menu.js";
 import {
   type LinkDrawer,
   MARKDOWN_MARK,
@@ -31,6 +32,7 @@ import {
 } from "../markdown-message.js";
 import { useCreator } from "../member-directory.js";
 import type { PlanEditorHandle } from "../plan-editor/contract.js";
+import { useSteadyDoor } from "../steady-door.js";
 import { Tooltip } from "../tooltip.js";
 import { prefersReducedMotion } from "../use-reduced-motion.js";
 import { DocumentByline, DocumentScroll } from "./document-frame.js";
@@ -73,7 +75,7 @@ import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-st
 import { agoText, momentText, sinceText, useMinute } from "./task-time.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
-import { EDITOR_PLACE, type PlanEditDoor, TAP_ROOM, usePlanEditing } from "./use-plan-editing.js";
+import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing.js";
 import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
 
 /**
@@ -586,25 +588,6 @@ const TASK_ITEM_ANYWHERE = /(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ \txX]\]/u;
 /** No section's save named, as a plan from a service before sections were named has. */
 const NO_SECTION_EDITS: readonly PlanSectionEdit[] = [];
 
-/**
- * A door that stands while the one handed over is made afresh on every
- * draw, as a page drawn again on each delivery of the window's state makes
- * its callbacks, and calls the newest; none while none is handed over. Note
- * that it stands so that what is drawn from it is not drawn again for
- * nothing.
- */
-function useSteadyDoor<Args extends readonly unknown[]>(
-  door: ((...args: Args) => void) | undefined,
-): ((...args: Args) => void) | undefined {
-  const latest = useRef(door);
-  latest.current = door;
-  const present = door !== undefined;
-  return useMemo(
-    () => (present ? (...args: Args) => latest.current?.(...args) : undefined),
-    [present],
-  );
-}
-
 /** A unit drawn with its section's byline, where a save has changed the section, and its ⋯, where it has a link. */
 function attributed(
   drawn: React.JSX.Element,
@@ -885,8 +868,12 @@ const DocumentUnit = memo(function DocumentUnit({
  * looked, which the task's region keeps (`use-task-looks.ts`); without them
  * none are. `readMark` is whether the plan is marked unread, which the
  * title's ⋯ offers to flip.
+ *
+ * A memo boundary: the task's page drawn again over the same task and the
+ * same doors, as its column's focus, its side panel's width, and the
+ * minute's clock draw it, leaves the plan as it was.
  */
-export function PlanBody({
+export const PlanBody = memo(function PlanBody({
   task,
   live,
   onShowHistory,
@@ -905,11 +892,11 @@ export function PlanBody({
   task: Task;
   live: boolean;
   onShowHistory?: ShowHistory;
-  onEdit?: PlanEditDoor;
+  onEdit?: PlanEditDoor | undefined;
   /** Renames the task, from its title, answering whether the name was taken. */
-  onRename?: (name: string) => Promise<boolean>;
+  onRename?: ((name: string) => Promise<boolean>) | undefined;
   /** Draws the name typed into the title wherever the task is named, or none once it is left. */
-  onDraftName?: (name: string | undefined) => void;
+  onDraftName?: ((name: string | undefined) => void) | undefined;
   looks?: TaskLooks;
   /** Whether the plan is marked unread, and the mark the title's ⋯ sets; without it, the ⋯ offers none. */
   readMark?: ReadMark;
@@ -923,7 +910,7 @@ export function PlanBody({
   agents?: EditAgents;
   /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
   standing?: TaskStandingDoor;
-  /** What the task's own page draws under its name and byline, ahead of its text, as its linked issues; nothing elsewhere. */
+  /** What the task's own page draws under its status and priority, over its byline, as its linked issues; nothing elsewhere. */
   underTitle?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
@@ -958,26 +945,27 @@ export function PlanBody({
   );
   const scroller = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  // A link in the plan's words being edited opens, from its right-click, where the plan stands.
+  const editedLinks = useEditedLinksHost();
+  const bodyHost = useCallback(
+    (element: HTMLDivElement | null) => {
+      body.current = element;
+      editedLinks(element);
+    },
+    [editedLinks],
+  );
   // The open editor's handle, which a comment started on its words is measured through.
   const editorHandle = useRef<PlanEditorHandle | undefined>(undefined);
   // A press on the document's empty room opens its text there, at its end
   // where it lands under the last line, or anywhere on a plan with no text
   // yet, which has no section to click into; the open editor's own room
-  // moves its caret (`PlanDocumentEditor`). A finger opens it at a second
-  // tap on the room, as it does a block.
+  // moves its caret (`PlanDocumentEditor`).
   useTextRoom({
     text: body,
     box: () => textBoxOf(body.current),
     room: scroller,
     open: false,
-    onPlace:
-      editable && editing.editor === undefined
-        ? (placement, at) => {
-            // Note that a plan with no text yet opens at a finger's first tap, since it has nothing to read.
-            const empty = textBoxOf(body.current) === undefined;
-            if (empty || editing.tapped(TAP_ROOM, at)) editing.open(placement);
-          }
-        : undefined,
+    onPlace: editable && editing.editor === undefined ? editing.open : undefined,
   });
   // How many times Rename was chosen from the title's ⋯, each putting the caret in the title.
   const [renaming, setRenaming] = useState(0);
@@ -1008,17 +996,6 @@ export function PlanBody({
     return () => {
       for (const kind of SCROLL_INTENT_EVENTS) element.removeEventListener(kind, intent);
     };
-  }, []);
-
-  // A scroll lets go of a finger's first tap, so a tap after it reads rather than edits.
-  const disarm = useRef(editing.disarm);
-  disarm.current = editing.disarm;
-  useEffect(() => {
-    const element = scroller.current;
-    if (element === null) return;
-    const scrolled = () => disarm.current();
-    element.addEventListener("scroll", scrolled, { passive: true });
-    return () => element.removeEventListener("scroll", scrolled);
   }, []);
 
   // With nothing focused, the arrows select a block of a document, the first
@@ -1217,7 +1194,7 @@ export function PlanBody({
     >
       <DocumentScroll ref={scroller}>
         {page === undefined ? null : <ChangedLine looks={looks} marks={marks} />}
-        <div ref={body} className={BODY_CLASS}>
+        <div ref={bodyHost} className={BODY_CLASS}>
           {taskStanding === undefined || page !== undefined ? null : (
             <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
           )}
@@ -1253,8 +1230,8 @@ export function PlanBody({
               {taskStanding === undefined ? null : (
                 <TaskStandingChips task={task} onSet={taskStanding.onSet} />
               )}
-              <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
               {underTitle}
+              <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
               <ChangedLine looks={looks} marks={marks} />
             </>
           ) : null}
@@ -1287,4 +1264,4 @@ export function PlanBody({
       </DocumentScroll>
     </PlanPictures>
   );
-}
+});

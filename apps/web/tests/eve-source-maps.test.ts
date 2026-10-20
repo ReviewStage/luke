@@ -32,6 +32,15 @@ for path in "$@"; do
 done | sort > "$here/uploaded-maps"
 `;
 
+/** A `sentry-cli` whose `command` fails, as the upload did with a 503 when Sentry was down. */
+function failingSentryCli(command: "inject" | "upload"): string {
+  return `#!/bin/sh
+[ "$2" = ${command} ] || exit 0
+printf 'error: API request failed (http status: 503)\\n' >&2
+exit 1
+`;
+}
+
 /** What `eve build` leaves for Vercel, with the hidden maps the root's Nitro config asks for. */
 const BUILT_FILES = [
   "functions/__server.func/index.mjs",
@@ -72,9 +81,10 @@ async function upload(
   t: TestContext,
   root: string,
   environment: Record<string, string>,
+  sentryCli = SENTRY_CLI,
 ): Promise<Run> {
   const bin = await temporaryDirectory(t, "luke-eve-source-maps-bin-");
-  writeFileSync(join(bin, "sentry-cli"), SENTRY_CLI);
+  writeFileSync(join(bin, "sentry-cli"), sentryCli);
   chmodSync(join(bin, "sentry-cli"), 0o755);
   const ran = spawnSync("bash", [SCRIPT], {
     cwd: root,
@@ -169,7 +179,7 @@ test("the output Vercel names for the service is the one uploaded from", async (
   assert.ok(!existsSync(join(root, "service-output/functions/__server.func/index.mjs.map")));
 });
 
-test("a build with the token but no maps fails rather than shipping traces Sentry cannot read", async (t) => {
+test("a build with the token but no maps warns and goes on, uploading nothing", async (t) => {
   const root = await builtService(
     t,
     ".vercel/output",
@@ -181,9 +191,37 @@ test("a build with the token but no maps fails rather than shipping traces Sentr
     SENTRY_AUTH_TOKEN: "test-token",
     VERCEL_ENV: "production",
   });
-  assert.notEqual(run.status, 0);
+  assert.equal(run.status, 0, run.output);
+  assert.match(run.output, /warning/);
   assert.equal(run.uploadArguments, undefined);
 });
+
+test.for(["inject", "upload"] as const)(
+  "a build whose sentry-cli %s fails warns and goes on, and still ships no map",
+  async (command, t) => {
+    const root = await builtService(t, ".vercel/output");
+    const run = await upload(
+      t,
+      root,
+      {
+        VERCEL: "1",
+        VERCEL_GIT_COMMIT_SHA: COMMIT,
+        SENTRY_AUTH_TOKEN: "test-token",
+        VERCEL_ENV: "production",
+      },
+      failingSentryCli(command),
+    );
+    assert.equal(run.status, 0, run.output);
+    assert.match(run.output, /warning/);
+    assert.deepEqual(existing(root, ".vercel/output"), [
+      "functions/__server.func/index.mjs",
+      "functions/__server.func/_libs/eve.mjs",
+      "functions/__server.func/node_modules/traced/index.js",
+      "functions/__server.func/node_modules/traced/index.js.map",
+      "functions/.well-known/workflow/v1/flow.func/index.mjs",
+    ]);
+  },
+);
 
 /** Each eve root's Nitro config, which decides whether `eve build` writes the maps this step uploads. */
 const NITRO_CONFIGS = ["luke", "dev"].map((root) =>

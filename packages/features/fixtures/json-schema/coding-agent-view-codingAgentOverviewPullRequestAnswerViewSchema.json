@@ -38,6 +38,10 @@
                   "type": "string",
                   "maxLength": 255
                 },
+                "headOwner": {
+                  "type": "string",
+                  "maxLength": 255
+                },
                 "createdAt": {
                   "type": "number",
                   "minimum": 0
@@ -94,7 +98,8 @@
                     "app-unlinked",
                     "app-no-push",
                     "app-automation",
-                    "app-unread"
+                    "app-unread",
+                    "token"
                   ]
                 },
                 "requested": {

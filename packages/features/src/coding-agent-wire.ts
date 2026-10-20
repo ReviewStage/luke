@@ -137,9 +137,28 @@ export const CODING_AGENT_AUTHOR = {
   APP_AUTOMATION: "app-automation",
   /** The App: GitHub could not be read as the agent started, so the developer's reach went unknown. */
   APP_UNREAD: "app-unread",
+  /** The developer who started the agent, through their own GitHub personal access token, where no installation reaches the repository. */
+  TOKEN: "token",
 } as const;
 
 export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING_AGENT_AUTHOR];
+
+/**
+ * Who pays for a coding agent's model calls, recorded as the agent starts
+ * and never moved after: the starter's Claude plan or ChatGPT plan, which
+ * run the provider's own harness, the starter's own API key, or Luke's key.
+ * A plan that runs out pauses the agent rather than falling through to
+ * another payer.
+ */
+export const CODING_AGENT_PAYER = {
+  // Note that the stored spelling says "plan", the subscription's own word, not a task's document.
+  CLAUDE_SUBSCRIPTION: "claude_plan",
+  CHATGPT_SUBSCRIPTION: "chatgpt_plan",
+  API_KEY: "api_key",
+  LUKE: "luke",
+} as const;
+
+export type CodingAgentPayer = (typeof CODING_AGENT_PAYER)[keyof typeof CODING_AGENT_PAYER];
 
 /** What an agent was handed as its first message: the task's document, or a prompt the developer wrote in its place. */
 export const CODING_AGENT_BRIEF = {
@@ -711,7 +730,8 @@ export type CodingAgentOrigin = typeof codingAgentOriginSchema.Type;
  * started with no task is read, having no task's tab to stand in: the
  * summary the tabs draw, the automation whose run started it or none, the
  * run that did where one did, the workspace it belongs to, and the
- * repository it works in. An agent on a plan reads so too, by the same id.
+ * repository it works in, null for one with none. An agent on a plan reads
+ * so too, by the same id.
  */
 export const codingAgentPageSchema = EffectSchema.Struct({
   ...codingAgentSummarySchema.fields,
@@ -719,7 +739,7 @@ export const codingAgentPageSchema = EffectSchema.Struct({
   /** The run that started the agent; absent for one started by hand, and from a service before it. */
   origin: EffectSchema.optionalKey(codingAgentOriginSchema),
   workspaceId: EffectSchema.String,
-  repository: EffectSchema.String,
+  repository: EffectSchema.NullOr(EffectSchema.String),
 });
 
 export type CodingAgentPage = typeof codingAgentPageSchema.Type;
@@ -793,12 +813,12 @@ export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
 
 /**
  * What an agent published (GET): the repository it works in as `owner/name`,
- * the branch it pushed, where GitHub holds one, and the pull request from
- * it, where one is open or was; null for each it has not. A pull request's
- * branch is its head.
+ * null for one with none, which publishes nothing; the branch it pushed,
+ * where GitHub holds one; and the pull request from it, where one is open or
+ * was; null for each it has not. A pull request's branch is its head.
  */
 export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
-  repository: EffectSchema.String,
+  repository: EffectSchema.NullOr(EffectSchema.String),
   branch: EffectSchema.NullOr(EffectSchema.String),
   pullRequest: EffectSchema.NullOr(codingAgentPullRequestSchema),
 });
@@ -1292,7 +1312,9 @@ export type PullRequestStackEntry = typeof stackEntrySchema.Type;
  * the first of the overview's three reads, each of which lands on its own:
  * where it stands, its title, number, and page; its description as GitHub
  * renders it (`body_html`), empty where it has none; the branch it merges
- * into and the one it merges from; when it was opened, and merged where it
+ * into and the one it merges from, with the account whose fork that one
+ * stands on where it is not the repository's own (absent from a service
+ * before it); when it was opened, and merged where it
  * was; whether it would merge as it stands; who opened it, who the agent
  * writes as on GitHub, and who it still asks for a review, people and
  * teams; its labels; and,
@@ -1311,6 +1333,7 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
       html: EffectSchema.String,
       base: overviewName,
       head: overviewName,
+      headOwner: EffectSchema.optionalKey(overviewName),
       createdAt: countedNumber,
       mergedAt: EffectSchema.NullOr(countedNumber),
       merge: EffectSchema.Literals(Object.values(MERGE_STATE)),

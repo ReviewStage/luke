@@ -501,14 +501,6 @@ export function changeMarks(
   }));
 }
 
-/** The lines every file adds and removes, summed. */
-export function linesChanged(files: readonly CodingAgentChangedFile[]) {
-  return {
-    additions: files.reduce((sum, file) => sum + file.additions, 0),
-    deletions: files.reduce((sum, file) => sum + file.deletions, 0),
-  };
-}
-
 /**
  * The folders the changed paths stand in, each listed as the tree lists a
  * folder of the repository: the entries of its own that hold a change, a
@@ -540,13 +532,34 @@ export function changedFolders(paths: readonly string[]): ReadFolder {
  * paths on each side, `/dev/null` for a side it does not stand on; none
  * where the file carries no hunks to copy.
  */
-export function filePatch(file: CodingAgentChangedFile): string | undefined {
+function filePatch(file: CodingAgentChangedFile): string | undefined {
   if (file.patch === null || fileNotice(file) !== undefined) return undefined;
   const from = file.previousPath ?? file.path;
   const before = file.status === CHANGED_FILE_STATUS.ADDED ? NO_SIDE : `a/${from}`;
   const after = file.status === CHANGED_FILE_STATUS.DELETED ? NO_SIDE : `b/${file.path}`;
   const body = file.patch.endsWith("\n") ? file.patch : `${file.patch}\n`;
   return [`diff --git a/${from} b/${file.path}`, `--- ${before}`, `+++ ${after}`, body].join("\n");
+}
+
+/**
+ * A whole pull request's patch, as git writes one: the patch of every file
+ * given that has lines to draw (`filePatch`), one after another in the order
+ * given; a file with none (a binary, one GitHub omitted, or one that only
+ * moved) is left out. None where no file has one.
+ */
+export function pullRequestPatch(files: readonly CodingAgentChangedFile[]): string | undefined {
+  const patches = files.flatMap((file) => filePatch(file) ?? []);
+  return patches.length === 0 ? undefined : patches.join("");
+}
+
+/** What a pull request's patch is saved as, from its page on GitHub: `<repository>-pr-<number>.patch`, or a plain name where the page names neither. */
+export function pullRequestPatchName(url: string): string {
+  const [, name, kind, number] = URL.canParse(url)
+    ? new URL(url).pathname.split("/").filter((segment) => segment !== "")
+    : [];
+  return name === undefined || kind !== "pull" || number === undefined
+    ? "pull-request.patch"
+    : `${name}-pr-${number}.patch`;
 }
 
 /** A file's header as git writes one, with no hunks under it: what the list draws for a file whose place shows no lines. */

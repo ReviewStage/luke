@@ -33,11 +33,11 @@ import {
   stopConversation,
 } from "./brain-ask.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "./eve-sessions.js";
 
 /**
@@ -153,7 +153,7 @@ type EveCall =
       readonly eveTurnId: string | undefined;
     };
 
-interface FakeEve extends EveSessions {
+interface FakeEve extends AgentSessions {
   readonly calls: EveCall[];
   /** Sessions eve has retired, so a follow-up to one reads as such. */
   readonly retired: Set<string>;

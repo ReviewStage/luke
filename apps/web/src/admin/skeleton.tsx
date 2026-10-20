@@ -15,8 +15,9 @@ import {
 } from "@luke/ui";
 import { ChartFrameSkeleton } from "./charts/chart-frame";
 import {
+  AdminSection,
+  CARD_GAP,
   MetricCardSkeleton,
-  SectionHeading,
   STAT_CELL,
   STAT_GROUP_COLUMNS,
   STAT_PAIR,
@@ -32,7 +33,9 @@ import {
  * fixed plot height, the retention grid's eight `min-h-9` cohort rows and the
  * tables' ten (`ADMIN_RETENTION_WEEKS` and `ADMIN_OVERVIEW_ACCOUNTS_LIMIT`, not
  * imported because the modules exporting them carry query code the client
- * bundle must not), and a table row's `py-3` around a `size-8` avatar. Static
+ * bundle must not), and a table cell's padding (`data-table.css`) around a
+ * `size-8` avatar. A heading opens a section that holds every shape after it
+ * up to the next, as the loaded page's sections hold theirs. Static
  * words — the headings, the notes under the sections — render as themselves;
  * only unknown data gets bones, each hidden from readers while `aria-busy` on
  * the region and one visually hidden line say what the page is doing.
@@ -50,6 +53,9 @@ function SkeletonLine({ variant, width }: SkeletonTextLine): React.JSX.Element {
     </Text>
   );
 }
+
+/** The retention basis picker's bone, about its two segments' width. */
+const RETENTION_PICKER_WIDTH = "260px";
 
 /** The small avatar's bone, the size of a table row's avatar. */
 const AVATAR_BONE = { small: "32px", large: "56px" } as const;
@@ -120,12 +126,19 @@ function bones(count: number): readonly number[] {
 }
 
 /** Two chart cards of equal width side by side, as the Reliability breakdowns stand. */
-export const CHART_PAIR_EVEN = "grid gap-3 min-[720px]:grid-cols-2";
+export const CHART_PAIR_EVEN = `grid ${CARD_GAP} min-[720px]:grid-cols-2`;
+
+/** A wide chart card beside a narrow one, as the Overview's funnel and reach stand. */
+export const CHART_PAIR_WIDE = `grid ${CARD_GAP} min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]`;
 
 const STAT_CARDS_GRID = {
-  1: "grid gap-3",
-  2: "grid grid-cols-2 gap-3",
+  1: `grid ${CARD_GAP}`,
+  2: `grid grid-cols-2 ${CARD_GAP}`,
 } as const;
+
+/** A table's row of bones, ruled and padded as a `DataTable` cell is (`data-table.css`). */
+const TABLE_ROW_BONES =
+  "flex items-center gap-(--luke-space-24) border-b border-(--luke-color-border) px-(--luke-space-20) py-(--luke-space-12)";
 
 /**
  * The bar charts and the share bars carry a caption across from their
@@ -164,7 +177,7 @@ function SkeletonAccountsTable({
   const columns = bones(numericColumns);
   return (
     <Card padding={CARD_PADDING.FLUSH}>
-      <div className="flex items-center gap-6 border-b border-(--luke-color-border) px-5 py-3">
+      <div className={TABLE_ROW_BONES}>
         <div className="min-w-0 flex-1">
           <SkeletonLine variant={TEXT_VARIANT.LABEL} width="64px" />
         </div>
@@ -175,11 +188,8 @@ function SkeletonAccountsTable({
         ))}
       </div>
       {bones(rows).map((row) => (
-        <div
-          key={row}
-          className="flex items-center gap-6 border-b border-(--luke-color-border) px-5 py-3 last:border-0"
-        >
-          <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div key={row} className={`${TABLE_ROW_BONES} last:border-0`}>
+          <div className="flex min-w-0 flex-1 items-center gap-(--luke-space-12)">
             <span className="flex shrink-0">
               <Bone shape={BONE_SHAPE.CIRCLE} width={AVATAR_BONE.small} />
             </span>
@@ -199,10 +209,11 @@ function SkeletonAccountsTable({
   );
 }
 
-function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Element {
+/** A shape that stands in a section, every one but the heading that opens it. */
+type SkeletonPart = Exclude<SkeletonShape, { kind: typeof SKELETON_SHAPE.HEADING }>;
+
+function SkeletonShapeBody({ shape }: { shape: SkeletonPart }): React.JSX.Element {
   switch (shape.kind) {
-    case SKELETON_SHAPE.HEADING:
-      return <SectionHeading>{shape.label}</SectionHeading>;
     case SKELETON_SHAPE.STAT_GROUP:
       return (
         <StatGroup>
@@ -241,11 +252,7 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
       return (
         <div
           className={
-            shape.plots.length > 1
-              ? shape.even
-                ? CHART_PAIR_EVEN
-                : "grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]"
-              : undefined
+            shape.plots.length > 1 ? (shape.even ? CHART_PAIR_EVEN : CHART_PAIR_WIDE) : undefined
           }
         >
           {shape.plots.map((plot, index) => (
@@ -256,31 +263,37 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
     case SKELETON_SHAPE.CALENDAR:
       return <SkeletonCalendarCard />;
     case SKELETON_SHAPE.RETENTION:
+      // Note that the grid's basis picker stands over it, so its bone does too.
       return (
-        <Card>
-          <div className="grid gap-1">
-            <SkeletonLine variant={TEXT_VARIANT.CAPTION} width="100%" />
-            {bones(8).map((row) => (
-              <div key={row} className="h-9">
-                <Bone shape={BONE_SHAPE.BLOCK} />
-              </div>
-            ))}
+        <>
+          <div>
+            <Bone shape={BONE_SHAPE.CONTROL} width={RETENTION_PICKER_WIDTH} />
           </div>
-        </Card>
+          <Card>
+            <div className="grid gap-(--luke-space-4)">
+              <SkeletonLine variant={TEXT_VARIANT.CAPTION} width="100%" />
+              {bones(8).map((row) => (
+                <div key={row} className="h-9">
+                  <Bone shape={BONE_SHAPE.BLOCK} />
+                </div>
+              ))}
+            </div>
+          </Card>
+        </>
       );
     case SKELETON_SHAPE.TABLE:
       return <SkeletonAccountsTable rows={shape.rows} numericColumns={shape.numericColumns} />;
     case SKELETON_SHAPE.LINES:
       return (
-        <>
+        <div>
           {shape.bones.map((width, index) => (
             <SkeletonLine key={index} variant={TEXT_VARIANT.BODY} width={width} />
           ))}
-        </>
+        </div>
       );
     case SKELETON_SHAPE.HEALTH:
       return (
-        <div className="grid gap-3 min-[720px]:grid-cols-[1fr_1.4fr]">
+        <div className={`grid ${CARD_GAP} min-[720px]:grid-cols-[1fr_1.4fr]`}>
           <MetricCardSkeleton>
             <Text as={TEXT_ELEMENT.DIV}>
               <Bone width="96px" />
@@ -315,43 +328,46 @@ function SkeletonShapeBody({ shape }: { shape: SkeletonShape }): React.JSX.Eleme
   }
 }
 
-/**
- * What separates one region from the next. The first opens where the page's
- * content does, under the toolbar, as the loaded page's first region does; a
- * heading carries its own margins, so the region under it needs none; a
- * masthead keeps the clearance the real pages give it; and words that draw
- * themselves bring whatever spacing they were written with, before them and
- * after.
- */
-function shapeSpacing(
-  shape: SkeletonShape,
-  previous: SkeletonShape | undefined,
-): string | undefined {
-  if (previous === undefined) return undefined;
-  switch (shape.kind) {
-    case SKELETON_SHAPE.HEADING:
-    case SKELETON_SHAPE.STATIC:
-      return undefined;
-    case SKELETON_SHAPE.MASTHEAD:
-      return "mt-6";
-    default:
-      return previous.kind === SKELETON_SHAPE.HEADING || previous.kind === SKELETON_SHAPE.STATIC
-        ? undefined
-        : "mt-3";
-  }
+/** One section of a loading page: its heading, where it has one, and the shapes under it. */
+interface SkeletonSection {
+  heading: string | undefined;
+  shapes: SkeletonPart[];
 }
 
-/** One loading page's regions, stacked in the order the page states them. */
+/**
+ * The shapes, each heading opening a section that holds what follows it up
+ * to the next; what stands before the first heading leads the page as a
+ * section of no heading, as an account's masthead or a page's note does.
+ */
+function skeletonSections(shapes: readonly SkeletonShape[]): SkeletonSection[] {
+  const sections: SkeletonSection[] = [];
+  for (const shape of shapes) {
+    if (shape.kind === SKELETON_SHAPE.HEADING) {
+      sections.push({ heading: shape.label, shapes: [] });
+      continue;
+    }
+    const last = sections.at(-1);
+    if (last === undefined) sections.push({ heading: undefined, shapes: [shape] });
+    else last.shapes.push(shape);
+  }
+  return sections;
+}
+
+/**
+ * One loading page's sections, stacked in the order the page states them, a
+ * section's gap apart as the loaded page's are (`Refreshing`), so the first
+ * opens where the page's content does, under the toolbar.
+ */
 export function SkeletonBody({ shapes }: { shapes: readonly SkeletonShape[] }): React.JSX.Element {
   return (
-    <>
-      {shapes.map((shape, index) => {
-        return (
-          <div key={index} className={shapeSpacing(shape, shapes[index - 1])}>
-            <SkeletonShapeBody shape={shape} />
-          </div>
-        );
-      })}
-    </>
+    <Stack gap={GAP.SECTION}>
+      {skeletonSections(shapes).map((section, index) => (
+        <AdminSection key={index} title={section.heading}>
+          {section.shapes.map((shape, at) => (
+            <SkeletonShapeBody key={at} shape={shape} />
+          ))}
+        </AdminSection>
+      ))}
+    </Stack>
   );
 }

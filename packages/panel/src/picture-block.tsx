@@ -26,11 +26,14 @@ const READING_LABEL = "Reading the picture";
 
 /** The picture's own block, by where its read stands. */
 export function PictureBlock({
+  ref,
   state,
   alt,
   caption,
   onOpen,
 }: {
+  /** The block's own element, as the place drawing it may need to find it among others. */
+  ref?: React.Ref<HTMLSpanElement> | undefined;
   state: PictureState;
   /** The picture's description, as its Markdown's alt text gives it; empty where it gives none. */
   alt: string;
@@ -46,7 +49,7 @@ export function PictureBlock({
   // A picture with nothing to open on a press is drawn as itself, no button.
   if (state.kind === PICTURE_STATE.READY && onOpen === undefined) {
     return (
-      <span className="picture-block ph-no-capture" data-state={state.kind}>
+      <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
         <span className="picture-frame">
           <img
             className="picture-image"
@@ -63,7 +66,7 @@ export function PictureBlock({
   if (state.kind === PICTURE_STATE.READY) {
     const open = onOpen;
     return (
-      <span className="picture-block ph-no-capture" data-state={state.kind}>
+      <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
         <button
           type="button"
           className="picture-frame"
@@ -88,7 +91,7 @@ export function PictureBlock({
   }
   if (state.kind === PICTURE_STATE.READING) {
     return (
-      <span className="picture-block ph-no-capture" data-state={state.kind}>
+      <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
         <span className="picture-frame picture-pending">
           <Spinner label={READING_LABEL} />
         </span>
@@ -97,7 +100,7 @@ export function PictureBlock({
     );
   }
   return (
-    <span className="picture-block ph-no-capture" data-state={state.kind}>
+    <span ref={ref} className="picture-block ph-no-capture" data-state={state.kind}>
       <span className="picture-frame picture-missing" role="img" aria-label={alt}>
         <ImageOffIcon aria-hidden="true" />
         <span>{alt === "" ? `This picture is ${MISSING_WORDS}` : `${alt} · ${MISSING_WORDS}`}</span>

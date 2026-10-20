@@ -22,6 +22,28 @@ export const PROVIDER_KEY_PROVIDER = MODEL_PROVIDER;
 export type ProviderKeyProvider =
   (typeof PROVIDER_KEY_PROVIDER)[keyof typeof PROVIDER_KEY_PROVIDER];
 
+/**
+ * What a stored credential is: a provider's API key, which is billed by the
+ * token, or a subscription credential, which runs on the plan the account
+ * pays its provider for. Every kind is sealed, braked, and rewrapped alike.
+ */
+export const PROVIDER_KEY_KIND = {
+  /** A provider API key, checked with the provider before it is kept. */
+  API_KEY: "api_key",
+  /** A Claude subscription's long-lived token, as `claude setup-token` prints it; Anthropic's alone. */
+  CLAUDE_SETUP_TOKEN: "claude_setup_token",
+} as const;
+
+export type ProviderKeyKind = (typeof PROVIDER_KEY_KIND)[keyof typeof PROVIDER_KEY_KIND];
+
+/** The provider each subscription kind belongs to; an API key belongs to whichever provider it is saved for. */
+export const SUBSCRIPTION_KIND_PROVIDER = {
+  [PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN]: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+} as const satisfies Record<
+  Exclude<ProviderKeyKind, typeof PROVIDER_KEY_KIND.API_KEY>,
+  ProviderKeyProvider
+>;
+
 /** How the provider last answered a stored key, or that the service can no longer read it. */
 export const PROVIDER_KEY_STATUS = {
   /** The provider accepted the key at its last use or check. */
@@ -32,6 +54,8 @@ export const PROVIDER_KEY_STATUS = {
   QUOTA_EXCEEDED: "quota_exceeded",
   /** The service cannot decrypt the key it holds, so it is used for nothing until it is replaced. */
   UNREADABLE: "unreadable",
+  /** A subscription credential no provider has answered yet: it is kept unchecked, since Luke never calls a provider on a plan itself. */
+  UNVERIFIED: "unverified",
 } as const;
 
 export type ProviderKeyStatus = (typeof PROVIDER_KEY_STATUS)[keyof typeof PROVIDER_KEY_STATUS];
@@ -73,12 +97,16 @@ const PROVIDER_KEY_BOUNDS = {
   MAX_KEY_CHARS: 512,
 } as const;
 
-/** The query `DELETE` names its provider in. */
+/** The query `DELETE` names its provider in, and the kind where it is not an API key. */
 export const PROVIDER_KEY_QUERY = {
   PROVIDER: "provider",
+  KIND: "kind",
 } as const;
 
 const providerSchema = EffectSchema.Literals(Object.values(PROVIDER_KEY_PROVIDER));
+
+/** A stored credential's kind, as a request names it; a request that names none means an API key. */
+export const providerKeyKindSchema = EffectSchema.Literals(Object.values(PROVIDER_KEY_KIND));
 
 /** What the account sees of one stored key: never the key, only what tells it apart. */
 export const providerKeySummarySchema = EffectSchema.Struct({
@@ -94,17 +122,32 @@ export const providerKeySummarySchema = EffectSchema.Struct({
 
 export type ProviderKeySummary = typeof providerKeySummarySchema.Type;
 
-/** The account's keys (GET, DELETE, and every PUT's answer), with why a save kept nothing where it did. */
+/** What the account sees of one stored subscription credential: never the credential, only what tells it apart. */
+export const subscriptionKeySummarySchema = EffectSchema.Struct({
+  ...providerKeySummarySchema.fields,
+  kind: providerKeyKindSchema,
+});
+
+export type SubscriptionKeySummary = typeof subscriptionKeySummarySchema.Type;
+
+/**
+ * The account's keys (GET, DELETE, and every PUT's answer), with why a save
+ * kept nothing where it did. `keys` holds its API keys alone, as every
+ * desktop reads them; its subscription credentials stand apart, so a desktop
+ * that knows no kind never reads one as an API key.
+ */
 export const providerKeysAnswerSchema = EffectSchema.Struct({
   keys: EffectSchema.Array(providerKeySummarySchema),
+  subscriptions: EffectSchema.optionalKey(EffectSchema.Array(subscriptionKeySummarySchema)),
   rejected: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(PROVIDER_KEY_REJECTION))),
 });
 
 export type ProviderKeysAnswer = typeof providerKeysAnswerSchema.Type;
 
-/** Saving a key for a provider (PUT), replacing the one it held. */
+/** Saving a key for a provider (PUT), replacing the one of its kind it held; a request naming no kind saves an API key. */
 export const providerKeySaveRequestSchema = EffectSchema.Struct({
   provider: providerSchema,
+  kind: EffectSchema.optionalKey(providerKeyKindSchema),
   key: EffectSchema.Trim.check(
     EffectSchema.isMinLength(PROVIDER_KEY_BOUNDS.MIN_KEY_CHARS),
     EffectSchema.isMaxLength(PROVIDER_KEY_BOUNDS.MAX_KEY_CHARS),

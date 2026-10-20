@@ -8,13 +8,15 @@ import { storeWriter } from "@luke/database/models/writer";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpClient, HttpRouter } from "effect/http";
 import { deploymentEveOrigin } from "../agents/brain-host/eve-origin.js";
-import { EVE_MOUNT, eveSessions } from "../agents/brain-host/eve-sessions.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
+import { deploymentEveForAccounts } from "../agents/deployment-eve.js";
 import { sessionSandboxesLayer, sweepSessionSandboxes } from "../agents/session-sandboxes.js";
 import type { EveForAccount } from "../automations/automation-runs.js";
 import { sweepAutomations } from "../automations/automation-sweep.js";
 import { HostedEnvironment } from "../environment.js";
 import type { GitHubApp } from "../github/github-app.js";
-import { effectPassthrough, HOSTED_REFUSAL, hostedNotFoundRoute } from "../http/http-effect.js";
+import { sweepTokenPullRequests } from "../github/token-pull-request-sweep.js";
+import { effectPassthrough, hostedNotFoundRoute } from "../http/http-effect.js";
 import { type CronMonitor, sentryCronCheckIns } from "../observability/sentry.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { ANY_METHOD, type WebRoutes } from "../route.js";
@@ -64,12 +66,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
 > {
   const environment = yield* HostedEnvironment;
   const startContext = yield* Effect.context<HttpClient.HttpClient | GitHubApp | ModelCatalog>();
-  const secret = environment.eveDeploymentSecret;
-  const origin = deploymentEveOrigin();
-  const eveFor: EveForAccount = (account) =>
-    secret === undefined || origin === undefined
-      ? Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)
-      : eveSessions({ origin, caller: { secret, account }, mount: EVE_MOUNT.CODER });
+  const eveFor: EveForAccount = yield* deploymentEveForAccounts<EveTypedTurn>(
+    deploymentEveOrigin(),
+    EVE_MOUNT.CODER,
+  );
   const sandboxes = Layer.provide(
     sessionSandboxesLayer,
     Layer.succeed(HttpClient.HttpClient, yield* HttpClient.HttpClient),
@@ -99,6 +99,10 @@ const maintenanceSweepEffect = /* @__PURE__ */ Effect.fn("web/maintenanceSweepEf
       sweepAutomations(eveFor, now).pipe(Effect.provideContext(startContext)),
     purgeUnsavedPictures: (now) =>
       purgeUnsavedAttachments(new Date(now - UNSAVED_PICTURE_GRACE_MS)),
+    sweepTokenPullRequests: (now) =>
+      sweepTokenPullRequests(eveFor, environment.providerKeyEncryptionKeys, new Date(now)).pipe(
+        Effect.provideContext(startContext),
+      ),
     sweepVoice: (now) =>
       voiceUpstream === undefined
         ? Effect.succeed(NOTHING_ORPHANED)

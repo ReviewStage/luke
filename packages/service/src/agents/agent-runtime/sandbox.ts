@@ -15,6 +15,19 @@
  * snapshot `prepare` made, so the larger image costs a brain session
  * nothing at open.
  *
+ * The image also carries what a coding agent on Claude Code runs on: the
+ * pinned Claude Agent SDK with the `claude` binary it carries, bubblewrap
+ * and socat for Claude Code's own command sandbox, and `agent`, the
+ * unprivileged user it runs as, with a home no other user reads; and the
+ * pinned Codex a coding agent on Codex runs on, as the same user, with its
+ * `CODEX_HOME` in that home. And the image holds no sudo at runtime:
+ * everything that needs root is installed here, and the default user's
+ * sudoers entry is dropped as the last step, so neither a Terminal's shell
+ * nor an agent's command reaches root through it. A package an agent needs is added here, never installed at runtime.
+ * Those shells and commands also run with every capability dropped
+ * (`sandbox-capabilities.ts`), since the sandbox hands its default user the
+ * whole set without sudo; the preparation checks that the drop holds.
+ *
  * Each root's `sandbox.ts` exports this one environment object, which is
  * safe because each eve project bundles its own copy of this module and
  * builds its own snapshot from it, and eve matches a sandbox's environment
@@ -25,8 +38,11 @@
  * What the role's policy (`role.ts`) does with the sandbox once open is
  * read here by the store hook that watches the session's stream: whether a
  * turn's end stops it, and whether a step renews the credential the
- * checkout set at its firewall. No effect runs here; the edges that call
- * these run their own.
+ * checkout set at its firewall, which a shallow checkout's deepen sets on
+ * its first write and which stands only from then on. A member's own GitHub token is never
+ * renewed, since it does not expire: a turn's end takes it off the firewall
+ * where the sandbox stops, and the next turn's first step sets it again. No
+ * effect runs here; the edges that call these run their own.
  */
 
 import { createHash } from "node:crypto";
@@ -37,6 +53,7 @@ import type { SandboxSession } from "eve/sandbox";
 import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/vercel";
 import { BRAIN_HOST } from "../brain-host/bounds.js";
 import { CODER } from "../coder-host/bounds.js";
+import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { PREPARE_TMUX } from "../terminal/tmux.js";
 import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
 
@@ -93,8 +110,123 @@ const INSTALL_GTK =
  */
 const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; fi >/dev/null; fi`;
 
-/** The commands `prepare` runs on the snapshot, after the code extension's tooling. */
-const PREPARE_SCRIPT = [
+/**
+ * Installs bubblewrap and socat, which Claude Code's command sandbox runs
+ * each command under on Linux, `$SUDO` as `PREPARE_TMUX` set it.
+ */
+const INSTALL_BUBBLEWRAP = [
+  "if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y bubblewrap socat; else $SUDO apt-get install -y --no-install-recommends bubblewrap socat; fi",
+  "bwrap --version",
+];
+
+/**
+ * The Claude Agent SDK, pinned exactly, and the `claude` binary its
+ * platform package carries (the SDK's own `claudeCodeVersion`), so
+ * installing the one installs the other. The pair is the one the Claude
+ * Code probe proved in a sandbox, and the runner that drives the binary
+ * pins the same SDK; a bump moves both on purpose. Installed as root in a
+ * directory only root writes, so no shell of the sandbox's user changes the
+ * binary Claude Code runs as `agent`. The binary is the Linux x86-64 build,
+ * the Vercel sandbox's architecture.
+ */
+const CLAUDE_CODE = {
+  SDK_VERSION: "0.3.304",
+  VERSION: "2.1.304",
+  DIRECTORY: "/opt/luke/claude-agent-sdk",
+  BINARY: "node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude",
+} as const;
+
+/**
+ * Installs the SDK where its binary does not already print the pin, links
+ * the binary as `claude`, and checks that it prints the pin, `$SUDO` as
+ * `PREPARE_TMUX` set it. Note that root's npm reads root's home, never the
+ * default user's configuration.
+ */
+const INSTALL_CLAUDE_CODE = [
+  `if ! ${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.BINARY} --version 2>/dev/null | grep -q '^${CLAUDE_CODE.VERSION} '; then`,
+  `  $SUDO env HOME=/root npm install --prefix ${CLAUDE_CODE.DIRECTORY} --no-audit --no-fund --save-exact @anthropic-ai/claude-agent-sdk@${CLAUDE_CODE.SDK_VERSION}`,
+  "fi",
+  `$SUDO ln -sfn ${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.BINARY} /usr/local/bin/claude`,
+  "claude --version",
+  `claude --version | grep -q '^${CLAUDE_CODE.VERSION} ' || { echo 'claude does not print ${CLAUDE_CODE.VERSION}' >&2; exit 1; }`,
+];
+
+/** The unprivileged user Claude Code runs as, apart from the sandbox's default user. */
+const AGENT_USER = "agent";
+
+/**
+ * Creates `agent` where it is missing, with a home only it reads, and in
+ * the default user's group, so the checkout can be shared with it, `$SUDO`
+ * as `PREPARE_TMUX` set it. Note that the Sandbox SDK's own user creation is
+ * not used, because the homes it makes are readable by the default user's
+ * group, so a Terminal could read what Claude Code keeps there.
+ */
+const CREATE_AGENT_USER = [
+  `id -u ${AGENT_USER} >/dev/null 2>&1 || $SUDO useradd --create-home --shell /bin/bash ${AGENT_USER}`,
+  `$SUDO chmod 700 /home/${AGENT_USER}`,
+  `$SUDO usermod -aG "$(id -gn)" ${AGENT_USER}`,
+];
+
+/**
+ * Codex, pinned exactly, the release the Codex probe proved in a sandbox
+ * and the runner's Codex mode drives; a bump moves them together. Installed
+ * as root under a prefix only root writes, beside the Claude Agent SDK, so
+ * no shell of the sandbox's user changes the binary Codex runs as `agent`.
+ * Its `CODEX_HOME` is in `agent`'s home, on the sandbox's persisted disk, so
+ * the threads it keeps there outlive a stop and `thread/resume` finds them;
+ * Codex refuses to start where it is missing, so the image makes it.
+ */
+const CODEX = {
+  VERSION: "0.163.0",
+  DIRECTORY: "/opt/luke/codex",
+  HOME: `/home/${AGENT_USER}/.codex`,
+} as const;
+
+/**
+ * Installs Codex where it does not already print the pin, links it as
+ * `codex`, and checks that it prints the pin, `$SUDO` as `PREPARE_TMUX` set
+ * it; then makes `agent`'s `CODEX_HOME`, which only `agent` reads.
+ */
+const INSTALL_CODEX = [
+  `if ! ${CODEX.DIRECTORY}/bin/codex --version 2>/dev/null | grep -Fxq 'codex-cli ${CODEX.VERSION}'; then`,
+  `  $SUDO env HOME=/root npm install --global --prefix ${CODEX.DIRECTORY} --no-audit --no-fund @openai/codex@${CODEX.VERSION}`,
+  "fi",
+  `$SUDO ln -sfn ${CODEX.DIRECTORY}/bin/codex /usr/local/bin/codex`,
+  "codex --version",
+  `codex --version | grep -Fxq 'codex-cli ${CODEX.VERSION}' || { echo 'codex does not print ${CODEX.VERSION}' >&2; exit 1; }`,
+  `$SUDO install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0700 ${CODEX.HOME}`,
+];
+
+/**
+ * Removes every sudoers line and file that grants the user named as `$1`,
+ * and takes it out of the groups a sudoers file commonly grants. Run as root
+ * in one shell, so the user's sudo is not lost halfway through.
+ */
+const DROP_SUDOERS = [
+  'user="$1"',
+  "for file in /etc/sudoers.d/*; do",
+  '  if [ -f "$file" ] && grep -qE "^[[:space:]]*$user[[:space:]]" "$file"; then rm -f "$file"; fi',
+  "done",
+  'sed -i "/^[[:space:]]*$user[[:space:]]/d" /etc/sudoers',
+  'for group in wheel sudo admin; do gpasswd -d "$user" "$group" >/dev/null 2>&1 || true; done',
+].join("\n");
+
+/**
+ * The image's last step: the default user's sudo dropped, then a check that
+ * it is gone and that a command started under the capability drop holds no
+ * capability, which fails the preparation rather than leave either standing.
+ * A sandbox prepared as root has no default user's sudo to drop.
+ */
+const DROP_SUDO = [
+  'if [ "$(id -u)" != 0 ]; then',
+  `  sudo -n sh -c '${DROP_SUDOERS.replaceAll("'", `'\\''`)}' drop-sudo "$(id -un)"`,
+  "  if sudo -n true 2>/dev/null; then echo 'sudo still stands for the default user' >&2; exit 1; fi",
+  "fi",
+  `${WITHOUT_CAPABILITIES.COMMAND} ${WITHOUT_CAPABILITIES.ARGS.join(" ")} grep -q '^CapEff:[[:space:]]*0*$' /proc/self/status || { echo 'a command without capabilities still holds one' >&2; exit 1; }`,
+];
+
+/** The commands `prepare` runs on the snapshot, after the code extension's tooling; the Claude Code probe (`tools/claude-code-probe`) prepares its sandbox from the same script. */
+export const PREPARE_SCRIPT = [
   "set -e",
   "git --version",
   "node --version",
@@ -116,19 +248,41 @@ const PREPARE_SCRIPT = [
   // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
   INSTALL_GTK,
   ...INSTALL_GH_STACK,
+  ...INSTALL_BUBBLEWRAP,
+  ...INSTALL_CLAUDE_CODE,
+  ...CREATE_AGENT_USER,
+  ...INSTALL_CODEX,
+  // Last, once everything that needs root is in place.
+  ...DROP_SUDO,
 ].join("\n");
 
 /**
  * What a session's store hook has told its sandbox, kept in the session's
  * durable state by the root that watches it: when a sandbox tool first ran,
- * which is when the sandbox opened and its checkout set the repository
- * credential at the firewall, and when that credential was last renewed.
+ * which is when the sandbox opened, and whether its checkout opened
+ * shallow; when the first write ran, which deepened a shallow checkout and
+ * set the repository credential at the firewall; when that credential was
+ * last renewed, whether it is its starter's own token, and whether a turn's
+ * end may have taken it off since.
  */
 export interface SandboxRecord {
   /** The instant the first sandbox tool of the session was called. */
   readonly openedAt?: number;
+  /**
+   * Whether the sandbox opened on a shallow checkout, with no credential
+   * standing until a write deepens it. A record kept before checkouts
+   * opened shallow says nothing, and its checkout stood whole, its
+   * credential with it, from the instant it opened.
+   */
+  readonly openedShallow?: boolean;
+  /** The instant the first write of the session was called, which deepened its checkout and set the credential at the firewall. */
+  readonly deepenedAt?: number;
   /** The instant the store hook last renewed the credential at the firewall. */
   readonly credentialAt?: number;
+  /** Whether the credential is the agent's starter's own GitHub token rather than an installation's. */
+  readonly memberToken?: boolean;
+  /** Whether a member's token may be off the firewall since a turn ended, for the next step to set again. */
+  readonly credentialLapsed?: boolean;
 }
 
 /** How many snapshots Vercel keeps of a sandbox, as a bounds module names it. */
@@ -179,7 +333,7 @@ const SANDBOX_LIFECYCLE = {
     renewsCredential: false,
     stopsAtTurnEnd: false,
   },
-  [SANDBOX_POLICY.WRITE_FULL_EAGER]: {
+  [SANDBOX_POLICY.SHALLOW_THEN_DEEP]: {
     open: {
       timeout: CODER.SANDBOX_TIMEOUT_MS,
       resources: { vcpus: CODER.SANDBOX_VCPUS },
@@ -203,14 +357,33 @@ function lifecycleOf(role: AgentRole): SandboxLifecycle {
   return SANDBOX_LIFECYCLE[ROLE_PROFILE[role].sandbox];
 }
 
-/** Whether the credential set at the firewall is old enough to renew: set when the sandbox opened, or when it was last renewed. */
+/**
+ * The instant the repository credential was first set at the firewall: as
+ * the first write deepened a checkout that opened shallow, or as the
+ * sandbox opened on a whole one; none while a shallow checkout stands, which
+ * holds no credential.
+ */
+function credentialSetAt(record: SandboxRecord): number | undefined {
+  return record.openedShallow === true ? record.deepenedAt : record.openedAt;
+}
+
+/** Whether the repository credential stands at the firewall: once it was first set, as the checkout deepened or opened whole. */
+function credentialStands(record: SandboxRecord): boolean {
+  return credentialSetAt(record) !== undefined;
+}
+
+/** Whether the credential set at the firewall is old enough to renew: first set, or last renewed, that long ago. */
 function credentialIsOld(record: SandboxRecord, now: number): boolean {
-  const setAt = record.credentialAt ?? record.openedAt;
+  const setAt = record.credentialAt ?? credentialSetAt(record);
   return setAt !== undefined && now - setAt >= Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH);
 }
 
-/** What the image is prepared with, once per build, on the snapshot every session starts from. */
-async function prepareImage(sandbox: SandboxSession): Promise<void> {
+/**
+ * What the image is prepared with, once per build, on the snapshot every
+ * session starts from; exported so `tools/codex-probe` builds its sandbox
+ * from the same image.
+ */
+export async function prepareImage(sandbox: SandboxSession): Promise<void> {
   await installCodeTooling(sandbox);
   const prepared = await sandbox.run({ command: PREPARE_SCRIPT });
   if (prepared.exitCode !== 0) {
@@ -270,7 +443,13 @@ export function stopsAtTurnEnd(
   );
 }
 
-/** Whether the role's policy renews the credential at its sandbox's firewall at this event: a step that starts once the credential has aged. */
+/**
+ * Whether the role's policy sets the credential at its sandbox's firewall
+ * again at this event: a step that starts once an installation token has
+ * aged, or once a member's own token lapsed at a turn's end, and only once
+ * the credential stands at all, a shallow checkout's never. A member's
+ * token is never renewed for its age, since it does not expire.
+ */
 export function renewsCredential(
   role: AgentRole,
   event: MessageStreamEvent,
@@ -280,6 +459,41 @@ export function renewsCredential(
   return (
     lifecycleOf(role).renewsCredential &&
     event.type === "step.started" &&
-    credentialIsOld(record, now)
+    credentialStands(record) &&
+    (record.credentialLapsed === true ||
+      (record.memberToken !== true && credentialIsOld(record, now)))
   );
+}
+
+/**
+ * Whether a turn's end lapses a member's own token: once the token stands
+ * at the firewall, every turn's end does, since it or a terminal's close
+ * may take the token off before the next turn, which sets it again.
+ */
+export function lapsesCredential(
+  role: AgentRole,
+  event: MessageStreamEvent,
+  record: SandboxRecord,
+): boolean {
+  return (
+    lifecycleOf(role).renewsCredential &&
+    endsTurn(event) &&
+    credentialStands(record) &&
+    record.memberToken === true
+  );
+}
+
+/**
+ * Whether a turn's end takes a member's own token off the firewall: where
+ * it stops the sandbox, so nothing stands while nobody uses it. A sandbox a
+ * developer's terminal holds keeps it, for the terminal to take off as it
+ * closes (`terminal/relay.ts`).
+ */
+export function withdrawsCredential(
+  role: AgentRole,
+  event: MessageStreamEvent,
+  record: SandboxRecord,
+  held: boolean,
+): boolean {
+  return lapsesCredential(role, event, record) && stopsAtTurnEnd(role, event, record, held);
 }

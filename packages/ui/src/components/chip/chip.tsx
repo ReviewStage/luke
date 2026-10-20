@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
+import { useClipped } from "../../use-clipped.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -40,8 +41,11 @@ import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
  *
  * A chip that opens a menu of values ends in the menu's small, muted
  * chevron where `chevron` asks for one. Its words go in a `ChipName`, which
- * cuts them short rather than letting them push past the row around it, in
- * the code face where they name code (`mono`, a branch). A leading mark, a
+ * cuts them short rather than letting them push past the row around it,
+ * fading out at their end while it does, as a browser's tab does, or, where
+ * their end is what tells one from another, in their middle at an ellipsis
+ * (`cut`, a branch's last words, as GitHub cuts one), in the code face where
+ * they name code (`mono`, a branch). A leading mark, a
  * glyph or a picture, stands at the control's glyph size. It takes no class
  * or style: its outer layout is its container's.
  */
@@ -89,6 +93,34 @@ export const CHIP_WIDTH = {
 } as const;
 
 export type ChipWidth = (typeof CHIP_WIDTH)[keyof typeof CHIP_WIDTH];
+
+/** Where a chip's words are cut short when they do not fit: at their end, or in their middle, keeping their last few. */
+export const CHIP_CUT = {
+  END: "end",
+  MIDDLE: "middle",
+} as const;
+
+export type ChipCut = (typeof CHIP_CUT)[keyof typeof CHIP_CUT];
+
+/** How many of its last characters a name cut in its middle keeps whole, at most. */
+const MIDDLE_KEPT = 12;
+
+/** Characters a name is read in parts by, which a name cut in its middle starts its kept end at. */
+const NAME_JOINS = /[/\-_.:]/u;
+
+/**
+ * The end a name cut in its middle keeps whole: its last few characters,
+ * after the first join among them where one stands, so it starts on a word
+ * (“and-pill” rather than “u-and-pill”), the ellipsis standing for
+ * the join; none for a name too short to cut in two.
+ */
+function keptEnd(name: string): string {
+  if (name.length <= MIDDLE_KEPT + MIDDLE_KEPT / 3) return "";
+  const last = name.slice(-MIDDLE_KEPT);
+  const join = last.search(NAME_JOINS);
+  const word = join === -1 ? "" : last.slice(join + 1);
+  return word === "" ? last : word;
+}
 
 /** What every chip takes, a button or a removable one: its look and the options beside it. */
 interface ChipFace {
@@ -182,18 +214,44 @@ export function Chip(props: ChipProps): React.JSX.Element {
   );
 }
 
-/** A chip's words, cut short at its end rather than pushing past the row it stands in; in the code face where they name code. */
-export function ChipName({
-  mono = false,
-  children,
-}: {
+/** A chip's words: in the code face where they name code, and cut at their end, or, words alone, in their middle. */
+type ChipNameProps = {
   /** Whether the words name code, a branch, and read in the code face. */
   mono?: boolean;
-  children: ReactNode;
-}): React.JSX.Element {
+} & (
+  | { cut?: typeof CHIP_CUT.END | undefined; children: ReactNode }
+  | {
+      /** Cut in the middle, keeping their end; a name too short to cut in two is cut at its end. */
+      cut: typeof CHIP_CUT.MIDDLE;
+      children: string;
+    }
+);
+
+/**
+ * A chip's words, cut short rather than pushing past the row it stands in:
+ * fading out at their end, or cut in their middle at an ellipsis, which says
+ * a cut stands there where a fade with words after it would not; in the code
+ * face where they name code.
+ */
+export function ChipName(props: ChipNameProps): React.JSX.Element {
+  const [measured, clipped] = useClipped();
+  const kept = props.cut === CHIP_CUT.MIDDLE ? keptEnd(props.children) : "";
   return (
-    <span className="luke-chip-name" data-mono={mono ? "true" : undefined}>
-      {children}
+    <span
+      ref={measured}
+      className="luke-chip-name"
+      data-mono={props.mono === true ? "true" : undefined}
+      data-cut={kept === "" ? undefined : CHIP_CUT.MIDDLE}
+      data-overflow={String(clipped)}
+    >
+      {props.cut !== CHIP_CUT.MIDDLE || kept === "" ? (
+        props.children
+      ) : (
+        <>
+          <span className="luke-chip-name-start">{props.children.slice(0, -kept.length)}</span>
+          <span className="luke-chip-name-end">{kept}</span>
+        </>
+      )}
     </span>
   );
 }

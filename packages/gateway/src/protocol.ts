@@ -48,6 +48,9 @@ export const GATEWAY_METHOD = {
   TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
   /** One page of a task's conversation as an agent's transcript is read, or a brain worker's under the call that started it, held open by the service while a turn or the worker runs; answered to the caller, never held in the view. */
   TASKS_MESSAGES: "tasks.messages",
+  /** A task's planning worker's transcript followed and let go, on the same terms as `CODING_AGENTS_TRANSCRIPT_FOLLOW`. */
+  TASKS_WORKER_TRANSCRIPT_FOLLOW: "tasks.workerTranscriptFollow",
+  TASKS_WORKER_TRANSCRIPT_UNFOLLOW: "tasks.workerTranscriptUnfollow",
   /** A window of a file of one task's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
   TASKS_FILE: "tasks.file",
   /** One folder of one task's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
@@ -114,6 +117,10 @@ export const GATEWAY_METHOD = {
   WORKSPACES_MEMBERS: "workspaces.members",
   /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   WORKSPACES_PHOTO: "workspaces.photo",
+  /** The repositories members added to one workspace on their own GitHub tokens, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_TOKEN_REPOSITORIES: "workspaces.tokenRepositories",
+  /** A repository added to a workspace on the account's own GitHub token, or removed from it, on the service; answered to the caller with the workspace's token repositories as they then stand. */
+  WORKSPACES_TOKEN_REPOSITORY_SET: "workspaces.tokenRepositorySet",
   /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
   WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
   /** Another member made an admin or an admin a member on the service by the owner, answered with the members as they then stand; the view's workspaces are read again. */
@@ -146,6 +153,15 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_START: "codingAgents.start",
   /** One agent's transcript past a cursor, held open by the service while the agent runs. */
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  /**
+   * One agent's transcript, or one of its workers', followed from now until
+   * it is let go or the account signs out. Its pages are heard as
+   * `TRANSCRIPT_CHANGED` events, never answered: the first from the start,
+   * then each one past the last; following again starts over.
+   */
+  CODING_AGENTS_TRANSCRIPT_FOLLOW: "codingAgents.transcriptFollow",
+  /** One agent's or worker's transcript let go: no more `TRANSCRIPT_CHANGED` events of it until it is followed again. */
+  CODING_AGENTS_TRANSCRIPT_UNFOLLOW: "codingAgents.transcriptUnfollow",
   /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
@@ -202,6 +218,12 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   /** One provider's key removed on the service; the keys as they then stand. */
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** The member's own GitHub token, read from the service now as its login, hint, and status; never the token. */
+  GITHUB_TOKEN_READ: "githubToken.read",
+  /** The member's GitHub token saved on the service, carried once in the params; the token as it then stands, or why nothing was kept. */
+  GITHUB_TOKEN_SAVE: "githubToken.save",
+  /** The member's GitHub token removed on the service; none then stands. */
+  GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /** The Markdown the account's new tasks start from, read from the service now: its own, or the default while it keeps none. */
   PLAN_TEMPLATE_READ: "planTemplate.read",
   /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */
@@ -415,12 +437,14 @@ function keptText(max: number): Schema.Codec<string, string> {
 const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 
 /**
- * `voice.createLiveSession`: the peer's SDP offer, and the task the call is
- * about. The host creates a call only for the task the panel has open.
+ * `voice.createLiveSession`: the peer's SDP offer, the task the call is
+ * about, and the agent of that task it speaks into, where it names one. The
+ * host creates a call only for the task the panel has open.
  */
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
   sdp: sdpSchema,
   taskId: text,
+  agentId: Schema.optionalKey(text),
 });
 
 /**
@@ -569,6 +593,8 @@ export const GATEWAY_EVENT = {
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",
   ACCOUNT_CHANGED: "account.changed",
+  /** What the signed-in account may open in the app (whether it is an admin), whenever a read or the account moved it. */
+  ACCOUNT_ACCESS_CHANGED: "accountAccess.changed",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's tasks, active task, and document, whole, whenever a read moved them. */
@@ -577,6 +603,8 @@ export const GATEWAY_EVENT = {
   TERMINAL_OUTPUT: "terminal.output",
   /** How an attached shell's connection stands, named by its connection. */
   TERMINAL_STATE: "terminal.state",
+  /** A followed transcript's next page, or why there is none, each time it moves while it is followed. */
+  TRANSCRIPT_CHANGED: "transcript.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

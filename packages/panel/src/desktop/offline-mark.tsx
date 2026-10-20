@@ -1,6 +1,7 @@
+import * as Atom from "effect/reactivity/Atom";
 import { WifiOffIcon } from "lucide-react";
 import { Tooltip } from "../tooltip.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 
 /**
  * offline-mark.tsx -- the pill that says this Mac is offline, in the sidebar's foot or, while the sidebar is folded or the sign-in stands, in the title bar.
@@ -17,9 +18,15 @@ import { useAppState } from "../use-app-state.js";
 /** What the pill's hint says: why reads are failing. */
 const OFFLINE_HINT = "You're offline.";
 
+/** Whether main last found the Mac offline, which redraws its readers only as it turns. */
+const offlineAtom: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.NETWORK,
+  (network) => network?.online === false,
+);
+
 /** Whether main last found the Mac offline: what the pill, and the room the title bar makes for it, answer. */
 export function useOffline(): boolean {
-  return useAppState()?.network.online === false;
+  return useAppSlice(offlineAtom);
 }
 
 /** The offline pill, or nothing while the Mac is online. */

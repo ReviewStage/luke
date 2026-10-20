@@ -104,7 +104,7 @@ import {
 import type { PlanDocumentBinding } from "../tasks/plan-notes.js";
 import { agentStarterName, controlsAgent } from "./agent-reach.js";
 import { AGENT_TOOL } from "./agent-runtime/tools.js";
-import type { EveSessions } from "./brain-host/eve-sessions.js";
+import type { AgentSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
 import { callEntry } from "./coder-host/replay.js";
 import type { SummaryModelOf } from "./coder-host/replay-summary.js";
@@ -459,7 +459,7 @@ type AgentCaller =
 export interface CodingAgentCall {
   readonly caller: AgentCaller;
   /** eve's coding-agent service as the deployment acting for the caller's member; nothing where the deployment names no secret or no origin for eve, which sends and starts nothing. */
-  readonly eve: EveSessions | undefined;
+  readonly eve: AgentSessions | undefined;
   readonly writer: Effect.Effect<StoreWriter>;
   /** The key a message or a start is made under: eve's own id for the tool call, so a call run again sends or starts once. */
   readonly clientKey: string;
@@ -1072,7 +1072,8 @@ interface AgentReading {
   readonly effort: string;
   readonly status: CodingAgentStatus;
   readonly failureReason?: CodingAgentFailure;
-  readonly repository: string;
+  /** The repository it works in; null for an agent with none. */
+  readonly repository: string | null;
   readonly branch: string | null;
   readonly activity: string | null;
   /** The agent's mention, `[@title](link)`, as the caller writes it to name the agent in its words. */
@@ -1252,9 +1253,10 @@ function agentMention(agent: CodingAgent, workspace: string): string {
   );
 }
 
-/** How a coding agent names itself to another: its title, its id to answer it by, and its repository. */
+/** How a coding agent names itself to another: its title, its id to answer it by, and its repository where it has one. */
 function agentIntroduction(agent: CodingAgent): string {
-  return `"${agentName(agent)}" (agent id ${agent.id}), working in ${agent.repository}`;
+  const working = agent.repository === null ? "" : `, working in ${agent.repository}`;
+  return `"${agentName(agent)}" (agent id ${agent.id})${working}`;
 }
 
 /** The words a coding agent's message hands the other: who sent them and how to answer, then its own. */
@@ -2083,7 +2085,7 @@ export function runUpdateTask(
 }
 
 /** A stop's refusal in the model's words: an agent gone meanwhile is none, a deployment with no eve says so, and anything else is the service down. */
-function stopRefusalWords(refusal: HostedRefusal, eve: EveSessions | undefined): string {
+function stopRefusalWords(refusal: HostedRefusal, eve: AgentSessions | undefined): string {
   if (refusal.error === HOSTED_API_ERROR.NOT_FOUND) return CODING_AGENT_TOOL_REFUSAL.NO_AGENT;
   return eve === undefined ? STOP_AGENT_REFUSAL.NO_SERVICE : STOP_AGENT_REFUSAL.UNAVAILABLE;
 }
@@ -2106,7 +2108,7 @@ function stopStands(turn: CodingAgentLatestTurn | undefined): boolean {
  * so a deployment with no eve still answers an idle agent as idle.
  */
 const stopOf = (
-  eve: EveSessions | undefined,
+  eve: AgentSessions | undefined,
   writer: Effect.Effect<StoreWriter>,
   agent: CodingAgent,
   key: string,

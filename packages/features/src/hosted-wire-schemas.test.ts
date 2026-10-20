@@ -67,6 +67,11 @@ const EFFECT_MODULE_SCHEMAS = {
   "live-wire": {
     sealedLiveQuerySchema: liveWire.sealedLiveQuerySchema,
     accountInboxLiveAnswerSchema: liveWire.accountInboxLiveAnswerSchema,
+    taskBoardLiveAnswerSchema: liveWire.taskBoardLiveAnswerSchema,
+    taskBoardLiveRowsSchema: liveWire.taskBoardLiveRowsSchema,
+    agentTranscriptLiveAnswerSchema: liveWire.agentTranscriptLiveAnswerSchema,
+    agentTranscriptLiveRowsSchema: liveWire.agentTranscriptLiveRowsSchema,
+    transcriptNowAnswerSchema: liveWire.transcriptNowAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveWire>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,
@@ -206,6 +211,8 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeysAnswerViewSchema: codingAgentView.providerKeysAnswerViewSchema,
     providerKeySaveParamsSchema: codingAgentView.providerKeySaveParamsSchema,
     providerKeyRemoveParamsSchema: codingAgentView.providerKeyRemoveParamsSchema,
+    githubTokenAnswerViewSchema: codingAgentView.githubTokenAnswerViewSchema,
+    githubTokenSaveParamsSchema: codingAgentView.githubTokenSaveParamsSchema,
     dictationTranscribeParamsSchema: codingAgentView.dictationTranscribeParamsSchema,
     dictationTranscribeAnswerViewSchema: codingAgentView.dictationTranscribeAnswerViewSchema,
     codingAgentListParamsSchema: codingAgentView.codingAgentListParamsSchema,
@@ -217,6 +224,8 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentMessagesParamsSchema: codingAgentView.codingAgentMessagesParamsSchema,
     codingAgentMessageParamsSchema: codingAgentView.codingAgentMessageParamsSchema,
     codingAgentMessagesAnswerViewSchema: codingAgentView.codingAgentMessagesAnswerViewSchema,
+    codingAgentTranscriptKeySchema: codingAgentView.codingAgentTranscriptKeySchema,
+    codingAgentTranscriptChangedSchema: codingAgentView.codingAgentTranscriptChangedSchema,
     codingAgentChooseParamsSchema: codingAgentView.codingAgentChooseParamsSchema,
     codingAgentRenameParamsSchema: codingAgentView.codingAgentRenameParamsSchema,
     codingAgentStopParamsSchema: codingAgentView.codingAgentStopParamsSchema,
@@ -291,6 +300,9 @@ const EFFECT_MODULE_SCHEMAS = {
     githubIssueNodeIdSchema: githubRepositoriesWire.githubIssueNodeIdSchema,
     githubIssuePickSchema: githubRepositoriesWire.githubIssuePickSchema,
     githubRepositoryIssuesAnswerSchema: githubRepositoriesWire.githubRepositoryIssuesAnswerSchema,
+    workspaceTokenRepositorySchema: githubRepositoriesWire.workspaceTokenRepositorySchema,
+    workspaceTokenRepositoriesAnswerSchema:
+      githubRepositoriesWire.workspaceTokenRepositoriesAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof githubRepositoriesWire>,
   "integration-view": {
     integrationProviderParamsSchema: integrationView.integrationProviderParamsSchema,
@@ -454,7 +466,9 @@ const EFFECT_MODULE_SCHEMAS = {
     taskSkillsAnswerSchema: taskWire.taskSkillsAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof taskWire>,
   "provider-key-wire": {
+    providerKeyKindSchema: providerKeyWire.providerKeyKindSchema,
     providerKeySummarySchema: providerKeyWire.providerKeySummarySchema,
+    subscriptionKeySummarySchema: providerKeyWire.subscriptionKeySummarySchema,
     providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
@@ -541,6 +555,7 @@ const EFFECT_MODULE_SCHEMAS = {
     workspaceTransferSchema: workspaceWire.workspaceTransferSchema,
     workspaceLeaveRequestSchema: workspaceWire.workspaceLeaveRequestSchema,
     workspaceLeaveAnswerSchema: workspaceWire.workspaceLeaveAnswerSchema,
+    workspaceTokenRepositoryRequestSchema: workspaceWire.workspaceTokenRepositoryRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof workspaceWire>,
 } as const;
 

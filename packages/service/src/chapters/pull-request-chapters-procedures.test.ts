@@ -102,6 +102,7 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 /** The one file the pull request changes, one hunk starting at old line 1. */

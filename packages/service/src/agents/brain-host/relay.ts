@@ -209,8 +209,8 @@ export interface RelayStanding {
  */
 type RelayEffect<Value> = Effect.Effect<Value, QueryError | Schema.SchemaError, DatabaseServices>;
 
-/** The ask record a brain turn binds its deliveries to, and the Stop a waiting ask took, carried the moment the turn starts. */
-interface RelayAskSeams {
+/** The ask record a turn of the voice's asks binds its deliveries to, and the Stop a waiting ask took, carried the moment the turn starts. */
+export interface RelayAskSeams {
   /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */
   readonly binding: AskDeliveryBinding;
   /** Carries the Stop an ask took while it waited, the moment eve's start names the turn it ran in: eve's cancel scoped to that turn, and the row's stamp. */
@@ -228,7 +228,7 @@ interface StreamRelaySeams {
     StoreWriter,
     "consumeAll" | "enqueueTurn" | "attachAskLines" | "takeAwaitingLine"
   >;
-  /** The ask record, where the conversation takes asks; nothing for a coding agent, whose turns are opened by a Start alone. */
+  /** The ask record, where the conversation takes asks: every brain turn, and a coding agent's spoken one; nothing for a coding agent's typed turn, whose line is its awaiting row. */
   readonly asks?: RelayAskSeams;
   readonly now: () => number;
   /** Where a write the writer refused is said; the relay never throws into eve's turn. */

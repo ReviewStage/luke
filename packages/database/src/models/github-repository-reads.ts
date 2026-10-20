@@ -86,6 +86,7 @@ const findUnaskedAgentRepositories = SqlSchema.findAll({
             eq(member.userId, userId),
             eq(codingAgent.githubAccess, GITHUB_ACCESS.TOKEN),
             ne(codingAgent.userId, userId),
+            isNotNull(codingAgent.repository),
             notExists(askedSince(userId, codingAgent.repository, since)),
           ),
         ),

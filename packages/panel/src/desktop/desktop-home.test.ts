@@ -275,6 +275,7 @@ function mount(
       onOpen: () => opened.inbox.push("inbox"),
       onClose: () => undefined,
       onChoose: (chosen) => opened.inbox.push(chosen),
+      onOpenItem: () => undefined,
       listed: false,
       onListed: () => undefined,
       pages: undefined,
@@ -873,11 +874,10 @@ test("a waiting row wears its agent's tile, whose card names the teammate who st
   await settle();
 
   const row = button(page, "Email the invitee when an invite is withdrawn?");
-  const mark = row.querySelector("[data-agent-ref]");
-  assert.ok(mark, "the row's mark hangs its agent's card");
-  assert.ok(mark.querySelector('.actor-mark[data-kind="agent"]'), "the mark is the agent's tile");
+  assert.equal(row.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
+  assert.ok(row.querySelector('.actor-mark[data-kind="agent"]'), "the row wears the agent's tile");
   act(() => {
-    mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.match(card?.textContent ?? "", /Started by.*Charles Pan/u);
@@ -933,10 +933,9 @@ test("a waiting row of an agent with no plan names the automation that started i
   );
   await settle();
 
-  const mark = button(container, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
-  assert.ok(mark, "the row's mark hangs its agent's card");
+  const row = button(container, "Quarantine the flaky test?");
   act(() => {
-    mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   const card = document.querySelector(".luke-tooltip-card [data-tab-card]");
   assert.match(card?.textContent ?? "", /Sweep the flaky tests.*Started by.*Nightly flake sweep/u);

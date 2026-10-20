@@ -17,6 +17,7 @@ import {
 } from "@luke/service/voice/service";
 import { Effect, Layer, Redacted } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import { runWeb } from "../runtime.js";
 
 /**
@@ -89,8 +90,17 @@ function reportReason(message: string): string {
   return (colon === -1 ? message : message.slice(0, colon)).slice(0, REPORT_REASON_BOUND);
 }
 
-/** The service's options as this deployment composes them for the server given, the exchange among them. */
-export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
+/**
+ * The service's options as this deployment composes them for the server
+ * given, the exchange among them. The exchange reaches eve over its own
+ * fetch unless a test hands it the `HttpClient` eve answers on, which is
+ * the one thing a caller may replace: the secret and the origin are always
+ * this deployment's own.
+ */
+export function voiceFunctionOptions(
+  server: VoiceServer,
+  seams: { readonly httpClient?: Layer.Layer<HttpClient.HttpClient> } = {},
+): VoiceServiceOptions {
   return {
     server,
     apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
@@ -103,6 +113,7 @@ export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
       eveOrigin: deploymentEveOrigin,
       report: (message) =>
         standardOutputLog({ event: LOG_EVENT.EXCHANGE_REPORTED, reason: reportReason(message) }),
+      ...(seams.httpClient === undefined ? undefined : { httpClient: seams.httpClient }),
     }),
   };
 }

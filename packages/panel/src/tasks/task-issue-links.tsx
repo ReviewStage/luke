@@ -8,20 +8,21 @@ import {
   type TaskIssueRelation,
 } from "@luke/features/task-issue-wire";
 import {
-  BUTTON_SIZE,
-  BUTTON_VARIANT,
-  Button,
-  CHOICE_BAR_LOOK,
-  CHOICE_BAR_SIZE,
-  ChoiceBar,
+  CHIP_LOOK,
+  CHIP_WIDTH,
+  Chip,
+  ChipName,
   CloseIcon,
-  IconButton,
+  dropBelowStart,
+  ExternalIcon,
   PROVIDER_MARK_SIZE,
   ProviderMark,
   TEXT_BUTTON_TONE,
   TextButton,
+  useMenu,
 } from "@luke/ui";
 import { CircleDotIcon } from "lucide-react";
+import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import { IssueMark } from "./issue-mark.js";
@@ -32,28 +33,29 @@ import { useTaskIssueLinks } from "./use-task-issue-links.js";
 import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
- * task-issue-links.tsx -- a task's Linked issues box under its name: each GitHub or Linear issue it links, where that issue stands now, the keyword its pull requests write of it, and the press that links one more.
+ * task-issue-links.tsx -- a task's linked issues under its status and priority, one chip each in the same look, each dropping the menu that opens it, switches the keyword its pull requests write of it, or unlinks it, and the chip that links one more.
  *
- * Each row is the issue's live mark, GitHub's for where it stands or
- * Linear's own, its key in the code face, its title, which opens the issue,
- * the state its provider answers now in words, a Closes / Part of switch,
- * and the × that unlinks it; the issue itself stays as it is with its
- * provider. Where stands is read as the box opens and never kept
- * (`use-task-issue-links.ts`), so a row its provider did not answer says no
- * state. The head's Link issue opens New task's own picker
- * (`issue-picker-chip.tsx`) over the task's repository, the issues it links
- * dimmed, and nothing more once it links as many as a task may. A task
- * with no links says so quietly beside the button; one whose workspace
- * offers no issue to link and links none draws no box at all. An archived
- * task's box is read only. What did not land is said under the rows, and a
- * read that did not land says so in the box with a Try again.
+ * Each chip is the issue's live mark, GitHub's for where it stands or
+ * Linear's own, its key in the code face, and its title, cut short; its
+ * tooltip says where the issue stands now and the keyword its pull requests
+ * write. Its menu, headed by the same, opens the issue with its provider,
+ * offers Closes and Part of with the one chosen checked, and unlinks it,
+ * which leaves the issue itself as it is with its provider. Where it
+ * stands is read as the row opens and never kept (`use-task-issue-links.ts`),
+ * so a link its provider did not answer says no state. Link issue, at the
+ * row's end, opens New task's own picker (`issue-picker-chip.tsx`) over the
+ * task's repository, the issues it links dimmed, and nothing more once it
+ * links as many as a task may. A task with no links shows Link issue alone;
+ * one whose workspace offers no issue to link and links none draws no row
+ * at all. An archived task's chips only open their issue. What did not land
+ * is said under the chips, and a read that did not land says so in the
+ * row's place with a Try again.
  */
 
-/** What the box says. */
+/** What the row says. */
 const LINKS_WORDS = {
   HEADING: "Linked issues",
   LINK: "Link issue",
-  NONE: "No linked issues",
   RELATION: "Which keyword its pull requests write",
   [TASK_ISSUE_RELATION.CLOSES]: "Closes",
   [TASK_ISSUE_RELATION.PART_OF]: "Part of",
@@ -61,11 +63,19 @@ const LINKS_WORDS = {
   RETRY: "Try again",
 } as const;
 
-/** The Closes / Part of switch's two options. */
-const RELATION_ITEMS = [
-  { value: TASK_ISSUE_RELATION.CLOSES, label: LINKS_WORDS[TASK_ISSUE_RELATION.CLOSES] },
-  { value: TASK_ISSUE_RELATION.PART_OF, label: LINKS_WORDS[TASK_ISSUE_RELATION.PART_OF] },
-] as const;
+/** What each keyword does, under its name in a chip's menu. */
+const RELATION_DETAIL = {
+  [TASK_ISSUE_RELATION.CLOSES]: "Merging closes the issue",
+  [TASK_ISSUE_RELATION.PART_OF]: "Names the issue, leaves it open",
+} as const satisfies Record<TaskIssueRelation, string>;
+
+const RELATIONS = [TASK_ISSUE_RELATION.CLOSES, TASK_ISSUE_RELATION.PART_OF] as const;
+
+/** Where an issue opens, by its provider, as its menu's first item says. */
+const OPEN_WORDS = {
+  [TASK_ISSUE_PROVIDER.GITHUB]: "Open on GitHub",
+  [TASK_ISSUE_PROVIDER.LINEAR]: "Open in Linear",
+} as const satisfies Record<TaskIssueLinkView["provider"], string>;
 
 /** The provider's mark for where a link's issue stands: GitHub's for its state, an open mark unread, or Linear's own. */
 function LinkMark({ link }: { link: TaskIssueLinkView }): React.JSX.Element {
@@ -79,8 +89,15 @@ function LinkMark({ link }: { link: TaskIssueLinkView }): React.JSX.Element {
   return <ProviderMark provider={INTEGRATION_PROVIDER.LINEAR} size={PROVIDER_MARK_SIZE.CAPTION} />;
 }
 
-/** One linked issue as its row. */
-function LinkRow({
+/** What a link's chip says of it beyond its key and title: where it stands, where its provider answered, and its keyword. */
+function linkSummary(link: TaskIssueLinkView): string {
+  const state = standingWords(link.standing);
+  const keyword = LINKS_WORDS[link.relation];
+  return state === undefined ? keyword : `${state} · ${keyword}`;
+}
+
+/** One linked issue as its chip, and the menu it drops. */
+function LinkChip({
   link,
   editable,
   onOpen,
@@ -93,50 +110,58 @@ function LinkRow({
   onRelate: (relation: TaskIssueRelation) => void;
   onUnlink: () => void;
 }): React.JSX.Element {
-  const state = standingWords(link.standing);
+  const { drawn, close, trigger } = useMenu(true);
+  const summary = linkSummary(link);
+  const open: MenuAction = {
+    label: OPEN_WORDS[link.provider],
+    icon: <ExternalIcon />,
+    onSelect: onOpen,
+  };
+  const relations: MenuAction[] = RELATIONS.map((relation) => ({
+    label: LINKS_WORDS[relation],
+    detail: RELATION_DETAIL[relation],
+    checked: relation === link.relation,
+    onSelect: () => {
+      if (relation !== link.relation) onRelate(relation);
+    },
+  }));
+  const unlink: MenuAction = {
+    label: LINKS_WORDS.UNLINK,
+    icon: <CloseIcon />,
+    onSelect: onUnlink,
+    danger: true,
+  };
   return (
-    <li className="task-issue-link" data-provider={link.provider}>
-      <span className="task-issue-link-mark">
-        <LinkMark link={link} />
-      </span>
-      <span className="task-issue-link-key">{link.key}</span>
-      <span className="task-issue-link-title">
-        <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={onOpen}>
-          {link.title}
-        </TextButton>
-      </span>
-      {/* Note that the controls stand in the row's line as its other parts do, and take a line of their own on a phone (`tasks.css`). */}
-      <span className="task-issue-link-controls">
-        {state === undefined ? null : <span className="task-issue-link-state">{state}</span>}
-        <span className="task-issue-link-relation">
-          <Tooltip label={LINKS_WORDS.RELATION}>
-            <span>
-              <ChoiceBar
-                label={`${LINKS_WORDS.RELATION}: ${link.key}`}
-                items={RELATION_ITEMS}
-                value={link.relation}
-                look={CHOICE_BAR_LOOK.SEGMENTED}
-                size={CHOICE_BAR_SIZE.COMPACT}
-                disabled={!editable}
-                onChange={(relation) => {
-                  if (relation !== link.relation) onRelate(relation);
-                }}
-              />
+    <li className="task-issue-link" data-provider={link.provider} data-relation={link.relation}>
+      <Tooltip label={`${link.title} · ${summary}`}>
+        <Chip
+          look={CHIP_LOOK.FIELD}
+          width={CHIP_WIDTH.AUTO}
+          chevron
+          aria-label={`${link.key} ${link.title}: ${summary}`}
+          {...trigger(dropBelowStart)}
+        >
+          <LinkMark link={link} />
+          <span className="task-issue-link-key">{link.key}</span>
+          <ChipName>{link.title}</ChipName>
+        </Chip>
+      </Tooltip>
+      {drawn === undefined ? null : (
+        <ActionMenu
+          label={`${link.key} ${link.title}`}
+          menu={drawn}
+          heading={
+            <span className="task-issue-link-heading">
+              <span className="task-issue-link-heading-title">{link.title}</span>
+              <span className="task-issue-link-heading-state">
+                {standingWords(link.standing) ?? link.key}
+              </span>
             </span>
-          </Tooltip>
-        </span>
-        {editable ? (
-          <span className="task-issue-link-unlink">
-            <Tooltip label={LINKS_WORDS.UNLINK}>
-              <IconButton
-                icon={<CloseIcon />}
-                label={`${LINKS_WORDS.UNLINK} ${link.key}`}
-                onClick={onUnlink}
-              />
-            </Tooltip>
-          </span>
-        ) : null}
-      </span>
+          }
+          groups={editable ? [[open], relations, [unlink]] : [[open]]}
+          onClose={close}
+        />
+      )}
     </li>
   );
 }
@@ -167,21 +192,12 @@ export function TaskIssueLinks({
   if (links === undefined && note !== undefined) {
     return (
       <section className="task-issue-links" aria-label={LINKS_WORDS.HEADING}>
-        <header className="task-issue-links-head">
-          <span className="task-issue-links-heading">{LINKS_WORDS.HEADING}</span>
-          <span className="task-issue-links-none" role="alert">
-            {note}
-          </span>
-          <span className="task-issue-links-retry">
-            <Button
-              variant={BUTTON_VARIANT.OUTLINE}
-              size={BUTTON_SIZE.COMPACT}
-              onClick={control.onRetry}
-            >
-              {LINKS_WORDS.RETRY}
-            </Button>
-          </span>
-        </header>
+        <p className="task-issue-links-note" role="alert">
+          {note}{" "}
+          <TextButton tone={TEXT_BUTTON_TONE.QUIET} onClick={control.onRetry}>
+            {LINKS_WORDS.RETRY}
+          </TextButton>
+        </p>
       </section>
     );
   }
@@ -190,49 +206,44 @@ export function TaskIssueLinks({
   const linked = new Set(links.map((link) => link.externalId));
   return (
     <section className="task-issue-links" aria-label={LINKS_WORDS.HEADING}>
-      <header className="task-issue-links-head">
-        <span className="task-issue-links-heading">{LINKS_WORDS.HEADING}</span>
-        {links.length === 0 ? (
-          <span className="task-issue-links-none">{LINKS_WORDS.NONE}</span>
-        ) : null}
-        {editable && offered ? (
-          <IssuePickerChip
-            trigger={LINKS_WORDS.LINK}
-            align={PICKER_ALIGN.END}
-            linearIn={linearIn}
-            githubIn={githubIn}
-            workspaceId={workspaceId}
-            repository={repository}
-            linked={linked}
-            full={linksFull(links.length)}
-            disabled={control.linking}
-            onChoose={(issue: LinearIssueSummary) =>
-              control.onLink({ provider: TASK_ISSUE_PROVIDER.LINEAR, id: issue.id })
-            }
-            onChooseGitHub={(issue: GitHubIssuePick) =>
-              control.onLink({
-                provider: TASK_ISSUE_PROVIDER.GITHUB,
-                repository: issue.repository,
-                number: issue.number,
-              })
-            }
+      <ul className="task-issue-links-rows">
+        {links.map((link) => (
+          <LinkChip
+            key={link.id}
+            link={link}
+            editable={editable}
+            onOpen={() => openLink(link.url)}
+            onRelate={(relation) => control.onRelate(link.id, relation)}
+            onUnlink={() => control.onUnlink(link.id)}
           />
-        ) : null}
-      </header>
-      {links.length === 0 ? null : (
-        <ul className="task-issue-links-rows">
-          {links.map((link) => (
-            <LinkRow
-              key={link.id}
-              link={link}
-              editable={editable}
-              onOpen={() => openLink(link.url)}
-              onRelate={(relation) => control.onRelate(link.id, relation)}
-              onUnlink={() => control.onUnlink(link.id)}
+        ))}
+        {editable && offered ? (
+          <li className="task-issue-links-add">
+            {/* Note that the chip may stand anywhere along a row that wraps, so its menu hangs from whichever edge leaves it room. */}
+            <IssuePickerChip
+              trigger={LINKS_WORDS.LINK}
+              align={PICKER_ALIGN.AUTO}
+              linearIn={linearIn}
+              githubIn={githubIn}
+              workspaceId={workspaceId}
+              repository={repository}
+              linked={linked}
+              full={linksFull(links.length)}
+              disabled={control.linking}
+              onChoose={(issue: LinearIssueSummary) =>
+                control.onLink({ provider: TASK_ISSUE_PROVIDER.LINEAR, id: issue.id })
+              }
+              onChooseGitHub={(issue: GitHubIssuePick) =>
+                control.onLink({
+                  provider: TASK_ISSUE_PROVIDER.GITHUB,
+                  repository: issue.repository,
+                  number: issue.number,
+                })
+              }
             />
-          ))}
-        </ul>
-      )}
+          </li>
+        ) : null}
+      </ul>
       {note === undefined ? null : (
         <p className="task-issue-links-note" role="alert">
           {note}

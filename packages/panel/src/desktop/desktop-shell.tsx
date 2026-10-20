@@ -37,6 +37,7 @@ import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
+import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import {
@@ -67,8 +68,7 @@ import { useWindowTitle } from "./window-title.js";
 /**
  * Settings, loaded as a chunk of its own the first time it opens rather than
  * with the window, because the renderer bundle is parsed at every window
- * open, the voice window's included, and Settings is opened seldom
- * (`bundle-budget.json`). The chunk is a local file, so it stands a frame
+ * open, the voice window's included, and Settings is opened seldom. The chunk is a local file, so it stands a frame
  * later, over its frame of placeholders in the meantime (`SettingsLoading`).
  */
 const DesktopSettings = lazy(() =>
@@ -79,7 +79,7 @@ const DesktopSettings = lazy(() =>
  * The Automations pages, loaded as a chunk of their own the first time
  * they open, as Settings is and for the same reason: the renderer bundle is
  * parsed at every window open, and the pages, their editor and its triggers
- * among them, are opened seldom (`bundle-budget.json`). What stands while
+ * among them, are opened seldom. What stands while
  * the chunk loads is the pages' own empty frame, for a frame.
  */
 const AutomationsPage = lazy(() =>
@@ -93,17 +93,29 @@ const TasksBoard = lazy(() =>
   import("./tasks-board.js").then((loaded) => ({ default: loaded.TasksBoard })),
 );
 
+/** The Tasks page that stands in the Board's place while the inbox-first sidebar is on, its own chunk too. */
+const TasksPage = lazy(() =>
+  import("./tasks-page.js").then((loaded) => ({ default: loaded.TasksPage })),
+);
+
 /** What stands while the Board's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the Board rather than reaching the plan behind it. */
-function BoardLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+function BoardLoading({
+  title,
+  onExit,
+}: {
+  /** The page's name: the Board's, or the Tasks page's standing in its place. */
+  title: string;
+  onExit: () => void;
+}): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, onExit);
   return (
     <CollectionPage
       frame={PAGE_FRAME.TOOLBAR}
-      label="Board"
+      label={title}
       toolbar={
         <header className="desktop-toolbar">
           <div className="desktop-toolbar-heading">
-            <h1 className="desktop-toolbar-title">Board</h1>
+            <h1 className="desktop-toolbar-title">{title}</h1>
           </div>
         </header>
       }
@@ -434,6 +446,8 @@ function titleSubject(
   tab: PanelTab,
   tasks: TasksControl,
   shownTask: Task | undefined,
+  /** Whether the account has the inbox-first sidebar on, under which the Board's place is the Tasks page. */
+  inboxFirst: boolean,
 ): Parameters<typeof useWindowTitle>[0] {
   const { signedIn } = tasks;
   if (tab === PANEL_TAB.SETTINGS) return { signedIn, subject: "Settings", workspace: undefined };
@@ -449,7 +463,9 @@ function titleSubject(
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
   if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
-  if (tasks.boardView.open) return { signedIn, subject: "Board", workspace: tasks.workspace };
+  if (tasks.boardView.open) {
+    return { signedIn, subject: inboxFirst ? "Tasks" : "Board", workspace: tasks.workspace };
+  }
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
@@ -562,7 +578,12 @@ export function DesktopShell({
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
       : undefined;
-  useWindowTitle(titleSubject(tab, tasks, shownTask));
+  // With the inbox-first sidebar on, the Board's place is the Tasks page, which holds the Board as one of its views.
+  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
+  // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
+  const inboxListing = useInboxListing(tasks, inboxFirst && tasks.signedIn);
+  const sharedListing = inboxFirst && tasks.signedIn ? inboxListing : undefined;
+  useWindowTitle(titleSubject(tab, tasks, shownTask, inboxFirst));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = useTaskLooks(shownTask, tasks.me);
   const mentionedAgents = useMemo(
@@ -570,20 +591,40 @@ export function DesktopShell({
     [tasks.agents.models, tasks.me],
   );
   // A chip naming a task hangs the task's card, as its sidebar row does.
-  const chipCards = {
-    taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) => {
-      const task = [...tasks.tasks, ...tasks.archived].find((each) => each.id === taskId);
-      if (task === undefined) return undefined;
-      // Note that the card names its creator as the task's own workspace holds them, whatever workspace the chip stands in.
-      const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
-      const card = taskCardOf(tasks, task, now, focus);
-      return home === undefined ? (
-        card
-      ) : (
-        <WorkspaceDirectory workspace={home}>{card}</WorkspaceDirectory>
-      );
-    },
-  };
+  // Note that what the columns are handed is held across draws over the same
+  // tasks, because each column holds while what it is handed does
+  // (`DesktopSidebar`, `DesktopTasks`), and a chip reads its cards from here.
+  const chipCards = useMemo(
+    () => ({
+      taskCard: (taskId: string, now: number, focus: TaskFocus | undefined) => {
+        const task = [...tasks.tasks, ...tasks.archived].find((each) => each.id === taskId);
+        if (task === undefined) return undefined;
+        // Note that the card names its creator as the task's own workspace holds them, whatever workspace the chip stands in.
+        const home = tasks.workspaces.find((each) => each.id === task.workspaceId);
+        const card = taskCardOf(tasks, task, now, focus);
+        return home === undefined ? (
+          card
+        ) : (
+          <WorkspaceDirectory workspace={home}>{card}</WorkspaceDirectory>
+        );
+      },
+    }),
+    [tasks],
+  );
+  // New task asks over whatever stands, the tasks or a version history.
+  const newTaskDialog = useMemo(() => <NewTaskDialog newTask={tasks.newTask} />, [tasks.newTask]);
+  // Note that the shell says whether the panel's toggle stands, because the
+  // toolbar beneath it leaves the toggle room then and only then. Factory,
+  // the Automations page, and Chat stand in the plan's place, so they draw
+  // no panel to toggle; an agent's page draws the agent's own, and the Inbox
+  // the chosen item's task's.
+  const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
+  const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
+  const speechHidden = taskDrawn && transcriptStreaming(tasks);
+  const captionStrip = useMemo(
+    () => <CaptionStrip {...captions} speechHidden={speechHidden} />,
+    [captions, speechHidden],
+  );
   if (gated) {
     const macAppLink = appPlatform().macAppLink?.();
     return (
@@ -634,8 +675,6 @@ export function DesktopShell({
       </div>
     );
   }
-  // New task asks over whatever stands, the tasks or a version history.
-  const newTaskDialog = <NewTaskDialog newTask={tasks.newTask} />;
   // A plan's version history takes the whole window too, its versions listed
   // where the sidebar was, and hands the task back as it found it.
   if (tasks.history.open) {
@@ -671,11 +710,6 @@ export function DesktopShell({
       </div>
     );
   }
-  // Note that the shell says whether the panel's toggle stands, because the
-  // toolbar beneath it leaves the toggle room then and only then. Factory,
-  // the Automations page, and Chat stand in the plan's place, so they draw
-  // no panel to toggle; an agent's page draws the agent's own, and the Inbox
-  // the chosen item's task's.
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
@@ -683,16 +717,11 @@ export function DesktopShell({
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
   const boardOpen = tasks.boardView.open;
-  const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   const panelToggle =
     planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
-  const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the task's column, call bar
   // and all, so the captions float in its place then.
   const captionsInColumn = taskDrawn && !tasks.sidePanel.fullScreen;
-  const captionStrip = (
-    <CaptionStrip {...captions} speechHidden={taskDrawn && transcriptStreaming(tasks)} />
-  );
   // A phone's drawer is modal, as a phone's own drawers are: while it stands
   // over the work, the work is inert, so neither a screen reader nor a
   // keyboard reaches what the drawer covers, and a press there only puts it
@@ -720,6 +749,7 @@ export function DesktopShell({
         call={sidebar.collapsed ? undefined : call}
         onPressWithin={keepOverlay}
         room={room}
+        inboxListing={sharedListing}
       />
       <main className="desktop-main" inert={drawerOver}>
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
@@ -732,7 +762,7 @@ export function DesktopShell({
                 accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
               />
             ) : inboxOpen ? (
-              <DesktopInbox tasks={tasks} />
+              <DesktopInbox tasks={tasks} listing={sharedListing} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
               <DesktopAgentPage key={pageAgent} tasks={tasks} agentId={pageAgent} />
@@ -763,9 +793,16 @@ export function DesktopShell({
                   <FACTORY.Route tasks={tasks} />
                 </Suspense>
               </PageFind>
+            ) : boardOpen && inboxFirst ? (
+              // The Tasks page holds its own find, its subject the view it shows, so a search in the List does not follow into the Board.
+              <Suspense fallback={<BoardLoading title="Tasks" onExit={tasks.boardView.onClose} />}>
+                <TasksPage tasks={tasks} room={room} />
+              </Suspense>
             ) : boardOpen ? (
               <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>
-                <Suspense fallback={<BoardLoading onExit={tasks.boardView.onClose} />}>
+                <Suspense
+                  fallback={<BoardLoading title="Board" onExit={tasks.boardView.onClose} />}
+                >
                   <TasksBoard tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>

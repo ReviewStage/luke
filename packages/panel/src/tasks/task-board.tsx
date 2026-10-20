@@ -7,12 +7,13 @@ import type { PortActPayload } from "@luke/host/contract";
 import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Atom from "effect/reactivity/Atom";
 import { Fragment, useEffect, useRef } from "react";
 import { askAct } from "../act.js";
 import { BOARD_LOAD_FAILED, useSideBundles } from "../bundle-loader.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { SpinnerRegion } from "../spinner.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import type { WhiteboardHandle, WhiteboardModule } from "../whiteboard/contract.js";
 
 /**
@@ -79,6 +80,12 @@ const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
   }),
 );
 
+/** Whether Luke is looking at the board now, which redraws the canvas only as he starts and stops. */
+const lookingAtom: Atom.Atom<boolean> = Atom.map(
+  APP_SLICE.TASKS,
+  (planning) => planning?.activity?.planner?.action === LOOK_AT_BOARD_TOOL_NAME,
+);
+
 /** The canvas, once its bundle has loaded: mounted for one task, and handed each board main holds. */
 function BoardCanvas({
   module,
@@ -98,7 +105,7 @@ function BoardCanvas({
   const latestBoard = useRef(board);
   latestBoard.current = board;
   const save = useAtomSet(boardSaveAtom);
-  const looking = useAppState()?.tasks.activity?.planner?.action === LOOK_AT_BOARD_TOOL_NAME;
+  const looking = useAppSlice(lookingAtom);
 
   useEffect(() => {
     const element = host.current;

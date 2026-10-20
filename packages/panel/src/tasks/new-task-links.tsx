@@ -17,6 +17,7 @@ import {
   ProviderMark,
 } from "@luke/ui";
 import { CircleDotIcon } from "lucide-react";
+import { FadingWords } from "../fading-words.js";
 import { Tooltip } from "../tooltip.js";
 
 /**
@@ -119,7 +120,7 @@ function LinkChip({
       <span className="new-task-issue-key">
         {github ? `#${link.issue.number}` : link.issue.identifier}
       </span>
-      <span className="new-task-issue-title">{link.issue.title}</span>
+      <FadingWords className="new-task-issue-title" words={link.issue.title} />
       <span className="new-task-issue-relation">
         <Tooltip label={LINK_WORDS.RELATION_HINT}>
           <Chip

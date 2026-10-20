@@ -1,6 +1,6 @@
 /**
- * one-line.tsx -- words held to one line in a narrow column, ending in an
- * ellipsis and in a fade, and a short line that ends on its last letter;
+ * one-line.tsx -- words held to one line in a narrow column, ending in a
+ * fade and in an ellipsis, and a short line that ends on its last letter;
  * the pointer resting on a line cut short reads it whole in a pill, the
  * catalog's own stand-in for the timing an app gives its hints.
  */
@@ -63,7 +63,11 @@ function OneLines(): React.JSX.Element {
       <div className="catalog-narrow">
         <Stack gap={GAP.CONTROL}>
           <OneLine hint={pillHint(ADDRESS)}>{ADDRESS}</OneLine>
-          <OneLine as={ONE_LINE_ELEMENT.STRONG} end={ONE_LINE_END.FADE} hint={pillHint(ADDRESS)}>
+          <OneLine
+            as={ONE_LINE_ELEMENT.STRONG}
+            end={ONE_LINE_END.ELLIPSIS}
+            hint={pillHint(ADDRESS)}
+          >
             {ADDRESS}
           </OneLine>
           <OneLine as={ONE_LINE_ELEMENT.SMALL} hint={pillHint("sam@relay.dev")}>

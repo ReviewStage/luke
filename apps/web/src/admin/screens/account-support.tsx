@@ -40,7 +40,7 @@ import {
   Text,
 } from "@luke/ui";
 import { formatNumber } from "@luke/ui/admin-format";
-import { SectionHeading, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card";
+import { AdminSection, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card";
 
 /** What the page draws where a value is absent. */
 const NONE = "—";
@@ -348,51 +348,57 @@ export function AccountSupportSections({
 }): React.JSX.Element {
   return (
     <>
-      <SectionHeading>Work</SectionHeading>
-      <WorkCards support={support} windowDays={windowDays} />
+      <AdminSection title="Work">
+        <WorkCards support={support} windowDays={windowDays} />
+      </AdminSection>
 
-      <SectionHeading>Recent agents</SectionHeading>
-      <DataTable
-        label="The account's newest coding agents"
-        columns={AGENT_COLUMNS}
-        rows={support.recentAgents}
-        rowKey={(agent) => agent.id}
-        empty="No coding agent started yet."
-        minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
-      />
+      <AdminSection title="Recent agents">
+        <DataTable
+          label="The account's newest coding agents"
+          columns={AGENT_COLUMNS}
+          rows={support.recentAgents}
+          rowKey={(agent) => agent.id}
+          empty="No coding agent started yet."
+          minWidth={DATA_TABLE_MIN_WIDTH.MEDIUM}
+        />
+      </AdminSection>
 
-      <SectionHeading>Workspaces</SectionHeading>
-      <DataTable
-        label="The account's workspaces"
-        columns={WORKSPACE_COLUMNS}
-        rows={support.workspaces}
-        rowKey={(workspace) => workspace.id}
-        empty="In no workspace."
-        minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
-      />
+      <AdminSection title="Workspaces">
+        <DataTable
+          label="The account's workspaces"
+          columns={WORKSPACE_COLUMNS}
+          rows={support.workspaces}
+          rowKey={(workspace) => workspace.id}
+          empty="In no workspace."
+          minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+        />
+      </AdminSection>
 
-      <SectionHeading>Keys and connections</SectionHeading>
-      <DataTable
-        label="The account's provider keys and integration connections"
-        columns={CREDENTIAL_COLUMNS}
-        rows={credentialRows(support)}
-        rowKey={(row) => String(row.order)}
-        empty="No provider key or connection."
-        minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
-      />
+      <AdminSection title="Keys and connections">
+        <DataTable
+          label="The account's provider keys and integration connections"
+          columns={CREDENTIAL_COLUMNS}
+          rows={credentialRows(support)}
+          rowKey={(row) => String(row.order)}
+          empty="No provider key or connection."
+          minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+        />
+      </AdminSection>
 
-      <SectionHeading>Defaults and experiments</SectionHeading>
-      <DefaultsLines support={support} />
+      <AdminSection title="Defaults and experiments">
+        <DefaultsLines support={support} />
+      </AdminSection>
 
-      <SectionHeading>{`Recent failures · ${windowDays} days`}</SectionHeading>
-      <DataTable
-        label="The account's recent failures"
-        columns={FAILURE_COLUMNS}
-        rows={support.failures.map((failure, order) => ({ order, failure }))}
-        rowKey={(row) => String(row.order)}
-        empty="Nothing failed in this window."
-        minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
-      />
+      <AdminSection title={`Recent failures · ${windowDays} days`}>
+        <DataTable
+          label="The account's recent failures"
+          columns={FAILURE_COLUMNS}
+          rows={support.failures.map((failure, order) => ({ order, failure }))}
+          rowKey={(row) => String(row.order)}
+          empty="Nothing failed in this window."
+          minWidth={DATA_TABLE_MIN_WIDTH.NARROW}
+        />
+      </AdminSection>
     </>
   );
 }

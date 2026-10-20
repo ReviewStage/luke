@@ -17,7 +17,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Deferred, Effect } from "effect";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-shell.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../agents/repository-sandbox-contract.js";
 import { sandboxListRefusal, sandboxStopRefusal } from "./vercel-sandbox-fake.js";
 
 export const SOURCE_SANDBOX = {
@@ -146,7 +146,8 @@ export function sourceSandbox(source: SourceCheckout, status: string | undefined
       return refused ?? Response.json({});
     }
     if (parsed.pathname.endsWith("/network-policy")) {
-      policies.push({ session, hosts: Object.keys(JSON.parse(body).allow) });
+      // An open policy carries a credential on no host.
+      policies.push({ session, hosts: Object.keys(JSON.parse(body).allow ?? {}) });
       return Response.json({});
     }
     if (parsed.searchParams.get("resume") === "true") {

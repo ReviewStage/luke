@@ -1380,9 +1380,6 @@ function TabContent({
   onBrowseFile,
   onFileHistory,
   onFoldNote,
-  codeReveal,
-  onShowNote,
-  onRevealed,
   onCloseTab,
   pullRequestViews,
   onPullRequestView,
@@ -1431,12 +1428,6 @@ function TabContent({
   onFileHistory: (from: string, step: FileHistoryStep) => void;
   /** Folds or opens a note on a File tab (`SidePanelControl.onFoldNote`). */
   onFoldNote: (path: string, callId: string, folded: boolean) => void;
-  /** The call whose card the Code tab scrolls to as it is drawn, which a File tab's note asked for. */
-  codeReveal: string | undefined;
-  /** Shows the Code tab on the card of the call a File tab's note is from. */
-  onShowNote: (callId: string) => void;
-  /** Says the Code tab scrolled to the card asked for. */
-  onRevealed: () => void;
   /** Closes a tab whose subject is gone, as an archived agent's Terminal tab closes. */
   onCloseTab: (tab: SidePanelTab) => void;
   /** What each Pull request tab shows, by agent and number (`SidePanelControl.pullRequestViews`). */
@@ -1555,7 +1546,6 @@ function TabContent({
             onStep: (step) => onFileHistory(file.path, step),
           }}
           onFoldNote={(callId, folded) => onFoldNote(file.path, callId, folded)}
-          onShowNote={onShowNote}
         />
       </Fragment>
     );
@@ -1640,8 +1630,6 @@ function TabContent({
           shown={shownCode}
           calls={transcript.region.kind === TRANSCRIPT_REGION.READY ? transcript.region.calls : []}
           onOpenFile={onOpenFile}
-          reveal={codeReveal}
-          onRevealed={onRevealed}
         />
       );
     case SIDE_PANEL_TAB.COMMENTS:
@@ -2036,16 +2024,6 @@ export function SidePanel({
                   : isBrowserTab(tab)
                     ? (browserTitleOf(browserPages.get(tab.browser)) ?? TAB_WORDS.BROWSER)
                     : tabLook({ kind: TAB_KIND.PANEL, tab }).label;
-  // The card a File tab's note asked the Code tab to scroll to, until it has.
-  const [codeReveal, setCodeReveal] = useState<string | undefined>(undefined);
-  const showNote = useCallback(
-    (callId: string) => {
-      setCodeReveal(callId);
-      panel.onChoose(SIDE_PANEL_TAB.CODE);
-    },
-    [panel.onChoose],
-  );
-  const revealed = useCallback(() => setCodeReveal(undefined), []);
   const keys = shown && leaving === PANEL_LEAVING.NONE;
   // The panel's "+" asks for a new shell where the panel already holds the keys.
   const openTerminal = useOpenTerminal(panel, noFocusMove);
@@ -2137,9 +2115,9 @@ export function SidePanel({
       ) : (
         // The Board is drawn on a canvas, which keeps a find of its own, and
         // a page's words stand in a sandboxed frame no find of the window
-        // reaches, so a page's tab finds in its source alone, itself; a
-        // Browser tab's page stands in a view of main's, which no find of the
-        // window reaches either.
+        // reaches, so a page's tab finds itself, through its frame or in its
+        // source; a Browser tab's page stands in a view of main's, which no
+        // find of the window reaches either.
         <FindScope
           className="side-panel-content"
           role="tabpanel"
@@ -2173,9 +2151,6 @@ export function SidePanel({
             onBrowseFile={panel.onBrowseFile}
             onFileHistory={panel.onFileHistory}
             onFoldNote={panel.onFoldNote}
-            codeReveal={codeReveal}
-            onShowNote={showNote}
-            onRevealed={revealed}
             onCloseTab={panel.onClose}
             pullRequestViews={panel.pullRequestViews}
             onPullRequestView={panel.onPullRequestView}

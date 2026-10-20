@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
+  readAccountRole,
   readPlanTemplate,
   restorePlanTemplate,
   writeAccountPreferences,
@@ -71,6 +72,7 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 /** The catalog a coding-agent choice is checked against: the default model and one other. */
@@ -120,6 +122,7 @@ const openAccounts = Effect.gen(function* () {
     standingSessions: () => Effect.die(new Error("this suite deletes no account")),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
+    readRole: readAccountRole,
     anthropicFastAccess,
     writePreferences: writeAccountPreferences,
     readPlanTemplate,

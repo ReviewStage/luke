@@ -1,6 +1,7 @@
 import { type AppStateSnapshot, RUN_PROFILE } from "@luke/host/app-state";
 import { EXPERIMENT, experimentOn, NO_EXPERIMENTS } from "@luke/settings";
-import { useAppState } from "../use-app-state.js";
+import type * as Atom from "effect/reactivity/Atom";
+import { appStateDerivedAtom, useAppSlice } from "../use-app-state.js";
 
 /**
  * chat-gate.ts -- whether the window offers Chat at all: the account's Chat experiment, or a fixture run staged on Chat.
@@ -18,7 +19,10 @@ function chatOffered(state: AppStateSnapshot | undefined): boolean {
   return experimentOn(state?.settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.CHAT);
 }
 
+/** The answer, judged once per delivery for every surface, which tells them only as it turns. */
+const chatOnAtom: Atom.Atom<boolean> = appStateDerivedAtom(chatOffered);
+
 /** Whether Chat is offered, as a surface reads it. */
 export function useChatOn(): boolean {
-  return chatOffered(useAppState());
+  return useAppSlice(chatOnAtom);
 }

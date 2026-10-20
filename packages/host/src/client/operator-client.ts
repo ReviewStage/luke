@@ -108,6 +108,9 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("client/createOper
       gateway.host.onAccountChanged((account) => {
         state.update({ account });
       }),
+      gateway.host.onAccountAccessChanged((access) => {
+        state.update({ access });
+      }),
       // The live session's phase is handed to the voice window as the event it is.
       gateway.host.onVoiceLiveSessionChanged((change) => {
         links().sendToVoice(PUSH.VOICE_LIVE_SESSION_CHANGED, change);

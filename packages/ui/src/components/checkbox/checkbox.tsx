@@ -8,7 +8,9 @@ import { type ReactNode, useEffect, useRef } from "react";
  * a reader. It is controlled: the caller holds `checked` and answers every
  * change with the value it asks for, so a press and a key arrive as the same
  * value. A box standing for a group whose members are some checked and some
- * not is `mixed`, which a press resolves to checked.
+ * not is `mixed`, which a press resolves to checked. A box `readOnly` records
+ * a choice made: drawn as it stands, in its words' own ink rather than an
+ * unavailable box's faded one, its press and Space changing nothing.
  */
 
 /** A box and its words, checked while `checked`, answering a change with the value asked for. */
@@ -17,6 +19,7 @@ export function Checkbox({
   onChange,
   mixed = false,
   disabled,
+  readOnly = false,
   name,
   id,
   "aria-describedby": describedBy,
@@ -27,6 +30,8 @@ export function Checkbox({
   /** Whether it stands for a group partly checked, drawn as a dash and read as mixed. */
   mixed?: boolean;
   disabled?: boolean | undefined;
+  /** Whether it records a choice made, which no press or key changes. */
+  readOnly?: boolean | undefined;
   name?: string | undefined;
   id?: string | undefined;
   /** The id of the words that say more of what checking it does. */
@@ -40,7 +45,11 @@ export function Checkbox({
     if (box.current !== null) box.current.indeterminate = mixed;
   }, [mixed]);
   return (
-    <label className="luke-checkbox" data-disabled={disabled === true}>
+    <label
+      className="luke-checkbox"
+      data-disabled={disabled === true}
+      data-read-only={readOnly || undefined}
+    >
       <input
         ref={box}
         className="luke-checkbox-box"
@@ -50,10 +59,14 @@ export function Checkbox({
         checked={checked}
         disabled={disabled}
         aria-describedby={describedBy}
+        aria-readonly={readOnly || undefined}
         // Note that a mixed box asks for checked whatever its box toggled
         // to under the dash, while the box itself keeps the caller's
         // `checked`, so a form it stands in still submits what the caller holds.
-        onChange={(event) => onChange(mixed ? true : event.target.checked)}
+        // A read-only box hands nothing on, so it stays as its caller holds it.
+        onChange={(event) => {
+          if (!readOnly) onChange(mixed ? true : event.target.checked);
+        }}
       />
       <span className="luke-checkbox-words">{children}</span>
     </label>

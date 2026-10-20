@@ -194,12 +194,7 @@ test("in a finished turn, a line GitHub sent while it ran splits its fold, the s
   const task = "line: task";
   const github = "line: github";
 
-  assert.deepEqual(drawnOrder(container), [
-    task,
-    "fold: 2 tool calls",
-    github,
-    "fold: 1 tool call",
-  ]);
+  assert.deepEqual(drawnOrder(container), [task, "fold: 2 tool calls", github, "call: c"]);
 
   openEveryFold(container);
   assert.deepEqual(drawnOrder(container), [
@@ -208,7 +203,6 @@ test("in a finished turn, a line GitHub sent while it ran splits its fold, the s
     "call: a",
     "call: b",
     github,
-    "fold: 1 tool call",
     "call: c",
   ]);
 });

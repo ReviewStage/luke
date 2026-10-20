@@ -9,6 +9,20 @@ export const CONVERSATION_KIND = {
 } as const;
 
 /**
+ * What answers a conversation's turns: eve, or a provider's own coding
+ * harness running unmodified in the agent's sandbox, Claude Code or Codex.
+ * Settled as the conversation is opened and never moved after; a
+ * conversation from before the column runs on eve.
+ */
+export const CONVERSATION_RUNTIME = {
+  EVE: "eve",
+  CLAUDE_CODE: "claude_code",
+  CODEX: "codex",
+} as const;
+
+export type ConversationRuntime = (typeof CONVERSATION_RUNTIME)[keyof typeof CONVERSATION_RUNTIME];
+
+/**
  * What sent one of the developer's lines to a coding agent: a member, from
  * the message box or an Inbox answer; Luke, from a call; an automation's
  * run, on its creator's behalf; GitHub, telling the agent of a review, a

@@ -33,7 +33,7 @@ import {
 import { formatDate, formatNumber } from "@luke/ui/admin-format";
 import { useEffect, useState } from "react";
 import { AccountCell } from "../accounts-table/accounts-table";
-import { STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card";
+import { AdminSection, STAT_CELL, STAT_PAIR, STAT_ROW, StatCard } from "../charts/stat-card";
 import { AdminErrorState, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing } from "../chrome/controls";
 import { AdminCollectionPage, type ViewerAccount } from "../chrome/page-header";
@@ -265,17 +265,14 @@ function WorkspaceTiles({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
 function WorkspacesNote({ list }: { list: AdminWorkspaceList }): React.JSX.Element {
   const truncated = list.total > list.rows.length;
   return (
-    <div className="mt-3">
-      <Text tone={TEXT_TONE.MUTED}>
-        Tasks and Agents count those started in the last {list.activityDays} UTC days, and Merged
-        the distinct pull requests from the workspace's agents that merged in them; the table is
-        sorted by that week's activity. The headline counts read shared workspaces whatever the
-        table lists.
-        {truncated
-          ? ` Only the ${formatNumber(list.rows.length)} busiest of ${formatNumber(list.total)} are listed. Search reads every workspace.`
-          : ""}
-      </Text>
-    </div>
+    <Text tone={TEXT_TONE.MUTED}>
+      Tasks and Agents count those started in the last {list.activityDays} UTC days, and Merged the
+      distinct pull requests from the workspace's agents that merged in them; the table is sorted by
+      that week's activity. The headline counts read shared workspaces whatever the table lists.
+      {truncated
+        ? ` Only the ${formatNumber(list.rows.length)} busiest of ${formatNumber(list.total)} are listed. Search reads every workspace.`
+        : ""}
+    </Text>
   );
 }
 
@@ -386,8 +383,10 @@ export function WorkspacesScreen({
       const body = (table: React.ReactNode) => (
         <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
           <WorkspaceTiles list={list} />
-          <div className="mt-6">{table}</div>
-          <WorkspacesNote list={list} />
+          <AdminSection>
+            {table}
+            <WorkspacesNote list={list} />
+          </AdminSection>
         </Refreshing>
       );
 

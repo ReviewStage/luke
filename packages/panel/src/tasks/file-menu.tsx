@@ -38,10 +38,7 @@ export const PATH_COPY_WORDS = {
 } as const;
 
 /** The ⋯'s Copy path for a file, from the repository's root. */
-export function copyPathAction(
-  path: string,
-  copy: (text: string, words: string) => void,
-): MenuAction {
+function copyPathAction(path: string, copy: (text: string, words: string) => void): MenuAction {
   return {
     label: PATH_COPY_WORDS.COPY_PATH,
     icon: <FolderTreeIcon aria-hidden="true" />,

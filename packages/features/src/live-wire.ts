@@ -13,6 +13,7 @@ import {
   accountInboxTaskSchema,
   accountTasklessEntrySchema,
 } from "./account-inbox-wire.js";
+import { codingAgentMessagesAnswerSchema } from "./coding-agent-wire.js";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -32,12 +33,30 @@ import { countedNumber } from "./service-wire.js";
  * reader orders them as the held read does.
  */
 
+/**
+ * The address a live read is answered at where it was read rather than
+ * sealed: the reader asked to poll, or Realtime could not seal it. Each
+ * statement then carries its rows, and nothing subscribes.
+ */
+export const LIVE_POLL_URL = "luke-poll:";
+
+/** How a reader asks for a live read's rows inline rather than sealed, while Realtime fails it. */
+export const LIVE_POLL = { QUERY: "poll", ON: "true" } as const;
+
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
 export const sealedLiveQuerySchema = EffectSchema.Struct({
   capability: EffectSchema.String,
   queryFingerprint: EffectSchema.String,
   /** When the seal expires, in epoch milliseconds; the reader renews it before. */
   expiresAt: countedNumber,
+  /**
+   * The statement's rows as they stand, answered only at `LIVE_POLL_URL`.
+   * They travel as JSON text, since a row has no wire form until its
+   * reader decodes it.
+   */
+  rows: EffectSchema.optionalKey(
+    EffectSchema.fromJsonString(EffectSchema.Array(EffectSchema.Unknown)),
+  ),
 });
 
 export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;
@@ -201,3 +220,116 @@ export function accountInboxOfLiveRows(
   };
   return { ...answer, cursor: liveCursorOf(answer), readAt: now };
 }
+
+/**
+ * One task's whiteboard sealed for following: the address, and one statement
+ * that marks where the board stands. The desktop reads the board again once
+ * the mark moves, rather than when a call's activity suggests it might have.
+ * The service answers `not-found` for a task the account does not reach, and
+ * `unavailable` where its deployment's Realtime is misconfigured, which the
+ * desktop answers by asking again.
+ */
+export const taskBoardLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({ board: sealedLiveQuerySchema }),
+});
+
+export type TaskBoardLiveAnswer = typeof taskBoardLiveAnswerSchema.Type;
+
+/** The board as its row delivers it: Luke's latest drawing's number, the one the scene holds, and whether the scene holds its image. */
+const taskBoardLiveRowSchema = EffectSchema.Struct({
+  taskId: EffectSchema.String,
+  drawingNumber: EffectSchema.Finite,
+  appliedDrawing: EffectSchema.Finite,
+  imaged: EffectSchema.Boolean,
+});
+
+/** The board's rows as Realtime delivers them: one, or none before the board was first written or for a task the account no longer reaches. */
+export const taskBoardLiveRowsSchema = EffectSchema.Struct({
+  board: EffectSchema.Array(taskBoardLiveRowSchema),
+});
+
+export type TaskBoardLiveRows = typeof taskBoardLiveRowsSchema.Type;
+
+/**
+ * A coding agent's transcript, or one of its workers', sealed for
+ * following: the address, and the statements a page past the reader's
+ * cursor is read from, which move where the service's held read would wake
+ * (`packages/service/src/agents/coder-host/transcript-live.ts`): its
+ * messages, its turns, its conversation's journal revision and title, the
+ * agent's title, and its workers' titles and delegations. The page itself
+ * is still read from the service, once they move. The service answers
+ * `not-found` for an agent the account does not reach, and `unavailable`
+ * where its deployment's Realtime is misconfigured, which the desktop
+ * answers by asking again.
+ */
+export const agentTranscriptLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({
+    messages: sealedLiveQuerySchema,
+    turns: sealedLiveQuerySchema,
+    conversation: sealedLiveQuerySchema,
+    agent: sealedLiveQuerySchema,
+    workers: sealedLiveQuerySchema,
+  }),
+});
+
+export type AgentTranscriptLiveAnswer = typeof agentTranscriptLiveAnswerSchema.Type;
+
+/** A transcript's rows as Realtime delivers them, decoded at the boundary before anything reads them. */
+export const agentTranscriptLiveRowsSchema = EffectSchema.Struct({
+  messages: EffectSchema.Array(EffectSchema.Struct({ rows: countedNumber, seq: countedNumber })),
+  turns: EffectSchema.Array(
+    EffectSchema.Struct({
+      status: EffectSchema.String,
+      rows: countedNumber,
+      stopped: countedNumber,
+      changedAt: countedNumber,
+    }),
+  ),
+  conversation: EffectSchema.Array(
+    EffectSchema.Struct({
+      id: EffectSchema.String,
+      title: EffectSchema.NullOr(EffectSchema.String),
+      revision: countedNumber,
+    }),
+  ),
+  agent: EffectSchema.Array(
+    EffectSchema.Struct({
+      id: EffectSchema.String,
+      title: EffectSchema.NullOr(EffectSchema.String),
+    }),
+  ),
+  workers: EffectSchema.Array(
+    EffectSchema.Struct({
+      id: EffectSchema.String,
+      title: EffectSchema.NullOr(EffectSchema.String),
+      callId: EffectSchema.NullOr(EffectSchema.String),
+    }),
+  ),
+});
+
+/** The query a transcript read is asked at once by rather than held, and the one word it takes. */
+export const TRANSCRIPT_NOW_QUERY = { WAIT: "wait", NONE: "none" } as const;
+
+/**
+ * A page of the transcript read at once rather than held, for a reader
+ * following its live statements: the page the held read answers, and
+ * whether that read would have held on it for more, which is when the
+ * reader waits for the statements to move, or for the clock to reach an
+ * edge the rows cannot say, before it reads again.
+ */
+export const transcriptNowAnswerSchema = EffectSchema.Struct({
+  ...codingAgentMessagesAnswerSchema.fields,
+  holds: EffectSchema.Boolean,
+  /**
+   * Where it would hold, how many milliseconds from now the clock alone may
+   * end that, which no row changing says: an agent passing the grace its
+   * first turn had to land in, or the window of a title it waits on
+   * closing. The reader reads again then. Absent where only a row may, and
+   * from a service older than it.
+   */
+  wakeIn: EffectSchema.optionalKey(countedNumber),
+});
+
+export type TranscriptNowAnswer = typeof transcriptNowAnswerSchema.Type;

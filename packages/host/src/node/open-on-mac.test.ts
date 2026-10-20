@@ -626,8 +626,13 @@ test(
       ),
     );
 
+    // Wait for the open to read the holder, however slow the machine, then give it the time it had to act on what it read.
+    const read = path.join(scratch, "lock-pid-read");
+    for (let waited = 0; !existsSync(read) && waited < 20_000; waited += 100) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(existsSync(read), true);
     await new Promise((resolve) => setTimeout(resolve, 2_500));
-    assert.equal(existsSync(path.join(scratch, "lock-pid-read")), true);
     assert.equal(existsSync(path.join(clone, ".git")), false);
     assert.equal(readFileSync(path.join(lock, "pid"), "utf8"), String(next.pid));
     next.kill();

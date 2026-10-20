@@ -30,7 +30,7 @@ import { runColours } from "./code-lines.js";
  * theirs is drawn and no stylesheet fights their classes. A fenced block
  * is coloured by main, by the highlighter the Code and File tabs' lines
  * are coloured with (`ACT_KIND.TASKS_COLOUR_CODE`), so the colours and
- * the type are theirs; the window's content policy and its bundle budget
+ * the type are theirs; the window's content policy and its bundle size
  * keep that highlighter out of the window. Only a block that is whole is
  * asked for: one whose closing fence has not arrived is still streaming,
  * and is drawn plain until it does, so a long answer is coloured once

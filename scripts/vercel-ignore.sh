@@ -24,6 +24,10 @@
 # script, and the eve services' source-map step (`eve-source-maps.sh`). `scripts/preview-address.sh` reads the same list, so a
 # skipped commit is known to serve what its nearest built ancestor serves.
 #
+# Note that Vercel never deploys a coding agent's branch (`luke/**`) or a
+# merge queue's (`gh-readonly-queue/**`): the root `vercel.json`'s
+# `git.deploymentEnabled` turns them off before this step would run.
+#
 # Note that since the project's Root Directory became the repository root
 # (#2876), Vercel's own "not affected" skip sees every push as affecting it,
 # so without this step every push of a desktop-only branch built all three

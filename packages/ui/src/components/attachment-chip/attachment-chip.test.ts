@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { ATTACHMENT_CHIP_STATE, AttachmentChip } from "./attachment-chip.js";
 
 /**
@@ -11,6 +11,7 @@ import { ATTACHMENT_CHIP_STATE, AttachmentChip } from "./attachment-chip.js";
  * or a key, one without presses nothing, its way off takes the file off by
  * pointer or keyboard and refuses while unavailable, a reader hears each
  * control by the file's name, and a file still read or failed opens nothing.
+ * A file's name fades out at its end only while the chip cuts it short.
  */
 
 const PICTURE = "data:image/png;base64,iVBORw0KGgo=";
@@ -23,9 +24,39 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const roots: Root[] = [];
 
+/** The measurement each observed box was handed, fired as a resize; jsdom lays nothing out, so nothing reports one of its own accord. */
+const resizes: (() => void)[] = [];
+
+class StandInResizeObserver {
+  readonly #fire: () => void;
+  constructor(fire: () => void) {
+    this.#fire = fire;
+  }
+  observe(): void {
+    resizes.push(this.#fire);
+  }
+  disconnect(): void {}
+}
+
+/** Stands every box's words `wide` pixels in a box 100px wide, and fires every observed box's measurement, as a resize would. */
+function resize(wide: number): void {
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(wide);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
+  act(() => {
+    for (const fire of resizes) fire();
+  });
+}
+
+beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", StandInResizeObserver);
+});
+
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.replaceChildren();
+  resizes.splice(0);
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 /** One chip drawn into a list of the page, as its callers draw it. */
@@ -146,4 +177,14 @@ test("a file that failed to come says why and its size, and opens nothing", () =
   assert.equal(list.textContent, "Not kept2.4 MB");
   assert.equal(list.querySelector("img"), null, "no picture stands for a file that failed");
   assert.equal(list.querySelector("li")?.getAttribute("title"), "shot.png");
+});
+
+test("a file's name fades out at its end only while the chip cuts it short", () => {
+  const list = drawn({ name: "quarterly-report-final.pdf", icon: null, detail: "2 MB" });
+  const name = () => list.querySelector(".luke-attachment-chip-name");
+  resize(80);
+  assert.equal(name()?.getAttribute("data-end"), "fade");
+  assert.equal(name()?.getAttribute("data-overflow"), "false");
+  resize(160);
+  assert.equal(name()?.getAttribute("data-overflow"), "true");
 });
