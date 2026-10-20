@@ -69,7 +69,7 @@ Review places a module and a component alike under this rule.
   trace, a counted event, a fixture, app state, the service, or the voice
   window; the still is left out of the screen recording, and the title and
   address the tab draws are masked there as every word is. Amended, approved
-  by Dean on DATE-FOR-DEAN: while that Mac's "Let agents run commands on this
+  by Dean on 2026-10-20: while that Mac's "Let agents run commands on this
   Mac" switch (`macCommands`, `packages/settings/src/schema.ts`) is on, an
   agent on a task may drive that task's Browser tabs on the Mac, over the
   view's debugger, with no approval for each action, and a tab's address,
