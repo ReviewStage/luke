@@ -102,7 +102,7 @@ export function AccountCell({
   return (
     <a
       href={accountHref(account.id)}
-      className="flex items-center gap-3 outline-offset-2"
+      className="flex items-center gap-(--luke-space-12) outline-offset-2"
       onClick={(event) => {
         if (!plainLeftClick(event)) return;
         event.preventDefault();

@@ -57,7 +57,7 @@ function ShareRow({
 }): React.JSX.Element {
   const percent = Math.min(100, Math.round((share ?? 0) * 100));
   return (
-    <li className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto_3rem] items-center gap-3 tabular-nums">
+    <li className="grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto_3rem] items-center gap-(--luke-space-12) tabular-nums">
       <Text as={TEXT_ELEMENT.SPAN}>{label}</Text>
       <span
         aria-hidden="true"
@@ -102,7 +102,7 @@ export function FunnelChart({
   }
   return (
     <ChartFrame title={title}>
-      <ul aria-label="Activation funnel" className="grid gap-2">
+      <ul aria-label="Activation funnel" className="grid gap-(--luke-space-8)">
         {funnel.map((step) => (
           <ShareRow
             key={step.step}
@@ -129,7 +129,7 @@ export function ReachChart({ reach }: { reach: AdminOverview["reach"] }): React.
   }
   return (
     <ChartFrame title={title} aside={aside}>
-      <ul aria-label="Feature reach" className="grid gap-2">
+      <ul aria-label="Feature reach" className="grid gap-(--luke-space-8)">
         {reach.features.map((row) => (
           <ShareRow
             key={row.feature}
