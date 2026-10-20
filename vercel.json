@@ -83,11 +83,11 @@
         },
         {
           "src": "/api/plans/([^/]+)/comments/([^/]+)",
-          "dest": "/api/default.js?route=plans/comment-thread&id=$1&thread=$2"
+          "dest": "/api/default.js?route=plans/comment-thread&route-path=plans/$1/comments/$2&id=$1&thread=$2"
         },
         {
           "src": "/api/plans/([^/]+)/comments",
-          "dest": "/api/default.js?route=plans/comments&id=$1"
+          "dest": "/api/default.js?route=plans/comments&route-path=plans/$1/comments&id=$1"
         },
         {
           "src": "/api/plans/([^/]+)/attachments/([^/]+)",
