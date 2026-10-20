@@ -1,36 +1,9 @@
 /* The renderer ships one stylesheet; esbuild inlines these imports. The
-   panel's own sheets are `@luke/panel`'s (`packages/panel/src/styles/`), in
-   the order the cascade needs. */
-/* The shared tokens first, `@luke/ui`'s scale, the desktop profile's roles,
-   its palette, and the window's old names for them, keyed on the root's
-   `data-luke-profile` and `data-luke-theme` (index.html, call.html), so every
-   sheet below reads them. */
-@import "@luke/ui/tokens.css";
-/* Motion tokens next, so base.css can spend them without restating the springs
-   or the duration set. */
-@import "@luke/brand/motion-tokens.css";
-/* Before base.css: `.settings-input` is equal specificity to the tweaks
-   there, and those tweaks have to win. */
-@import "@luke/panel/styles/settings.css";
-@import "@luke/panel/styles/base.css";
-/* The shared components' own rules, in the `components` layer: above
-   base.css's element resets, which sit in `base`, and under the utilities
-   tailwind.css layers last, so a reset never undoes a shared control. */
-@import "@luke/ui/styles.css";
-/* Before the surfaces that draw messages, so each can restate a measure of its
-   own without out-specifying the block it is styling. */
-@import "@luke/panel/styles/markdown.css";
-/* Before the surfaces that show a chord, so each can size its own without
-   out-specifying the chord itself. */
-@import "@luke/panel/styles/shortcut.css";
-@import "@luke/panel/styles/tooltip.css";
-@import "@luke/panel/styles/sign-in.css";
-@import "@luke/panel/styles/tasks.css";
+   panel's own sheets, and the shared tokens they read, come in the order the
+   cascade needs from `@luke/panel/styles/index.css`, which the web imports too. */
+@import "@luke/panel/styles/index.css";
 /* The AI Elements components' utilities, over the tokens above; compiled by
-   scripts/tailwind.mjs as the stylesheet is built. */
+   scripts/tailwind.mjs as the stylesheet is built. Its rules sit in cascade
+   layers the panel's sheets opened first, so coming after them changes no
+   winner. */
 @import "./tailwind.css";
-/* After everything: the window's own layout restages the shared surface's
-   elements, and its overrides have to win. */
-@import "@luke/panel/styles/desktop.css";
-/* The call card, and its floating window over the desktop's ground, which it must not have. */
-@import "@luke/panel/styles/call.css";

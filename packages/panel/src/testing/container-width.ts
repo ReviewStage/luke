@@ -1,6 +1,8 @@
+import motionTokens from "@luke/brand/motion-tokens.css?raw";
 import base from "@luke/panel/styles/base.css?raw";
 import call from "@luke/panel/styles/call.css?raw";
 import desktop from "@luke/panel/styles/desktop.css?raw";
+import entry from "@luke/panel/styles/index.css?raw";
 import markdown from "@luke/panel/styles/markdown.css?raw";
 import settings from "@luke/panel/styles/settings.css?raw";
 import shortcut from "@luke/panel/styles/shortcut.css?raw";
@@ -33,7 +35,7 @@ import tokens from "@luke/ui/tokens.css?inline";
  * wearing a profile and a density reads its roles, and a query that rules
  * a coarse pointer out (`not all and (pointer: coarse)`) is resolved as its
  * opposite. The shared components' sheet (`@luke/ui/styles.css`) is laid
- * where the desktop's `index.css` imports it, and each `@layer` block's rules, which
+ * where the panel's `index.css` imports it, and each `@layer` block's rules, which
  * jsdom would drop, are laid ahead of every unlayered rule, layer by layer
  * in the order the layers first appear, as the cascade orders them. Note
  * that jsdom still weighs a selector's specificity across layers, which the
@@ -42,20 +44,28 @@ import tokens from "@luke/ui/tokens.css?inline";
  * `shown` reads up the element's ancestors.
  */
 
-/** The shared tokens, the panel's stylesheets, and the shared components' beneath them, in the order the desktop's `index.css` imports them. */
-const SHEETS = [
-  tokens,
-  settings,
-  base,
-  ui,
-  markdown,
-  shortcut,
-  tooltip,
-  signIn,
-  tasks,
-  desktop,
-  call,
-] as const;
+/** Each stylesheet the panel's `index.css` imports, by the specifier it imports it by. */
+const SHEET_BY_IMPORT: Readonly<Record<string, string>> = {
+  "@luke/ui/tokens.css": tokens,
+  "@luke/brand/motion-tokens.css": motionTokens,
+  "./settings.css": settings,
+  "./base.css": base,
+  "@luke/ui/styles.css": ui,
+  "./markdown.css": markdown,
+  "./shortcut.css": shortcut,
+  "./tooltip.css": tooltip,
+  "./sign-in.css": signIn,
+  "./tasks.css": tasks,
+  "./desktop.css": desktop,
+  "./call.css": call,
+};
+
+/** The stylesheets in the order the panel's `index.css` imports them, which is the order every app lays them in. */
+const SHEETS = [...entry.matchAll(/^@import "([^"]+)";$/gm)].map(([, specifier]) => {
+  const sheet = specifier === undefined ? undefined : SHEET_BY_IMPORT[specifier];
+  if (sheet === undefined) throw new Error(`container-width.ts lays no sheet for ${specifier}`);
+  return sheet;
+});
 
 /**
  * An at-rule resolved here, through the brace that opens its block: a

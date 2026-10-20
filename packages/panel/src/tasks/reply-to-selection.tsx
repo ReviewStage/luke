@@ -8,7 +8,7 @@ import { ReplyIcon, XIcon } from "lucide-react";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppCommand } from "../app-commands.js";
-import { coarsePointerNow } from "../coarse-pointer.js";
+import { coarsePointerNow, FINGER_SELECTION_GAP } from "../coarse-pointer.js";
 import type { ComposerQuote } from "../plan-editor/contract.js";
 import { rendererRuntime } from "../renderer-runtime.js";
 import { Tooltip } from "../tooltip.js";
@@ -58,9 +58,6 @@ const REPLY_WORDS = {
 const PRESS_GAP = 6;
 const PRESS_MARGIN = 48;
 
-/** How far a finger's press stands under the selection, past the knob of the handle that ends it. */
-const PRESS_GAP_TOUCH = 16;
-
 /** The room the press needs over the selection, under which it stands below instead. */
 const PRESS_ROOM = 40;
 
@@ -107,13 +104,14 @@ function pickedIn(scope: HTMLElement): Picked | undefined {
   const box = range.getBoundingClientRect();
   const seen = visibleViewport();
   // Note that a finger's press stands under the words, clear of the system's menu over them, unless the window ends first.
-  const finger = coarsePointerNow() && box.bottom + PRESS_GAP_TOUCH + PRESS_ROOM <= seen.bottom;
+  const finger =
+    coarsePointerNow() && box.bottom + FINGER_SELECTION_GAP + PRESS_ROOM <= seen.bottom;
   const below = finger || box.top - seen.top < PRESS_ROOM;
   const centre = box.left + box.width / 2;
   return {
     reply,
     left: Math.min(Math.max(centre, seen.left + PRESS_MARGIN), seen.right - PRESS_MARGIN),
-    top: below ? box.bottom + (finger ? PRESS_GAP_TOUCH : PRESS_GAP) : box.top - PRESS_GAP,
+    top: below ? box.bottom + (finger ? FINGER_SELECTION_GAP : PRESS_GAP) : box.top - PRESS_GAP,
     below,
   };
 }
