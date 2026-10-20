@@ -2734,6 +2734,147 @@ export function chatWaitingLiveStatements(
   return Option.all({ chatAsks: liveStatementOf(asks), chatNotices: liveStatementOf(notices) });
 }
 
+/**
+ * How many of each channel's newest messages a live read of the chat holds:
+ * Neon and the host hold a live result whole for as long as it is
+ * followed, and a channel's history only grows.
+ */
+export const LIVE_CHANNEL_MESSAGES = 200;
+
+/** A workspace's chat as a person reads it, written for Neon Realtime: one statement per part of the window's read. */
+export interface WorkspaceChatLiveStatements {
+  /** The reader's own member and how far it has read everywhere. */
+  readonly self: LiveStatement;
+  readonly members: LiveStatement;
+  readonly channels: LiveStatement;
+  readonly messages: LiveStatement;
+  /** Each channel the reader has read on that channel's own cursor. */
+  readonly reads: LiveStatement;
+}
+
+/**
+ * The condition that a message is among the newest `LIVE_CHANNEL_MESSAGES`
+ * of its channel by place. Note that the inner `chat_message` shadows the
+ * outer one, so the ranking reads the workspace's messages afresh.
+ */
+function newestOfChannel(organizationId: string): SQL {
+  return sql`${chatMessage.id} in (select ranked.id from (select ${chatMessage.id} as id, row_number() over (partition by ${chatMessage.channelId} order by ${chatMessage.seq} desc) as place from ${chatMessage} where ${chatMessage.organizationId} = ${organizationId}) as ranked where ranked.place <= ${LIVE_CHANNEL_MESSAGES}::int)`;
+}
+
+/**
+ * A workspace's chat as its reader sees it, written for Neon Realtime: the
+ * same rows and the same rule of who may read them as the window's held
+ * read (`roster`, `channelsOf`, `chatPast` from the start, `channelReads`),
+ * each column under the key `live-wire.ts` reads it by and each instant in
+ * epoch milliseconds. Every part reads nothing once the account is not in
+ * the workspace or has turned Chat off, and the messages are those
+ * `visibleTo` lets the reader see, the newest `LIVE_CHANNEL_MESSAGES` of
+ * each channel by place, and every ask still open. The order is the reader's to keep, since
+ * Realtime keeps none. None where a statement names a value Realtime cannot
+ * carry.
+ */
+export function workspaceChatLiveStatements(
+  userId: string,
+  reader: ChatMemberRow,
+): Option.Option<WorkspaceChatLiveStatements> {
+  const { organizationId } = reader;
+  const reached = and(workspaceReachableBy(userId, organizationId), chatOnFor(userId));
+  const self = queryBuilder
+    .select(liveSelection({ self: chatMember.id, readSeq: chatMember.readSeq }))
+    .from(chatMember)
+    .where(and(eq(chatMember.id, reader.id), reached));
+  const members = queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: chatMember.id,
+          kind: chatMember.kind,
+          handle: chatMember.handle,
+          // A person by their account's name; an agent by its title, else its model's id, as `agentMembersOf` names one.
+          name: sql<
+            string | null
+          >`case when ${chatMember.userId} is null then coalesce(${codingAgent.title}, ${codingAgent.model}) else ${user.name} end`,
+          userId: chatMember.userId,
+          agentId: chatMember.agentId,
+          planId: sql<string | null>`coalesce(${chatMember.taskId}, ${codingAgent.taskId})`,
+          left: sql<boolean>`${chatMember.leftAt} is not null`,
+          ordinal: chatMember.ordinal,
+        },
+        { joinedAt: chatMember.joinedAt },
+      ),
+    )
+    .from(chatMember)
+    .leftJoin(
+      codingAgent,
+      and(eq(codingAgent.id, chatMember.agentId), eq(chatMember.kind, MEMBER_KIND.AGENT)),
+    )
+    .leftJoin(user, eq(user.id, chatMember.userId))
+    .where(and(eq(chatMember.organizationId, organizationId), reached));
+  const channels = queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: chatChannel.id,
+          kind: chatChannel.kind,
+          name: chatChannel.name,
+          planId: chatChannel.taskId,
+          dmAMemberId: chatChannel.dmAMemberId,
+          dmBMemberId: chatChannel.dmBMemberId,
+          archived: sql<boolean>`${chatChannel.archivedAt} is not null`,
+          purpose: chatChannel.purpose,
+        },
+        { createdAt: chatChannel.createdAt },
+      ),
+    )
+    .from(chatChannel)
+    .where(and(eq(chatChannel.organizationId, organizationId), reached));
+  const messages = queryBuilder
+    .select(
+      liveSelection(
+        {
+          id: chatMessage.id,
+          seq: chatMessage.seq,
+          touchedSeq: chatMessage.touchedSeq,
+          channelId: chatMessage.channelId,
+          parentId: chatMessage.parentId,
+          authorId: chatMessage.authorMemberId,
+          blocks: chatMessage.blocks,
+          mentions: chatMessage.mentions,
+          ask: chatMessage.ask,
+          askKey: chatMessage.askKey,
+          askRevision: chatMessage.askRevision,
+          askStatus: chatMessage.askStatus,
+          answer: chatMessage.answer,
+          answeredBy: chatMessage.answeredByMemberId,
+          closedReason: chatMessage.closedReason,
+        },
+        { postedAt: chatMessage.createdAt },
+      ),
+    )
+    .from(chatMessage)
+    .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
+    .where(
+      and(
+        eq(chatMessage.organizationId, organizationId),
+        // An open ask stays however far back it was posted, since For you lists it until it is settled.
+        or(newestOfChannel(organizationId), eq(chatMessage.askStatus, ASK_STATUS.OPEN)),
+        visibleTo(reader),
+        reached,
+      ),
+    );
+  const reads = queryBuilder
+    .select(liveSelection({ channelId: chatRead.channelId, readSeq: chatRead.readSeq }))
+    .from(chatRead)
+    .where(and(eq(chatRead.memberId, reader.id), reached));
+  return Option.all({
+    self: liveStatementOf(self),
+    members: liveStatementOf(members),
+    channels: liveStatementOf(channels),
+    messages: liveStatementOf(messages),
+    reads: liveStatementOf(reads),
+  });
+}
+
 /** One picture as a post hands it in and a read answers it: the type its bytes were sniffed to be, and the bytes. */
 export interface ChatImage {
   readonly contentType: ChatImageType;

@@ -3,14 +3,17 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { Database } from "@luke/database/core/query";
+import { writeAccountPreferences } from "@luke/database/models/account-store";
 import { writeDrawing } from "@luke/database/models/board-store";
+import { ensureMember } from "@luke/database/models/chat-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { childConversationId } from "@luke/database/models/ids";
 import { openTaskConversation } from "@luke/database/models/task-store";
 import { user } from "@luke/database/schemas/auth";
 import { messages, turns } from "@luke/database/schemas/storage";
-import { getTestDB, startTask } from "@luke/database/testing";
+import { getTestDB, joinWorkspace, openWorkspace, startTask } from "@luke/database/testing";
 import { BOARD_ELEMENT_TYPE } from "@luke/features/board-vocabulary";
+import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
   accountInboxLiveAnswerSchema,
   agentTranscriptLiveAnswerSchema,
@@ -24,7 +27,9 @@ import {
   taskBoardLiveRowsSchema,
   taskConversationLiveAnswerSchema,
   taskRecordLiveAnswerSchema,
+  workspaceChatLiveAnswerSchema,
 } from "@luke/features/live-wire";
+import { EXPERIMENT } from "@luke/settings";
 import { TURN_ORIGIN, type WireBoundaryInput, type WireRecord } from "@luke/wire";
 import type { StoredUIMessage } from "@luke/wire/ui-messages";
 import { eq } from "drizzle-orm";
@@ -1146,6 +1151,90 @@ it.layer(getTestDB())("a plan's and an agent's inbox live reads", (it) => {
           }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
+      }),
+  );
+});
+
+/** The procedures answering a workspace chat's live read as `bearer`, over the store and the deployment's Realtime. */
+const askChat = (options: {
+  readonly bearer: string;
+  readonly forUser?: string;
+  readonly workspaceId?: string;
+  readonly sealing: Option.Option<LiveSealer>;
+}) =>
+  Effect.gen(function* () {
+    const services = Layer.mergeAll(
+      Layer.succeed(LiveSealing, options.sealing),
+      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(Database, yield* Database),
+    );
+    const procedures = liveProcedures({
+      resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
+    });
+    const url = readOf("/api/live/workspace-chat", options.forUser ?? options.bearer);
+    if (options.workspaceId !== undefined) url.searchParams.set("workspaceId", options.workspaceId);
+    const response = yield* hostedAnswer(
+      { live: procedures },
+      services,
+      new Request(url, { headers: { authorization: `Bearer ${options.bearer}` } }),
+    );
+    const text = yield* Effect.promise(() => response.text());
+    // SAFETY: the route answers JSON; the test compares it as the wire value it is.
+    const body = JSON.parse(text) as WireBoundaryInput;
+    return { status: response.status, body };
+  });
+
+it.layer(getTestDB())("the workspace chat's live read", (it) => {
+  it.effect(
+    "a workspace's chat is sealed part by part for a member who joined it, and not found for one who has not, an outsider, or one with Chat off",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        const workspace = yield* openWorkspace(owner);
+        yield* joinWorkspace(workspace, teammate);
+        for (const account of [owner, teammate, stranger]) {
+          yield* writeAccountPreferences(account, { experiments: { [EXPERIMENT.CHAT]: true } });
+        }
+        assert.ok(
+          Option.isSome(
+            yield* ensureMember(owner, workspace, { kind: MEMBER_KIND.HUMAN, userId: owner }),
+          ),
+        );
+        const notFound = {
+          status: HOSTED_HTTP_STATUS.NOT_FOUND,
+          body: { error: HOSTED_API_ERROR.NOT_FOUND },
+        };
+        const chat = (bearer: string) =>
+          askChat({ bearer, workspaceId: workspace, sealing: Option.some(SCRIPTED) });
+
+        const sealed = yield* chat(owner);
+        assert.equal(sealed.status, HOSTED_HTTP_STATUS.OK);
+        const answer = Schema.decodeUnknownSync(workspaceChatLiveAnswerSchema)(sealed.body);
+        assert.equal(answer.url, REALTIME_URL);
+        for (const [part, query] of Object.entries(answer.queries)) {
+          assert.ok(query.capability.includes(`"${owner}"`), `${part} is read for the bearer`);
+        }
+        // The teammate has not joined, and sealing joins no one, so asking again is not found again.
+        assert.deepEqual(yield* chat(teammate), notFound);
+        assert.deepEqual(yield* chat(teammate), notFound);
+        assert.deepEqual(yield* chat(stranger), notFound);
+        // A session of another account than the read names is signed out.
+        assert.deepEqual(
+          yield* askChat({
+            bearer: teammate,
+            forUser: owner,
+            workspaceId: workspace,
+            sealing: Option.some(SCRIPTED),
+          }),
+          {
+            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+          },
+        );
+        yield* writeAccountPreferences(owner, { experiments: { [EXPERIMENT.CHAT]: false } });
+        assert.deepEqual(yield* chat(owner), notFound);
       }),
   );
 });
