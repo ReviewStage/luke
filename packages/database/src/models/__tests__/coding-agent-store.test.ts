@@ -18,6 +18,7 @@ import {
   MESSAGE_ROLE,
   TURN_ORIGIN,
   TURN_STATUS,
+  type TurnStatus,
 } from "@luke/wire";
 import { eq } from "drizzle-orm";
 import { Clock, DateTime, Effect, Option, Result } from "effect";
@@ -62,6 +63,7 @@ import {
   readCodingAgent,
   readCodingAgentPublished,
   readCodingAgentRouting,
+  readNativeRunStanding,
   readRunnerTokenConversation,
   recordCodingAgentAuthor,
   recordCodingAgentNativeSession,
@@ -1761,6 +1763,79 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
           Option.getOrThrow(yield* readCodingAgentRouting(starter, older)),
           expected,
         );
+      }),
+  );
+
+  it.effect(
+    "a native agent's run reads as ended once its newest turn ends, never while one is queued or running, and an eve, deleted, or unknown agent reads as none",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const claude = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        const codex = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        });
+        const eve = yield* startIn(starter, workspace, {});
+        const deleted = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        const settledAt = new Date(Date.UTC(2026, 9, 14, 12));
+        const turnOf = (conversationId: string, status: TurnStatus, at: Date) =>
+          db.insert(turns).values({
+            userId: starter,
+            conversationId,
+            origin: TURN_ORIGIN.TYPED,
+            status,
+            queuedAt: at,
+            settledAt: status === TURN_STATUS.RUNNING ? null : at,
+          });
+        for (const agent of [eve, deleted]) {
+          yield* turnOf(agent.conversationId, TURN_STATUS.SETTLED, settledAt);
+        }
+        yield* db
+          .update(conversations)
+          .set({ deletedAt: settledAt })
+          .where(eq(conversations.id, deleted.conversationId));
+
+        const beforeAnyTurn = yield* readNativeRunStanding(claude.id);
+        yield* turnOf(claude.conversationId, TURN_STATUS.SETTLED, settledAt);
+        yield* turnOf(codex.conversationId, TURN_STATUS.CANCELLED, settledAt);
+        const ended = yield* readNativeRunStanding(claude.id);
+        const cancelled = yield* readNativeRunStanding(codex.id);
+        yield* turnOf(
+          claude.conversationId,
+          TURN_STATUS.RUNNING,
+          new Date(settledAt.getTime() + 1),
+        );
+        const running = yield* readNativeRunStanding(claude.id);
+
+        assert.deepEqual(Option.getOrThrow(beforeAnyTurn), {
+          conversationId: claude.conversationId,
+          endedAt: null,
+        });
+        assert.deepEqual(Option.getOrThrow(ended), {
+          conversationId: claude.conversationId,
+          endedAt: settledAt,
+        });
+        assert.deepEqual(Option.getOrThrow(cancelled), {
+          conversationId: codex.conversationId,
+          endedAt: settledAt,
+        });
+        assert.deepEqual(Option.getOrThrow(running), {
+          conversationId: claude.conversationId,
+          endedAt: null,
+        });
+        assert.ok(Option.isNone(yield* readNativeRunStanding(eve.id)));
+        assert.ok(Option.isNone(yield* readNativeRunStanding(deleted.id)));
+        assert.ok(Option.isNone(yield* readNativeRunStanding(randomUUID())));
+        assert.ok(Option.isNone(yield* readNativeRunStanding("not-an-agent-id")));
       }),
   );
 

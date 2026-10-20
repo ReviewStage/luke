@@ -940,6 +940,62 @@ const findRunnerTokenConversation = SqlSchema.findOneOption({
     ),
 });
 
+/** The runtimes whose sandbox Luke opens itself, with a runner in it: the native harnesses. */
+const NATIVE_RUNTIMES = [CONVERSATION_RUNTIME.CLAUDE_CODE, CONVERSATION_RUNTIME.CODEX] as const;
+
+/** The turn statuses a turn ends in; a queued or running one has not ended. */
+const ENDED_TURN_STATUSES = [
+  TURN_STATUS.SETTLED,
+  TURN_STATUS.CANCELLED,
+  TURN_STATUS.FAILED,
+] as const;
+
+/** A sandbox's agent id as its tag spells it, before a query takes it as a `uuid`. */
+const AGENT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+
+/**
+ * The conversation of the agent under this id, where it stands undeleted on a
+ * native harness, read with no account in hand, because the sweep that asks
+ * acts for every account at once.
+ */
+const findNativeAgentConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ agentId: Schema.String }),
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ agentId }) =>
+    Database.use((db) =>
+      db
+        .select({ conversationId: conversations.id })
+        .from(codingAgent)
+        .innerJoin(conversations, eq(conversations.id, codingAgent.conversationId))
+        .where(
+          and(
+            eq(codingAgent.id, agentId),
+            inArray(conversations.runtime, [...NATIVE_RUNTIMES]),
+            isNull(conversations.deletedAt),
+          ),
+        )
+        .limit(1),
+    ),
+});
+
+/** The conversation's newest turn: where it stands, and when it settled. */
+const findNewestTurnStanding = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String }),
+  Result: Schema.Struct({
+    status: Schema.String,
+    settledAt: Schema.NullOr(InstantColumnSchema),
+  }),
+  execute: ({ conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ status: turns.status, settledAt: turns.settledAt })
+        .from(turns)
+        .where(eq(turns.conversationId, conversationId))
+        .orderBy(desc(turns.queuedAt), desc(turns.id))
+        .limit(1),
+    ),
+});
+
 const updateAgentRunnerToken = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -2250,6 +2306,40 @@ export function readRunnerTokenConversation(
     const { userId, conversationId } = found.value;
     const agent = yield* findAgentOfConversation({ userId, conversationId });
     return Option.isSome(agent) ? found : Option.none();
+  });
+}
+
+/** Where a native agent's run stands, as the sweep reads it from its sandbox's agent tag. */
+export interface NativeRunStanding {
+  /** The agent's conversation, which a Terminal's lease is held on. */
+  readonly conversationId: string;
+  /** When its newest turn ended; null while that turn is queued or running (a runner waiting on a wakeup among it), or before it has any turn. */
+  readonly endedAt: Date | null;
+}
+
+/**
+ * Where the run of the agent under this id stands, read with no account in
+ * hand, because the scheduled sweep stops ended native sandboxes for every
+ * account: its conversation, and when its newest turn ended. Nothing for an
+ * id that names no agent, an agent on eve, or one whose conversation was
+ * deleted. Only for an id a sandbox Luke opened carries; it answers nothing
+ * a member wrote.
+ */
+export function readNativeRunStanding(
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<NativeRunStanding>> {
+  return Effect.gen(function* () {
+    if (!AGENT_ID_PATTERN.test(agentId)) return Option.none();
+    const found = yield* findNativeAgentConversation({ agentId });
+    if (Option.isNone(found)) return Option.none();
+    const { conversationId } = found.value;
+    const newest = yield* findNewestTurnStanding({ conversationId });
+    const ended = Option.filter(newest, (turn) =>
+      ENDED_TURN_STATUSES.some((status) => status === turn.status),
+    );
+    // An ended turn with no settle time stamped reads as ended long ago, so the sweep takes it at once.
+    const endedAt = Option.isSome(ended) ? (ended.value.settledAt ?? new Date(0)) : null;
+    return Option.some({ conversationId, endedAt });
   });
 }
 

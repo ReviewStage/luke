@@ -134,15 +134,15 @@ export interface ClaudeCodeSessionsOptions {
 }
 
 /** The tags a sandbox Luke opens carries beside its session's: its agent, and the runner it runs, so a later call finds both. */
-const RUNNER_TAG = {
+export const RUNNER_TAG = {
   AGENT: "lukeAgent",
   SANDBOX_SESSION: "lukeRunnerSession",
   COMMAND: "lukeRunnerCommand",
   FIRST_SEQUENCE: "lukeRunnerFirst",
 } as const;
 
-/** What a sandbox Luke opens is named and its session minted as, each beside a fresh UUID. */
-const NATIVE_NAME = {
+/** What a sandbox Luke opens is named and its session minted as, each beside a fresh UUID; the sweep tells a native sandbox from eve's by its name. */
+export const NATIVE_NAME = {
   SESSION: "luke-claude-code-",
   SANDBOX: "luke-agent-",
 } as const;
