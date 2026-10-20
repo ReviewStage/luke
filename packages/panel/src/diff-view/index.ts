@@ -123,7 +123,8 @@ import { wholeOf } from "./whole-diff.js";
  * a file's header, to one of its lines, or to a run of its lines, which
  * stand lit a moment and fade (`revealLines`): Pierre's own lit lines,
  * which it keeps on the rows it draws however it draws them again, worn
- * with a fade of the file's own (`FLASH_CSS`), whose end lets them go.
+ * with a fade of the file's own (`FLASH_CSS`), whose end lets them go, or
+ * a deadline of the moment's own where the rows were taken down first.
  *
  * Where the view comments on lines, code selected as text is read once the
  * drag that began in a file lets go (`watchTextSelection`): the lines it
@@ -165,6 +166,15 @@ const FLASH_ANIMATION = {
 
 /** The fade animations, by name, whose end is a moment's. */
 const FLASH_ANIMATIONS: ReadonlySet<string> = new Set(Object.values(FLASH_ANIMATION));
+
+/**
+ * How long a moment stands at most, in milliseconds, past its hold and its
+ * fade: a fade on rows scrolled away or folded before it ends is dropped
+ * with no end told, so the moment ends by this deadline of its own. Twice
+ * the hold outlasts the fade and the scroll to the lines, whose rows start
+ * their hold only once drawn.
+ */
+const FLASH_DEADLINE_MS = LINE_FLASH_HOLD_MS * 2;
 
 /** What the find leaves out of the shadow root's words: the gutter of numbers, as a File tab's numbers are. */
 const FIND_SKIPPED = "[data-gutter]";
@@ -743,6 +753,8 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   // The lines lit a moment, none while none are, and how many moments there were, whose count names the turn they fade in.
   let flash: DiffLineRange | undefined;
   let flashes = 0;
+  // The moment's deadline, run on the host's own animation clock, since the bundle holds no runtime to wait on.
+  let deadline: Animation | undefined;
   const markFlash = (element: HTMLElement) => {
     if (flash === undefined || elementPaths.get(element) !== flash.path)
       return element.removeAttribute(FLASH_ATTRIBUTE);
@@ -876,17 +888,22 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
   };
   if (props.selected !== undefined) light(props.selected);
   const drawnElements = () => host.querySelectorAll<HTMLElement>(`[${FIND_SHADOW_ATTRIBUTE}]`);
-  // Note that the lines lit before stand again only where the moment's still stand, since a press may have picked others meanwhile.
+  // Note that the lines lit before stand again only where the moment's still stand, on the same side, since a press may have picked others meanwhile.
   const endFlash = () => {
     const standing = flash;
+    deadline?.cancel();
+    deadline = undefined;
     if (standing === undefined) return;
     flash = undefined;
     for (const element of drawnElements()) markFlash(element);
     const now = view.getSelectedLines();
+    const picked = now === null ? undefined : selectionOf(now.range);
     if (
       now?.id === standing.path &&
-      now.range.start === standing.startLine &&
-      now.range.end === standing.endLine
+      picked?.start === standing.startLine &&
+      picked.end === standing.endLine &&
+      picked.side === standing.side &&
+      picked.endSide === standing.side
     )
       light(latest.selected);
   };
@@ -895,6 +912,9 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     const lines = { start: startLine, side, end: endLine, endSide: side };
     flashes += 1;
     flash = range;
+    deadline?.cancel();
+    deadline = host.animate([], { duration: FLASH_DEADLINE_MS });
+    deadline.onfinish = endFlash;
     view.setSelectedLines({ id: path, range: lines });
     for (const element of drawnElements()) markFlash(element);
     view.scrollTo({
@@ -950,6 +970,7 @@ function mountList(host: HTMLElement, props: DiffListProps): DiffListHandle {
     unmount: () => {
       // A list taken down draws nothing; the next one mounted opens no gap.
       drawn.forget(new Set());
+      deadline?.cancel();
       stopWatching();
       unsubscribe();
       view.cleanUp();
