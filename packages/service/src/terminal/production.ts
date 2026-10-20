@@ -10,7 +10,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import { readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { hasRepository, readCodingAgent } from "@luke/database/models/coding-agent-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import {
   claimCredentialRenewal,
@@ -99,6 +99,8 @@ export const relayDependencies: Effect.Effect<RelayDependencies, never, RelaySer
             const agent = found.value;
             // Note that a shell in an agent on its starter's own GitHub token is its starter's alone.
             if (!controlsAgent(userId, agent)) return Option.none();
+            // An agent with no repository opens no sandbox for a shell to reach.
+            if (!hasRepository(agent)) return Option.none();
             const target = { userId: agent.userId, conversationId: agent.conversationId };
             const [session] = yield* standingSessionsOf(agent.userId, [agent.conversationId]);
             return Option.some({

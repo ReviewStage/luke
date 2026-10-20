@@ -3,11 +3,13 @@ import { settleEndedSession } from "@luke/database/models/abandoned-turns";
 import { chatEnabledFor } from "@luke/database/models/account-store";
 import {
   type CodingAgent,
+  hasRepository,
   readCodingAgentOfConversation,
   readDelegation,
   recordCodingAgentCompaction,
   recordCodingAgentStep,
   updateCodingAgentBranch,
+  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import { promptHashOf } from "@luke/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
@@ -241,7 +243,9 @@ export interface CoderHost extends HostAdmission {
    */
   admitSandbox(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The agent the admitted conversation is, or the refusal for a conversation that is no agent's. */
-  agent(admitted: AdmittedConversation): HostEffect<Result.Result<CodingAgent, CoderRefusal>>;
+  agent(
+    admitted: AdmittedConversation,
+  ): HostEffect<Result.Result<WithRepository<CodingAgent>, CoderRefusal>>;
   /** The model one step of the turn named runs on, read from the agent's row now, with the window the catalog lists for it. */
   model(
     admitted: AdmittedConversation,
@@ -272,12 +276,12 @@ export interface CoderHost extends HostAdmission {
   /** The instructions the session runs under, with the hash its turns are recorded under, composed on whether the agent's token reads the repository's CI and whose its commits are; the text itself is stored nowhere. */
   prompt(
     admitted: AdmittedConversation,
-    agent: CodingAgent,
+    agent: WithRepository<CodingAgent>,
   ): Effect.Effect<CoderSessionPrompt, never, CheckoutServices>;
   /** The skills the agent's repository keeps, offered to the session as it starts; none where they could not be read (`skills.ts`). */
   skills(
     admitted: AdmittedConversation,
-    agent: CodingAgent,
+    agent: WithRepository<CodingAgent>,
   ): Effect.Effect<readonly AgentSkill[], never, CheckoutServices>;
   /** The agent's repository checked out into the sandbox; answers the credential for the caller to set at the firewall (`credentialPolicy`). */
   checkOut(
@@ -565,7 +569,9 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       (found) =>
         Option.match(found, {
           onNone: () => Result.fail(CODER_REFUSAL.NO_AGENT),
-          onSome: (agent) => Result.succeed(agent),
+          // Note that a session here is repository work through and through, so one with none is refused until the agent runtime runs sessions without a checkout.
+          onSome: (agent) =>
+            hasRepository(agent) ? Result.succeed(agent) : Result.fail(CODER_REFUSAL.NO_REPOSITORY),
         }),
     );
 
@@ -610,7 +616,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
 
   /** The instructions the agent's session runs under, composed on what its row names, whether its token reads the repository's CI, and the co-author trailer where it writes as its developer. */
   const promptOf = (
-    agent: CodingAgent,
+    agent: WithRepository<CodingAgent>,
     ciReadable: boolean,
     coAuthor: string | undefined,
     workspace: string,
@@ -647,7 +653,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   const recordContext = (
     event: MessageStreamEvent,
     userId: string,
-    agent: CodingAgent,
+    agent: WithRepository<CodingAgent>,
     prompt: CoderSessionPromptRecord,
   ) => {
     const written = Effect.suspend(() => {

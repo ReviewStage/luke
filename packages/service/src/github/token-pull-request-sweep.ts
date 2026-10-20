@@ -25,7 +25,12 @@
  */
 
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  hasRepository,
+  readCodingAgent,
+  type WithRepository,
+} from "@luke/database/models/coding-agent-store";
 import {
   type ClaimedTokenPullRequest,
   claimTokenPullRequestPolls,
@@ -154,7 +159,7 @@ type Changed<A> = Option.Option<{ readonly body: A; readonly etag: string | unde
 
 /** One pull request's poll: the agent, its owner's token, its number, and what the last poll read. */
 interface Poll {
-  readonly agent: CodingAgent;
+  readonly agent: WithRepository<CodingAgent>;
   readonly member: MemberGitHubToken;
   readonly number: number;
   readonly claimed: ClaimedTokenPullRequest;
@@ -427,7 +432,8 @@ const pollClaimed = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<number, never, PollServices> {
   return yield* Effect.gen(function* () {
     const agent = yield* readCodingAgent(claimed.userId, claimed.agentId);
-    if (Option.isNone(agent)) return 0;
+    // An agent with no repository has no pull request to poll.
+    if (Option.isNone(agent) || !hasRepository(agent.value)) return 0;
     const held = yield* openMemberGitHubToken(ring, claimed.userId);
     if (Result.isFailure(held)) return 0;
     const member = held.success;

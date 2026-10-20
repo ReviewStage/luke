@@ -27,8 +27,10 @@ import { member, organization, user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
 import { conversations, messages, turns } from "../../schemas/storage.js";
 import { task } from "../../schemas/task.js";
+import { voiceSessions } from "../../schemas/voice.js";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, linearIssueLink } from "../../testing/index.js";
+import { VOICE_DELEGATION_MODE } from "../../voice-vocabulary.js";
 import {
   archiveCodingAgent,
   archiveIdleCodingAgent,
@@ -80,6 +82,7 @@ import { type LineSender, storeWriter } from "../writer.js";
  * And where in a turn under way each line arrived, as the turn took it in.
  * And who an agent writes as on GitHub, settled once by its first session.
  * And an agent's pin, which is its reader's own, as a plan's is.
+ * And an agent with no repository, started blank, which a call names.
  *
  * Synthetic accounts and conversations throughout.
  */
@@ -1546,6 +1549,73 @@ it.layer(getTestDB())("the coding-agent store's list lines", (it) => {
           yield* listWorkspaceCodingAgentLines(outsider, workspace, { limit: 10 }),
           [],
         );
+      }),
+  );
+});
+
+it.layer(getTestDB())("the coding-agent store's agent with no repository, started blank", (it) => {
+  it.effect(
+    "an agent started on a task with no repository and handed nothing is read back by its workspace's members with no repository and neither plan nor prompt, and a call into it outlives it naming none",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const teammate = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        yield* joinWorkspace(workspace, teammate);
+        const task = yield* createTask(starter, {
+          organizationId: workspace,
+          name: "Talk it over",
+        });
+
+        const { agent } = Option.getOrThrow(
+          yield* createCodingAgent(starter, {
+            taskId: task.id,
+            planSnapshot: null,
+            prompt: null,
+            idempotencyKey: randomUUID(),
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            repository: null,
+          }),
+        );
+
+        const read = Option.getOrThrow(yield* readCodingAgent(teammate, agent.id));
+        assert.deepEqual(
+          { repository: read.repository, planSnapshot: read.planSnapshot, prompt: read.prompt },
+          { repository: null, planSnapshot: null, prompt: null },
+        );
+        const lines = yield* listCodingAgentLines(teammate, task.id);
+        assert.deepEqual(
+          lines.map((line) => [line.id, line.repository, line.handedPrompt]),
+          [[agent.id, null, false]],
+        );
+        const [stored] = yield* Database.use((db) =>
+          db
+            .select({ repositories: codingAgent.repositories })
+            .from(codingAgent)
+            .where(eq(codingAgent.id, agent.id)),
+        );
+        assert.deepEqual(stored?.repositories, []);
+
+        const call = randomUUID();
+        yield* Database.use((db) =>
+          db.insert(voiceSessions).values({
+            id: call,
+            userId: starter,
+            taskId: task.id,
+            agentId: agent.id,
+            liveSessionId: `live-${call}`,
+            delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+          }),
+        );
+        yield* Database.use((db) => db.delete(codingAgent).where(eq(codingAgent.id, agent.id)));
+        const calls = yield* Database.use((db) =>
+          db
+            .select({ agentId: voiceSessions.agentId })
+            .from(voiceSessions)
+            .where(eq(voiceSessions.id, call)),
+        );
+        assert.deepEqual(calls, [{ agentId: null }]);
       }),
   );
 });

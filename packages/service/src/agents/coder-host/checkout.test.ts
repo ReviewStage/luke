@@ -6,6 +6,7 @@ import { createAutomation } from "@luke/database/models/automation-store";
 import {
   type CodingAgent,
   createCodingAgent,
+  hasRepository,
   readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
@@ -134,6 +135,7 @@ const openTokenAgent = Effect.gen(function* () {
   });
   assert.ok(Option.isSome(started));
   const { agent } = started.value;
+  assert.ok(hasRepository(agent));
   return { agent, target: { userId, conversationId: agent.conversationId } };
 });
 
@@ -197,6 +199,7 @@ const openAgent = (
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
+    assert.ok(hasRepository(agent));
     return { agent, target: { userId, conversationId: agent.conversationId } };
   });
 

@@ -8,6 +8,7 @@ import {
   archiveCodingAgent,
   createCodingAgent,
   fillCodingAgentTitle,
+  hasRepository,
   lineSendersOf,
   readCodingAgent,
   takeCodingAgentMentionedServers,
@@ -962,6 +963,7 @@ test("start_agent with a branch starts an agent whose checkout is cloned at that
   const stored = Option.getOrThrow(
     await database.run(readCodingAgent(caller.userId, started.agent.id)),
   );
+  assert.ok(hasRepository(stored));
   const target = { userId: caller.userId, conversationId: stored.conversationId };
   const session = sessionId();
   assert.equal(await database.run(claimRuntimeSession(target, session, new Date(NOW))), true);

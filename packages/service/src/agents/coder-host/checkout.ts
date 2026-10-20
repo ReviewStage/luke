@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
   settleCodingAgentAuthor,
+  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
@@ -115,7 +116,7 @@ function identityOf(user: GitHubUser): CheckoutIdentity {
  */
 const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<CodingAgentAuthor, StoreFailure, CheckoutServices> {
   // Note that the run's origin outlives its automation, whose id goes null once it is deleted.
   if (agent.automationId !== null || agent.automationOrigin !== null) {
@@ -147,7 +148,7 @@ const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
  */
 const agentAuthor = /* @__PURE__ */ Effect.fn("web/agentAuthor")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<CodingAgentAuthor, StoreFailure, CheckoutServices> {
   if (agent.author !== null) return agent.author;
   const read = yield* readAuthor(target, agent);
@@ -165,7 +166,7 @@ const agentAuthor = /* @__PURE__ */ Effect.fn("web/agentAuthor")(function* (
  */
 export const agentCoAuthor = /* @__PURE__ */ Effect.fn("web/agentCoAuthor")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<string | undefined, never, CheckoutServices> {
   const app = yield* GitHubApp;
   return yield* Effect.gen(function* () {
@@ -201,7 +202,7 @@ export const agentCoAuthor = /* @__PURE__ */ Effect.fn("web/agentCoAuthor")(func
  */
 export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<boolean, never, CheckoutServices> {
   const app = yield* GitHubApp;
   return yield* Effect.gen(function* () {
@@ -228,7 +229,7 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
 export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(
   function* (
     target: ConversationTarget,
-    agent: CodingAgent,
+    agent: WithRepository<CodingAgent>,
   ): Effect.fn.Return<
     {
       readonly token: Redacted.Redacted;
@@ -269,7 +270,7 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
  */
 const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   author: CodingAgentAuthor,
   credential: RepositoryCredential,
 ): Effect.fn.Return<CheckoutIdentity, CheckoutRefused, CheckoutServices> {
@@ -302,7 +303,7 @@ const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(func
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
     target: ConversationTarget,
-    agent: CodingAgent,
+    agent: WithRepository<CodingAgent>,
     sandbox: RepositorySandbox,
   ): Effect.fn.Return<RepositoryCredential, CheckoutRefused | StoreFailure, CheckoutServices> {
     const minted = yield* agentRepositoryToken(target, agent);

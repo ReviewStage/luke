@@ -489,7 +489,7 @@ function listRead(
     return {
       agents: [automationId === null ? agent : { ...agent, automationId }],
       workspaceId: answer.agent.workspaceId,
-      repository: answer.agent.repository,
+      ...(answer.agent.repository === null ? undefined : { repository: answer.agent.repository }),
       ...(origin === undefined ? undefined : { origin }),
     };
   });

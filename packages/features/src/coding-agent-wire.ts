@@ -713,7 +713,8 @@ export type CodingAgentOrigin = typeof codingAgentOriginSchema.Type;
  * started with no task is read, having no task's tab to stand in: the
  * summary the tabs draw, the automation whose run started it or none, the
  * run that did where one did, the workspace it belongs to, and the
- * repository it works in. An agent on a plan reads so too, by the same id.
+ * repository it works in, null for one with none. An agent on a plan reads
+ * so too, by the same id.
  */
 export const codingAgentPageSchema = EffectSchema.Struct({
   ...codingAgentSummarySchema.fields,
@@ -721,7 +722,7 @@ export const codingAgentPageSchema = EffectSchema.Struct({
   /** The run that started the agent; absent for one started by hand, and from a service before it. */
   origin: EffectSchema.optionalKey(codingAgentOriginSchema),
   workspaceId: EffectSchema.String,
-  repository: EffectSchema.String,
+  repository: EffectSchema.NullOr(EffectSchema.String),
 });
 
 export type CodingAgentPage = typeof codingAgentPageSchema.Type;
@@ -795,12 +796,12 @@ export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
 
 /**
  * What an agent published (GET): the repository it works in as `owner/name`,
- * the branch it pushed, where GitHub holds one, and the pull request from
- * it, where one is open or was; null for each it has not. A pull request's
- * branch is its head.
+ * null for one with none, which publishes nothing; the branch it pushed,
+ * where GitHub holds one; and the pull request from it, where one is open or
+ * was; null for each it has not. A pull request's branch is its head.
  */
 export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
-  repository: EffectSchema.String,
+  repository: EffectSchema.NullOr(EffectSchema.String),
   branch: EffectSchema.NullOr(EffectSchema.String),
   pullRequest: EffectSchema.NullOr(codingAgentPullRequestSchema),
 });
