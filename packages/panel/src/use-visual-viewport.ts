@@ -104,7 +104,8 @@ function typedField(target: EventTarget | null): target is HTMLElement {
  */
 function caretAboveKeyboard(bottom: number): void {
   const field = document.activeElement;
-  const column = typedField(field) ? scrollerOf(field) : undefined;
+  if (!typedField(field)) return;
+  const column = scrollerOf(field);
   if (column === undefined) return;
   const below =
     caretBox(field).bottom + CARET_MARGIN - Math.min(bottom, column.getBoundingClientRect().bottom);
