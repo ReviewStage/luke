@@ -865,7 +865,7 @@ async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | und
   return { opened, boards };
 }
 
-test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K offers none of the plan's files or panel tabs behind it; on the plan, or over an item of it, a file found opens", async () => {
+test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K offers none of the plan's files or panel tabs behind it; on the plan, or over an item of it, a file found opens, and its panel tabs are offered on the plan alone, since the Inbox's panel draws none", async () => {
   assert.deepEqual(await paletteOverPanel(undefined), {
     opened: ["accept.ts"],
     boards: ["Show board"],
@@ -875,7 +875,7 @@ test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K off
   });
   assert.deepEqual(
     await paletteOverPanel({ chosen: { taskId: DOCUMENT_TASK.id, itemId: "item-1" } }),
-    { opened: ["accept.ts"], boards: ["Show board"] },
+    { opened: ["accept.ts"], boards: [] },
   );
   act(() => {
     for (const root of roots.splice(0)) root.unmount();

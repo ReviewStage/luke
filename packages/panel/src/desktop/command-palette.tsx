@@ -715,14 +715,23 @@ function actionRows(run: (command: AppCommand) => void): readonly PaletteRow[] {
 }
 
 /**
- * Whether the side panel is the open plan's: not while an agent's page holds
- * it, nor while the Inbox does, unless the item chosen there is of the open
- * plan (`use-tasks-tab.ts`). Over an Inbox with nothing chosen the panel has
- * no task, so a tab or a file opened there could not be shown.
+ * Whether the side panel draws the open plan's own tabs, its fixed kinds and
+ * its workers: not while an agent's page holds it, nor while the Inbox does,
+ * whose panel is bare and draws neither (`use-tasks-tab.ts`).
  */
 function holdsTaskPanel(tasks: TasksControl): boolean {
-  if (tasks.agentView.agentId !== undefined) return false;
-  if (!tasks.inboxView.open) return true;
+  return tasks.agentView.agentId === undefined && !tasks.inboxView.open;
+}
+
+/**
+ * Whether a file of the open plan opens in the side panel: wherever it holds
+ * the plan's tabs, and over an Inbox item of the open plan, whose panel opens
+ * that task's files. Over an Inbox with nothing chosen the panel has no task,
+ * so a file opened there could not be shown.
+ */
+function opensTaskFiles(tasks: TasksControl): boolean {
+  if (holdsTaskPanel(tasks)) return true;
+  if (tasks.agentView.agentId !== undefined || !tasks.inboxView.open) return false;
   const { chosen } = tasks.inboxView;
   return chosen !== undefined && "taskId" in chosen && chosen.taskId === tasks.activeTaskId;
 }
@@ -1191,7 +1200,7 @@ export function CommandPalette({
       ? files
       : undefined;
   // Note that a task's files are searched only while its panel is the one standing, which an agent's page holds otherwise.
-  const filesOpen = holdsTaskPanel(tasks) && taskId !== undefined && repository !== null;
+  const filesOpen = opensTaskFiles(tasks) && taskId !== undefined && repository !== null;
   const filesAsked = open && filesOpen && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
 
   // Note that the repository is read the first time its files are searched
