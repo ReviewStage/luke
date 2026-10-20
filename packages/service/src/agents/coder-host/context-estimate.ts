@@ -109,17 +109,13 @@ const AUTHORED_TOOLS = {
     description: INBOX_TOOLS.POST.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.POST.inputSchema),
   },
-  [CODER_TOOL.CLOSE_INBOX_ITEM]: {
-    description: INBOX_TOOLS.CLOSE.description,
-    inputSchema: emitJsonSchema(INBOX_TOOLS.CLOSE.inputSchema),
+  [CODER_TOOL.WITHDRAW_ASK]: {
+    description: INBOX_TOOLS.WITHDRAW.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.WITHDRAW.inputSchema),
   },
   [CODER_TOOL.READ_INBOX]: {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
-  },
-  [CODER_TOOL.REPLY_INBOX]: {
-    description: INBOX_TOOLS.REPLY.description,
-    inputSchema: emitJsonSchema(INBOX_TOOLS.REPLY.inputSchema),
   },
   [CODER_TOOL.OPEN_PULL_REQUEST]: {
     description: OPEN_PULL_REQUEST_TOOL.description,

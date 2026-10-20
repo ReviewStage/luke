@@ -125,13 +125,12 @@ import { contextWindowOf } from "./context.js";
 import { agentStepOf } from "./context-estimate.js";
 import { type DelegationAsk, delegationChoice, recordDelegation } from "./delegation.js";
 import {
-  closeInInbox,
   INBOX_REFUSAL,
   type InboxToolResult,
   inboxRejected,
   postToInbox,
   readOwnInbox,
-  replyInInbox,
+  withdrawAsk,
 } from "./inbox.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { coderInstructions } from "./instructions.js";
@@ -446,15 +445,15 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
-/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post and a reply carry the door to the session's sandbox, where their pictures are read. */
+/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post carries the door to the session's sandbox, where its pictures are read. */
 export type InboxCall =
   | {
-      readonly tool: typeof INBOX_TOOL.POST | typeof INBOX_TOOL.REPLY;
+      readonly tool: typeof INBOX_TOOL.POST;
       readonly input: UnparsedWireValue;
       readonly sandbox: InboxSandboxDoor;
     }
   | {
-      readonly tool: typeof INBOX_TOOL.CLOSE | typeof INBOX_TOOL.READ;
+      readonly tool: typeof INBOX_TOOL.WITHDRAW | typeof INBOX_TOOL.READ;
       readonly input: UnparsedWireValue;
     };
 
@@ -868,17 +867,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
-        const { id: agentId, taskId, repository } = found.success;
+        const { id: agentId, taskId } = found.success;
         const agent = { userId: admitted.target.userId, taskId, agentId };
         switch (call.tool) {
           case INBOX_TOOL.POST:
-            return yield* postToInbox({ ...agent, repository }, call.input, call.sandbox);
-          case INBOX_TOOL.CLOSE:
-            return yield* closeInInbox(agent, call.input);
+            return yield* postToInbox(agent, call.input, call.sandbox);
+          case INBOX_TOOL.WITHDRAW:
+            return yield* withdrawAsk(agent, call.input);
           case INBOX_TOOL.READ:
             return yield* readOwnInbox(agent);
-          case INBOX_TOOL.REPLY:
-            return yield* replyInInbox(agent, call.input, call.sandbox);
         }
       }).pipe(
         Effect.tapError(logStoreFailure),

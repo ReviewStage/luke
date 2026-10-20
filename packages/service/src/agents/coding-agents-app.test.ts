@@ -5422,6 +5422,13 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(pressed.taken, true);
         assert.equal(eve.sent.length, before + 1, "an item that asks nothing back messages nobody");
 
+        const withdrawn = yield* closeInboxItem(
+          { userId: owner, agentId: asked.success.agentId },
+          QUESTION.key,
+          "Found it myself.",
+        );
+        assert.ok(Option.isNone(withdrawn), "the agent withdraws no ask the member's close did");
+        assert.ok(Result.isSuccess(yield* post(QUESTION)), "the agent asks again");
         yield* closeInboxItem(
           { userId: owner, agentId: asked.success.agentId },
           QUESTION.key,
