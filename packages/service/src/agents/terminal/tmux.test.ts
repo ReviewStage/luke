@@ -19,7 +19,8 @@ import {
  * named as the developer named it or as its foreground command is, and
  * running where that command is not the shell at its prompt. Every command
  * runs with the inheritable, ambient, and bounding capability sets emptied,
- * so tmux's server and its shells hold no capability and no sudo, and none
+ * so tmux's server and its shells hold no capability and no sudo, the server
+ * on a socket no server started before the drop listens on, and none
  * installs anything or reaches for sudo itself.
  */
 
@@ -74,7 +75,7 @@ test("starting, naming, and ending a shell target its session exactly and carry 
   assert.ok(!startTerminal(SHELL_A, undefined).args.includes(TMUX.TITLE_OPTION));
 });
 
-test("every command runs with every capability dropped, and none installs tmux or reaches for sudo", () => {
+test("every command runs with every capability dropped, on a tmux server of its own, and none installs tmux or reaches for sudo", () => {
   const asks = [
     listTerminals(),
     startTerminal(SHELL_A, "dev server"),
@@ -88,6 +89,8 @@ test("every command runs with every capability dropped, and none installs tmux o
     assert.equal(ask.command, "setpriv");
     assert.deepEqual(ask.args.slice(0, CAPABILITIES_DROPPED.length), CAPABILITIES_DROPPED);
     assert.doesNotMatch(scriptOf(ask) ?? "", /\b(sudo|apt-get|dnf)\b/);
+    // A server on tmux's default socket may predate the drop and hold the capabilities still.
+    assert.match(scriptOf(ask) ?? "", /tmux -L luke-unprivileged "\$@"/);
   }
 });
 

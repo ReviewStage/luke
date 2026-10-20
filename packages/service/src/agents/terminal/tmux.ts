@@ -14,7 +14,8 @@
  * no status line, no mouse, and its output scrolling into the terminal's own
  * scrollback. Every command runs with every capability dropped
  * (`sandbox-capabilities.ts`), the command that starts tmux's server among
- * them, so the server and every shell it starts hold none: a shell cannot
+ * them, so the server, on a socket of its own (`TMUX.SOCKET`), and every
+ * shell it starts hold none: a shell cannot
  * read another process's environment, a file its mode keeps from the
  * sandbox's user, or reach root through sudo.
  *
@@ -38,6 +39,14 @@ export const TMUX = {
   TITLE_OPTION: "@luke_title",
   /** Where a new shell stands: the agent's checkout. */
   START_DIRECTORY: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
+  /**
+   * The socket every command names its server by. Note that it is a name of
+   * its own rather than tmux's default, because a server started on the
+   * default before shells dropped their capabilities still holds them and
+   * would start each new shell with them; this one is only ever started
+   * without, and the old one ends as its sandbox next stops.
+   */
+  SOCKET: "luke-unprivileged",
 } as const;
 
 /**
@@ -133,13 +142,20 @@ function optionTargetOf(terminalId: string): string {
 function script(text: string, args: readonly string[] = []): CommandAsk {
   return {
     command: WITHOUT_CAPABILITIES.COMMAND,
-    args: [...WITHOUT_CAPABILITIES.ARGS, "sh", "-c", text, "sh", ...args],
+    args: [
+      ...WITHOUT_CAPABILITIES.ARGS,
+      "sh",
+      "-c",
+      `tmux() { command tmux -L ${TMUX.SOCKET} "$@"; }\n${text}`,
+      "sh",
+      ...args,
+    ],
   };
 }
 
-/** One tmux command. */
+/** One tmux command, in place of the script's shell. */
 function tmux(args: readonly string[]): CommandAsk {
-  return script('exec tmux "$@"', args);
+  return script(`exec tmux -L ${TMUX.SOCKET} "$@"`, args);
 }
 
 /** Lists the tab's sessions, in the lines `terminalsOf` reads. */
