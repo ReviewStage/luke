@@ -140,7 +140,7 @@ function drawnToggles(tab: HTMLElement): HTMLButtonElement[] {
     .flatMap((place) => [...place.querySelectorAll("button")]);
 }
 
-test("a Changes tab draws no tree beside the diff, its count under the diff, until the tree's toggle opens it over the diff for this tab alone", async () => {
+test("a Changes tab draws no tree beside the diff until the tree's toggle opens it over the diff for this tab alone", async () => {
   const tab = await drawChangesTab();
   // The tree, where it is drawn at all.
   const treeDrawn = () => {
@@ -148,11 +148,8 @@ test("a Changes tab draws no tree beside the diff, its count under the diff, unt
     return tree !== null && drawn(tree);
   };
   const toggles = () => drawnToggles(tab);
-  const count = () =>
-    [...tab.querySelectorAll(".file-tree-foot")].filter(drawn).map((foot) => foot.textContent);
 
   assert.ok(!treeDrawn(), "the tree the panel holds open stands nowhere");
-  assert.deepEqual(count(), ["1 file changed +2 −1"]);
   assert.deepEqual(
     toggles().map((button) => [
       button.getAttribute("aria-label"),

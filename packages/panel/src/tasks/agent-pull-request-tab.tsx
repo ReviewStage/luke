@@ -1988,7 +1988,7 @@ interface AgentPullRequestTabProps {
   control: CodingAgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
-  /** The plan's repository, which the files' breadcrumbs name; none names the path plain. */
+  /** The plan's repository, whose files a gap between a diff's hunks is read from; none opens no gap. */
   repository: string | null;
   /** Whether the tree beside File tabs and the files is open, and its toggle. */
   tree: TreeShown;

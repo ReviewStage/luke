@@ -1300,8 +1300,38 @@
 /* Words leading the bar, with no control before them. */
 .file-view-bar > .page-view-title,
 .file-view-bar > .terminal-tab-title,
-.file-view-bar > .luke-breadcrumb-bar > .file-view-path:first-child {
+.file-view-bar > .luke-breadcrumb-bar > :is(.file-view-path, .files-viewed):first-child {
   padding-left: var(--row-inset);
+}
+
+/* How many of Files changed's files are viewed, leading its bar in the
+   window's own type, quiet, cut short at its end where the bar is narrow;
+   a check and the palette's green once every one is (agent-changes-tab.tsx). */
+.files-viewed {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--luke-space-4);
+  margin: 0;
+  color: var(--luke-color-text-muted);
+  white-space: nowrap;
+}
+
+.files-viewed-words {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.files-viewed[data-complete] {
+  color: var(--luke-color-complete);
+}
+
+.files-viewed > svg {
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+  flex: none;
 }
 
 .file-view-history,
@@ -1398,14 +1428,9 @@
 /* A pane beside a tab, a File or Changes tab's tree or a Terminal tab's
    shells, stands there while the panel holds it open or it slides out; it
    may be drawn for its place over the tab alone, which a wide panel does
-   not show (`usePaneRoom`). Its count stands under the tab while it stands
-   nowhere beside it. Note that each rule here and under the query names
-   one selector, so each weighs only its own. */
+   not show (`usePaneRoom`). Note that each rule here and under the query
+   names one selector, so each weighs only its own. */
 .file-view[data-pane-beside="false"] :is(.file-tree-pane, .terminal-shells) {
-  display: none;
-}
-
-.file-view[data-pane-beside="true"] > .file-tree-foot {
   display: none;
 }
 
@@ -1415,7 +1440,7 @@
 
 /* While Files changed's tree is hidden, a strip stands in its place, one
    mark for each changed file, coloured as its letter is in the tree, dimmed
-   once viewed, the file the bar names standing out (changes-strip.tsx);
+   once viewed, the file stood on standing out (changes-strip.tsx);
    the pointer resting on it peeks the tree out over the list, as a pane
    floats where the panel is too narrow for it (below). */
 .file-tree-strip {
@@ -1435,7 +1460,7 @@
 /* Each mark is a share of the strip's height, at most a line's mark, its
    colour filling the top of its share so the gap between marks shrinks
    with them: a pull request of thousands of files draws every mark, however
-   thin, and the file the bar names never thinner than a line. */
+   thin, and the file stood on never thinner than a line. */
 .file-tree-strip-mark {
   --strip-mark-colour: var(--luke-color-attention);
   width: var(--luke-space-6);
@@ -1547,20 +1572,12 @@
     display: none;
   }
 
-  .file-tree-pane > .file-tree-foot {
-    display: none;
-  }
-
   .file-tree-toggle[data-place="beside"] {
     display: none;
   }
 
   .file-tree-toggle[data-place="over"] {
     display: flex;
-  }
-
-  .file-view[data-pane-beside] > .file-tree-foot {
-    display: block;
   }
 }
 
@@ -1587,7 +1604,6 @@
   > .file-view-body
   > .file-tree-strip,
 .desktop-shell[data-room="narrow"] .file-view[data-pane-over="closed"] .file-tree-pane,
-.desktop-shell[data-room="narrow"] .file-tree-pane > .file-tree-foot,
 .desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="beside"] {
   display: none;
 }
@@ -1605,10 +1621,6 @@
 
 .desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="over"] {
   display: flex;
-}
-
-.desktop-shell[data-room="narrow"] .file-view[data-pane-beside] > .file-tree-foot {
-  display: block;
 }
 
 /* A panel with no room for the tree's least width beside the tab's own
@@ -2243,17 +2255,6 @@
 .file-tree-host > .file-tree-cut {
   flex: none;
   border-top: 1px solid var(--luke-color-border);
-  font-size: var(--luke-type-caption-size);
-}
-
-/* The line under a change set's tree counting its files (file-tree-pane.tsx),
-   in the tree's own notice under it. */
-.file-tree-foot {
-  flex: none;
-  margin: 0;
-  padding: var(--luke-space-6) var(--luke-space-12);
-  border-top: 1px solid var(--luke-color-border);
-  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
 }
 

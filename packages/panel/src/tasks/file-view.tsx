@@ -87,9 +87,9 @@ import { VIEW_SETTINGS_SCOPE, ViewSettingsButton } from "./view-settings.js";
  * the bar has no room for (`file-breadcrumbs.tsx`).
  *
  * The bar and the tree's slide are an agent's Changes tab's too
- * (`agent-changes-tab.tsx`), so a diff stands under the same bar, its file's
- * path as breadcrumbs, the pull request on GitHub, its ⋯, and the same
- * toggle of the same tree.
+ * (`agent-changes-tab.tsx`), so a diff stands under the same bar, led by
+ * how many of its files are viewed rather than a path, the pull request on
+ * GitHub, its ⋯, and the same toggle of the same tree.
  */
 
 /** What a pane's toggle says while the pane is open, and while it is not. */
@@ -444,8 +444,8 @@ function HistoryButtons({ history }: { history: FileHistory }): React.JSX.Elemen
   );
 }
 
-/** The path the bar names, and the repository it browses, whose folders its breadcrumbs list; none names the path plain. */
-export interface BarPath {
+/** The path a File tab's bar names, and the repository it browses, whose folders its breadcrumbs list; none names the path plain. */
+interface BarPath {
   readonly path: string;
   readonly browse:
     | {
@@ -457,25 +457,45 @@ export interface BarPath {
     | undefined;
 }
 
+/** A File tab's path in its bar: as breadcrumbs where the repository is browsed, else plain. */
+function BarPathWords({ path }: { path: BarPath }): React.JSX.Element {
+  const { browse } = path;
+  if (browse === undefined) {
+    return (
+      <Tooltip label={path.path}>
+        <span className="file-view-path">
+          <bdi>{path.path}</bdi>
+        </span>
+      </Tooltip>
+    );
+  }
+  return (
+    <FileBreadcrumbs
+      repository={browse.repository}
+      path={path.path}
+      listFolder={browse.listFolder}
+      onOpen={browse.onOpen}
+    />
+  );
+}
+
 /**
  * The bar across a File tab and its tree, or a Changes tab and its own:
- * Back and Forward where the tab keeps a history, the path as breadcrumbs,
- * or plain where nothing is browsed, what stands quietly beside it, then
- * the GitHub button, dimmed with no page to open yet, the ⋯, and the tree's
+ * Back and Forward where the tab keeps a history, what leads it (a File
+ * tab's path, or Files changed's count of the files viewed), then the
+ * GitHub button, dimmed with no page to open yet, the ⋯, and the tree's
  * toggle where there is a tree.
  */
 export function FileViewBar({
   history,
-  path,
-  beside,
+  lead,
   onGitHub,
   menu,
   tree,
 }: {
   history?: FileHistory | undefined;
-  path: BarPath;
-  /** What stands quietly after the path: the commit a file is read at, or what became of a changed file. */
-  beside?: ReactNode;
+  /** What leads the bar after Back and Forward: a File tab's path and the commit it is read at, or Files changed's count. */
+  lead: ReactNode;
   /** Opens the page on GitHub; none dims the button. */
   onGitHub: (() => void) | undefined;
   /** The bar's ⋯. */
@@ -483,26 +503,11 @@ export function FileViewBar({
   /** The tree's toggles, where there is a tree. */
   tree?: PaneToggles | undefined;
 }): React.JSX.Element {
-  const { browse } = path;
   return (
     <header className="file-view-bar">
       <BreadcrumbBar>
         {history === undefined ? null : <HistoryButtons history={history} />}
-        {browse === undefined ? (
-          <Tooltip label={path.path}>
-            <span className="file-view-path">
-              <bdi>{path.path}</bdi>
-            </span>
-          </Tooltip>
-        ) : (
-          <FileBreadcrumbs
-            repository={browse.repository}
-            path={path.path}
-            listFolder={browse.listFolder}
-            onOpen={browse.onOpen}
-          />
-        )}
-        {beside}
+        {lead}
         <div className="file-view-actions">
           <Tooltip label="Open on GitHub">
             <IconButton
@@ -654,18 +659,22 @@ export function FileView({
     <div className="file-view" {...tree.root}>
       <FileViewBar
         history={history}
-        path={{
-          path: file.path,
-          browse: browsing
-            ? { repository, listFolder: readFolderListing, onOpen: onBrowse }
-            : undefined,
-        }}
-        beside={
-          commit === undefined ? null : (
-            <Tooltip label={`Read at commit ${commit}`}>
-              <span className="file-view-commit">{shortCommit(commit)}</span>
-            </Tooltip>
-          )
+        lead={
+          <>
+            <BarPathWords
+              path={{
+                path: file.path,
+                browse: browsing
+                  ? { repository, listFolder: readFolderListing, onOpen: onBrowse }
+                  : undefined,
+              }}
+            />
+            {commit === undefined ? null : (
+              <Tooltip label={`Read at commit ${commit}`}>
+                <span className="file-view-commit">{shortCommit(commit)}</span>
+              </Tooltip>
+            )}
+          </>
         }
         onGitHub={read.kind === FILE_READ.READY ? () => openGitHub(fileUrl(read, file)) : undefined}
         menu={
