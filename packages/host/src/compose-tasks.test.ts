@@ -975,7 +975,7 @@ function fakeRealtime() {
       const data = {
         messages: [{ rows, seq: rows }],
         turns: [],
-        conversation: [{ title: null, revision: 0 }],
+        conversation: [{ id: "worker-conversation", title: null, revision: 0 }],
         agent: [],
         workers: [],
       };

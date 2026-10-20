@@ -4,7 +4,11 @@ import { it } from "@effect/vitest";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
 import { ConfigProvider, Effect, Layer, Option } from "effect";
-import { agentFollowedBy, transcriptLiveStatements } from "../agents/coder-host/transcript-live.js";
+import {
+  agentFollowedBy,
+  taskFollowedBy,
+  transcriptLiveStatements,
+} from "../agents/coder-host/transcript-live.js";
 import {
   accountInboxLiveStatements,
   memberAgentInboxLiveStatements,
@@ -40,6 +44,13 @@ function liveStatements() {
       agentFollowedBy(USER_ID, parent, USER_ID),
     ),
   );
+  const planWorker = Option.getOrThrow(
+    transcriptLiveStatements(
+      { userId: USER_ID, conversationId: randomUUID() },
+      parent,
+      taskFollowedBy(randomUUID(), USER_ID),
+    ),
+  );
   return {
     ...Object.fromEntries(
       Object.entries(account).map(([part, query]) => [`account.${part}`, query]),
@@ -49,6 +60,9 @@ function liveStatements() {
     ...Object.fromEntries(Object.entries(agent).map(([part, query]) => [`agent.${part}`, query])),
     ...Object.fromEntries(
       Object.entries(transcript).map(([part, query]) => [`transcript.${part}`, query]),
+    ),
+    ...Object.fromEntries(
+      Object.entries(planWorker).map(([part, query]) => [`planWorker.${part}`, query]),
     ),
   };
 }
