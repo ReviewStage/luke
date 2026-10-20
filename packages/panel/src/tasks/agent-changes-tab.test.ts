@@ -1772,6 +1772,69 @@ test("minimized, the threads on no line take a row of their own for their chip, 
   assert.equal(chipOf(current?.key)?.hasAttribute("data-above"), false, "on its line");
 });
 
+/** The seats patch and a second hunk far below it, so a long gap stands between them, its line 30 the same line on both sides but one. */
+const GAPPED_PATCH = [
+  PATCH,
+  "@@ -59,3 +60,3 @@",
+  " const kept = 59;",
+  "-const late = 60;",
+  "+const late = 61;",
+  " const end = 61;",
+].join("\n");
+
+test("a review thread on a line between hunks moves onto its line once a gap opened over it draws it, and back above the diff as the gap closes; an outdated one stays above", async () => {
+  commits = { headSha: HEAD_SHA };
+  files = [changed("src/seats.ts", { patch: GAPPED_PATCH })];
+  const threads: ChangesThreads = {
+    list: [seatsThread(30, "in-gap"), seatsThread(null, "was-3")],
+    draw: (thread) => createElement("p", { className: "drawn-thread" }, thread.comments[0]?.body),
+  };
+  await drawTab({ threads });
+  const file = () => lastDrawn().files[0] ?? assert.fail("the file is drawn");
+  const onLines = () =>
+    file()
+      .annotations.filter((note) => note.line !== 0)
+      .map((note) => [note.key, note.side, note.line]);
+  const aboveWords = () => {
+    const above = file().annotations.find((note) => note.line === 0);
+    return lastDrawn()
+      .renderAnnotation("src/seats.ts", above?.key ?? "")
+      .querySelector('[aria-label="Comments on lines this diff does not show"]')?.textContent;
+  };
+  assert.deepEqual(file().hidden, [30], "the list is asked to tell of the thread's line");
+  assert.deepEqual(onLines(), []);
+  assert.equal(aboveWords(), "in-gapwas-3");
+
+  // The gap's arrow opened over line 30, as the list tells it.
+  act(() => lastDrawn().onDrawn?.("src/seats.ts", [30]));
+  await flush();
+  assert.deepEqual(onLines(), [[`${PAGE}#in-gap`, "additions", 30]]);
+  assert.equal(
+    lastDrawn().renderAnnotation("src/seats.ts", `${PAGE}#in-gap`).textContent,
+    "in-gap",
+  );
+  assert.equal(aboveWords(), "was-3", "the outdated thread stays above");
+
+  // Minimized, the thread that moved is its line's chip.
+  press(listBox(), { key: "i" });
+  await flush();
+  assert.equal(
+    lastDrawn()
+      .renderAnnotation("src/seats.ts", `${PAGE}#in-gap`)
+      .querySelector(".diff-thread-chip")
+      ?.getAttribute("aria-label"),
+    "1 comment by octo · 1 open, show",
+  );
+  press(listBox(), { key: "i" });
+  await flush();
+
+  // The gap closed again, its patch read anew.
+  act(() => lastDrawn().onDrawn?.("src/seats.ts", []));
+  await flush();
+  assert.deepEqual(onLines(), []);
+  assert.equal(aboveWords(), "in-gapwas-3");
+});
+
 test("a header copies the path it names on a press, the path a file moved from apart from the one it moved to", async () => {
   files = [
     changed("src/seats.ts"),

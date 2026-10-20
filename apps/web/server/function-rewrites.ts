@@ -99,8 +99,9 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
     src: "/api/plans/([^/]+)/comments/([^/]+)",
     route: "plans/comment-thread",
     query: "id=$1&thread=$2",
+    orpc: true,
   },
-  { src: "/api/plans/([^/]+)/comments", route: "plans/comments", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/comments", route: "plans/comments", query: "id=$1", orpc: true },
   {
     src: "/api/plans/([^/]+)/attachments/([^/]+)",
     route: "plans/attachment",
