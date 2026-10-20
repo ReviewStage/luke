@@ -14,7 +14,7 @@ import { FIND_SKIP_ATTRIBUTE } from "../find-matches.js";
 import { useFileViewSettings } from "./file-view-settings.js";
 
 /**
- * code-lines.tsx -- numbered code lines: a Code card's, and filling their place and scrolling there, a File tab's file, a page's source, a text file opened over the window.
+ * code-lines.tsx -- numbered code lines: a Code card's, and filling their place and scrolling there, the lines Luke showed of a file a File tab cannot read, and a text file opened over the window.
  *
  * Each line is numbered from where it sits in its file, its runs coloured
  * in both appearances, the lines pointed at lit; a Code card draws its rows
@@ -27,11 +27,11 @@ import { useFileViewSettings } from "./file-view-settings.js";
  * place's width in view; the gutter's numbers may be gone. Note that the
  * lines stand in a frame as wide as the place, which a note measures itself
  * by, because the lines themselves are as wide as the longest so a note can
- * stay stuck in view across the whole of them. Whether they wrap and number is the caller's: a File tab's and a
- * page's source follow the File tabs' settings (`useLinesLook`), a text
- * file opened over the window always wraps and numbers. What stands above
- * and below the lines, a File tab's rows reading more of its file, stands
- * in the scroll with them.
+ * stay stuck in view across the whole of them. Whether they wrap and number
+ * is the caller's: the lines Luke showed in a File tab follow the File tabs'
+ * settings (`useLinesLook`), a text file opened over the window always wraps
+ * and numbers. A File tab's file and a page's source are drawn whole by
+ * Pierre's diffs instead (`whole-file.tsx`).
  */
 
 /**
@@ -77,7 +77,7 @@ function isBlank(tokens: CodeLines[number]): boolean {
 /**
  * One line, its number and its runs, drawn again only where its runs or its
  * lighting changed, so a window of lines coloured anew redraws that window
- * alone rather than every line held (`themed-lines.tsx`).
+ * alone rather than every line held.
  */
 const CodeLine = memo(function CodeLine({
   line,
@@ -176,20 +176,6 @@ function typeStyle(type: CodeType | undefined): CSSProperties | undefined {
   });
 }
 
-/** A colour in each appearance. */
-interface Appearances {
-  readonly dark: string;
-  readonly light: string;
-}
-
-/** A theme's ground in each appearance as custom properties, which the stylesheet reads (`.code-lines-ground`). */
-function groundStyle(ground: Appearances): CSSProperties {
-  return cssCustomProperties({
-    "--theme-ground-dark": ground.dark,
-    "--theme-ground-light": ground.light,
-  });
-}
-
 /** Lines numbered from `firstLine`, those `pointed` names lit, scrolling in the place they fill as `look` says. */
 export function CodeLinesView({
   look,
@@ -198,11 +184,8 @@ export function CodeLinesView({
   pointed,
   lit,
   after,
-  above,
-  below,
   fade = SCROLL_FADE.NONE,
   scrollerRef,
-  ground,
 }: {
   look: LinesLook;
   firstLine: number;
@@ -212,23 +195,12 @@ export function CodeLinesView({
   lit?: LitLines | undefined;
   /** What stands after a line, by its number; nothing where absent. */
   after?: ((line: number) => ReactNode) | undefined;
-  /** What stands over the first line, in the scroll; nothing where absent. */
-  above?: ReactNode;
-  /** What stands under the last line, in the scroll; nothing where absent. */
-  below?: ReactNode;
   /** Which edges dissolve where the lines run past them; none where none is named. */
   fade?: ScrollFade | undefined;
   /** Handed the box that scrolls, which a caller centres a line within. */
   scrollerRef?: Ref<HTMLDivElement> | undefined;
-  /**
-   * The syntax theme's ground in each appearance, where the lines are
-   * coloured in one other than the window's own (`themed-lines.tsx`). Note
-   * that its ink is not taken: every run coloured in the theme names its own
-   * colour, and a run the host coloured keeps the host's ink.
-   */
-  ground?: Appearances | undefined;
 }): React.JSX.Element {
-  const scroll = (
+  return (
     <ScrollArea
       ref={scrollerRef}
       axis={look.wrap ? SCROLL_AXIS.VERTICAL : SCROLL_AXIS.BOTH}
@@ -241,7 +213,6 @@ export function CodeLinesView({
           data-line-numbers={String(look.lineNumbers)}
           data-wrap={String(look.wrap)}
         >
-          {above}
           <CodeLineRows
             firstLine={firstLine}
             lines={lines}
@@ -249,16 +220,8 @@ export function CodeLinesView({
             lit={lit}
             after={after}
           />
-          {below}
         </div>
       </div>
     </ScrollArea>
-  );
-  if (ground === undefined) return scroll;
-  // Note that the theme's ground stands under the scroll area whole, its bar's gutter among it, so it wraps the area rather than the lines.
-  return (
-    <div className="code-lines-ground" style={groundStyle(ground)}>
-      {scroll}
-    </div>
   );
 }

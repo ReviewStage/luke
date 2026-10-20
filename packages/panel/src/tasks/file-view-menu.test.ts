@@ -1,5 +1,5 @@
 /**
- * file-view-menu.test.ts -- the end of a File tab's bar as the developer meets it: View settings offering the settings a File tab's lines follow, its wrap, numbers, syntax theme, and type, each drawn at once, and a ⋯ of actions alone, its Copy path copying the file's path. Synthetic files only.
+ * file-view-menu.test.ts -- the end of a File tab's bar as the developer meets it: View settings offering the settings a File tab's lines follow, its wrap, numbers, minimized notes, syntax theme, and type, each drawn at once, and a ⋯ of actions alone, its Copy path copying the file's path. Synthetic files only.
  */
 
 // @vitest-environment jsdom
@@ -14,9 +14,10 @@ import { copyingInto, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { CodeLinesView, useLinesLook } from "./code-lines.js";
+import { wholeFileDrawn, wholeFileRoot } from "../testing/whole-file.js";
 import { WHOLE_TEXT } from "./file-tab-model.js";
 import { FileViewMenu } from "./file-view.js";
+import { WholeFile } from "./whole-file.js";
 
 const PATH = "src/billing/plan.ts";
 
@@ -36,26 +37,32 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** A File tab's lines as the tab draws them, in the look it reads. */
+/** A File tab's file as the tab draws it, in the look it reads. */
 function DrawnLines(): React.JSX.Element {
-  return createElement(CodeLinesView, {
-    look: useLinesLook(),
-    firstLine: 1,
-    lines: [[{ text: "const seats = 3;" }]],
-    pointed: { path: PATH },
+  return createElement(WholeFile, {
+    name: PATH,
+    text: "const seats = 3;\n",
+    revision: "abc123",
+    lit: undefined,
+    notes: [],
+    findFrom: 1,
   });
 }
 
-/** How the drawn lines stand: their numbers, their wrap, and the type their box names. */
+/** How the drawn file stands: its numbers, its wrap, and the type its scroller names. */
 function drawnLines(container: HTMLElement) {
-  const box = container.querySelector<HTMLElement>(".code-lines") ?? assert.fail("lines are drawn");
+  const scroller =
+    container.querySelector<HTMLElement>(".whole-file > .luke-scroll-area") ??
+    assert.fail("the file is drawn");
+  const pre =
+    wholeFileRoot(container)?.querySelector("pre") ?? assert.fail("the file's lines are drawn");
   return {
-    numbers: box.dataset.lineNumbers,
-    wrap: box.dataset.wrap,
-    font: box.style.getPropertyValue("--code-font"),
-    size: box.style.getPropertyValue("--code-font-size"),
-    lineHeight: box.style.getPropertyValue("--code-line-height"),
-    features: box.style.getPropertyValue("--code-font-features"),
+    numbers: String(!pre.hasAttribute("data-disable-line-numbers")),
+    wrap: String(pre.getAttribute("data-overflow") === "wrap"),
+    font: scroller.style.getPropertyValue("--diffs-font-family"),
+    size: scroller.style.getPropertyValue("--diffs-font-size"),
+    lineHeight: scroller.style.getPropertyValue("--diffs-line-height"),
+    features: scroller.style.getPropertyValue("--diffs-font-features"),
   };
 }
 
@@ -92,8 +99,9 @@ function press(container: HTMLElement, name: string): void {
   act(() => button.click());
 }
 
-test("View settings on a File tab offers its lines' wrap, numbers, syntax theme, and type, and each is drawn on its lines at once", async () => {
+test("View settings on a File tab offers its lines' wrap, numbers, minimized notes, syntax theme, and type, and each is drawn on its lines at once", async () => {
   const container = mount();
+  await wholeFileDrawn(container);
   press(container, "View settings");
   const popover = document.querySelector<HTMLElement>('[role="dialog"]') ?? assert.fail();
 
@@ -109,6 +117,7 @@ test("View settings on a File tab offers its lines' wrap, numbers, syntax theme,
     [
       "Word wrap",
       "Line numbers",
+      "Minimize inline comments",
       "Syntax theme",
       "For dark mode",
       "Font",
@@ -132,7 +141,7 @@ test("View settings on a File tab offers its lines' wrap, numbers, syntax theme,
     );
   await act(async () => switches("Line numbers")?.click());
   await act(async () => switches("Ligatures")?.click());
-  assert.equal(drawnLines(container).numbers, "false");
+  await vi.waitFor(() => assert.equal(drawnLines(container).numbers, "false"));
   assert.equal(drawnLines(container).features, "'liga' 1, 'calt' 1");
 });
 

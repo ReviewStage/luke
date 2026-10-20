@@ -536,7 +536,7 @@ interface TabRead {
 export function FileViewMenu(props: ComponentProps<typeof FileMenu>): React.JSX.Element {
   return (
     <>
-      <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES }} />
+      <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.LINES, notes: true }} />
       <FileMenu {...props} />
     </>
   );
