@@ -351,6 +351,9 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("host/composeAccount")(f
     // while it reads (a refused call's re-read of a cookie session) is held
     // for the subscriber rather than published to no one; the subscriber
     // starts once the launch's account stands as the one it compares against.
+    // Note that a session a re-read settled on during the launch is then the
+    // launch's own account: the panel hears it, and, as for a launch that read
+    // it itself, no sign-in is counted.
     lifetime: Effect.gen(function* () {
       const changes = yield* session.changes;
       previousAccount = yield* session.initialize;
