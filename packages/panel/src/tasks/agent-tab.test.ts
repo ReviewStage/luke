@@ -441,7 +441,7 @@ function listedAgent(id: string, title: string, overrides: Partial<CodingAgentSu
 }
 
 /** The card standing in the window once `row` is reached from the keyboard: its name, then its corner. */
-function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[] {
+function cardOn(row: HTMLElement | null): readonly (string | boolean | null | undefined)[] {
   assert.ok(row, "the row is drawn");
   document.documentElement.dataset.keyboard = "true";
   act(() => row.focus());
@@ -450,6 +450,7 @@ function cardOn(row: HTMLElement | null): readonly (string | null | undefined)[]
   return [
     card.querySelector(".luke-hover-card-name")?.textContent,
     card.querySelector(".luke-hover-card-corner")?.textContent,
+    card.querySelector('.actor-card-head .state-glyph[data-state="working"]') !== null,
   ];
 }
 
@@ -508,12 +509,13 @@ test("in an agent's transcript, a call about an agent hangs that agent's tab's c
   // The calls run together fold under one line, which a press opens.
   const fold = container.querySelector<HTMLElement>("[data-turn-fold] > summary");
   act(() => fold?.click());
-  assert.deepEqual(cardOn(chip("message_coding_agent")), ["Invoice export", "Working…"]);
+  // Note that a working agent's corner says no word: its tile's working mark says it.
+  assert.deepEqual(cardOn(chip("message_coding_agent")), ["Invoice export", undefined, true]);
   const [archived, corner] = cardOn(row("read_coding_agent"));
   assert.equal(archived, "Retry audit");
-  assert.match(corner ?? "", /^Archived · /u);
-  assert.deepEqual(cardOn(chip("start_coding_agent")), ["Coding agent", "Not found"]);
-  assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", "Working…"]);
+  assert.match(String(corner), /^Archived · /u);
+  assert.deepEqual(cardOn(chip("start_coding_agent")), ["Coding agent", "Not found", false]);
+  assert.deepEqual(cardOn(row("delegate")), ["Audit the retry paths", undefined, true]);
 });
 
 test("a call about an agent names it by its chip in the place of the words, as its tab names it or its answer does, wearing the harness its answer's model runs in, a chip that opens the agent on a row that folds what was sent and is no target of its own on a row that opens it", () => {

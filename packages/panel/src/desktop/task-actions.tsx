@@ -1,7 +1,6 @@
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { PLAN_ACTOR, TASK_BOUNDS, type TaskSummary } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
@@ -63,7 +62,7 @@ import { useMinute } from "../tasks/task-time.js";
 import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
-import { APP_SLICE, useAppSlice, useExperiment } from "../use-app-state.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import { strandedHome, useMoveTaskDialog } from "./move-task-dialog.js";
 import { useRowPlace, withRowMoves } from "./row-moves.js";
@@ -389,10 +388,9 @@ export function useTaskMenu(
   // The place the row stands in a list that reorders, which the menu moves it from under a finger; none for the toolbar's ⋯.
   const place = useRowPlace();
   // Note that an archived task stands in no section, so it is offered none until it is brought back.
-  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const sections = useSectionDialogs(tasks, tasks.shown && doors.drawn);
   const section =
-    sectionsOn && task !== undefined && task.archivedAt === undefined
+    task !== undefined && task.archivedAt === undefined
       ? moveToSectionEntry(tasks, task, sections.askNew)
       : undefined;
   const menu =

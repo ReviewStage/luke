@@ -45,6 +45,7 @@ function environment(secrets: {
     githubWebhookSecret: undefined,
     providerKeyEncryptionKeys: undefined,
     nativeAgentAccounts: [],
+    agentSandboxSnapshot: undefined,
   };
   return Layer.succeed(HostedEnvironment, values);
 }
