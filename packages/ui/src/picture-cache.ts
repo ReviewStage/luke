@@ -100,6 +100,19 @@ function land(kept: KeptPicture, url: string): void {
   trim(kept);
 }
 
+/**
+ * Holds the picture against the budget until the returned function lets it
+ * go. Only this closure keeps the picture, so a place that pins none holds
+ * none once it was let go of, nor the bytes of its URL.
+ */
+function pin(kept: KeptPicture): () => void {
+  kept.pins += 1;
+  return () => {
+    kept.pins -= 1;
+    trim(undefined);
+  };
+}
+
 /** What a read's answer comes to: drawn, settled as missing, or nothing to keep. */
 function stateOf(answer: PictureAnswer): PictureState | undefined {
   if ("failure" in answer) return answer.failure === NOT_FOUND_FAILURE ? MISSING : undefined;
@@ -188,7 +201,7 @@ export function usePicture(
     let standing = true;
     const kept = keptPicture(owner, id, () => read(owner, id));
     // Note that the budget lets go of no picture a place is drawing, so one never goes back to reading under it; a place only reading ahead, which draws nothing, leaves its picture to the budget.
-    if (drawn) kept.pins += 1;
+    const unpin = drawn ? pin(kept) : undefined;
     kept.read.then((answered) => {
       if (!standing) return;
       if (
@@ -201,8 +214,7 @@ export function usePicture(
     });
     return () => {
       standing = false;
-      if (drawn) kept.pins -= 1;
-      trim(undefined);
+      unpin?.();
     };
   }, [owner, id, read, generation, drawn]);
   const mine =
