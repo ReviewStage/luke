@@ -283,10 +283,10 @@ const LUKE_CALLS: readonly {
     target: { kind: TOOL_TARGET.PLAN },
   },
   {
-    tool: "start_agent",
-    input: { prompt: "Write the export's tests" },
-    output: { status: "accepted", agent: { id: "agent-9", title: "Export tests" } },
-    target: { kind: TOOL_TARGET.AGENT, agent: "agent-9" },
+    tool: "show_page",
+    input: { title: "Rounding explorer", path: "rounding.html" },
+    output: { status: "accepted", page: { id: "page-1", version: 1 } },
+    target: { kind: TOOL_TARGET.PAGE, page: "page-1" },
   },
 ];
 
