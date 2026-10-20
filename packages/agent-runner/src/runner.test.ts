@@ -300,6 +300,30 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
   }),
 );
 
+it.effect("takes a test-mode launch's API key out of every event, as it does a plan's token", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const apiKey = "sk-ant-api03-test-mode-key-for-tests";
+    const leak: Step = {
+      emit: {
+        type: "assistant",
+        message: { content: [{ type: "text", text: `the key is ${apiKey}` }] },
+        parent_tool_use_id: null,
+      },
+    };
+    const { write, run } = yield* launch([leak, ...SHORT_TURN], luke, {
+      [RUNNER_ENV.BEARER]: BEARER,
+      [RUNNER_ENV.API_KEY]: apiKey,
+    });
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* Fiber.join(run);
+
+    assert.ok(JSON.stringify(luke.applied).includes("the key is [redacted]"));
+    assert.ok(!JSON.stringify(luke.applied).includes(apiKey));
+  }),
+);
+
 it.effect("leaves an escape that only looks like a secret's spelling as it was", () =>
   Effect.gen(function* () {
     const luke = fakeLuke();

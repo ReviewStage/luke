@@ -1142,6 +1142,9 @@ importers:
       '@effect/sql-pg':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)
+      '@luke/agent-runner':
+        specifier: workspace:*
+        version: link:../agent-runner
       '@luke/database':
         specifier: workspace:*
         version: link:../database

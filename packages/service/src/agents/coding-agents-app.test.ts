@@ -536,6 +536,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   nativeAgentAccounts: [],
+  agentSandboxSnapshot: undefined,
 };
 
 /** What the endpoints counted, across the file; a test reads its own account's. */
