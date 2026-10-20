@@ -358,6 +358,8 @@ const askTranscript = (options: {
   readonly sealing: Option.Option<LiveSealer>;
   /** The read asked, an agent's transcript where none is named. */
   readonly path?: string;
+  /** The account the read names, the bearer's own where none is named. */
+  readonly forUser?: string;
 }) =>
   Effect.gen(function* () {
     const services = Layer.mergeAll(
@@ -368,7 +370,10 @@ const askTranscript = (options: {
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
     });
-    const url = readOf(options.path ?? "/api/live/agent-transcript", options.bearer);
+    const url = readOf(
+      options.path ?? "/api/live/agent-transcript",
+      options.forUser ?? options.bearer,
+    );
     url.searchParams.set("id", options.agentId);
     if (options.call !== undefined) url.searchParams.set("call", options.call);
     const response = yield* hostedAnswer(
@@ -589,6 +594,20 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           status: HOSTED_HTTP_STATUS.NOT_FOUND,
           body: { error: HOSTED_API_ERROR.NOT_FOUND },
         });
+        // A read naming another account than the bearer's, as one started before a switch does, is signed out.
+        assert.deepEqual(
+          yield* askTranscript({
+            bearer: owner,
+            forUser: stranger,
+            agentId: task.id,
+            sealing: Option.some(SCRIPTED),
+            path: "/api/live/task-conversation",
+          }),
+          {
+            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+          },
+        );
         const polled = yield* askConversation(owner, Option.none());
         assert.equal(
           Schema.decodeUnknownSync(taskConversationLiveAnswerSchema)(polled.body).url,

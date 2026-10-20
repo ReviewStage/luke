@@ -33,11 +33,15 @@ export type ConversationMark =
 
 export interface ConversationMarkDependencies {
   /** The conversation sealed again, for renewing; a failure where the service sealed none. */
-  readonly seal: () => Effect.Effect<TaskConversationLiveAnswer | { readonly failure: string }>;
+  readonly seal: () => Effect.Effect<
+    TaskConversationLiveAnswer | { readonly failure: string; readonly gone?: boolean }
+  >;
   /** The mark's and the workers' rows inline, held past `after`, polled while Realtime is off or fails them; failures as `seal`'s. */
   readonly poll: (
     after: string | undefined,
-  ) => Effect.Effect<TaskConversationLiveAnswer | { readonly failure: string }>;
+  ) => Effect.Effect<
+    TaskConversationLiveAnswer | { readonly failure: string; readonly gone?: boolean }
+  >;
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;
 }

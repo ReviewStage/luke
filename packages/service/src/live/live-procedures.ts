@@ -215,6 +215,7 @@ export function liveProcedures(seams: LiveProcedureSeams) {
       return yield* sealedParts({ commands: statement.value }, input);
     }),
     taskConversation: signedIn.taskConversation.effect(function* ({ input, context }) {
+      yield* sameUser(input, context.userId);
       const taskId = yield* rowIdOf(input.id);
       const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
       if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

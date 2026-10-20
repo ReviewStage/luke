@@ -962,6 +962,8 @@ interface FakeConversations extends TasksConversationClient {
   readonly seals: string[];
   /** The mark's rows a poll answers inline, while Realtime fails the follow. */
   polled: readonly unknown[];
+  /** Whether the task is gone, so every seal and poll answers not found. */
+  gone: boolean;
   /** Every plan a poll was asked for, in order. */
   readonly polls: string[];
 }
@@ -981,8 +983,14 @@ function fakeConversations(): Effect.Effect<FakeConversations> {
       seals: [],
       polled: [],
       polls: [],
+      gone: false,
       taskConversationLive: (taskId, _userId, poll) =>
         Effect.sync(() => {
+          if (conversations.gone) {
+            if (poll === true) conversations.polls.push(taskId);
+            else conversations.seals.push(taskId);
+            return { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND };
+          }
           if (poll === true) {
             conversations.polls.push(taskId);
             const inline = (rows: readonly unknown[]) => ({
@@ -2051,6 +2059,29 @@ it.effect(
 
       assert.deepEqual(yield* conversations.nextAsk, [INVITES, CONVERSATION_READ.LOOK, "1:1"]);
       assert.ok(conversations.polls.length > 0);
+    }),
+);
+
+it.effect(
+  "a task gone while its conversation mark is polled ends the follow, rather than polling it on",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, tasks, conversations, realtime } = yield* subject(service);
+      yield* tasks.lifetime;
+      yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+      yield* conversations.nextAsk;
+      yield* conversations.answer(
+        INVITES,
+        conversationPage([journal("turn-1", "Reading")], "1:1", CODING_AGENT_STATUS.RUNNING),
+      );
+      conversations.gone = true;
+      yield* realtime.fail;
+      yield* TestClock.adjust(Duration.seconds(10));
+      const asked = conversations.polls.length + conversations.seals.length;
+
+      yield* TestClock.adjust(Duration.minutes(5));
+      assert.equal(conversations.polls.length + conversations.seals.length, asked);
     }),
 );
 
@@ -3523,7 +3554,8 @@ function fakeBoardRealtime() {
   };
   return {
     client,
-    subscribed: () => [...listeners.keys()].filter((capability) => capability.startsWith("board-")),
+    subscribed: () =>
+      [...listeners.keys()].filter((capability) => !capability.startsWith("capability-")),
     deliver: (capability: string, data: readonly unknown[]) =>
       listener(capability)({ status: "live", data }),
     fail: (capability: string) => listener(capability)({ status: "error", data: undefined }),

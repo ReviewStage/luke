@@ -25,7 +25,7 @@ import {
   type CodingAgentMessagesAnswer,
   type CodingAgentStatus,
 } from "@luke/features/coding-agent-wire";
-import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
+import { LIVE_SIGNED_OUT, type TaskConversationLiveAnswer } from "@luke/features/live-wire";
 import { PLAN_ACTOR, type Task, UNTITLED_TASK_NAME } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
@@ -1177,7 +1177,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       const landed = pageLanding(taskId);
       // The account the follow starts for, which every seal names, so one under another's session is refused as signed out.
       const userId = dependencies.accountId();
-      const seal = (poll = false, after?: string) =>
+      const seal = (
+        poll = false,
+        after?: string,
+      ): Effect.Effect<TaskConversationLiveAnswer | { readonly failure: string }> =>
         userId === undefined || !gate()
           ? Effect.succeed(
               userId === undefined
@@ -1185,6 +1188,17 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
                 : { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
             )
           : served(conversations.taskConversationLive(taskId, userId, poll, after));
+      // A task the account no longer reaches, or one no longer open, ends the follow rather than renewing or polling it.
+      const sealedFor = (poll: boolean, after?: string) =>
+        gate() && view.activeTaskId === taskId
+          ? Effect.map(seal(poll, after), (renewed) =>
+              "failure" in renewed &&
+              (renewed.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND ||
+                renewed.failure === LIVE_SIGNED_OUT.failure)
+                ? { ...renewed, gone: true }
+                : renewed,
+            )
+          : Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED, gone: true });
       while (gate() && view.activeTaskId === taskId) {
         const sealed = yield* seal();
         if ("failure" in sealed) {
@@ -1195,8 +1209,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
             Effect.flatMap(
               conversationMark(
                 {
-                  seal: () => seal(),
-                  poll: (after) => seal(true, after),
+                  seal: () => sealedFor(false),
+                  poll: (after) => sealedFor(true, after),
                   openLive: dependencies.openLive ?? openRealtimeClient,
                   now: kernel.now,
                 },
