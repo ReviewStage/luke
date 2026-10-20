@@ -24,7 +24,12 @@ import {
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 import type { SidePanelTab } from "./tasks/use-side-panel.js";
-import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "./tasks/use-tasks-tab.js";
+import {
+  AUTOMATIONS_PAGE,
+  type AutomationsPlace,
+  type InboxChoice,
+  type TasksControl,
+} from "./tasks/use-tasks-tab.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "./testing/app-platform.js";
 import { handState } from "./testing/app-state.js";
 import { onRegistry } from "./testing/copy-feedback.js";
@@ -86,7 +91,9 @@ interface Standing {
   /** The coding agent whose page stands, while one does. */
   readonly agent: string | undefined;
   /** Whether the automation's page stands, and its runs alone over its setup. */
-  readonly automation?: { readonly open: boolean; readonly runs: boolean } | undefined;
+  readonly automation?:
+    | { readonly open: boolean; readonly runs: boolean; readonly runId?: string | undefined }
+    | undefined;
   /** Whether a page holds unsaved work whose ask refuses every way out, as Cancel would. */
   readonly unsaved?: boolean | undefined;
 }
@@ -121,6 +128,28 @@ function tasksTab(
   const shut = () => setOpen(false);
   // A narrow room holds the panel full screen alone, so leaving full screen there shuts it.
   const narrow = room === SHELL_ROOM.NARROW;
+  // As the window's own guard does while a page holds unsaved work, every way out guarded asks, and here is
+  // refused, but for a way out the page passes it by.
+  let passing = false;
+  const leaveGuard: TasksControl["leaveGuard"] =
+    at.unsaved === true
+      ? {
+          ...base.leaveGuard,
+          pass: (leave) => {
+            passing = true;
+            try {
+              leave();
+            } finally {
+              passing = false;
+            }
+          },
+          guard:
+            (leave) =>
+            (...args) => {
+              if (passing) leave(...args);
+            },
+        }
+      : base.leaveGuard;
   return tasksControl({
     page: TASKS_PAGE.DOCUMENT,
     activeTaskId: DOCUMENT_TASK.id,
@@ -147,20 +176,32 @@ function tasksTab(
       if (at.panel.open) shut();
       return true;
     },
-    // As the window's own guard does while a page holds unsaved work, every way out guarded asks, and here is refused.
-    leaveGuard:
-      at.unsaved === true ? { ...base.leaveGuard, guard: () => () => undefined } : base.leaveGuard,
+    leaveGuard,
     automationsView: {
       ...base.automationsView,
       open: at.automation?.open === true,
       place:
         at.automation?.open === true
-          ? { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION }
+          ? {
+              kind: AUTOMATIONS_PAGE.EDIT,
+              automationId: AUTOMATION,
+              ...(at.automation.runId === undefined ? {} : { runId: at.automation.runId }),
+            }
           : { kind: AUTOMATIONS_PAGE.LIST },
       runs: at.automation?.runs === true,
-      onOpen: (_place, runs) =>
-        patch((held) => ({ ...held, automation: { open: true, runs: runs === true } })),
-      onRuns: (runs) => patch((held) => ({ ...held, automation: { open: true, runs } })),
+      // As the real one does, opening a page is a way out its guard asks first, and opening it on a run's link stands its runs.
+      onOpen: leaveGuard.guard((place: AutomationsPlace | undefined, runs?: boolean) => {
+        const runId = place?.kind === AUTOMATIONS_PAGE.EDIT ? place.runId : undefined;
+        patch((held) => ({
+          ...held,
+          automation: { open: true, runs: runs ?? runId !== undefined, runId },
+        }));
+      }),
+      onRuns: (runs) =>
+        patch((held) => ({
+          ...held,
+          automation: { open: true, runs, runId: held.automation?.runId },
+        })),
       onClose: () => patch((held) => ({ ...held, automation: undefined })),
     },
     agentView: {
@@ -629,7 +670,7 @@ test("on a narrow stage a move the history makes by itself back from an automati
   const window = mount(SHELL_ROOM.NARROW, ON_AUTOMATION);
   window.press(() => window.shown().automationsView.onRuns(true));
   window.moveHistory(-1);
-  assert.deepEqual(window.at().automation, { open: true, runs: false });
+  assert.equal(window.at().automation?.runs, false);
   assert.equal(window.history().canGoForward, true);
 });
 
@@ -639,7 +680,7 @@ test("on a narrow stage an automation opened on its runs, as a run's link opens 
   assert.equal(window.addresses().length, 2);
 
   window.press(() => window.shown().automationsView.onRuns(false));
-  assert.deepEqual(window.at().automation, { open: true, runs: false });
+  assert.equal(window.at().automation?.runs, false);
   assert.equal(window.addresses().length, 2, "the setup took the runs' step");
   assert.equal(window.history().canGoForward, false);
 });
@@ -648,4 +689,16 @@ test("on the desktop's width an automation's runs are no step", () => {
   const window = mount(SHELL_ROOM.WIDE, ON_AUTOMATION);
   window.press(() => window.shown().automationsView.onRuns(true));
   assert.equal(window.addresses().length, 1);
+});
+
+test("on a narrow stage a step between an automation's setup and its runs a link opened on another run moves the window there without asking to leave its unsaved work", () => {
+  const window = mount(SHELL_ROOM.NARROW, ON_AUTOMATION);
+  // A run's link opens the same automation on its runs, as a door other than the history does.
+  window.move((held) => ({ ...held, automation: { open: true, runs: true, runId: "run-1" } }));
+  assert.equal(window.addresses().length, 2);
+
+  act(() => window.history().onBack());
+  assert.deepEqual(window.at().automation, { open: true, runs: false, runId: undefined });
+  act(() => window.history().onForward());
+  assert.deepEqual(window.at().automation, { open: true, runs: true, runId: "run-1" });
 });

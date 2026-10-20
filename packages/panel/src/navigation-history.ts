@@ -892,13 +892,15 @@ export function useWindowHistory(input: {
       return;
     }
     if (to.kind === PLACE_KIND.AUTOMATIONS) {
-      // A narrow room's step within the automation standing moves between its setup and its runs, rather than opening it again.
-      const within =
-        automationsOpen &&
-        sameAutomationsPage(automationsPage, to.page) &&
-        sameAutomationsOpening(automationsPage, to.page);
-      if (within && to.runs !== undefined) tasks.automationsView.onRuns(to.runs);
-      else if (!within) tasks.automationsView.onOpen(to.page, to.runs);
+      // A narrow room's step within the automation standing moves between its setup and its runs, rather than opening it again;
+      // one that also marks another run, as a run's link does, opens it on that run past the ask, since it leaves no page.
+      if (!automationsOpen || !sameAutomationsPage(automationsPage, to.page)) {
+        tasks.automationsView.onOpen(to.page, to.runs);
+      } else if (!sameAutomationsOpening(automationsPage, to.page)) {
+        tasks.leaveGuard.pass(() => tasks.automationsView.onOpen(to.page, to.runs));
+      } else if (to.runs !== undefined) {
+        tasks.automationsView.onRuns(to.runs);
+      }
       return;
     }
     if (to.kind === PLACE_KIND.CHAT) {
