@@ -335,13 +335,7 @@ export function RepositoryChip(props: {
     ) : undefined;
 
   return (
-    <div
-      className="repository-chip"
-      data-place={props.place}
-      data-align={props.align ?? PICKER_ALIGN.END}
-      {...placement}
-      ref={chip}
-    >
+    <div className="repository-chip" data-place={props.place} {...placement} ref={chip}>
       {triggerDrawn ? (
         <Chip
           ref={trigger}
