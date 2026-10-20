@@ -1,14 +1,17 @@
 import type { CodingAgentChangedFile, ReviewThread } from "@luke/features/coding-agent-wire";
+import { patchHunks } from "@luke/features/diff-hunks";
 import {
   CHAPTER_KIND,
   type Chapter,
   type ChapterHunk,
   chapterPatches,
+  LINE_REF_SIDE,
   type LineRef,
   threadInChapter,
 } from "@luke/features/pull-request-chapters";
 import type { PullRequestChaptersAnswerView } from "@luke/features/pull-request-chapters-view";
 import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapters-wire";
+import type { DiffLineSpan } from "../diff-view/contract.js";
 
 /**
  * chapters-model.ts -- a pull request's chapters as its Chapters view draws them: which of its states stands, whether the chapters are stale, the order they are read in, which files each holds, and whether the member has viewed them.
@@ -22,7 +25,10 @@ import { PULL_REQUEST_CHAPTERS_STATE } from "@luke/features/pull-request-chapter
  * (`orderedChapters`). A chapter is viewed once every file it holds is
  * marked viewed on GitHub (`chapterViewed`), and marking it marks each of
  * them, or unmarks them all where all were (`chapterMarks`), so a file two
- * chapters hold is shared by both. Nothing here reads the DOM.
+ * chapters hold is shared by both. A key change's press brings its first
+ * lines in the chapter's reading order into view (`firstLineRef`), lit where
+ * the chapter's diff draws them (`drawnLines`), else its file's header.
+ * Nothing here reads the DOM.
  */
 
 /** Which of its states the Chapters view draws. */
@@ -170,6 +176,59 @@ export function lineRefLabel(ref: LineRef): string {
   const lines =
     ref.startLine === ref.endLine ? `L${ref.startLine}` : `L${ref.startLine}–${ref.endLine}`;
   return `${ref.path} · ${lines}`;
+}
+
+/** Where a line ref stands among others of its file at the same line: a removed line before an added one, as a unified diff draws them. */
+const SIDE_RANK = { [LINE_REF_SIDE.DELETIONS]: 0, [LINE_REF_SIDE.ADDITIONS]: 1 } as const;
+
+/**
+ * The lines of a key change its press brings into view: the first in the
+ * chapter's reading order, as ReviewStage orders them, by the file the
+ * chapter draws first (`paths`), then by line, a removed line before an
+ * added one at the same number, then the shorter run. Lines of files the
+ * chapter does not draw come last, in the order the key change names them.
+ */
+export function firstLineRef(
+  refs: readonly LineRef[],
+  paths: readonly string[],
+): LineRef | undefined {
+  const rank = (ref: LineRef) => {
+    const at = paths.indexOf(ref.path);
+    return at === -1 ? paths.length : at;
+  };
+  const sorted = [...refs].sort((a, b) => {
+    if (rank(a) !== rank(b)) return rank(a) - rank(b);
+    if (a.path !== b.path) return 0;
+    if (a.startLine !== b.startLine) return a.startLine - b.startLine;
+    if (a.side !== b.side) return SIDE_RANK[a.side] - SIDE_RANK[b.side];
+    return a.endLine - b.endLine;
+  });
+  return sorted[0];
+}
+
+/**
+ * The lines of `ref` the chapter's diff draws of `file`, the file as the
+ * chapter draws it (`chapterPatches`): from its first line to its last, or
+ * to the end of the hunk holding its first where it runs past it; none
+ * where the file draws no lines, or no hunk it draws holds the first line
+ * on its side, which brings the file's header into view instead. Note that
+ * a hunk draws every line it counts on a side, its unchanged lines among
+ * them, so a run may start on one.
+ */
+export function drawnLines(
+  file: CodingAgentChangedFile | undefined,
+  ref: LineRef,
+): DiffLineSpan | undefined {
+  if (file === undefined || file.path !== ref.path) return undefined;
+  if (file.omitted !== null || file.patch === null) return undefined;
+  const additions = ref.side === LINE_REF_SIDE.ADDITIONS;
+  for (const hunk of patchHunks(file.patch) ?? []) {
+    const first = additions ? hunk.newStart : hunk.oldStart;
+    const last = first + (additions ? hunk.newLines : hunk.oldLines) - 1;
+    if (ref.startLine < first || ref.startLine > last) continue;
+    return { side: ref.side, startLine: ref.startLine, endLine: Math.min(ref.endLine, last) };
+  }
+  return undefined;
 }
 
 /** The chapter `step` on from `at` among `count`, held at either end. */
