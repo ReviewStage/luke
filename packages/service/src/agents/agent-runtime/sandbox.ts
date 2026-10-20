@@ -187,12 +187,12 @@ const CODEX = {
  * it; then makes `agent`'s `CODEX_HOME`, which only `agent` reads.
  */
 const INSTALL_CODEX = [
-  `if ! ${CODEX.DIRECTORY}/bin/codex --version 2>/dev/null | grep -qx 'codex-cli ${CODEX.VERSION}'; then`,
+  `if ! ${CODEX.DIRECTORY}/bin/codex --version 2>/dev/null | grep -Fxq 'codex-cli ${CODEX.VERSION}'; then`,
   `  $SUDO env HOME=/root npm install --global --prefix ${CODEX.DIRECTORY} --no-audit --no-fund @openai/codex@${CODEX.VERSION}`,
   "fi",
   `$SUDO ln -sfn ${CODEX.DIRECTORY}/bin/codex /usr/local/bin/codex`,
   "codex --version",
-  `codex --version | grep -qx 'codex-cli ${CODEX.VERSION}' || { echo 'codex does not print ${CODEX.VERSION}' >&2; exit 1; }`,
+  `codex --version | grep -Fxq 'codex-cli ${CODEX.VERSION}' || { echo 'codex does not print ${CODEX.VERSION}' >&2; exit 1; }`,
   `$SUDO install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0700 ${CODEX.HOME}`,
 ];
 

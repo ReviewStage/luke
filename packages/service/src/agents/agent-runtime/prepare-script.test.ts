@@ -177,11 +177,10 @@ test("the image fails where a command under the capability drop still holds a ca
 });
 
 test("the image fails where the Codex installed does not print the pin", async (t) => {
-  const { exitCode, stderr } = await prepare(t, {
-    sudoDrops: true,
-    setprivExit: 0,
-    codexPrints: "0.162.0",
-  });
-  assert.notEqual(exitCode, 0);
-  assert.match(stderr, /codex does not print 0\.163\.0/);
+  // A version that matches the pin only with its dots read as any character fails too.
+  for (const codexPrints of ["0.162.0", "0a163b0"]) {
+    const { exitCode, stderr } = await prepare(t, { sudoDrops: true, setprivExit: 0, codexPrints });
+    assert.notEqual(exitCode, 0, codexPrints);
+    assert.match(stderr, /codex does not print 0\.163\.0/);
+  }
 });
