@@ -419,16 +419,14 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
     while: (error) => error._tag === "ReadSuperseded",
   });
 
-  // The account the service names now, the arrival a switch to it makes
-  // waited for while no later change passed it over, though not its
-  // capabilities' starting.
+  /** The arrival under way shown, while no later change passed it over; not its capabilities' starting. */
+  const arrivalSettled: Effect.Effect<void> = Effect.suspend(() =>
+    arrival?.asOf === generation ? Deferred.await(arrival.shown) : Effect.void,
+  );
+
+  // The account the service names now, the arrival a switch to it makes waited for.
   const confirmAccount = (): Effect.Effect<void> =>
-    Effect.andThen(
-      Effect.ignore(reread),
-      Effect.suspend(() =>
-        arrival?.asOf === generation ? Deferred.await(arrival.shown) : Effect.void,
-      ),
-    );
+    Effect.andThen(Effect.ignore(reread), arrivalSettled);
 
   const token: AccountToken = {
     // A cookie session holds no bearer: what reads one reads nothing.
@@ -560,10 +558,13 @@ const openCookieSession = /* @__PURE__ */ Effect.fnUntraced(function* (
         Result.isSuccess(settled) && settled.success.signedIn
           ? settled.success.account
           : SIGNED_OUT;
-      // A change that landed while the launch read, a refused call's, stands over it.
+      // A change that landed while the launch read, a refused call's, stands
+      // over it, its arrival shown first so the launch answers that person.
       if (asked === generation) {
         yield* settleArrival(initial);
         account = initial;
+      } else {
+        yield* arrivalSettled;
       }
       yield* Deferred.succeed(initialized, undefined);
       return account;
