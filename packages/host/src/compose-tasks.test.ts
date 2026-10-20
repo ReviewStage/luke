@@ -95,7 +95,7 @@ import {
   GATEWAY_METHOD,
   type GatewayMethod,
 } from "@luke/gateway";
-import { MESSAGE_ROLE, type WireRecord } from "@luke/wire";
+import { isRecord, MESSAGE_ROLE, type UnparsedWireValue, type WireRecord } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { noNetwork } from "@luke/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber, Queue, Result } from "effect";
@@ -2761,6 +2761,102 @@ it.effect("behind a closed account gate a pull request's read does not reach the
       { failure: TASK_CALL_FAILURE.UNANSWERED },
     );
   }),
+);
+
+/** A service whose every read of a pull request waits for `released` and then answers it under a title naming which read it was, so an answer says which read made it. */
+function readCountingService(released: Deferred.Deferred<void>) {
+  const service = fakeService([]);
+  let reads = 0;
+  service.readRepositoryPullRequest = (_place, number) =>
+    Effect.gen(function* () {
+      reads += 1;
+      const read = reads;
+      yield* Deferred.await(released);
+      return {
+        pullRequest: {
+          number,
+          title: `Read ${read}`,
+          url: `https://github.com/acme/relay/pull/${number}`,
+          state: PULL_REQUEST_STATE.OPEN,
+        },
+      };
+    });
+  return service;
+}
+
+const titleOf = (answer: UnparsedWireValue) =>
+  isRecord(answer) && isRecord(answer.pullRequest) ? answer.pullRequest.title : undefined;
+
+it.effect(
+  "links asking for one pull request at once share one read of it, and an ask within a minute is answered from it until it lapses",
+  () =>
+    Effect.gen(function* () {
+      const released = yield* Deferred.make<void>();
+      const { call } = yield* subject(readCountingService(released));
+      const asked = (number: number) =>
+        call(GATEWAY_METHOD.TASKS_PULL_REQUEST, {
+          workspaceId: ACME.id,
+          repository: "acme/relay",
+          number,
+        });
+
+      const chips = yield* Effect.forkChild(
+        Effect.all(
+          Array.from({ length: 12 }, () => asked(42)),
+          { concurrency: "unbounded" },
+        ),
+      );
+      for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+      yield* Deferred.succeed(released, undefined);
+      const answers = yield* Fiber.join(chips);
+
+      assert.deepEqual(
+        answers.map(titleOf),
+        Array.from({ length: 12 }, () => "Read 1"),
+        "every chip is answered by the one read",
+      );
+      yield* TestClock.adjust(Duration.seconds(59));
+      assert.equal(
+        titleOf(yield* asked(42)),
+        "Read 1",
+        "a remount within the minute reads nothing",
+      );
+      assert.equal(titleOf(yield* asked(43)), "Read 2", "another pull request is read for itself");
+      yield* TestClock.adjust(Duration.seconds(1));
+      assert.equal(titleOf(yield* asked(42)), "Read 3", "a lapsed answer is read afresh");
+    }),
+);
+
+it.effect(
+  "a pull request the service did not answer is held for less than one it drew, and the same number in another workspace is read for that workspace",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const released = yield* Deferred.make<void>();
+      yield* Deferred.succeed(released, undefined);
+      const drawing = readCountingService(released);
+      let answering = false;
+      service.readRepositoryPullRequest = (place, number) =>
+        answering ? drawing.readRepositoryPullRequest(place, number) : Effect.succeed(undefined);
+      const { call } = yield* subject(service);
+      const asked = (workspaceId: string) =>
+        call(GATEWAY_METHOD.TASKS_PULL_REQUEST, {
+          workspaceId,
+          repository: "acme/relay",
+          number: 42,
+        });
+
+      assert.deepEqual(yield* asked(ACME.id), { failure: TASK_CALL_FAILURE.UNANSWERED });
+      answering = true;
+      assert.deepEqual(
+        yield* asked(ACME.id),
+        { failure: TASK_CALL_FAILURE.UNANSWERED },
+        "a refusal stands a while, so a burst of chips does not ask again",
+      );
+      assert.equal(titleOf(yield* asked(RELAY.id)), "Read 1");
+      yield* TestClock.adjust(Duration.seconds(15));
+      assert.equal(titleOf(yield* asked(ACME.id)), "Read 2", "a refusal lapses before a minute");
+    }),
 );
 
 it.effect(

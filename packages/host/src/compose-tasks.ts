@@ -145,6 +145,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
+import { holdPullRequestReads } from "./pull-request-hold.js";
 import type { RunMode } from "./run-mode.js";
 import { codeExcerpt, highlightCode, highlightFile } from "./task-code.js";
 
@@ -492,6 +493,9 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     Effect.provideService(call, HttpClient.HttpClient, http);
   const idleView = (): TasksView => IDLE_TASKS_VIEW;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
+  const heldPullRequest = yield* holdPullRequestReads((place, number) =>
+    served(client.readRepositoryPullRequest(place, number)),
+  );
 
   /**
    * One read of the service at a time, whichever ask made it. Note that the
@@ -1375,8 +1379,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         );
         return carried<TasksSkillsAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // A pull request is answered to the link that asked and held nowhere:
-    // its title and where it stands are read again on the next ask.
+    // A pull request is answered to every link that asks for it from one read,
+    // held a while (`pull-request-hold.ts`), and read again once that lapses.
     [GATEWAY_METHOD.TASKS_PULL_REQUEST]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksPullRequestParamsSchema)(unparsedWire(params));
@@ -1389,10 +1393,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
           return carried<TasksPullRequestAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
         }
         const { number, ...place } = read.success;
-        const answer = yield* served(client.readRepositoryPullRequest(place, number));
+        const answer = yield* heldPullRequest(place, number);
         return carried<TasksPullRequestAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
-    // An issue is answered as a pull request is: to the link that asked, and held nowhere.
+    // An issue is answered to the link that asked, and held nowhere.
     [GATEWAY_METHOD.TASKS_ISSUE]: (params) =>
       Effect.gen(function* () {
         const read = readEither(tasksIssueParamsSchema)(unparsedWire(params));
