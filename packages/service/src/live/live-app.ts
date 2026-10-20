@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { readTask } from "@luke/database/models/task-store";
 import { HOSTED_SERVICE_PATH } from "@luke/features";
+import { LIVE_USER_QUERY } from "@luke/features/live-wire";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { reachedAgent, resolvedUserId, uuidOf } from "../agents/agent-reach.js";
@@ -43,6 +44,11 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  * more, after the plan or the agent is read as the account,
  * so one it does not reach is not found, as its held read answers.
  * Nothing else here reads a row: the store is read by Realtime.
+ *
+ * Each read names the account the desktop started following for
+ * (`LIVE_USER_QUERY`), and a bearer of any other account, or a read that
+ * names none, is answered as signed out, with the same 401 as no session,
+ * as Neon's guide says to ("When the session changes").
  */
 
 const HTTP_METHOD = { GET: "GET" } as const;
@@ -146,8 +152,20 @@ const agentInboxLiveEndpoint = /* @__PURE__ */ Effect.fn("web/agentInboxLiveEndp
   return yield* sealedScope(yield* LiveSealing, memberAgentInboxLiveStatements(userId, agent.id));
 });
 
+/** The bearer's account, where it is the one the read names; none, as signed out, for any other. */
+function sameUser(resolveUserId: UserIdResolver): UserIdResolver {
+  return (request) =>
+    Effect.map(resolveUserId(request), (account) =>
+      Option.filter(
+        account,
+        (userId) => new URL(request.url).searchParams.get(LIVE_USER_QUERY) === userId,
+      ),
+    );
+}
+
 /** The group: each live read's path, and the hosted vocabulary's own refusal for any other. */
-export function liveApp(seams: LiveAppSeams): WebRoutes<DatabaseServices> {
+export function liveApp(given: LiveAppSeams): WebRoutes<DatabaseServices> {
+  const seams: LiveAppSeams = { resolveUserId: sameUser(given.resolveUserId) };
   return Layer.mergeAll(
     HttpRouter.add(
       ANY_METHOD,

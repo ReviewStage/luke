@@ -46,6 +46,16 @@ import { countedNumber } from "./service-wire.js";
  * reader orders them as the held read does.
  */
 
+/**
+ * The query every live read names the account it was started for under, as
+ * Neon's guide says a page sends its user ("When the session changes"):
+ * the service answers a session of anyone else as signed out.
+ */
+export const LIVE_USER_QUERY = "userId";
+
+/** A live read the service refused as signed out: no session, or one of another account than the read names. */
+export const LIVE_SIGNED_OUT = { failure: "signed-out" } as const;
+
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
 export const sealedLiveQuerySchema = EffectSchema.Struct({
   capability: EffectSchema.String,

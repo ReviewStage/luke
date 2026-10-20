@@ -6,7 +6,11 @@ import { Database } from "@luke/database/core/query";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB, startTask } from "@luke/database/testing";
-import { accountInboxLiveAnswerSchema, scopeInboxLiveAnswerSchema } from "@luke/features/live-wire";
+import {
+  accountInboxLiveAnswerSchema,
+  LIVE_USER_QUERY,
+  scopeInboxLiveAnswerSchema,
+} from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
 import { Effect, Layer, Option, Schema } from "effect";
 import { HttpRouter } from "effect/http";
@@ -52,6 +56,8 @@ const SCRIPTED: LiveSealer = {
 /** The group answering one request as `bearer`, over the deployment's Realtime where it has one, at the path asked. */
 const ask = (options: {
   readonly bearer?: string;
+  /** The account the read names; the bearer's own where left out. */
+  readonly forUser?: string;
   readonly method?: string;
   readonly path?: string;
   readonly sealing: Option.Option<LiveSealer>;
@@ -73,9 +79,12 @@ const ask = (options: {
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
+    const read = new URL(options.path ?? LIVE_INBOX, ORIGIN);
+    const forUser = options.forUser ?? options.bearer;
+    if (forUser !== undefined) read.searchParams.set(LIVE_USER_QUERY, forUser);
     const response = yield* Effect.promise(() =>
       handler(
-        new Request(new URL(options.path ?? LIVE_INBOX, ORIGIN), {
+        new Request(read, {
           method: options.method ?? "GET",
           headers:
             options.bearer === undefined ? {} : { authorization: `Bearer ${options.bearer}` },
@@ -103,6 +112,36 @@ it.layer(getTestDB())("the live reads", (it) => {
         },
       );
     }),
+  );
+
+  it.effect(
+    "a read that names another account than the bearer's, or none, is answered as signed out, as no session is",
+    () =>
+      Effect.gen(function* () {
+        const signedOut = {
+          status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+          body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+        };
+        const owner = yield* openUser;
+        const task = yield* startTask(owner, { name: "Teammate invitations" });
+        for (const path of [LIVE_INBOX, `/api/live/task-inbox?id=${task.id}`]) {
+          assert.deepEqual(
+            yield* ask({
+              bearer: owner,
+              forUser: "user-eli",
+              path,
+              sealing: Option.some(SCRIPTED),
+            }),
+            signedOut,
+          );
+          assert.deepEqual(
+            yield* ask({ bearer: owner, forUser: "", path, sealing: Option.some(SCRIPTED) }),
+            signedOut,
+          );
+          const read = yield* ask({ bearer: owner, path, sealing: Option.some(SCRIPTED) });
+          assert.equal(read.status, HOSTED_HTTP_STATUS.OK);
+        }
+      }),
   );
 
   it.effect("a deployment whose Realtime is misconfigured answers unavailable", () =>

@@ -224,6 +224,8 @@ const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERA
 /** The service as a script, writing down every ask in the order it was made. */
 function fakeService() {
   const asked: string[] = [];
+  /** The account each live read named, in order. */
+  const liveUsers: string[] = [];
   let live: AccountInboxLiveAnswer | undefined;
   let scope: ScopeInboxLiveAnswer | { readonly failure: "not-found" } | undefined;
   let cursor = CODING_AGENT_CURSOR_START;
@@ -480,9 +482,10 @@ function fakeService() {
           taken: true,
         };
       }),
-    accountInboxLive: () =>
+    accountInboxLive: (userId) =>
       Effect.sync(() => {
         asked.push("account-inbox-live");
+        liveUsers.push(userId);
         return live ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
     chat: (workspaceId, after) =>
@@ -500,20 +503,23 @@ function fakeService() {
         asked.push(`chat-attachment:${workspaceId}:${messageId}:${attachmentId}`);
         return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
       }),
-    taskInboxLive: (taskId) =>
+    taskInboxLive: (taskId, userId) =>
       Effect.sync(() => {
         asked.push(`plan-inbox-live:${taskId}`);
+        liveUsers.push(userId);
         return scope ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
-    agentInboxLive: (agentId) =>
+    agentInboxLive: (agentId, userId) =>
       Effect.sync(() => {
         asked.push(`agent-inbox-live:${agentId}`);
+        liveUsers.push(userId);
         return scope ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
   };
   return {
     client,
     asked,
+    liveUsers,
     /** What the service seals for following the account's inbox; none answers unanswered. */
     seal: (next: AccountInboxLiveAnswer | undefined) => {
       live = next;
@@ -539,6 +545,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
         now: () => NOW + elapsed,
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
+      accountId: () => ((options.signedIn ?? true) ? SIGNED_IN_ID : undefined),
       client: service.client,
       openLive: realtime.open,
     }).pipe(Effect.provide(noNetwork));
@@ -555,6 +562,7 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
     return {
       call,
       asked: service.asked,
+      liveUsers: service.liveUsers,
       seal: service.seal,
       sealScope: service.sealScope,
       realtime,
@@ -575,6 +583,8 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
 
 /** The host's clock, which an answer read live is stamped with. */
 const NOW = 1_800_000_100_000;
+/** The account signed in, which every live read names. */
+const SIGNED_IN_ID = "user-dana";
 
 const MINUTE = 60 * 1_000;
 const DAY = 24 * 60 * MINUTE;
@@ -1056,7 +1066,7 @@ it.effect(
   "the account inbox is followed over Realtime: every part subscribed at the address it names, and once each part has its rows the answer published whole, in the held read's order, with the last week's failed runs, and never a sealed statement",
   () =>
     Effect.gen(function* () {
-      const { call, asked, seal, realtime, inboxes } = yield* subject();
+      const { call, asked, liveUsers, seal, realtime, inboxes } = yield* subject();
       seal(SEALED);
       yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
       yield* settled;
@@ -1116,6 +1126,7 @@ it.effect(
         },
       ]);
       assert.deepEqual(asked, ["account-inbox-live"]);
+      assert.deepEqual(liveUsers, [SIGNED_IN_ID], "sealed for the account signed in");
       assert.ok(!JSON.stringify(inboxes()).includes("capability"));
     }),
 );
@@ -1264,7 +1275,7 @@ it.effect(
   "a plan's inbox is answered from its Realtime subscription: at once once its rows land, then as soon as they move past the reader's cursor, and unchanged when the hold ends",
   () =>
     Effect.gen(function* () {
-      const { call, asked, sealScope, realtime } = yield* subject();
+      const { call, asked, liveUsers, sealScope, realtime } = yield* subject();
       sealScope(SEALED_SCOPE);
       const first = yield* Effect.forkChild(
         call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: INBOX_CURSOR_START }),
@@ -1307,6 +1318,7 @@ it.effect(
       assert.deepEqual(yield* Fiber.join(unchanged), moved);
       // One subscription served every read.
       assert.deepEqual(asked, [`plan-inbox-live:${TASK_ID}`]);
+      assert.deepEqual(liveUsers, [SIGNED_IN_ID], "sealed for the account signed in");
       assert.deepEqual(realtime.opened, [SEALED_SCOPE.url]);
     }),
 );

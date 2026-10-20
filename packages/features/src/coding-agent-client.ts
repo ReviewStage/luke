@@ -1,5 +1,6 @@
 import {
   HTTP_METHOD,
+  HTTP_STATUS,
   type UnparsedWireValue,
   unparsedWire,
   type WireBoundaryInput,
@@ -113,6 +114,8 @@ import {
 import {
   type AccountInboxLiveAnswer,
   accountInboxLiveAnswerSchema,
+  LIVE_SIGNED_OUT,
+  LIVE_USER_QUERY,
   type ScopeInboxLiveAnswer,
   scopeInboxLiveAnswerSchema,
 } from "./live-wire.js";
@@ -304,6 +307,18 @@ function readAnswer<Answer, Encoded>(
     const read = Result.getOrUndefined(readServiceAnswer(schema)(payload));
     return read === undefined ? UNANSWERED : read;
   });
+}
+
+/** A live read's answer, as `readAnswer` reads one, or signed out where the service refused the session (`live-wire.ts`). */
+function readLiveAnswer<Answer, Encoded>(
+  answer: CallAnswer,
+  schema: Schema.Codec<Answer, Encoded>,
+  named: NamedRefusals,
+): Effect.Effect<Answer | Failed | typeof LIVE_SIGNED_OUT> {
+  if (callAnswered(answer) && answer.response.status === HTTP_STATUS.UNAUTHORIZED) {
+    return Effect.succeed(LIVE_SIGNED_OUT);
+  }
+  return readAnswer(answer, schema, named);
 }
 
 /**
@@ -832,43 +847,65 @@ export class HostedCodingAgentClient {
 
   /**
    * What waits on the developer across the account, sealed for following
-   * over Neon Realtime: answered at once, never held. Unanswered for
-   * anything that went wrong, which the caller answers by asking again.
+   * over Neon Realtime for the account `userId` names: answered at once,
+   * never held. Signed out where the session is no longer that account's;
+   * unanswered for anything else that went wrong, which the caller answers
+   * by asking again.
    */
-  accountInboxLive(): Effect.Effect<AccountInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
+  accountInboxLive(
+    userId: string,
+  ): Effect.Effect<
+    AccountInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
     return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }),
-      (answer) => readAnswer(answer, accountInboxLiveAnswerSchema, {}),
+      this.#call.send({
+        method: HTTP_METHOD.GET,
+        path: `${HOSTED_SERVICE_PATH.LIVE_INBOX}?${new URLSearchParams({ [LIVE_USER_QUERY]: userId })}`,
+      }),
+      (answer) => readLiveAnswer(answer, accountInboxLiveAnswerSchema, {}),
     );
   }
 
   /**
    * One plan's inbox sealed for following over Neon Realtime, answered at
-   * once: not found where the account reaches no such plan, unanswered
-   * for anything else, which the caller answers by asking again.
+   * once: not found where the account reaches no such plan, signed out as
+   * the account inbox is, unanswered for anything else, which the caller
+   * answers by asking again.
    */
   taskInboxLive(
     taskId: string,
-  ): Effect.Effect<ScopeInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    userId: string,
+  ): Effect.Effect<
+    ScopeInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
     return Effect.flatMap(
       this.#call.send({
         method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.LIVE_TASK_INBOX}?${new URLSearchParams({ id: taskId })}`,
+        path: `${HOSTED_SERVICE_PATH.LIVE_TASK_INBOX}?${new URLSearchParams({ id: taskId, [LIVE_USER_QUERY]: userId })}`,
       }),
-      (answer) => readAnswer(answer, scopeInboxLiveAnswerSchema, ROW_REFUSALS),
+      (answer) => readLiveAnswer(answer, scopeInboxLiveAnswerSchema, ROW_REFUSALS),
     );
   }
 
   /** One agent's inbox sealed for following over Neon Realtime, on the terms a plan's is. */
   agentInboxLive(
     agentId: string,
-  ): Effect.Effect<ScopeInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    userId: string,
+  ): Effect.Effect<
+    ScopeInboxLiveAnswer | Failed | typeof LIVE_SIGNED_OUT,
+    never,
+    HttpClient.HttpClient
+  > {
     return Effect.flatMap(
       this.#call.send({
         method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX}?${new URLSearchParams({ id: agentId })}`,
+        path: `${HOSTED_SERVICE_PATH.LIVE_AGENT_INBOX}?${new URLSearchParams({ id: agentId, [LIVE_USER_QUERY]: userId })}`,
       }),
-      (answer) => readAnswer(answer, scopeInboxLiveAnswerSchema, ROW_REFUSALS),
+      (answer) => readLiveAnswer(answer, scopeInboxLiveAnswerSchema, ROW_REFUSALS),
     );
   }
 

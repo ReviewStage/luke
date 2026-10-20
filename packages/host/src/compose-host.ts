@@ -1,3 +1,4 @@
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import {
   HostedAutomationClient,
   HostedCodingAgentClient,
@@ -183,6 +184,10 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
     const codingAgents = yield* composeCodingAgents({
       kernel,
       account,
+      accountId: () => {
+        const signedIn = account.session.snapshot();
+        return signedIn.status === ACCOUNT_STATUS.SIGNED_IN ? signedIn.id : undefined;
+      },
       client: codingAgentClient,
     });
     const automations = yield* composeAutomations({

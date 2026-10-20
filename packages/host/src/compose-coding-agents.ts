@@ -65,6 +65,7 @@ import {
   providerKeySaveParamsSchema,
 } from "@luke/features/coding-agent-view";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
+import { LIVE_SIGNED_OUT } from "@luke/features/live-wire";
 import {
   carried,
   GATEWAY_EVENT,
@@ -161,6 +162,8 @@ export interface CodingAgentsDependencies {
   kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: CodingAgentClient;
+  /** The account signed in now, by its id, which every live read names; none where nobody is. */
+  accountId: () => string | undefined;
   /** Realtime's client at an address, which the account inbox is followed over; Realtime's own outside a test. */
   openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
@@ -195,12 +198,15 @@ export function composeCodingAgents(
     const asked = askedOf(dependencies, http);
     const { client } = dependencies;
     const inboxes = yield* scopeInboxes({
-      seal: (scope) => {
+      seal: (scope, userId) => {
         const [kind, id] = scope.split(":", 2);
         return asked(
-          kind === "plan" ? client.taskInboxLive(id ?? "") : client.agentInboxLive(id ?? ""),
+          kind === "plan"
+            ? client.taskInboxLive(id ?? "", userId)
+            : client.agentInboxLive(id ?? "", userId),
         );
       },
+      accountId: dependencies.accountId,
       openLive: dependencies.openLive ?? openRealtimeClient,
       now: dependencies.kernel.now,
     });
@@ -218,6 +224,9 @@ function composed(
   const { kernel, client } = dependencies;
   const gate = gateOf(dependencies);
   const asked = askedOf(dependencies, http);
+  /** The account inbox sealed for the account a follow started for, as every renewal of it names; signed out where none was. */
+  const liveFor = (userId: string | undefined) => () =>
+    userId === undefined ? Effect.succeed(LIVE_SIGNED_OUT) : asked(client.accountInboxLive(userId));
 
   /** The params read against the method's own schema, or the invalid-params refusal worded. */
   const read = <Params>(
@@ -662,7 +671,7 @@ function composed(
         FiberHandle.run(
           follower,
           followAccountInbox({
-            live: () => asked(client.accountInboxLive()),
+            live: liveFor(dependencies.accountId()),
             openLive: dependencies.openLive ?? openRealtimeClient,
             now: kernel.now,
             publish: (answer) => kernel.emit(GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED, carried(answer)),

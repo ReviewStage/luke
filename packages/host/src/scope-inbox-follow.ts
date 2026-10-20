@@ -5,6 +5,7 @@ import {
 import type { InboxItem } from "@luke/features/inbox-wire";
 import {
   inboxOfLiveRows,
+  LIVE_SIGNED_OUT,
   type ScopeInboxLiveAnswer,
   scopeInboxLiveRowsSchema,
 } from "@luke/features/live-wire";
@@ -87,10 +88,13 @@ function cursorOf(items: readonly InboxItem[]): Effect.Effect<string> {
 }
 
 export interface ScopeInboxDependencies {
-  /** The scope sealed for following; not found, or a failure where the service sealed none. */
+  /** The scope sealed for following for the account named; not found, or a failure where the service sealed none. */
   readonly seal: (
     scope: InboxScopeKey,
+    userId: string,
   ) => Effect.Effect<ScopeInboxLiveAnswer | { readonly failure: string }>;
+  /** The account signed in now, which a subscription is sealed for from its first seal on; none where nobody is. */
+  readonly accountId: () => string | undefined;
   /** Realtime's client at the address the service named, loaded where it must be. */
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;
@@ -108,7 +112,11 @@ export function scopeInboxes(
     idleTimeToLive: IDLE,
     lookup: (scope: InboxScopeKey) =>
       Effect.gen(function* () {
-        const first = yield* dependencies.seal(scope);
+        // The account the subscription starts for, which every renewal names, so a renewal under another's session is refused as signed out.
+        const userId = dependencies.accountId();
+        const seal = () =>
+          userId === undefined ? Effect.succeed(LIVE_SIGNED_OUT) : dependencies.seal(scope, userId);
+        const first = yield* seal();
         if ("failure" in first) {
           const failure =
             first.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND
@@ -120,7 +128,7 @@ export function scopeInboxes(
         const rows = liveRows(
           {
             openLive: dependencies.openLive,
-            reseal: () => dependencies.seal(scope),
+            reseal: seal,
             now: dependencies.now,
           },
           first,

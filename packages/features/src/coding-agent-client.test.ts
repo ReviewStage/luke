@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, type JsonValue, recordingHttpClient } from "@luke/wire/testing";
 import { Effect, Fiber } from "effect";
+import type * as HttpClient from "effect/http/HttpClient";
 import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
 import { MEMBER_KIND } from "./chat-wire.js";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { LIVE_SIGNED_OUT, LIVE_USER_QUERY } from "./live-wire.js";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
@@ -572,5 +574,40 @@ it.effect(
       assert.deepEqual(yield* Fiber.join(unanswered), {
         failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
       });
+    }),
+);
+
+it.effect(
+  "a live read names the account it is for, and a session the service refuses for it is signed out rather than unanswered",
+  () =>
+    Effect.gen(function* () {
+      const reads: readonly (readonly [
+        string,
+        () => Effect.Effect<unknown, never, HttpClient.HttpClient>,
+      ])[] = [
+        ["/api/live/inbox", () => client().accountInboxLive("user-dana")],
+        ["/api/live/task-inbox", () => client().taskInboxLive(TASK_ID, "user-dana")],
+        ["/api/live/agent-inbox", () => client().agentInboxLive(AGENT_ID, "user-dana")],
+      ];
+      for (const [path, read] of reads) {
+        const refusing = fakeCloudApi({
+          [`GET ${path}`]: {
+            answer: () => ({ error: HOSTED_API_ERROR.INVALID_TOKEN }),
+            status: HTTP_STATUS.UNAUTHORIZED,
+          },
+        });
+        assert.deepEqual(yield* Effect.provide(read(), refusing.layer), LIVE_SIGNED_OUT, path);
+        assert.equal(refusing.requests()[0]?.searchParams.get(LIVE_USER_QUERY), "user-dana");
+
+        const unavailable = fakeCloudApi({
+          [`GET ${path}`]: {
+            answer: () => ({ error: HOSTED_API_ERROR.UNAVAILABLE }),
+            status: HTTP_STATUS.SERVER_ERROR,
+          },
+        });
+        assert.deepEqual(yield* Effect.provide(read(), unavailable.layer), {
+          failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+        });
+      }
     }),
 );
