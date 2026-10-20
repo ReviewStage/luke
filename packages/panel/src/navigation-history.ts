@@ -921,6 +921,11 @@ export function useWindowHistory(input: {
     if (to.kind === PLACE_KIND.CHAT) {
       if (to.shown !== undefined) {
         tasks.chatView.onShow(to.shown);
+        // A wide room's step on For you stands at Chat's own link, so it stands the rail too, as the link does, which a
+        // narrow room shows alone, the room turned since or measured only after the step is gone back to.
+        if (to.listed === undefined && to.shown.kind === CHAT_PLACE.FOR_YOU) {
+          tasks.chatView.onList();
+        }
         return;
       }
       tasks.chatView.onOpen();

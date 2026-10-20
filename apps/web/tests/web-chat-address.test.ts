@@ -28,6 +28,9 @@ import {
 /** The staged chat's topic channel, `members-schema`, by the id the fixture mints it (`chat-fixture.ts`). */
 const SCHEMA_CHANNEL = "0e1f2a3b-4c5d-4e6f-8a7b-8c9d0e1f2a3b";
 
+/** A phone's width, narrower than the panel stands two panes side by side at. */
+const PHONE_WIDTH = 390;
+
 /** A channel id the staged chat holds none of. */
 const GONE_CHANNEL = "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a";
 
@@ -99,6 +102,16 @@ it.effect(
         const stale = await loadedAt(`/personal/chat/${GONE_CHANNEL}`);
         assert.ok(stale.shows("For you"), "a channel the chat does not hold opens For you");
         assert.equal(addressBar(), "/personal/chat", "and the address names Chat alone");
+
+        // That step was written on the desktop's width; reloaded on a phone's, it opens on the rail, as Chat's link does there.
+        vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+          new DOMRect(0, 0, PHONE_WIDTH, 800),
+        );
+        await reloadedHere();
+        const forYou = document.querySelector<HTMLElement>('section[aria-label="For you"]');
+        assert.equal(forYou?.hidden, true, "the rail stands over For you");
+        assert.equal(addressBar(), "/personal/chat");
+        vi.restoreAllMocks();
 
         const unknownPage = await loadedAt("/personal/settings/billing");
         assert.ok(unknownPage.shows("Settings pages"), "a page Settings does not know opens it");
