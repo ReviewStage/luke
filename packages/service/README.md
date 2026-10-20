@@ -2232,7 +2232,8 @@ The store tests run the generated migrations on PGlite in process, so
 `check.sh` and CI's test jobs need no service. The `postgres` CI job
 ("Postgres migrations and store") proves only what PGlite cannot: it runs
 `db:migrate` against a fresh Postgres container and then
-`apps/web/tests/storage-schema.test.ts` against what that migrated, so a
+`apps/web/tests/storage-schema.test.ts` and `drizzle-schema.test.ts` against
+what that migrated, so a
 statement PGlite accepts and Postgres refuses, or migrations that do not end
 at the declared schema, fail there. Every one of those is Postgres 18, the
 major production runs: Neon serves 18.x, PGlite 0.5.8 embeds PostgreSQL
