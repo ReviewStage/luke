@@ -5,13 +5,17 @@ import { afterEach, test } from "vitest";
 import { layContainersAt } from "../testing/container-width.js";
 
 /**
- * call-video-shape.test.ts -- Luke's video tile stays a 16:9 picture
- * whatever its stream's shape. The stock avatars stream a square picture,
- * and a box drawn at a ratio takes its content's height as its least
- * height unless told otherwise, so the tile in the Call tab and on the
- * call card grew square around the video. jsdom lays nothing out, so the
- * sheets are laid (`testing/container-width.ts`) and the tile is built in
- * the markup `call-video-tile.tsx` draws, on each surface it stands on.
+ * call-video-shape.test.ts -- Luke's video tile draws the avatar's whole
+ * picture in a shape that follows the room. The stock avatars stream a
+ * square picture: in the Call tab the tile is square at its width and held
+ * to two fifths of the stage's height, so a short window draws it wider,
+ * never past 16:9; on the call card it stays 16:9. The picture is never
+ * cut, and a blurred copy of it fills what it leaves. A box drawn at a
+ * ratio takes its content's height as its least height unless told
+ * otherwise, which grew the tile square around the video, so that least
+ * height is zero. jsdom lays nothing out, so the sheets are laid
+ * (`testing/container-width.ts`) and the tile is built in the markup
+ * `call-video-tile.tsx` draws, on each surface it stands on.
  */
 
 let laid: HTMLStyleElement | undefined;
@@ -29,7 +33,9 @@ function liveTile(parent: HTMLElement) {
   tile.dataset.status = "live";
   const frame = tile.appendChild(document.createElement("video"));
   frame.className = "call-video-frame";
-  return { tile, frame };
+  const fill = tile.appendChild(document.createElement("video"));
+  fill.className = "call-video-fill";
+  return { tile, frame, fill };
 }
 
 /** The Call tab's column and a call card in the sidebar, each holding a live tile. */
@@ -44,25 +50,45 @@ function surfaces() {
   return { tab: liveTile(tab), card: liveTile(card) };
 }
 
-test("the tile is a 16:9 picture whose least height is not its square stream's", () => {
+test("no tile takes its least height from the square stream inside it", () => {
   for (const { tile } of Object.values(surfaces())) {
-    const drawn = getComputedStyle(tile);
-    assert.equal(drawn.aspectRatio, "16 / 9");
-    assert.equal(drawn.minHeight, "0px");
+    assert.equal(getComputedStyle(tile).minHeight, "0px");
   }
 });
 
-test("the square stream is cut to the tile, held above its middle where the avatar's face is", () => {
-  for (const { frame } of Object.values(surfaces())) {
-    const drawn = getComputedStyle(frame);
-    assert.equal(drawn.objectFit, "cover");
-    assert.equal(drawn.objectPosition, "50% 35%");
-  }
-});
-
-test("the Call tab's tile follows the tab's width up to a widest of its own", () => {
+test("the Call tab's tile is square at its width, held to two fifths of the stage, and never wider than 16:9 at that height", () => {
   const { tab } = surfaces();
-  const width = getComputedStyle(tab.tile).width;
-  assert.match(width, /^min\(/u, "the tile follows the tab rather than standing at one width");
-  assert.match(width, /\b560px\b/u);
+  const drawn = getComputedStyle(tab.tile);
+  assert.equal(drawn.aspectRatio, "1 / 1");
+  assert.match(drawn.maxHeight, /--luke-stage-height\) \* 0\.4\)$/u);
+  assert.match(
+    drawn.width,
+    /^min\(/u,
+    "the tile follows the tab rather than standing at one width",
+  );
+  assert.match(drawn.width, /\b560px\b/u);
+  assert.match(drawn.width, /--luke-stage-height\) \* 0\.4 \* 16 \/ 9\)/u);
+});
+
+test("the call card's tile stays 16:9 at the card's width", () => {
+  const { card } = surfaces();
+  const drawn = getComputedStyle(card.tile);
+  assert.equal(drawn.aspectRatio, "16 / 9");
+  assert.equal(drawn.maxHeight, "none");
+});
+
+test("the picture is drawn whole, and a blurred copy fills the tile under it", () => {
+  for (const { tile, frame, fill } of Object.values(surfaces())) {
+    assert.equal(getComputedStyle(frame).objectFit, "contain");
+    const under = getComputedStyle(fill);
+    assert.equal(under.objectFit, "cover");
+    assert.equal(under.position, "absolute");
+    assert.equal(under.zIndex, "-1");
+    assert.match(under.filter, /blur\(/u);
+    assert.equal(
+      getComputedStyle(tile).isolation,
+      "isolate",
+      "the fill stands over the tile's ground",
+    );
+  }
 });
