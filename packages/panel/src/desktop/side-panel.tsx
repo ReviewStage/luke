@@ -2137,9 +2137,9 @@ export function SidePanel({
       ) : (
         // The Board is drawn on a canvas, which keeps a find of its own, and
         // a page's words stand in a sandboxed frame no find of the window
-        // reaches, so a page's tab finds in its source alone, itself; a
-        // Browser tab's page stands in a view of main's, which no find of the
-        // window reaches either.
+        // reaches, so a page's tab finds itself, through its frame or in its
+        // source; a Browser tab's page stands in a view of main's, which no
+        // find of the window reaches either.
         <FindScope
           className="side-panel-content"
           role="tabpanel"
