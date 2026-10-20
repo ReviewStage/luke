@@ -1907,6 +1907,12 @@ interface AgentPullRequestTabProps {
  */
 const HEADER_FOLD = { AT: 48, BACK: 8 } as const;
 
+/** Whether the header is folded, and what the tab's root hears its scrolls by. */
+interface HeaderFold {
+  readonly folded: boolean;
+  readonly onScrollCapture: (event: React.UIEvent<HTMLElement>) => void;
+}
+
 /**
  * Whether the header is folded to its title's one line, as the view under it
  * is scrolled down, and what the tab's root hears every scroll in it by. A
@@ -1915,10 +1921,7 @@ const HEADER_FOLD = { AT: 48, BACK: 8 } as const;
  * starts unfolded. It is held on every width, and only a narrow room's
  * stylesheet folds it (tasks.css), so the desktop's header stays put.
  */
-function useHeaderFold(view: PullRequestView): {
-  readonly folded: boolean;
-  readonly onScrollCapture: (event: React.UIEvent<HTMLElement>) => void;
-} {
+function useHeaderFold(view: PullRequestView): HeaderFold {
   const [fold, setFold] = useState<{ readonly view: PullRequestView; readonly folded: boolean }>({
     view,
     folded: false,
