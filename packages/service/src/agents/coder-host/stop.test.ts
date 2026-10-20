@@ -80,7 +80,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   nativeAgentAccounts: [],
-  agentSandboxSnapshot: undefined,
 };
 
 const WITH_SECRET = Layer.succeed(HostedEnvironment, {

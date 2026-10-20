@@ -41,7 +41,9 @@
  * Every call answers in eve's outcomes, so a caller holds one interface
  * whichever runtime answers. What fails here (Vercel, the store, GitHub, a
  * missing token or snapshot) answers `failed`, with the reason in the log
- * by its kind alone; nothing is retried.
+ * by its kind alone; nothing is retried. An image still being prepared
+ * (`agent-sandbox-image.ts`) answers `failed` with `IMAGE_PREPARING_STATUS`,
+ * for the caller to show and retry.
  */
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
@@ -72,7 +74,7 @@ import type { UserContent } from "ai";
 import { Data, DateTime, Duration, Effect, Option, Redacted, Result, Stream } from "effect";
 import { HostedEnvironment } from "../../environment.js";
 import { providerModelOf } from "../../providers/model-catalog.js";
-import { AgentSandboxImage } from "../agent-sandbox-image.js";
+import { AgentSandboxImage, IMAGE_PREPARING_STATUS } from "../agent-sandbox-image.js";
 import type { BrainHostTurn } from "../brain-host/bounds.js";
 import {
   type AgentSessions,
@@ -463,6 +465,14 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
         yield* api.writeFiles(sandbox.running, [
           { path: RUNNER_PATH.UPLOAD, contents: bundle, mode: 0o644 },
         ]);
+        // The launch's first event number is tagged before its command starts, so an END the
+        // launch it replaces posts late is told apart from this one's and stops nothing.
+        const firstSequence = yield* options.nextSequence(agent.conversationId);
+        yield* api.updateTags(sandbox.name, {
+          [SESSION_TAG]: sessionId,
+          [RUNNER_TAG.AGENT]: agent.id,
+          [RUNNER_TAG.FIRST_SEQUENCE]: String(firstSequence),
+        });
         const commandId = yield* api.start(sandbox.running, {
           command: "bash",
           args: ["-c", LAUNCH_SCRIPT, LAUNCH_NAME, digest],
@@ -473,7 +483,6 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
         // A runner started but never configured is ended, and its tags cleared, so the next
         // message relaunches whole rather than writing to a runner that waits for its config.
         yield* Effect.gen(function* () {
-          const firstSequence = yield* options.nextSequence(agent.conversationId);
           yield* api.updateTags(sandbox.name, {
             [SESSION_TAG]: sessionId,
             [RUNNER_TAG.AGENT]: agent.id,
@@ -490,6 +499,7 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
                 api.updateTags(sandbox.name, {
                   [SESSION_TAG]: sessionId,
                   [RUNNER_TAG.AGENT]: agent.id,
+                  [RUNNER_TAG.FIRST_SEQUENCE]: String(firstSequence),
                 }),
               ),
             ),
@@ -542,11 +552,13 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
         {
           outcome: EVE_SEND_OUTCOME.FAILED,
           status:
-            failure._tag === "LaunchRefused" || failure._tag === "RunnerBundleMissing"
-              ? FAILED_STATUS.REFUSED
-              : failure instanceof SandboxUnavailable
-                ? (failure.status ?? FAILED_STATUS.UNAVAILABLE)
-                : FAILED_STATUS.UNAVAILABLE,
+            failure._tag === "ImagePreparing"
+              ? IMAGE_PREPARING_STATUS
+              : failure._tag === "LaunchRefused" || failure._tag === "RunnerBundleMissing"
+                ? FAILED_STATUS.REFUSED
+                : failure instanceof SandboxUnavailable
+                  ? (failure.status ?? FAILED_STATUS.UNAVAILABLE)
+                  : FAILED_STATUS.UNAVAILABLE,
         } as const,
       );
 
@@ -735,8 +747,11 @@ export const runnerEnded = Effect.fn("web/claudeCodeRunnerEnded")(function* (end
   const api = yield* vercelSandboxApi(deploymentOidcToken);
   const found = yield* sandboxOf(api, ending.sessionId);
   if (Option.isNone(found)) return RUNNER_ENDED.STALE;
-  const runner = taggedRunner(found.value);
-  if (runner !== undefined && ending.sequence < runner.firstSequence) return RUNNER_ENDED.STALE;
+  // Read apart from the runner's other tags, which a launch writes only once its command started.
+  const firstSequence = Number(found.value.tags?.[RUNNER_TAG.FIRST_SEQUENCE]);
+  if (Number.isSafeInteger(firstSequence) && ending.sequence < firstSequence) {
+    return RUNNER_ENDED.STALE;
+  }
   const running = found.value.currentSessionId;
   if (found.value.status !== "running" || running === undefined) return RUNNER_ENDED.STALE;
   // Read last, just before the stop, so a developer who opened a Terminal during the turn keeps the sandbox.

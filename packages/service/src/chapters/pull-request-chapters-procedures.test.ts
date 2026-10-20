@@ -103,7 +103,6 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   nativeAgentAccounts: [],
-  agentSandboxSnapshot: undefined,
 };
 
 /** The one file the pull request changes, one hunk starting at old line 1. */

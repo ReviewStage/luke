@@ -1,0 +1,365 @@
+/**
+ * native-sandbox-template.ts -- Luke's own template of the coding agent's image, which a native harness's sandbox opens from: found, built once, snapshotted, and swept.
+ *
+ * eve prepares the coding agent's image into a snapshot of its own and hands
+ * no code of Luke's its id, so a sandbox Luke opens itself for Claude Code or
+ * Codex opens from a template Luke prepares from the same preparation
+ * (`agent-runtime/sandbox-image.ts`'s `prepareImage`) on eve's own base
+ * image, as eve's template is. The preparation is recorded rather than run:
+ * `prepareImage` is handed a session that keeps the files it writes and the
+ * commands it runs, and the template's key is the digest of all of it with
+ * the base image. So the key moves whenever `PREPARE_SCRIPT`, a pin in it,
+ * `prepareImage`, eve's tooling, or eve's image does, and is the same in
+ * every bundle that computes it, which a digest of a function's source would
+ * not be.
+ *
+ * The template is a persistent sandbox named for its key, and its name is
+ * the lock: of launches that find no template at once, Vercel lets one
+ * create it and refuses the rest with a 409, which wait for it. The one that
+ * created it uploads the recorded preparation and starts it as a detached
+ * command, so no function waits out a build that takes minutes; the
+ * command's id is kept in the template's tags. Whoever reads the template
+ * after that command exited 0 marks it built in a tag, then snapshots it;
+ * a template marked built, stopped, and holding a snapshot is ready, and
+ * that snapshot is the one a launch opens from. The mark is what tells a
+ * whole image apart, because a persistent sandbox also snapshots itself as
+ * it stops, a half-built one included, and only a reader that saw the build
+ * end well writes it. A snapshot stops the session it is taken of, so of
+ * readers racing to take it Vercel takes the first and refuses the rest,
+ * and a mark one of them writes over another's changes nothing. A preparation that failed is stopped and marked, and answers
+ * failed until a retry window passes, when it is deleted and built again; a
+ * template its builder left behind unstarted, or stopped unready, is
+ * deleted and built again at once.
+ *
+ * The scheduled sweep reads the template too, so a build finishes and is
+ * snapshotted whether or not a launch is waiting on it, and, where native
+ * agents are admitted at all, a new image's template is built before its
+ * first launch asks. It also deletes the templates of every other key, once
+ * they are old enough that a Preview of another image is done with its own.
+ */
+
+import { createHash } from "node:crypto";
+import { Clock, Data, Duration, Effect, Result } from "effect";
+import type { SandboxSession } from "eve/sandbox";
+import { prepareImage } from "./agent-runtime/sandbox-image.js";
+import { CODER } from "./coder-host/bounds.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "./repository-sandbox-contract.js";
+import {
+  deploymentOidcToken,
+  type ListedSandbox,
+  SandboxUnavailable,
+  type VercelSandboxApi,
+  vercelSandboxApi,
+} from "./vercel-sandbox-api.js";
+
+/**
+ * The image eve's own template starts from (eve 0.74.0's
+ * `resolveVercelEveSandboxImage`), which this one starts from too; it moves
+ * with eve's pin, and a test holds it to the installed eve.
+ */
+export const EVE_BASE_IMAGE = "vcr.vercel.com/vercel/eve/base:0.74.0";
+
+export const NATIVE_TEMPLATE = {
+  /** Every template's name starts with this, its key after it. */
+  NAME_PREFIX: "luke-native-template-",
+  /** How long a template's sandbox may run: a build is minutes, and one cut off is built again. */
+  BUILD_TIMEOUT: Duration.minutes(45),
+  /** How long a template may stand created with no build started before its builder is taken for gone. */
+  START_GRACE: Duration.minutes(5),
+  /** How long a failed preparation answers failed before it is built again. */
+  RETRY_AFTER: Duration.minutes(30),
+  /** How often a launch waiting on a build reads the template again. */
+  POLL: Duration.seconds(10),
+  /** How long a launch waits on a build before it answers that the image is still being prepared. */
+  WAIT: Duration.minutes(3),
+  /** How old another key's template must be before the sweep deletes it, so a Preview's lasts its testing. */
+  SWEEP_AFTER: Duration.days(1),
+} as const;
+
+/** The template's tags beside its key: where its build runs, and how the build ended. */
+const TEMPLATE_TAG = {
+  KEY: "lukeTemplate",
+  SESSION: "lukeTemplateSession",
+  BUILD: "lukeTemplateBuild",
+  /** Set, to the instant, once a reader found the build ended well, before it snapshots it. */
+  BUILT: "lukeTemplateBuilt",
+  FAILED_AT: "lukeTemplateFailedAt",
+} as const;
+
+/** Where the recorded preparation is uploaded and run from: the default user's own `/tmp`. */
+const BUILD_DIRECTORY = "/tmp/luke-template";
+
+/** Where eve's session resolves a relative path, as its template's preparation saw it. */
+const WORKSPACE = REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE;
+
+/**
+ * What eve's base setup does before it prepares a template: the workspace
+ * made, here owned by the default user, who writes the checkout into it.
+ */
+const BASE_SETUP = [
+  `if ! mkdir -p ${WORKSPACE} 2>/dev/null || [ ! -w ${WORKSPACE} ]; then`,
+  `  sudo -n install -d -o "$(id -u)" -g "$(id -g)" ${WORKSPACE}`,
+  "fi",
+].join("\n");
+
+export const TEMPLATE_STATE = {
+  READY: "ready",
+  PREPARING: "preparing",
+  FAILED: "failed",
+} as const;
+
+export type TemplateState =
+  | { readonly state: typeof TEMPLATE_STATE.READY; readonly snapshotId: string }
+  | { readonly state: typeof TEMPLATE_STATE.PREPARING }
+  | { readonly state: typeof TEMPLATE_STATE.FAILED };
+
+const PREPARING: TemplateState = { state: TEMPLATE_STATE.PREPARING };
+const FAILED: TemplateState = { state: TEMPLATE_STATE.FAILED };
+
+/** The preparation as recorded: the template's key, its name, and the files that run it. */
+export interface ImageBuild {
+  readonly key: string;
+  readonly name: string;
+  readonly files: readonly { readonly path: string; readonly contents: Uint8Array }[];
+  /** The script that runs the preparation, whose path the files hold. */
+  readonly entry: string;
+}
+
+/** `prepareImage` threw while it was being recorded, which a recording that answers every command as passed never makes it do. */
+export class ImageBuildUnrecorded extends Data.TaggedError("ImageBuildUnrecorded") {}
+
+/** The template's state where it is ready, preparing, or failed, or Vercel could not be asked. */
+type TemplateRead = Effect.Effect<TemplateState, SandboxUnavailable>;
+
+/** `prepareImage` run against a session that keeps what it is asked to do, and the files that do it again in a sandbox. */
+export const recordImageBuild = Effect.fn("web/recordImageBuild")(function* () {
+  const writes: { path: string; content: string }[] = [];
+  const commands: string[] = [];
+  const resolvePath = (path: string) => (path.startsWith("/") ? path : `${WORKSPACE}/${path}`);
+  const recording: Pick<SandboxSession, "resolvePath" | "writeTextFile" | "run"> = {
+    resolvePath,
+    writeTextFile: async (options) => {
+      writes.push({ path: resolvePath(options.path), content: String(options.content) });
+    },
+    run: async (options) => {
+      commands.push(options.command);
+      return { exitCode: 0, stdout: "", stderr: "" } as Awaited<ReturnType<SandboxSession["run"]>>;
+    },
+  };
+  yield* Effect.tryPromise({
+    // SAFETY: `prepareImage` and the code tooling it installs call only `resolvePath`,
+    // `writeTextFile` and `run` (eve 0.74.0's `installCodeTooling`), as `tools/codex-probe` relies on too.
+    try: () => prepareImage(recording as SandboxSession),
+    catch: () => new ImageBuildUnrecorded(),
+  });
+  const files = writes.map((write, index) => ({
+    path: `${BUILD_DIRECTORY}/file-${index}`,
+    contents: Buffer.from(write.content, "utf8"),
+  }));
+  const steps = commands.map((command, index) => ({
+    path: `${BUILD_DIRECTORY}/step-${index}.sh`,
+    contents: Buffer.from(command, "utf8"),
+  }));
+  // Each file is put where the preparation wrote it, then each command runs in order, as `prepareImage` ran them.
+  const entry = [
+    "set -e",
+    BASE_SETUP,
+    ...writes.map(
+      (write, index) =>
+        `mkdir -p "$(dirname '${write.path}')" && cp ${BUILD_DIRECTORY}/file-${index} '${write.path}'`,
+    ),
+    ...steps.map((step) => `bash ${step.path}`),
+  ].join("\n");
+  const digest = createHash("sha256").update(EVE_BASE_IMAGE).update("\0");
+  for (const write of writes)
+    digest.update(write.path).update("\0").update(write.content).update("\0");
+  for (const command of commands) digest.update(command).update("\0");
+  const key = digest.digest("hex").slice(0, 16);
+  const entryFile = { path: `${BUILD_DIRECTORY}/build.sh`, contents: Buffer.from(entry, "utf8") };
+  return {
+    key,
+    name: `${NATIVE_TEMPLATE.NAME_PREFIX}${key}`,
+    files: [...files, ...steps, entryFile],
+    entry: entryFile.path,
+  } satisfies ImageBuild;
+});
+
+/** The template created and its build started; a name another launch took first is that launch's build. */
+const startBuild = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
+  Effect.gen(function* () {
+    const created = yield* api
+      .createFromImage({
+        name: build.name,
+        image: EVE_BASE_IMAGE,
+        tags: { [TEMPLATE_TAG.KEY]: build.key },
+        timeoutMs: Duration.toMillis(NATIVE_TEMPLATE.BUILD_TIMEOUT),
+        vcpus: CODER.SANDBOX_VCPUS,
+      })
+      .pipe(
+        Effect.map((sandbox): ListedSandbox | undefined => sandbox),
+        Effect.catchIf(
+          (failure) => failure.status === CONFLICT_STATUS,
+          () => Effect.succeed(undefined),
+        ),
+      );
+    if (created === undefined) return PREPARING;
+    yield* Effect.gen(function* () {
+      const running = created.currentSessionId;
+      if (running === undefined) return yield* new SandboxUnavailable({});
+      yield* api.writeFiles(
+        running,
+        build.files.map((file) => ({ ...file, mode: 0o644 })),
+      );
+      const commandId = yield* api.start(running, {
+        command: "bash",
+        args: [build.entry],
+        sudo: false,
+      });
+      yield* api.updateTags(build.name, {
+        [TEMPLATE_TAG.KEY]: build.key,
+        [TEMPLATE_TAG.SESSION]: running,
+        [TEMPLATE_TAG.BUILD]: commandId,
+      });
+      yield* Effect.logInfo(`the native agents' image ${build.key} is being prepared`);
+    }).pipe(Effect.tapError(() => Effect.ignore(api.deleteSandbox(build.name))));
+    return PREPARING;
+  });
+
+/** Vercel's refusal of a name already taken. */
+const CONFLICT_STATUS = 409;
+
+/** The template deleted, and built again from nothing. */
+const rebuild = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
+  Effect.andThen(api.deleteSandbox(build.name), startBuild(api, build));
+
+/** Whether the instant the tag holds is longer ago than the bound. */
+function olderThan(now: number, at: number | undefined, bound: Duration.Duration): boolean {
+  return at !== undefined && Number.isFinite(at) && now - at >= Duration.toMillis(bound);
+}
+
+/**
+ * The template read once and moved on as far as one read moves it: built
+ * where there is none, snapshotted where its build ended well, marked where
+ * it ended badly, and built again where it was left behind.
+ */
+export const advanceTemplate = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
+  Effect.gen(function* () {
+    const found = yield* api.getNamed(build.name);
+    if (found === undefined) return yield* startBuild(api, build);
+    const tags = found.tags ?? {};
+    const built = tags[TEMPLATE_TAG.BUILT] !== undefined;
+    // Any snapshot taken once the build ended well holds the whole image, and a stopped
+    // template's current snapshot is the last one taken.
+    if (built && found.status === "stopped" && found.currentSnapshotId !== undefined) {
+      return { state: TEMPLATE_STATE.READY, snapshotId: found.currentSnapshotId } as const;
+    }
+    const now = yield* Clock.currentTimeMillis;
+    const failedAt = tags[TEMPLATE_TAG.FAILED_AT];
+    if (failedAt !== undefined) {
+      return olderThan(now, Number(failedAt), NATIVE_TEMPLATE.RETRY_AFTER)
+        ? yield* rebuild(api, build)
+        : FAILED;
+    }
+    const session = tags[TEMPLATE_TAG.SESSION];
+    const commandId = tags[TEMPLATE_TAG.BUILD];
+    const running = found.status === "running" && found.currentSessionId === session;
+    if (session === undefined || commandId === undefined) {
+      // Its builder is still uploading, or never got as far as starting the build.
+      return found.status === "running" &&
+        !olderThan(now, found.createdAt, NATIVE_TEMPLATE.START_GRACE)
+        ? PREPARING
+        : yield* rebuild(api, build);
+    }
+    if (!running) {
+      // A snapshot under way stops the session; anything else stopped unready was left behind.
+      return found.status === "snapshotting" || found.status === "stopping"
+        ? PREPARING
+        : yield* rebuild(api, build);
+    }
+    const exit = yield* api.commandExit(session, commandId);
+    if (exit === null) return PREPARING;
+    if (exit !== 0) {
+      yield* Effect.logWarning(
+        `the native agents' image ${build.key} failed to prepare (exit ${exit})`,
+      );
+      yield* api.updateTags(build.name, { ...tags, [TEMPLATE_TAG.FAILED_AT]: String(now) });
+      yield* Effect.ignore(api.stopSession(session));
+      return FAILED;
+    }
+    // The mark goes up before the snapshot, so the snapshot it leaves is known for a whole image
+    // and one Vercel took of a sandbox it stopped mid-build never is. Of readers racing here,
+    // Vercel snapshots for the first and refuses the rest, which read on and find it ready.
+    yield* api.updateTags(build.name, { ...tags, [TEMPLATE_TAG.BUILT]: String(now) });
+    const taken = yield* Effect.result(api.snapshot(session));
+    if (Result.isFailure(taken)) return PREPARING;
+    yield* Effect.logInfo(`the native agents' image ${build.key} is ready`);
+    return { state: TEMPLATE_STATE.READY, snapshotId: taken.success } as const;
+  });
+
+/**
+ * The template as a launch waits on it: read every `POLL` while it is
+ * being prepared, for at most `WAIT`, and answered as it then stands.
+ */
+export const awaitTemplate = (api: VercelSandboxApi, build: ImageBuild): TemplateRead =>
+  Effect.gen(function* () {
+    const reads = Math.floor(
+      Duration.toMillis(NATIVE_TEMPLATE.WAIT) / Duration.toMillis(NATIVE_TEMPLATE.POLL),
+    );
+    let read = yield* advanceTemplate(api, build);
+    for (let waited = 0; read.state === TEMPLATE_STATE.PREPARING && waited < reads; waited += 1) {
+      yield* Effect.sleep(NATIVE_TEMPLATE.POLL);
+      read = yield* advanceTemplate(api, build);
+    }
+    return read;
+  });
+
+/** What one sweep of the templates came to: the current one's state where it was read, and how many others went. */
+export interface TemplateSweepOutcome {
+  readonly current: TemplateState["state"] | "unread";
+  readonly deleted: number;
+}
+
+/**
+ * The sweep's turn at the templates: the current one moved on, where native
+ * agents are admitted at all, and every other key's deleted once it is old
+ * enough, with the snapshots only it kept.
+ */
+export const sweepTemplates = (
+  api: VercelSandboxApi,
+  build: ImageBuild,
+  advance: boolean,
+): Effect.Effect<TemplateSweepOutcome, SandboxUnavailable> =>
+  Effect.gen(function* () {
+    const current = advance ? (yield* advanceTemplate(api, build)).state : "unread";
+    const now = yield* Clock.currentTimeMillis;
+    const listed = yield* api.listNamed(NATIVE_TEMPLATE.NAME_PREFIX);
+    let deleted = 0;
+    for (const sandbox of listed) {
+      if (sandbox.name === build.name || !sandbox.name.startsWith(NATIVE_TEMPLATE.NAME_PREFIX))
+        continue;
+      if (!olderThan(now, sandbox.createdAt, NATIVE_TEMPLATE.SWEEP_AFTER)) continue;
+      yield* api.deleteSandbox(sandbox.name);
+      deleted += 1;
+    }
+    return { current, deleted };
+  });
+
+/**
+ * The scheduled sweep's turn, over the deployment's own credentials: a
+ * Vercel that could not be asked is logged by its status alone and left for
+ * the next minute's sweep.
+ */
+export const sweepNativeTemplates = Effect.fn("web/sweepNativeTemplates")(function* (
+  advance: boolean,
+) {
+  const api = yield* vercelSandboxApi(deploymentOidcToken);
+  const build = yield* Effect.orDie(recordImageBuild());
+  return yield* sweepTemplates(api, build, advance).pipe(
+    Effect.catch((failure) =>
+      Effect.as(
+        Effect.logWarning(`the native agents' templates were not swept: ${failure.message}`),
+        { current: "unread", deleted: 0 } satisfies TemplateSweepOutcome,
+      ),
+    ),
+  );
+});

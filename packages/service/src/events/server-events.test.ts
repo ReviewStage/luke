@@ -26,7 +26,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   nativeAgentAccounts: [],
-  agentSandboxSnapshot: undefined,
 };
 
 interface Posted {
