@@ -14,8 +14,10 @@ import { Schema as EffectSchema } from "effect";
  * in the frame (`page-pane.tsx`).
  *
  * The panel posts a search, a step, or a clear to the frame; the frame posts
- * back its tally after each, and again as its text changes, and the words
- * selected in it as the selection changes, which ⌘F seeds the field with.
+ * back its tally after each, and again as its text changes, the words
+ * selected in it as the selection changes, which ⌘F seeds the field with,
+ * and ⌘F, ⌘G, and ⇧⌘G pressed in it, which no key pressed in a frame
+ * otherwise brings to the window's keymap.
  * The script runs among the page's own, so whatever the frame posts is the
  * page's word, not Luke's: the panel takes a message only from the frame it
  * drew and only in the shape below, and what it takes is a count and a
@@ -30,6 +32,17 @@ export const PAGE_FIND_ACT = {
   SEARCH: "search",
   STEP: "step",
   CLEAR: "clear",
+} as const;
+
+/**
+ * The find chords the frame hears pressed in the page and hands the panel,
+ * since a key pressed in a frame never reaches the window's own keymap:
+ * ⌘F, ⌘G, and ⇧⌘G.
+ */
+export const PAGE_FIND_KEY = {
+  FIND: "find",
+  NEXT: "next",
+  PREVIOUS: "previous",
 } as const;
 
 /** The longest selection the frame hands the panel to seed the field with. */
@@ -64,6 +77,10 @@ export const pageFindAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({
     type: EffectSchema.Literal(PAGE_FIND_TYPE),
     selection: EffectSchema.String.check(EffectSchema.isMaxLength(PAGE_FIND_SELECTION_CHARS)),
+  }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(PAGE_FIND_TYPE),
+    key: EffectSchema.Literals(Object.values(PAGE_FIND_KEY)),
   }),
 ]);
 
@@ -227,6 +244,19 @@ const PAGE_FIND_SCRIPT = `(() => {
       tally();
     }
   });
+
+  // A find chord is the panel's, as it is anywhere else in the window: the page never sees it.
+  addEventListener("keydown", (event) => {
+    if (!event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+    const letter = event.key.toLowerCase();
+    const key = letter === "f" && !event.shiftKey ? ${JSON.stringify(PAGE_FIND_KEY.FIND)}
+      : letter === "g" ? (event.shiftKey ? ${JSON.stringify(PAGE_FIND_KEY.PREVIOUS)} : ${JSON.stringify(PAGE_FIND_KEY.NEXT)})
+      : undefined;
+    if (key === undefined) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    post({ key });
+  }, true);
 
   document.addEventListener("selectionchange", () => {
     post({ selection: String(getSelection() ?? "").slice(0, MAX_SELECTION) });

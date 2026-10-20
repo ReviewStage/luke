@@ -265,6 +265,37 @@ it.effect("a query with the characters of a pattern is found as it is typed", ()
   }),
 );
 
+it.effect(
+  "⌘F, ⌘G, and ⇧⌘G pressed in the page are handed to the panel, and the page never sees them; ⌘C stays the page's",
+  () =>
+    Effect.gen(function* () {
+      const { frame, posted } = yield* draw(FUNNEL);
+      const framed = frame.contentWindow ?? assert.fail();
+      const seen: string[] = [];
+      framed.addEventListener("keydown", (event) => seen.push(event.key));
+      const press = (key: string, shiftKey = false) => {
+        const event = new KeyboardEvent("keydown", {
+          key,
+          metaKey: true,
+          shiftKey,
+          bubbles: true,
+          cancelable: true,
+        });
+        frame.contentDocument?.body.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+
+      const kept = [press("f"), press("g"), press("G", true), press("c")];
+
+      assert.deepEqual(kept, [true, true, true, false]);
+      assert.deepEqual(seen, ["c"]);
+      assert.deepEqual(
+        posted.flatMap((message) => ("key" in message ? [message.key] : [])),
+        ["find", "next", "previous"],
+      );
+    }),
+);
+
 it.effect("an ask from anything but the window that framed the page is not heard", () =>
   Effect.gen(function* () {
     const { ask, posted } = yield* draw(FUNNEL);

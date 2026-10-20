@@ -50,7 +50,7 @@ function sourceOf(version: number): CodeLines {
 const readSource: ReadPageSource = (version) => Promise.resolve({ lines: sourceOf(version) });
 
 /** Mounts the pane over the page as the task lists it, answering what it draws and a way to list it again. */
-function mount(page: PageLine, read: ReadPageSource = readSource) {
+function mount(page: PageLine, read: ReadPageSource = readSource, findActive = true) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -58,7 +58,7 @@ function mount(page: PageLine, read: ReadPageSource = readSource) {
   const render = (listed: PageLine) =>
     act(() =>
       root.render(
-        createElement(PagePane, { taskId: TASK, page: listed, readSource: read, findActive: true }),
+        createElement(PagePane, { taskId: TASK, page: listed, readSource: read, findActive }),
       ),
     );
   render(page);
@@ -277,6 +277,40 @@ test("a frame that loads again, as a Reload or another version does, is asked ag
   });
 
   assert.deepEqual(posted, [{ type: "luke-page-find", act: "search", query: "invites" }]);
+});
+
+test("⌘F and ⌘G pressed in the page, which the window's keys never hear, open the find over it and step, whichever column held the keys", () => {
+  const { frame } = mount(FUNNEL, readSource, false);
+  const posted = framePosts(frame());
+
+  postFrom(frame().contentWindow, { type: "luke-page-find", selection: "funnel" });
+  postFrom(frame().contentWindow, { type: "luke-page-find", key: "find" });
+  postFrom(frame().contentWindow, { type: "luke-page-find", key: "next" });
+
+  const field = document.querySelector<HTMLInputElement>(
+    'search.find-bar input[aria-label="Find"]',
+  );
+  assert.equal(field?.value, "funnel");
+  assert.deepEqual(posted, [
+    { type: "luke-page-find", act: "search", query: "funnel" },
+    { type: "luke-page-find", act: "step", query: "funnel", by: 1 },
+  ]);
+});
+
+test("a click into the page, which stirs only the window's blur, is told as a focus in the tab, which hands its column the keys", () => {
+  const { container, frame } = mount(FUNNEL);
+  // Note that jsdom tells a focus moved into a frame itself, which Chromium's click does not.
+  act(() => frame().focus());
+  const heard: EventTarget[] = [];
+  container.addEventListener("focusin", (event) => {
+    if (event.target !== null) heard.push(event.target);
+  });
+
+  act(() => {
+    window.dispatchEvent(new FocusEvent("blur"));
+  });
+
+  assert.deepEqual(heard, [frame()]);
 });
 
 test("⌘F over the source finds in its lines, the window's own, rather than through the frame", async () => {
