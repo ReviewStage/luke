@@ -94,21 +94,34 @@ function ownPath(address: string): string | undefined {
   return url.origin === location.origin ? `${url.pathname}${url.search}${url.hash}` : undefined;
 }
 
+/**
+ * This tab's session storage, or nothing where the browser blocks the site's
+ * storage, as it does for a site whose storage the person turned off: reading
+ * the property then throws, and a connect simply keeps nothing in the tab.
+ */
+function tabSession(): Storage | undefined {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 /** The address a same-tab connect left, where it is this origin's and its connect is not yet abandoned. */
 function leftAddress(): string | undefined {
-  const left = decodeLeft(sessionStorage.getItem(RETURN_KEY) ?? "");
+  const left = decodeLeft(tabSession()?.getItem(RETURN_KEY) ?? "");
   if (Option.isNone(left) || Date.now() - left.value.at > CONNECT_BOUND_MS) return undefined;
   return ownPath(left.value.address);
 }
 
 /** The hand-off this tab was marked with, where the app opened it for a connect. */
 function markedHandoff(): string | undefined {
-  return sessionStorage.getItem(HANDOFF_KEY) ?? undefined;
+  return tabSession()?.getItem(HANDOFF_KEY) ?? undefined;
 }
 
 /** Keeps the address the app's tab leaves from, for the landing page it comes back through. */
 export function rememberReturn(address: string): void {
-  sessionStorage.setItem(RETURN_KEY, JSON.stringify({ address, at: Date.now() }));
+  tabSession()?.setItem(RETURN_KEY, JSON.stringify({ address, at: Date.now() }));
 }
 
 /**
@@ -130,8 +143,9 @@ export function markHandoff(
 
 /** Lets go of what a connect left in this tab, the address it left from and the hand-off it was marked as, as the app does once it stands in the tab again. */
 export function forgetReturn(): void {
-  sessionStorage.removeItem(RETURN_KEY);
-  sessionStorage.removeItem(HANDOFF_KEY);
+  const session = tabSession();
+  session?.removeItem(RETURN_KEY);
+  session?.removeItem(HANDOFF_KEY);
 }
 
 /** How this landing page goes back to Luke before any tab has answered. */

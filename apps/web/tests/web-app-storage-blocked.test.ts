@@ -8,8 +8,9 @@ import { fakeService } from "./support/fake-service";
 
 /**
  * The web app's root in a browser that blocks the site's storage, where
- * reading `localStorage` throws a `SecurityError`: the host keeps its files
- * in memory and the panel still draws its sign-in, rather than a blank tab.
+ * reading `localStorage` or `sessionStorage` throws a `SecurityError`: the
+ * host keeps its files in memory, a connect keeps nothing in the tab, and the
+ * panel still draws its sign-in, rather than a blank tab.
  * One mount per file, because the panel's state read is the tab's once.
  */
 
@@ -21,9 +22,11 @@ afterEach(async () => {
 });
 
 test("with the site's storage blocked, the tab still draws the sign-in", async () => {
-  vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+  const blocked = () => {
     throw new DOMException("The operation is insecure.", "SecurityError");
-  });
+  };
+  vi.spyOn(window, "localStorage", "get").mockImplementation(blocked);
+  vi.spyOn(window, "sessionStorage", "get").mockImplementation(blocked);
   vi.spyOn(console, "warn").mockImplementation(() => undefined);
   const service = fakeService({ signedIn: false });
   const root = document.createElement("div");
