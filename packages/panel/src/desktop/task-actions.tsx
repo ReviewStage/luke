@@ -354,13 +354,13 @@ const ARCHIVE_ASKED: ActionResult = { status: ACTION_RESULT_STATUS.ACCEPTED };
 
 /**
  * One task's menu and its archive and delete questions, held for whichever door offers
- * them. Neither outlives the tab going off screen, the menu does not
+ * them: the sidebar's row, the toolbar's ⋯, and a Board card. Neither outlives the tab going off screen, the menu does not
  * outlive its door, and the question does not outlive the task: each is
  * taken down in the render that finds it gone, so neither is left standing
  * over another surface, over a task deleted elsewhere, or waiting for the
  * next time the panel opens.
  */
-function useTaskMenu(
+export function useTaskMenu(
   tasks: TasksControl,
   taskId: string,
   name: string,
@@ -384,7 +384,7 @@ function useTaskMenu(
   };
   const moving = useMoveTaskDialog(tasks, task);
   const copy = useCopyToast();
-  const { open, drawn, close, trigger, contextMenu } = useMenu(tasks.shown && doors.drawn);
+  const { open, drawn, close, trigger, contextMenu, keyMenu } = useMenu(tasks.shown && doors.drawn);
   // The place the row stands in a list that reorders, which the menu moves it from under a finger; none for the toolbar's ⋯.
   const place = useRowPlace();
   // Note that an archived task stands in no section, so it is offered none until it is brought back.
@@ -431,7 +431,17 @@ function useTaskMenu(
       {sections.dialog}
     </>
   );
-  return { deletion, archive, open: open !== undefined, close, trigger, contextMenu, menu, dialog };
+  return {
+    deletion,
+    archive,
+    open: open !== undefined,
+    close,
+    trigger,
+    contextMenu,
+    keyMenu,
+    menu,
+    dialog,
+  };
 }
 
 /**

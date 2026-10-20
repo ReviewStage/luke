@@ -1,13 +1,18 @@
 import {
+  TASK_BOUNDS,
+  TASK_PRIORITY_ORDER,
   TASK_STATUS,
   TASK_STATUS_ORDER,
+  type TaskStanding,
   type TaskStatus,
   type TaskSummary,
 } from "@luke/features/task-wire";
 import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
+  BUTTON_SIZE,
   CHIP_LOOK,
+  CHIP_SIZE,
   CHOICE_BAR_LOOK,
   Chip,
   ChipName,
@@ -15,9 +20,13 @@ import {
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
+  dropBelowStart,
+  EllipsisIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
   ErrorState,
+  IconButton,
+  InlineEdit,
   PAGE_FRAME,
   PAGE_WIDTH,
   SCROLL_FADE,
@@ -29,33 +38,44 @@ import {
   TEXT_TONE,
   TEXT_VARIANT,
   Text,
+  useMenu,
 } from "@luke/ui";
 import { creatorActor } from "@luke/ui/actor-model";
 import { type TaskBoardColumn, taskBoardColumns } from "@luke/ui/task-list-model";
+import { RENAME_FAILED_NOTE } from "@luke/ui/tasks-model";
+import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { Schema } from "effect";
 import { SquareKanbanIcon } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { TASK_STATUS_WORDS, TaskStatusPicker } from "../tasks/task-standing.js";
+import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { useReadMarks } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
+import { Tooltip } from "../tooltip.js";
+import { ActionMenu } from "./action-menu.js";
 import { readKept, writeKept } from "./folded-groups.js";
+import { useTaskMenu } from "./task-actions.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
  * tasks-board.tsx -- the window's Board: the listed workspace's tasks on a column for each status, in the order work moves through them.
  *
  * It stands in the plan's place beside the sidebar, as Factory does, and its
- * sidebar row is marked while it does. A column is boxed and headed by its
- * status's mark, its name, and how many tasks stand in it, and scrolls its own cards, the most pressing first. A card
- * is a row of the sidebar's own on two lines: its priority's mark, its key,
- * and its creator's face over its whole name. A press opens the task. A
- * card dragged onto another column is sent that column's status, as the
- * task page's Status chip sends it, and stands where it was until the list
- * read again says otherwise; a change the service did not keep says so.
+ * sidebar row is marked while it does. A column is a quiet well headed by
+ * its status's mark, its name, and how many tasks stand in it, and scrolls
+ * its own cards, the most pressing first. A card is raised off the well:
+ * its key and its creator's face over its whole name, and at its foot the
+ * chips that change its priority and its status where it stands, its
+ * repository, and a ⋯ dropping the task's own menu, the sidebar row's, which
+ * a right-click drops too and whose Rename makes the card's name its field.
+ * A press anywhere else opens the task. A card dragged onto another column
+ * is sent that column's status, as the task page's Status chip sends it,
+ * and stands where it was until the list read again says otherwise; a
+ * change the service did not keep says so, whether dragged or picked.
  * Backlog, Todo, In progress, and Done stand at first; Canceled is a filter
  * of the toolbar's, kept on this Mac as the sidebar's view is
  * (`folded-groups.ts`). A task archived is off the board, as it is off the
@@ -66,8 +86,8 @@ import { useRowDrag } from "./use-row-drag.js";
  * A narrow room, a phone's, has no width for columns side by side, nor a
  * second column in sight to drag a card onto: it stands one column at a
  * time across the whole page, chosen by a tab for each status above it
- * (Todo at first), and each card wears the task page's own Status chip,
- * whose pick sends the task that status, so a card moves without a drag.
+ * (Todo at first), and each card's Status chip says its status in words,
+ * since its pick is how a card moves there without a drag.
  */
 
 /** The columns the board stands before Canceled is asked for. */
@@ -102,53 +122,205 @@ function boardState(tasks: TasksControl, empty: boolean): CollectionState {
   return empty ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
 }
 
+/** A repository's own name, without its owner, as a card has room for. */
+function repositoryName(repository: string): string {
+  return repository.slice(repository.indexOf("/") + 1);
+}
+
 /** The column a narrow board shows first: where a task starts. */
 const FIRST_SHOWN: TaskStatus = TASK_STATUS.TODO;
 
 /** What the tabs choosing a narrow board's column are called, to a screen reader. */
 const COLUMN_TABS = "Status";
 
+/** A card's chip that names one of a task's standings by its mark and drops the menu that changes it, each value with its mark, the one standing checked. */
+function CardStandingChip<T extends string>({
+  label,
+  value,
+  order,
+  words,
+  mark,
+  named,
+  onPick,
+}: {
+  /** What it changes, Status or Priority, which its tooltip and its menu say before the value. */
+  label: string;
+  value: T;
+  order: readonly T[];
+  words: Readonly<Record<T, string>>;
+  mark: (value: T) => React.JSX.Element;
+  /** Whether it says its value in words beside its mark, as on a phone, where it is how a card moves. */
+  named: boolean;
+  onPick: (value: T) => void;
+}): React.JSX.Element {
+  const { drawn, close, trigger } = useMenu(true);
+  const name = `${label}: ${words[value]}`;
+  return (
+    <>
+      <Tooltip label={name}>
+        <Chip
+          look={CHIP_LOOK.FIELD}
+          size={CHIP_SIZE.COMPACT}
+          iconOnly={!named}
+          aria-label={name}
+          {...trigger(dropBelowStart)}
+        >
+          {mark(value)}
+          <ChipName>{words[value]}</ChipName>
+        </Chip>
+      </Tooltip>
+      {drawn === undefined ? null : (
+        <ActionMenu
+          label={label}
+          menu={drawn}
+          groups={[
+            order.map((each) => ({
+              label: words[each],
+              icon: mark(each),
+              checked: each === value,
+              onSelect: () => {
+                if (each !== value) onPick(each);
+              },
+            })),
+          ]}
+          onClose={close}
+        />
+      )}
+    </>
+  );
+}
+
 /**
- * One task's card: its priority, key, and creator's face over its name, one
- * press that opens it; in a narrow room, its Status chip under them, a pick
- * of which is sent as the task's status.
+ * One task's card: its key and its creator's face over its name, one press
+ * that opens it, and at its foot the chips that change it where it stands,
+ * its priority and its status, its repository, and the ⋯ dropping the
+ * task's own menu, which a right-click opens too. Renamed from that menu,
+ * its name is its field until the edit ends. On a phone the status chip
+ * says its status in words, since it is how a card moves there.
  */
 function TaskBoardCard({
+  tasks,
   task,
   workspaceName,
+  narrow,
   onOpen,
-  onStatus,
+  onStanding,
 }: {
+  tasks: TasksControl;
   task: TaskSummary;
   workspaceName: string;
+  narrow: boolean;
   onOpen: () => void;
-  /** Present in a narrow room alone, where a card moves by its chip rather than a drag. */
-  onStatus: ((status: TaskStatus) => void) | undefined;
+  onStanding: (standing: TaskStanding) => void;
 }): React.JSX.Element {
   const creator = creatorActor(task, useMemberDirectory(), undefined);
-  return (
-    <li className="sidebar-task-item home-row factory-row" data-task-id={task.id}>
-      <button type="button" className="sidebar-task" onClick={onOpen}>
-        <span className="sidebar-task-line">
-          {task.priority === undefined ? null : <TaskPriorityMark priority={task.priority} />}
-          {task.number === undefined ? null : (
-            <span className="tasks-board-key">{taskKey(workspaceName, task.number)}</span>
-          )}
-          <span className="tasks-board-face">
-            <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
-          </span>
-        </span>
-        <span className="sidebar-task-name tasks-board-name">{task.name}</span>
-      </button>
-      {onStatus === undefined ? null : (
-        <div className="tasks-board-card-status">
-          <TaskStatusPicker
-            label={`Status of ${task.name}`}
-            status={task.status ?? FIRST_SHOWN}
-            onPick={onStatus}
-          />
-        </div>
+  const reads = useReadMarks();
+  const rename = useInlineRename(task.id, tasks.onRenameTask);
+  const actions = useTaskMenu(tasks, task.id, task.name, {
+    rename: rename.begin,
+    drawn: true,
+    unread: reads.markedUnread(task.id),
+  });
+  const press = useRef<HTMLButtonElement | null>(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (rename.editing || !refocus.current) return;
+    refocus.current = false;
+    press.current?.focus();
+  }, [rename.editing]);
+  const head = (
+    <span className="tasks-board-card-head">
+      {task.number === undefined ? null : (
+        <span className="tasks-board-key">{taskKey(workspaceName, task.number)}</span>
       )}
+      <span className="tasks-board-face">
+        <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+      </span>
+    </span>
+  );
+  return (
+    <li
+      className="tasks-board-card"
+      data-task-id={task.id}
+      data-menu-open={actions.open ? "true" : undefined}
+      data-editing={rename.editing ? "true" : undefined}
+    >
+      {rename.editing ? (
+        <div className="tasks-board-card-press">
+          {head}
+          <span className="tasks-board-name">
+            <InlineEdit
+              value={task.name}
+              label="Task name"
+              maxLength={TASK_BOUNDS.MAX_NAME_CHARS}
+              editing
+              onEnd={(edit) => {
+                refocus.current = edit.byKey;
+                void rename.end(edit.value);
+              }}
+            />
+          </span>
+        </div>
+      ) : (
+        <button
+          ref={press}
+          type="button"
+          className="tasks-board-card-press"
+          disabled={actions.deletion.busy}
+          onClick={() => {
+            actions.close(false);
+            onOpen();
+          }}
+          onKeyDown={actions.keyMenu}
+          {...actions.contextMenu(press)}
+        >
+          {head}
+          <span className="tasks-board-name">{task.name}</span>
+        </button>
+      )}
+      {rename.refused ? (
+        <span className="tasks-board-card-note" role="alert">
+          {RENAME_FAILED_NOTE}
+        </span>
+      ) : null}
+      <div className="tasks-board-card-foot">
+        {task.priority === undefined ? null : (
+          <CardStandingChip
+            label="Priority"
+            value={task.priority}
+            order={TASK_PRIORITY_ORDER}
+            words={TASK_PRIORITY_WORDS}
+            mark={(priority) => <TaskPriorityMark priority={priority} />}
+            named={false}
+            onPick={(priority) => onStanding({ priority })}
+          />
+        )}
+        <CardStandingChip
+          label="Status"
+          value={task.status ?? FIRST_SHOWN}
+          order={TASK_STATUS_ORDER}
+          words={TASK_STATUS_WORDS}
+          mark={(status) => <TaskStatusMark status={status} />}
+          named={narrow}
+          onPick={(status) => onStanding({ status })}
+        />
+        {task.repository === null ? null : (
+          <span className="tasks-board-repository">{repositoryName(task.repository)}</span>
+        )}
+        <span className="tasks-board-card-more">
+          <Tooltip label="Task actions">
+            <IconButton
+              icon={<EllipsisIcon />}
+              label={`Actions for ${task.name}`}
+              size={BUTTON_SIZE.COMPACT}
+              disabled={actions.deletion.busy}
+              {...actions.trigger()}
+            />
+          </Tooltip>
+        </span>
+      </div>
+      {actions.menu}
+      {actions.dialog}
     </li>
   );
 }
@@ -159,27 +331,29 @@ function TaskBoardCard({
  * another; dropped there, a card's task is sent that column's status.
  */
 function TaskBoardColumnView({
+  tasks,
   column,
   workspaceName,
   narrow,
   panelId,
   onOpen,
-  onStatus,
+  onStanding,
 }: {
+  tasks: TasksControl;
   column: TaskBoardColumn;
   workspaceName: string;
   /** Whether the room is a phone's: the column stands alone, as its tab's panel, its cards moved by their chips, not dragged. */
   narrow: boolean;
   panelId: string;
   onOpen: (task: TaskSummary) => void;
-  onStatus: (task: TaskSummary, status: TaskStatus) => void;
+  onStanding: (task: TaskSummary, standing: TaskStanding) => void;
 }): React.JSX.Element {
   const drag = useRowDrag(undefined, {
     onDropOut: (from, zone) => {
       const task = column.tasks[from];
       const status = TASK_STATUS_ORDER.find((each) => each === zone);
       if (task === undefined || status === undefined || status === task.status) return;
-      onStatus(task, status);
+      onStanding(task, { status });
     },
   });
   const words = TASK_STATUS_WORDS[column.status];
@@ -213,17 +387,16 @@ function TaskBoardColumnView({
             size={narrow ? SCROLL_SIZE.FILL : SCROLL_SIZE.CONTENT}
             fade={SCROLL_FADE.BOTH}
           >
-            <ul
-              className="sidebar-tasks tasks-board-cards"
-              onPointerDown={narrow ? undefined : drag}
-            >
+            <ul className="tasks-board-cards" onPointerDown={narrow ? undefined : drag}>
               {column.tasks.map((task) => (
                 <TaskBoardCard
                   key={task.id}
+                  tasks={tasks}
                   task={task}
                   workspaceName={workspaceName}
+                  narrow={narrow}
                   onOpen={() => onOpen(task)}
-                  onStatus={narrow ? (status) => onStatus(task, status) : undefined}
+                  onStanding={(standing) => onStanding(task, standing)}
                 />
               ))}
             </ul>
@@ -272,8 +445,8 @@ export function TasksBoard({
     </div>
   ) : null;
   const workspaceName = tasks.workspace?.name ?? "";
-  const setStatus = (task: TaskSummary, status: TaskStatus) => {
-    void tasks.onSetTaskStanding(task.id, { status }).then((kept) => {
+  const setStanding = (task: TaskSummary, standing: TaskStanding) => {
+    void tasks.onSetTaskStanding(task.id, standing).then((kept) => {
       if (!kept) toast({ words: UNCHANGED_LINE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
     });
   };
@@ -323,12 +496,13 @@ export function TasksBoard({
             (column) => (
               <TaskBoardColumnView
                 key={column.status}
+                tasks={tasks}
                 column={column}
                 workspaceName={workspaceName}
                 narrow={narrow}
                 panelId={panelId}
                 onOpen={(task) => tasks.onSelect(task.id)}
-                onStatus={setStatus}
+                onStanding={setStanding}
               />
             ),
           )}
