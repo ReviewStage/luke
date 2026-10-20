@@ -138,7 +138,7 @@ export function CallCard({
   leaving?: boolean;
   onLeft?: () => void;
 }): React.JSX.Element {
-  const [title, clipped] = useClipped();
+  const [title, clipped] = useClipped(card.taskName);
   const inWindow = surface === CALL_CARD_SURFACE.WINDOW;
   const name = (
     <span className="call-card-task" ref={title} data-overflow={clipped}>

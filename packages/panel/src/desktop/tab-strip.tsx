@@ -413,7 +413,7 @@ export function Tab({
 }): React.JSX.Element {
   // Whether the label is cut short: a label renamed, or the task's one tab
   // giving way to its toolbar.
-  const [words, clipped] = useClipped();
+  const [words, clipped] = useClipped(detail === undefined ? label : `${label} ${detail}`);
   // Note that a tab other than the chosen one is named in its hint whether or
   // not its label shows, because a narrow strip draws it as its glyph alone
   // (desktop.css), which the label's own measure cannot see.

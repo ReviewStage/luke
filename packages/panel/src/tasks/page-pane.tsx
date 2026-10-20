@@ -236,7 +236,7 @@ export function PagePane({
     if (showingSource && source === undefined) ask(version);
   }, [showingSource, source, version, ask]);
   const toggleLabel = showingSource ? "View page" : "View source";
-  const [titleBox, titleClipped] = useClipped();
+  const [titleBox, titleClipped] = useClipped(page.title);
   return (
     <FindScope
       className="page-view-find"

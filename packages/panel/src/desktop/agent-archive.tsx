@@ -132,12 +132,12 @@ function ArchivedAgentRow({
   agents: CodingAgentsControl;
   shown: boolean;
 }): React.JSX.Element {
-  const [words, clipped] = useClipped();
   const press = useArchivePress(agents);
   const menu = useMenu(shown);
   const item = useRef<HTMLLIElement>(null);
   const unarchive = () => press(agent.id, false);
   const subject = agentSubject(agents, agent.id, NOTHING_HELD, false);
+  const [words, clipped] = useClipped(subject.name);
   return (
     <li ref={item} className="task-summary-archived-agent" {...menu.contextMenu()}>
       <Tooltip

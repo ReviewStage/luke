@@ -667,7 +667,7 @@ function AutomationActions({
 
 /** The crumb naming the automation, cut short with an ellipsis where the toolbar is narrow, the pointer reading it whole. */
 function CurrentCrumb({ name }: { name: string }): React.JSX.Element {
-  const [words, clipped] = useClipped();
+  const [words, clipped] = useClipped(name);
   return (
     <Tooltip label={clipped ? name : undefined}>
       <span ref={words} className="automation-crumb">
