@@ -8,9 +8,10 @@ import { downloadText, webPlatform } from "../src/app/web-platform";
 /**
  * What a browser tab answers the panel: a link opens in a tab of its own
  * only where its address is on the web, never as script or another app's
- * scheme; a download's file stays readable after its press returns, for a
- * browser that reads it only then, and is let go of as the next download
- * starts; and the way to the Mac app is offered only on a Mac.
+ * scheme, and a GitHub link only where its address is GitHub's; a download's
+ * file stays readable after its press returns, for a browser that reads it
+ * only then, and is let go of as the next download starts; and the way to
+ * the Mac app is offered only on a Mac.
  */
 
 /** The platform as the tab builds it, counting nothing. */
@@ -31,22 +32,42 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-test("a link opens in a tab of its own only where its address is an http or https one", () => {
+/** The addresses the browser is asked to open in a tab, from here on. */
+function tabsOpened(): (string | URL | undefined)[] {
   const opened: (string | URL | undefined)[] = [];
   vi.spyOn(window, "open").mockImplementation((url) => {
     opened.push(url);
     return null;
   });
+  return opened;
+}
+
+test("a link opens in a tab of its own only where its address is an http or https one", () => {
+  const opened = tabsOpened();
   const platform = webPlatform(COUNTING);
 
   platform.openWeb("https://example.com/docs");
+  platform.openWeb("http://localhost:3000/preview");
+  for (const address of OFF_THE_WEB) platform.openWeb(address);
+
+  assert.deepEqual(opened, ["https://example.com/docs", "http://localhost:3000/preview"]);
+});
+
+test("a GitHub link opens in a tab of its own only where its address is GitHub's", () => {
+  const opened = tabsOpened();
+  const platform = webPlatform(COUNTING);
+
   platform.openGitHub("https://github.com/acme/app/pull/7");
-  for (const address of OFF_THE_WEB) {
-    platform.openWeb(address);
+  for (const address of [
+    ...OFF_THE_WEB,
+    "https://example.com/acme/app/pull/7",
+    "https://github.com.example.com/acme/app",
+    "http://github.com/acme/app",
+  ]) {
     platform.openGitHub(address);
   }
 
-  assert.deepEqual(opened, ["https://example.com/docs", "https://github.com/acme/app/pull/7"]);
+  assert.deepEqual(opened, ["https://github.com/acme/app/pull/7"]);
 });
 
 test("a download's file stays readable once its press returns, and is let go of as the next download starts", async () => {

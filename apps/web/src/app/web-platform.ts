@@ -10,7 +10,7 @@
 import { inAppScheme, LINK_ORIGIN } from "@luke/features/link-home";
 import { LINK_PLATFORM, type LinkPlatform } from "@luke/features/link-open";
 import { openTargetOf } from "@luke/features/open-address";
-import { isWebAddress } from "@luke/host/acts";
+import { isGitHubAddress, isWebAddress } from "@luke/host/acts";
 import type { AppPlatform } from "@luke/panel/app-platform";
 import type { ShellBundles } from "@luke/panel/shell-bundles";
 import { NOTIFICATIONS_GRANTOR } from "@luke/voice/settings-controls";
@@ -63,6 +63,15 @@ export function openTab(url: string): void {
     return;
   }
   window.open(url, "_blank", "noopener");
+}
+
+/** Opens a GitHub page in a tab of its own, where its address is GitHub's, as the desktop's `github.open` takes it; any other opens nothing. */
+function openGitHubTab(url: string): void {
+  if (!isGitHubAddress(url)) {
+    console.warn("A GitHub link whose address is not GitHub's was not opened.");
+    return;
+  }
+  openTab(url);
 }
 
 /**
@@ -122,7 +131,7 @@ export function webPlatform(
     onMenuCommand: () => ignore,
     setShortcutCapturing: ignore,
     recordSurfaceEvent: shell.recordSurfaceEvent,
-    openGitHub: openTab,
+    openGitHub: openGitHubTab,
     openWeb: openTab,
     applySessionReplay: lazySessionReplay(),
     ...(linkPlatform === LINK_PLATFORM.MAC ? { macAppLink } : undefined),

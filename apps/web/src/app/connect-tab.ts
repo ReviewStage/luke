@@ -88,6 +88,12 @@ export function connectTabs(browser: ConnectBrowser): ConnectTabs {
   // When each connect this tab handed to a tab of its own was handed off, by the hand-off its tab is marked as, until its landing says so.
   const handedOff = new Map<string, number>();
 
+  /** Lets go of every connect abandoned by now, whose landing is no longer this tab's to answer. */
+  const dropAbandoned = (): void => {
+    const now = Date.now();
+    for (const [made, at] of handedOff) if (now - at > CONNECT_BOUND_MS) handedOff.delete(made);
+  };
+
   /** A connect pressed: its empty tab opened at once, and closed where its act opened nothing. */
   const press = <A>(go: () => Promise<A>): Promise<A> => {
     const pressed: Press = { tab: browser.openEmptyTab(), handoff: crypto.randomUUID() };
@@ -147,14 +153,14 @@ export function connectTabs(browser: ConnectBrowser): ConnectTabs {
     // Note that a tab the developer closed before the address came opens nothing, because closing it said no.
     if (press.tab.closed) return;
     press.tab.location.replace(url);
+    dropAbandoned();
     handedOff.set(press.handoff, Date.now());
   };
 
   /** Takes the hand-off a landing names, answering whether this tab made it and its connect is not yet abandoned. */
   const claim = (handoff: string): boolean => {
-    const at = handedOff.get(handoff);
-    handedOff.delete(handoff);
-    return at !== undefined && Date.now() - at <= CONNECT_BOUND_MS;
+    dropAbandoned();
+    return handedOff.delete(handoff);
   };
 
   const listen = (): (() => void) => {
