@@ -145,12 +145,16 @@ const lostRace = (
 ) =>
   Effect.gen(function* () {
     if (agent.archivedAt !== null) return;
-    yield* cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), agent).pipe(
+    const stopped = yield* cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), agent).pipe(
+      Effect.as(true),
       Effect.catch((refusal) =>
-        Effect.logWarning(`a take-over that lost its source was not stopped: ${refusal.error}`),
+        Effect.as(
+          Effect.logWarning(`a take-over that lost its source was not stopped: ${refusal.error}`),
+          false,
+        ),
       ),
     );
-    if (!(yield* stopsForGood(agent))) {
+    if (!stopped || !(yield* stopsForGood(agent))) {
       return yield* Effect.logWarning("a take-over that lost its source is still coming up");
     }
     yield* hostedStoreOrUnavailable(
