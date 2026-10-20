@@ -216,8 +216,20 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
   }
 });
 
+/** The SDK message types the runner acts on, as the SDK spells them. */
+const SDK_MESSAGE = {
+  ASSISTANT: "assistant",
+  STREAM_EVENT: "stream_event",
+  USER: "user",
+  RESULT: "result",
+} as const satisfies Record<string, SDKMessage["type"]>;
+
 /** The message types that say the CLI is in a turn, whoever started it. */
-const TURN_OUTPUT: ReadonlySet<SDKMessage["type"]> = new Set(["assistant", "stream_event", "user"]);
+const TURN_OUTPUT: ReadonlySet<SDKMessage["type"]> = new Set([
+  SDK_MESSAGE.ASSISTANT,
+  SDK_MESSAGE.STREAM_EVENT,
+  SDK_MESSAGE.USER,
+]);
 
 /**
  * The messages Luke sent that a `result` leaves unanswered. A result names
@@ -227,7 +239,7 @@ const TURN_OUTPUT: ReadonlySet<SDKMessage["type"]> = new Set(["assistant", "stre
  */
 function stillUnanswered(
   sent: ReadonlySet<string>,
-  result: Extract<SDKMessage, { type: "result" }>,
+  result: Extract<SDKMessage, { type: typeof SDK_MESSAGE.RESULT }>,
 ): ReadonlySet<string> {
   const answered =
     result.user_message_uuids ??
@@ -245,7 +257,7 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
 ) {
   yield* launch.sink.emit(message);
   if (TURN_OUTPUT.has(message.type)) yield* Ref.set(launch.turnRunning, true);
-  if (message.type !== "result") return;
+  if (message.type !== SDK_MESSAGE.RESULT) return;
   const inFlight = MutableRef.getAndSet(launch.inFlight, undefined);
   if (yield* Ref.get(launch.stopping)) {
     return yield* Deferred.succeed(launch.ended, RUNNER_END.STOPPED);
