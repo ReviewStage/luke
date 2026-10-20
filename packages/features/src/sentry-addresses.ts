@@ -106,6 +106,7 @@ export function scrubbedAttributes<Attributes extends object>(attributes: Attrib
 /** A request's query as an event carries it, a string or its pairs, with every value redacted. */
 export function scrubbedQueryParams(query: QueryParams): QueryParams {
   if (Predicate.isString(query)) return scrubbedQuery(query);
-  if (Array.isArray(query)) return query.map(([name]) => [scrubbedSegment(name), REDACTED]);
+  if (Array.isArray(query))
+    return query.map(([name]): [string, string] => [scrubbedSegment(name), REDACTED]);
   return Object.fromEntries(Object.keys(query).map((name) => [scrubbedSegment(name), REDACTED]));
 }

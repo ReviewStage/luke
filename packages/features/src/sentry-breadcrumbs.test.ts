@@ -115,6 +115,9 @@ interface SpanContainer {
 
 /** A client of Sentry's core, as the browser and Electron SDKs' clients are, building no error events, which these tests send none of. */
 class FixtureClient extends Sentry.Client {
+  constructor(options: Sentry.ClientOptions) {
+    super(options);
+  }
   eventFromException(): PromiseLike<Sentry.Event> {
     return Promise.resolve({});
   }
