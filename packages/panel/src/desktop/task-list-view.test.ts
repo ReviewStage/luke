@@ -638,7 +638,7 @@ test("⌘K offers each view choice only while it would change the list, and runn
   act(() => {
     runAppCommand(APP_COMMAND.SHOW_MY_TASKS);
   });
-  assert.equal(chipWords(sidebar), "Created by me");
+  assert.equal(chipWords(sidebar), "Assigned to me");
   assert.equal(appCommandOffered(APP_COMMAND.SHOW_EVERYONES_TASKS), true);
 
   act(() => {
@@ -1026,16 +1026,18 @@ test("Assigned to a teammate, with nothing of theirs, says so, and Show all list
   assert.equal(taskRows(sidebar).length, 3);
 });
 
-test("⌘K's Show tasks assigned to me lists yours, and Show everyone's tasks lets go of both filters", async () => {
+test("⌘K's Show my tasks lists the tasks you are on, whoever created them, and Show everyone's tasks lets go of both filters", async () => {
   const sidebar = await mountRead(ACME, ASSIGNED);
-  choose(sidebar, "Created by", "Charles Pan");
-  act(() => runAppCommand(APP_COMMAND.SHOW_TASKS_ASSIGNED_TO_ME));
+  // Created by › Me holds none of the tasks Dean is on, which Show my tasks lists whoever created them.
+  choose(sidebar, "Created by", "Me");
+  act(() => runAppCommand(APP_COMMAND.SHOW_MY_TASKS));
 
   assert.deepEqual(
     taskRows(sidebar).map((row) => row.name),
     ["Fix flaky deploy"],
   );
-  assert.equal(appCommandOffered(APP_COMMAND.SHOW_TASKS_ASSIGNED_TO_ME), false);
+  assert.equal(chipWords(sidebar), "Assigned to me");
+  assert.equal(appCommandOffered(APP_COMMAND.SHOW_MY_TASKS), false);
   act(() => runAppCommand(APP_COMMAND.SHOW_EVERYONES_TASKS));
   assert.equal(taskRows(sidebar).length, 3);
   assert.equal(chip(sidebar), null);

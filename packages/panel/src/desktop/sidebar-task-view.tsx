@@ -462,8 +462,9 @@ function offer(offered: boolean, changes: boolean, run: () => void): (() => void
  * The view's choices as ⌘K offers them, each only while it would change
  * the list: Group tasks by repository, by creator in a shared workspace, or
  * in one list; Order tasks by last updated, created, or name; Show my tasks,
- * Show tasks assigned to me, and Show everyone's tasks, which lets go of
- * both, in a shared workspace; and Show or Hide archived tasks. They act as the View options menu's choices do.
+ * the tasks assigned to the reader whoever created them, and Show everyone's
+ * tasks, which lets go of both filters by person, in a shared workspace; and
+ * Show or Hide archived tasks. They act as the View options menu's choices do.
  */
 export function useTaskViewCommands({
   offered,
@@ -497,14 +498,12 @@ export function useTaskViewCommands({
   useAppCommand(APP_COMMAND.ORDER_TASKS_BY_NAME, orderBy(TASK_ORDER.NAME));
   useAppCommand(
     APP_COMMAND.SHOW_MY_TASKS,
-    offer(offered && shared && readerId !== undefined, createdBy !== readerId, () =>
-      control.onCreatedBy(readerId),
-    ),
-  );
-  useAppCommand(
-    APP_COMMAND.SHOW_TASKS_ASSIGNED_TO_ME,
-    offer(offered && shared && readerId !== undefined, assignedTo !== readerId, () =>
-      control.onAssignedTo(readerId),
+    offer(
+      offered && shared && readerId !== undefined,
+      assignedTo !== readerId || createdBy !== undefined,
+      () => {
+        if (readerId !== undefined) control.onAssignedToAlone(readerId);
+      },
     ),
   );
   useAppCommand(

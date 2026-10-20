@@ -58,6 +58,8 @@ export interface TaskListViewControl {
   readonly onEveryone: () => void;
   /** Lists every task one member created, whoever it is assigned to, in one choice, as their page's Show all asks. */
   readonly onCreatedByAlone: (createdBy: string) => void;
+  /** Lists every task assigned to one member, whoever created it, in one choice, as ⌘K's Show my tasks asks. */
+  readonly onAssignedToAlone: (assignedTo: string) => void;
   /** Lists the tasks of these statuses, in `TASK_STATUS_ORDER`. */
   readonly onStatuses: (statuses: readonly TaskStatus[]) => void;
 }
@@ -110,6 +112,10 @@ export function useTaskListView(
     onCreatedByAlone: (createdBy) => {
       const { assignedTo: _assigned, ...rest } = view;
       choose({ ...rest, createdBy });
+    },
+    onAssignedToAlone: (assignedTo) => {
+      const { createdBy: _created, ...rest } = view;
+      choose({ ...rest, assignedTo });
     },
     onEveryone: () => {
       const { createdBy: _created, assignedTo: _assigned, ...rest } = view;
