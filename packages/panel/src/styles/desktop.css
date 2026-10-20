@@ -264,7 +264,13 @@ body,
 /* A narrow room's sidebar is a drawer: the same float, standing on the
    window's left edge over the work, never so wide that the work stops showing
    past it, where a press puts it away (`shell-room.ts`). It stands out of the
-   shell's columns, so the work is the one column left. */
+   shell's columns, so the work is the one column left. It clips what runs
+   past its top and bottom: standing out of the shell, it is no longer inside
+   the shell's clip, and a box it holds that its scroller does not, such as a
+   row's visually hidden words, which are placed against the drawer, would
+   otherwise make the page itself taller than the screen, and a finger would
+   drag the whole app by the difference. Only the block axis, so its shadow
+   still falls over the work beside it; its scroller still scrolls its rows. */
 .desktop-shell[data-room="narrow"][data-sidebar-collapsed] {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -275,6 +281,8 @@ body,
   bottom: 0;
   left: 0;
   width: min(var(--sidebar-width), calc(100% - var(--luke-space-48)));
+  overflow-x: visible;
+  overflow-y: clip;
 }
 
 /* A narrow room shows a screen's list or the item chosen in it, one at a
