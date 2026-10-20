@@ -574,3 +574,20 @@ test("a place chosen in a narrow Chat takes the focus to its way back, and Back 
   pressFocused(the(page, CHAT_COLUMNS.place), "Chat");
   assert.equal(document.activeElement, forYou, "the row chosen");
 });
+
+test("a wide Settings turned narrow hands the focus from the hidden page list to the page's way back", async () => {
+  const page = await mount(WIDE, createElement(SettingsWindow, { link: undefined }));
+  pressFocused(the(page, SETTINGS_COLUMNS.list), "Appearance");
+  resizeStage(PHONE);
+  assert.deepEqual(onScreen(page, SETTINGS_COLUMNS), ["page"]);
+  assert.equal(document.activeElement?.textContent?.trim(), "Settings", "the way back to the list");
+});
+
+test("a link to a version on a narrow stage opens with the focus on its way back", async () => {
+  const page = await mount(
+    PHONE,
+    createElement(HistoryWindow, { returnTo: { revision: 2, opened: undefined } }),
+  );
+  assert.equal(focusIn(page, HISTORY_COLUMNS), "version");
+  assert.equal(document.activeElement?.textContent?.trim(), "Versions", "the way back to the list");
+});
