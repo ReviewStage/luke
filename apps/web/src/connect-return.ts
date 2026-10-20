@@ -19,6 +19,7 @@
 
 import { Option, Schema } from "effect";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
+import { PANEL_PATH } from "./app/web-address";
 
 /** The broadcast channel a landing page and the app's tabs speak on. */
 export const CONNECT_CHANNEL = "luke:connect";
@@ -43,9 +44,6 @@ export const CONNECT_BOUND_MS = 30 * 60 * 1000;
  * every answer.
  */
 const LANDING = crypto.randomUUID();
-
-/** Where the web app's panel is served, the way back when no address was left. */
-const APP_PATH = "/app";
 
 /** The words every way back is offered in. */
 export const BACK_TO_LUKE = "Back to Luke";
@@ -200,6 +198,6 @@ export function useConnectReturn(state: {
     if (answered && settled) window.close();
   }, [answered, settled]);
   if (!landed) return { back: { kind: CONNECT_RETURN.ELSEWHERE }, onBack: undefined };
-  if (answered) return { back: { kind: CONNECT_RETURN.APP, href: APP_PATH }, onBack: closeToApp };
+  if (answered) return { back: { kind: CONNECT_RETURN.APP, href: PANEL_PATH }, onBack: closeToApp };
   return { back: read, onBack: undefined };
 }

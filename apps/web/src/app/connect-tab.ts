@@ -44,6 +44,7 @@ import {
   rememberReturn,
   saying,
 } from "../connect-return";
+import { addressHere } from "./web-address";
 
 /** What a connect reaches of a tab it opened: whether it is still open, its close, its address replaced, and its own session storage, which it keeps through the provider and back. */
 export interface ConnectTab {
@@ -200,7 +201,7 @@ export function tabBrowser(
     },
     navigate: (url) => location.assign(url),
     leave,
-    address: () => `${location.pathname}${location.search}${location.hash}`,
+    address: addressHere,
     openLink,
   };
 }

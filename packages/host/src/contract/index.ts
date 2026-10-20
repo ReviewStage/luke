@@ -71,6 +71,7 @@ export {
   type PushPayload,
 } from "./pushes.js";
 export type { SettingUpdatePayload } from "./settings.js";
+export { CONTACT_MAILTO } from "./window-surface.js";
 
 /** Every domain's procedures, one spread each, in alphabetical order. */
 export const actContract = {

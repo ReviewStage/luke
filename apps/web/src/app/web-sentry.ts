@@ -101,20 +101,31 @@ declare const WEB_DEPLOYMENT: string | undefined;
 declare const WEB_SENTRY_RELEASE: string | undefined;
 
 /**
- * What this build carries, from the free identifiers `vite.config.ts`
- * replaces. A module that never went through the bundler, as in a test, has
- * none of them, and reading one throws, which is a build with no DSN.
+ * One free identifier `vite.config.ts` replaces, or `fallback` where the
+ * build wrote none. Note that a module that never went through the bundler,
+ * as in a test, has no such global, and reading one throws rather than
+ * answering undefined.
  */
-export function webSentryBuild(): WebSentryBuild {
+function buildDefine(read: () => string | undefined, fallback: string): string {
   try {
-    return {
-      dsn: WEB_SENTRY_DSN ?? "",
-      environment: WEB_DEPLOYMENT || UNNAMED_DEPLOYMENT,
-      release: WEB_SENTRY_RELEASE ?? "",
-    };
+    return read() || fallback;
   } catch {
-    return { dsn: "", environment: UNNAMED_DEPLOYMENT, release: "" };
+    return fallback;
   }
+}
+
+/** Vercel's name for the deployment this build was made for: `production`, `preview`, `development`, or empty where the build names none. */
+export function webDeployment(): string {
+  return buildDefine(() => WEB_DEPLOYMENT, "");
+}
+
+/** What this build carries; a build with no DSN, as in a test, reports nothing. */
+export function webSentryBuild(): WebSentryBuild {
+  return {
+    dsn: buildDefine(() => WEB_SENTRY_DSN, ""),
+    environment: webDeployment() || UNNAMED_DEPLOYMENT,
+    release: buildDefine(() => WEB_SENTRY_RELEASE, ""),
+  };
 }
 
 /** Loads and starts the SDK, answering nothing where it could not load, which leaves the tab running and reporting nothing. */

@@ -28,8 +28,9 @@ import type { FileMark } from "./contract.js";
  * Note that the sheet is adopted by the tree's shadow root as a
  * constructed sheet rather than handed to Pierre's `unsafeCSS`, because
  * Pierre writes that into a `<style>` element, which the panel's policy
- * (`style-src 'self'`, `index.html`) refuses, as it admits a constructed
- * sheet (`../terminal/adopted-styles.ts`). Pierre adopts its own sheet each
+ * (`style-src 'self'`: the desktop's `renderer/index.html` and the web's
+ * `vercel.json`) refuses, as it admits a constructed sheet
+ * (`../terminal/adopted-styles.ts`). Pierre adopts its own sheet each
  * time its element joins the document, in this one's place, so the tree
  * adopts it again after each time it moves one (`dress`).
  */

@@ -528,10 +528,6 @@ node --input-type=module -e '
     "apps/web/server/build-output.ts",
     "apps/web/server/api-callers.ts",
     "apps/web/server/preview-*.ts",
-    // What the desktop answers the platform door of the panel with, which
-    // the window root installs: each capability as the act or the preload
-    // event main serves, so it names nothing but the panel and the act table.
-    "apps/desktop/src/renderer/desktop-platform.ts",
   ];
   const shell = new Set(edges.runtimeEdges);
   for await (const found of glob(shellGlobs, { cwd: root })) shell.add(found.split(path.sep).join("/"));
@@ -571,7 +567,7 @@ node --input-type=module -e '
   }
   if (offenders.length > 0) {
     process.stderr.write(
-      `error: these modules under apps/ import nothing of their app and no platform library, so they are logic and belong in a package (@luke/ui, @luke/service, @luke/features, @luke/host, @luke/wire); a module is shell only as an app entry in knip.json, a runtimeEdges row in tools/anti-slop/effect-edges.json, or a deployment or test-support file named in scripts/repository-checks.sh:\n${offenders.sort().map((one) => `  ${one}`).join("\n")}\n`,
+      `error: these modules under apps/ import nothing of their app and no platform library, so they are logic and belong in a package (@luke/ui, @luke/panel, @luke/service, @luke/features, @luke/host, @luke/wire); a module is shell only as an app entry in knip.json, a runtimeEdges row in tools/anti-slop/effect-edges.json, or a deployment or test-support file named in scripts/repository-checks.sh:\n${offenders.sort().map((one) => `  ${one}`).join("\n")}\n`,
     );
     process.exit(1);
   }

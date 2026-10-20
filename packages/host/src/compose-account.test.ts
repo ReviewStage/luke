@@ -17,7 +17,7 @@ import {
   gatewayHost,
 } from "@luke/gateway";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
-import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
+import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice/live-socket";
 import { scriptedOpenSocket } from "@luke/voice/testing";
 import { HTTP_STATUS, isRecord, type WireRecord, type WireValue } from "@luke/wire";
 import { jsonResponse } from "@luke/wire/testing";

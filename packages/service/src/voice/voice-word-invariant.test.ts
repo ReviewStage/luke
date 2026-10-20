@@ -38,8 +38,8 @@ import {
   type LiveBrainSubmission,
   LiveSessionService,
   ROW_WRITE_DEBOUNCE_MS,
-  sidebandOverSocket,
 } from "@luke/voice/live-session";
+import { sidebandOverSocket } from "@luke/voice/live-socket";
 import { FakeLiveSocket } from "@luke/voice/testing";
 import { type ToolSet, tool } from "ai";
 import { Duration, Effect, Layer, Schema } from "effect";
