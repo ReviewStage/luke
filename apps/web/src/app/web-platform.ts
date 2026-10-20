@@ -108,7 +108,7 @@ export function webPlatform(
     askNotificationsPermission: () => {
       void askNotificationsPermission();
     },
-    unsavedWork: shell.unsavedWork,
+    ...(shell.unsavedWork === undefined ? {} : { unsavedWork: shell.unsavedWork }),
   };
 }
 
