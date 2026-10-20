@@ -17,6 +17,7 @@ import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -30,7 +31,8 @@ import { TasksBoard } from "./tasks-board.js";
  * on a column for each status, each card its key, priority, name, and
  * creator's face, the most pressing first; a press opens the task, a card
  * dragged onto another column is sent that column's status, and Canceled
- * is a filter kept on this Mac.
+ * is a filter kept on this Mac. In a narrow room, a phone's, one column
+ * stands at a time, chosen by its tab, and a card's Status chip moves it.
  */
 
 const DEAN = "user-dean";
@@ -117,7 +119,10 @@ const TASKS = [
 ];
 
 /** The Board over `tasks`, read by Dean, once the workspace's members have answered. */
-async function mountBoard(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLElement> {
+async function mountBoard(
+  tasks: readonly TaskSummary[] = TASKS,
+  room: ShellRoom = SHELL_ROOM.WIDE,
+): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -142,7 +147,7 @@ async function mountBoard(tasks: readonly TaskSummary[] = TASKS): Promise<HTMLEl
         createElement(
           Fragment,
           null,
-          createElement(TasksBoard, { tasks: control }),
+          createElement(TasksBoard, { tasks: control, room }),
           createElement(ToastHost),
         ),
       ),
@@ -291,4 +296,87 @@ test("a card dragged onto Done whose change the service refused says so", async 
 
   assert.deepEqual(sent, [["t-42", { status: TASK_STATUS.DONE }]]);
   assert.match(newestToastSays() ?? "", /Couldn't change the task\. Try again\./);
+});
+
+/** What a reader hears of a narrow board's tabs: their names, and the one chosen. */
+interface ColumnTabs {
+  readonly names: readonly string[];
+  readonly chosen: string | undefined;
+}
+
+/** The tabs choosing a narrow board's column, by their names, and the one chosen. */
+function columnTabs(board: HTMLElement): ColumnTabs {
+  const tabs = [...board.querySelectorAll<HTMLElement>('[role="tablist"] [role="tab"]')];
+  const name = (tab: HTMLElement) => tab.querySelector(".luke-choice-bar-label")?.textContent ?? "";
+  const chosen = tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
+  return { names: tabs.map(name), chosen: chosen === undefined ? undefined : name(chosen) };
+}
+
+/** Presses the narrow board's tab named `name`. */
+function pressTab(board: HTMLElement, name: string): void {
+  const tab = [...board.querySelectorAll<HTMLElement>('[role="tab"]')].find(
+    (each) => each.querySelector(".luke-choice-bar-label")?.textContent === name,
+  );
+  act(() => (tab ?? assert.fail(`no ${name} tab`)).click());
+}
+
+/** The Status chip on a task's card, where its card wears one. */
+function statusChipOf(board: HTMLElement, taskId: string): HTMLButtonElement | null {
+  return board.querySelector<HTMLButtonElement>(
+    `li[data-task-id="${taskId}"] .tasks-board-card-status button`,
+  );
+}
+
+test("in a narrow room the board shows one column at a time, Todo first, and a tab shows another", async () => {
+  const board = await mountBoard(TASKS, SHELL_ROOM.NARROW);
+
+  assert.deepEqual(columnTabs(board), {
+    names: ["Backlog", "Todo", "In progress", "Done"],
+    chosen: "Todo",
+  });
+  assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);
+
+  pressTab(board, "In progress");
+
+  assert.equal(columnTabs(board).chosen, "In progress");
+  assert.deepEqual(columns(board), [["In progress", ["ACME-42"]]]);
+});
+
+test("in a narrow room Canceled adds its tab, and hiding it again while shown goes back to Todo, which showing it again keeps", async () => {
+  const board = await mountBoard(TASKS, SHELL_ROOM.NARROW);
+  const canceled = board.querySelector<HTMLButtonElement>("button[aria-pressed]");
+  assert.ok(canceled, "the toolbar offers Canceled");
+
+  act(() => canceled.click());
+  pressTab(board, "Canceled");
+  assert.deepEqual(columns(board), [["Canceled", ["ACME-33"]]]);
+
+  act(() => canceled.click());
+  assert.equal(columnTabs(board).chosen, "Todo");
+  assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);
+  act(() => canceled.click());
+  assert.equal(columnTabs(board).chosen, "Todo");
+  assert.deepEqual(columns(board), [["Todo", ["ACME-40", "ACME-39"]]]);
+});
+
+test("in a narrow room a card's Status chip sends the status picked, without a drag", async () => {
+  const board = await mountBoard(TASKS, SHELL_ROOM.NARROW);
+  const chip = statusChipOf(board, "t-39") ?? assert.fail("the card wears its Status chip");
+
+  act(() => chip.click());
+  const row = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((each) =>
+    each.textContent?.includes("In progress"),
+  );
+  act(() => (row ?? assert.fail("no In progress row")).click());
+
+  assert.deepEqual(sent, [["t-39", { status: TASK_STATUS.IN_PROGRESS }]]);
+  assert.deepEqual(opened, [], "a pick opens no task");
+});
+
+test("in a wide room every column stands side by side, with no tabs, and no card wears a Status chip", async () => {
+  const board = await mountBoard();
+
+  assert.equal(board.querySelector('[role="tablist"]'), null);
+  assert.equal(columns(board).length, 4);
+  assert.equal(statusChipOf(board, "t-39"), null);
 });

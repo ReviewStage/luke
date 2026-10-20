@@ -8,8 +8,10 @@ import { taskKey } from "@luke/features/workspace-key";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   CHIP_LOOK,
+  CHOICE_BAR_LOOK,
   Chip,
   ChipName,
+  ChoiceBar,
   COLLECTION_STATE,
   CollectionPage,
   type CollectionState,
@@ -32,11 +34,12 @@ import { creatorActor } from "@luke/ui/actor-model";
 import { type TaskBoardColumn, taskBoardColumns } from "@luke/ui/task-list-model";
 import { Schema } from "effect";
 import { SquareKanbanIcon } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
-import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { TASK_STATUS_WORDS, TaskStatusPicker } from "../tasks/task-standing.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast.js";
 import { readKept, writeKept } from "./folded-groups.js";
@@ -59,6 +62,12 @@ import { useRowDrag } from "./use-row-drag.js";
  * sidebar's list. A task from a service before statuses stands under Todo,
  * where a task starts, and is sent nothing until it is dragged. Escape
  * closes the board, as it closes Factory.
+ *
+ * A narrow room, a phone's, has no width for columns side by side, nor a
+ * second column in sight to drag a card onto: it stands one column at a
+ * time across the whole page, chosen by a tab for each status above it
+ * (Todo at first), and each card wears the task page's own Status chip,
+ * whose pick sends the task that status, so a card moves without a drag.
  */
 
 /** The columns the board stands before Canceled is asked for. */
@@ -93,15 +102,28 @@ function boardState(tasks: TasksControl, empty: boolean): CollectionState {
   return empty ? COLLECTION_STATE.EMPTY : COLLECTION_STATE.READY;
 }
 
-/** One task's card: its priority, key, and creator's face over its name, one press that opens it. */
+/** The column a narrow board shows first: where a task starts. */
+const FIRST_SHOWN: TaskStatus = TASK_STATUS.TODO;
+
+/** What the tabs choosing a narrow board's column are called, to a screen reader. */
+const COLUMN_TABS = "Status";
+
+/**
+ * One task's card: its priority, key, and creator's face over its name, one
+ * press that opens it; in a narrow room, its Status chip under them, a pick
+ * of which is sent as the task's status.
+ */
 function TaskBoardCard({
   task,
   workspaceName,
   onOpen,
+  onStatus,
 }: {
   task: TaskSummary;
   workspaceName: string;
   onOpen: () => void;
+  /** Present in a narrow room alone, where a card moves by its chip rather than a drag. */
+  onStatus: ((status: TaskStatus) => void) | undefined;
 }): React.JSX.Element {
   const creator = creatorActor(task, useMemberDirectory(), undefined);
   return (
@@ -118,6 +140,15 @@ function TaskBoardCard({
         </span>
         <span className="sidebar-task-name tasks-board-name">{task.name}</span>
       </button>
+      {onStatus === undefined ? null : (
+        <div className="tasks-board-card-status">
+          <TaskStatusPicker
+            label={`Status of ${task.name}`}
+            status={task.status ?? FIRST_SHOWN}
+            onPick={onStatus}
+          />
+        </div>
+      )}
     </li>
   );
 }
@@ -130,11 +161,16 @@ function TaskBoardCard({
 function TaskBoardColumnView({
   column,
   workspaceName,
+  narrow,
+  panelId,
   onOpen,
   onStatus,
 }: {
   column: TaskBoardColumn;
   workspaceName: string;
+  /** Whether the room is a phone's: the column stands alone, as its tab's panel, its cards moved by their chips, not dragged. */
+  narrow: boolean;
+  panelId: string;
   onOpen: (task: TaskSummary) => void;
   onStatus: (task: TaskSummary, status: TaskStatus) => void;
 }): React.JSX.Element {
@@ -153,6 +189,8 @@ function TaskBoardColumnView({
       data-task-column={column.status}
       data-row-drop={column.status}
       aria-label={words}
+      id={narrow ? panelId : undefined}
+      role={narrow ? "tabpanel" : undefined}
     >
       <h2 className="tasks-board-column-head">
         <TaskStatusMark status={column.status} />
@@ -171,14 +209,21 @@ function TaskBoardColumnView({
         </Text>
       ) : (
         <div className="tasks-board-column-scroll">
-          <ScrollArea size={SCROLL_SIZE.CONTENT} fade={SCROLL_FADE.BOTH}>
-            <ul className="sidebar-tasks tasks-board-cards" onPointerDown={drag}>
+          <ScrollArea
+            size={narrow ? SCROLL_SIZE.FILL : SCROLL_SIZE.CONTENT}
+            fade={SCROLL_FADE.BOTH}
+          >
+            <ul
+              className="sidebar-tasks tasks-board-cards"
+              onPointerDown={narrow ? undefined : drag}
+            >
               {column.tasks.map((task) => (
                 <TaskBoardCard
                   key={task.id}
                   task={task}
                   workspaceName={workspaceName}
                   onOpen={() => onOpen(task)}
+                  onStatus={narrow ? (status) => onStatus(task, status) : undefined}
                 />
               ))}
             </ul>
@@ -190,13 +235,42 @@ function TaskBoardColumnView({
 }
 
 /** The window's Board, in the plan's place: the listed workspace's tasks by status. */
-export function TasksBoard({ tasks }: { tasks: TasksControl }): React.JSX.Element {
+export function TasksBoard({
+  tasks,
+  room,
+}: {
+  tasks: TasksControl;
+  room: ShellRoom;
+}): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
   const toast = useToast();
+  const ids = useId();
   const [canceled, setCanceled] = useState(() => readKept(CANCELED_KEY, storedCanceled, false));
+  const [chosen, setChosen] = useState<TaskStatus>(FIRST_SHOWN);
   const listed = tasks.listed.tasks;
   const statuses = canceled ? TASK_STATUS_ORDER : OPEN_COLUMNS;
   const columns = taskBoardColumns(listed, statuses);
+  const narrow = room === SHELL_ROOM.NARROW;
+  // Note that Canceled hidden again while its column was shown shows the first column again, rather than none.
+  const shown = statuses.includes(chosen) ? chosen : FIRST_SHOWN;
+  const panelId = `${ids}panel`;
+  const tabs = narrow ? (
+    <div className="tasks-board-tabs">
+      <ChoiceBar
+        label={COLUMN_TABS}
+        items={columns.map((column) => ({
+          value: column.status,
+          label: TASK_STATUS_WORDS[column.status],
+          icon: <TaskStatusMark status={column.status} />,
+          count: column.tasks.length === 0 ? undefined : String(column.tasks.length),
+        }))}
+        value={shown}
+        look={CHOICE_BAR_LOOK.FILL}
+        panels={(status) => ({ tab: `${ids}tab-${status}`, panel: panelId })}
+        onChange={setChosen}
+      />
+    </div>
+  ) : null;
   const workspaceName = tasks.workspace?.name ?? "";
   const setStatus = (task: TaskSummary, status: TaskStatus) => {
     void tasks.onSetTaskStanding(task.id, { status }).then((kept) => {
@@ -214,6 +288,8 @@ export function TasksBoard({ tasks }: { tasks: TasksControl }): React.JSX.Elemen
           aria-pressed={canceled}
           onClick={() => {
             setCanceled(!canceled);
+            // Note that Canceled hidden while its column is shown lets the choice go, so showing it again does not bring it back unasked.
+            if (canceled && chosen === TASK_STATUS.CANCELED) setChosen(FIRST_SHOWN);
             writeKept(CANCELED_KEY, storedCanceled, !canceled);
           }}
         >
@@ -230,6 +306,7 @@ export function TasksBoard({ tasks }: { tasks: TasksControl }): React.JSX.Elemen
       width={PAGE_WIDTH.FULL}
       label={BOARD}
       toolbar={toolbar}
+      filters={tabs}
       state={boardState(tasks, listed.length === 0)}
       loadingLabel={READING_LINE}
       empty={<EmptyState icon={<SquareKanbanIcon />}>No tasks yet</EmptyState>}
@@ -242,15 +319,19 @@ export function TasksBoard({ tasks }: { tasks: TasksControl }): React.JSX.Elemen
       {/* A card's face names its creator against the listed workspace's members. */}
       <MemberDirectory workspace={tasks.workspace} readerId={tasks.me}>
         <div className="tasks-board" data-row-drop-scope="">
-          {columns.map((column) => (
-            <TaskBoardColumnView
-              key={column.status}
-              column={column}
-              workspaceName={workspaceName}
-              onOpen={(task) => tasks.onSelect(task.id)}
-              onStatus={setStatus}
-            />
-          ))}
+          {(narrow ? columns.filter((column) => column.status === shown) : columns).map(
+            (column) => (
+              <TaskBoardColumnView
+                key={column.status}
+                column={column}
+                workspaceName={workspaceName}
+                narrow={narrow}
+                panelId={panelId}
+                onOpen={(task) => tasks.onSelect(task.id)}
+                onStatus={setStatus}
+              />
+            ),
+          )}
         </div>
       </MemberDirectory>
     </CollectionPage>
