@@ -11,13 +11,7 @@ import {
 } from "@luke/features/terminal-acts";
 import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
-import {
-  ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  type Act,
-  type ActKind,
-  type ActOutcome,
-} from "@luke/host/acts";
+import { ACT_KIND, type Act, type ActKind } from "@luke/host/acts";
 import {
   ACT_ERROR,
   type PortActPayload,
@@ -205,12 +199,7 @@ beforeEach(() => {
     }
     return Promise.resolve(answer(request));
   };
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppBridge({});
   // SAFETY: each procedure answers its own kind, whose answer `answer` gives by the same kind; the casts are the one dispatch on it.
   fakeActPort({
     [ACT_KIND.TERMINAL_LIST]: (payload) =>

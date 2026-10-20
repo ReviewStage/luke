@@ -10,6 +10,7 @@ import { agentInboxActsContract } from "./agent-inbox.js";
 import { agentActsContract } from "./agents.js";
 import { automationActsContract } from "./automations.js";
 import { avatarActsContract } from "./avatar.js";
+import { browserActsContract } from "./browser.js";
 import { factoryActsContract } from "./factory.js";
 import { integrationActsContract } from "./integrations.js";
 import { issueActsContract } from "./issues.js";
@@ -18,7 +19,9 @@ import { macTerminalActsContract } from "./mac-terminals.js";
 import { settingsActsContract } from "./settings.js";
 import { tasksActsContract } from "./tasks.js";
 import { terminalActsContract } from "./terminals.js";
+import { updateActsContract } from "./updates.js";
 import { voiceRuntimeActsContract } from "./voice-runtime.js";
+import { windowSurfaceActsContract } from "./window-surface.js";
 import { workspaceActsContract } from "./workspaces.js";
 
 /**
@@ -40,6 +43,7 @@ export {
   AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
   AVATAR_ACT_KIND,
+  BROWSER_ACT_KIND,
   FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
   ISSUE_ACT_KIND,
@@ -50,7 +54,9 @@ export {
   SETTINGS_ACT_KIND,
   TASKS_ACT_KIND,
   TERMINAL_ACT_KIND,
+  UPDATE_ACT_KIND,
   VOICE_RUNTIME_ACT_KIND,
+  WINDOW_SURFACE_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "./kinds.js";
 export { MAC_REPOSITORIES_REFUSAL } from "./mac-terminals.js";
@@ -64,6 +70,7 @@ export const actContract = {
   ...agentInboxActsContract,
   ...automationActsContract,
   ...avatarActsContract,
+  ...browserActsContract,
   ...factoryActsContract,
   ...integrationActsContract,
   ...issueActsContract,
@@ -71,7 +78,9 @@ export const actContract = {
   ...settingsActsContract,
   ...tasksActsContract,
   ...terminalActsContract,
+  ...updateActsContract,
   ...voiceRuntimeActsContract,
+  ...windowSurfaceActsContract,
   ...workspaceActsContract,
 } satisfies Record<PortActKind, AnyContractProcedure>;
 

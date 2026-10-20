@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -110,10 +110,6 @@ async function drawn(text: string, workspace: Workspace, onTask = true) {
       return () => undefined;
     },
     requestAppState: () => Promise.resolve(state),
-    act: (request: Act): Promise<ActOutcome> => {
-      asked.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
   });
   fakeActPort({
     [ACT_KIND.WORKSPACE_LINEAR_ISSUES]: (payload) => {
