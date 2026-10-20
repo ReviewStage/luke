@@ -20,6 +20,7 @@ import { codingAgentsControl } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
 import { AgentTab, type BriefTask, type TranscriptCards } from "./agent-tab.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
+import type { TranscriptFollower } from "./use-agent-transcript.js";
 
 /**
  * agent-tab-kept.test.ts -- a running agent's tab draws again only the
@@ -184,18 +185,13 @@ function recording(cards: TranscriptCards, drawn: string[]): TranscriptCards {
 /** A running agent's tab over a transcript whose first page is answered at once and each later one when the test hands it. */
 function runningTab() {
   fakeAppBridge({});
-  const pages: ((answer: CodingAgentMessagesAnswerView) => void)[] = [];
-  let first = true;
-  const readTranscript = (): Promise<CodingAgentMessagesAnswerView> => {
-    if (first) {
-      first = false;
-      return Promise.resolve(
-        page([PLAN, EARLIER, newest("Reading.")], CODING_AGENT_STATUS.RUNNING, "1:1"),
-      );
-    }
-    return new Promise((resolve) => {
-      pages.push(resolve);
-    });
+  let hear: ((page: CodingAgentMessagesAnswerView) => void) | undefined;
+  const transcripts: TranscriptFollower = (_transcript, heard) => {
+    hear = heard;
+    heard(page([PLAN, EARLIER, newest("Reading.")], CODING_AGENT_STATUS.RUNNING, "1:1"));
+    return () => {
+      hear = undefined;
+    };
   };
   const registry = AtomRegistry.make();
   const container = document.body.appendChild(document.createElement("div"));
@@ -203,7 +199,7 @@ function runningTab() {
   const controlOf = (otherTitle: string) =>
     codingAgentsControl({
       agents: [AGENT, listed("agent-7", otherTitle)],
-      readTranscript,
+      transcripts,
     });
   const cardsOf = (control: ReturnType<typeof controlOf>, task?: BriefTask) =>
     taskCards({
@@ -243,8 +239,7 @@ function runningTab() {
     },
     async answer(next: CodingAgentMessagesAnswerView) {
       await act(async () => {
-        while (pages.length === 0) await Promise.resolve();
-        pages.shift()?.(next);
+        hear?.(next);
         for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
       });
     },

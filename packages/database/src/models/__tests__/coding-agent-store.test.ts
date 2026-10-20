@@ -35,7 +35,7 @@ import {
   CONVERSATION_RUNTIME,
   MESSAGE_SENDER,
 } from "../../storage-vocabulary.js";
-import { getTestDB, joinWorkspace, linearIssueLink } from "../../testing/index.js";
+import { getTestDB, joinWorkspace, leaveWorkspace, linearIssueLink } from "../../testing/index.js";
 import { VOICE_DELEGATION_MODE } from "../../voice-vocabulary.js";
 import {
   archiveCodingAgent,
@@ -63,6 +63,7 @@ import {
   readCodingAgent,
   readCodingAgentPublished,
   readCodingAgentRouting,
+  readRunnerTokenConversation,
   recordCodingAgentAuthor,
   recordCodingAgentNativeSession,
   recordCodingAgentPublished,
@@ -1695,6 +1696,51 @@ it.layer(getTestDB())("the coding-agent store's routing of an agent", (it) => {
         });
         assert.equal(retired.runnerTokenHash, null);
         assert.equal(retired.nativeSession, "session-1");
+      }),
+  );
+
+  it.effect(
+    "a runner's bearer digest finds the agent's conversation under its starter until it is retired, and another digest finds none",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const agent = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CLAUDE_CODE,
+          payer: CODING_AGENT_PAYER.CLAUDE_SUBSCRIPTION,
+        });
+        yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-held");
+
+        const held = yield* readRunnerTokenConversation("digest-held");
+        const other = yield* readRunnerTokenConversation("digest-other");
+        yield* recordCodingAgentRunnerToken(starter, agent.id, null);
+        const retired = yield* readRunnerTokenConversation("digest-held");
+
+        assert.deepEqual(Option.getOrThrow(held), {
+          userId: starter,
+          conversationId: agent.conversationId,
+          runtimeSessionId: null,
+        });
+        assert.ok(Option.isNone(other));
+        assert.ok(Option.isNone(retired));
+      }),
+  );
+
+  it.effect(
+    "a runner's bearer digest finds nothing once its starter left the agent's workspace",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openAccount;
+        const workspace = yield* openWorkspace(starter);
+        const agent = yield* startIn(starter, workspace, {
+          runtime: CONVERSATION_RUNTIME.CODEX,
+          payer: CODING_AGENT_PAYER.CHATGPT_SUBSCRIPTION,
+        });
+        yield* recordCodingAgentRunnerToken(starter, agent.id, "digest-departed");
+
+        yield* leaveWorkspace(workspace, starter);
+
+        assert.ok(Option.isNone(yield* readRunnerTokenConversation("digest-departed")));
       }),
   );
 

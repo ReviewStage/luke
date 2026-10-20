@@ -12,6 +12,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { type SideBundles, sideBundles } from "../bundle-loader.js";
 import {
   PLACEMENT_END,
+  type PlacedWords,
   type PlanEditorModule,
   type PlanEditorPlacement,
   type PlanEditorProps,
@@ -44,6 +45,9 @@ const mounted: {
 /** Where the line of the words the stand-in opened on stands in the window, as a laid-out editor answers; none, as when the words were not found, unless a test lays it out. */
 let wordsLine: (() => number) | undefined;
 
+/** The words the stand-in's caret stands in as it closes, as a laid-out editor answers; none unless a test lays them out. */
+let caretOn: PlacedWords | undefined;
+
 /** The stand-in for the editor's bundle: it records what it is handed and takes a merged answer whole. */
 const STAND_IN: PlanEditorModule = {
   mount: (_host, props) => {
@@ -62,6 +66,7 @@ const STAND_IN: PlanEditorModule = {
         placed.push(placement);
       },
       wordsTop: () => wordsLine?.(),
+      caretWords: () => caretOn,
       insertPictures: () => undefined,
       settlePicture: () => undefined,
       removePicture: () => undefined,
@@ -109,6 +114,7 @@ beforeEach(() => {
 
 afterEach(() => {
   wordsLine = undefined;
+  caretOn = undefined;
   vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
@@ -657,4 +663,66 @@ test("a press on the room after a click while the editor's bundle loads opens th
   } finally {
     bundles = landed;
   }
+});
+
+test("the words the caret stood on stay where they stood as the editor closes, the column scrolled by as much as the drawn text moved them", async () => {
+  const { container } = mount();
+  act(() => block(container, "Goal").click());
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  // The caret's line stands 300 down the window in the editor; the drawn text, with a shorter diagram above, draws it 57 down.
+  caretOn = {
+    section: 1,
+    text: "Invites land by email.",
+    occurrence: 0,
+    offset: 3,
+    code: false,
+    top: 300,
+  };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 0, y: 57, width: 300, height: 20 }),
+  );
+
+  act(() => open().onFinish(1));
+  await settle();
+
+  assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
+  assert.equal(scroller.scrollTop, 500 + 57 - 300);
+});
+
+test("an editor closing with its caret on no words scrolls nothing", async () => {
+  const { container } = mount();
+  act(() => block(container, "Goal").click());
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+
+  act(() => open().onFinish(1));
+  await settle();
+
+  assert.equal(scroller.scrollTop, 500);
+});
+
+test("words left by an editor closed as another plan opens move nothing in it", async () => {
+  const { container, render } = mount();
+  act(() => block(container, "Goal").click());
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  caretOn = {
+    section: 1,
+    text: "Invites land by email.",
+    occurrence: 0,
+    offset: 3,
+    code: false,
+    top: 300,
+  };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 0, y: 57, width: 300, height: 20 }),
+  );
+
+  // Another plan with the same words opens in its place.
+  render({ ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" });
+  await settle();
+
+  assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
+  assert.equal(scroller.scrollTop, 500);
 });

@@ -10,7 +10,12 @@ import {
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
-import { beginTaskWork, readTask, readTaskWorkspace } from "@luke/database/models/task-store";
+import {
+  assignUnassignedTask,
+  beginTaskWork,
+  readTask,
+  readTaskWorkspace,
+} from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import type {
@@ -129,7 +134,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * first (`issueLinksBrief`). Once eve has taken an agent on a task, the
  * task moves into progress from the backlog or to do and never back
  * (`beginTaskWork`), a move that fails logged rather than the Start's
- * failure. An agent
+ * failure; a Start by hand on a task no one is assigned to assigns it to
+ * its starter (`assignUnassignedTask`), as that fails logged too. An agent
  * started with no task is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a task's is.
@@ -871,6 +877,13 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       Effect.asVoid,
       Effect.catch(logStoreFailure),
     );
+    // Its starter is on a task no one was, where they started it by hand; an automation's run assigns no one.
+    if (ask.automationOrigin === undefined) {
+      yield* assignUnassignedTask(userId, landing.task.id).pipe(
+        Effect.asVoid,
+        Effect.catch(logStoreFailure),
+      );
+    }
   }
   // An agent joins the chat only where its starter turned Chat on; one minted later joins on first use.
   const chatOn = yield* chatEnabledFor(userId).pipe(

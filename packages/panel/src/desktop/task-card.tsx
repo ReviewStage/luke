@@ -2,6 +2,7 @@ import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import type { CatalogModel } from "@luke/features/models-wire";
 import { moreText, TASK_ROW_MARK, taskRowMark } from "@luke/features/task-agents-model";
 import type { TaskAgentLine, TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
+import { taskKey } from "@luke/features/workspace-key";
 import type { Workspace } from "@luke/features/workspace-wire";
 import {
   HOVER_CARD_ROW_LOOK,
@@ -11,6 +12,8 @@ import {
   HoverCardRow,
   HoverCardRule,
   ProviderMark,
+  TaskPriorityMark,
+  TaskStatusMark as TaskStatusGlyph,
 } from "@luke/ui";
 import { ACTOR_KIND, actorName, SOMEONE_REASON } from "@luke/ui/actor-model";
 import { TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
@@ -25,6 +28,7 @@ import { agentTabLabel, pullRequestNumberLabel } from "../tasks/coding-agent-mod
 import { PullRequestMark } from "../tasks/pull-request-mark.js";
 import { RelativeTime } from "../tasks/relative-time.js";
 import { AgentGlyph, agentEndMark } from "../tasks/tab-look.js";
+import { TASK_PRIORITY_WORDS, TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { useOpenLink } from "../tasks/use-open-link.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { strandedHome } from "./move-task-dialog.js";
@@ -236,8 +240,11 @@ export function TaskCard({
   shared,
   readerId,
   focus,
+  workspaceName,
 }: {
   task: TaskSummary;
+  /** The name of the task's workspace, which its key is read under; none where the window holds no such workspace, and the card says no key. */
+  workspaceName?: string | undefined;
   /** The place within the task the card is hung for, its glyph and its words, said under the head in the agents' and pull requests' stead. */
   focus?: { readonly glyph: React.ReactNode; readonly words: React.ReactNode } | undefined;
   /**
@@ -265,30 +272,16 @@ export function TaskCard({
   const { members } = useMemberDirectory();
   const agentRows = agents?.agents.slice(0, CARD_ROWS.AGENTS) ?? [];
   const pullRequestRows = agents?.pullRequests.slice(0, CARD_ROWS.PULL_REQUESTS) ?? [];
+  const creatorShown =
+    (shared ?? (members !== undefined && members.length > 1)) &&
+    (task.createdBy !== undefined || task.ownerId !== undefined);
   return (
     <HoverCard data-task-card="">
+      <TaskStanding task={task} workspaceName={workspaceName} />
       <HoverCardHead
         name={task.name}
         corner={<RelativeTime at={taskTime(task, TASK_ORDER.UPDATED)} now={now} hint={false} />}
       />
-      {repository === null ? null : (
-        <RepositoryDetail repository={repository} pictures={pictures} onOpenGitHub={onOpenGitHub} />
-      )}
-      {(shared ?? (members !== undefined && members.length > 1)) &&
-      (task.createdBy !== undefined || task.ownerId !== undefined) ? (
-        <CreatorDetail task={task} readerId={readerId} now={now} />
-      ) : null}
-      {stranded === undefined ? null : (
-        <HoverCardRow
-          look={HOVER_CARD_ROW_LOOK.DETAIL}
-          glyph={<AttentionMark />}
-          label={
-            <>
-              Repository belongs to <WorkspaceRef workspace={stranded} />
-            </>
-          }
-        />
-      )}
       {focus === undefined ? null : (
         <>
           <HoverCardRule />
@@ -328,7 +321,70 @@ export function TaskCard({
           </HoverCardList>
         </>
       )}
+      {/* Where the task lives and who made it stand at the card's foot, under what is moving on it. */}
+      {repository === null && !creatorShown && stranded === undefined ? null : (
+        <>
+          {focus !== undefined || agentRows.length > 0 || pullRequestRows.length > 0 ? (
+            <HoverCardRule />
+          ) : null}
+          {repository === null ? null : (
+            <RepositoryDetail
+              repository={repository}
+              pictures={pictures}
+              onOpenGitHub={onOpenGitHub}
+            />
+          )}
+          {creatorShown ? <CreatorDetail task={task} readerId={readerId} now={now} /> : null}
+          {stranded === undefined ? null : (
+            <HoverCardRow
+              look={HOVER_CARD_ROW_LOOK.DETAIL}
+              glyph={<AttentionMark />}
+              label={
+                <>
+                  Repository belongs to <WorkspaceRef workspace={stranded} />
+                </>
+              }
+            />
+          )}
+        </>
+      )}
     </HoverCard>
+  );
+}
+
+/**
+ * Where a task stands, as its card leads with it: its key, its status, and
+ * its priority, each a small chip of its mark and its words; none it has
+ * not got, as a task from a service before keys, statuses, or priorities.
+ */
+function TaskStanding({
+  task,
+  workspaceName,
+}: {
+  task: TaskSummary;
+  workspaceName: string | undefined;
+}): React.JSX.Element | null {
+  const key =
+    task.number === undefined || workspaceName === undefined
+      ? undefined
+      : taskKey(workspaceName, task.number);
+  if (key === undefined && task.status === undefined && task.priority === undefined) return null;
+  return (
+    <div className="task-card-standing">
+      {key === undefined ? null : <span className="task-card-chip task-card-key">{key}</span>}
+      {task.status === undefined ? null : (
+        <span className="task-card-chip">
+          <TaskStatusGlyph status={task.status} />
+          {TASK_STATUS_WORDS[task.status]}
+        </span>
+      )}
+      {task.priority === undefined ? null : (
+        <span className="task-card-chip">
+          <TaskPriorityMark priority={task.priority} />
+          {TASK_PRIORITY_WORDS[task.priority]}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -359,6 +415,7 @@ export function taskCardOf(
       stranded={strandedHome(tasks, task)}
       shared={sharedWorkspace(tasks, task)}
       readerId={tasks.me}
+      workspaceName={tasks.workspaces.find((each) => each.id === task.workspaceId)?.name}
       models={tasks.agents.models ?? []}
       pictures={tasks.repositories.pictures}
       now={now}
