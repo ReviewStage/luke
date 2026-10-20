@@ -29,6 +29,7 @@ import { listTaskSections, writeTaskSections } from "@luke/database/models/task-
 import {
   listTasks,
   readTask,
+  readTaskHeader,
   type StoredTask,
   type TaskChanges,
   updateTask,
@@ -1304,8 +1305,8 @@ export const orStoreRefusal = <R>(
 export const workedRepository = (caller: AgentCaller) =>
   caller.kind === AGENT_CALLER.AGENT
     ? Effect.succeed<string | null>(caller.agent.repository)
-    : Effect.map(readTask(caller.plan.userId, caller.plan.taskId), (read) =>
-        Option.isSome(read) ? read.value.task.repository : null,
+    : Effect.map(readTaskHeader(caller.plan.userId, caller.plan.taskId), (read) =>
+        Option.isSome(read) ? read.value.repository : null,
       );
 
 /**

@@ -34,7 +34,7 @@ import {
   unreadFor,
 } from "@luke/database/models/chat-store";
 import { type CodingAgent, listCodingAgents } from "@luke/database/models/coding-agent-store";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import { chatTargetMember } from "@luke/features/chat-mentions";
 import {
   ASK_STATUS,
@@ -730,11 +730,8 @@ export function agentAway(
   return Effect.gen(function* () {
     if (agent.archivedAt !== null) return true;
     if (agent.taskId === null) return false;
-    const task = yield* readTask(userId, agent.taskId);
-    return Option.match(task, {
-      onNone: () => true,
-      onSome: (held) => held.task.archivedAt !== undefined,
-    });
+    const task = yield* readTaskHeader(userId, agent.taskId);
+    return Option.match(task, { onNone: () => true, onSome: (held) => held.archived });
   });
 }
 

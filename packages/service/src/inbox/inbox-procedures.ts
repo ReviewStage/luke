@@ -16,7 +16,7 @@
  */
 
 import { readCodingAgent } from "@luke/database/models/coding-agent-store";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import { ACCOUNT_INBOX_ARCHIVED } from "@luke/features/account-inbox-wire";
@@ -456,8 +456,8 @@ export function inboxProcedures(seams: InboxProcedureSeams) {
     }),
     task: signedIn.task.effect(function* ({ input, context }) {
       const taskId = yield* rowIdOf(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const workspace = yield* hostedStoreOrUnavailable(readTaskWorkspace(context.userId, taskId));
+      if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const after = input.after ?? INBOX_CURSOR_START;
       return yield* hostedStoreOrUnavailable(taskInboxPast(context.userId, taskId, after));
     }),

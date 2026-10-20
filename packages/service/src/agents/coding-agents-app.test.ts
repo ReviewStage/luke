@@ -62,6 +62,7 @@ import { storeWriter } from "@luke/database/models/writer";
 import { member, organization, user } from "@luke/database/schemas/auth";
 import { codingAgent } from "@luke/database/schemas/coding-agent";
 import { githubInstallation } from "@luke/database/schemas/github-installation";
+import { planRevision } from "@luke/database/schemas/plan-revision";
 import { conversations, messages } from "@luke/database/schemas/storage";
 import { task } from "@luke/database/schemas/task";
 import { CONVERSATION_KIND, MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
@@ -178,7 +179,7 @@ import { CHAT_NOTICE_FROM_CHARS, unparsedWire, type WireBoundaryInput } from "@l
 import { readEither } from "@luke/wire/effect";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { MockLanguageModelV4 } from "ai/test";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   Clock,
   type Context,
@@ -327,9 +328,11 @@ const TASKS = "/api/plans";
 const TASK = (taskId: string) => `${TASKS}/${taskId}`;
 /** Luke's Stop on a task, served by the hosted oRPC router, which reaches the brain's eve as the request's caller. */
 const TASK_STOP = (taskId: string) => `${TASK(taskId)}/stop`;
-/** A task's own path or its Stop, by the task's id, which the router serves where the old groups serve flattened keys. */
+/** Luke's own transcript of a task, served by the hosted oRPC router. */
+const TASK_MESSAGES = (taskId: string) => `${TASK(taskId)}/messages`;
+/** A task's own path, its Stop, or its transcript, by the task's id, which the router serves where the old groups serve flattened keys. */
 const TASK_PATH =
-  /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop)?$/u;
+  /^\/api\/plans\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/stop|\/messages)?$/u;
 /** A workspace's chat, served by the chat group, whose posts tell the agents through the same door. */
 const CHAT = "/api/workspaces/chat";
 const CHAT_ATTACHMENT = "/api/workspaces/chat/attachment";
@@ -1570,6 +1573,47 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           yield* ask(request(TASK_AGENTS, other, { id: task.id })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+      }),
+  );
+
+  it.effect(
+    "a plan's agents, inbox, and transcript are read without its plan's history, so a revision this build cannot read leaves them answering, while an account outside its workspace and a plan that is none are refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, task, ask } = yield* openTask();
+        const now = yield* DateTime.nowAsDate;
+        // A revision a later build wrote, by a kind of writer this build has no name for.
+        yield* Database.use((db) =>
+          db.insert(planRevision).values({
+            taskId: task.id,
+            seq: 1_000,
+            actor: sql`'a-later-writer'`,
+            document: SAVED,
+            changes: 1,
+            startedAt: now,
+            at: now,
+          }),
+        );
+        // The whole read, which reads who wrote each section, cannot answer the plan.
+        assert.equal(
+          (yield* ask(request(TASK(task.id), owner))).status,
+          HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+        );
+        const reads = (bearer: string, id: string) =>
+          [
+            request(TASK_AGENTS, bearer, { id }),
+            request(TASK_INBOX, bearer, { id }),
+            request(TASK_MESSAGES(id), bearer),
+          ] as const;
+
+        const [agents, inbox, transcript] = reads(owner, task.id);
+        readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(agents));
+        readAnswer(inboxAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(inbox));
+        readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(transcript));
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+        for (const refused of [...reads(other, task.id), ...reads(owner, randomUUID())]) {
+          assert.deepEqual(yield* ask(refused), notFound, refused.url);
+        }
       }),
   );
 

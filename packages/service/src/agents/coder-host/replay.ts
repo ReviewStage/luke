@@ -11,7 +11,7 @@ import {
   messageSeqOf,
   type StoredMessageRecord,
 } from "@luke/database/models/message-reads";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import type { StoredStartedFrom } from "@luke/database/schemas/coding-agent";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
@@ -974,8 +974,8 @@ export const startFromOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   }
   const { agent: source, published } = found;
-  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
-  const repository = Option.isSome(task) ? task.value.task.repository : null;
+  const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
+  const repository = Option.isSome(task) ? task.value.repository : null;
   const { lineage, carried: carriedWork } = yield* hostedStoreOrUnavailable(
     lineageOf(userId, source, repository),
   );

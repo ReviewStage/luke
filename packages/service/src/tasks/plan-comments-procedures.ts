@@ -8,7 +8,7 @@ import {
   startPlanCommentThread,
   withdrawPlanCommentAsk,
 } from "@luke/database/models/plan-comments";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskHeader } from "@luke/database/models/task-store";
 import { askedInWords } from "@luke/features/mention-link";
 import {
   PLAN_COMMENT_ACTION,
@@ -232,10 +232,10 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   const asked = thread.entries.findLast(
     (entry) => entry.kind === PLAN_COMMENT_ENTRY.ASKED && entry.writer.by?.userId === userId,
   );
-  const task = yield* hostedStoreOrUnavailable(readTask(userId, taskId));
+  const task = yield* hostedStoreOrUnavailable(readTaskHeader(userId, taskId));
   if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const text = commentAskMessage({
-    taskName: task.value.task.name,
+    taskName: task.value.name,
     thread,
     sender: asked?.writer.by?.name ?? "A member",
     toLuke: to.actor === PLAN_COMMENT_ACTOR.LUKE,

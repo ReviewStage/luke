@@ -10,7 +10,7 @@ import {
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
-import { beginTaskWork, readTask } from "@luke/database/models/task-store";
+import { beginTaskWork, readTask, readTaskWorkspace } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import type {
@@ -720,7 +720,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   if (ask.taskId !== null && ask.from !== undefined) {
     const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
     if (Option.isSome(made) && made.value.taskId === ask.taskId) {
-      const reached = yield* hostedStoreOrUnavailable(readTask(userId, ask.taskId));
+      const reached = yield* hostedStoreOrUnavailable(readTaskWorkspace(userId, ask.taskId));
       if (Option.isSome(reached)) return { agent: made.value, created: false };
     }
   }

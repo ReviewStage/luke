@@ -38,7 +38,7 @@ import {
   updateCodingAgentServers,
 } from "@luke/database/models/coding-agent-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
-import { readTask } from "@luke/database/models/task-store";
+import { readTaskWorkspace } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import {
@@ -241,8 +241,8 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
     /** The task's agents with their status. */
     listOfTask: signedIn.listOfTask.effect(function* ({ input, context }) {
       const taskId = yield* pathUuid(input.id);
-      const task = yield* hostedStoreOrUnavailable(readTask(context.userId, taskId));
-      if (Option.isNone(task)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      const workspace = yield* hostedStoreOrUnavailable(readTaskWorkspace(context.userId, taskId));
+      if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       const agents = yield* hostedStoreOrUnavailable(
         listCodingAgents(context.userId, taskId, {
           includeArchived: listsArchived(input.archived),
