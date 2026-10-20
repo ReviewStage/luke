@@ -39,6 +39,7 @@
 
 import { randomUUID } from "node:crypto";
 import { Effect, Exit, Option, Queue, Redacted, Schema, Scope, Stream } from "effect";
+import type { ChildProcessSpawner } from "effect/process";
 import {
   type AppServer,
   AppServerError,
@@ -275,7 +276,8 @@ const openAppServer = Effect.fn("agent-runner/openAppServer")(function* (
       executable: config.executable,
       args: appServerArgs(config),
       cwd: config.cwd,
-      env: { ...env, [RUNNER_ENV.CODEX_TOKEN]: token },
+      // Note that Claude Code's token, were it set, is no business of Codex's.
+      env: { ...env, [RUNNER_ENV.CLAUDE_TOKEN]: undefined, [RUNNER_ENV.CODEX_TOKEN]: token },
     },
     listenerFor(seen),
   ).pipe(Scope.provide(serverScope));
@@ -419,13 +421,31 @@ const takeTurnCompleted = Effect.fn("agent-runner/codex/takeTurnCompleted")(func
   const unanswered = [...launch.sent.values(), ...launch.waiting];
   launch.sent.clear();
   launch.waiting = [];
-  if (unanswered.length === 0) return ended(RUNNER_END.TURN_ENDED);
-  yield* startTurn(launch, unanswered);
-  return undefined;
+  if (unanswered.length > 0) {
+    yield* startTurn(launch, unanswered);
+    return undefined;
+  }
+  // What Luke wrote before the turn completed, still queued behind the
+  // completion, is acted on before the launch is called over, so a
+  // follow-up already sent starts the next turn rather than being dropped.
+  for (;;) {
+    const queued = yield* Queue.poll(launch.signals);
+    if (Option.isNone(queued)) break;
+    const done = yield* takeSignal(launch, queued.value);
+    if (done !== undefined) return done;
+  }
+  return launch.turnId === undefined ? ended(RUNNER_END.TURN_ENDED) : undefined;
 });
 
 /** One signal, acted on; answers the launch's outcome where it ends the launch. */
-function takeSignal(launch: CodexLaunch, signal: Signal) {
+function takeSignal(
+  launch: CodexLaunch,
+  signal: Signal,
+): Effect.Effect<
+  LaunchOutcome | undefined,
+  AppServerError,
+  ChildProcessSpawner.ChildProcessSpawner
+> {
   switch (signal.kind) {
     case SIGNAL.LINE:
       return takeLine(launch, signal.text);

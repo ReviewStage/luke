@@ -125,6 +125,9 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
   const pending = new Map<number, Deferred.Deferred<Schema.Json, AppServerError>>();
   let nextId = 1;
   let stderrTail = "";
+  // Note that a request is refused once stdout has ended, because no reader
+  // is left to answer it; the check and the registration are one step.
+  let closed = false;
   const write = (message: Outgoing) =>
     Queue.offer(stdin, encoder.encode(`${JSON.stringify(message)}\n`)).pipe(Effect.asVoid);
 
@@ -162,6 +165,7 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
   // Note that stderr is read to its end, or for a moment at most, before the
   // exit is reported, because its last words are why the process ended.
   const ended = Effect.suspend(() => {
+    closed = true;
     const unanswered = [...pending.values()];
     pending.clear();
     return Effect.forEach(
@@ -197,7 +201,8 @@ export const spawnAppServer = Effect.fn("agent-runner/spawnAppServer")(function*
     Effect.gen(function* () {
       const id = nextId;
       nextId += 1;
-      const answer = yield* Deferred.make<Schema.Json, AppServerError>();
+      const answer = Deferred.makeUnsafe<Schema.Json, AppServerError>();
+      if (closed) return yield* new AppServerError({ method, detail: "app-server exited" });
       pending.set(id, answer);
       yield* write({ id, method, params });
       return yield* Deferred.await(answer);

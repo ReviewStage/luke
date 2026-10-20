@@ -50,12 +50,14 @@ const decodeClientId = Schema.decodeUnknownOption(
 export interface Exchange {
   readonly method: string;
   readonly reply: readonly RecordedMessage[];
+  /** Holds the answer back, writing the reply's notifications first, until this settles. */
+  readonly holdAnswer?: Effect.Effect<void>;
 }
 
 /** One spawned process's script: its exchanges in order, and, where it crashes, what it last says. */
 export interface Script {
   readonly exchanges: readonly Exchange[];
-  /** Ends the process's stdout once its exchanges are played, with this on stderr. */
+  /** Ends the process's stdout once its exchanges are played (at once, with none), with this on stderr. */
   readonly exitWith?: string;
 }
 
@@ -114,7 +116,10 @@ export function received<M extends RequestMethod>(
  * A reply as the lines app-server writes: the recorded request's id made the
  * runner's, and a turn's user message named by the runner's client id.
  */
-function replyLines(reply: readonly RecordedMessage[], answering: RecordedMessage): string[] {
+function replyLines(
+  reply: readonly RecordedMessage[],
+  answering: RecordedMessage,
+): { readonly line: string; readonly isAnswer: boolean }[] {
   const recordedId = reply.find((message) => message.method === undefined)?.id;
   const clientId = Option.flatMap(Option.fromNullishOr(answering.params), decodeClientId);
   return reply.map((message) => {
@@ -123,13 +128,17 @@ function replyLines(reply: readonly RecordedMessage[], answering: RecordedMessag
         ? { ...message, id: answering.id }
         : message;
     const line = JSON.stringify(answered);
+    if (message.method === undefined) return { line, isAnswer: true };
     // Note that only a `userMessage` item carries a `clientId` in the protocol.
-    return Option.isSome(clientId) && message.method !== undefined
-      ? line.replace(
-          '"clientId":null',
-          `"clientId":${JSON.stringify(clientId.value.clientUserMessageId)}`,
-        )
-      : line;
+    return {
+      line: Option.isSome(clientId)
+        ? line.replace(
+            '"clientId":null',
+            `"clientId":${JSON.stringify(clientId.value.clientUserMessageId)}`,
+          )
+        : line,
+      isAnswer: false,
+    };
   });
 }
 
@@ -179,8 +188,15 @@ export function fakeAppServer(scripts: readonly Script[]) {
             return;
           }
           next += 1;
-          for (const line of replyLines(exchange.reply, message)) {
-            yield* Queue.offer(stdout, encoder.encode(`${line}\n`));
+          const lines = replyLines(exchange.reply, message);
+          const held = exchange.holdAnswer;
+          const first = held === undefined ? lines : lines.filter(({ isAnswer }) => !isAnswer);
+          for (const { line } of first) yield* Queue.offer(stdout, encoder.encode(`${line}\n`));
+          if (held !== undefined) {
+            yield* held;
+            for (const { line } of lines.filter(({ isAnswer }) => isAnswer)) {
+              yield* Queue.offer(stdout, encoder.encode(`${line}\n`));
+            }
           }
           if (next === script.exchanges.length && script.exitWith !== undefined) {
             yield* Queue.offer(stderr, encoder.encode(script.exitWith));
@@ -188,6 +204,11 @@ export function fakeAppServer(scripts: readonly Script[]) {
             yield* Queue.end(stdout);
           }
         });
+      if (script.exchanges.length === 0 && script.exitWith !== undefined) {
+        yield* Queue.offer(stderr, encoder.encode(script.exitWith));
+        yield* Queue.end(stderr);
+        yield* Queue.end(stdout);
+      }
       const input = command.options.stdin;
       if (Predicate.hasProperty(input, "stream") && Stream.isStream(input.stream)) {
         yield* input.stream.pipe(

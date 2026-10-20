@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { type Cause, Effect, Fiber, Layer, Logger, Queue, Stream } from "effect";
+import { type Cause, Deferred, Effect, Fiber, Layer, Logger, Queue, Stream } from "effect";
 import {
   CODEX_EFFORT,
   type CodexConfig,
@@ -379,6 +379,50 @@ it.effect("ends an idle launch at once on a stop, and on stdin closing, with no 
     yield* closed.closeStdin;
     assert.equal(yield* Fiber.join(closed.run), RUNNER_END.INPUT_CLOSED);
     assert.ok(closed.spawned[0]?.ended);
+  }),
+);
+
+it.effect("starts the next turn for a message Luke sent just before the turn completed", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke("turn/completed");
+    const release = yield* Deferred.make<void>();
+    const userMessage = RESUMED_TURN.reply.find((line) => line.method === "item/started");
+    if (userMessage === undefined) throw new Error("the resumed turn has no user message");
+    const script: Script = {
+      exchanges: [
+        ...RESUME,
+        { method: "turn/start", reply: RESUMED_TURN.reply.slice(0, -2) },
+        // The steer is taken and the turn completes before app-server answers it.
+        {
+          method: "turn/steer",
+          reply: [
+            { id: 4, result: { turnId: "00000000-0000-4000-8000-000000000008" } },
+            userMessage,
+            ...RESUMED_TURN_END,
+          ],
+          holdAnswer: Deferred.await(release),
+        },
+        RESUMED_TURN,
+      ],
+    };
+    const { spawned, write, run } = yield* launch([script], luke);
+    yield* write({ ...CONFIG, threadId: THREAD });
+    yield* write(message("What exact line did you first write to PROBE.md?"));
+    yield* write(message("And the second line?"));
+    yield* luke.seen;
+    // The follow-up is queued behind the completion before the steer is answered.
+    yield* write(message("Also check the tests."));
+    yield* Effect.yieldNow.pipe(Effect.repeat({ times: 50 }));
+    yield* Deferred.succeed(release, undefined);
+
+    assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
+    const [process] = spawned;
+    assert.deepEqual(process?.unexpected, []);
+    const starts = received(process, "turn/start");
+    assert.equal(starts.length, 2);
+    assert.deepEqual(starts[1]?.input, [
+      { type: "text", text: "Also check the tests.", text_elements: [] },
+    ]);
   }),
 );
 
