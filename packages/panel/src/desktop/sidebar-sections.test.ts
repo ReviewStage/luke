@@ -272,7 +272,6 @@ test("a section stands over its tasks, which Tasks leaves out", async () => {
 });
 
 test("a filter by person leaves out a section's task it would leave out of the list", async () => {
-  handState(experimentsOn(EXPERIMENT.SECTIONS));
   const shared = { ...WORKSPACE, memberCount: 2 };
   window.localStorage.setItem(
     "luke.sidebarTaskViews",
