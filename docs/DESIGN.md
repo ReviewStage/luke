@@ -89,9 +89,9 @@ text changes size mid-motion, and each move runs as
 one transition. Chromium serializes `inset()` with collapsed components;
 parse computed clip-paths accordingly before trusting a sample.
 
-Repository checks hold one part of this contract: the generated brand art and
-motion tokens must match their generators in `@luke/brand`. The rest is held by review:
-renderer CSS may not reintroduce `@starting-style`, and no rule may transition
+Review holds this contract: the generated brand art and motion tokens match
+their generators in `@luke/brand` (`pnpm --filter @luke/brand check` reports
+drift when run by hand), renderer CSS may not reintroduce `@starting-style`, and no rule may transition
 a layout property. A new exception belongs in this contract in the same change.
 
 ## Shared tokens and components

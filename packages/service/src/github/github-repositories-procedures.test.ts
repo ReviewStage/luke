@@ -4,7 +4,10 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
 import { ensurePersonalWorkspace } from "@luke/database/models/workspace-store";
-import { listWorkspaceTokenRepositories } from "@luke/database/models/workspace-token-repository-store";
+import {
+  addWorkspaceTokenRepository,
+  listWorkspaceTokenRepositories,
+} from "@luke/database/models/workspace-token-repository-store";
 import { user } from "@luke/database/schemas/auth";
 import {
   fakeWorkspaceSeams,
@@ -375,6 +378,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               access: GITHUB_ACCESS.APP,
             },
           ],
+          addable: [],
           installationUrl: `https://github.com/apps/${GITHUB_FIXTURE.SLUG}/installations/new`,
         });
         // Note that neither the account's own token nor the App's are in the answer.
@@ -384,7 +388,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
   );
 
   it.effect(
-    "a member's own token adds the repositories it may push to, each entry marked by what reaches it, and one the installation lists is listed once, as the App's",
+    "the picker lists the installation's repositories and those added to the workspace on a token, each marked by what reaches it, never one the member's own token may push to that is not added, which is answered as addable",
     () =>
       Effect.gen(function* () {
         const own = [
@@ -399,6 +403,10 @@ it.layer(getTestDB())("the repositories route", (it) => {
           memberRepositoryJson(
             { owner: "octo-member", name: "fork", updatedAt: "2026-10-06T00:00:00Z" },
             false,
+          ),
+          memberRepositoryJson(
+            { owner: "octo-member", name: "kept", updatedAt: "2026-10-07T00:00:00Z" },
+            true,
           ),
         ];
         const github = githubReaching(
@@ -425,15 +433,25 @@ it.layer(getTestDB())("the repositories route", (it) => {
           accountId: 9151,
           accountLogin: "acme",
         });
+        yield* addWorkspaceTokenRepository(
+          member,
+          workspace,
+          "octo-member/kept",
+          new Date("2026-09-01T00:00:00Z"),
+        );
 
         const reached = listed(yield* ask(member, "GET", [workspace]));
 
         assert.deepEqual(
-          reached.repositories.map((one) => [one.fullName, one.access]),
+          reached.repositories.map((one) => [one.fullName, one.access, one.updatedAt]),
           [
-            ["octo-member/side", GITHUB_ACCESS.TOKEN],
-            ["acme/relay", GITHUB_ACCESS.APP],
+            ["octo-member/kept", GITHUB_ACCESS.TOKEN, Date.parse("2026-10-07T00:00:00Z")],
+            ["acme/relay", GITHUB_ACCESS.APP, Date.parse("2026-10-02T00:00:00Z")],
           ],
+        );
+        assert.deepEqual(
+          reached.addable?.map((one) => [one.fullName, one.access]),
+          [["octo-member/side", GITHUB_ACCESS.TOKEN]],
         );
         assert.equal(JSON.stringify(reached).includes(GITHUB_FIXTURE_MEMBER.TOKEN), false);
       }),

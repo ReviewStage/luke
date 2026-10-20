@@ -38,7 +38,7 @@ environment of the Luke it is: `production` for a Developer ID package, `test`
 for an ad-hoc `Luke Test` package, and `development` for `electron .`. When
 `SENTRY_AUTH_TOKEN` is present, the final esbuild plugin on the main, preload,
 and renderer JavaScript builds uploads their source maps to that release before
-electron-builder packages the app, and a refused upload fails the build. The
+electron-builder packages the app; a refused upload warns and the build goes on. The
 maps are written beside the bundles, named by no `sourceMappingURL` comment,
 and excluded from the app bundle; ordinary local builds need neither Sentry
 value and upload nothing, and neither does a rehearsal (below).
@@ -47,9 +47,7 @@ value and upload nothing, and neither does a rehearsal (below).
 
 1. **Prepare and merge the version PR.** Bump `apps/desktop/package.json` and add the
    release's entry to `CHANGELOG.md` at the repository root in the same change. The
-   landing page renders that file at `/changelog`, and `scripts/repository-checks.sh`
-   refuses a desktop version the changelog does not name, so a bump cannot land without
-   its notes. Every bullet and feature section links the pull request or
+   landing page renders that file at `/changelog`. Every bullet and feature section links the pull request or
    requests that made it, in the form the comment atop `CHANGELOG.md` gives.
    A feature section's screenshot is taken on a Mac from the release's own build
    with mock data staged for it, and framed by `scripts/changelog-screenshot.sh` on

@@ -69,6 +69,8 @@ export interface EventSink {
   readonly drain: Effect.Effect<void, EventsUndelivered>;
   /** Settles only if the sender gives up, with why: Luke will not hear anything more from this launch. */
   readonly undelivered: Effect.Effect<EventsUndelivered>;
+  /** Adds a secret the launch came to hold, such as a refreshed token, to those no batch from now on carries. */
+  readonly withhold: (secret: Redacted.Redacted) => Effect.Effect<void>;
 }
 
 /** What a secret is replaced with wherever an event carried it. */
@@ -152,11 +154,12 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
   const client = yield* HttpClient.HttpClient;
   const queue = yield* Queue.unbounded<RunnerEvent, Cause.Done>();
   let next = options.firstSequence;
+  let secrets = options.secrets;
 
   const sendAll = Effect.gen(function* () {
     for (;;) {
       const events = yield* Queue.takeBetween(queue, 1, BATCH_MAX);
-      yield* postBatch(client, options, { events });
+      yield* postBatch(client, { ...options, secrets }, { events });
     }
   }).pipe(Effect.catchIf(Cause.isDone, () => Effect.void));
   const sender = yield* Effect.forkScoped(sendAll);
@@ -173,5 +176,9 @@ export const makeEventSink = Effect.fn("agent-runner/makeEventSink")(function* (
     Effect.flip,
     Effect.catch(() => Effect.never),
   );
-  return { emit, drain, undelivered } satisfies EventSink;
+  const withhold = (secret: Redacted.Redacted) =>
+    Effect.sync(() => {
+      secrets = [...secrets, secret];
+    });
+  return { emit, drain, undelivered, withhold } satisfies EventSink;
 });

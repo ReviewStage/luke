@@ -24,10 +24,10 @@ import {
  * An account's provider credential rows over a real dialect: an API key and
  * a Claude setup-token are rows of their own kind, each read, replaced and
  * removed by its kind for its account alone, a setup-token kept unverified,
- * and a save never replacing the provider's row of the other kind. A
- * ChatGPT sign-in is a row of its own kind with its access token's expiry,
- * resealed in place under its lock, and the account's ChatGPT host id is
- * minted once and outlives it.
+ * and the two kinds of one provider standing side by side. A ChatGPT
+ * sign-in is a row of its own kind with its access token's expiry, resealed
+ * in place under its lock, and the account's ChatGPT host id is minted once
+ * and outlives it.
  *
  * Synthetic accounts and seals throughout.
  */
@@ -56,7 +56,7 @@ it.layer(getTestDB())("the provider key store", (it) => {
         const { owner, other } = yield* openAccounts;
         const { ANTHROPIC, OPENAI } = PROVIDER_KEY_PROVIDER;
         const { API_KEY, CLAUDE_SETUP_TOKEN } = PROVIDER_KEY_KIND;
-        const first = yield* saveProviderKey(
+        yield* saveProviderKey(
           owner,
           ANTHROPIC,
           CLAUDE_SETUP_TOKEN,
@@ -65,7 +65,7 @@ it.layer(getTestDB())("the provider key store", (it) => {
           null,
           new Date(1),
         );
-        const second = yield* saveProviderKey(
+        yield* saveProviderKey(
           owner,
           ANTHROPIC,
           CLAUDE_SETUP_TOKEN,
@@ -84,8 +84,6 @@ it.layer(getTestDB())("the provider key store", (it) => {
           new Date(3),
         );
 
-        assert.equal(first, true);
-        assert.equal(second, true);
         assert.deepEqual(shown(yield* listProviderKeyRows(owner, CLAUDE_SETUP_TOKEN)), [
           [ANTHROPIC, CLAUDE_SETUP_TOKEN, "token-2", PROVIDER_KEY_STATUS.UNVERIFIED],
         ]);
@@ -108,63 +106,46 @@ it.layer(getTestDB())("the provider key store", (it) => {
   );
 
   it.effect(
-    "a save never replaces the provider's other kind, and a removal takes its own kind of its own account alone",
+    "a provider's API key and setup-token stand side by side, each replaced and removed by its own kind, of its own account alone",
     () =>
       Effect.gen(function* () {
         const { owner, other } = yield* openAccounts;
         const { ANTHROPIC } = PROVIDER_KEY_PROVIDER;
         const { API_KEY, CLAUDE_SETUP_TOKEN } = PROVIDER_KEY_KIND;
-        yield* saveProviderKey(
-          owner,
-          ANTHROPIC,
-          API_KEY,
-          sealed("key"),
-          "sk-ant-…aaaa",
-          null,
-          new Date(1),
-        );
-        yield* saveProviderKey(
-          other,
-          ANTHROPIC,
-          CLAUDE_SETUP_TOKEN,
-          sealed("other-token"),
-          "sk-ant-…bbbb",
-          null,
-          new Date(1),
-        );
+        const save = (
+          userId: string,
+          kind: typeof API_KEY | typeof CLAUDE_SETUP_TOKEN,
+          key: string,
+        ) =>
+          saveProviderKey(userId, ANTHROPIC, kind, sealed(key), "sk-ant-…test", null, new Date(1));
+        yield* save(owner, API_KEY, "key");
+        yield* save(owner, CLAUDE_SETUP_TOKEN, "token");
+        yield* save(other, API_KEY, "other-key");
+        yield* save(other, CLAUDE_SETUP_TOKEN, "other-token");
+        yield* save(owner, CLAUDE_SETUP_TOKEN, "token-2");
 
-        const tokenOverKey = yield* saveProviderKey(
-          owner,
-          ANTHROPIC,
-          CLAUDE_SETUP_TOKEN,
-          sealed("token"),
-          "sk-ant-…cccc",
-          null,
-          new Date(2),
-        );
-        const keyOverToken = yield* saveProviderKey(
-          other,
-          ANTHROPIC,
-          API_KEY,
-          sealed("other-key"),
-          "sk-ant-…dddd",
-          null,
-          new Date(2),
-        );
-        yield* removeProviderKey(owner, ANTHROPIC, CLAUDE_SETUP_TOKEN);
-        yield* removeProviderKey(other, ANTHROPIC, API_KEY);
         const ownerKeys = shown(yield* listProviderKeyRows(owner, API_KEY));
-        const otherTokens = shown(yield* listProviderKeyRows(other, CLAUDE_SETUP_TOKEN));
-        yield* removeProviderKey(owner, ANTHROPIC, API_KEY);
+        const ownerTokens = shown(yield* listProviderKeyRows(owner, CLAUDE_SETUP_TOKEN));
+        yield* removeProviderKey(owner, ANTHROPIC, CLAUDE_SETUP_TOKEN);
+        const keysLeft = shown(yield* listProviderKeyRows(owner, API_KEY));
+        const tokensLeft = shown(yield* listProviderKeyRows(owner, CLAUDE_SETUP_TOKEN));
+        yield* removeProviderKey(other, ANTHROPIC, API_KEY);
 
-        assert.equal(tokenOverKey, false);
-        assert.equal(keyOverToken, false);
         assert.deepEqual(ownerKeys, [[ANTHROPIC, API_KEY, "key", PROVIDER_KEY_STATUS.VERIFIED]]);
-        assert.deepEqual(otherTokens, [
-          [ANTHROPIC, CLAUDE_SETUP_TOKEN, "other-token", PROVIDER_KEY_STATUS.UNVERIFIED],
-        ]);
-        assert.deepEqual(yield* listProviderKeyRows(owner, API_KEY), []);
-        assert.deepEqual(shown(yield* listProviderKeyRows(other, CLAUDE_SETUP_TOKEN)), otherTokens);
+        assert.deepEqual(
+          ownerTokens,
+          [[ANTHROPIC, CLAUDE_SETUP_TOKEN, "token-2", PROVIDER_KEY_STATUS.UNVERIFIED]],
+          "a save replaces the row of its own kind and leaves the other",
+        );
+        assert.deepEqual(keysLeft, ownerKeys, "removing the setup-token leaves the API key");
+        assert.deepEqual(tokensLeft, []);
+        assert.deepEqual(
+          shown(yield* listProviderKeyRows(other, CLAUDE_SETUP_TOKEN)),
+          [[ANTHROPIC, CLAUDE_SETUP_TOKEN, "other-token", PROVIDER_KEY_STATUS.UNVERIFIED]],
+          "removing the API key leaves the setup-token, and the owner's changes touch no other account",
+        );
+        assert.deepEqual(yield* listProviderKeyRows(other, API_KEY), []);
+        assert.deepEqual(shown(yield* listProviderKeyRows(owner, API_KEY)), ownerKeys);
       }),
   );
 
@@ -175,7 +156,7 @@ it.layer(getTestDB())("the provider key store", (it) => {
         const { owner, other } = yield* openAccounts;
         const { OPENAI } = PROVIDER_KEY_PROVIDER;
         const { API_KEY, CHATGPT_OAUTH } = PROVIDER_KEY_KIND;
-        const kept = yield* saveProviderKey(
+        yield* saveProviderKey(
           owner,
           OPENAI,
           CHATGPT_OAUTH,
@@ -216,7 +197,7 @@ it.layer(getTestDB())("the provider key store", (it) => {
           Effect.succeed(Option.isNone(row)),
         );
 
-        assert.deepEqual([kept, resealed, stale, othersReseal], [true, true, false, false]);
+        assert.deepEqual([resealed, stale, othersReseal], [true, false, false]);
         assert.equal(othersLocked, true);
         const [row] = yield* listProviderKeyRows(owner, CHATGPT_OAUTH);
         assert.deepEqual(

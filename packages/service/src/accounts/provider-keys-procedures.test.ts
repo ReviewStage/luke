@@ -678,7 +678,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
   );
 
   it.effect(
-    "a setup-token is refused over an Anthropic API key and an API key over a setup-token, each left as it stood, and one spelled as no setup-token or saved for OpenAI keeps nothing",
+    "a setup-token is kept beside an Anthropic API key and an API key beside a setup-token, each removed by its own kind, and one spelled as no setup-token or saved for OpenAI keeps nothing",
     () =>
       Effect.gen(function* () {
         const { owner, other, ask, checks, logged } = yield* openAccounts({ ring: KEK.ONE });
@@ -686,13 +686,20 @@ it.layer(getTestDB())("the provider keys route", (it) => {
         keysOf(yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)));
         const checksBefore = checks.length;
 
-        const tokenOverKey = keysOf(
+        const tokenBesideKey = keysOf(
           yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, SETUP_TOKEN)),
         );
-        const keyOverToken = keysOf(
+        const checksAfterToken = checks.length;
+        const keyBesideToken = keysOf(
           yield* ask(save(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)),
         );
-        const checksAfter = checks.length;
+        const checksAfterKey = checks.length;
+        const tokenRemoved = keysOf(
+          yield* ask(
+            remove(owner, PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN),
+          ),
+        );
+        const keyRemoved = keysOf(yield* ask(remove(other, PROVIDER_KEY_PROVIDER.ANTHROPIC)));
         const apiKeyAsToken = keysOf(
           yield* ask(saveToken(other, PROVIDER_KEY_PROVIDER.ANTHROPIC, KEY.ANTHROPIC)),
         );
@@ -700,25 +707,28 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           yield* ask(saveToken(owner, PROVIDER_KEY_PROVIDER.OPENAI, SETUP_TOKEN)),
         );
 
-        assert.deepEqual(tokenOverKey.rejected, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
-        assert.deepEqual(
-          tokenOverKey.keys.map(({ provider, hint }) => [provider, hint]),
-          [[PROVIDER_KEY_PROVIDER.ANTHROPIC, "sk-ant-…wxyz"]],
-        );
-        assert.equal(tokenOverKey.subscriptions, undefined);
-        assert.deepEqual(keyOverToken.rejected, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
-        assert.equal(
-          checksAfter,
-          checksBefore,
-          "no provider is asked about a key refused beside a token",
-        );
-        assert.deepEqual(keyOverToken.keys, []);
-        assert.deepEqual(
-          keyOverToken.subscriptions?.map(({ kind, hint }) => [kind, hint]),
-          [[PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN, "sk-ant-…tokn"]],
-        );
+        const keyHints = (answer: typeof tokenBesideKey) =>
+          answer.keys.map(({ provider, hint }) => [provider, hint]);
+        const tokenHints = (answer: typeof tokenBesideKey) =>
+          answer.subscriptions?.map(({ provider, kind, hint }) => [provider, kind, hint]);
+        const anthropicKey = [[PROVIDER_KEY_PROVIDER.ANTHROPIC, "sk-ant-…wxyz"]];
+        const anthropicToken = [
+          [PROVIDER_KEY_PROVIDER.ANTHROPIC, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN, "sk-ant-…tokn"],
+        ];
+        assert.equal(tokenBesideKey.rejected, undefined);
+        assert.deepEqual(keyHints(tokenBesideKey), anthropicKey);
+        assert.deepEqual(tokenHints(tokenBesideKey), anthropicToken);
+        assert.equal(checksAfterToken, checksBefore, "no provider is asked about a setup-token");
+        assert.equal(keyBesideToken.rejected, undefined);
+        assert.ok(checksAfterKey > checksAfterToken, "the API key is checked with its provider");
+        assert.deepEqual(keyHints(keyBesideToken), anthropicKey);
+        assert.deepEqual(tokenHints(keyBesideToken), anthropicToken);
+        assert.deepEqual(keyHints(tokenRemoved), anthropicKey, "the API key outlives the token");
+        assert.equal(tokenRemoved.subscriptions, undefined);
+        assert.deepEqual(keyRemoved.keys, [], "the token outlives the API key");
+        assert.deepEqual(tokenHints(keyRemoved), anthropicToken);
         assert.deepEqual(apiKeyAsToken.rejected, PROVIDER_KEY_REJECTION.INVALID);
-        assert.deepEqual(apiKeyAsToken.subscriptions, keyOverToken.subscriptions);
+        assert.deepEqual(apiKeyAsToken.subscriptions, keyRemoved.subscriptions);
         assert.deepEqual(forOpenAi.rejected, PROVIDER_KEY_REJECTION.WRONG_PROVIDER);
         assert.equal(forOpenAi.subscriptions, undefined);
         assert.ok(logged.every((line) => !line.includes(SETUP_TOKEN)));
@@ -791,7 +801,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
   );
 
   it.effect(
-    "a sign-in without the plan's scope, one under the registration client, a pasted one, and one over an OpenAI API key keep nothing and say why",
+    "a sign-in without the plan's scope, one under the registration client, and a pasted one keep nothing and say why; one beside an OpenAI API key stands beside it",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts({ ring: KEK.ONE });
@@ -814,7 +824,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
           ),
         );
         keysOf(yield* ask(save(owner, PROVIDER_KEY_PROVIDER.OPENAI, KEY.OPENAI)));
-        const overKey = keysOf(yield* ask(saveSignIn(owner)));
+        const besideKey = keysOf(yield* ask(saveSignIn(owner)));
 
         assert.deepEqual(
           [noUsage, registrationClient, pasted].map((answered) => [
@@ -827,9 +837,12 @@ it.layer(getTestDB())("the provider keys route", (it) => {
             [PROVIDER_KEY_REJECTION.INVALID, undefined],
           ],
         );
-        assert.equal(overKey.rejected, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
-        assert.equal(overKey.keys.length, 1);
-        assert.equal(overKey.subscriptions, undefined);
+        assert.equal(besideKey.rejected, undefined);
+        assert.equal(besideKey.keys.length, 1);
+        assert.deepEqual(
+          besideKey.subscriptions?.map(({ kind }) => kind),
+          [PROVIDER_KEY_KIND.CHATGPT_OAUTH],
+        );
       }),
   );
 

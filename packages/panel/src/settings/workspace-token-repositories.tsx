@@ -22,8 +22,9 @@ import { PICKER_ALIGN, usePickerPlacement } from "./picker-row.js";
  * left out by the service, since the App wins. Add repository drops the
  * app's searched menu over the repositories the reader's own token may
  * push to that neither the App nor the workspace's list already holds, read
- * from the repository picker's own listing as the menu opens; a pick adds
- * it, and the service answers the list as it then stands.
+ * as the menu opens from the addable the repository picker's listing
+ * answers beside its own; a pick adds it, and the service answers the list
+ * as it then stands.
  */
 
 /** The words the rows and the menu say: labels and facts alone. */
@@ -121,10 +122,11 @@ export function AddTokenRepository({
           setCandidates({ kind: "failed" });
           return;
         }
-        const rows = answer.repositories.repositories
-          .filter(
-            (one) => one.access === GITHUB_ACCESS.TOKEN && !added.has(one.fullName.toLowerCase()),
-          )
+        // A service older than `addable` lists the token's repositories among the picker's own.
+        const { addable, repositories: listed } = answer.repositories;
+        const offered = addable ?? listed.filter((one) => one.access === GITHUB_ACCESS.TOKEN);
+        const rows = offered
+          .filter((one) => !added.has(one.fullName.toLowerCase()))
           .map((one): MenuRow => ({ id: one.fullName, label: one.fullName }));
         setCandidates({ kind: "read", rows });
       },

@@ -107,7 +107,6 @@
             "wrong_provider",
             "unreachable",
             "too_many_tries",
-            "other_kind_held",
             "unverified_sign_in"
           ]
         },

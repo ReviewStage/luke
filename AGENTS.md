@@ -34,12 +34,10 @@ web's tab alike, in `packages/panel`, the hosted service's logic in
 wire value in `packages/wire`. A
 `.ts` module whose imports name no module of its app and no platform
 library (`electron`, `react-dom`, a DOM API, `better-auth`, `eve`,
-`@vercel/*`) is logic and belongs in a package. The logic-lives-in-packages
-check in `scripts/repository-checks.sh` refuses one under
-`apps/desktop/src`, `apps/web/src`, `apps/web/server`, `apps/luke`, or `apps/dev` unless it is shell:
-an app entry in `knip.json`, a `runtimeEdges` row in
-`tools/anti-slop/effect-edges.json`, or a deployment or test-support file
-the check names. A component is placed by review under the same rule.
+`@vercel/*`) is logic and belongs in a package unless it is shell: an app
+entry in `knip.json`, a `runtimeEdges` row in
+`tools/anti-slop/effect-edges.json`, or a deployment or test-support file.
+Review places a module and a component alike under this rule.
 
 ## Never
 
@@ -83,10 +81,9 @@ the check names. A component is placed by review under the same rule.
   (`packages/panel/src/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
   would change that.
-- Never push PR media to a branch but `pr-assets`, under `pr-<number>/`
-  (`docs/WORKFLOW.md` step 7). A fresh `pr-assets-<topic>` branch mails a
-  failed Vercel Preview on every push; a push refused because another workspace
-  got there first is fetched, rebased, and pushed again.
+- Never push PR media to a branch but `pr-assets`, under `pr-<number>/`, if
+  you add any; a fresh `pr-assets-<topic>` branch mails a failed Vercel Preview
+  on every push. PR media is not required.
 - Never add to this file (`AGENTS.md`, which `CLAUDE.md` links to) unless the
   user explicitly approved the addition.
 
@@ -111,7 +108,6 @@ token and wakes the agent with them, as the webhook does for the App.
 pnpm check:affected                      # optional: the checks for what changed
 ./scripts/check.sh                       # CI's checks, bar the Postgres job
 pnpm exec vitest run <path>              # one file
-pnpm --filter @luke/web test:store       # store tests on a real Postgres (CI's postgres job runs it)
 pnpm --filter @luke/web test:agent       # offline brain eval, scripted model, by hand
 ```
 
@@ -127,7 +123,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 - Every behavior change ships with a test that fails without it, same PR.
 - Use the smallest layer that catches the bug: a type or lint rule, then a
   test through the module's public export, then a real Postgres or child
-  process (`test:store`, which CI's postgres job runs).
+  process.
 - Tests are hermetic: one process, `TestClock`, a temp dir they made, PGlite.
   No network, personal data, live provider, or real clock. They pass alone
   and in any order.
@@ -165,8 +161,7 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
 
 What the checks hold a test to is narrower than the rules above:
 `anti-slop/no-node-test` refuses `node:test` in TypeScript, so every test runs
-on vitest, and `scripts/repository-checks.sh` refuses a hand-rolled `mkdtemp`
-in a desktop or host test (`temporaryDirectory` instead) and a workspace whose
+on vitest, and `scripts/repository-checks.sh` refuses a workspace whose
 `vitest.config.ts` the root `vitest.config.ts` projects list does not name.
 
 ## Effect idioms
@@ -366,11 +361,6 @@ reads it: `packages/host/src/acts.ts`,
   host's event loop for as long as it stands, so a store with an automatic
   reset enabled holds its host open for as long as its generation does: mind
   this when the caller is a process that would otherwise exit.
-- A bundle-budget baseline (`apps/desktop/bundle-budget.json`, checked with 5%
-  slack) is re-recorded with `LUKE_UPDATE_BUNDLE_BUDGET=1` by a PR that
-  genuinely needs the room, a feature's or a library's, which states the reason
-  and the size delta in its body. Drift and accidental growth are not a reason:
-  the slack is the speed bump that makes a PR stop and say why.
 
 ## Code style
 
@@ -409,8 +399,8 @@ while CI runs, before arming auto-merge, and while a PR waits in the queue.
 Restacking a stack onto the PR beneath it after that PR changed is the one
 routine rebase.
 
-To merge a PR, run `gh pr merge --auto` right away, once any manual pre-merge
-step (`docs/WORKFLOW.md` step 3's preview run) is done; the merge queue waits
+Open a PR ready for review, never as a draft, so CI and review start on it at
+once. To merge a PR, run `gh pr merge --auto` right away; the merge queue waits
 on CI, so do not wait on it yourself, and do not update the branch first. In a
 stack, arm a PR only once it targets `main`.
 

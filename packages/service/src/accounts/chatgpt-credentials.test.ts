@@ -164,7 +164,7 @@ const signIn = (userId: string, overrides: Partial<ChatGptCredentialsSaveRequest
       ...overrides,
     };
     const { sealed, accessExpiresAt, hint } = sealChatGptCredentials(ring(), userId, request, now);
-    const kept = yield* saveProviderKey(
+    yield* saveProviderKey(
       userId,
       PROVIDER_KEY_PROVIDER.OPENAI,
       PROVIDER_KEY_KIND.CHATGPT_OAUTH,
@@ -174,7 +174,6 @@ const signIn = (userId: string, overrides: Partial<ChatGptCredentialsSaveRequest
       now,
       accessExpiresAt,
     );
-    assert.ok(kept);
   });
 
 /** An access token as OpenAI shapes one, a JWT whose only claim read is `exp`, in Unix seconds; unsigned, as nothing verifies it. */

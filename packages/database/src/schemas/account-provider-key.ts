@@ -5,17 +5,18 @@ import {
   type ProviderKeyProvider,
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
-import { integer, pgTable, primaryKey, text, uniqueIndex } from "drizzle-orm/pg-core";
+import { integer, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
 
 /**
  * One of an account's own provider credentials, an API key or a
- * subscription's credential as its kind says, at most one per provider,
+ * subscription's credential as its kind says, at most one of each kind per
+ * provider, so a provider's API key and its subscription stand side by side,
  * sealed by `models/provider-key-seal.ts`: no column holds the key or the
  * data key in the clear. The hint is the one part of the key kept readable,
  * its prefix and last four characters, so the account can tell its keys
- * apart. Saving a key for a provider that holds one replaces the row whole,
+ * apart. Saving a key of a kind the provider holds replaces that row whole,
  * removing one deletes it, and every row leaves with the account.
  */
 export const accountProviderKey = pgTable(
@@ -47,13 +48,10 @@ export const accountProviderKey = pgTable(
     createdAt: timestamptz("created_at").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.userId, table.provider] }),
-    // The key the primary key moves onto once a provider's API key and subscription stand side by side.
-    uniqueIndex("account_provider_key_user_provider_kind_idx").on(
-      table.userId,
-      table.provider,
-      table.kind,
-    ),
+    primaryKey({
+      name: "account_provider_key_pkey",
+      columns: [table.userId, table.provider, table.kind],
+    }),
   ],
 );
 

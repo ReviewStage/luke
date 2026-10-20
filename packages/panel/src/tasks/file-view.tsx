@@ -561,7 +561,6 @@ export function FileView({
   onBrowse,
   history,
   onFoldNote,
-  onShowNote,
 }: {
   taskId: string;
   /** The task's repository, `owner/name`, which the tree browses; none draws the tab alone. */
@@ -586,8 +585,6 @@ export function FileView({
   history: FileHistory;
   /** Folds or opens the note of the call that showed lines of the file, on this tab. */
   onFoldNote: FileNotes["onFold"];
-  /** Shows the card the call's code stands on in the Code tab. */
-  onShowNote: FileNotes["onShow"];
 }): React.JSX.Element {
   // The view's store of listings, one per task and repository. Note that
   // it lists through a ref to the latest door, so a parent drawing a fresh
@@ -622,7 +619,7 @@ export function FileView({
     notes: notesOf(shownCode, file.path, repository, commit),
     folded: file.foldedNotes ?? [],
     onFold: onFoldNote,
-    onShow: onShowNote,
+    taskId,
   };
 
   const [told, setTold] = useState<TabRead | undefined>(undefined);

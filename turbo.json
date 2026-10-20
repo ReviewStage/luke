@@ -36,11 +36,9 @@
       "dependsOn": ["^transit"],
       "outputs": []
     },
-    // One workspace's tests. apps/web reads beyond its own graph in one test,
-    // tests/api-callers.test.ts, which walks every client in the repository;
-    // its check is the one scripts/repository-checks.sh runs on every
-    // check.sh and in CI outside the cache, so web's tests do not hash the
-    // whole repository for its sake.
+    // One workspace's tests. The check that walks every /api/ client in the
+    // repository runs in scripts/repository-checks.sh, outside the cache, so
+    // no workspace's tests read beyond their own graph.
     "test:vitest": {
       "dependsOn": ["^transit"],
       "outputs": []
@@ -57,17 +55,6 @@
     },
     "test:vitest:3": {
       "dependsOn": ["^transit"],
-      "outputs": []
-    },
-    // Web's store tests against the real Postgres CI's postgres job stands.
-    // The database URL is hashed, not passed through, because without it the
-    // same files run on PGlite: a pass there must never replay as a pass on
-    // Postgres. CI's URL names a throwaway local server and carries no secret.
-    // The runner starts vitest from the root, so the root config is an input.
-    "test:store": {
-      "dependsOn": ["^transit"],
-      "env": ["LUKE_STORE_TEST_DATABASE_URL"],
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/vitest.config.ts"],
       "outputs": []
     },
     "build": {

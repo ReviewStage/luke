@@ -9,6 +9,7 @@ import {
 } from "@luke/features/automation-wire";
 import {
   GITHUB_ACCESS,
+  type GitHubAccess,
   type WorkspaceTokenRepository,
 } from "@luke/features/github-repositories-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
@@ -148,8 +149,16 @@ let macSaveHeld: Promise<void> | undefined;
 let githubRepositories: string[] = [];
 /** While set, the read of the repositories the workspace reaches waits on it before it is answered. */
 let repositoriesHeld: Promise<void> | undefined;
-/** The repositories the reader's own token may push to that the picker lists as the token's, by full name. */
+/** A repository as the picker's listing answers it, by its full name and what reaches it. */
+function listedRepository(fullName: string, access: GitHubAccess) {
+  const [owner = "", name = ""] = fullName.split("/");
+  return { owner, name, fullName, defaultBranch: "main", private: true, updatedAt: 1, access };
+}
+
+/** The repositories the reader's own token may push to that the picker's listing answers as addable, by full name. */
 let tokenReach: string[] = [];
+/** Whether the listing answers as a service older than `addable`, the token's repositories among its own. */
+let beforeAddable = false;
 /** The repositories members added to the workspace on their tokens, as the service lists them to the reader. */
 let tokenRepositories: WorkspaceTokenRepository[] = [];
 /** While set, the token repositories' read waits on it before answering what it read. */
@@ -327,21 +336,25 @@ function answer(request: Asked): Promise<Answered> {
           repositories: {
             installed: true,
             installationUrl: "https://github.com/apps/luke/installations/new",
-            repositories: [
-              ...githubRepositories.map((fullName) => ({ fullName, access: GITHUB_ACCESS.APP })),
-              ...tokenReach.map((fullName) => ({ fullName, access: GITHUB_ACCESS.TOKEN })),
-            ].map(({ fullName, access }) => {
-              const [owner = "", name = ""] = fullName.split("/");
-              return {
-                owner,
-                name,
-                fullName,
-                defaultBranch: "main",
-                private: true,
-                updatedAt: 1,
-                access,
-              };
-            }),
+            ...(beforeAddable
+              ? {
+                  repositories: [
+                    ...githubRepositories.map((fullName) =>
+                      listedRepository(fullName, GITHUB_ACCESS.APP),
+                    ),
+                    ...tokenReach.map((fullName) =>
+                      listedRepository(fullName, GITHUB_ACCESS.TOKEN),
+                    ),
+                  ],
+                }
+              : {
+                  repositories: githubRepositories.map((fullName) =>
+                    listedRepository(fullName, GITHUB_ACCESS.APP),
+                  ),
+                  addable: tokenReach.map((fullName) =>
+                    listedRepository(fullName, GITHUB_ACCESS.TOKEN),
+                  ),
+                }),
           },
         }),
       );
@@ -437,6 +450,7 @@ beforeEach(() => {
   githubRepositories = [];
   repositoriesHeld = undefined;
   tokenReach = [];
+  beforeAddable = false;
   tokenRepositories = [];
   tokenReadHeld = undefined;
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
@@ -1618,6 +1632,21 @@ test("Add repository offers the repositories the reader's own token may push to 
   assert.equal(
     rowNamed(githubGroup(page), "octo-member/side").querySelector(".luke-badge")?.textContent,
     "Token",
+  );
+});
+
+test("Add repository offers the token's repositories from a service older than addable, which lists them among the picker's own", async () => {
+  beforeAddable = true;
+  githubRepositories = ["acme/relay"];
+  tokenReach = ["octo-member/side"];
+  const { page } = await mount({ ...SEVERAL, role: WORKSPACE_ROLE.MEMBER });
+
+  act(() => button(rowNamed(page, "GitHub"), "Add repository").click());
+  await settle();
+
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="option"]')].map((one) => one.textContent),
+    ["octo-member/side"],
   );
 });
 
