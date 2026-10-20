@@ -5569,3 +5569,12 @@ test("the steps ticked and the answer pressed are the item's draft, standing aga
   assert.equal(attachedOf(pane), "Couldn't do itSending answers the ask");
   assert.equal(sendWords(pane), "Couldn't do it");
 });
+
+test("a teammate's open ask says it waits on them, in the line and on its box, rather than on you, and still takes your answer", async () => {
+  const pane = await mountThread(threadItem([askingMessage(EXPIRY_ASK)], { startedBy: TEAMMATE }));
+  assert.deepEqual(subjectLine(pane), ["1 message", "Alerts", "Waiting on Charles Pan"]);
+  assert.deepEqual(askBoxes(pane), [["open", "Pick oneWaiting on Charles Pan"]]);
+  assert.equal(pane.querySelector(".inbox-waiting"), null, "no attention ink is spent");
+  act(() => openOptions(pane)[0]?.click());
+  assert.equal(sendWords(pane), 'Choose "1 day"');
+});

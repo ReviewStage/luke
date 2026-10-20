@@ -3763,6 +3763,12 @@ ul.actor-stack {
   content: "";
 }
 
+/* A teammate's open ask names who it waits on in the line's own muted ink,
+   as the list's Waiting on others does. */
+.inbox-waiting-on {
+  color: var(--luke-color-text-muted);
+}
+
 /* An agent's message names it, then a quiet "agent" after the name. */
 .inbox-comment-tag {
   color: var(--luke-color-text-subtle);

@@ -109,6 +109,7 @@ import {
   numberedPick,
   openAskOf,
   proposedOptions,
+  readersItem,
   SETTLED_BY,
   sentenceCased,
   sentStamp,
@@ -1469,8 +1470,30 @@ function useScrollToOwnMessage(
 /** What an ask's box says where its type is one this build does not know. */
 const NEWER_LUKE_ASK = "Answer this in a newer Luke.";
 
-/** What a thread's line says while its ask waits on an answer. */
+/** What a thread's line says while its ask waits on the reader's answer. */
 const WAITING_ON_YOU = "Waiting on you";
+
+/**
+ * Who an open ask waits on, as the list says it: the reader, in the
+ * attention ink, where the item is theirs (`readersItem`), or the teammate
+ * who started its agent, in the muted ink, as the list's Waiting on others
+ * does, though any member may still answer.
+ */
+function Waiting({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element {
+  const starter = usePerson(on);
+  if (on === undefined) {
+    return (
+      <span className="inbox-waiting" data-inbox-waiting="">
+        {WAITING_ON_YOU}
+      </span>
+    );
+  }
+  return (
+    <span className="inbox-waiting-on" data-inbox-waiting="">
+      Waiting on {actorName(starter, { sentence: true })}
+    </span>
+  );
+}
 
 /** What an ask's box says of an ask a newer one replaced. */
 const REPLACED = "Replaced";
@@ -1511,16 +1534,20 @@ function askHeadWords(ask: InboxKnownAsk, draft: InboxDraft | undefined): string
 /**
  * The thread's subject: the item's title, and under it one muted line of
  * how many messages it holds, who wrote them, and, while an ask waits,
- * "Waiting on you" in the attention ink, the only colour the line spends.
+ * who it waits on (`Waiting`), "Waiting on you" in the attention ink, the
+ * only colour the line spends.
  */
 function ThreadSubject({
   item,
   thread,
   by,
+  waitingOn,
 }: {
   item: InboxItem;
   thread: readonly InboxMessage[];
   by: ItemAgent;
+  /** The teammate an open ask waits on; none where it waits on the reader. */
+  waitingOn: InboxItem["startedBy"];
 }): React.JSX.Element {
   const { members, readerId, former } = useMemberDirectory();
   const writers: string[] = [];
@@ -1540,11 +1567,7 @@ function ThreadSubject({
       <p className="inbox-subject-line" data-inbox-subject-line="">
         <span>{messagesWords(thread.length)}</span>
         {writers.length === 0 ? null : <span>{writers.join(", ")}</span>}
-        {waiting ? (
-          <span className="inbox-waiting" data-inbox-waiting="">
-            {WAITING_ON_YOU}
-          </span>
-        ) : null}
+        {waiting ? <Waiting on={waitingOn} /> : null}
       </p>
     </header>
   );
@@ -1760,11 +1783,14 @@ function AskBox({
   thread,
   doors,
   pane,
+  waitingOn,
 }: {
   item: InboxItem;
   message: InboxMessage;
   ask: InboxReadAsk;
   thread: readonly InboxMessage[];
+  /** The teammate the ask waits on while open; none where it waits on the reader. */
+  waitingOn: InboxItem["startedBy"];
   /** What the open ask's controls press, where it is open; none for a settled one. */
   doors: AskDoors | undefined;
   pane: React.RefObject<HTMLElement | null>;
@@ -1783,11 +1809,7 @@ function AskBox({
   const standing = (() => {
     switch (ask.status) {
       case INBOX_ASK_STATUS.OPEN:
-        return (
-          <span className="inbox-waiting" data-inbox-waiting="">
-            {WAITING_ON_YOU}
-          </span>
-        );
+        return <Waiting on={waitingOn} />;
       case INBOX_ASK_STATUS.ANSWERED:
         return <AnsweredLine ask={ask} answer={answerOf(thread, message.id)} />;
       case INBOX_ASK_STATUS.REPLACED:
@@ -1847,6 +1869,7 @@ function ThreadMessage({
   control,
   doors,
   pane,
+  waitingOn,
 }: {
   item: InboxItem;
   message: InboxMessage;
@@ -1856,6 +1879,7 @@ function ThreadMessage({
   control: TaskInboxControl;
   doors: AskDoors | undefined;
   pane: React.RefObject<HTMLElement | null>;
+  waitingOn: InboxItem["startedBy"];
 }): React.JSX.Element {
   const member = usePerson(message.member);
   const fromAgent = message.author === INBOX_MESSAGE_AUTHOR.AGENT;
@@ -1913,6 +1937,7 @@ function ThreadMessage({
           thread={thread}
           doors={message.ask.status === INBOX_ASK_STATUS.OPEN ? doors : undefined}
           pane={pane}
+          waitingOn={waitingOn}
         />
       )}
     </Comment>
@@ -2167,7 +2192,10 @@ export function InboxPane({
     if (board.current !== null) board.current.scrollTop = 0;
   }, [item.id]);
   const directory = useMemberDirectory();
-  useScrollToOwnMessage(board, item, directory.readerId ?? agents.me);
+  const readerId = directory.readerId ?? agents.me;
+  useScrollToOwnMessage(board, item, readerId);
+  // An open ask waits on whoever started its agent, as the list says, though any member may answer it.
+  const waitingOn = readersItem(item, readerId) ? undefined : item.startedBy;
   const by: ItemAgent = {
     subject: agentSubject(agents, item.agentId, NOTHING_HELD, false),
     models: agents.models,
@@ -2282,7 +2310,7 @@ export function InboxPane({
                     </>
                   ) : (
                     <>
-                      <ThreadSubject item={item} thread={thread} by={by} />
+                      <ThreadSubject item={item} thread={thread} by={by} waitingOn={waitingOn} />
                       <AnswerMentions value={mentions}>
                         <ol className="inbox-thread" aria-label="Thread">
                           {thread.map((message, at) => (
@@ -2301,6 +2329,7 @@ export function InboxPane({
                                   onDraft: (next) => control.onDraft(item, next),
                                 }}
                                 pane={pane}
+                                waitingOn={waitingOn}
                               />
                               {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
                               {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
