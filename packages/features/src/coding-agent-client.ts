@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -14,21 +14,15 @@ import {
   type CallCredential,
   callAnswered,
 } from "./account-call.js";
+import type { AccountPreferencesAnswerWire } from "./account-wire.js";
 import {
-  ACCOUNT_INBOX_ARCHIVED,
-  ACCOUNT_INBOX_QUERY,
-  accountInboxAnswerSchema,
-} from "./account-inbox-wire.js";
-import {
+  CHAT_ATTACHMENT_QUERY,
   CHAT_QUERY,
   type ChatWriteRequest,
-  chatAnswerSchema,
-  chatWriteAnswerSchema,
   chatWriteRequestSchema,
 } from "./chat-wire.js";
 import {
   CODING_AGENT_CALL_FAILURE,
-  type CodingAgentAccountInboxAnswerView,
   type CodingAgentAgentAnswer,
   type CodingAgentCallFailure,
   type CodingAgentChangesAnswerView,
@@ -83,27 +77,30 @@ import {
   codingAgentChangesAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
-  codingAgentMessagesAnswerSchema,
-  codingAgentOverviewChecksAnswerSchema,
-  codingAgentOverviewConversationAnswerSchema,
-  codingAgentOverviewPullRequestAnswerSchema,
   codingAgentPageAnswerSchema,
-  codingAgentPullRequestAnswerSchema,
   codingAgentRenameRequestSchema,
   codingAgentReviewOptionsAnswerSchema,
   codingAgentServersRequestSchema,
   codingAgentStartRequestOnWire,
 } from "./coding-agent-wire.js";
-import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
-import { askHosted, type HostedClient, type HostedFailure, hostedClient } from "./hosted-link.js";
+import { dictationRequestSchema } from "./dictation-wire.js";
+import {
+  askHosted,
+  HOSTED_DEADLINE,
+  type HostedClient,
+  type HostedFailure,
+  hostedClient,
+} from "./hosted-link.js";
 import { imageBodyOf } from "./image-body.js";
 import {
   type InboxAnswerRequest,
+  type InboxCloseRequest,
   type InboxMessageRequest,
   type InboxReadAllRequest,
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
+  inboxCloseRequestSchema,
   inboxImageTypeSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
@@ -111,57 +108,35 @@ import {
   inboxReadAllSchema,
   inboxReadStateSchema,
 } from "./inbox-wire.js";
+import { type AccountInboxLiveAnswer, accountInboxLiveAnswerSchema } from "./live-wire.js";
 import {
-  codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
   type ModelChoice,
   modelChoiceSchema,
 } from "./models-wire.js";
-import {
-  planTemplateAnswerSchema,
-  planTemplateRevisionAnswerSchema,
-  planTemplateRevisionsAnswerSchema,
-  planTemplateWriteRequestSchema,
-} from "./plan-document-template.js";
-import {
-  PROVIDER_KEY_QUERY,
-  providerKeySaveRequestSchema,
-  providerKeysAnswerSchema,
-} from "./provider-key-wire.js";
+import { planTemplateWriteRequestSchema } from "./plan-document-template.js";
+import { PROVIDER_KEY_QUERY, providerKeySaveRequestSchema } from "./provider-key-wire.js";
 import {
   type PullRequestActionRequest,
   pullRequestActionRequestSchema,
-  pullRequestViewedAnswerSchema,
-  pullRequestWriteAnswerSchema,
 } from "./pull-request-write-wire.js";
 import { type RepositoryUnreached, repositoryNotReachableSchema } from "./repository-reach-wire.js";
 import {
   agentChangesPath,
   agentGitHubImagePath,
   agentInboxPath,
-  agentMessagesPath,
-  agentOverviewChecksPath,
-  agentOverviewConversationPath,
-  agentOverviewPullRequestPath,
   agentPath,
   agentPicturePath,
-  agentPullRequestActionPath,
-  agentPullRequestPath,
-  agentPullRequestViewedPath,
   agentReviewOptionsPath,
   agentStopPath,
-  agentSubagentMessagesPath,
   HOSTED_SERVICE_PATH,
   inboxAttachmentPath,
+  inboxClosePath,
   inboxItemPath,
   inboxItemReadPath,
   inboxMessagesPath,
-  planTemplateRestorePath,
-  planTemplateRevisionPath,
   taskAgentsPath,
   taskInboxPath,
-  taskMessagesPath,
-  taskSubagentMessagesPath,
 } from "./service-paths.js";
 import {
   HOSTED_API_ERROR,
@@ -333,12 +308,30 @@ function hostedAnswer<Answer>(
   return Effect.catch(asked, (failed) => Effect.succeed(hostedFailedAs(failed, named)));
 }
 
+/** The agent and, where the tab names one, the pull request of its repository a read is about, the number as its query spells it. */
+function pullRequestRead(agentId: string, number: number | undefined) {
+  return number === undefined ? { id: agentId } : { id: agentId, number: String(number) };
+}
+
 function hostedFailedAs(failed: HostedFailure, named: NamedRefusals): Failed {
   if (failed._tag !== "HostedRefused") return UNANSWERED;
   const failure = named[failed.refusal];
   if (failure === undefined) return UNANSWERED;
   const unreached = failed.data?.unreached;
   return unreached === undefined ? { failure } : { failure, unreached };
+}
+
+/**
+ * The default read off the preferences snapshot, or why there was none: its
+ * coding-agent part as a choice reads, the settings parts beside it the
+ * settings client's to read.
+ */
+function defaultOf(read: AccountPreferencesAnswerWire | Failed): CodingAgentDefaultAnswer {
+  if ("failure" in read) return read;
+  const choice = Option.getOrUndefined(
+    Schema.decodeUnknownOption(modelChoiceSchema)(read.codingAgent),
+  );
+  return choice === undefined ? UNANSWERED : { choice };
 }
 
 /**
@@ -387,12 +380,9 @@ export class HostedCodingAgentClient {
 
   /** The account's default model and effort, read off the preferences snapshot. */
   readDefault(): Effect.Effect<CodingAgentDefaultAnswer, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES }),
-      (answer) =>
-        Effect.map(readAnswer(answer, codingAgentDefaultAnswerSchema, {}), (read) =>
-          "failure" in read ? read : { choice: read.codingAgent },
-        ),
+    return Effect.map(
+      hostedAnswer(askHosted(this.#hosted.account.preferences, undefined), {}),
+      defaultOf,
     );
   }
 
@@ -404,25 +394,15 @@ export class HostedCodingAgentClient {
       readEither(codingAgentDefaultWriteSchema)({ codingAgent: choice }),
     );
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES,
-        body: JSON.stringify(admitted),
-      }),
-      (answer) =>
-        Effect.map(readAnswer(answer, codingAgentDefaultAnswerSchema, DEFAULT_REFUSALS), (read) =>
-          "failure" in read ? read : { choice: read.codingAgent },
-        ),
+    return Effect.map(
+      hostedAnswer(askHosted(this.#hosted.account.writePreferences, admitted), DEFAULT_REFUSALS),
+      defaultOf,
     );
   }
 
   /** The account's plan template: its own, or the default while it keeps none. */
   readPlanTemplate(): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE }),
-      (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.account.planTemplate, undefined), {});
   }
 
   /**
@@ -435,40 +415,25 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(planTemplateWriteRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE,
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.account.writePlanTemplate, admitted), {});
   }
 
   /** A page of the account's plan template history, the newest or the one before a revision. */
   readPlanTemplateRevisions(
     params: PlanTemplateRevisionsParams,
   ): Effect.Effect<PlanTemplateRevisionsAnswerView, never, HttpClient.HttpClient> {
-    const path = HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE_REVISIONS;
-    const query = new URLSearchParams(
-      params.before === undefined ? {} : { before: String(params.before) },
-    );
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: query.size === 0 ? path : `${path}?${query}`,
-      }),
-      (answer) => readAnswer(answer, planTemplateRevisionsAnswerSchema, {}),
-    );
+    // The revision a page is read before travels as the text a query carries.
+    const query = params.before === undefined ? {} : { before: String(params.before) };
+    return hostedAnswer(askHosted(this.#hosted.account.planTemplateRevisions, query), {});
   }
 
   /** One revision of the account's plan template beside the one before it. */
   readPlanTemplateRevision(
     params: PlanTemplateRevisionParams,
   ): Effect.Effect<PlanTemplateRevisionAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: planTemplateRevisionPath(params.seq) }),
-      (answer) => readAnswer(answer, planTemplateRevisionAnswerSchema, {}),
+    return hostedAnswer(
+      askHosted(this.#hosted.account.planTemplateRevision, { seq: String(params.seq) }),
+      {},
     );
   }
 
@@ -476,18 +441,15 @@ export class HostedCodingAgentClient {
   restorePlanTemplate(
     params: PlanTemplateRevisionParams,
   ): Effect.Effect<PlanTemplateAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.POST, path: planTemplateRestorePath(params.seq) }),
-      (answer) => readAnswer(answer, planTemplateAnswerSchema, {}),
+    return hostedAnswer(
+      askHosted(this.#hosted.account.restorePlanTemplate, { seq: String(params.seq) }),
+      {},
     );
   }
 
   /** The account's own provider keys, as hints and statuses. */
   readProviderKeys(): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }),
-      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
-    );
+    return hostedAnswer(askHosted(this.#hosted.account.providerKeys, undefined), {});
   }
 
   /**
@@ -500,13 +462,19 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(providerKeySaveRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.PUT,
-        path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS,
-        body: JSON.stringify(admitted),
+    return hostedAnswer(askHosted(this.#hosted.account.saveProviderKey, admitted), {});
+  }
+
+  /** One provider's key removed, answering the keys as they then stand. */
+  removeProviderKey(
+    params: ProviderKeyRemoveParams,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    // The provider rides in the query, since a DELETE carries no body.
+    return hostedAnswer(
+      askHosted(this.#hosted.account.removeProviderKey, {
+        query: { [PROVIDER_KEY_QUERY.PROVIDER]: params.provider },
       }),
-      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
+      {},
     );
   }
 
@@ -520,28 +488,9 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<DictationTranscribeAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(dictationRequestSchema)(params));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#held.send({
-        method: HTTP_METHOD.POST,
-        path: HOSTED_SERVICE_PATH.DICTATION,
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, dictationAnswerSchema, {}),
-    );
-  }
-
-  /** One provider's key removed, answering the keys as they then stand. */
-  removeProviderKey(
-    params: ProviderKeyRemoveParams,
-  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
-    // The provider rides in the query, since a DELETE carries no body.
-    const query = new URLSearchParams({ [PROVIDER_KEY_QUERY.PROVIDER]: params.provider });
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.DELETE,
-        path: `${HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS}?${query}`,
-      }),
-      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
+    return hostedAnswer(
+      askHosted(this.#hosted.dictation.transcribe, admitted, HOSTED_DEADLINE.HELD),
+      {},
     );
   }
 
@@ -606,13 +555,15 @@ export class HostedCodingAgentClient {
     after: string,
     callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
-    const path =
+    const asked =
       callId === undefined
-        ? agentMessagesPath(agentId, after)
-        : agentSubagentMessagesPath(agentId, callId, after);
-    return Effect.flatMap(this.#held.send({ method: HTTP_METHOD.GET, path }), (answer) =>
-      readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
-    );
+        ? askHosted(this.#hosted.messages.agent, { id: agentId, after }, HOSTED_DEADLINE.HELD)
+        : askHosted(
+            this.#hosted.messages.agentWorker,
+            { id: agentId, call: callId, after },
+            HOSTED_DEADLINE.HELD,
+          );
+    return hostedAnswer(asked, ROW_REFUSALS);
   }
 
   /**
@@ -626,13 +577,23 @@ export class HostedCodingAgentClient {
     page: { after?: string; before?: string },
     callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
-    const path =
+    const asked =
       callId === undefined
-        ? taskMessagesPath(taskId, page)
-        : taskSubagentMessagesPath(taskId, callId, page.after ?? CODING_AGENT_CURSOR_START);
-    return Effect.flatMap(this.#held.send({ method: HTTP_METHOD.GET, path }), (answer) =>
-      readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
-    );
+        ? askHosted(
+            this.#hosted.messages.task,
+            {
+              id: taskId,
+              ...(page.after === undefined ? undefined : { after: page.after }),
+              ...(page.before === undefined ? undefined : { before: page.before }),
+            },
+            HOSTED_DEADLINE.HELD,
+          )
+        : askHosted(
+            this.#hosted.messages.taskWorker,
+            { id: taskId, call: callId, after: page.after ?? CODING_AGENT_CURSOR_START },
+            HOSTED_DEADLINE.HELD,
+          );
+    return hostedAnswer(asked, ROW_REFUSALS);
   }
 
   /**
@@ -647,13 +608,9 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(codingAgentMessageRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: agentMessagesPath(agentId),
-        body: JSON.stringify(admitted),
-      }),
-      (answer) => readAnswer(answer, codingAgentAnswerSchema, MESSAGE_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.messages.send, { params: { id: agentId }, body: admitted }),
+      MESSAGE_REFUSALS,
     );
   }
 
@@ -763,9 +720,9 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentPullRequestAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestPath(agentId, number) }),
-      (answer) => readAnswer(answer, codingAgentPullRequestAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.agentPullRequests.pullRequest, pullRequestRead(agentId, number)),
+      ROW_REFUSALS,
     );
   }
 
@@ -785,12 +742,12 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentOverviewPullRequestAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: agentOverviewPullRequestPath(agentId, number),
-      }),
-      (answer) => readAnswer(answer, codingAgentOverviewPullRequestAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.agentPullRequests.overviewPullRequest,
+        pullRequestRead(agentId, number),
+      ),
+      ROW_REFUSALS,
     );
   }
 
@@ -809,9 +766,9 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentOverviewChecksAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({ method: HTTP_METHOD.GET, path: agentOverviewChecksPath(agentId, number) }),
-      (answer) => readAnswer(answer, codingAgentOverviewChecksAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.agentPullRequests.overviewChecks, pullRequestRead(agentId, number)),
+      ROW_REFUSALS,
     );
   }
 
@@ -820,12 +777,12 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentOverviewConversationAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: agentOverviewConversationPath(agentId, number),
-      }),
-      (answer) => readAnswer(answer, codingAgentOverviewConversationAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(
+        this.#hosted.agentPullRequests.overviewConversation,
+        pullRequestRead(agentId, number),
+      ),
+      ROW_REFUSALS,
     );
   }
 
@@ -851,37 +808,60 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** What waits on the developer across the account past the cursor: every open item, held by the service while nothing changed, and every task holding items, the archived ones among them for the Inbox's Archived tab. */
-  accountInbox(
-    after: string,
-  ): Effect.Effect<CodingAgentAccountInboxAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({
-        method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({
-          [ACCOUNT_INBOX_QUERY.AFTER]: after,
-          [ACCOUNT_INBOX_QUERY.ARCHIVED]: ACCOUNT_INBOX_ARCHIVED.INCLUDE,
-        })}`,
-      }),
-      (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
-    );
-  }
-
   /** A workspace's chat past the cursor: what a person in it sees, held by the service while nothing moved. */
   chat(
     workspaceId: string,
     after: string,
   ): Effect.Effect<CodingAgentChatAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(
+      askHosted(this.#hosted.messages.chat, { workspaceId, after }, HOSTED_DEADLINE.HELD),
+      ROW_REFUSALS,
+    );
+  }
+
+  /**
+   * One picture a chat message carries, by the attachment its image block
+   * names, fetched under the account: its bytes in base64 under the media
+   * type the service sniffed and kept, as an inbox image is; not found
+   * where the account is not in the workspace or the message carries no
+   * such picture; unanswered for anything else.
+   */
+  chatAttachment(
+    workspaceId: string,
+    messageId: string,
+    attachmentId: string,
+  ): Effect.Effect<CodingAgentInboxAttachmentView, never, HttpClient.HttpClient> {
     const query = new URLSearchParams({
-      [CHAT_QUERY.WORKSPACE_ID]: workspaceId,
-      [CHAT_QUERY.AFTER]: after,
+      [CHAT_ATTACHMENT_QUERY.WORKSPACE_ID]: workspaceId,
+      [CHAT_ATTACHMENT_QUERY.MESSAGE_ID]: messageId,
+      [CHAT_ATTACHMENT_QUERY.ATTACHMENT_ID]: attachmentId,
     });
     return Effect.flatMap(
-      this.#held.send({
+      this.#call.send({
         method: HTTP_METHOD.GET,
-        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
+        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT_ATTACHMENT}?${query}`,
       }),
-      (answer) => readAnswer(answer, chatAnswerSchema, ROW_REFUSALS),
+      (answer) => {
+        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
+        if (!answer.response.ok) {
+          return Effect.map(jsonOf(answer.response), (body) =>
+            refusedAs(unparsedWire(body), ROW_REFUSALS),
+          );
+        }
+        return readImage(answer.response);
+      },
+    );
+  }
+
+  /**
+   * What waits on the developer across the account, sealed for following
+   * over Neon Realtime: answered at once, never held. Unanswered for
+   * anything that went wrong, which the caller answers by asking again.
+   */
+  accountInboxLive(): Effect.Effect<AccountInboxLiveAnswer | Failed, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_INBOX }),
+      (answer) => readAnswer(answer, accountInboxLiveAnswerSchema, {}),
     );
   }
 
@@ -926,13 +906,14 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentPullRequestWriteAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(pullRequestActionRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: agentPullRequestActionPath(agentId, number),
-        body: JSON.stringify(admitted),
+    const read = pullRequestRead(agentId, number);
+    return hostedAnswer(
+      askHosted(this.#hosted.agentPullRequests.action, {
+        params: { id: read.id },
+        ...(read.number === undefined ? undefined : { query: { number: read.number } }),
+        body: admitted,
       }),
-      (answer) => readAnswer(answer, pullRequestWriteAnswerSchema, ROW_REFUSALS),
+      ROW_REFUSALS,
     );
   }
 
@@ -941,12 +922,9 @@ export class HostedCodingAgentClient {
     agentId: string,
     number?: number,
   ): Effect.Effect<CodingAgentPullRequestViewedAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.GET,
-        path: agentPullRequestViewedPath(agentId, number),
-      }),
-      (answer) => readAnswer(answer, pullRequestViewedAnswerSchema, ROW_REFUSALS),
+    return hostedAnswer(
+      askHosted(this.#hosted.agentPullRequests.viewed, pullRequestRead(agentId, number)),
+      ROW_REFUSALS,
     );
   }
 
@@ -963,14 +941,12 @@ export class HostedCodingAgentClient {
   ): Effect.Effect<CodingAgentChatWriteAnswerView, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(chatWriteRequestSchema)(request));
     if (admitted === undefined) return Effect.succeed(UNANSWERED);
-    const query = new URLSearchParams({ [CHAT_QUERY.WORKSPACE_ID]: workspaceId });
-    return Effect.flatMap(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path: `${HOSTED_SERVICE_PATH.WORKSPACES_CHAT}?${query}`,
-        body: JSON.stringify(admitted),
+    return hostedAnswer(
+      askHosted(this.#hosted.messages.chatWrite, {
+        query: { [CHAT_QUERY.WORKSPACE_ID]: workspaceId },
+        body: admitted,
       }),
-      (answer) => readAnswer(answer, chatWriteAnswerSchema, MESSAGE_REFUSALS),
+      MESSAGE_REFUSALS,
     );
   }
   /**
@@ -1043,6 +1019,28 @@ export class HostedCodingAgentClient {
       this.#call.send({
         method: HTTP_METHOD.POST,
         path: inboxItemPath(itemId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),
+    );
+  }
+
+  /**
+   * Closes one open item of the inbox without an answer, against the
+   * revision the window drew, under the key the window made for the close,
+   * which a retry carries again, and answers the item as it then stands with
+   * whether the close was taken, as an answer does.
+   */
+  closeInbox(
+    itemId: string,
+    request: InboxCloseRequest,
+  ): Effect.Effect<CodingAgentInboxAnsweredView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(inboxCloseRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: inboxClosePath(itemId),
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, inboxAnsweredSchema, INBOX_ANSWER_REFUSALS),

@@ -37,6 +37,7 @@ import {
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@luke/features";
+import { readerZone } from "@luke/features/date-mention";
 import type { VideoAvatar } from "@luke/features/video-avatar";
 import {
   decodeLivePayload,
@@ -321,6 +322,8 @@ interface ServiceSessionOptions {
   authorization: AccountToken;
   voice?: string;
   requestTimeoutMs?: number;
+  /** The developer's time zone as each opening frame names it, read again for each so a moved clock is told; the runtime's own by default. */
+  timeZone?: () => string;
 }
 
 /**
@@ -337,6 +340,7 @@ class ServiceLiveSessionSource {
   readonly #configuredVoice: LiveVoice;
   #voice: LiveVoice;
   readonly #requestTimeoutMs: number;
+  readonly #timeZone: () => string;
   readonly #outcome: OutcomeRecord;
   #quota: HostedQuota | undefined;
   #sidebandAttached = false;
@@ -353,6 +357,7 @@ class ServiceLiveSessionSource {
     this.#configuredVoice = chosenVoice(options.voice, LIVE_DEFAULTS.VOICE);
     this.#voice = this.#configuredVoice;
     this.#requestTimeoutMs = positiveInteger(options.requestTimeoutMs, SERVICE_REQUEST_TIMEOUT_MS);
+    this.#timeZone = options.timeZone ?? readerZone;
     this.#outcome = new OutcomeRecord(options.logLabel);
   }
 
@@ -425,6 +430,8 @@ class ServiceLiveSessionSource {
         // it with the plan and what was said on the task's earlier calls.
         input: [],
         planId: input.taskId,
+        // The brain's turns on the call count the developer's days and spell their times in it.
+        timeZone: this.#timeZone(),
       };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       const created = answer === undefined ? undefined : this.#readCreated(answer);
@@ -489,6 +496,7 @@ class ServiceLiveSessionSource {
       const frame: SessionAttachFrame = {
         type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
         sessionId,
+        timeZone: this.#timeZone(),
       };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       if (answer === undefined) {

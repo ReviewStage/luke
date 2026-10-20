@@ -7,7 +7,11 @@ import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { settingsView } from "@luke/settings/testing";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import { NOTIFICATIONS_STATUS, type NotificationsControl } from "@luke/voice/settings-controls";
+import {
+  NOTIFICATIONS_GRANTOR,
+  NOTIFICATIONS_STATUS,
+  type NotificationsControl,
+} from "@luke/voice/settings-controls";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
@@ -21,7 +25,8 @@ import { SettingsPanel, type SettingsPanelProps } from "./settings-panel.js";
 /**
  * Settings › Notifications as the panel draws it: a test notification posted
  * on a press, and what macOS last answered said plainly, naming Electron in
- * a development build, which is the app macOS knows it as.
+ * a development build, which is the app macOS knows it as; in a browser, the
+ * site's permission said in the browser's terms, with no System Settings.
  */
 
 const ignore = () => undefined;
@@ -77,6 +82,7 @@ function settingsOn(notifications: NotificationsControl): SettingsPanelProps {
 function control(overrides: Partial<NotificationsControl>): NotificationsControl {
   return {
     status: NOTIFICATIONS_STATUS.UNKNOWN,
+    grantor: NOTIFICATIONS_GRANTOR.MACOS,
     packaged: true,
     onOpenSettings: ignore,
     onTest: ignore,
@@ -164,4 +170,16 @@ test("once macOS showed one, the page says notifications are on and asks nothing
     /macOS showed Luke's last notification, so notifications are on\./,
   );
   assert.equal(button(container, "Open System Settings"), undefined);
+});
+
+test("in a browser, a refused permission says where it is changed and offers no System Settings", () => {
+  const container = draw(
+    control({ status: NOTIFICATIONS_STATUS.OFF, grantor: NOTIFICATIONS_GRANTOR.BROWSER }),
+  );
+
+  assert.match(container.textContent ?? "", /Your browser blocks Luke's notifications\./);
+  assert.match(container.textContent ?? "", /Luke notifies only while its tab is hidden\./);
+  assert.doesNotMatch(container.textContent ?? "", /macOS/);
+  assert.equal(button(container, "Open System Settings"), undefined);
+  assert.ok(button(container, "Send test notification") !== undefined);
 });

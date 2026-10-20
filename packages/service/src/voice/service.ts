@@ -510,6 +510,7 @@ export class VoiceService {
         accountId,
         sessionId,
         taskId: opened.taskId,
+        timeZone: opened.timeZone,
         started: opened.started,
         sideband,
         // What each part of Luke is doing, sent the same way, so the

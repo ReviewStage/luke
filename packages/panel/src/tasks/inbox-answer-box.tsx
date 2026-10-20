@@ -5,9 +5,11 @@ import {
   INBOX_RESPONSE,
   INBOX_STATUS,
   type InboxItem,
+  type InboxMessage,
   type InboxReadResponse,
   knownResponse,
 } from "@luke/features/inbox-wire";
+import { SHORTCUT_KEY } from "@luke/settings/shortcuts";
 import {
   BUTTON_TYPE,
   BUTTON_VARIANT,
@@ -32,6 +34,7 @@ import { useSideBundles } from "../bundle-loader.js";
 import { imageFiles } from "../feedback-images.js";
 import { type IntegrationStatuses, useIntegrationStatuses } from "../integration-statuses.js";
 import { COMPOSER_INPUT, type ComposerEditorHandle } from "../plan-editor/contract.js";
+import { Shortcut } from "../shortcut.js";
 import { Tooltip } from "../tooltip.js";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips.js";
 import { readFiles, withFiles } from "./attached-files.js";
@@ -39,13 +42,19 @@ import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import {
+  attachedAnswers,
+  attachedStamp,
   type InboxDraft,
   type InboxMissing,
   inboxMessageOf,
   inboxMissing,
   inboxReply,
+  inboxThreadSend,
+  openAskOf,
   pickedWords,
+  withoutAnswer,
 } from "./inbox-model.js";
+import { InboxStamp } from "./inbox-stamp.js";
 import { ComposerQuoteView, ReplyToSelection } from "./reply-to-selection.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
@@ -99,6 +108,15 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * both, sent by Send or Enter, which reach the agent and leave the item
  * where it stands. While the item waits, its words are its answer, never a
  * message beside it, so an open item is answered as it always was.
+ *
+ * An item drawn as a thread from version 5 (`inbox-model.ts`'s
+ * `inboxThreadOf`) is only ever replied to: the box's one button is Reply,
+ * filled in the text's own colour, and while an ask waits its foot says
+ * replying keeps it open. Pressing one of the ask's answers in the thread
+ * attaches it over the words as a stamp, its glyph and its words with a ×
+ * that takes it off, a muted line beside it saying the send answers the
+ * ask, and the button takes the answer's name, "Approve" or "Mark done"; the
+ * reply then carries the answer with the reader's words and files.
  */
 
 /** What a card's box asks for, by what the item asks; a text's own placeholder stands where the agent wrote one. */
@@ -133,6 +151,18 @@ const SEND = "Send to agent";
 
 /** What the box's Send is called on a settled item, where it writes a message on the thread. */
 const SEND_MESSAGE = "Send";
+
+/** What a thread's box asks for. */
+const REPLY_PLACEHOLDER = "Reply…";
+
+/** What a thread's box's one button reads with no answer attached. */
+const REPLY = "Reply";
+
+/** What a thread's box says over its words and at its foot of the open ask. */
+const ASK_LINE = {
+  KEPT: "Replying keeps the ask open",
+  ANSWERS: "Sending answers the ask",
+} as const;
 
 /** What a settled item's box asks for: a message to its agent, by name. */
 function messagePlaceholder(agentName: string): string {
@@ -248,6 +278,8 @@ interface AnswerBoxProps {
   agent: CodingAgentSummary | undefined;
   /** The agent's name as the thread names it, which a settled item's box asks to message. */
   agentName: string;
+  /** The thread the item is drawn as from version 5, which the box only replies to; none for an item drawn as before. */
+  thread: readonly InboxMessage[] | undefined;
   /** Where the item's repository's skills are read from; nothing where none can be. */
   skills: SkillSource | undefined;
   /** The words a dictation into the box is likely to say (`dictation-keywords.ts`). */
@@ -264,6 +296,7 @@ function AnswerCard({
   control,
   agent,
   agentName,
+  thread,
   skills,
   keywords,
   replyScope,
@@ -285,11 +318,19 @@ function AnswerCard({
   // while and the item they land on is whichever revision is current by then.
   const latest = useRef(item);
   latest.current = item;
-  // Note that a settled item's box writes a message on its thread, which no response shapes.
-  const answering = item.status === INBOX_STATUS.OPEN;
-  // Note that a note's Send is its words, which the narrow card keeps in the foot rather than at the field's end.
-  const namedSend = answering && item.response.type === INBOX_RESPONSE.NONE;
-  const placeholder = answering ? placeholderOf(item.response) : messagePlaceholder(agentName);
+  // Note that a settled item's box writes a message on its thread, which no response shapes, and a thread's only ever replies.
+  const answering = thread === undefined && item.status === INBOX_STATUS.OPEN;
+  const asking = thread === undefined ? undefined : openAskOf(thread);
+  const attached = asking === undefined ? undefined : attachedAnswers(asking, draft);
+  const stamp = attached === undefined ? undefined : attachedStamp(attached, asking?.ask);
+  // Note that a note's Send is its words, which the narrow card keeps in the foot rather than at the field's end, as a thread's Reply is.
+  const namedSend =
+    thread !== undefined || (answering && item.response.type === INBOX_RESPONSE.NONE);
+  const placeholder = answering
+    ? placeholderOf(item.response)
+    : thread === undefined
+      ? messagePlaceholder(agentName)
+      : REPLY_PLACEHOLDER;
   const bundle = useAtomValue(useSideBundles().planEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   const pickers = useComposerPickers({
@@ -360,7 +401,15 @@ function AnswerCard({
       })
       .finally(() => setReading((count) => count - 1));
   };
-  const quiet = answering ? openQuietLine(item, draft, wanting) : undefined;
+  const quiet = answering
+    ? openQuietLine(item, draft, wanting)
+    : asking !== undefined && stamp === undefined
+      ? { line: ASK_LINE.KEPT, wanting: false }
+      : undefined;
+  const sendable =
+    thread === undefined
+      ? inboxMessageOf(draft) !== undefined
+      : inboxThreadSend(thread, draft) !== undefined;
   const takes = !answering || knownResponse(item.response);
   const takesFiles = takes && !sending;
   // Note that Reply stands only while the editor stands and takes a quote, since a press lets the selection go.
@@ -398,6 +447,15 @@ function AnswerCard({
             else message();
           }}
         >
+          {stamp === undefined ? null : (
+            <div className="inbox-reply-stamp" data-inbox-attached="">
+              <InboxStamp
+                stamp={stamp}
+                onRemove={sending ? undefined : () => control.onDraft(item, withoutAnswer(draft))}
+              />
+              <span className="inbox-reply-stamp-line">{ASK_LINE.ANSWERS}</span>
+            </div>
+          )}
           <AttachedFileChips
             files={attachmentChips(draft.attachments)}
             onRemove={
@@ -484,12 +542,23 @@ function AnswerCard({
                   <DictateButton dictation={dictation} disabled={sending || module === undefined} />
                   {answering ? (
                     <AnswerSend item={item} draft={draft} sending={sending} reading={reading > 0} />
+                  ) : thread !== undefined ? (
+                    <Button
+                      type={BUTTON_TYPE.SUBMIT}
+                      variant={BUTTON_VARIANT.INK}
+                      busy={sending}
+                      busyLabel="Sending"
+                      disabled={reading > 0 || !sendable}
+                    >
+                      {stamp?.words ?? REPLY}
+                      <Shortcut chord={{ key: SHORTCUT_KEY.ENTER, bare: true }} />
+                    </Button>
                   ) : (
                     <Tooltip label={SEND_MESSAGE}>
                       <PromptInputSubmit
                         label={SEND_MESSAGE}
                         status={sending ? SUBMIT_STATE.SUBMITTED : SUBMIT_STATE.READY}
-                        disabled={sending || reading > 0 || inboxMessageOf(draft) === undefined}
+                        disabled={sending || reading > 0 || !sendable}
                       />
                     </Tooltip>
                   )}

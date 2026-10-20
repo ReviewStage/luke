@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { CHAT_NOTICE_LEAD } from "@luke/features/chat-wire";
-import { CODING_AGENT_BRIEF } from "@luke/features/coding-agent-wire";
+import { CODING_AGENT_BRIEF, type CodingAgentBrief } from "@luke/features/coding-agent-wire";
 import { Duration, Redacted, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
@@ -232,7 +232,7 @@ test("an agent on a task starts the agents that help with it on its own task, an
   }
 });
 
-test("an agent handed its task's plan is offered edit_plan, show_page, and the comment tools, one handed a prompt on a task all but edit_plan, and one an automation started with no task none", () => {
+test("an agent on a task is offered edit_plan, show_page, and the comment tools, whether it was handed the plan or a prompt, and one an automation started with no task none", () => {
   const offered = (agent: Parameters<typeof taskToolsOf>[0]) => [...taskToolsOf(agent)].sort();
   const comments = [
     CODER_TOOL.READ_COMMENTS,
@@ -240,15 +240,44 @@ test("an agent handed its task's plan is offered edit_plan, show_page, and the c
     CODER_TOOL.REPLY_TO_COMMENT,
     CODER_TOOL.RESOLVE_THREAD,
   ];
-  assert.deepEqual(
-    offered({ taskId: "plan-1", prompt: null }),
-    [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments].sort(),
-  );
-  assert.deepEqual(
-    offered({ taskId: "plan-1", prompt: "Fix the flaky test." }),
-    [CODER_TOOL.SHOW_PAGE, ...comments].sort(),
-  );
-  assert.deepEqual(offered({ taskId: null, prompt: "Sweep the flaky tests." }), []);
+  const all = [CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...comments].sort();
+  const handedItsTask = { taskId: "plan-1", prompt: null };
+  const handedPrompt = { taskId: "plan-1", prompt: "Fix the flaky test." };
+  const automation = { taskId: null, prompt: "Sweep the flaky tests." };
+  assert.deepEqual(offered(handedItsTask), all);
+  assert.deepEqual(offered(handedPrompt), all);
+  assert.deepEqual(offered(automation), []);
+});
+
+test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {
+  const UPDATING = "## Updating the plan";
+  const READ_FIRST = `Read it with \`${CODER_TOOL.READ_TASK}\``;
+  const told = (brief: CodingAgentBrief, taskLink: string | null) => {
+    const words = coderInstructions("Acme/Relay", brief, true, taskLink);
+    return [
+      words.includes(UPDATING),
+      words.includes(CODER_TOOL.EDIT_PLAN),
+      words.includes(READ_FIRST),
+    ];
+  };
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, TASK_ADDRESS), [true, true, true]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, false, false]);
+});
+
+test("an agent asked for a plan, a proposal, or research opens no pull request of a document, and writes it where it can: the plan, a page, or its final message", () => {
+  const NO_DOCUMENT = "never commit the write-up as a document";
+  const PLAN = `write it into the plan with \`${CODER_TOOL.EDIT_PLAN}\``;
+  const PAGE = `show it as a page with \`${CODER_TOOL.SHOW_PAGE}\``;
+  const MESSAGE = "write it in your final message";
+  const told = (brief: CodingAgentBrief, taskLink: string | null) => {
+    const words = coderInstructions("Acme/Relay", brief, true, taskLink);
+    assert.ok(words.includes(NO_DOCUMENT), brief);
+    return [words.includes(PLAN), words.includes(PAGE), words.includes(MESSAGE)];
+  };
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PLAN, TASK_ADDRESS), [true, true, false]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, TASK_ADDRESS), [false, true, false]);
+  assert.deepEqual(told(CODING_AGENT_BRIEF.PROMPT, null), [false, false, true]);
 });
 
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
@@ -370,16 +399,31 @@ const TASK_LINK = "https://tryluke.dev/acme/task/5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4
  * code for each brief, on a task and on none: what an agent whose starter
  * has not turned Chat on must still read, byte for byte.
  */
+const BEFORE_CHAT_PATH = fileURLToPath(
+  new URL("../../../fixtures/coder-instructions/chat-off.json", import.meta.url),
+);
+
+/** The instructions with Chat off for each brief, on a task and on none, as the golden records them. */
+function chatOffInstructions(): Record<string, { onTask: string; taskless: string }> {
+  return Object.fromEntries(
+    Object.values(CODING_AGENT_BRIEF).map((brief) => [
+      brief,
+      {
+        onTask: coderInstructions("Acme/Relay", brief, true, TASK_LINK),
+        taskless: coderInstructions("Acme/Relay", brief, false, null),
+      },
+    ]),
+  );
+}
+
+// Note that the golden is written again only under LUKE_UPDATE_FIXTURES=1, and the diff explained in the PR.
+if (process.env.LUKE_UPDATE_FIXTURES === "1") {
+  writeFileSync(BEFORE_CHAT_PATH, `${JSON.stringify(chatOffInstructions(), null, 2)}\n`);
+}
+
 const BEFORE_CHAT = Schema.decodeUnknownSync(
   Schema.Record(Schema.String, Schema.Struct({ onTask: Schema.String, taskless: Schema.String })),
-)(
-  JSON.parse(
-    readFileSync(
-      fileURLToPath(new URL("../../../fixtures/coder-instructions/chat-off.json", import.meta.url)),
-      "utf8",
-    ),
-  ),
-);
+)(JSON.parse(readFileSync(BEFORE_CHAT_PATH, "utf8")));
 
 test("with Chat off the instructions are main's own, byte for byte, and with it on they add the chat section alone", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {

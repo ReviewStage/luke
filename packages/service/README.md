@@ -138,7 +138,8 @@ is who a coding agent's commits are by. A task's repository is reached
 through its task's workspace, read afresh at each use, so an installation
 suspended, removed, or reinstalled decides the very next read.
 
-`GET /api/github/repositories` (`src/github/github-repositories-app.ts`) is that
+`GET /api/github/repositories` (`src/github/github-procedures.ts`, on the
+hosted oRPC router) is that
 listing under the account bearer, answered as
 `packages/features/src/github-repositories-wire.ts` declares it: `installed`,
 whether the workspace has an installation connected, `repositories` (owner,
@@ -167,7 +168,7 @@ token minted for that one repository with `issues: read` alone; an
 installation that does not grant the App issues mints nothing and answers
 `{ issue: null }`, as an unreached repository, a pull request's number, a
 missing number, and a repository with its issues turned off do.
-`src/github/github-repositories-app.test.ts` holds the route and
+`src/github/github-repositories-procedures.test.ts` holds the route and
 `src/github/github-app.test.ts` the reads beneath it, over
 `src/testing/github-app-fake.ts`.
 
@@ -381,7 +382,8 @@ policy keeps an SVG's script from running as this origin.
 
 ## The dictation group
 
-`src/dictation/dictation-app.ts` answers `POST /api/dictation`: one clip the
+`src/dictation/dictation-procedures.ts` answers `POST /api/dictation` on the
+hosted oRPC router (`src/orpc/`): one clip the
 developer dictated into a message box, `{ audio, durationMs, keywords }`
 (`@luke/features/dictation-wire`), answered `{ text }`. The clip is WebM
 with Opus in base64, held to two minutes and a megabyte and refused past
@@ -396,7 +398,7 @@ event; a failure logs OpenAI's status alone and answers `unavailable`, as a
 deployment without `OPENAI_API_KEY` does. The day is metered one call and the
 seconds OpenAI billed, or the clip's own length where the answer reports none,
 and a meter the database refused is logged while the text is still answered.
-There is no path on an account's own key. `src/dictation/dictation-app.test.ts`
+There is no path on an account's own key. `src/dictation/dictation-procedures.test.ts`
 answers the route over a scripted OpenAI at its HTTP door.
 
 ## The models group
@@ -441,7 +443,8 @@ answers the route over a fixed catalog, byte for byte as the old group did.
 
 ## Accounts' own provider keys
 
-`src/accounts/provider-keys-app.ts` answers `/api/account/provider-keys`, the
+`src/accounts/provider-keys-procedures.ts` answers `/api/account/provider-keys` on the
+hosted oRPC router (`src/orpc/`), the
 account's own Anthropic and OpenAI API keys, at most one per provider:
 `GET` answers what each is, `PUT` saves one, and `DELETE
 ?provider=<provider>` removes one, each answered with the keys as they then
@@ -494,7 +497,9 @@ deployment's `CRON_SECRET`, compared in constant time as the sweep's is, so
 the rewrap (`src/accounts/provider-key-rewrap.ts`) runs on the deployment
 over the ring it holds and the key-encryption keys never leave Vercel. It
 unwraps each older row's data key and wraps it under the head version,
-leaving the sealed key itself untouched, and answers counts: the version,
+leaving the sealed key itself untouched, and moves members' GitHub
+personal access tokens (`github_personal_token`, sealed under the same ring
+by `src/github/github-token-app.ts`) the same way, and answers counts: the version,
 moved, already current, changed meanwhile, and unreadable. Run it again
 until nothing is changed meanwhile; once nothing names the old version,
 drop it from the list and redeploy. A row counted unreadable reads
@@ -599,7 +604,9 @@ lets it go, so its name is free again.
 Deleting the Luke account reads every row's subject before the cascade and
 revokes each.
 
-**The routes** (`src/integrations/integrations-app.ts`). Every route about
+**The routes** (the hosted procedures in
+`src/integrations/integrations-procedures.ts`, and Connect's return to the
+browser in `src/integrations/integrations-app.ts`). Every route about
 one account reads it from a `connection` query beside the provider, and
 without one means the provider's first account, so a desktop that predates
 more than one sees exactly what it saw before:
@@ -1303,25 +1310,24 @@ and a reader that has heard some hears the rest and the end exactly once.
 
 ## The account group
 
-`src/accounts/account-app.ts` is the account route group: the signed-in desktop's
-own delete, preferences, and plan template endpoints, described as routes of the group's own
-rather than carried as a passthrough, because each answers from this
-deployment's own database and none owns a contract of its own the way Better Auth does.
-Each endpoint resolves the bearer against the deployment's own account store
+`src/accounts/account-procedures.ts` is the account resource on the hosted oRPC
+router (`src/orpc/`): the signed-in desktop's own delete, preferences, and plan
+template procedures, on the paths `@luke/features/contract`'s `account.ts`
+declares, each answering from this deployment's own database.
+Each procedure resolves the bearer against the deployment's own account store
 before touching anything — root AGENTS.md pins that no credential or account
 secret ever travels in an answer — and answers only the boolean or the
 snapshot the caller's own account carries. `src/accounts/account-seams.ts` is
-the one place that hands the group a real user table and a real preferences
-store, so `api/account/delete.ts`, `preferences.ts`, and `plan-template.ts` build
-the same group from the same wiring; the reads and the writes themselves are
+the one place that hands the procedures a real user table and a real preferences
+store, which `apps/web/server/orpc-route.ts` hands the router; the reads and the writes themselves are
 `packages/database/src/models/account-store.ts`'s effects over the ambient `SqlClient`,
-handed to the group as the effects they are rather than run at the seam, and
+handed to the procedures as the effects they are rather than run at the seam, and
 that store names no database and reaches no auth session, so `apps/web/tests/hosted-account-store.test.ts`
 exercises the erasure's cascade and the snapshot's replacement against a real
 dialect; the analytics erasure key and project are
 read from `HostedEnvironment` instead, the way the hosted tier's own key is,
 and the erasure call itself runs over the ambient
-`HttpClient` rather than an injected transport, so nothing in `AccountAppSeams`
+`HttpClient` rather than an injected transport, so nothing in `AccountProcedureSeams`
 carries one — a test provides its own fake `HttpClient` layer instead.
 
 The preferences snapshot carries three parts. `preferences` is the settings
@@ -1371,6 +1377,24 @@ belong in that loop. It lives in `account_preference.plan_template`
 the preferences part's own, so a row a template opened answers no snapshot.
 `src/accounts/account-plan-template.test.ts` answers the path over a real dialect.
 
+## The chapters group
+
+`src/chapters/chapters-generator.ts` tells a pull request's diff as chapters
+(`@luke/features/pull-request-chapters`): `generateChapters(model, input)`
+groups, orders, and narrates the hunks in one structured call
+(`Output.object`, its JSON Schema emitted from the Effect Schema that decodes
+the answer), holds the answer to the diff, asks once more for any hunk it left
+out, and closes the story with "Other changes": the files a reader reads past,
+those with no hunk, and whatever is still outside. The model is a seam: the
+route hands in `chaptersModelOf(anthropicKey)`, one fixed fast Claude model on
+Luke's own key, never the account's meter, and a test hands in a scripted
+one. An input past `CHAPTERS_BOUNDS.MAX_INPUT_TOKENS` is refused before any
+call, the whole run is bounded by `CHAPTERS_BOUNDS.TIMEOUT`, and a failure is
+one of the store's `PULL_REQUEST_CHAPTERS_FAILURE` kinds, logged by its kind alone. The prompt,
+ReviewStage's rules in one pass, and the diff laid out as stage-cli's `prep`
+lays it out are `src/chapters/chapters-prompt.ts`.
+`src/chapters/chapters-generator.test.ts` answers it over a scripted model.
+
 ## The coding-agent routes
 
 `src/agents/coding-agents-app.ts` is the group the desktop starts, lists,
@@ -1391,11 +1415,12 @@ the task's workspace no longer reaches, read at the start rather than when
 the task named it (`repository-not-reachable`, 403;
 `src/github/workspace-repository.ts`), snapshots the
 task's plan as the Markdown Copy puts on the clipboard
-(`@luke/features/plan-markdown`), with the Linear issue a plan was started
-from after it (`linearIssueBrief`): the issue as a mention, a branch named
-`luke/<key>-<slug>` and a `Fixes <key>` or `Part of <key>` line in the pull
-request, by which Linear's own GitHub integration links the pull request and
-moves the issue's status, and the issue's description fenced as data; then
+(`@luke/features/plan-markdown`), with the issues the task links after it,
+oldest linked first, in one section (`issueLinksBrief`): a branch named
+`luke/<key>-<slug>` after the first, and each issue as a mention with the line
+its link's relation asks of the pull request, `Fixes <key>` or `Part of <key>`
+for Linear's own GitHub integration to link the pull request and move the
+issue's status, and its description fenced as data; then
 makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own
 bearer with the snapshot as the first message of a typed turn. A Start
@@ -1543,8 +1568,7 @@ double, reading every run for the token and never finding it.
 ## Automations
 
 An automation is an account's saved coding-agent Start on one of its tasks,
-fired by a trigger (`docs/proposals/automations-research.md` is the
-research and the plan behind it). The account, the task, the trigger, the
+fired by a trigger. The account, the task, the trigger, the
 action, and the guards are an `automation` row
 (`packages/database/src/schemas/automation.ts`), the trigger, the action,
 and the guards as `@luke/features/automation-wire`'s own JSON; every
@@ -1615,7 +1639,8 @@ fails with the start's refusal. A claim left without its agent for ten
 minutes, its function gone, is settled by the sweep as the agent its key
 made where one stands, and failed as `unavailable` where none does.
 
-The routes are `src/automations/automations-app.ts`, under the account bearer, every
+The routes are procedures of the hosted oRPC router
+(`src/automations/automations-procedures.ts`), under the account bearer, every
 row gated by the store on the account owning the automation and still
 reaching its task, so another account's automation, or one on a task of a
 workspace the account left, is `not-found`:
@@ -1664,7 +1689,8 @@ past its bound. The body reaches the run's agent task, transcript, and traces
 by the carve-out in root `AGENTS.md`; nothing of it or the secret is logged.
 
 `@luke/features/automation-wire` declares every body and `service-paths.ts`
-the addresses; `src/automations/automations-app.test.ts` holds the routes over a fake
+the addresses, `@luke/features/contract`'s `automations.ts` the procedures;
+`src/automations/automations-procedures.test.ts` holds the routes over a fake
 eve, a scripted GitHub, a fixed catalog, and PGlite.
 
 A GitHub trigger fires on the Luke App's own webhook
@@ -1747,7 +1773,8 @@ its membership of the task's workspace, so a teammate's task reads and
 writes as the account's own, and a task of a workspace the account is not in
 answers exactly as none does.
 
-`src/github/repository-pins-app.ts` answers `/api/repository-pins`, the
+`src/github/repository-pins-procedures.ts` answers `/api/repository-pins` on
+the hosted oRPC router, the
 repositories the account pinned in the sidebar, whose groups of tasks stand
 above the rest: `GET` reads them newest pinned first, and `PUT` pins or
 unpins one and answers them all as they then stand. A pin is a row of

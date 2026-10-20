@@ -19,7 +19,7 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { ACTOR_KIND } from "@luke/ui/actor-model";
 import { MESSAGE_ROLE } from "@luke/wire";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -27,7 +27,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, type AnyActOutcome, fakeActs, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
@@ -157,8 +157,8 @@ afterEach(() => {
 
 /** The developer's messages as `reader` sees the tab drawn, one element for each of `MESSAGES`, every place a press opened kept in `opened`. */
 async function drawnFor(reader: string, opened: LinkPlace[] = []): Promise<readonly Element[]> {
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
+  fakeActs({
+    act: (request: AnyAct): Promise<AnyActOutcome> =>
       Promise.resolve(
         request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
           ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }

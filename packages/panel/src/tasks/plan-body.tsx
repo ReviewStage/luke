@@ -63,6 +63,7 @@ import {
   chaseView,
   type UnitView,
 } from "./task-reveal.js";
+import { TaskKeyLine, TaskStandingChips, type TaskStandingDoor } from "./task-standing.js";
 import { agoText, momentText, sinceText, useMinute } from "./task-time.js";
 import { TaskTitle } from "./task-title.js";
 import { useOpenLink } from "./use-open-link.js";
@@ -795,6 +796,7 @@ export function PlanBody({
   sectionLinks,
   reader = NO_READER,
   agents,
+  standing: taskStanding,
 }: {
   task: Task;
   live: boolean;
@@ -815,6 +817,8 @@ export function PlanBody({
   reader?: TaskReader;
   /** The task's coding agents, among which an agent's edit is found and opened; without them, an agent is named alone. */
   agents?: EditAgents;
+  /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
+  standing?: TaskStandingDoor;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
@@ -1051,6 +1055,9 @@ export function PlanBody({
       <DocumentScroll ref={scroller}>
         {page === undefined ? null : <ChangedLine looks={looks} marks={marks} />}
         <div ref={body} className={BODY_CLASS}>
+          {taskStanding === undefined || page !== undefined ? null : (
+            <TaskKeyLine task={task} workspaceName={taskStanding.workspaceName} />
+          )}
           {titled ? (
             attributed(
               // Keyed by the plan, so words typed for one are saved to it as another opens.
@@ -1080,6 +1087,9 @@ export function PlanBody({
           )}
           {page === undefined ? (
             <>
+              {taskStanding === undefined ? null : (
+                <TaskStandingChips task={task} onSet={taskStanding.onSet} />
+              )}
               <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
               <ChangedLine looks={looks} marks={marks} />
             </>

@@ -5,7 +5,7 @@ import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@luke/features/cod
 import type { Task, TaskSummary } from "@luke/features/task-wire";
 import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE } from "@luke/features/terminal-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import type { StripTab } from "@luke/ui/tab-strip-model";
@@ -16,7 +16,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { DesktopTasks } from "../desktop/desktop-tasks.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -89,19 +89,14 @@ beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
   installScrollIntoView();
   // Main answers how each agent's sandbox stands: the working agent's runs, the other's is stopped.
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.TERMINAL_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-      }
-      const running = request.payload.agentId === WORKING.id;
-      return Promise.resolve({
-        status: ACT_OUTCOME_STATUS.DONE,
-        value: running
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.TERMINAL_LIST]: ({ agentId }) =>
+      Promise.resolve(
+        agentId === WORKING.id
           ? { sandbox: SANDBOX_STATE.RUNNING, terminals: [] }
           : { sandbox: SANDBOX_STATE.STOPPED, terminals: [] },
-      });
-    },
+      ),
   });
   handCapabilities(DESKTOP_CAPABILITIES);
 });

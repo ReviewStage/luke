@@ -1,22 +1,31 @@
-import type { TaskSummary } from "@luke/features/task-wire";
+import { TASK_STATUS_ORDER, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   ArchiveIcon,
   CHIP_LOOK,
   Chip,
   ChipName,
+  dropBelowStart,
   IconButton,
   NAV_ITEM_VARIANT,
   NavItem,
+  TaskStatusMark,
+  TextButton,
   useMenu,
 } from "@luke/ui";
 import { type Actor, actorName, creatorActor, memberActor } from "@luke/ui/actor-model";
-import { TASK_GROUPING, TASK_ORDER } from "@luke/ui/task-list-model";
+import {
+  type HiddenStatus,
+  TASK_GROUPING,
+  TASK_ORDER,
+  toggledStatus,
+} from "@luke/ui/task-list-model";
 import {
   ArrowDownAZIcon,
   CalendarPlusIcon,
   ClockIcon,
   FolderGitIcon,
+  ListFilterIcon,
   ListIcon,
   SlidersHorizontalIcon,
   UserIcon,
@@ -26,6 +35,7 @@ import type { ReactNode } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { useMemberDirectory } from "../member-directory.js";
+import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "./action-menu.js";
 import type { CountNoun } from "./sidebar-group-header.js";
@@ -46,10 +56,22 @@ import type { TaskListViewControl } from "./task-list-view.js";
  * the view lists one member's tasks or the archived ones, a chip under the
  * head says so, its × lifts it, and the button wears a dot, so a filtered
  * list never passes for the whole of it.
+ *
+ * Beside it, revealed while the head is hovered or reached, stands the
+ * status filter: which statuses' tasks the list holds, each checked, to do
+ * and in progress until the reader chooses. Under the list a quiet line
+ * says how many tasks the filter leaves out and in which statuses, and
+ * opens the same menu under itself.
  */
 
 /** What View options is called, on its button and its menu alike. */
 const VIEW_OPTIONS = "View options";
+
+/** What the status filter is called, on its button and its menu alike. */
+const STATUS_FILTER = "Show statuses";
+
+/** The menu the status filter's button and the hidden tasks' line both open. */
+type StatusFilterMenu = ReturnType<typeof useMenu>;
 
 /** A section's head: its name, which folds the section where it may be folded, and what stands at its end. */
 export function SidebarSectionHead({
@@ -269,6 +291,82 @@ export function TaskViewOptions({
         />
       )}
     </>
+  );
+}
+
+/** The status filter's menu: a status a line, its mark leading and a check where its tasks are listed. */
+function StatusFilterMenuDrawn({
+  menu,
+  statuses,
+  onStatuses,
+}: {
+  menu: StatusFilterMenu;
+  statuses: readonly TaskStatus[];
+  onStatuses: (statuses: readonly TaskStatus[]) => void;
+}): React.JSX.Element | null {
+  if (menu.drawn === undefined) return null;
+  const entries: MenuAction[] = TASK_STATUS_ORDER.map((status) => ({
+    label: TASK_STATUS_WORDS[status],
+    icon: <TaskStatusMark status={status} />,
+    checked: statuses.includes(status),
+    onSelect: () => onStatuses(toggledStatus(statuses, status)),
+  }));
+  return (
+    <ActionMenu label={STATUS_FILTER} menu={menu.drawn} groups={[entries]} onClose={menu.close} />
+  );
+}
+
+/**
+ * The Tasks head's status filter: its button, revealed while the head is
+ * hovered, reached, or its menu stands, and the menu it drops.
+ */
+export function TaskStatusFilter({
+  menu,
+  statuses,
+  onStatuses,
+}: {
+  /** The menu it opens, which the hidden tasks' line opens too. */
+  menu: StatusFilterMenu;
+  statuses: readonly TaskStatus[];
+  onStatuses: (statuses: readonly TaskStatus[]) => void;
+}): React.JSX.Element {
+  return (
+    <>
+      <span
+        className="sidebar-status-filter"
+        data-menu-open={menu.open === undefined ? undefined : "true"}
+      >
+        <Tooltip label={STATUS_FILTER}>
+          <IconButton icon={<ListFilterIcon />} label={STATUS_FILTER} {...menu.trigger()} />
+        </Tooltip>
+      </span>
+      <StatusFilterMenuDrawn menu={menu} statuses={statuses} onStatuses={onStatuses} />
+    </>
+  );
+}
+
+/** What the hidden tasks' line says: how many, and in which statuses, as `4 more in Backlog, Done`. */
+function hiddenStatusesLine(hidden: readonly HiddenStatus[]): string {
+  const count = hidden.reduce((sum, each) => sum + each.count, 0);
+  return `${count} more in ${hidden.map((each) => TASK_STATUS_WORDS[each.status]).join(", ")}`;
+}
+
+/** The quiet line at the list's foot saying what the status filter leaves out, which opens the filter under itself; nothing where it leaves nothing out. */
+export function HiddenStatusesLine({
+  menu,
+  hidden,
+}: {
+  menu: StatusFilterMenu;
+  hidden: readonly HiddenStatus[];
+}): React.JSX.Element | null {
+  if (hidden.length === 0) return null;
+  const opener = menu.trigger(dropBelowStart);
+  return (
+    <p className="sidebar-hidden-statuses">
+      <TextButton aria-expanded={opener["aria-expanded"]} onClick={opener.onClick}>
+        {hiddenStatusesLine(hidden)}
+      </TextButton>
+    </p>
   );
 }
 

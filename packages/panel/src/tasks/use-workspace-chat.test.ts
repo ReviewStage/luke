@@ -7,6 +7,7 @@ import {
   CHAT_ASK,
   CHAT_BLOCK,
   CHAT_CURSOR_START,
+  CHAT_IMAGE_TYPE,
   CHAT_REPLY,
   type ChatAnswer,
   type ChatMessage,
@@ -15,9 +16,11 @@ import {
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentChatAnswerView,
+  type CodingAgentChatAttachmentParams,
   type CodingAgentChatParams,
   type CodingAgentChatPostParams,
   type CodingAgentChatWriteAnswerView,
+  type CodingAgentInboxAttachmentView,
 } from "@luke/features/coding-agent-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -79,6 +82,7 @@ function scriptedService() {
     params: CodingAgentChatPostParams;
     settle: (answer: CodingAgentChatWriteAnswerView) => void;
   }[] = [];
+  const pictures: CodingAgentChatAttachmentParams[] = [];
   return {
     reads,
     writes,
@@ -86,6 +90,14 @@ function scriptedService() {
       new Promise<CodingAgentChatAnswerView>((settle) => reads.push({ params, settle })),
     writeChat: (params: CodingAgentChatPostParams) =>
       new Promise<CodingAgentChatWriteAnswerView>((settle) => writes.push({ params, settle })),
+    pictures,
+    readPicture: (params: CodingAgentChatAttachmentParams) => {
+      pictures.push(params);
+      return Promise.resolve<CodingAgentInboxAttachmentView>({
+        contentType: CHAT_IMAGE_TYPE.PNG,
+        base64: "iVBORw0KGgo=",
+      });
+    },
   };
 }
 
@@ -213,6 +225,19 @@ test("a post sent again after a reply that never came goes under the same key, a
   );
 });
 
+test("a message's picture is read in the workspace shown, by the message and the attachment its block names", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  const picture = await tab.control().readPicture("m1", "p1");
+  assert.deepEqual(picture, { contentType: CHAT_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" });
+  tab.rerender({ workspaceId: "globex", reading: undefined });
+  await tab.control().readPicture("m2", "p2");
+  assert.deepEqual(service.pictures, [
+    { workspaceId: "acme", messageId: "m1", attachmentId: "p1" },
+    { workspaceId: "globex", messageId: "m2", attachmentId: "p2" },
+  ]);
+});
+
 test("an answer the service did not take, its ask changed first, says so and leaves the ask as the service answered it", async () => {
   const service = scriptedService();
   const tab = mount(service);
@@ -333,4 +358,57 @@ test("another account signed in with the same channel shown marks it read as its
       { readTo: 2, channelId: CHANNEL },
     ],
   );
+});
+
+test("a channel the window wrote stands through a read that was asked before the write, and the next read is the service's word", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  service.reads[0]?.settle(answered([message(1)], "1"));
+  await settle();
+  // The second read is out while the channel is renamed.
+  let said: Promise<string | undefined> | undefined;
+  act(() => {
+    said = tab.control().onChannel({ edit: { channelId: CHANNEL, name: "invites-v2" } });
+  });
+  const renamed = { id: CHANNEL, kind: CHANNEL_KIND.TOPIC, name: "invites-v2", archived: false };
+  service.writes[0]?.settle({ channel: renamed });
+  await settle();
+  assert.equal(await said, undefined);
+  service.reads[1]?.settle(answered([message(1)], "1"));
+  await settle();
+  assert.equal(
+    tab.control().chat?.channels[0]?.name,
+    "invites-v2",
+    "the older read sets nothing back",
+  );
+  // A read asked after the write is the service's own word again.
+  service.reads[2]?.settle({
+    ...answered([message(1)], "1"),
+    channels: [{ ...renamed, name: "invites-v3" }],
+  });
+  await settle();
+  assert.equal(tab.control().chat?.channels[0]?.name, "invites-v3");
+});
+
+test("a channel the last account wrote, answered after another account signed in, is laid over nothing of the new account's reads", async () => {
+  const service = scriptedService();
+  const tab = mount(service);
+  service.reads[0]?.settle(answered([message(1)], "1"));
+  await settle();
+  act(() => {
+    void tab.control().onChannel({ edit: { channelId: CHANNEL, name: "alpha" } });
+  });
+  tab.rerender({ workspaceId: "acme", reading: undefined, account: "ada@example.com" });
+  await settle();
+  const ada = service.reads.at(-1);
+  service.writes[0]?.settle({
+    channel: { id: CHANNEL, kind: CHANNEL_KIND.TOPIC, name: "alpha", archived: false },
+  });
+  await settle();
+  ada?.settle({
+    ...answered([message(1)], "1"),
+    channels: [{ id: CHANNEL, kind: CHANNEL_KIND.TOPIC, name: "beta", archived: false }],
+  });
+  await settle();
+  assert.equal(tab.control().chat?.channels[0]?.name, "beta");
 });

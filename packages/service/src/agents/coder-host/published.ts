@@ -27,7 +27,7 @@ import {
   pullRequestFiles,
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
-import { agentWorkspace } from "../../github/workspace-repository.js";
+import { agentMember, agentWorkspace } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
 import { CODER } from "./bounds.js";
 
@@ -202,7 +202,7 @@ export const agentPullRequestReach = /* @__PURE__ */ Effect.fnUntraced(function*
   const app = yield* GitHubApp;
   const reached = Option.isNone(workspace)
     ? Option.none()
-    : yield* app.repositoryPullRequestToken(workspace.value, agent.repository);
+    : yield* app.repositoryPullRequestToken(workspace.value, agent.repository, agentMember(agent));
   if (Option.isNone(reached)) {
     return yield* new RepositoryNotReachable({ repository: agent.repository });
   }
@@ -326,4 +326,20 @@ export function withPublishedCache<A, E, R>(
   routes: (cache: PublishedCache) => Layer.Layer<A, E, R>,
 ): Effect.Effect<Layer.Layer<A, E, R>> {
   return Effect.map(publishedCache, routes);
+}
+
+/**
+ * A cache of its own for procedures that are built with no Effect to build
+ * one in (`agent-pull-request-procedures.ts`): made on the first ask and
+ * kept for the instance's life, as a route group's is. Note that two first
+ * asks at once each make one and the first to land is the one kept, so
+ * every later ask shares it.
+ */
+export function instancePublishedCache(): Effect.Effect<PublishedCache> {
+  let kept: PublishedCache | undefined;
+  return Effect.suspend(() =>
+    kept === undefined
+      ? Effect.map(publishedCache, (made) => (kept ??= made))
+      : Effect.succeed(kept),
+  );
 }

@@ -4,14 +4,14 @@ import assert from "node:assert/strict";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
@@ -102,7 +102,7 @@ async function settle(): Promise<void> {
 
 /** The words drawn in a window holding `workspace`, on the plan's page or, as the window's own Inbox draws an item's, off any, and every act the window asked. */
 async function drawn(text: string, workspace: Workspace, onTask = true) {
-  const asked: Act[] = [];
+  const asked: { kind: string; payload?: unknown }[] = [];
   const state = stateWith(workspace);
   fakeAppBridge({
     onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
@@ -110,25 +110,20 @@ async function drawn(text: string, workspace: Workspace, onTask = true) {
       return () => undefined;
     },
     requestAppState: () => Promise.resolve(state),
-    act: (request: Act): Promise<ActOutcome> => {
-      asked.push(request);
-      return Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_LINEAR_ISSUES
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: [
-                {
-                  id: "issue-1",
-                  identifier: "ENG-1",
-                  title: "Start a plan from Linear",
-                  url: ISSUE,
-                  state: "In Progress",
-                  assignee: "Sam Okafor",
-                },
-              ],
-            }
-          : { status: ACT_OUTCOME_STATUS.DONE, value: undefined },
-      );
+  });
+  fakeActPort({
+    [ACT_KIND.WORKSPACE_LINEAR_ISSUES]: (payload) => {
+      asked.push({ kind: ACT_KIND.WORKSPACE_LINEAR_ISSUES, payload });
+      return Promise.resolve([
+        {
+          id: "issue-1",
+          identifier: "ENG-1",
+          title: "Start a plan from Linear",
+          url: ISSUE,
+          state: "In Progress",
+          assignee: "Sam Okafor",
+        },
+      ]);
     },
   });
   const container = document.body.appendChild(document.createElement("div"));

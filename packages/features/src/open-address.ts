@@ -2,20 +2,21 @@ import { LINK_ORIGIN } from "./link-home.js";
 import { appLinkOf, type LinkPlaceKind, readLink } from "./luke-link.js";
 
 /**
- * open-address.ts -- what the "Open in Luke" page reads off its address: the place it is a link to, spelled in the desktop's own scheme.
+ * open-address.ts -- what a web page at a Luke link reads off its address: the place it is a link to, spelled in the desktop's own scheme.
  *
- * The page is served at every place's address, `/<workspace>/<kind>/…`, on
- * Luke's home and on a preview alike, so its path, its query (which names a
- * comment thread of a task), and its fragment are read as those of a link
- * on the home, whatever host served it, a
- * slash after it let go as the route lets it, and written again in the
- * desktop's scheme by the one module that knows a link's form
- * (`@luke/features/luke-link`). A picture's address,
- * `/<workspace>/plan/<id>/files/<picture>`, opens the plan it is of, and the
- * page shows nothing of the picture. A path that names no place opens nothing.
+ * The web app is served at every place's address, `/<workspace>/<kind>/…`,
+ * on Luke's home and on a preview alike, and offers the place to the Mac app
+ * (its sign-in's "Open in the Mac app", and the hand-off an account that
+ * chose the app gets). Its path, its query (which names a comment thread of
+ * a task), and its fragment are read as those of a link on the home,
+ * whatever host served it, a slash after it let go as the route lets it,
+ * and written again in the desktop's scheme by the one module that knows a
+ * link's form (`@luke/features/luke-link`). A picture's address,
+ * `/<workspace>/plan/<id>/files/<picture>`, opens the plan it is of. A path
+ * that names no place opens nothing.
  */
 
-/** What the page hands the app: the link in the app's own scheme, and the kind of place it opens, which the page names. */
+/** What the page hands the app: the link in the app's own scheme, and the kind of place it opens. */
 export interface OpenTarget {
   readonly appLink: string;
   readonly kind: LinkPlaceKind;

@@ -1,5 +1,4 @@
 import { Schema as EffectSchema } from "effect";
-import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import { chatAnswerSchema, chatWriteAnswerSchema, chatWriteRequestSchema } from "./chat-wire.js";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
@@ -28,6 +27,7 @@ import {
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
+  inboxCloseRequestSchema,
   inboxMessagedSchema,
   inboxMessageRequestSchema,
   inboxReadAllSchema,
@@ -474,6 +474,14 @@ export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnswe
 
 export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;
 
+/** A close of one item without an answer, as the window asks it: the item, and the close request the service takes, its key the window's own. It is heard as an answer is (`codingAgentInboxAnsweredViewSchema`). */
+export const codingAgentInboxCloseParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  ...inboxCloseRequestSchema.fields,
+});
+
+export type CodingAgentInboxCloseParams = typeof codingAgentInboxCloseParamsSchema.Type;
+
 /** A message on one item's thread, as the window asks it: the item, and the message request the service takes, its key the window's own. */
 export const codingAgentInboxMessageParamsSchema = EffectSchema.Struct({
   itemId: EffectSchema.NonEmptyString,
@@ -508,20 +516,6 @@ export const codingAgentInboxReadAllViewSchema = EffectSchema.Union([inboxReadAl
 
 export type CodingAgentInboxReadAllView = typeof codingAgentInboxReadAllViewSchema.Type;
 
-/** What waits across the account past a cursor, as main asks it: where it stands. */
-export const codingAgentAccountInboxParamsSchema = EffectSchema.Struct({
-  after: EffectSchema.NonEmptyString,
-});
-
-export type CodingAgentAccountInboxParams = typeof codingAgentAccountInboxParamsSchema.Type;
-
-/** What waits across the account, as main hears it: every open item and the cursor to read on from, or why there is none. */
-export const codingAgentAccountInboxAnswerViewSchema = EffectSchema.Union([
-  accountInboxAnswerSchema,
-  failed,
-]);
-
-export type CodingAgentAccountInboxAnswerView = typeof codingAgentAccountInboxAnswerViewSchema.Type;
 /** One image of an inbox item, as the window asks it: the item and the attachment its block names. */
 export const codingAgentInboxAttachmentParamsSchema = EffectSchema.Struct({
   itemId: EffectSchema.NonEmptyString,
@@ -538,6 +532,15 @@ export const codingAgentPictureParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentPictureParams = typeof codingAgentPictureParamsSchema.Type;
+
+/** One picture a chat message carries, as the window asks it: the workspace, the message, and the attachment its image block names. */
+export const codingAgentChatAttachmentParamsSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.NonEmptyString,
+  messageId: EffectSchema.NonEmptyString,
+  attachmentId: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentChatAttachmentParams = typeof codingAgentChatAttachmentParamsSchema.Type;
 
 /**
  * The image, or the file an inbox answer carried, as the window hears it:

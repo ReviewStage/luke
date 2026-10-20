@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import {
   type KeyRing,
+  openGitHubToken,
   openProviderKey,
   PROVIDER_KEY_UNREADABLE,
   parseKeyRing,
   type SealOwner,
+  sealGitHubToken,
   sealProviderKey,
 } from "@luke/database/models/provider-key-seal";
 import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
@@ -62,6 +64,27 @@ test("a seal moved onto another account's row or another provider's fails closed
   );
   assert.deepEqual(
     openProviderKey(one, { ...OWNER, provider: PROVIDER_KEY_PROVIDER.OPENAI }, sealed),
+    Result.fail(PROVIDER_KEY_UNREADABLE),
+  );
+});
+
+test("a GitHub token's seal opens for its member alone, and no provider key's seal opens as one", () => {
+  const one = ring(`1:${KEK.ONE}`);
+  const token = Redacted.make(`ghp_${"0".repeat(32)}abcd`);
+  const sealed = sealGitHubToken(one, OWNER.userId, token);
+  const providerSealed = sealProviderKey(one, OWNER, token);
+
+  assert.equal(opened(openGitHubToken(one, OWNER.userId, sealed)), Redacted.value(token));
+  assert.deepEqual(
+    openGitHubToken(one, "user-other", sealed),
+    Result.fail(PROVIDER_KEY_UNREADABLE),
+  );
+  assert.deepEqual(
+    openGitHubToken(one, OWNER.userId, {
+      keyVersion: providerSealed.keyVersion,
+      sealedDataKey: providerSealed.sealedDataKey,
+      sealedToken: providerSealed.sealedKey,
+    }),
     Result.fail(PROVIDER_KEY_UNREADABLE),
   );
 });

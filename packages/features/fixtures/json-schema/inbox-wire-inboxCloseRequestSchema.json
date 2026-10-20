@@ -1,0 +1,19 @@
+{
+  "type": "object",
+  "properties": {
+    "revision": {
+      "type": "number",
+      "minimum": 0
+    },
+    "clientKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  },
+  "required": [
+    "revision",
+    "clientKey"
+  ],
+  "additionalProperties": false
+}

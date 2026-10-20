@@ -21,18 +21,27 @@
             "ballad",
             "beacon",
             "bossa",
+            "brise",
             "cedar",
             "cinder",
             "coral",
             "delta",
             "echo",
+            "flitz",
             "gleam",
+            "harema",
+            "juni",
             "marin",
             "meridian",
+            "nira",
+            "noeul",
+            "nuri",
             "quartz",
             "ripple",
             "sage",
+            "shida",
             "shimmer",
+            "sillage",
             "stone",
             "tempo",
             "verse",
@@ -196,6 +205,10 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 36
+        },
+        "timeZone": {
+          "type": "string",
+          "maxLength": 64
         }
       },
       "required": [
@@ -220,6 +233,10 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 256
+        },
+        "timeZone": {
+          "type": "string",
+          "maxLength": 64
         }
       },
       "required": [

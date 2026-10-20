@@ -16,6 +16,11 @@ import { workspaceIdSchema } from "./task-wire.js";
  * this one, or the owner's installation connected to another workspace the
  * account is in. The reason travels beside the refusal's `error`, so a
  * build that reads `error` alone reads the refusal as it always did.
+ *
+ * A member who saved their own personal access token is answered on it
+ * where no installation reaches the repository, and the reason is then the
+ * token's: none the service can open, refused by GitHub, no access to the
+ * repository, or no push to it.
  */
 
 /** Why the workspace's GitHub installation does not reach the repository. */
@@ -32,6 +37,14 @@ export const REPOSITORY_UNREACHED = {
   GONE: "gone",
   /** The owner's installation is connected to another workspace the account is in, which the task can move to. */
   OTHER_WORKSPACE: "other-workspace",
+  /** The member's GitHub token cannot be opened, so there is none to use. */
+  NO_TOKEN: "no-token",
+  /** GitHub refused the member's token. */
+  TOKEN_INVALID: "token-invalid",
+  /** The member's token does not reach the repository. */
+  TOKEN_NO_ACCESS: "token-no-access",
+  /** The member's token reaches the repository but may not push to it. */
+  TOKEN_CANNOT_PUSH: "token-cannot-push",
 } as const;
 
 /** Where GitHub's installation settings may live: GitHub's own site and nothing else, so an answer cannot send the desktop elsewhere. */
@@ -47,7 +60,11 @@ const unreachedBare = (
   reason:
     | typeof REPOSITORY_UNREACHED.NOT_CONNECTED
     | typeof REPOSITORY_UNREACHED.CONNECTION_LAPSED
-    | typeof REPOSITORY_UNREACHED.GONE,
+    | typeof REPOSITORY_UNREACHED.GONE
+    | typeof REPOSITORY_UNREACHED.NO_TOKEN
+    | typeof REPOSITORY_UNREACHED.TOKEN_INVALID
+    | typeof REPOSITORY_UNREACHED.TOKEN_NO_ACCESS
+    | typeof REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH,
 ) =>
   EffectSchema.Struct({
     reason: EffectSchema.Literal(reason),
@@ -59,6 +76,10 @@ export const repositoryUnreachedSchema = EffectSchema.Union([
   unreachedBare(REPOSITORY_UNREACHED.NOT_CONNECTED),
   unreachedBare(REPOSITORY_UNREACHED.CONNECTION_LAPSED),
   unreachedBare(REPOSITORY_UNREACHED.GONE),
+  unreachedBare(REPOSITORY_UNREACHED.NO_TOKEN),
+  unreachedBare(REPOSITORY_UNREACHED.TOKEN_INVALID),
+  unreachedBare(REPOSITORY_UNREACHED.TOKEN_NO_ACCESS),
+  unreachedBare(REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH),
   EffectSchema.Struct({
     reason: EffectSchema.Literal(REPOSITORY_UNREACHED.OTHER_OWNER),
     repository: githubRepositoryFullNameSchema,

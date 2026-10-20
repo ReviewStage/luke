@@ -17,6 +17,9 @@
     "handle": {
       "type": "string"
     },
+    "name": {
+      "type": "string"
+    },
     "userId": {
       "type": "string"
     },
@@ -37,7 +40,6 @@
   "required": [
     "id",
     "kind",
-    "handle",
     "left"
   ],
   "additionalProperties": false

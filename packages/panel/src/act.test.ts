@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
-import { createActPortHandler, WindowPushes } from "@luke/host/act-port";
+import {
+  type ActPortDependencies,
+  createActPortHandler,
+  type PlatformActProcedures,
+  type TasksProceduresDependencies,
+  type WorkspaceProceduresDependencies,
+} from "@luke/host/act-port";
 import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { Context, Effect } from "effect";
@@ -18,26 +25,72 @@ import { installActPort } from "./app-bridge.js";
 const PANEL: ActSender = { sender: Symbol("window"), panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
+// SAFETY: these tests call the issue procedures alone, and building the others reads none of these.
+const UNREACHED = { account: {}, settings: {} } as unknown as Omit<
+  ActPortDependencies,
+  "accountAsks" | "issues"
+>;
+
 const opened: MessagePort[] = [];
 
 afterEach(() => {
   for (const port of opened.splice(0)) port.close();
 });
 
+// SAFETY: this window calls the issue kinds alone, so no platform procedure is reached.
+const NO_PLATFORM_PROCEDURES = {} as PlatformActProcedures<unknown>;
+
 /** This window's act port, opened onto the port's server as the bridge opens it, standing as `actor`. */
 function openActPort(actor: ActSender): void {
   const unanswered = () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED });
-  const handler = createActPortHandler({
-    issues: {
-      host: {
-        issueList: unanswered,
-        issueRead: unanswered,
-        issueCreate: unanswered,
-        issueChange: unanswered,
+  const noKeys = () => Effect.succeed({ keys: [] });
+  const notTemplated = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  // SAFETY: no agent, inbox, chat, automation, factory, or integration act is called here, so their hosts are never reached.
+  const elsewhere = {
+    agentInbox: { host: {} },
+    agents: { host: {}, notices: {} },
+    automations: { host: {} },
+    factory: { host: {} },
+    integrations: { host: {} },
+  } as Pick<
+    ActPortDependencies,
+    "agentInbox" | "agents" | "automations" | "factory" | "integrations"
+  >;
+  const handler = createActPortHandler(
+    {
+      ...UNREACHED,
+      ...elsewhere,
+      accountAsks: {
+        host: {
+          providerKeysRead: noKeys,
+          providerKeySave: noKeys,
+          providerKeyRemove: noKeys,
+          planTemplateRead: notTemplated,
+          planTemplateWrite: notTemplated,
+          planTemplateRevisions: notTemplated,
+          planTemplateRevision: notTemplated,
+          planTemplateRestore: notTemplated,
+          dictationTranscribe: notTemplated,
+        },
+      },
+      issues: {
+        host: {
+          issueList: unanswered,
+          issueRead: unanswered,
+          issueCreate: unanswered,
+          issueChange: unanswered,
+        },
+      },
+      // SAFETY: no test here calls a task kind, so no method of this host nor door of its own is ever read.
+      tasks: { host: {} } as TasksProceduresDependencies,
+      // SAFETY: no test here calls a workspace kind, so no method of this host is ever read.
+      workspaces: {
+        host: {} as WorkspaceProceduresDependencies["host"],
+        openExternal: () => Promise.resolve(),
       },
     },
-    pushes: new WindowPushes(),
-  });
+    NO_PLATFORM_PROCEDURES,
+  );
   const { port1, port2 } = new MessageChannel();
   opened.push(port1, port2);
   handler.upgrade(port1, {
@@ -63,4 +116,10 @@ it("a kind the port answers resolves the caller with the host's answer", async (
   assert.deepEqual(await askAct(ACT_KIND.ISSUES_LIST, { workspaceId: "workspace-1" }), {
     failure: ISSUE_CALL_FAILURE.UNANSWERED,
   });
+});
+
+it("a kind the port answers that carries nothing is asked with nothing and resolves the caller with the host's answer", async () => {
+  openActPort(PANEL);
+
+  assert.deepEqual(await askAct(ACT_KIND.PROVIDER_KEYS_READ), { keys: [] });
 });

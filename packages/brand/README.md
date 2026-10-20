@@ -40,6 +40,9 @@ rsvg-convert -w 1320 -h 800 dmg/luke-dmg-background.svg -o dmg/luke-dmg-backgrou
 rsvg-convert -w 1200 -h 630 social/luke-og-card.svg -o ../../../apps/web/public/luke-og-card.png
 cp icon/luke-favicon.svg ../../../apps/web/public/favicon.svg
 rsvg-convert -w 180 -h 180 avatar/luke-avatar-dark.svg -o ../../../apps/web/public/apple-touch-icon.png
+for s in 192 512; do
+  rsvg-convert -w $s -h $s avatar/luke-avatar-dark.svg -o ../../../apps/web/public/app-icon-$s.png
+done
 for s in 16 32 48; do rsvg-convert -w $s -h $s icon/luke-favicon.svg -o /tmp/favicon-$s.png; done
 # Pack the three into apps/web/public/favicon.ico with any ICO writer;
 # this one was made with Pillow's ICO format.
@@ -101,7 +104,7 @@ Under `assets/`:
 | `mark/luke-mark-square-black.svg` + `-1024.png` | The dark mark once more over flat pure black (`#000000`) instead of the tile's gradient, for surfaces that want the mark on true black |
 | `avatar/luke-avatar-{light,dark,black}.svg` + `-{400,1024}.png` | The profile photo: the face with room around it, on the icon's gradient per mode or on flat black. The square marks are cropped to the face, so the circle GitHub, X, Slack, and LinkedIn cut from a profile photo takes the eyes and the smile's end; here the face's bounding box diagonal spans 80% of the canvas, so the whole face sits inside that circle. Cut at 400, the size X and LinkedIn ask for, and at 1024 |
 | `logo/luke-logo-{light,dark}.svg` + `-{256,512}.png` | The wordmark lockup as a shareable logo set, per mode: transparent background, no tile and no rounded corners. The PNGs are cut at 256 and 512 wide, because a lockup goes into headers and docs, not a 1024 avatar tile |
-| `icon/luke-favicon.svg` | The site's favicon: the dark tile with no Dock margin or shadow and the face a little larger, so it reads at 16 pixels in a tab. Copied to `apps/web/public/favicon.svg` and packed at 16, 32, and 48 into `apps/web/public/favicon.ico`, for readers that ask for `/favicon.ico` by name. The site's 180-pixel `apple-touch-icon.png` is cut from `avatar/luke-avatar-dark.svg`, whose face keeps clear of the corners iOS rounds |
+| `icon/luke-favicon.svg` | The site's favicon: the dark tile with no Dock margin or shadow and the face a little larger, so it reads at 16 pixels in a tab. Copied to `apps/web/public/favicon.svg` and packed at 16, 32, and 48 into `apps/web/public/favicon.ico`, for readers that ask for `/favicon.ico` by name. The site's 180-pixel `apple-touch-icon.png` is cut from `avatar/luke-avatar-dark.svg`, whose face keeps clear of the corners iOS rounds. The web app's manifest (`apps/web/public/manifest.webmanifest`) takes the same avatar at 192 and 512 as `app-icon-{192,512}.png`, for Android's home screen, both as is and as maskable: the tile is full bleed and the face sits inside the centre circle of 80% a mask keeps |
 | `social/luke-og-card.svg` | The 1200×630 link-preview card the web pages' `og:image` points at: the wordmark on the landing page's dark ground. One card, dark only: a link preview follows no UI theme. Its PNG is cut outside `assets/`, as the favicons are, into `apps/web/public/luke-og-card.png`, because Vite serves `public/` at the site root and scrapers fetch the card from `https://tryluke.dev/luke-og-card.png` |
 | `button/luke-cta-download-{light,dark}.svg` | The download button, drawn as the site's hero CTA, per mode, for a page that links the download |
 | `motion/luke-<state>-{light,dark}.svg` | Animated state marks (below) |

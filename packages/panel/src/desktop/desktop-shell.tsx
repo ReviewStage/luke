@@ -95,6 +95,31 @@ const IssuesPage = lazy(() =>
   import("./issues-page.js").then((loaded) => ({ default: loaded.IssuesPage })),
 );
 
+/** The Board, its own chunk, loaded the first time it is opened. */
+const TasksBoard = lazy(() =>
+  import("./tasks-board.js").then((loaded) => ({ default: loaded.TasksBoard })),
+);
+
+/** What stands while the Board's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the Board rather than reaching the plan behind it. */
+function BoardLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_BOARD, onExit);
+  return (
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Board"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Board</h1>
+          </div>
+        </header>
+      }
+      state={COLLECTION_STATE.LOADING}
+      loadingLabel="Reading tasks"
+    />
+  );
+}
+
 /**
  * What stands while the Issues page's chunk loads: its empty frame, and its
  * own way out, so Escape pressed in that frame closes Issues as the list
@@ -366,6 +391,7 @@ function titleSubject(
   }
   if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
   if (tasks.issuesView.open) return { signedIn, subject: "Issues", workspace: tasks.workspace };
+  if (tasks.boardView.open) return { signedIn, subject: "Board", workspace: tasks.workspace };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
@@ -466,7 +492,7 @@ export function DesktopShell({
   useColumnDock(
     shell,
     tasks.sidePanel.fullScreen,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.issuesView.open}:${sidebar.collapsed}`,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.issuesView.open}:${tasks.boardView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
   // the Inbox, an agent's or a person's page, Factory, the Automations page, or Chat standing in its place is not the plan.
@@ -477,7 +503,8 @@ export function DesktopShell({
     tasks.factoryView.open ||
     tasks.automationsView.open ||
     tasks.chatView.open ||
-    tasks.issuesView.open;
+    tasks.issuesView.open ||
+    tasks.boardView.open;
   const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
@@ -593,6 +620,7 @@ export function DesktopShell({
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
   const issuesOpen = tasks.issuesView.open && issuesOn;
+  const boardOpen = tasks.boardView.open;
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
   // The Issues list draws the panel beside it once an issue has been peeked there, as the Inbox does once an item is chosen.
   const issuePeeked =
@@ -632,6 +660,7 @@ export function DesktopShell({
         onSignOut={settings.onSignOut}
         call={sidebar.collapsed ? undefined : call}
         onPressWithin={keepOverlay}
+        room={room}
       />
       <main className="desktop-main">
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
@@ -673,6 +702,12 @@ export function DesktopShell({
                   <IssuesPage tasks={tasks} />
                 </Suspense>
               </PageFind>
+            ) : boardOpen ? (
+              <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>
+                <Suspense fallback={<BoardLoading onExit={tasks.boardView.onClose} />}>
+                  <TasksBoard tasks={tasks} />
+                </Suspense>
+              </PageFind>
             ) : automationsOpen ? (
               <PageFind
                 page={FIND_PAGE.AUTOMATIONS}
@@ -689,6 +724,7 @@ export function DesktopShell({
                 looks={looks}
                 captions={captionsInColumn ? captionStrip : undefined}
                 summary={summary}
+                room={room}
                 accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
               />
             )}

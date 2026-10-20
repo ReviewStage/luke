@@ -15,7 +15,8 @@ import {
 } from "@luke/ui/chat-model";
 import type { ChatNoticeMetadata } from "@luke/wire";
 import type { ReactNode } from "react";
-import { MemberMark } from "./chat-pane.js";
+import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
+import { useChatActor } from "./chat-actors.js";
 import { RelativeTime } from "./relative-time.js";
 import { TranscriptWords } from "./transcript-blocks.js";
 
@@ -25,7 +26,7 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * A line the chat steered into a coding agent's turn is no message of the
  * developer's, so it never draws as their bubble. It draws as a card across
  * the column instead, washed in Luke's blue, headed by its sender's mark,
- * handle, the channel the message was posted in, its place in the
+ * name, the channel the message was posted in, its place in the
  * workspace's chat as `m 41`, and how long ago it was posted, with Open in
  * Chat at the head's end, which opens the window's Chat on that channel.
  * Its body is the message as the chat holds it, Markdown as the transcript
@@ -33,6 +34,14 @@ import { TranscriptWords } from "./transcript-blocks.js";
  * what the notice's own metadata says, the sender and the place, and the
  * body is the notice's words, with nothing to open.
  */
+
+/** No names, for a notice read before the chat is: its sender is drawn as someone until the chat lands. */
+const NO_NAMES: ChatNames = {
+  agents: new Map(),
+  tasks: new Map(),
+  agentTasks: new Map(),
+  selfName: undefined,
+};
 
 /** What Open in Chat is called. */
 const OPEN_IN_CHAT = "Open in Chat";
@@ -67,7 +76,7 @@ export function ChatNoticeCard({
   notice: ChatNoticeMetadata;
   /** The notice's own words, drawn where the chat the window holds does not carry the message, without the lines that are the agent's alone (`chatNoticeWords`). */
   words: string;
-  /** Who posted, drawn in the handle's place: another coding agent's own chip; none to name the poster by their mark and handle. */
+  /** Who posted, drawn in the name's place: another coding agent's own chip; none to name the poster by their mark and name. */
   from?: ReactNode | undefined;
   doors: ChatNoticeDoors | undefined;
   now: number;
@@ -77,6 +86,7 @@ export function ChatNoticeCard({
     held === undefined
       ? undefined
       : doors?.chat.channels.find((each) => each.id === held.channelId);
+  const actorOf = useChatActor(doors?.chat, doors?.names ?? NO_NAMES);
   const who =
     held === undefined || doors === undefined
       ? undefined
@@ -100,8 +110,12 @@ export function ChatNoticeCard({
       <header className="chat-notice-head">
         {from ?? (
           <>
-            {who === undefined ? null : <MemberMark who={who} small />}
-            <span className="chat-notice-from">@{notice.from}</span>
+            {who?.member === undefined ? null : (
+              <ActorMark actor={actorOf(who.member.id)} size={ACTOR_SIZE.INLINE} />
+            )}
+            <span className="chat-notice-from">
+              {who?.member === undefined ? notice.from : who.name}
+            </span>
           </>
         )}
         <span className="chat-notice-place">

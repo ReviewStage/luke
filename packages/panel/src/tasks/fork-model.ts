@@ -26,7 +26,8 @@ import type {
   CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
 import type { ModelChoice } from "@luke/features/models-wire";
-import type { ACT_KIND, ActPayload } from "@luke/host/acts";
+import type { ACT_KIND } from "@luke/host/acts";
+import type { PortActPayload } from "@luke/host/contract";
 import { isRecord, isWireString, MESSAGE_ROLE } from "@luke/wire";
 import { AGENT_PART, choiceRequest } from "./coding-agent-model.js";
 import { cardTitle } from "./tool-call-model.js";
@@ -98,7 +99,7 @@ const START_STAGE_WORDS = {
 const COPY_STAGE_MS = 3_000;
 
 /** A Start as the draft's send asks it, the plan left for the caller to name. */
-export type ForkStart = Omit<ActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">;
+export type ForkStart = Omit<PortActPayload<typeof ACT_KIND.CODING_AGENTS_START>, "taskId">;
 
 /**
  * A message's opening words as the fork's chip quotes them: its first line

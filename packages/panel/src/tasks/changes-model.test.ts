@@ -13,6 +13,7 @@ import {
   commentLines,
   commentLinesLabel,
   filterFiles,
+  gapLines,
   rowPlace,
   startsCollapsed,
   suggestedLines,
@@ -200,6 +201,58 @@ test("a file's threads stand under the lines its diff draws, on the side they co
   );
 });
 
+/** A file of two hunks, old lines 3 to 5 and 40 to 42, new lines 3 to 6 and 41 to 43, the lines between them one further on the new side. */
+const FILE_GAPPED = {
+  ...FILE_A,
+  patch: `${FILE_A.patch}\n@@ -40,3 +41,3 @@\n const x = 1;\n-const y = 2;\n+const y = 3;\n const z = 4;`,
+};
+
+/** Threads on the gapped file: on a line of each side between its hunks, on a line a hunk shows, and outdated though it names a line. */
+const GAP_THREADS = [
+  threadAt("src/a.ts", 30, `${R}gap-right`),
+  { ...threadAt("src/a.ts", 20, `${R}gap-left`), side: DIFF_SIDE.LEFT },
+  threadAt("src/a.ts", 4, `${R}hunk`),
+  { ...threadAt("src/a.ts", 25, `${R}outdated`), outdated: true },
+];
+
+test("the lines a file's threads wait on between its hunks are named on the new side, an old line counted on past the hunks before it", () => {
+  assert.deepEqual(gapLines(GAP_THREADS, FILE_GAPPED), [21, 30]);
+  assert.deepEqual(
+    gapLines(GAP_THREADS, { ...FILE_GAPPED, patch: null, omitted: PATCH_OMITTED.BINARY }),
+    [],
+    "a file whose patch is not drawn opens no gap",
+  );
+});
+
+test("a thread moves onto its line once a gap opened over it draws the line, and an outdated one stays above", () => {
+  const closed = threadsOn(GAP_THREADS, FILE_GAPPED);
+  assert.deepEqual(
+    closed.placed.map(({ key }) => key),
+    [`${R}hunk`],
+  );
+
+  const opened = threadsOn(GAP_THREADS, FILE_GAPPED, undefined, new Set([21, 30]));
+  assert.deepEqual(
+    opened.placed.map(({ key, side, line }) => [key, side, line]),
+    [
+      [`${R}gap-right`, "additions", 30],
+      [`${R}gap-left`, "deletions", 20],
+      [`${R}hunk`, "additions", 4],
+    ],
+  );
+  assert.deepEqual(
+    opened.above.map(({ key }) => key),
+    [`${R}outdated`],
+  );
+
+  const half = threadsOn(GAP_THREADS, FILE_GAPPED, undefined, new Set([30]));
+  assert.deepEqual(
+    half.above.map(({ key }) => key),
+    [`${R}gap-left`, `${R}outdated`],
+    "a gap opened over one line leaves the other above",
+  );
+});
+
 test("every thread on a file whose diff is not drawn stands above where its diff would", () => {
   const { placed, above } = threadsOn([threadAt("src/a.ts", 4, `${R}1`)], {
     ...FILE_A,
@@ -277,6 +330,7 @@ test("a deleted file, a lockfile, and a file of more than a thousand changed lin
     true,
   );
   assert.equal(startsCollapsed(changed("apps/web/package-lock.json")), true);
+  assert.equal(startsCollapsed(changed("ios/Podfile.lock")), true);
   assert.equal(startsCollapsed(changed("src/big.ts", { additions: 900, deletions: 101 })), true);
   assert.equal(startsCollapsed(changed("src/big.ts", { additions: 900, deletions: 100 })), false);
   assert.equal(

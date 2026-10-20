@@ -43,6 +43,22 @@ function ruleOf(sheet: (typeof SHEETS)[number], selector: string): TokenRule {
   return rule;
 }
 
+/** A `#rrggbb` colour's relative luminance, as WCAG 2 defines it. */
+function luminanceOf(hex: string): number {
+  const linear = [1, 3, 5].map((at) => {
+    const channel = Number.parseInt(hex.slice(at, at + 2), 16) / 255;
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  const [red = 0, green = 0, blue = 0] = linear;
+  return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+}
+
+/** The WCAG 2 contrast ratio between two `#rrggbb` colours. */
+function contrastOf(first: string, second: string): number {
+  const [lighter, darker] = [luminanceOf(first), luminanceOf(second)].sort((a, b) => b - a);
+  return ((lighter ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
+}
+
 function sortedNames(rule: TokenRule): string[] {
   return [...rule.values.keys()].sort();
 }
@@ -97,6 +113,15 @@ test("every palette sets the same colours", () => {
   );
   assert.deepEqual(webLight, desktop);
   assert.deepEqual(webDark, desktop);
+});
+
+test("the web's dark accent ink reads at AA on every dark ground it stands on", () => {
+  const dark = ruleOf("palettes", '[data-luke-profile="web"][data-luke-theme="dark"]').values;
+  const ink = dark.get("--luke-color-accent-text") ?? "";
+  for (const ground of ["--luke-color-ground", "--luke-color-surface", "--luke-color-well"]) {
+    const behind = dark.get(ground) ?? "";
+    assert.ok(contrastOf(ink, behind) >= 4.5, `${ink} on ${ground} (${behind})`);
+  }
 });
 
 test("every shared token a sheet reads is one some sheet sets", () => {

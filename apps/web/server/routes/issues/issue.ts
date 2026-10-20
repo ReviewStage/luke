@@ -1,6 +1,7 @@
-import { resolveHostedUserId } from "@luke/service/auth/bearer";
-import { issuesApp } from "@luke/service/issues/issues-app";
-import { routeFromHttpRouter } from "../../route-effect.js";
+import { orpcRoute } from "../../orpc-route.js";
 
-/** One issue: read it (GET), or change it (PATCH). The logic lives in `packages/service/src/issues/issues-app.ts`; this file only hands it the deployment's real seams. */
-export default routeFromHttpRouter(issuesApp({ resolveUserId: resolveHostedUserId }));
+/**
+ * One issue: read it (GET), or change it (PATCH), answered by the hosted oRPC router
+ * (`packages/service/src/issues/issues-procedures.ts`).
+ */
+export default orpcRoute;

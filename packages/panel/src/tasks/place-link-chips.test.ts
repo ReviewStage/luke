@@ -10,7 +10,7 @@ import {
   type Workspace,
   type WorkspaceMember,
 } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -18,7 +18,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, type AnyActOutcome, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { signedInAs } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -140,12 +140,12 @@ afterEach(() => {
 async function drawn(
   text: string,
   opened: LinkPlace[],
-  reads: (request: Act) => ActOutcome | undefined = () => undefined,
+  reads: (request: AnyAct) => AnyActOutcome | undefined = () => undefined,
 ): Promise<HTMLElement> {
-  fakeAppBridge({
+  fakeActs({
     onAppState: () => () => undefined,
     requestAppState: () => Promise.resolve(STATE),
-    act: (request: Act): Promise<ActOutcome> =>
+    act: (request: AnyAct): Promise<AnyActOutcome> =>
       Promise.resolve(
         reads(request) ??
           (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ

@@ -14,8 +14,8 @@ import {
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
-import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
@@ -40,7 +40,12 @@ import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  fakeActPort,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -612,13 +617,13 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
   } as const;
   const listed: (string | undefined)[] = [];
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      if (request.kind !== ACT_KIND.AUTOMATIONS_LIST) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
-      listed.push(request.payload.workspaceId);
-      const value = { automations: [automation] };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
+      listed.push(payload.workspaceId);
+      return Promise.resolve({ automations: [automation] });
     },
   });
   const tasks = tasksControl({
@@ -1310,14 +1315,7 @@ test("People lists the listed workspace's members by name and role, the reader a
       role: WORKSPACE_ROLE.MEMBER,
     },
   ];
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      Promise.resolve(
-        request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-          ? { status: ACT_OUTCOME_STATUS.DONE, value: members }
-          : { status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." },
-      ),
-  });
+  membersAnswer(() => Promise.resolve(members));
   const opened: string[] = [];
   const base = tasksControl();
   const sent = openPalette(
@@ -1352,14 +1350,15 @@ async function settle(): Promise<void> {
   });
 }
 
-/** A window whose members read is answered by `members`, every other act refused. */
-function membersAnswer(members: () => Promise<ActOutcome>): void {
+/** A window whose members read is answered on its act port by `members`, every other act refused. */
+function membersAnswer(
+  members: () => Promise<PortActResult<typeof ACT_KIND.WORKSPACE_MEMBERS_READ>>,
+): void {
   fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> =>
-      request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-        ? members()
-        : Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+    act: (): Promise<ActOutcome> =>
+      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
   });
+  fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: members });
 }
 
 const ACME = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.OWNER, github: null };
@@ -1379,7 +1378,7 @@ test("under All, a query nothing else matches says the repository's files are st
       },
     ],
   });
-  membersAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }));
+  membersAnswer(() => Promise.resolve([]));
   openPalette(
     { ...tasks, workspace: ACME },
     () =>
@@ -1418,11 +1417,12 @@ test("People says the members are being read until they answer, and a refused re
     email: "charles@example.com",
     role: WORKSPACE_ROLE.MEMBER,
   };
-  let answers: ((outcome: ActOutcome) => void)[] = [];
+  let answers: { resolve: (members: readonly WorkspaceMember[]) => void; refuse: () => void }[] =
+    [];
   membersAnswer(
     () =>
-      new Promise((resolve) => {
-        answers.push(resolve);
+      new Promise((resolve, reject) => {
+        answers.push({ resolve, refuse: () => reject(refusedOnPort("No.")) });
       }),
   );
   openPalette(tasksControl({ me: "user-dean", workspace: ACME }));
@@ -1430,7 +1430,7 @@ test("People says the members are being read until they answer, and a refused re
   await settle();
   assert.equal(emptyLine(), "Reading the workspace's members…");
 
-  await act(async () => answers.shift()?.({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No." }));
+  await act(async () => answers.shift()?.refuse());
   await settle();
   const alert = document.querySelector(".command-palette-empty [role=alert]");
   assert.match(alert?.textContent ?? "", /The workspace's members could not be read\./u);
@@ -1444,13 +1444,13 @@ test("People says the members are being read until they answer, and a refused re
   act(() => retry.click());
   await settle();
   assert.equal(emptyLine(), "Reading the workspace's members…");
-  await act(async () => answers.shift()?.({ status: ACT_OUTCOME_STATUS.DONE, value: [member] }));
+  await act(async () => answers.shift()?.resolve([member]));
   await settle();
   assert.deepEqual(rows(), ["Charles Pan · Member"]);
 });
 
 test("Tasks says the account's tasks are being read before the list first answers", () => {
-  membersAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }));
+  membersAnswer(() => Promise.resolve([]));
   openPalette(tasksControl({ workspace: ACME, listRead: false }));
   chooseFilter("Tasks");
   assert.equal(emptyLine(), "Reading your tasks…");
@@ -1459,7 +1459,7 @@ test("Tasks says the account's tasks are being read before the list first answer
 
 test("Tasks says a refused list with a Retry that reads it again", () => {
   const retried: number[] = [];
-  membersAnswer(() => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }));
+  membersAnswer(() => Promise.resolve([]));
   openPalette(
     tasksControl({
       workspace: ACME,

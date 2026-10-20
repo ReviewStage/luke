@@ -41,10 +41,15 @@ export function appBridge(): AppBridge {
 
 /**
  * Installs this window's end of its act port, the other end of which its
- * root has handed main, and starts it; its root does this once, beside the bridge.
+ * root has handed main, and starts it; its root does this once, beside the
+ * bridge. A shell that acts on some calls as they leave hands its client
+ * `through` what does so, as the web app's does for a connect's press.
  */
-export function installActPort(port: MessagePort): void {
-  installActPortClient(createORPCClient(new RPCLink({ port })));
+export function installActPort(
+  port: MessagePort,
+  through: (client: ActPortClient) => ActPortClient = (client) => client,
+): void {
+  installActPortClient(through(createORPCClient(new RPCLink({ port }))));
   port.start();
 }
 

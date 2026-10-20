@@ -6,15 +6,8 @@ import {
   browserAddressOf,
 } from "@luke/features/browser-acts";
 import { ACT_KIND } from "@luke/host/acts";
-import { EmptyState, ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
-import {
-  ArrowLeftIcon,
-  ArrowRightIcon,
-  ExternalLinkIcon,
-  GlobeIcon,
-  RotateCwIcon,
-  XIcon,
-} from "lucide-react";
+import { ERROR_STATE_PLACEMENT, ErrorState } from "@luke/ui";
+import { ArrowLeftIcon, ArrowRightIcon, ExternalLinkIcon, RotateCwIcon, XIcon } from "lucide-react";
 import {
   type FormEvent,
   type RefObject,
@@ -41,8 +34,7 @@ import type { OpenBrowser } from "./use-side-panel.js";
  * tooltip over it, whether drawn over the document's body or from inside
  * the window's root (`coveredAt`). Otherwise a still of the page is caught first and drawn
  * in its place, then the view is put out of sight, so the change cannot be
- * seen and the layer over it reads as standing over the page
- * (`docs/proposals/browser-tab.md` §2). The pane watches for that once a
+ * seen and the layer over it reads as standing over the page. The pane watches for that once a
  * frame while it is drawn, since a pane's motion is played on transforms
  * that no observer hears.
  *
@@ -506,11 +498,7 @@ export function BrowserPane({
         </div>
       </header>
       <div ref={body} className="browser-view-body">
-        {!opened && !refused ? (
-          <EmptyState icon={<GlobeIcon />}>
-            Type an address above. Your own dev server works too, like localhost:3000.
-          </EmptyState>
-        ) : refused ? (
+        {!opened && !refused ? null : refused ? (
           <ErrorState
             onRetry={() => openAt(browserAddressOf(address) ?? address)}
             placement={ERROR_STATE_PLACEMENT.CENTRED}

@@ -220,6 +220,15 @@ export function BackIcon(): React.JSX.Element {
   );
 }
 
+/** Points on, the mirror of `BackIcon`: a calendar's next month. */
+export function ForwardIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
+    </Glyph>
+  );
+}
+
 /** An arrow pointing left: back to the place the window stood on before. */
 export function ArrowLeftIcon(): React.JSX.Element {
   return (
@@ -580,6 +589,15 @@ export function PlayIcon(): React.JSX.Element {
   return (
     <Glyph className="control-icon">
       <path d="M8 5.6v12.8l10-6.4z" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
+/** Stops what is playing: the square every transport draws for stop, at the triangle's weight. */
+export function StopIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <rect x="6" y="6" width="12" height="12" rx="1.8" fill="currentColor" stroke="none" />
     </Glyph>
   );
 }

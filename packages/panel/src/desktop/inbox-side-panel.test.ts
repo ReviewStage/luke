@@ -21,7 +21,7 @@ import { pageFrameUrl } from "@luke/features/page-frame";
 import type { PageLine } from "@luke/features/page-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT, type ExperimentChoices, NO_EXPERIMENTS } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { Effect } from "effect";
@@ -34,7 +34,7 @@ import { useInboxTaskAgents } from "../tasks/use-inbox-task-agents.js";
 import { OpenLinkProvider } from "../tasks/use-open-link.js";
 import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import type { InboxChoice } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, type AnyActOutcome, fakeActs } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -63,13 +63,16 @@ const ACME: Workspace = {
   memberCount: 2,
 };
 
+/** The task's repository, where its agent opened the pull request. */
+const REPOSITORY = "acme/relay";
+
 const TASK: TaskSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   workspaceId: ACME.id,
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
-  repository: "acme/relay",
+  repository: REPOSITORY,
 };
 const OTHER_TASK = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
@@ -142,7 +145,7 @@ afterEach(() => {
 /** Every read mark the Inbox sent, in order. */
 let readMarks: string[] = [];
 
-function answer(request: Act): Promise<ActOutcome> {
+function answer(request: AnyAct): Promise<AnyActOutcome> {
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_INBOX_READ_STATE:
       readMarks.push(`${request.payload.unread ? "unread" : "read"}:${request.payload.itemId}`);
@@ -167,7 +170,7 @@ function answer(request: Act): Promise<ActOutcome> {
       return Promise.resolve({
         status: ACT_OUTCOME_STATUS.DONE,
         value: {
-          repository: TASK.repository,
+          repository: REPOSITORY,
           branch: "luke/batch-invitations",
           pullRequest: {
             number: 42,
@@ -211,7 +214,7 @@ async function inbox(
   const tasks: string[] = [];
   const left = { links, tasks, rereads: 0 };
   fakeAppPlatform({ ...QUIET_PANEL, pageFrameUrl });
-  fakeAppBridge({
+  fakeActs({
     act: answer,
     onBrowserState: () => () => undefined,
     onBrowserKey: (listener: (key: BrowserKey) => void) => {

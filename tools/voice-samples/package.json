@@ -1,0 +1,10 @@
+{
+  "name": "@luke/voice-samples",
+  "version": "0.18.0",
+  "private": true,
+  "type": "module",
+  "description": "Records the clip Settings plays for each Live voice, by hand on a Mac, into the panel's static files",
+  "scripts": {
+    "record": "node src/record.mjs"
+  }
+}

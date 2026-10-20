@@ -6,7 +6,7 @@ import { LIVE_STATUS } from "@luke/live";
 import { CALL_CARD_SURFACE, CallCardDock, type CallCardInput } from "@luke/panel/call/call-card";
 import { CALL_VIDEO_LABEL } from "@luke/panel/call/call-video-tile";
 import { CallTabVideo, useCallCardVideo } from "@luke/panel/call/panel-avatar";
-import { fakeAppBridge } from "@luke/panel/testing/app-bridge";
+import { fakeActPortAnswering, fakeAppBridge } from "@luke/panel/testing/app-bridge";
 import { stateWith } from "@luke/panel/testing/app-state";
 import { onRegistry } from "@luke/panel/testing/copy-feedback";
 import { EXPERIMENT } from "@luke/settings";
@@ -98,10 +98,10 @@ function handBridge(first: AppStateSnapshot): void {
     onAvatarViewSignal: () => () => undefined,
     signalAvatarView: () => undefined,
     onCallWindowMoved: () => () => undefined,
-    act: (request: { kind: string; payload?: unknown }) => {
-      sent.push(request);
-      return Promise.resolve({ status: "done", value: undefined });
-    },
+  });
+  fakeActPortAnswering((request) => {
+    sent.push(request);
+    return Promise.resolve(undefined);
   });
 }
 

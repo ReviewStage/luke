@@ -1,5 +1,4 @@
 import {
-  ACT,
   ACT_KIND,
   ACT_OUTCOME_STATUS,
   type Act,
@@ -7,7 +6,7 @@ import {
   type ActOutcome,
   type ActPayload,
   type ActResultFor,
-  type SettingUpdatePayload,
+  actDeclarationOf,
 } from "@luke/host/acts";
 import {
   ACT_ERROR,
@@ -15,6 +14,7 @@ import {
   type PortActKind,
   type PortActPayload,
   type PortActResult,
+  type SettingUpdatePayload,
 } from "@luke/host/contract";
 import type { AppSettingField, AppSettingValue } from "@luke/settings";
 import type { SettingsUpdateResult } from "@luke/settings/wire";
@@ -25,19 +25,24 @@ import { actPort, appBridge } from "./app-bridge.js";
 /** Any kind a window may ask: one `app:act` carries, or one its act port answers. */
 type AnyActKind = ActKind | PortActKind;
 
+/**
+ * What each kind takes and answers, from whichever side declares it, keyed by
+ * the kind. Note that a kind's own entry is looked up by its key rather than
+ * chosen by a conditional over every kind, which TypeScript would distribute
+ * over the whole union at each generic signature that names it.
+ */
+type AnyActPayloads = { readonly [Kind in ActKind]: ActPayload<Kind> } & {
+  readonly [Kind in PortActKind]: PortActPayload<Kind>;
+};
+type AnyActResults = { readonly [Kind in ActKind]: ActResultFor<Kind> } & {
+  readonly [Kind in PortActKind]: PortActResult<Kind>;
+};
+
 /** What a kind takes, from whichever side declares it. */
-type AnyActPayload<Kind extends AnyActKind> = Kind extends PortActKind
-  ? PortActPayload<Kind>
-  : Kind extends ActKind
-    ? ActPayload<Kind>
-    : never;
+type AnyActPayload<Kind extends AnyActKind> = AnyActPayloads[Kind];
 
 /** What a kind answers, from whichever side declares it. */
-type AnyActResult<Kind extends AnyActKind> = Kind extends PortActKind
-  ? PortActResult<Kind>
-  : Kind extends ActKind
-    ? ActResultFor<Kind>
-    : never;
+type AnyActResult<Kind extends AnyActKind> = AnyActResults[Kind];
 
 /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
 type ActArguments<Kind extends AnyActKind> =
@@ -59,7 +64,7 @@ function decodedOutcome<Kind extends ActKind>(kind: Kind, outcome: ActOutcome): 
     throw new Error(`Luke does not know the act ${kind}.`);
   }
   if (outcome.status === ACT_OUTCOME_STATUS.REFUSED) throw new Error(outcome.reason);
-  if (ACT[kind].result(outcome.value) === false) {
+  if (actDeclarationOf(kind)?.result(outcome.value) !== true) {
     throw new Error(`Invalid answer to the act ${kind}.`);
   }
   // SAFETY: the kind's own result guard admitted this value.
@@ -149,7 +154,7 @@ export function askAct<Kind extends AnyActKind>(
   kind: Kind,
   ...[payload]: ActArguments<Kind>
 ): Promise<AnyActResult<Kind>> {
-  return performAct(send, kind, payload);
+  return performAct<Kind>(send, kind, payload);
 }
 
 /**
@@ -163,36 +168,28 @@ interface SettingWriteActs {
   ): Promise<SettingsUpdateResult>;
 }
 
-/** What a component or hook reaches the act channel through, in one bundle. */
+/**
+ * What a component or hook reaches the act channel through, in one bundle.
+ * Note that `act` and `tell` are typed as `askAct` and `tellAct` themselves,
+ * rather than restated as generic methods: with every kind the act port
+ * answers beside the ones `app:act` carries, comparing two such generic
+ * signatures is a union TypeScript can no longer represent.
+ */
 export interface ActHandle extends SettingWriteActs {
-  act<Kind extends AnyActKind>(
-    kind: Kind,
-    ...args: ActArguments<Kind>
-  ): Promise<AnyActResult<Kind>>;
-  tell<Kind extends AnyActKind>(kind: Kind, ...args: ActArguments<Kind>): void;
+  act: typeof askAct;
+  tell: typeof tellAct;
 }
 
 /** What a component or hook reaches the act channel through, in one bundle. */
 export function useAct(): ActHandle {
-  return useMemo<ActHandle>(() => {
-    function boundAct<Kind extends AnyActKind>(
-      kind: Kind,
-      ...[payload]: ActArguments<Kind>
-    ): Promise<AnyActResult<Kind>> {
-      return performAct(send, kind, payload);
-    }
-    function boundTell<Kind extends AnyActKind>(
-      kind: Kind,
-      ...[payload]: ActArguments<Kind>
-    ): void {
-      performTell(send, kind, payload);
-    }
-    return {
-      act: boundAct,
-      tell: boundTell,
+  return useMemo<ActHandle>(
+    () => ({
+      act: askAct,
+      tell: tellAct,
       // SAFETY: as updateSetting's own cast above, for this render tree's channel.
       updateSetting: (field, value) =>
-        boundAct(ACT_KIND.SETTING_UPDATE, { field, value } as SettingUpdatePayload),
-    };
-  }, []);
+        askAct(ACT_KIND.SETTING_UPDATE, { field, value } as SettingUpdatePayload),
+    }),
+    [],
+  );
 }

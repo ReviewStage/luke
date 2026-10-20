@@ -42,6 +42,8 @@ export const repositorySkills = /* @__PURE__ */ Effect.fn("web/repositorySkills"
   /** The workspace whose installation reads the repository, as the caller reaches it. */
   workspaceOf: Effect.Effect<Option.Option<string>, StoreFailure, DatabaseServices>,
   repository: string,
+  /** The member whose own token reads the repository where no installation reaches it; none for an automation. */
+  member: string | undefined,
   loaded: (skill: RepositorySkill) => string,
 ): Effect.fn.Return<
   readonly AgentSkill[],
@@ -52,7 +54,7 @@ export const repositorySkills = /* @__PURE__ */ Effect.fn("web/repositorySkills"
   const read = Effect.gen(function* () {
     const workspace = yield* workspaceOf;
     if (Option.isNone(workspace)) return [];
-    const reached = yield* app.repositoryReadToken(workspace.value, repository);
+    const reached = yield* app.repositoryReadToken(workspace.value, repository, member);
     if (Option.isNone(reached)) return [];
     return yield* readRepositorySkills(reached.value.token, reached.value.repository);
   });

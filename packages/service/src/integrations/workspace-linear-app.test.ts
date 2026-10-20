@@ -15,17 +15,20 @@ import {
 import type { WireBoundaryInput } from "@luke/wire";
 import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option } from "effect";
+import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/http";
 import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
+import { hostedFetch } from "../orpc/handler.js";
+import type { WebServices } from "../runtime.js";
 import { GRANTING_SIGN_IN_URL, integrationConnectOver } from "../testing/integration-connect.js";
 import { mintIntegrationState } from "./integrations-app.js";
 import { workspaceLinearApp } from "./workspace-linear-app.js";
+import { workspaceLinearProcedures } from "./workspace-linear-procedures.js";
 
 /**
- * A workspace's one Linear connection, as the workspace Linear group answers
- * it: an owner or admin begins the sign-in for every member, the browser's
+ * A workspace's one Linear connection, as the hosted oRPC router and the
+ * browser's callback answer it: an owner or admin begins the sign-in for every member, the browser's
  * return connects the workspace, any member then reads the issues it
  * reaches through the workspace's grant, and a Disconnect ends every read.
  * The store is the real one over the migrations on PGlite; Vercel Connect is
@@ -98,37 +101,46 @@ const standing = (
       integrationConnectOver(connectors),
       linear.layer,
     );
-    const app = HttpRouter.toWebHandler(
-      workspaceLinearApp({
+    const callback = HttpRouter.toWebHandler(
+      workspaceLinearApp({ now: () => clock.currentTimeMillisUnsafe() }).pipe(
+        HttpRouter.provideRequest(services),
+      ),
+      { disableLogger: true },
+    );
+    yield* Effect.addFinalizer(() => Effect.promise(() => callback.dispose()));
+    const context = yield* Effect.context<never>().pipe(Effect.provide(services));
+    const procedures = hostedFetch({
+      workspaceLinear: workspaceLinearProcedures({
         resolveUserId: (incoming) =>
           Effect.succeed(
             Option.fromNullishOr(incoming.headers.get("authorization")?.replace("Bearer ", "")),
           ),
         mintState: mintIntegrationState,
-        now: () => clock.currentTimeMillisUnsafe(),
-      }).pipe(HttpRouter.provideRequest(services)),
-      { disableLogger: true },
-    );
-    yield* Effect.addFinalizer(() => Effect.promise(() => app.dispose()));
+      }),
+    });
+    // SAFETY: the procedures yield the database, Connect, the clock and the HTTP client alone, which is all a test provides of the web runtime's services.
+    const webServices = context as Context.Context<WebServices>;
     const fetch = (path: string) =>
-      Effect.promise(() => app.handler(new Request(new URL(path, ORIGIN))));
-    const post = (path: string, userId: string, body: WireBoundaryInput) =>
+      Effect.promise(() => callback.handler(new Request(new URL(path, ORIGIN))));
+    /** One request the procedures answer: its status, and its body as JSON. */
+    const answered = (request: Request) =>
       Effect.gen(function* () {
-        const response = yield* Effect.promise(() =>
-          app.handler(
-            new Request(new URL(path, ORIGIN), {
-              method: "POST",
-              headers: { authorization: `Bearer ${userId}` },
-              body: JSON.stringify(body),
-            }),
-          ),
-        );
-        // SAFETY: the group answers JSON; the test compares it as the wire value it is.
+        const response = yield* Effect.promise(() => procedures(request, webServices));
+        // SAFETY: the router answers JSON; the test compares it as the wire value it is.
         const answer = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
         return { status: response.status, body: answer };
       });
+    const post = (path: string, userId: string, body: WireBoundaryInput) =>
+      answered(
+        new Request(new URL(path, ORIGIN), {
+          method: "POST",
+          headers: { authorization: `Bearer ${userId}`, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      );
     return {
       linear,
+      answered,
       connect: (userId: string, workspaceId: string) =>
         post(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_CONNECT, userId, { workspaceId }),
       disconnect: (userId: string, workspaceId: string) =>
@@ -340,6 +352,51 @@ it.layer(getTestDB())("a workspace's Linear connection", (it) => {
         assert.ok(Option.isSome(listed));
         assert.equal(listed.value.linear, undefined);
         assert.deepEqual(group.linear.asked, []);
+      }),
+  );
+
+  it.effect(
+    "the refusals are byte for byte the old group's: unsigned is 401 whatever it sent, a stray key or a body past the cap is refused, and another method is 405",
+    () =>
+      Effect.gen(function* () {
+        const group = yield* standing();
+        const { admin, workspaceId } = yield* team;
+        const asked = (init: { method?: string; signedIn?: boolean; body?: string }) => {
+          const headers = new Headers();
+          if (init.signedIn !== false) headers.set("authorization", `Bearer ${admin}`);
+          const request: RequestInit = { method: init.method ?? "POST", headers };
+          if (init.body !== undefined) {
+            headers.set("content-type", "application/json");
+            headers.set("content-length", String(new TextEncoder().encode(init.body).byteLength));
+            request.body = init.body;
+          }
+          return group.answered(
+            new Request(new URL(HOSTED_SERVICE_PATH.WORKSPACE_LINEAR_ISSUES, ORIGIN), request),
+          );
+        };
+
+        assert.deepEqual(
+          yield* asked({ signedIn: false, body: JSON.stringify({ workspaceId: 7 }) }),
+          {
+            status: HOSTED_HTTP_STATUS.UNAUTHORIZED,
+            body: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+          },
+        );
+        assert.deepEqual(yield* asked({ body: JSON.stringify({ workspaceId, team: "ENG" }) }), {
+          status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+          body: { error: HOSTED_API_ERROR.INVALID_REQUEST },
+        });
+        assert.deepEqual(
+          yield* asked({ body: JSON.stringify({ workspaceId, query: "x".repeat(4_096) }) }),
+          {
+            status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
+            body: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
+          },
+        );
+        assert.deepEqual(yield* asked({ method: "GET" }), {
+          status: HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+          body: { error: HOSTED_API_ERROR.METHOD_NOT_ALLOWED },
+        });
       }),
   );
 });

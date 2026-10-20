@@ -8,7 +8,7 @@ import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
  * Luke opens a terminal of this Mac in a tab of its own, whose shell brings
  * the branch into a worktree of Luke's own clone of the repository and opens
  * a shell there, after the repository's run command where this Mac has one
- * for it, kept in its settings file and never sent anywhere. What the terminal prints and what is typed into it travel
+ * for it, kept in its settings file and never sent anywhere. What the run prints, and the terminal's size, travel
  * on a port between main and that one tab, and nowhere else.
  */
 
@@ -42,11 +42,19 @@ const BRANCH_PATTERN = /^(?!-)(?!.*\.\.)[A-Za-z0-9._/-]{1,255}$/u;
 const terminalSize = (maximum: number) =>
   EffectSchema.Int.check(EffectSchema.isBetween({ minimum: 1, maximum }));
 
-/** Opening the agent's branch in a terminal on this Mac: the agent, its repository and branch, and the terminal's size in cells. */
+/** Opening the agent's branch in a terminal on this Mac: the agent, its repository and branch, the pull request from it where there is one, and the terminal's size in cells. */
 export const macTerminalOpenParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.String.check(EffectSchema.isPattern(/^[0-9a-f-]{36}$/u)),
   repository: githubRepositoryFullNameSchema,
   branch: EffectSchema.String.check(EffectSchema.isPattern(BRANCH_PATTERN)),
+  /** The pull request's number, whose last head opens where GitHub deleted the branch once it merged; null for none. */
+  pullRequest: EffectSchema.optional(
+    EffectSchema.NullOr(
+      EffectSchema.Int.check(EffectSchema.isBetween({ minimum: 1, maximum: 2_147_483_647 })),
+    ),
+  ),
+  /** Whether this is a Run press, which starts a run anew where the last has ended; a tab drawn again over an ended run only shows it. */
+  again: EffectSchema.optional(EffectSchema.Boolean),
   cols: terminalSize(1_000),
   rows: terminalSize(1_000),
 });
@@ -66,8 +74,6 @@ export const MAC_TERMINAL_PORT_MESSAGE = {
   OUTPUT: "output",
   /** main → renderer: the shell ended, with its status. */
   EXIT: "exit",
-  /** renderer → main: what was typed. */
-  INPUT: "input",
   /** renderer → main: the terminal's size in cells. */
   RESIZE: "resize",
 } as const;
@@ -85,14 +91,9 @@ export const macTerminalPortOutboundSchema = EffectSchema.Union([
 
 export type MacTerminalPortOutbound = typeof macTerminalPortOutboundSchema.Type;
 
-export const macTerminalPortInboundSchema = EffectSchema.Union([
-  EffectSchema.Struct({
-    type: EffectSchema.Literal(MAC_TERMINAL_PORT_MESSAGE.INPUT),
-    data: EffectSchema.String.check(EffectSchema.isMaxLength(65_536)),
-  }),
-  EffectSchema.Struct({
-    type: EffectSchema.Literal(MAC_TERMINAL_PORT_MESSAGE.RESIZE),
-    cols: terminalSize(1_000),
-    rows: terminalSize(1_000),
-  }),
-]);
+/** renderer → main: the terminal's size; a run takes nothing typed. */
+export const macTerminalPortInboundSchema = EffectSchema.Struct({
+  type: EffectSchema.Literal(MAC_TERMINAL_PORT_MESSAGE.RESIZE),
+  cols: terminalSize(1_000),
+  rows: terminalSize(1_000),
+});

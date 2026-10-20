@@ -55,6 +55,7 @@ import { readFiles, withFiles } from "./attached-files.js";
 import { ComposerField } from "./composer-field.js";
 import { useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
+import { MENTION_MENU_SIDE, type MentionMenuSide } from "./mention-picker.js";
 import { ComposerQuoteView } from "./reply-to-selection.js";
 import { useRepositoryRemedy } from "./repository-remedy.js";
 import type { SkillSource } from "./skill-picker.js";
@@ -202,12 +203,15 @@ const BUTTON = {
 
 /**
  * The card widths below which a chip draws its mark alone: the branch's
- * chip first, then the model chip. Note that they are steps of the same
- * order as the stylesheet's (tasks.css's `composer` queries, at 400 and 240),
- * because the room each leaves is counted on the steps before it.
+ * chip first, then the owner's actions where they carry words (New task's
+ * Plan toggle, at the step the ⋯ stands), then the model chip. Note that
+ * they are steps of the same order as the stylesheet's (tasks.css's
+ * `composer` queries, at 400 and 240), because the room each leaves is
+ * counted on the steps before it.
  */
 const FOLD_WIDTH = {
   PUBLISHED: 520,
+  ACTIONS: 400,
   MODEL: 300,
 } as const;
 
@@ -344,10 +348,12 @@ export function AgentComposer({
   above,
   tools,
   actions,
+  beforeSend,
   sendable = true,
   onKey,
   onLeave,
   focusedByOwner = false,
+  listSide = MENTION_MENU_SIDE.ABOVE,
 }: {
   /** The agent the box writes to, which its `@` list does not offer; none for a draft not yet started. */
   agentId?: string | undefined;
@@ -391,8 +397,10 @@ export function AgentComposer({
   above?: ReactNode;
   /** What stands after the "+" at the foot's left: New task's repository and Issue chips. */
   tools?: ReactNode;
-  /** What stands first among the foot's right-hand presses, before the model chip: New task's Plan toggle. */
-  actions?: ReactNode;
+  /** What stands first among the foot's right-hand presses, before the model chip, handed whether the card is too narrow for their words: New task's Plan toggle. */
+  actions?: ((narrow: boolean) => ReactNode) | undefined;
+  /** What stands just before the round button: New task's File for later. */
+  beforeSend?: ReactNode;
   /** Whether the round button may send at all, beside the words: New task's is held while Agent mode has no repository. */
   sendable?: boolean;
   /** A key pressed in the field that neither its lists nor dictation took, and none while a file is still being read; answers whether it took it. */
@@ -401,6 +409,8 @@ export function AgentComposer({
   onLeave?: (() => void) | undefined;
   /** Whether the owner hands the field focus where it stands as the box first draws, as a dialog's card does, so the field takes it itself only where its editor lands later. */
   focusedByOwner?: boolean;
+  /** Which side of the caret's line the `@` and `/` lists stand: over it, as at a tab's foot, or under it, as on Home, whose card stands at the top of its page. */
+  listSide?: MentionMenuSide;
 }): React.JSX.Element {
   const editor = useRef<ComposerEditorHandle | undefined>(undefined);
   const card = useRef<HTMLDivElement>(null);
@@ -550,6 +560,7 @@ export function AgentComposer({
     },
     onNote: setRefusal,
     onLeave,
+    side: listSide,
   });
   const { dictation, dictating } = pickers;
   // A file's lines picked in a File tab on the page (⌥⌘K) are laid in here, where the caret stands.
@@ -743,7 +754,7 @@ export function AgentComposer({
                 {tools}
               </PromptInputTools>
               <div className="agent-composer-actions">
-                {actions}
+                {actions?.(folds(FOLD_WIDTH.ACTIONS))}
                 {model === undefined ? null : (
                   <AgentModelChip
                     model={model}
@@ -769,6 +780,7 @@ export function AgentComposer({
                 />
                 <DictateButton dictation={dictation} disabled={held || module === undefined} />
                 <ComposerMore foot={foot} offers={offers} />
+                {beforeSend}
                 {showsStop ? (
                   <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
                     <PromptInputSubmit

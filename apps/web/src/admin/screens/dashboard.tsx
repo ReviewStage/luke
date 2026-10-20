@@ -1,14 +1,24 @@
-import type { AdminMetrics } from "@luke/service/admin/admin-metrics";
+import type { AdminMetrics, AdminTrend } from "@luke/service/admin/admin-metrics";
+import type { AdminOverview, AdminOverviewAccount } from "@luke/service/admin/admin-overview";
+import {
+  RETENTION_BASIS,
+  type RetentionBasis,
+} from "@luke/service/admin/admin-overview-vocabulary";
 import type { AdminMetricsWindow } from "@luke/service/admin/http";
-import { formatNumber } from "@luke/ui/admin-format";
+import { CHOICE_BAR_LOOK, ChoiceBar } from "@luke/ui";
+import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-sort";
+import { formatDate, formatNumber } from "@luke/ui/admin-format";
+import { useState } from "react";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
+import { ActivityChart } from "../charts/activity-chart";
+import { TrendMove } from "../charts/chart-frame";
 import { RetentionGrid } from "../charts/retention-grid";
-import { SignInMethodsChart, SignupsChart } from "../charts/signups-chart";
+import { FunnelChart, ReachChart } from "../charts/share-bars";
+import { SignupsChart } from "../charts/signups-chart";
 import { SectionHeading, StatCard, StatGroup } from "../charts/stat-card";
-import { UsageChart } from "../charts/usage-chart";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
-import { RetentionNote, TopAccountsNote } from "../chrome/notes";
+import { ActivityNote, RetentionNote, TopAccountsNote } from "../chrome/notes";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
 import { METRICS_PATH, windowedReadPath } from "../routing";
@@ -26,21 +36,143 @@ const METRICS_ERROR = "The metrics endpoint did not answer.";
 const readMetrics: AdminReader<AdminMetrics> = async (response) =>
   (await response.json()) as AdminMetrics;
 
+/** What the page is called, in the sidebar and over the page alike. */
+const OVERVIEW_TITLE = "Overview";
+
+/** The retention grid's two bases, the meaningful one first and chosen until another is. */
+const RETENTION_OPTIONS = [
+  { value: RETENTION_BASIS.MEANINGFUL, label: "Meaningful action" },
+  { value: RETENTION_BASIS.HOSTED_CALL, label: "Any hosted call" },
+] as const;
+
 /** The dashboard's own sections, in the order the loaded page states them. */
 const DASHBOARD_SHAPES: readonly SkeletonShape[] = [
-  { kind: SKELETON_SHAPE.HEADING, label: "User activity" },
-  { kind: SKELETON_SHAPE.STAT_GROUP },
-  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.SIGNUPS, SKELETON_PLOT.SIGN_IN_METHODS] },
-  { kind: SKELETON_SHAPE.HEADING, label: "Signup retention · weekly cohorts" },
+  { kind: SKELETON_SHAPE.HEADING, label: "This week" },
+  { kind: SKELETON_SHAPE.STAT_GROUP, cards: 4 },
+  { kind: SKELETON_SHAPE.HEADING, label: "Activity by feature" },
+  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.ACTIVITY] },
+  { kind: SKELETON_SHAPE.STATIC, node: <ActivityNote /> },
+  { kind: SKELETON_SHAPE.HEADING, label: "Activation and reach" },
+  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.SHARE_BARS, SKELETON_PLOT.SHARE_BARS] },
+  { kind: SKELETON_SHAPE.HEADING, label: "Retention · weekly cohorts" },
   { kind: SKELETON_SHAPE.RETENTION },
-  { kind: SKELETON_SHAPE.STATIC, node: <RetentionNote /> },
-  { kind: SKELETON_SHAPE.HEADING, label: "Feature usage · hosted tier" },
-  { kind: SKELETON_SHAPE.STAT_CARDS, count: 1, columns: 1 },
-  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.USAGE] },
-  { kind: SKELETON_SHAPE.HEADING, label: "Most active hosted-tier accounts" },
-  { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 3 },
+  { kind: SKELETON_SHAPE.STATIC, node: <RetentionNote basis={RETENTION_BASIS.MEANINGFUL} /> },
+  { kind: SKELETON_SHAPE.HEADING, label: "Most active accounts" },
+  { kind: SKELETON_SHAPE.TABLE, rows: 10, numericColumns: 6 },
   { kind: SKELETON_SHAPE.STATIC, node: <TopAccountsNote /> },
+  { kind: SKELETON_SHAPE.HEADING, label: "Signups" },
+  { kind: SKELETON_SHAPE.CHART, plots: [SKELETON_PLOT.SIGNUPS] },
 ];
+
+/**
+ * The most active accounts' own columns after Active days: what each did in
+ * the window, and when it last signed in. The table is ranked by the server
+ * and draws no sort, so no ordering rides these but the column's own.
+ */
+const OVERVIEW_ACCOUNT_COLUMNS: readonly AccountsDetailColumn<AdminOverviewAccount>[] = [
+  {
+    key: ACCOUNTS_SORT_KEY.TASKS,
+    label: "Tasks",
+    cell: (row) => formatNumber(row.tasks),
+    sortValue: (row) => row.tasks,
+  },
+  {
+    key: ACCOUNTS_SORT_KEY.AGENTS,
+    label: "Agents",
+    cell: (row) => formatNumber(row.agents),
+    sortValue: (row) => row.agents,
+  },
+  {
+    key: ACCOUNTS_SORT_KEY.PRS_MERGED,
+    label: "PRs merged",
+    cell: (row) => formatNumber(row.prsMerged),
+    sortValue: (row) => row.prsMerged,
+  },
+  {
+    key: ACCOUNTS_SORT_KEY.CALL_MINUTES,
+    label: "Call min",
+    cell: (row) => formatNumber(row.callMinutes),
+    sortValue: (row) => row.callMinutes,
+  },
+  {
+    key: ACCOUNTS_SORT_KEY.LAST_SEEN,
+    label: "Last seen",
+    cell: (row) => (row.lastSeenAt === null ? "—" : formatDate(row.lastSeenAt)),
+    sortValue: (row) => row.lastSeenAt,
+  },
+];
+
+function percentOf(part: number, whole: number): string {
+  return `${Math.round((part / whole) * 100)}%`;
+}
+
+/** A tile's figure for the recent run, its move against the run before, and what else it says. */
+function TrendTile({
+  label,
+  trend,
+  detail,
+}: {
+  label: string;
+  trend: AdminTrend;
+  detail?: string | undefined;
+}): React.JSX.Element {
+  return (
+    <StatCard
+      label={label}
+      value={formatNumber(trend.recent)}
+      hint={
+        <>
+          <TrendMove trend={trend} /> vs the {trend.days} days before
+          {detail === undefined ? null : ` · ${detail}`}
+        </>
+      }
+      title={`against ${formatNumber(trend.prior)} in the ${trend.days} days before`}
+      grouped
+    />
+  );
+}
+
+/**
+ * The four headline tiles, each over the last seven UTC days against the
+ * seven before: who is active, and the tasks, agents, and pull requests the
+ * product exists to move.
+ */
+function HeadlineTiles({ headline }: { headline: AdminOverview["headline"] }): React.JSX.Element {
+  const { activeDevelopers, tasksCreated, agentsStarted, prsMerged, prsOpened } = headline;
+  const days = activeDevelopers.days;
+  return (
+    <StatGroup>
+      <TrendTile label="Weekly active developers" trend={activeDevelopers} />
+      <TrendTile
+        label={`Tasks created · ${days} days`}
+        trend={tasksCreated}
+        detail={
+          activeDevelopers.recent === 0
+            ? undefined
+            : `${(tasksCreated.recent / activeDevelopers.recent).toFixed(1)} per active developer`
+        }
+      />
+      <TrendTile
+        label={`Agents started · ${days} days`}
+        trend={agentsStarted}
+        detail={
+          agentsStarted.recent === 0
+            ? undefined
+            : `${percentOf(headline.agentsFromAutomations, agentsStarted.recent)} from automations`
+        }
+      />
+      <TrendTile
+        label={`PRs merged · ${days} days`}
+        trend={prsMerged}
+        detail={
+          prsOpened.opened === 0
+            ? undefined
+            : `${percentOf(prsOpened.merged, prsOpened.opened)} of this week's agents' ${formatNumber(prsOpened.opened)} PRs merged`
+        }
+      />
+    </StatGroup>
+  );
+}
 
 /**
  * The overview's own read. It is held by the shell rather than by the screen
@@ -87,12 +219,15 @@ export function DashboardScreen({
 }): React.JSX.Element {
   const { state, refreshing, reload, withdraw } = read;
   const signOut = () => void withdraw(onSignOut);
+  // The basis is the page's own choice, kept across refreshes and windows:
+  // both grids ride every answer, so flipping it reads nothing.
+  const [basis, setBasis] = useState<RetentionBasis>(RETENTION_BASIS.MEANINGFUL);
 
   switch (state.status) {
     case "loading":
       return frame(
         <PageSkeleton
-          title="Dashboard"
+          title={OVERVIEW_TITLE}
           account={account}
           onSignOut={signOut}
           controls={
@@ -119,10 +254,11 @@ export function DashboardScreen({
       );
     case "ready": {
       const metrics = state.value;
+      const overview = metrics.overview;
 
       return frame(
         <AdminPage
-          title="Dashboard"
+          title={OVERVIEW_TITLE}
           account={account}
           onSignOut={signOut}
           controls={
@@ -136,65 +272,58 @@ export function DashboardScreen({
           the numbers below stay the last ones actually read, and the dimming
           says so while the next read is in flight. */}
           <Refreshing failure={state.refreshFailure} refreshing={refreshing} onRetry={reload}>
-            <SectionHeading>User activity</SectionHeading>
-            <StatGroup>
-              <StatCard label="Total accounts" value={formatNumber(metrics.users.total)} grouped />
-              {/* The hint already carries the window total, so the run this count
-              is read against rides the title attribute instead. */}
-              <StatCard
-                label={`New · ${metrics.users.signupTrend.days} days`}
-                value={formatNumber(metrics.users.signupTrend.recent)}
-                hint={`${formatNumber(metrics.users.newInWindow)} in ${metrics.windowDays} days`}
-                title={`against ${formatNumber(metrics.users.signupTrend.prior)} in the ${metrics.users.signupTrend.days} days before`}
-                grouped
-              />
-              <StatCard
-                label="Active today"
-                value={formatNumber(metrics.featureUsage.activeUsersToday)}
-                hint={`${formatNumber(metrics.featureUsage.activeUsersWindow)} accounts in ${metrics.windowDays} days`}
-                grouped
-              />
-            </StatGroup>
-            <div className="mt-3 grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-              <SignupsChart
-                daily={metrics.users.dailySignups}
-                trend={metrics.users.signupTrend}
-                generatedAt={metrics.generatedAt}
-              />
-              <SignInMethodsChart
-                methods={metrics.users.signInMethods}
-                totalAccounts={metrics.users.total}
-              />
-            </div>
+            <SectionHeading>This week</SectionHeading>
+            <HeadlineTiles headline={overview.headline} />
 
-            <SectionHeading>Signup retention · weekly cohorts</SectionHeading>
-            <RetentionGrid retention={metrics.retention} />
-            <RetentionNote />
-
-            <SectionHeading>Feature usage · hosted tier</SectionHeading>
-            <StatCard
-              label="Hosted calls · today"
-              value={formatNumber(metrics.featureUsage.callsToday)}
-              hint={`${formatNumber(metrics.featureUsage.callsWindow)} in ${metrics.windowDays} days`}
+            <SectionHeading>Activity by feature</SectionHeading>
+            <ActivityChart
+              activity={overview.activity}
+              generatedAt={metrics.generatedAt}
+              onOpenDay={onOpenDay}
             />
-            <div className="mt-3">
-              <UsageChart
-                daily={metrics.featureUsage.daily}
-                trend={metrics.featureUsage.usageTrend}
-                label="Hosted-tier calls per day"
-                generatedAt={metrics.generatedAt}
-                onOpenDay={onOpenDay}
+            <ActivityNote />
+
+            <SectionHeading>Activation and reach</SectionHeading>
+            <div className="grid gap-3 min-[720px]:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+              <FunnelChart funnel={overview.funnel} windowDays={metrics.windowDays} />
+              <ReachChart reach={overview.reach} />
+            </div>
+
+            <SectionHeading>Retention · weekly cohorts</SectionHeading>
+            <div className="mb-3">
+              <ChoiceBar
+                label="Retained by"
+                items={RETENTION_OPTIONS}
+                value={basis}
+                look={CHOICE_BAR_LOOK.SEGMENTED}
+                onChange={setBasis}
               />
             </div>
-            <SectionHeading>Most active hosted-tier accounts</SectionHeading>
+            <RetentionGrid
+              retention={
+                basis === RETENTION_BASIS.MEANINGFUL ? overview.retention : metrics.retention
+              }
+            />
+            <RetentionNote basis={basis} />
+
+            <SectionHeading>Most active accounts</SectionHeading>
             <AccountsTable
-              rows={metrics.featureUsage.topUsers}
+              rows={overview.topAccounts}
               windowDays={metrics.windowDays}
-              emptyText="No hosted-tier usage recorded in this window yet."
-              minWidth={ACCOUNTS_TABLE_MIN_WIDTH.OVERVIEW}
+              emptyText="No meaningful actions recorded in this window yet."
+              minWidth={ACCOUNTS_TABLE_MIN_WIDTH.ROSTER}
               onOpen={onOpenAccount}
+              hostedColumns={false}
+              trailingColumns={OVERVIEW_ACCOUNT_COLUMNS}
             />
             <TopAccountsNote />
+
+            <SectionHeading>Signups</SectionHeading>
+            <SignupsChart
+              daily={metrics.users.dailySignups}
+              trend={metrics.users.signupTrend}
+              generatedAt={metrics.generatedAt}
+            />
           </Refreshing>
         </AdminPage>,
       );

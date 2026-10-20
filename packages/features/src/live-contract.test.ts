@@ -78,6 +78,22 @@ test("an opening frame is either a create or an attach, told apart by type", () 
   );
 });
 
+test("an opening frame names the developer's time zone, a desktop's older frame names none, and a zone the service does not know reads as none rather than refusing the call", () => {
+  const attach = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: "live_123" };
+  const zoned = sessionOpeningFrameFromWire(createFrame({ timeZone: "America/Los_Angeles" }));
+  assert.equal(zoned?.timeZone, "America/Los_Angeles");
+  assert.equal(
+    sessionOpeningFrameFromWire({ ...attach, timeZone: "Asia/Tokyo" })?.timeZone,
+    "Asia/Tokyo",
+  );
+  const older = sessionOpeningFrameFromWire(createFrame());
+  assert.ok(older);
+  assert.equal("timeZone" in older, false);
+  const unknown = sessionOpeningFrameFromWire({ ...attach, timeZone: "Mars/Olympus_Mons" });
+  assert.equal(unknown?.type, VOICE_SERVICE_FRAME.SESSION_ATTACH);
+  assert.equal(unknown?.timeZone, undefined);
+});
+
 test("a development override reduces to its origin; a packaged build never leaves the pinned one", () => {
   assert.equal(
     hostedVoiceServiceOrigin({ packaged: false, override: undefined }),

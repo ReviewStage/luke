@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import type { Task, TaskSummary } from "@luke/features/task-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -51,7 +50,6 @@ const roots: Root[] = [];
 beforeEach(() => {
   installScrollIntoView();
   fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined }),
     onMenuCommand: () => () => undefined,
     onBrowserState: () => () => undefined,
   });

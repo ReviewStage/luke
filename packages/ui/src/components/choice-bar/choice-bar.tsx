@@ -17,9 +17,13 @@
  * Each option is its glyph, its name, and a count. The name is always
  * given: a fill bar narrower than its options need scrolls sideways and
  * shows an option other than the chosen one by its glyph alone, its name
- * left to a reader who cannot see it. A count is words, or parts each in
+ * left to a reader who cannot see it; one standing in a toolbar beside other
+ * controls folds every option at once instead, once their names no longer
+ * fit (`fold`).
+ * A count is words, or parts each in
  * its own tone (`CountPart`), which holds chosen or not; a diff's lines are
- * `linesCount`'s, always green and red.
+ * `linesCount`'s, always green and red. An option may say more in the
+ * app's hint over it (`hint`), such as the whole a count leaves out.
  *
  * `look` is how the chosen option stands out. `fill` is the window's own
  * selected state, a sidebar row's and an open tab's: plain words at the
@@ -37,12 +41,17 @@
 
 import {
   type ButtonHTMLAttributes,
+  type ComponentType,
+  type FocusEventHandler,
   type HTMLAttributes,
+  type PointerEventHandler,
+  type ReactElement,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
   useLayoutEffect,
   useRef,
+  useState,
 } from "react";
 import { CHOICE_ROLE, type ChoiceRole } from "../choice/choice-keys.js";
 import { type CountPart, CountParts } from "../choice/count-part.js";
@@ -80,6 +89,22 @@ export const CHOICE_BAR_INSET = {
 } as const;
 
 export type ChoiceBarInset = (typeof CHOICE_BAR_INSET)[keyof typeof CHOICE_BAR_INSET];
+
+/**
+ * What folds a fill bar's options when the row is short of room: its own
+ * width, each option but the chosen one drawn by its glyph alone below a
+ * width; or their names not fitting (`together`), measured, every option
+ * then drawn by its glyph alone at once, the chosen one too, so none is
+ * named while the others are not. A bar folding together also takes its
+ * options' room in where its toolbar sets `--luke-fold: tight`, which it
+ * does before their names stop fitting.
+ */
+export const CHOICE_BAR_FOLD = {
+  OWN: "own",
+  TOGETHER: "together",
+} as const;
+
+export type ChoiceBarFold = (typeof CHOICE_BAR_FOLD)[keyof typeof CHOICE_BAR_FOLD];
 
 /** The ids a tab and the panel it controls carry. */
 export interface ChoicePanelIds {
@@ -213,7 +238,65 @@ function useThumb() {
     },
     [optionRef],
   );
-  return { barRef, optionRef };
+  return { bar, barRef, optionRef };
+}
+
+/**
+ * The width the options take as they stand, from the bar's start to the
+ * last one's end and the bar's own inset after it. Note that this is read
+ * from the options rather than the bar's `scrollWidth`, which is never less
+ * than the bar's own width, so it says how little folded options take.
+ */
+function optionsWidth(bar: HTMLElement): number {
+  const options = bar.querySelectorAll<HTMLElement>(".luke-choice-bar-option");
+  const last = options[options.length - 1];
+  if (last === undefined) return 0;
+  const inset = Number.parseFloat(getComputedStyle(bar).paddingInlineEnd) || 0;
+  return last.offsetLeft + last.offsetWidth + inset;
+}
+
+/** The room the folded options' names would take back: each name's own width and the gap it would stand in. */
+function foldedNames(bar: HTMLElement): number {
+  let room = 0;
+  for (const label of bar.querySelectorAll<HTMLElement>(
+    ".luke-choice-bar-icon + .luke-choice-bar-label",
+  )) {
+    const option = label.parentElement;
+    const gap = option === null ? 0 : Number.parseFloat(getComputedStyle(option).columnGap) || 0;
+    room += label.scrollWidth + gap;
+  }
+  return room;
+}
+
+/** How far short of the bar's width named options must stand before a folded bar names them again, so a width on the edge never sets it folding and unfolding in turn. */
+const UNFOLD_SLACK = 2;
+
+/**
+ * Whether a bar folding together draws its options by their glyphs alone:
+ * while their names do not fit its width. The width the names take is
+ * measured from the options as they stand, drawn or folded (`optionsWidth`),
+ * a folded name read by its own width (`foldedNames`), so a change that makes them fit, a tighter step's
+ * padding among them, unfolds the bar at once. It is measured on every draw,
+ * before the frame is painted, and whenever the bar or an option resizes.
+ */
+function useFoldTogether(on: boolean, bar: React.RefObject<HTMLDivElement | null>): boolean {
+  const [folded, setFolded] = useState(false);
+  const measure = useCallback(() => {
+    const element = bar.current;
+    if (!on || element === null) return;
+    const named = optionsWidth(element) + (folded ? foldedNames(element) : 0);
+    setFolded(folded ? named > element.clientWidth - UNFOLD_SLACK : named > element.clientWidth);
+  }, [on, bar, folded]);
+  useLayoutEffect(measure);
+  useLayoutEffect(() => {
+    const element = bar.current;
+    if (!on || element === null || !("ResizeObserver" in globalThis)) return undefined;
+    const resized = new ResizeObserver(measure);
+    resized.observe(element);
+    for (const option of element.children) resized.observe(option);
+    return () => resized.disconnect();
+  }, [on, bar, measure]);
+  return on && folded;
 }
 
 /**
@@ -258,8 +341,26 @@ export interface ChoiceItem<Value extends string> {
   readonly icon?: ReactNode;
   /** Words drawn quiet after the name, or parts each in its own tone. */
   readonly count?: string | readonly CountPart[] | undefined;
+  /** What the app's hint over the option says beyond its name and count (the whole a count leaves out); none raises nothing. */
+  readonly hint?: string | undefined;
   readonly disabled?: boolean | undefined;
 }
+
+/** What a hint hands the option it wraps: when to show and go, and what it says of it. */
+interface ChoiceBarHintProps {
+  "aria-describedby"?: string | undefined;
+  onPointerEnter?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerLeave?: PointerEventHandler<HTMLElement> | undefined;
+  onPointerDown?: PointerEventHandler<HTMLElement> | undefined;
+  onFocus?: FocusEventHandler<HTMLElement> | undefined;
+  onBlur?: FocusEventHandler<HTMLElement> | undefined;
+}
+
+/** The hint an app hangs from an option that has one, saying `label`. */
+export type ChoiceBarHint = ComponentType<{
+  label: string | undefined;
+  children: ReactElement<ChoiceBarHintProps>;
+}>;
 
 interface ChoiceBarBase<Value extends string> {
   /** The bar's accessible name. */
@@ -273,6 +374,9 @@ interface ChoiceBarBase<Value extends string> {
   panels?: ((value: Value) => ChoicePanelIds) | undefined;
   focus?: ChoiceBarFocus | undefined;
   inset?: ChoiceBarInset | undefined;
+  fold?: ChoiceBarFold | undefined;
+  /** The app's hint, hung from each option that says one (`ChoiceItem.hint`). */
+  hint?: ChoiceBarHint | undefined;
   disabled?: boolean | undefined;
 }
 
@@ -316,12 +420,15 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
     panels,
     focus = CHOICE_BAR_FOCUS.ROVING,
     inset = CHOICE_BAR_INSET.NONE,
+    fold = CHOICE_BAR_FOLD.OWN,
+    hint: Hint,
     disabled = false,
     clearable: _,
     onChange: __,
     ...appAttributes
   } = props;
   const thumb = useThumb();
+  const folded = useFoldTogether(fold === CHOICE_BAR_FOLD.TOGETHER, thumb.bar);
   const role = panels === undefined ? CHOICE_ROLE.RADIO : CHOICE_ROLE.TAB;
   const roving = focus === CHOICE_BAR_FOCUS.ROVING;
   const choose = (chosen: Value) => props.onChange(chosen);
@@ -346,12 +453,14 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
       data-look={look}
       data-size={size}
       data-inset={inset}
+      data-fold={fold}
+      data-folded={folded ? "true" : undefined}
     >
       <span className="luke-choice-bar-thumb" aria-hidden="true" />
       {items.map((item) => {
         const chosen = item.value === value;
         const count = countOf(item.count);
-        return (
+        const option = (
           <button
             key={item.value}
             ref={thumb.optionRef}
@@ -371,6 +480,13 @@ export function ChoiceBar<Value extends string>(props: ChoiceBarProps<Value>): R
             <span className="luke-choice-bar-label">{item.label}</span>
             {count === undefined ? null : <span className="luke-choice-bar-count">{count}</span>}
           </button>
+        );
+        return Hint === undefined || item.hint === undefined ? (
+          option
+        ) : (
+          <Hint key={item.value} label={item.hint}>
+            {option}
+          </Hint>
         );
       })}
     </div>

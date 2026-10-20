@@ -18,6 +18,8 @@ import { ACCOUNTS_SORT_KEY, type AccountsDetailColumn } from "@luke/ui/accounts-
 import { formatDate, formatNumber } from "@luke/ui/admin-format";
 import { useEffect, useState } from "react";
 import { ACCOUNTS_TABLE_MIN_WIDTH, AccountsTable } from "../accounts-table/accounts-table";
+import { SignInMethodsChart } from "../charts/signups-chart";
+import { SectionHeading } from "../charts/stat-card";
 import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { RosterNote } from "../chrome/notes";
@@ -172,8 +174,9 @@ export function UsersScreen({
   );
 
   switch (state.status) {
-    case "loading":
+    case "loading": {
       return page({ filters: search, state: COLLECTION_STATE.LOADING });
+    }
     case "signed-out":
       return <SignInCard />;
     case "forbidden":
@@ -204,6 +207,15 @@ export function UsersScreen({
         </Refreshing>
       );
 
+      // Note that the methods describe every account the scope keeps, so a
+      // search that narrows the rows, or finds none, leaves the chart standing.
+      const signInMethods = (
+        <>
+          <SectionHeading>Sign-in methods</SectionHeading>
+          <SignInMethodsChart methods={list.signIn.methods} totalAccounts={list.signIn.accounts} />
+        </>
+      );
+
       return page({
         // Note that the count stands beside the field rather than in it, so a
         // narrow page wraps it under the field instead of crowding the query.
@@ -223,6 +235,7 @@ export function UsersScreen({
             {truncatedTo === undefined ? null : (
               <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
             )}
+            {signInMethods}
           </>,
         ),
         children: refreshed(
@@ -238,6 +251,7 @@ export function UsersScreen({
               favorite={{ starred: (row) => row.favorite, onToggle: toggleFavorite }}
             />
             <RosterNote truncatedTo={truncatedTo} searched={list.search !== undefined} />
+            {signInMethods}
           </>,
         ),
       });

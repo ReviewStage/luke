@@ -19,16 +19,17 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
 import type { InboxChoice, NewTaskAgent, TasksControl } from "../tasks/use-tasks-tab.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { handState } from "../testing/app-state.js";
 import {
   composerEditor,
@@ -182,32 +183,24 @@ beforeEach(() => {
   installScrollIntoView();
   installEditorLayout();
   fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-        const value: CodingAgentInboxAnswerView = {
-          items: AGENT_INBOXES.get(request.payload.agentId) ?? [],
-          cursor: "1",
-        };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
-        automationReads.push(request.payload.workspaceId ?? "");
-        return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.DONE,
-          value: { automations: [SWEEP] },
-        });
-      }
-      if (request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS });
-      }
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
+    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
+  });
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: ({ agentId }) => {
       const value: CodingAgentInboxAnswerView = {
-        items: INBOXES.get(request.payload.taskId) ?? [],
+        items: AGENT_INBOXES.get(agentId) ?? [],
         cursor: "1",
       };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      return Promise.resolve(value);
+    },
+    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
+      const value: CodingAgentInboxAnswerView = { items: INBOXES.get(taskId) ?? [], cursor: "1" };
+      return Promise.resolve(value);
+    },
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
+    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
+      automationReads.push(payload.workspaceId ?? "");
+      return Promise.resolve({ automations: [SWEEP] });
     },
   });
 });
@@ -260,8 +253,12 @@ function newTaskControl(started: Started[]): TasksControl["newTask"] {
   };
 }
 
-/** The home page over `overrides`, every door it opens recorded. */
-function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Stratakos") {
+/** The home page over `overrides`, in the room given, every door it opens recorded. */
+function mount(
+  overrides: Partial<TasksControl> = {},
+  accountName = "Dean Stratakos",
+  room: ShellRoom = SHELL_ROOM.WIDE,
+) {
   const opened: Opened = { tasks: [], inbox: [], newTasks: 0, started: [] };
   const tasks = tasksControl({
     tasks: TASKS,
@@ -291,7 +288,7 @@ function mount(overrides: Partial<TasksControl> = {}, accountName = "Dean Strata
   root = createRoot(container);
   act(() =>
     root?.render(
-      onRegistry(AtomRegistry.make(), createElement(DesktopHome, { tasks, accountName })),
+      onRegistry(AtomRegistry.make(), createElement(DesktopHome, { tasks, room, accountName })),
     ),
   );
   return { page: container, opened, tasks };
@@ -420,6 +417,24 @@ test("Home offers no line to search every task, though Recent lists fewer than t
   assert.doesNotMatch(page.textContent ?? "", /Search all/u);
   const palette = commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE);
   assert.equal(page.querySelector(`[aria-keyshortcuts="${palette}"]`), null);
+});
+
+test("on a phone, where the sidebar is a drawer, Recent lists the 20 plans saved latest rather than 6", async () => {
+  const many = Array.from({ length: 30 }, (_, n) =>
+    task(100 + n, `Plan ${n + 1}`, (n + 1) * 60_000, "acme/relay"),
+  );
+  const listed = { tasks: many, archived: [], ...HOLDING };
+  const latest = many.map((each) => `${each.name} · acme/relay`);
+
+  const phone = mount({ tasks: many, listed }, "Dean", SHELL_ROOM.NARROW);
+  await settle();
+  assert.deepEqual(rows(phone.page, "home-recent"), latest.slice(0, 20));
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const desktop = mount({ tasks: many, listed }, "Dean", SHELL_ROOM.WIDE);
+  await settle();
+  assert.deepEqual(rows(desktop.page, "home-recent"), latest.slice(0, 6));
 });
 
 test("a waiting item's row opens the Inbox on its item, and a recent plan opens the plan", async () => {

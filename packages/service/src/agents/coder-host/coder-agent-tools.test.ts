@@ -31,6 +31,7 @@ import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
 import {
   joinWorkspace,
   leaveWorkspace,
+  linearIssueLink,
   openHostedStoreTestDatabase,
   openWorkspace,
   startTask,
@@ -45,8 +46,9 @@ import {
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
+import { TASK_ISSUE_PROVIDER, TASK_ISSUE_RELATION } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { TASK_BOUNDS, TASK_PRIORITY, TASK_STATUS } from "@luke/features/task-wire";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
@@ -1447,13 +1449,16 @@ test("create_task makes a task in the caller's workspace for the member the agen
   assert.equal(made.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(made));
   assert.ok(isRecord(made.task) && isWireString(made.task.id), JSON.stringify(made));
   const taskId = made.task.id;
+  const stored = Option.getOrThrow(await database.run(readTask(bob, taskId)));
   assert.deepEqual(made.task, {
     id: taskId,
+    key: `TW-${stored.task.number}`,
+    status: TASK_STATUS.TODO,
+    priority: TASK_PRIORITY.NONE,
     name,
     repository: RELAY_FULL_NAME,
     mention: `[@${name}](https://tryluke.dev/workspace-${workspaceId}/plan/${taskId})`,
   });
-  const stored = Option.getOrThrow(await database.run(readTask(bob, taskId)));
   assert.deepEqual(
     [stored.ownerId, stored.task.workspaceId, stored.task.repository, stored.text, stored.brief],
     [bob, workspaceId, RELAY_FULL_NAME, body, "Invites should lapse after a week."],
@@ -1674,10 +1679,16 @@ test("update_task refuses to archive a task while an agent on it still works, th
   const eve = await fakeCoderEve(workspaceId);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
   const turnId = await turnOn(agents.teammates, false);
+  const billing = Option.getOrThrow(
+    await database.run(readTask(agents.teammates.userId, tasks.billing)),
+  );
   const answered = (archived: boolean, already: boolean) => ({
     status: ACTION_RESULT_STATUS.ACCEPTED,
     task: {
       id: tasks.billing,
+      key: `TW-${billing.task.number}`,
+      status: TASK_STATUS.TODO,
+      priority: TASK_PRIORITY.NONE,
       name: "Billing",
       repository: RELAY_FULL_NAME,
       archived,
@@ -2656,7 +2667,7 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     String(identifier),
   );
   assert.ok(isWireString(url) && url.includes(filed.id), String(url));
-  assert.equal(issued.task.linearIssue, null);
+  assert.deepEqual(issued.task.issues, []);
   const linearIssue = {
     identifier: "REL-7",
     title: "Seat pricing",
@@ -2664,10 +2675,23 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     description: "Charge per active seat.",
   };
   const fromLinear = await database.run(
-    createTask(teammates.userId, { organizationId: workspaceId, name: "Seats", linearIssue }),
+    createTask(teammates.userId, {
+      organizationId: workspaceId,
+      name: "Seats",
+      issueLinks: [linearIssueLink(linearIssue)],
+    }),
   );
   const linear = await call(CODER_TOOL.READ_TASK, { taskId: fromLinear.id });
-  assert.deepEqual(isRecord(linear.task) && linear.task.linearIssue, linearIssue);
+  assert.deepEqual(isRecord(linear.task) && linear.task.issues, [
+    {
+      provider: TASK_ISSUE_PROVIDER.LINEAR,
+      key: linearIssue.identifier,
+      title: linearIssue.title,
+      url: linearIssue.url,
+      relation: TASK_ISSUE_RELATION.CLOSES,
+      description: linearIssue.description,
+    },
+  ]);
 
   // A task started from a brief, its plan still untouched, is read with the developer's words.
   const briefed = await database.run(
@@ -2694,6 +2718,82 @@ test("read_task reads a teammate's task of the caller's workspace with its plan 
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: READ_TASK_REFUSAL.UNREADABLE,
   });
+});
+
+test("create_task, update_task, list_tasks, and read_task carry a task's status, priority, and key, list_tasks narrows by status, and an unknown status is refused", async () => {
+  const { workspaceId, plans: taskIds, agents } = await openWorkspaces();
+  const { caller } = agents;
+  const eve = await fakeCoderEve(workspaceId);
+  const call = await peerCaller(hostOf(true), caller, eve.services);
+  const taskOf = (answer: WireRecord) =>
+    isRecord(answer.task) ? answer.task : assert.fail(JSON.stringify(answer));
+  const listedIds = async (input: WireBoundaryInput) => {
+    const listed = await call(CODER_TOOL.LIST_TASKS, input);
+    assert.ok(Array.isArray(listed.tasks), JSON.stringify(listed));
+    return listed.tasks.map((each) => (isRecord(each) ? each.id : undefined));
+  };
+
+  const filed = taskOf(
+    await call(
+      CODER_TOOL.CREATE_TASK,
+      { name: "Refund export", status: TASK_STATUS.BACKLOG, priority: TASK_PRIORITY.HIGH },
+      "call-filed",
+    ),
+  );
+  assert.ok(isWireString(filed.id) && isWireString(filed.key), JSON.stringify(filed));
+  assert.match(filed.key, /^TW-\d+$/u);
+  assert.deepEqual([filed.status, filed.priority], [TASK_STATUS.BACKLOG, TASK_PRIORITY.HIGH]);
+  const stored = Option.getOrThrow(await database.run(readTask(caller.userId, filed.id)));
+  assert.deepEqual(
+    [stored.task.status, stored.task.priority, `TW-${stored.task.number}`],
+    [TASK_STATUS.BACKLOG, TASK_PRIORITY.HIGH, filed.key],
+  );
+
+  assert.deepEqual(await listedIds({ status: TASK_STATUS.BACKLOG }), [filed.id]);
+  const listed = await call(CODER_TOOL.LIST_TASKS, { nameContains: "Billing" });
+  assert.ok(Array.isArray(listed.tasks) && isRecord(listed.tasks[0]), JSON.stringify(listed));
+  assert.deepEqual(
+    [listed.tasks[0].id, listed.tasks[0].status, listed.tasks[0].priority],
+    [taskIds.billing, TASK_STATUS.TODO, TASK_PRIORITY.NONE],
+  );
+  assert.match(String(listed.tasks[0].key), /^TW-\d+$/u);
+
+  const changed = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: filed.id, status: TASK_STATUS.DONE, priority: TASK_PRIORITY.LOW },
+    "call-done",
+  );
+  assert.equal(changed.already, false, JSON.stringify(changed));
+  assert.deepEqual(
+    [taskOf(changed).status, taskOf(changed).priority, taskOf(changed).key],
+    [TASK_STATUS.DONE, TASK_PRIORITY.LOW, filed.key],
+  );
+  const again = await call(
+    CODER_TOOL.UPDATE_TASK,
+    { taskId: filed.id, status: TASK_STATUS.DONE },
+    "call-again",
+  );
+  assert.equal(again.already, true, JSON.stringify(again));
+  assert.deepEqual(await listedIds({ status: TASK_STATUS.BACKLOG }), []);
+
+  const read = taskOf(await call(CODER_TOOL.READ_TASK, { taskId: filed.id }));
+  assert.deepEqual(
+    [read.key, read.status, read.priority],
+    [filed.key, TASK_STATUS.DONE, TASK_PRIORITY.LOW],
+  );
+
+  assert.deepEqual(await call(CODER_TOOL.UPDATE_TASK, { taskId: filed.id, status: "started" }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: UPDATE_TASK_REFUSAL.UNREADABLE,
+  });
+  assert.deepEqual(await call(CODER_TOOL.LIST_TASKS, { status: "started" }), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: CODING_AGENT_TOOL_REFUSAL.UNREADABLE_TASKS,
+  });
+  assert.deepEqual(
+    await call(CODER_TOOL.CREATE_TASK, { name: "Odd", priority: "p0" }, "call-odd"),
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: CREATE_TASK_REFUSAL.UNREADABLE },
+  );
 });
 
 test("list_issues, read_issue, create_issue, and update_issue keep the caller's workspace's issues, named by id or identifier, archived and brought back, as the store then reads them, and reach no issue of another workspace", async () => {

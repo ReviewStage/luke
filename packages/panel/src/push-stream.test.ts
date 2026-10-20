@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
-import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
 import { LIVE_SESSION_PHASE } from "@luke/gateway";
-import { createActPortHandler, WindowPushes } from "@luke/host/act-port";
+import {
+  type ActPortDependencies,
+  createActPortHandler,
+  type PlatformActProcedures,
+  WindowPushes,
+} from "@luke/host/act-port";
 import type { ActSender } from "@luke/host/act-router";
 import { PUSH } from "@luke/host/contract";
 import { AVATAR_FEED_KIND } from "@luke/voice/avatar";
 import { VOICE_COMMAND } from "@luke/voice/voice-view";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect } from "effect";
+import { Context } from "effect";
 import { afterEach, it } from "vitest";
 import { openPushStream } from "./app-bridge.js";
 import { stateWith } from "./testing/app-state.js";
@@ -34,18 +38,23 @@ afterEach(() => {
 /** Main's side of every window: the pushes it holds, and the port server each window's port is upgraded with. */
 function mainProcess() {
   const pushes = new WindowPushes();
-  const unanswered = () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED });
-  const handler = createActPortHandler({
-    issues: {
-      host: {
-        issueList: unanswered,
-        issueRead: unanswered,
-        issueCreate: unanswered,
-        issueChange: unanswered,
-      },
-    },
-    pushes,
-  });
+  // SAFETY: these tests open the push stream alone, so no act procedure's host is ever read.
+  const acts = {
+    account: {},
+    accountAsks: { host: {} },
+    agentInbox: { host: {} },
+    agents: { host: {}, notices: {} },
+    automations: { host: {} },
+    factory: { host: {} },
+    integrations: { host: {} },
+    issues: { host: {} },
+    settings: {},
+    tasks: { host: {} },
+    workspaces: { host: {} },
+  } as unknown as Omit<ActPortDependencies, "pushes">;
+  // SAFETY: as above, no platform kind is called here.
+  const platform = {} as PlatformActProcedures<unknown>;
+  const handler = createActPortHandler({ ...acts, pushes }, platform);
   /** One page of a window standing as `actor`: its act port opened, and its push stream on it. */
   const page = (actor: ActSender) => {
     const { port1, port2 } = new MessageChannel();

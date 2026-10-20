@@ -59,6 +59,7 @@ const STORAGE_KEY = {
   INBOX_WHOSE: "luke.inboxWhose",
   INBOX_MEDIA_PREVIEWS: "luke.inboxMediaPreviews",
   INBOX_LIST_WIDTH: "luke.inboxListWidth",
+  CHAT_LIST_WIDTH: "luke.chatListWidth",
   RUNS_PANEL: "luke.automationRunsPanel",
   FILE_TREE_WIDTH: "luke.fileTreeWidth",
 } as const;
@@ -406,15 +407,27 @@ export interface InboxListWidth {
 
 /** The Inbox list's width, the default until first dragged, and kept as it is. */
 export function useInboxListWidth(): InboxListWidth {
+  return useListWidth(STORAGE_KEY.INBOX_LIST_WIDTH);
+}
+
+/** Chat's rail's width, on the Inbox list's bounds, since it stands where the Inbox's list does, and kept apart from it. */
+export function useChatListWidth(): InboxListWidth {
+  return useListWidth(STORAGE_KEY.CHAT_LIST_WIDTH);
+}
+
+/** A list column's width beside the item it opens, the default until first dragged, and kept under its key. */
+function useListWidth(
+  key: typeof STORAGE_KEY.INBOX_LIST_WIDTH | typeof STORAGE_KEY.CHAT_LIST_WIDTH,
+): InboxListWidth {
   const [width, setWidth] = useState(() =>
-    clampListWidth(readKept(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth, INBOX_LIST_WIDTH.DEFAULT)),
+    clampListWidth(readKept(key, storedWidth, INBOX_LIST_WIDTH.DEFAULT)),
   );
   return {
     width,
     onResize: (asked) => {
       const next = clampListWidth(asked);
       setWidth(next);
-      writeKept(STORAGE_KEY.INBOX_LIST_WIDTH, storedWidth, next);
+      writeKept(key, storedWidth, next);
     },
   };
 }

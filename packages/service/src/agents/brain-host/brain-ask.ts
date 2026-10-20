@@ -164,6 +164,8 @@ export interface AskInput<Origin extends AskOrigin = AskOrigin> {
   readonly clientId: string;
   readonly conversationId: string;
   readonly voice?: AskVoice;
+  /** The asker's time zone, which the turn the ask opens reads the day in; none reads UTC. */
+  readonly timeZone?: string | undefined;
 }
 
 /**
@@ -251,7 +253,12 @@ export const acceptAsk = /* @__PURE__ */ Effect.fn("web/acceptAsk")(function* <
     queuedAt: ask.createdAt.getTime(),
   });
   if (ask.sessionId !== undefined) return accepted;
-  const message = { conversationId, turn: HOST_TURN_OF_ASK_ORIGIN[origin], message: question };
+  const message = {
+    conversationId,
+    turn: HOST_TURN_OF_ASK_ORIGIN[origin],
+    message: question,
+    ...(input.timeZone === undefined ? undefined : { timeZone: input.timeZone }),
+  };
 
   // The dispatch runs under the conversation's lock, so one dispatch at a time runs in a
   // conversation: of two retries for one client id the second finds the session written and

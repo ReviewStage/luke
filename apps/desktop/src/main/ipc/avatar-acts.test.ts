@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
+import { afterEach, it } from "@effect/vitest";
 import { AVATAR_STOP_REASON, type AvatarStopReason } from "@luke/features";
 import type { AvatarGrant } from "@luke/features/avatar-grant";
 import { runModeFor } from "@luke/host";
-import { type ActRows, type ActSender, createActRouter } from "@luke/host/act-router";
+import { settledAct, type TestActPort, testActPort } from "@luke/host/act-port/testing";
+import type { ActSender } from "@luke/host/act-router";
 import { ACT_KIND } from "@luke/host/acts";
 import { AppStateStore, initialAppState } from "@luke/host/client";
+import type { PortActPayload, PortActResult } from "@luke/host/contract";
 import type { HostAvatar } from "@luke/host/effect";
 import {
   AVATAR_END_REASON,
@@ -23,7 +25,7 @@ import type { UnparsedWireValue } from "@luke/wire";
 import { Context, Effect, PubSub, Stream } from "effect";
 import type { WebContents } from "electron";
 import { linkAvatar } from "../services/avatar-link";
-import { avatarActRows, avatarReports } from "./avatar-acts";
+import { avatarProcedures, avatarReports } from "./avatar-acts";
 
 /** What the document is composed from; the avatar rows read none of it. */
 const RUN = {
@@ -50,6 +52,13 @@ const GRANT: AvatarGrant = {
 };
 
 const CHUNK: AvatarFeed = { kind: AVATAR_FEED_KIND.AUDIO, pcm: "AAAA" };
+
+/** Every act port a fixture opened, closed once its test is done. */
+const ports: TestActPort<WebContents>[] = [];
+
+afterEach(() => {
+  for (const port of ports.splice(0)) port.close();
+});
 
 function settle() {
   return Effect.gen(function* () {
@@ -149,9 +158,8 @@ function fixture() {
       // SAFETY: as above.
       [ROLE.CALL]: {} as WebContents,
     };
-    // SAFETY: only the avatar rows are under test; the router dispatches on
-    // the kind alone, so the kinds this fragment does not answer are never reached.
-    const router = createActRouter(avatarActRows({ avatar }) as ActRows);
+    const port = testActPort(avatarProcedures({ avatar }));
+    ports.push(port);
     const reports = avatarReports({
       state,
       panel: {
@@ -165,20 +173,32 @@ function fixture() {
       },
       voiceOwns: (sender) => sender === senders[ROLE.VOICE],
     });
-    const senderOf = (role: Role): ActSender => ({
+    const senderOf = (role: Role): ActSender<WebContents> => ({
       sender: senders[role],
       panel: role === ROLE.PANEL,
       voice: role === ROLE.VOICE,
       call: role === ROLE.CALL,
     });
-    const perform = (role: Role, kind: ACT_KIND_UNDER_TEST, payload: UnparsedWireValue) =>
+    /** One act called on the port as a window would, settled to whether it was done or refused, and in what words. */
+    const performed = (
+      role: Role,
+      kind: ACT_KIND_UNDER_TEST,
+      payload: UnparsedWireValue,
+      options: { readonly trusted?: boolean } = {},
+    ) =>
       Effect.gen(function* () {
-        // SAFETY: a window's act crosses as a structured-clone value, which the router reads again.
-        const act = { kind, payload } as Parameters<typeof router.performAct>[0];
-        const outcome = yield* router.performAct(act, senderOf(role));
+        // SAFETY: a window's act crosses as a structured-clone value, which the port's schema reads again.
+        const call = port.as(senderOf(role), options)[kind] as (
+          sent: UnparsedWireValue,
+        ) => Promise<PortActResult<ACT_KIND_UNDER_TEST>>;
+        const settled = yield* Effect.promise(() => settledAct(call(payload)));
         yield* settle();
-        return outcome.status;
+        return settled;
       });
+    const perform = (role: Role, kind: ACT_KIND_UNDER_TEST, payload: UnparsedWireValue) =>
+      Effect.map(performed(role, kind, payload), (settled) =>
+        "answer" in settled ? "done" : "refused",
+      );
     const feed = (role: Role, sent: AvatarFeed) =>
       reports.feedAvatar({ sender: senders[role] }, sent);
     const signal = (role: Role, sent: AvatarViewSignal) =>
@@ -193,11 +213,30 @@ function fixture() {
       settle(),
     );
     const avatarNow = () => state.snapshot().voice.avatar;
-    return { perform, feed, signal, moved, granted, avatarNow, page, asked, restarts };
+    return {
+      perform,
+      performed,
+      feed,
+      signal,
+      moved,
+      granted,
+      avatarNow,
+      page,
+      asked,
+      restarts,
+    };
   });
 }
 
 type ACT_KIND_UNDER_TEST = typeof ACT_KIND.AVATAR_REPORT | typeof ACT_KIND.VOICE_SET_VIDEO;
+
+/** Each kind's refusal, as the window drew it before the kinds moved onto the port. */
+const REFUSAL = {
+  [ACT_KIND.AVATAR_REPORT]: "Could not report the video on this system.",
+  [ACT_KIND.VOICE_SET_VIDEO]: "Could not turn the video on or off on this system.",
+} as const;
+
+const LIVE_REPORT: PortActPayload<typeof ACT_KIND.AVATAR_REPORT> = { status: AVATAR_STATUS.LIVE };
 
 it.effect(
   "the host's start is written at once, so the tile stands before the panel has a grant",
@@ -286,6 +325,39 @@ it.effect(
       assert.equal(
         yield* f.perform(ROLE.VOICE, ACT_KIND.VOICE_SET_VIDEO, { on: false }),
         "refused",
+      );
+      assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
+      assert.deepEqual(f.asked, []);
+    }),
+);
+
+it.effect("a refused report or toggle is refused in its kind's own words", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    assert.deepEqual(yield* f.performed(ROLE.CALL, ACT_KIND.AVATAR_REPORT, LIVE_REPORT), {
+      refused: REFUSAL[ACT_KIND.AVATAR_REPORT],
+    });
+    assert.deepEqual(yield* f.performed(ROLE.VOICE, ACT_KIND.VOICE_SET_VIDEO, { on: true }), {
+      refused: REFUSAL[ACT_KIND.VOICE_SET_VIDEO],
+    });
+  }),
+);
+
+it.effect(
+  "a frame this build does not trust is refused the report and the toggle, even as the panel, and changes nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      yield* f.moved({ status: LIVE_AVATAR_STATUS.STARTING });
+      yield* f.granted;
+      const untrusted = { trusted: false };
+      assert.deepEqual(
+        yield* f.performed(ROLE.PANEL, ACT_KIND.AVATAR_REPORT, LIVE_REPORT, untrusted),
+        { refused: REFUSAL[ACT_KIND.AVATAR_REPORT] },
+      );
+      assert.deepEqual(
+        yield* f.performed(ROLE.PANEL, ACT_KIND.VOICE_SET_VIDEO, { on: false }, untrusted),
+        { refused: REFUSAL[ACT_KIND.VOICE_SET_VIDEO] },
       );
       assert.deepEqual(f.avatarNow(), { status: AVATAR_STATUS.STARTING });
       assert.deepEqual(f.asked, []);

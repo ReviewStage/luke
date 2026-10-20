@@ -18,12 +18,14 @@ import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../providers/post
 import type { AdminViewer } from "./admin-access.js";
 import { readAdminAccountSource } from "./admin-account-queries.js";
 import type { AdminSeams } from "./admin-app.js";
+import { readAdminCost } from "./admin-cost-queries.js";
 import { buildAdminDayDetail } from "./admin-day.js";
 import { adminIntegrations } from "./admin-health.js";
 import { buildAdminMetrics } from "./admin-metrics.js";
+import { buildAdminOverview } from "./admin-overview.js";
+import { readAdminDashboardSources } from "./admin-overview-queries.js";
 import {
   readAdminDaySource,
-  readAdminMetricsSource,
   readAdminUserSource,
   readAdminUsersSource,
   writeAdminFavorite,
@@ -132,9 +134,11 @@ export function hostedAdminSeams(): AdminSeams {
   return {
     resolveViewer: resolveSessionViewer,
     readMetrics: (now, scope, windowDays) =>
-      Effect.map(readAdminMetricsSource({ now, scope, windowDays }), (source) =>
-        buildAdminMetrics(source, now, windowDays),
-      ),
+      Effect.map(readAdminDashboardSources({ now, scope, windowDays }), (sources) => ({
+        ...buildAdminMetrics(sources.metrics, now, windowDays),
+        overview: buildAdminOverview(sources.overview, now, windowDays),
+      })),
+    readCost: (now, scope, windowDays) => readAdminCost({ now, scope, windowDays }),
     readUsers: (now, scope, viewerId, windowDays, search) =>
       Effect.map(readAdminUsersSource({ now, scope, search, viewerId, windowDays }), (source) =>
         buildAdminUserList(source, now, windowDays, search),

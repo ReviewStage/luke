@@ -6,7 +6,8 @@ import { closeEveryMacTerminal, type MacTerminalTools, startMacTerminal } from "
 /**
  * A terminal of this Mac over this system's own `script`: the script runs on
  * a real terminal, takes what is typed, follows a resize, says how it ended,
- * and a close hangs up what it started. On a Mac it runs on macOS's own
+ * and a close hangs up what it started, and kills what ignores that once
+ * its grace is up. On a Mac it runs on macOS's own
  * tools as Luke starts them; elsewhere `script` and `stty` take Linux's
  * arguments, which the tools seam hands in.
  */
@@ -15,10 +16,11 @@ const LINUX_TOOLS: MacTerminalTools = {
   script: (file) => ["script", ["-q", "-e", "-c", `/bin/bash ${file}`, "/dev/null"]],
   resize: (tty, cols, rows) => ["stty", ["-F", tty, "rows", String(rows), "cols", String(cols)]],
   hangUp: (tty) => ["pkill", ["-HUP", "-t", tty.replace(/^\/dev\//u, "")]],
+  processes: (tty) => ["ps", ["-o", "pid=", "-t", tty.replace(/^\/dev\//u, "")]],
 };
 
 /** A terminal running the script, and a promise of each output marker and of its end. */
-function open(script: (ttyFile: string) => string) {
+function open(script: (ttyFile: string) => string, stopGraceMs?: number) {
   let printed = "";
   const waiters: { text: string; resolve: () => void }[] = [];
   let exited: (code: number | null) => void = () => undefined;
@@ -37,6 +39,7 @@ function open(script: (ttyFile: string) => string) {
       }
     },
     onExit: (code) => exited(code),
+    stopGraceMs,
   });
   const until = (text: string) =>
     new Promise<void>((resolve) => {
@@ -125,6 +128,29 @@ test("a close hangs up a job in a process group of its own on the terminal", asy
   terminal.close();
   await ended;
   execFileSync("sleep", ["0.2"]);
+
+  assert.equal(alive(child), false);
+});
+
+test("a close kills what ignores the hang-up and the terminate once its grace is up", async () => {
+  const { terminal, until, printed } = open(
+    (ttyFile) =>
+      [
+        `tty > ${ttyFile}`,
+        "set -m",
+        `bash -c 'trap "" HUP TERM; echo "child:$$"; while :; do sleep 0.1; done' &`,
+        "wait",
+        "",
+      ].join("\n"),
+    300,
+  );
+
+  await until("child:");
+  const child = Number(/child:(\d+)/u.exec(printed())?.[1]);
+  assert.ok(alive(child));
+  terminal.close();
+  // Note that the job is a real process on a real terminal, so its end is waited for as the system reports it, up to a bound, rather than on a clock of the test's.
+  for (let tries = 0; tries < 100 && alive(child); tries += 1) execFileSync("sleep", ["0.1"]);
 
   assert.equal(alive(child), false);
 });

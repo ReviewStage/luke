@@ -114,6 +114,26 @@
     "brief": {
       "type": "string",
       "maxLength": 16000
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "backlog",
+        "todo",
+        "in-progress",
+        "done",
+        "canceled"
+      ]
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "none",
+        "urgent",
+        "high",
+        "medium",
+        "low"
+      ]
     }
   },
   "required": [],

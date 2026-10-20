@@ -8,7 +8,7 @@ import { and, eq, sum } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/sql";
 import { Database } from "../core/query.js";
-import { conversationAttachment } from "../schemas/conversation-attachment.js";
+import { attachment } from "../schemas/attachment.js";
 import type { TaskStoreEffect } from "./task-store.js";
 import type { ConversationTarget } from "./writer.js";
 
@@ -51,11 +51,11 @@ const KeptRowSchema = Schema.Struct({
 });
 
 const KEPT_COLUMNS = {
-  id: conversationAttachment.id,
-  contentType: conversationAttachment.contentType,
-  width: conversationAttachment.width,
-  height: conversationAttachment.height,
-  byteCount: conversationAttachment.byteCount,
+  id: attachment.id,
+  contentType: attachment.contentType,
+  width: attachment.width,
+  height: attachment.height,
+  byteCount: attachment.byteCount,
 };
 
 const findByHash = SqlSchema.findOneOption({
@@ -65,13 +65,8 @@ const findByHash = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select(KEPT_COLUMNS)
-        .from(conversationAttachment)
-        .where(
-          and(
-            eq(conversationAttachment.conversationId, conversationId),
-            eq(conversationAttachment.sha256, sha256),
-          ),
-        ),
+        .from(attachment)
+        .where(and(eq(attachment.conversationId, conversationId), eq(attachment.sha256, sha256))),
     ),
 });
 
@@ -81,9 +76,9 @@ const sumKept = SqlSchema.findAll({
   execute: ({ conversationId }) =>
     Database.use((db) =>
       db
-        .select({ kept: sum(conversationAttachment.byteCount).mapWith(Number) })
-        .from(conversationAttachment)
-        .where(eq(conversationAttachment.conversationId, conversationId)),
+        .select({ kept: sum(attachment.byteCount).mapWith(Number) })
+        .from(attachment)
+        .where(eq(attachment.conversationId, conversationId)),
     ),
 });
 
@@ -102,10 +97,10 @@ const insertPicture = SqlSchema.findAll({
   execute: ({ now, bytes, ...row }) =>
     Database.use((db) =>
       db
-        .insert(conversationAttachment)
+        .insert(attachment)
         .values({ ...row, bytes, byteCount: bytes.byteLength, createdAt: now })
         .onConflictDoNothing({
-          target: [conversationAttachment.conversationId, conversationAttachment.sha256],
+          target: [attachment.conversationId, attachment.sha256],
         })
         .returning(KEPT_COLUMNS),
     ),
@@ -118,16 +113,11 @@ const findPicture = SqlSchema.findOneOption({
     Database.use((db) =>
       db
         .select({
-          contentType: conversationAttachment.contentType,
-          bytes: conversationAttachment.bytes,
+          contentType: attachment.contentType,
+          bytes: attachment.bytes,
         })
-        .from(conversationAttachment)
-        .where(
-          and(
-            eq(conversationAttachment.conversationId, conversationId),
-            eq(conversationAttachment.id, id),
-          ),
-        ),
+        .from(attachment)
+        .where(and(eq(attachment.conversationId, conversationId), eq(attachment.id, id))),
     ),
 });
 

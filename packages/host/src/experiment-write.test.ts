@@ -83,7 +83,10 @@ function serviceAnswering(
 
 /** The service's answer: the experiments it then holds. */
 const holding = (experiments: ExperimentChoices) =>
-  new Response(JSON.stringify({ preferences: {}, experiments }), { status: 200 });
+  new Response(JSON.stringify({ preferences: {}, experiments }), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 
 test("the service's answer is what the store keeps and the settings carry", async (t) => {
   const store = await signedInStore(await temporaryDirectory(t, "luke-experiments-"));

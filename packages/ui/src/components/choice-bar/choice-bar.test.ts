@@ -3,10 +3,11 @@
 import assert from "node:assert/strict";
 import { act, createElement, type ReactElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { COUNT_TONE, linesCount } from "../choice/count-part.js";
 import {
   CHOICE_BAR_FOCUS,
+  CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
   ChoiceBar,
   type ChoiceBarFocus,
@@ -22,8 +23,10 @@ import {
  * keeps the keyboard where it was when pressed; the arrows, Home, and End
  * choose as they move and take the keyboard along, ↑ and ↓ only in a radio
  * group, and neither with a modifier held nor in a disabled bar; a disabled
- * option is not chosen; a count's glyph says its state in words; and the
- * app's `data-` attributes reach the bar.
+ * option is not chosen; a count's glyph says its state in words; the
+ * app's `data-` attributes reach the bar; and a bar folding together folds
+ * every option once their names no longer fit, and unfolds once they would;
+ * and an option that says more hangs the app's hint saying it.
  */
 
 declare global {
@@ -328,4 +331,109 @@ test("a count's glyph says its state in words beside the count", () => {
   const checks = option(page, "Checks");
   assert.equal(checks.querySelector('[role="img"]')?.getAttribute("aria-label"), "failing");
   assert.equal(checks.textContent, "Checks×1");
+});
+
+test("a bar folding together folds every option once their names no longer fit its width, and names them again once they would, measured as they stand", () => {
+  // Note that jsdom lays nothing out, so the bar's width, each option's, each name's, and when it resizes are the test's; a bar's scrollWidth is never less than its own width, as a browser's is not.
+  const NAME = 40;
+  let room = 500;
+  let glyph = 90;
+  const observers: (() => void)[] = [];
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(private readonly heard: () => void) {
+        observers.push(() => this.heard());
+      }
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const folded = () =>
+    document.querySelector('[data-fold="together"]')?.getAttribute("data-folded") === "true";
+  const optionWidth = () => glyph + (folded() ? 0 : NAME);
+  const optionsOf = (element: HTMLElement) => [
+    ...(element.parentElement?.querySelectorAll(".luke-choice-bar-option") ?? []),
+  ];
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(() => room);
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(optionWidth);
+  vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return optionsOf(this).indexOf(this) * optionWidth();
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.classList.contains("luke-choice-bar-label")) return NAME;
+    return Math.max(room, 3 * optionWidth());
+  });
+  const resize = (width: number) => {
+    room = width;
+    act(() => {
+      for (const heard of observers) heard();
+    });
+  };
+  const items: readonly ChoiceItem<View>[] = [
+    { value: VIEW.CONVERSATION, label: "Conversation", icon: "C", count: "12" },
+    { value: VIEW.CHECKS, label: "Checks", icon: "K" },
+    { value: VIEW.FILES, label: "Files", icon: "F", count: linesCount(214, 38) },
+  ];
+  render(
+    createElement(ChoiceBar<View>, {
+      label: "Pull request",
+      items,
+      value: VIEW.CONVERSATION,
+      onChange: () => undefined,
+      look: CHOICE_BAR_LOOK.FILL,
+      fold: CHOICE_BAR_FOLD.TOGETHER,
+    }),
+  );
+  try {
+    assert.equal(folded(), false, "names that fit stand");
+    resize(300);
+    assert.equal(folded(), true, "names that no longer fit fold, every option at once");
+    resize(380);
+    assert.equal(folded(), true, "short of the room the names take, the bar stays folded");
+    resize(600);
+    assert.equal(folded(), false, "widened well past what the names take, they come back");
+    resize(300);
+    glyph = 75;
+    resize(370);
+    assert.equal(
+      folded(),
+      false,
+      "options drawn tighter while folded are measured as they stand, so names that now fit come back",
+    );
+  } finally {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  }
+});
+
+test("an option that says more hangs the app's hint saying it, and one that says nothing more hangs none", () => {
+  const heard: (string | undefined)[] = [];
+  function Hint({ label, children }: { label: string | undefined; children: ReactElement }) {
+    heard.push(label);
+    return createElement("span", { "data-hint": label }, children);
+  }
+  const page = render(
+    createElement(ChoiceBar<View>, {
+      label: "Pull request",
+      items: [
+        { value: VIEW.CONVERSATION, label: "Conversation" },
+        { value: VIEW.FILES, label: "Files", count: linesCount(50, 5), hint: "+60 −7 total" },
+      ],
+      value: VIEW.CONVERSATION,
+      onChange: () => undefined,
+      look: CHOICE_BAR_LOOK.FILL,
+      hint: Hint,
+    }),
+  );
+  assert.equal(
+    option(page, "Files").closest("[data-hint]")?.getAttribute("data-hint"),
+    "+60 −7 total",
+  );
+  assert.equal(option(page, "Conversation").closest("[data-hint]"), null);
+  assert.ok(heard.every((label) => label === "+60 −7 total"));
 });

@@ -39,7 +39,7 @@ import {
   runOnMacTool,
 } from "@luke/service/agents/mac-command";
 import { hostedEnvironment } from "@luke/service/environment";
-import { type CommentTool, commentToolRejected } from "@luke/service/tasks/comment-tools";
+import { type CommentToolName, commentToolRejected } from "@luke/service/tasks/comment-tools";
 import { showPageRejected } from "@luke/service/tasks/page-tool";
 import { type PictureLookResult, pictureNotLooked } from "@luke/service/tasks/picture-look";
 import { scriptedModel } from "@luke/service/testing/coder-scripted-model";
@@ -53,7 +53,7 @@ import {
 import { emitJsonSchema } from "@luke/wire/effect";
 import { Effect, Result, Schema } from "effect";
 import type { SessionAuth } from "eve/context";
-import { defineDynamic, defineTool } from "eve/tools";
+import { defineTool } from "eve/tools";
 import { runAgent } from "./runtime.js";
 
 /**
@@ -165,7 +165,7 @@ export function relayChildEvent(
 
 /**
  * The plan's tools the session is offered for the turn it opens, for those
- * tools' own files (`planToolsOf`): none for a session the host does not
+ * tools' own files (`taskToolsOf`): none for a session the host does not
  * admit or whose conversation is no agent's.
  */
 export function offeredPlanTools(
@@ -265,39 +265,23 @@ export function lookAtPlanPicture(
 }
 
 /**
- * A comment tool's own file: the planning model's tool too, one
+ * One call of a comment tool, the planning model's tool too, one
  * implementation for both (`packages/service/src/tasks/comment-tools.ts`),
- * offered to an agent on a task alone, since an agent on none has no comments,
- * and run here under the agent's session rather than at an edge of its own.
+ * run here under the agent's session rather than at an edge of its own.
  */
-export function commentToolFor(tool: CommentTool) {
-  return defineDynamic({
-    events: {
-      "turn.started": async (_event, ctx) =>
-        (await offeredPlanTools(ctx.session.auth, ctx.session.id)).has(tool.name)
-          ? defineTool({
-              description: tool.description,
-              inputSchema: emitJsonSchema(tool.inputSchema),
-              execute: (input, toolContext): Promise<WireRecord> =>
-                runAgent(
-                  Effect.gen(function* () {
-                    const admitted = yield* host.admit(
-                      toolContext.session.auth,
-                      toolContext.session.id,
-                    );
-                    if (Result.isFailure(admitted)) return commentToolRejected(admitted.failure);
-                    // SAFETY: eve hands a tool the JSON object the model emitted; the host parses it as wire input.
-                    return yield* host.comment(
-                      admitted.success,
-                      tool.name,
-                      unparsedWire(input as WireBoundaryInput),
-                    );
-                  }),
-                ),
-            })
-          : null,
-    },
-  });
+export function runCommentTool(
+  auth: SessionAuth,
+  sessionId: string,
+  name: CommentToolName,
+  input: UnparsedWireValue,
+): Promise<WireRecord> {
+  return runAgent(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return commentToolRejected(admitted.failure);
+      return yield* host.comment(admitted.success, name, input);
+    }),
+  );
 }
 
 /** One call of the agent's tools about the workspace's coding agents, run under its session, for the tool, which runs here rather than at an edge of its own. */

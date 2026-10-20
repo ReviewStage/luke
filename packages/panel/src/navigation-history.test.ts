@@ -524,6 +524,30 @@ test("the Issues page is its workspace's, so once another is listed Back passes 
   assert.equal(reopened, 0);
 });
 
+/** The window with the Board standing or not, in the workspace given, each time the Board is asked to open counted in `opened`. */
+function onBoard(open: boolean, opened: string[], workspaceId = "workspace-acme"): TasksControl {
+  const base = tasksControl();
+  return tasksControl({
+    workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
+    boardView: { ...base.boardView, open, onOpen: () => opened.push(workspaceId) },
+  });
+}
+
+test("the Board is its workspace's tasks, so Back returns to it in that workspace and passes over it once another is listed", async () => {
+  const opened: string[] = [];
+  const same = mount(onBoard(true, opened));
+  await settle();
+  same.stand(onBoard(false, opened));
+  assert.equal(same.history().canGoBack, true);
+  act(() => same.history().onBack());
+  assert.deepEqual(opened, ["workspace-acme"]);
+
+  const other = mount(onBoard(true, opened));
+  await settle();
+  other.stand(onBoard(false, opened, "workspace-platform"));
+  assert.equal(other.history().canGoBack, false, "the Board of another workspace is no step back");
+});
+
 test("an issue's page is a step of its own beside the Issues list, so Back from it opens the list and Forward the issue again", async () => {
   handState(experimentsOn(EXPERIMENT.ISSUES));
   const opened: (IssuesPlace | undefined)[] = [];
@@ -629,6 +653,55 @@ test("a place with no link stands at /app: the home page, and Chat though a task
   window.stand({ ...task, chatView: { ...task.chatView, open: true } });
 
   assert.deepEqual(window.addresses(), ["/app", "/app"]);
+});
+
+test("with no workspace listed, a place in a workspace has no link, so it stands at /app as Copy link offers nothing", async () => {
+  const copied: string[] = [];
+  fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
+  const none = { workspaces: [], workspace: undefined };
+  const places: TasksControl[] = [
+    tasksControl({
+      ...none,
+      automationsView: { ...tasksControl().automationsView, open: true },
+    }),
+    tasksControl({
+      ...none,
+      automationsView: {
+        ...tasksControl().automationsView,
+        open: true,
+        place: { kind: AUTOMATIONS_PAGE.EDIT, automationId: AUTOMATION_ID },
+      },
+    }),
+    tasksControl({ ...none, inboxView: { ...tasksControl().inboxView, open: true } }),
+    tasksControl({ ...none, factoryView: { ...tasksControl().factoryView, open: true } }),
+    tasksControl({ ...none, agentView: { ...tasksControl().agentView, agentId: "agent-1" } }),
+    tasksControl({
+      ...none,
+      personView: { ...tasksControl().personView, userId: "user-charles" },
+    }),
+    tasksControl({
+      ...none,
+      issuesView: {
+        ...tasksControl().issuesView,
+        open: true,
+        place: { kind: ISSUES_PAGE.ISSUE, issueId: "issue-1" },
+      },
+    }),
+  ];
+  const addresses: string[] = [];
+  for (const tasks of places) {
+    const window = mount(tasks);
+    act(() => runAppCommand(APP_COMMAND.COPY_LINK));
+    await settle();
+    addresses.push(...window.addresses());
+    unmountAll();
+  }
+
+  assert.deepEqual(
+    addresses,
+    places.map(() => "/app"),
+  );
+  assert.deepEqual(copied, []);
 });
 
 test("a workspace's slug read after the visit moves the standing step to its address, without a step of its own", () => {

@@ -499,6 +499,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../../packages/wire
+      '@sentry/browser':
+        specifier: 11.7.0
+        version: 11.7.0
       '@tailwindcss/vite':
         specifier: 4.3.3
         version: 4.3.3(vite@7.3.1)
@@ -807,6 +810,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@neon/realtime':
+        specifier: 0.1.1
+        version: 0.1.1(ws@8.21.3)
       '@orpc/contract':
         specifier: 'catalog:'
         version: 2.0.0-beta.44
@@ -980,9 +986,21 @@ importers:
       lucide-react:
         specifier: 1.53.0
         version: 1.53.0(@types/react@19.2.18)(react@19.2.8)
+      mdast-util-from-markdown:
+        specifier: 2.0.3
+        version: 2.0.3
+      mdast-util-gfm:
+        specifier: 3.1.0
+        version: 3.1.0
       mermaid:
         specifier: 11.17.2
         version: 11.17.2
+      micromark-extension-gfm:
+        specifier: 3.0.0
+        version: 3.0.0
+      posthog-js:
+        specifier: 1.418.3
+        version: 1.418.3(preact-render-to-string@6.6.5)
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -1017,6 +1035,9 @@ importers:
       '@types/hast':
         specifier: 3.0.5
         version: 3.0.5
+      '@types/mdast':
+        specifier: 4.0.4
+        version: 4.0.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
@@ -1102,6 +1123,9 @@ importers:
       '@luke/wire':
         specifier: workspace:*
         version: link:../wire
+      '@neon/realtime':
+        specifier: 0.1.1
+        version: 0.1.1(ws@8.21.3)
       '@orpc/contract':
         specifier: 'catalog:'
         version: 2.0.0-beta.44
@@ -1355,6 +1379,8 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+
+  tools/voice-samples: {}
 
 packages:
 
@@ -2574,6 +2600,15 @@ packages:
     peerDependencies:
       '@emnapi/core': ^1.7.1 || ^2.0.0-alpha.4
       '@emnapi/runtime': ^1.7.1 || ^2.0.0-alpha.4
+
+  '@neon/realtime@0.1.1':
+    resolution: {integrity: sha512-YbTaKcq7Vmaw05oEu/1HNbxrtLeHaofnPHptd6QPGZj2M1uZJRJKKrjb+ShH0GpR5fpBlp8S4iZcTW3IsnIoqg==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      ws: ^8.21.2
+    peerDependenciesMeta:
+      ws:
+        optional: true
 
   '@next/env@16.3.1':
     resolution: {integrity: sha512-35G3xwkQUb2oETSDjFXGrVugknoayLFBh7vSE+yAcl9IP2zT9wyGwq7297AYHR11kJld807t5f8AJBs6WBzXsQ==}
@@ -7134,6 +7169,10 @@ packages:
     resolution: {integrity: sha512-VpZrUqU5A69eQyW2c5CA1jtLecCsN2U/bD6VilrFDWq5+5UIEVO7nazS3TEcHf1zuPYO/sqGvUvW62g86RXZuA==}
     engines: {node: '>=4'}
 
+  postgres-array@3.0.4:
+    resolution: {integrity: sha512-nAUSGfSDGOaOAEGwqsRY27GPOea7CNipJPOA7lPbdEpx5Kg3qzdP0AaWC5MlhTWV9s4hFX39nomVZ+C4tnGOJQ==}
+    engines: {node: '>=12'}
+
   postgres-bytea@1.0.1:
     resolution: {integrity: sha512-5+5HqXnsZPE65IJZSMkZtURARZelel2oXUEO8rH83VS/hxH5vv1uHquPg5wZs8yMAfdv971IU+kcPUczi7NVBQ==}
     engines: {node: '>=0.10.0'}
@@ -9207,6 +9246,12 @@ snapshots:
       '@emnapi/runtime': 1.11.2
       '@tybys/wasm-util': 0.10.3
     optional: true
+
+  '@neon/realtime@0.1.1(ws@8.21.3)':
+    dependencies:
+      postgres-array: 3.0.4
+    optionalDependencies:
+      ws: 8.21.3
 
   '@next/env@16.3.1':
     optional: true
@@ -13664,6 +13709,8 @@ snapshots:
       source-map-js: 1.2.1
 
   postgres-array@2.0.0: {}
+
+  postgres-array@3.0.4: {}
 
   postgres-bytea@1.0.1: {}
 

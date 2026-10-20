@@ -1,8 +1,10 @@
 import { CHAT_TARGET_SIGIL } from "@luke/features/chat-wire";
-import { ComboboxList, comboboxOptionId } from "@luke/ui";
-import { type ChatMention, type ChatTarget, matchingTargets } from "@luke/ui/chat-mention";
+import { readerZone } from "@luke/features/date-mention";
+import { ComboboxList, type ComboboxOption, comboboxOptionId } from "@luke/ui";
+import { type ChatMention, type ChatTarget, chatRows } from "@luke/ui/chat-mention";
 import { useId, useState } from "react";
 import type { ComposerTrigger } from "../plan-editor/contract.js";
+import { useMinute } from "./task-time.js";
 
 /**
  * chat-mention-picker.tsx -- the list a chat box's `@` or `#` word opens over the box: the members or the channels it may name, narrowed as the word is typed, and the keys that move through it and write the one chosen.
@@ -11,7 +13,9 @@ import type { ComposerTrigger } from "../plan-editor/contract.js";
  * its own report (`composer-editor.ts`), and the list is the chat's own
  * roster rather than the agent box's mentions (`mention-picker.tsx`), which
  * stand on a task's page: one row per member or channel, its handle or name
- * and a muted line of what it stands for (`chat-mention.ts`). ↑ and ↓ move
+ * and a muted line of what it stands for (`chat-mention.ts`), after the
+ * date the `@` words name where they read as one, said as its chip says
+ * it with the date in full beside it. ↑ and ↓ move
  * the highlight, Enter or Tab writes the one highlighted, as the box writes
  * it (`chat-composer.tsx`), and Escape closes the list until the caret
  * leaves the word. A key
@@ -46,16 +50,23 @@ export interface ChatMentionPicker {
   readonly onKey: (event: KeyboardEvent) => boolean;
 }
 
+/** A row as the list draws it: a member or a channel by its sigil and name, a date as its chip says it. */
+export function chatOption(target: ChatTarget): ComboboxOption {
+  const label = target.date === undefined ? `${target.sigil}${target.name}` : target.name;
+  return { id: label, label, detail: target.detail };
+}
+
 export function useChatMentionPicker({
   targets,
   onChoose,
 }: {
   /** What an `@` or `#` word may name. */
   targets: readonly ChatTarget[];
-  /** Writes the one chosen over the word typed: its chip, or its word (`@luke`, `#general`). */
+  /** Writes the one chosen over the word typed: its chip, or a channel's word (`#general`); a date as its chip. */
   onChoose: (target: ChatTarget) => void;
 }): ChatMentionPicker {
   const id = useId();
+  const now = useMinute();
   const [reported, setReported] = useState<Reported | undefined>(undefined);
   const [highlight, setHighlight] = useState<Highlight | undefined>(undefined);
   const [closed, setClosed] = useState<{ sigil: ChatSigil; start: number } | undefined>(undefined);
@@ -72,7 +83,7 @@ export function useChatMentionPicker({
   const shut =
     closed !== undefined && closed.start === mention?.start && closed.sigil === mention.sigil;
   if (closed !== undefined && !shut) setClosed(undefined);
-  const rows = mention !== undefined && !shut ? matchingTargets(targets, mention) : [];
+  const rows = mention !== undefined && !shut ? chatRows(targets, mention, now, readerZone()) : [];
   const held =
     highlight !== undefined &&
     mention !== undefined &&
@@ -115,11 +126,7 @@ export function useChatMentionPicker({
           label={MENU_LABEL}
           groups={[
             {
-              options: rows.map((target) => ({
-                id: `${target.sigil}${target.name}`,
-                label: `${target.sigil}${target.name}`,
-                detail: target.detail,
-              })),
+              options: rows.map(chatOption),
             },
           ]}
           active={at}

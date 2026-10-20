@@ -2,6 +2,7 @@
 import { GITHUB_INSTALL_LANDING, GITHUB_INSTALL_STATUS } from "@luke/features";
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
+import { rememberReturn } from "../src/connect-return";
 
 /**
  * github-installed.test.ts -- the GitHub App's landing says where an
@@ -40,6 +41,7 @@ function said(page: HTMLElement): string[] {
 
 afterEach(() => {
   document.body.replaceChildren();
+  sessionStorage.clear();
 });
 
 test("an installation sends the developer back to Luke", async () => {
@@ -92,4 +94,22 @@ test("an address with no status it knows reads as an unconfirmed installation", 
       "Return to Luke and choose Connect GitHub again.",
     ]);
   }
+});
+
+test("an installation the web app's tab left for offers the way back, with what is left to say", async () => {
+  rememberReturn("/settings/workspace");
+
+  const page = await openPage(GITHUB_INSTALL_STATUS.CONNECTED);
+
+  expect(said(page)).toEqual([
+    "Connected",
+    "GitHub is connected to your workspace",
+    "Its repositories are available to everyone in the workspace.",
+  ]);
+  expect(
+    Array.from(page.querySelectorAll("a")).map((link) => [
+      link.textContent,
+      link.getAttribute("href"),
+    ]),
+  ).toEqual([["Back to Luke", "/settings/workspace"]]);
 });

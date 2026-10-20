@@ -10,7 +10,12 @@
  * (`pin-order.ts`), and so do the tasks in each.
  */
 
-import { inPinOrder, type PinPlace, pinPositionsForMove } from "@luke/features/pin-order";
+import {
+  inPinOrder,
+  type PinPlace,
+  pinPositionsForInsert,
+  pinPositionsForMove,
+} from "@luke/features/pin-order";
 import {
   TASK_SECTION_WRITE,
   type TaskSection,
@@ -211,4 +216,42 @@ export function placeWrites(
       }),
     );
   return [first, ...rest];
+}
+
+/**
+ * The writes that put `taskIds`, in their order, on top of a section, from
+ * another section or from none, as a section's Move tasks to asks: the
+ * last put first, so the first stands on top. Note that each is given a
+ * position, even on top, unlike `placeWrites`, because tasks moved together
+ * are stamped by the service's clock in the same instant, which would leave
+ * their order among themselves to chance.
+ */
+export function placeAllWrites(
+  state: TaskSections,
+  taskIds: readonly string[],
+  sectionId: string,
+  now: number,
+): TaskSectionWrite[] {
+  const moving = new Set(taskIds);
+  let order = sectionOrder(state, sectionId).filter((entry) => !moving.has(entry.taskId));
+  const writes: TaskSectionWrite[] = [];
+  for (const taskId of [...taskIds].reverse()) {
+    const entry: TaskSectionEntry = { taskId, sectionId, addedAt: now };
+    const positions = pinPositionsForInsert(order, entry, 0, entryPlace);
+    // Note that the order is kept here rather than read back from the state, because a section just made is in none yet.
+    order = [entry, ...order].map((each) => {
+      const position = positions.get(each);
+      return position === undefined ? each : { ...each, position };
+    });
+    // The moving task stands first in the answer, so its own write goes ahead of its neighbours'.
+    for (const [each, position] of positions) {
+      writes.push({ kind: TASK_SECTION_WRITE.PLACE, taskId: each.taskId, sectionId, position });
+    }
+  }
+  return writes;
+}
+
+/** The writes that take `taskIds` out of every section, as a section's Remove tasks from section asks. */
+export function unplaceAllWrites(taskIds: readonly string[]): TaskSectionWrite[] {
+  return taskIds.map((taskId) => ({ kind: TASK_SECTION_WRITE.PLACE, taskId, sectionId: null }));
 }

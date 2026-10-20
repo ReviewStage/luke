@@ -33,6 +33,7 @@ import {
   type ComposerMark,
   type ComposerQuote,
   type ComposerTrigger,
+  type MentionDrawer,
   type MentionNode,
 } from "./contract.js";
 import {
@@ -359,8 +360,8 @@ function slashWord(text: string, caret: number): TriggerWord | undefined {
   return { ...mention, end };
 }
 
-/** The `@` word the caret ends: `@` at the start of a word, then up to four words with no bracket, parenthesis, or `@` in them. */
-const AT_WORD = /(^|\s)@((?:[^\s@[\]()]+(?: [^\s@[\]()]+){0,3})?)$/u;
+/** The `@` word the caret ends: `@` at the start of a word, then up to six words with no bracket, parenthesis, or `@` in them. */
+const AT_WORD = /(^|\s)@((?:[^\s@[\]()]+(?: [^\s@[\]()]+){0,5})?)$/u;
 
 /** A character of an `@` word, which a pick replaces through to the word's end. */
 const AT_WORD_CHARACTER = /[^\s@[\]()]/u;
@@ -547,7 +548,7 @@ function quoteNode(drawQuote: ComposerEditorProps["drawQuote"]) {
 function composerExtensions(
   drawChip: ComposerEditorProps["drawChip"],
   known: (name: string) => boolean,
-  drawMention: ((element: HTMLElement, mention: MentionNode) => () => void) | undefined,
+  drawMention: MentionDrawer | undefined,
   drawQuote: ComposerEditorProps["drawQuote"],
 ): AnyExtension[] {
   const kit = StarterKit.configure({

@@ -18,6 +18,7 @@
     display: grid;
     place-items: center;
     padding: var(--luke-space-24);
+    container: luke-dialog-room / inline-size;
     background: var(--luke-color-scrim);
     animation: luke-dialog-fade var(--luke-duration-quick) ease-out;
     -webkit-app-region: no-drag;
@@ -55,6 +56,23 @@
   .luke-dialog[data-size="composer"] {
     width: min(var(--luke-dialog-composer-width), 100%);
     gap: var(--luke-space-12);
+  }
+
+  /* A composer's card on a phone's screen gives its words the room the
+     desktop's margins and inset would spend: it stands half the dimmed
+     window's margin from the screen's edges, at a card's snug inset, so the
+     composer it holds keeps its chips beside the round button. The desktop's
+     window is never this narrow. */
+  @container luke-dialog-room (max-width: 639px) {
+    .luke-dialog[data-size="composer"] {
+      width: calc(100% + 2 * var(--luke-space-12));
+      margin-right: calc(-1 * var(--luke-space-12));
+      margin-left: calc(-1 * var(--luke-space-12));
+      padding-top: var(--luke-card-inset-snug);
+      padding-right: var(--luke-card-inset-snug);
+      padding-bottom: var(--luke-card-inset-snug);
+      padding-left: var(--luke-card-inset-snug);
+    }
   }
 
   /* A file shown edge to edge: the card fits what it holds between its

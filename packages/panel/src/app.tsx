@@ -25,10 +25,11 @@ import { forgetPictures } from "@luke/ui/picture-cache";
 import { TASKS_PAGE } from "@luke/ui/tasks-model";
 import { useStateWithRef } from "@luke/ui/use-state-with-ref";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
-import type {
-  MicrophoneControl,
-  ShortcutControl,
-  UpdateControl,
+import {
+  type MicrophoneControl,
+  NOTIFICATIONS_GRANTOR,
+  type ShortcutControl,
+  type UpdateControl,
 } from "@luke/voice/settings-controls";
 import type { VoiceSpeakers } from "@luke/voice/voice-view";
 import {
@@ -613,6 +614,7 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
       if (runAppCommand(APP_COMMAND.EXIT_ISSUES)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
       // An open task unwinds to the home page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       tasks.back();
@@ -795,6 +797,9 @@ export function App(): React.JSX.Element {
                                   microphone,
                                   notifications: {
                                     status: state.notifications.status,
+                                    grantor:
+                                      appPlatform().notificationsGrantor?.() ??
+                                      NOTIFICATIONS_GRANTOR.MACOS,
                                     packaged: state.run.packaged,
                                     onOpenSettings: () =>
                                       tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),

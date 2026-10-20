@@ -12,10 +12,10 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test, vi } from "vitest";
+import { ChangesTabReading } from "../testing/changes-tab.js";
 import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
-import { AgentChangesTab } from "./agent-changes-tab.js";
 
 /**
  * The side panel's Changes tab at its narrowest, 280px, where it has no room
@@ -101,7 +101,7 @@ function drawChangesTab(): Promise<HTMLElement> {
       }),
   });
   return mounted(
-    createElement(AgentChangesTab, {
+    createElement(ChangesTabReading, {
       agentId: AGENT.id,
       control,
       shown: true,

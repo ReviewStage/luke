@@ -128,8 +128,6 @@ export {
   type HostedMacCommandClientOptions,
 } from "./mac-command-client.js";
 export {
-  agentMessagesPath,
-  agentPullRequestPath,
   agentStopPath,
   automationPath,
   automationRunPath,

@@ -12,7 +12,6 @@ import {
   INLINE_DIFF,
   INLINE_DIFF_LABEL,
 } from "@luke/settings/diff-view";
-import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { FILES_CHANGED_KEY, FILES_CHANGED_SHORTCUTS } from "@luke/settings/shortcuts";
 import {
   AnchoredPopover,
@@ -22,12 +21,10 @@ import {
   POPOVER_ALIGN,
   SETTINGS_ROW_DENSITY,
   SettingsRow,
-  TEXT_BUTTON_TONE,
-  TextButton,
 } from "@luke/ui";
+import { drawnDark } from "@luke/ui/appearance";
 import { SlidersHorizontalIcon } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import { useOpenSettings } from "../open-settings.js";
 import { PopoverPanel } from "../popover-panel.js";
 import { ChangedMark } from "../settings/marks.js";
 import { PickerRow } from "../settings/picker-row.js";
@@ -51,8 +48,7 @@ import {
  * layout, its changed words, its indicators, and its backgrounds); Lines,
  * how lines run (wrap, numbers, and minimized comments, with the key that
  * turns them); and Text, how code looks (the syntax theme of the appearance
- * chosen, the type, its size and line height, and ligatures). Its foot opens
- * Settings › Appearance › Diffs, which holds the same settings. A File
+ * chosen, the type, its size and line height, and ligatures). A File
  * tab's lines and a page's source follow wrap, numbers, the syntax theme,
  * and the type, not a diff's own marks, so there it offers those alone,
  * never a row that changes nothing on the tab. Each row
@@ -84,12 +80,6 @@ const FONT_SIZE_OPTIONS = DIFF_FONT_SIZES.map((size) => ({ value: size, label: `
 
 /** The key that turns Minimize inline comments in the list, which its row names. */
 const MINIMIZE_CHORD = FILES_CHANGED_SHORTCUTS[FILES_CHANGED_KEY.MINIMIZE_COMMENTS].chord;
-
-/** Where the popover's foot opens Settings: Appearance, at its Diffs. */
-const DIFF_SETTINGS_LINK = {
-  page: SETTINGS_VIEW.APPEARANCE,
-  section: SETTINGS_SECTION.APPEARANCE_DIFFS,
-} as const satisfies SettingsLink;
 
 /** What a picker of themes says where its search matches none. */
 const NO_THEME = "No theme matches.";
@@ -191,16 +181,10 @@ const APPEARANCE_OPTIONS = [
   { value: APPEARANCE.DARK, label: "Dark" },
 ] as const;
 
-/** The query the window's appearance answers, which the Text group opens on. */
-const DARK_APPEARANCE = "(prefers-color-scheme: dark)";
-
-/** The appearance the window is drawn in now. */
+/** The appearance the window is drawn in now, which the Text group opens on. */
 function currentAppearance(): Appearance {
-  return window.matchMedia(DARK_APPEARANCE).matches ? APPEARANCE.DARK : APPEARANCE.LIGHT;
+  return drawnDark() ? APPEARANCE.DARK : APPEARANCE.LIGHT;
 }
-
-/** What the popover's foot says, and where it goes. */
-const ALL_SETTINGS = "All diff and code settings\u2026";
 
 /** A group of the popover's rows under its name, set apart from the one before by a rule. */
 function SettingsGroup({
@@ -409,7 +393,7 @@ function DiffSettingsRows({ roomy }: { roomy: boolean }): React.JSX.Element {
   );
 }
 
-/** The popover: its title and ×, then the rows (`PopoverPanel`), and at its foot the way to every such setting in Settings. */
+/** The popover: its title and ×, then the rows (`PopoverPanel`). */
 function ViewSettingsPopover({
   id,
   scope,
@@ -423,7 +407,6 @@ function ViewSettingsPopover({
   /** Focus left the popover for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
 }): React.JSX.Element {
-  const openSettings = useOpenSettings();
   return (
     <PopoverPanel
       id={id}
@@ -445,17 +428,6 @@ function ViewSettingsPopover({
           </SettingsGroup>
         </>
       )}
-      <div className="view-settings-foot">
-        <TextButton
-          tone={TEXT_BUTTON_TONE.LINK}
-          onClick={() => {
-            onClose();
-            openSettings(DIFF_SETTINGS_LINK);
-          }}
-        >
-          {ALL_SETTINGS}
-        </TextButton>
-      </div>
     </PopoverPanel>
   );
 }

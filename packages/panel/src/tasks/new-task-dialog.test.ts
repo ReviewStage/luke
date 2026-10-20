@@ -12,9 +12,9 @@ import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
-import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
+import { TASK_STATUS, TASK_TREE_ENTRY, type TaskStatus } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -24,7 +24,13 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActPort,
+  fakeActs,
+  fakeAppBridge,
+} from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import {
@@ -89,6 +95,7 @@ beforeEach(() => {
   fakeAppBridge({
     act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
   });
+  fakeActPort({});
 });
 
 afterEach(() => {
@@ -135,6 +142,7 @@ async function mount(
   const fromWorkspaceIssues: (string | undefined)[] = [];
   const briefs: (string | undefined)[] = [];
   const startedIn: (string | undefined)[] = [];
+  const statuses: (TaskStatus | undefined)[] = [];
   const control = tasksControl();
   let repositories: RepositoryChooser = {
     ...control.repositories,
@@ -172,6 +180,7 @@ async function mount(
           fromWorkspaceIssues.push(from?.issueId);
           briefs.push(from?.brief);
           startedIn.push(workspaceId);
+          statuses.push(from?.status);
           return Promise.resolve(answer);
         },
         onClose: () => setOpen(false),
@@ -228,6 +237,8 @@ async function mount(
     briefs,
     /** The workspace each start asked for. */
     startedIn,
+    /** The status each start asked its task to stand in, where it asked for one. */
+    statuses,
     /** Whether each start asked for its planning phase. */
     planned,
     /** The coding agent each start handed its words, where it asked for one. */
@@ -361,21 +372,11 @@ test("a model picked on the chip runs this agent alone, and the account's defaul
 });
 
 test("a server whose sign-in expired is offered nowhere in the card, which hands an agent no servers", async () => {
-  fakeAppBridge({
-    act: (request: Act) =>
-      Promise.resolve(
-        request.kind === ACT_KIND.INTEGRATIONS_STATUS
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                integrations: {
-                  ...UNAVAILABLE,
-                  [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.EXPIRED,
-                },
-              },
-            }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      ),
+  fakeActPort({
+    [ACT_KIND.INTEGRATIONS_STATUS]: () =>
+      Promise.resolve({
+        integrations: { ...UNAVAILABLE, [INTEGRATION_PROVIDER.SLACK]: INTEGRATION_STATUS.EXPIRED },
+      }),
   });
   const card = await mount();
   await settle();
@@ -413,9 +414,9 @@ test("Shift+Return is a new line, and the agent is handed both lines", async () 
 });
 
 test("once a repository is chosen, an @ offers its files, read through the workspace, and the row chosen is drawn as its chip and handed to the agent as its link", async () => {
-  const told: Act[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+  const told: AnyAct[] = [];
+  fakeActs({
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       told.push(request);
       return Promise.resolve(
         request.kind === ACT_KIND.TASKS_TREE
@@ -572,32 +573,27 @@ test("with Issues on, an @ offers the workspace's issues, and the one chosen is 
 });
 
 test("a skill chosen from the / list is its chip, which opens its SKILL.md in the chosen repository on GitHub", async () => {
-  const told: Act[] = [];
+  const onGitHub: string[] = [];
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: (request: Act) => {
-      told.push(request);
-      return Promise.resolve(
-        request.kind === ACT_KIND.TASKS_SKILLS
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                skills: {
-                  repository: "acme/web",
-                  branch: "main",
-                  skills: [
-                    {
-                      name: "release",
-                      description: "Cut a release.",
-                      path: ".agents/skills/release/SKILL.md",
-                    },
-                  ],
-                },
-              },
-            }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      );
+  fakeActPort({
+    [ACT_KIND.GITHUB_OPEN]: ({ url }) => {
+      onGitHub.push(url);
+      return Promise.resolve();
     },
+    [ACT_KIND.TASKS_SKILLS]: () =>
+      Promise.resolve({
+        skills: {
+          repository: "acme/web",
+          branch: "main",
+          skills: [
+            {
+              name: "release",
+              description: "Cut a release.",
+              path: ".agents/skills/release/SKILL.md",
+            },
+          ],
+        },
+      }),
   });
   const container = document.createElement("div");
   document.body.append(container);
@@ -627,10 +623,9 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
     assert.fail("the skill is a chip that opens");
   act(() => chip.click());
 
-  assert.deepEqual(
-    told.filter((each) => each.kind === ACT_KIND.GITHUB_OPEN).map((each) => each.payload),
-    [{ url: "https://github.com/acme/web/blob/HEAD/.agents/skills/release/SKILL.md" }],
-  );
+  assert.deepEqual(onGitHub, [
+    "https://github.com/acme/web/blob/HEAD/.agents/skills/release/SKILL.md",
+  ]);
 });
 
 test("Plan mode: Shift+Tab turns it on, the model chip stands down, and Start begins the plan and its call, Untitled, handing Luke the words as its brief", async () => {
@@ -1574,4 +1569,55 @@ test("opened as a new agent's card on an issue, it offers no Plan toggle, holds 
   assert.deepEqual(card.planned, [false]);
   assert.deepEqual(card.fromWorkspaceIssues, ["issue-1"]);
   assert.deepEqual(card.agentsAtOnce, [true]);
+});
+
+test("File for later files the task in the backlog with no call and no agent, named by the words' first line and keeping them as its brief", async () => {
+  const card = await mount();
+  card.type("Rate limit the public search\nThirty a minute per installation.");
+  act(() => card.button("File for later").click());
+  await settle();
+
+  assert.deepEqual(card.starts, [["Rate limit the public search", "acme/web"]]);
+  assert.deepEqual(card.statuses, [TASK_STATUS.BACKLOG]);
+  assert.deepEqual(card.planned, [false]);
+  assert.deepEqual(card.agents, [undefined]);
+  assert.deepEqual(card.agentsAtOnce, [undefined]);
+  assert.deepEqual(card.briefs, [
+    "Rate limit the public search\nThirty a minute per installation.",
+  ]);
+});
+
+test("File for later is held while the box is empty, and Start's task names no status, so it starts to do", async () => {
+  const card = await mount();
+  assert.equal(card.button("File for later").disabled, true);
+
+  card.type("Fix the refresh");
+  await card.key("Enter");
+
+  assert.deepEqual(card.statuses, [undefined]);
+});
+
+test("Retry after a refused File for later files the task for later again, rather than starting it", async () => {
+  const card = await mount("Luke can't reach acme/web.");
+  act(() => modeToggle().click());
+  card.type("Rate limit search");
+  act(() => card.button("File for later").click());
+  await settle();
+  act(() => card.button("Retry").click());
+  await settle();
+
+  assert.deepEqual(card.statuses, [TASK_STATUS.BACKLOG, TASK_STATUS.BACKLOG]);
+  assert.deepEqual(card.planned, [false, false]);
+});
+
+test("a task filed for later is named by as much of its first line as a name holds, an emoji kept whole", async () => {
+  const card = await mount();
+  card.type(`${"a".repeat(199)}🚀 and more`);
+  act(() => card.button("File for later").click());
+  await settle();
+
+  assert.deepEqual(
+    card.starts.map(([name]) => name),
+    ["a".repeat(199)],
+  );
 });

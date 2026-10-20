@@ -47,9 +47,11 @@ import {
   taskFileRefusalSchema,
   taskFileRequestSchema,
   taskFileTextSchema,
+  taskPrioritySchema,
   taskRenameRequestSchema,
   taskSchema,
   taskSkillsSchema,
+  taskStatusSchema,
   taskSummarySchema,
   taskTreeFolderSchema,
   taskTreeRequestSchema,
@@ -555,6 +557,20 @@ export const tasksSetRepositoryParamsSchema = EffectSchema.Struct({
 
 export type TasksSetRepositoryParams = typeof tasksSetRepositoryParamsSchema.Type;
 
+/** Whether a change of where a task stands names its status, its priority, or both. */
+function namesAStanding(params: { status?: unknown; priority?: unknown }): boolean {
+  return params.status !== undefined || params.priority !== undefined;
+}
+
+/** Setting where a task stands, how much it matters, or both, as the window asks it. */
+export const tasksSetStandingParamsSchema = EffectSchema.Struct({
+  taskId: EffectSchema.NonEmptyString,
+  status: EffectSchema.optionalKey(taskStatusSchema),
+  priority: EffectSchema.optionalKey(taskPrioritySchema),
+}).check(EffectSchema.makeFilter(namesAStanding));
+
+export type TasksSetStandingParams = typeof tasksSetStandingParamsSchema.Type;
+
 /** Moving a task to another of the account's workspaces: the task, and the workspace it moves to. */
 export const tasksMoveParamsSchema = EffectSchema.Struct({
   taskId: EffectSchema.NonEmptyString,
@@ -779,8 +795,6 @@ export type TasksPullRequestAnswer = typeof tasksPullRequestAnswerSchema.Type;
 /** The pull request as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksPullRequestSchema = EffectSchema.NullOr(githubPullRequestSummarySchema);
 
-export type TasksPullRequest = typeof tasksPullRequestSchema.Type;
-
 /** One issue of a repository, as a link to it asks the host for it: the workspace whose installation reaches the repository, the repository, and the issue's number. */
 export const tasksIssueParamsSchema = EffectSchema.Struct({
   ...repositoryPlaceFields,
@@ -799,8 +813,6 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
-
-export type TasksIssue = typeof tasksIssueSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({

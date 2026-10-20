@@ -896,24 +896,44 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
   });
   const call = await callerOn(acting, task, eve.services);
 
-  const told = await call(CHAT_TOOL.POST, { text: INSTRUCTION, to: "@agent-1" });
+  // The agent is addressed by its mention link, and named back by its link under the workspace as Luke's account reads it.
+  const agentLink = (step: string) =>
+    `[@anthropic/claude-opus-5.5](https://tryluke.dev/${step}/plan/${task.taskId}/agent/${agent.id})`;
+  const told = await call(CHAT_TOOL.POST, { text: INSTRUCTION, to: agentLink("acme") });
   assert.equal(told.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(told));
-  assert.deepEqual([told.in, told.told, told.held], ["@agent-1", ["@agent-1"], []]);
+  assert.ok(Array.isArray(told.told));
+  const named = String(told.told[0]);
+  assert.match(
+    named,
+    new RegExp(
+      `^\\[@anthropic/claude-opus-5\\.5\\]\\(https://tryluke\\.dev/[^/]+/plan/${task.taskId}/agent/${agent.id}\\)$`,
+      "u",
+    ),
+  );
+  assert.deepEqual([told.in, told.told, told.held], [named, [named], []]);
   assert.deepEqual(
     eve.sent.map((request) => request.path),
     [`/eve/coder/v1/session/${agent.sessionId}`],
   );
   assert.equal(eve.sent[0]?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), userId);
-  assert.match(JSON.parse(eve.sent[0]?.body ?? "").message, /@luke to you/u);
+  // The notice names Luke by his task's link.
+  assert.match(
+    JSON.parse(eve.sent[0]?.body ?? "").message,
+    new RegExp(`\\[@Luke\\]\\(https://tryluke\\.dev/[^/]+/plan/${task.taskId}/luke\\) to you`, "u"),
+  );
 
   // Another account's plan, on a deployment that reaches no eve: its agent reads Luke's word when it next reads.
   const other = await taskConversation(undefined, RELAY_FULL_NAME);
   await chatOn(other.userId);
-  await agentOn(other.userId, other.taskId);
+  const otherAgent = await agentOn(other.userId, other.taskId);
   const unsecured = await callerOn(brainHost(seams), other, eve.services);
-  const held = await unsecured(CHAT_TOOL.POST, { text: INSTRUCTION, to: "@agent-1" });
+  const held = await unsecured(CHAT_TOOL.POST, {
+    text: INSTRUCTION,
+    to: `https://tryluke.dev/acme/plan/${other.taskId}/agent/${otherAgent.id}`,
+  });
   assert.equal(held.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(held));
-  assert.deepEqual([held.told, held.held], [[], ["@agent-1"]]);
+  assert.equal(Array.isArray(held.told) && held.told.length, 0);
+  assert.ok(Array.isArray(held.held) && String(held.held[0]).endsWith(`/agent/${otherAgent.id})`));
   assert.equal(eve.sent.length, 1);
 });
 
@@ -933,7 +953,7 @@ test("with Chat off for the plan's owner Luke's chat tools run nothing, and once
   assert.equal(read.messages.length, 1);
 });
 
-test("Luke speaks in the chat as the plan's own @luke whatever member a call's input names: a post naming an agent's member lands as Luke's, and an ask of the agent's cannot be resolved through Luke", async () => {
+test("Luke speaks in the chat as the plan's own Luke whatever member a call's input names: a post naming an agent's member lands as Luke's, and an ask of the agent's cannot be resolved through Luke", async () => {
   const task = await taskConversation(undefined, RELAY_FULL_NAME);
   await chatOn(task.userId);
   const agent = await agentOn(task.userId, task.taskId);
@@ -951,7 +971,6 @@ test("Luke speaks in the chat as the plan's own @luke whatever member a call's i
       authorMemberId: member.id,
       to: { channelId: channel.id },
       blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "Which queue sends the emails?" }],
-      mentions: [],
       clientKey: randomUUID(),
       key: "invite-queue",
       ask: { response: { type: CHAT_ASK.TEXT } },
@@ -959,7 +978,7 @@ test("Luke speaks in the chat as the plan's own @luke whatever member a call's i
   );
   assert.ok(Result.isSuccess(asked));
   const call = await callerOn(brainHost(seams), task);
-  const smuggled = { authorMemberId: member.id, as: "@agent-1", author: member.id };
+  const smuggled = { authorMemberId: member.id, as: "agent-1", author: member.id };
 
   const posted = await call(CHAT_TOOL.POST, { text: "The outbox does.", ...smuggled }, "call-as");
   assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(posted));
@@ -967,7 +986,10 @@ test("Luke speaks in the chat as the plan's own @luke whatever member a call's i
   assert.ok(Array.isArray(read.messages));
   const mine = read.messages.find((each) => isRecord(each) && each.seq === posted.seq);
   assert.ok(isRecord(mine));
-  assert.equal(mine.from, "@luke");
+  assert.match(
+    String(mine.from),
+    new RegExp(`^\\[@Luke\\]\\(https://tryluke\\.dev/[^/]+/plan/${task.taskId}/luke\\)$`, "u"),
+  );
 
   assert.deepEqual(
     await call(CHAT_TOOL.RESOLVE, { key: "invite-queue", reason: "Answered.", ...smuggled }),

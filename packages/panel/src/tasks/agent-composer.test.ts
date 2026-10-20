@@ -7,7 +7,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Effect } from "effect";
@@ -15,7 +15,7 @@ import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import {
   composerEditor,
   editorBundleLanded,
@@ -381,20 +381,6 @@ function stubMicrophone(): void {
   );
 }
 
-/** What main answers a dictation's acts with: the microphone granted, no route to prefer, and the words heard. */
-function microphoneAnswer(request: Act): ActOutcome {
-  if (request.kind === ACT_KIND.MICROPHONE_REQUEST) {
-    return { status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.GRANTED };
-  }
-  if (request.kind === ACT_KIND.MICROPHONE_ROUTE) {
-    return { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
-  }
-  if (request.kind === ACT_KIND.DICTATION_TRANSCRIBE) {
-    return { status: ACT_OUTCOME_STATUS.DONE, value: { text: "the bug in" } };
-  }
-  return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
-}
-
 test("a dictation's words land where the caret stood as it began, spaced from the words around them", async () => {
   stubMicrophone();
   // The strip draws still under reduced motion, which jsdom has no answer to.
@@ -403,8 +389,12 @@ test("a dictation's words land where the caret stood as it began, spaced from th
     addEventListener: ignore,
     removeEventListener: ignore,
   }));
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => Promise.resolve(microphoneAnswer(request)),
+  fakeAppBridge({});
+  // Main answers the microphone granted, and no route to prefer.
+  fakeActPort({
+    [ACT_KIND.MICROPHONE_REQUEST]: () => Promise.resolve(MICROPHONE_STATUS.GRANTED),
+    [ACT_KIND.MICROPHONE_ROUTE]: () => Promise.resolve(undefined),
+    [ACT_KIND.DICTATION_TRANSCRIBE]: () => Promise.resolve({ text: "the bug in" }),
   });
   const box = await mounted();
   typeInComposer(box.container, "Fix this later");

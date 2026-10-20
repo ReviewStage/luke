@@ -31,16 +31,22 @@ import {
 import { TASK_TREE_ENTRY } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { ACTOR_KIND, ACTOR_STATE } from "@luke/ui/actor-model";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement, Fragment, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, test } from "vitest";
+import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { MemberDirectory } from "../member-directory.js";
-import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActs,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import {
@@ -193,7 +199,7 @@ const MEMBERS: readonly WorkspaceMember[] = [
 ];
 
 /** Every act the panel told the main process, in order. */
-const told: Act[] = [];
+const told: AnyAct[] = [];
 
 /** The repository the task's tree is read from now. */
 let standing = "acme/relay";
@@ -210,65 +216,66 @@ const roots: Root[] = [];
 // Landed before any box renders, as the panel lands it after its first paint.
 beforeAll(() => Effect.runPromise(editorBundleLanded));
 
+/** What main answers the box's acts with, on `app:act` or the act port, every one told. */
+function answer(request: AnyAct): Promise<AnyActOutcome> {
+  told.push(request);
+  return Promise.resolve(
+    request.kind === ACT_KIND.INTEGRATIONS_STATUS
+      ? {
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            integrations: LINEAR_CONNECTED,
+          },
+        }
+      : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
+        ? {
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: {
+              tools: [
+                { name: "list_issues", description: "List the team's issues." },
+                { name: "get_issue", description: "Read one issue." },
+                { name: "list/issues", description: "A name no mention can carry." },
+                {
+                  name: "list\ud800",
+                  description: "A name that is no string of characters.",
+                },
+                { name: "..", description: "A name an address resolves away." },
+              ],
+            },
+          }
+        : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
+          ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
+          : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
+            ? {
+                status: ACT_OUTCOME_STATUS.DONE,
+                value: {
+                  agents: workspaceAnswer(request.payload),
+                },
+              }
+            : request.kind === ACT_KIND.TASKS_TREE
+              ? {
+                  status: ACT_OUTCOME_STATUS.DONE,
+                  value: {
+                    folder: {
+                      path: "",
+                      repository: standing,
+                      branch: "main",
+                      entries: TREES.get(standing) ?? [],
+                      truncated: false,
+                    },
+                  },
+                }
+              : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
+  );
+}
+
 beforeEach(() => {
   standing = "acme/relay";
   told.length = 0;
   installScrollIntoView();
   installEditorLayout();
   fakeAppPlatform(DESKTOP_LINKS);
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      told.push(request);
-      return Promise.resolve(
-        request.kind === ACT_KIND.INTEGRATIONS_STATUS
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                integrations: LINEAR_CONNECTED,
-              },
-            }
-          : request.kind === ACT_KIND.INTEGRATIONS_TOOLS
-            ? {
-                status: ACT_OUTCOME_STATUS.DONE,
-                value: {
-                  tools: [
-                    { name: "list_issues", description: "List the team's issues." },
-                    { name: "get_issue", description: "Read one issue." },
-                    { name: "list/issues", description: "A name no mention can carry." },
-                    {
-                      name: "list\ud800",
-                      description: "A name that is no string of characters.",
-                    },
-                    { name: "..", description: "A name an address resolves away." },
-                  ],
-                },
-              }
-            : request.kind === ACT_KIND.WORKSPACE_MEMBERS_READ
-              ? { status: ACT_OUTCOME_STATUS.DONE, value: MEMBERS }
-              : request.kind === ACT_KIND.CODING_AGENTS_WORKSPACE_LIST
-                ? {
-                    status: ACT_OUTCOME_STATUS.DONE,
-                    value: {
-                      agents: workspaceAnswer(request.payload),
-                    },
-                  }
-                : request.kind === ACT_KIND.TASKS_TREE
-                  ? {
-                      status: ACT_OUTCOME_STATUS.DONE,
-                      value: {
-                        folder: {
-                          path: "",
-                          repository: standing,
-                          branch: "main",
-                          entries: TREES.get(standing) ?? [],
-                          truncated: false,
-                        },
-                      },
-                    }
-                  : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      );
-    },
-  });
+  fakeActs({ act: answer });
 });
 
 afterEach(() => {
@@ -699,7 +706,7 @@ test("an @ in the box on a plan's page offers the plan's pages and its other age
     ["Pages", ["Invites by week"]],
     ["Agents", ["Wire the desktop"]],
     ["MCP servers", ["Linear"]],
-    ["Mention from", ["Files and folders", "Plan", "Pages", "Agents", "Linear"]],
+    ["Mention from", ["Files and folders", "Plan", "Pages", "Agents", "Dates", "Linear"]],
   ]);
   assert.equal(agentGlyph?.getAttribute("data-kind"), ACTOR_KIND.AGENT);
 });
@@ -1044,6 +1051,7 @@ test("a bare @ ends in a row for each kind the place offers, and → on one narr
     ["Plan", "2 sections"],
     ["Pages", "1 page"],
     ["Agents", "acme"],
+    ["Dates", "A day, a time, or a range"],
     ["Linear", "MCP server"],
   ]);
   assert.deepEqual(wideKeys, ["↑↓ Move", "↵ Mention", "→ Open", "esc Close"]);
@@ -1482,10 +1490,11 @@ const issuesRead: string[] = [];
 /** The box on a plan's page in a workspace with issues, Issues on or off, every message it sends written down. */
 async function issuesBox(on: boolean, standing: Issue[] = [REFRESH_ISSUE, LINK_ISSUE]) {
   issuesRead.length = 0;
-  fakeActPort({
-    [ACT_KIND.ISSUES_LIST]: (payload) => {
-      issuesRead.push(payload.workspaceId);
-      return Promise.resolve({ issues: [...standing] });
+  fakeActs({
+    act: (request) => {
+      if (request.kind !== ACT_KIND.ISSUES_LIST) return answer(request);
+      issuesRead.push(request.payload.workspaceId);
+      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { issues: [...standing] } });
     },
   });
   handState({ [EXPERIMENT.ISSUES]: on });
@@ -1618,4 +1627,106 @@ test("a sent message's mention of an issue is drawn as the chip that opens the i
     { workspace: "acme", place: { kind: LINK_PLACE.ISSUE, issueId: REFRESH_ISSUE.id } },
   ]);
   assert.equal(carryingTarget(container), undefined);
+});
+
+/** Monday, October 19, 2026, at noon in UTC: the same day in any zone within eleven hours of it. */
+const MONDAY_NOON = Date.parse("2026-10-19T12:00:00Z");
+
+test("words after an @ that read as a date offer it first, said from today, and its pick is drawn from today and sent with the date in full", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const { container, sent } = await box(taskPage());
+
+    typeInComposer(container, "Ship it @tomorrow");
+    await settle();
+    const offered = groupsListed(container)[0];
+    pressInComposer(container, "Enter");
+    await settle();
+    const chips = [...composerEditor(container).querySelectorAll("[data-mention-ref]")];
+    pressInComposer(container, "Enter");
+    await settle();
+
+    assert.deepEqual(offered, ["Dates", ["Tomorrow"]]);
+    assert.deepEqual(
+      chips.map((chip) => chip.textContent),
+      ["Tomorrow"],
+    );
+    assert.deepEqual(sent, ["Ship it [@Oct 20, 2026](luke://date/2026-10-20)"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a date's chip in the box opens its picker, and the day picked there is the date the message sends", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const { container, sent } = await box(taskPage());
+
+    typeInComposer(container, "Ship it @tomorrow");
+    await settle();
+    pressInComposer(container, "Enter");
+    await settle();
+    const chip = composerEditor(container).querySelector<HTMLElement>("button[data-mention-ref]");
+    assert.ok(chip, "the date's chip is a button in the box");
+    act(() => chip.click());
+    await settle();
+    const dialog = container.querySelector<HTMLElement>('[role="dialog"]');
+    assert.ok(dialog, "the picker is open");
+    act(() =>
+      dialog
+        .querySelector<HTMLButtonElement>('button[aria-label="Thursday, October 22, 2026"]')
+        ?.click(),
+    );
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    await settle();
+    pressInComposer(container, "Enter");
+    await settle();
+
+    assert.equal(container.querySelector('[role="dialog"]'), null);
+    assert.deepEqual(sent, ["Ship it [@Oct 22, 2026](luke://date/2026-10-22)"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("an @ narrowed to dates offers today, tomorrow, and next Monday before a word is typed, then the row that opens the picker", async () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const { container } = await box(taskPage());
+
+    typeInComposer(container, "Due @dates:");
+    await settle();
+
+    assert.equal(crumb(container), "Dates");
+    assert.deepEqual(groupsListed(container), [
+      ["Dates", ["Today", "Tomorrow", "Oct 26", "Pick a date…"]],
+    ]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a sent message's date is drawn as a chip saying it from today that opens nothing, and words that read as no date stay words", () => {
+  vi.useFakeTimers({ now: MONDAY_NOON, toFake: ["Date"] });
+  try {
+    const container = drawn(
+      createElement(TranscriptWords, {
+        text: "Ready [@Oct 23, 2026](luke://date/2026-10-23), not [@Feb 30](luke://date/2026-02-30).",
+      }),
+      planPage([]),
+    );
+
+    const chips = [...container.querySelectorAll("[data-mention-ref]")];
+
+    assert.deepEqual(
+      chips.map((chip) => [chip.tagName, chip.textContent]),
+      [["SPAN", "Friday"]],
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });

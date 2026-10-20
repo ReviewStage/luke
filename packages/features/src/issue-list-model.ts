@@ -7,6 +7,7 @@ import {
   type IssuePriority,
   type IssueStatus,
 } from "./issue-wire.js";
+import { workspacePrefix } from "./workspace-key.js";
 
 /**
  * issue-list-model.ts -- a workspace's issues as a window draws them: grouped by where each stands, the most pressing first, each named by its workspace's prefix and its number.
@@ -32,9 +33,6 @@ import {
 
 /** The prefix an identifier falls back on where the workspace's name holds no letter or digit. */
 const FALLBACK_PREFIX = "ISSUE";
-
-/** The most characters a prefix spells. */
-const MAX_PREFIX_CHARS = 4;
 
 /** How long a settled issue stays in sight after its last change while settled issues gone quiet are left out: a week. */
 const SETTLED_QUIET_MS = 7 * 24 * 60 * 60 * 1000;
@@ -243,25 +241,7 @@ export function issueListGroups(
   })).filter((group) => group.issues.length > 0);
 }
 
-/**
- * The prefix a workspace's issues are named by: the initials of a name of
- * several words, or the head of a name of one, upper-cased, so "Acme" is
- * ACME and "Luke Labs" is LL.
- */
-function workspacePrefix(workspaceName: string): string {
-  const words = workspaceName
-    .replaceAll(/['’]/gu, "")
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter((word) => word.length > 0);
-  if (words.length === 0) return FALLBACK_PREFIX;
-  const prefix =
-    words.length === 1
-      ? Array.from(words[0] ?? "").slice(0, MAX_PREFIX_CHARS)
-      : words.slice(0, MAX_PREFIX_CHARS).map((word) => Array.from(word)[0] ?? "");
-  return prefix.join("").toLocaleUpperCase();
-}
-
 /** An issue's identifier in its workspace, as `ACME-42`. */
 export function issueIdentifier(workspaceName: string, number: number): string {
-  return `${workspacePrefix(workspaceName)}-${number}`;
+  return `${workspacePrefix(workspaceName, FALLBACK_PREFIX)}-${number}`;
 }

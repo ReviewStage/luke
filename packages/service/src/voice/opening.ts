@@ -92,6 +92,8 @@ type Opened =
       attachId: string;
       /** The store's own id for the session's row, which its avatar rows name; none where the row is another account's. */
       voiceSessionId: string | undefined;
+      /** The developer's time zone as this connection's opening frame named it; none from a desktop released before it was sent. */
+      timeZone: string | undefined;
       /**
        * Whether the session is already running: false for one just created
        * from a WebRTC offer, whose peer has yet to connect; true for one
@@ -418,6 +420,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         taskId: frame.planId,
         attachId,
         voiceSessionId,
+        timeZone: frame.timeZone,
         started: false,
         sideband,
         answer,
@@ -468,6 +471,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         taskId: owned.taskId,
         attachId,
         voiceSessionId: owned.voiceSessionId,
+        timeZone: frame.timeZone,
         started: true,
         sideband,
         answer,

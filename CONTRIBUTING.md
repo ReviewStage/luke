@@ -86,7 +86,7 @@ tools/
   anti-slop/      the repository's oxlint rules
   trace-export/   turns a recorded development trace into the unbox-ai viewer's document
 scripts/          bootstrap, check, run, evidence, and release; repository-checks.sh holds the contract checks
-docs/             design, tasks, style, and workflow; proposals/ for what is not built yet
+docs/             design, tasks, style, and workflow; a plan lives on its task, never in a document here
 ```
 
 Application logic lives in `packages/`; an app holds only what is specific to

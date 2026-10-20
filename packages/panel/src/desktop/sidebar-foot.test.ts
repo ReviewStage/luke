@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
@@ -12,7 +12,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { useAppCommand } from "../app-commands.js";
 import { OpenPersonProvider } from "../person-door.js";
-import { fakeAppBridge } from "../testing/app-bridge.js";
+import { fakeActPortAnswering, fakeAppBridge } from "../testing/app-bridge.js";
 import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { SidebarFoot } from "./sidebar-foot.js";
@@ -37,11 +37,10 @@ let sent: { kind: string }[] = [];
 
 beforeEach(() => {
   sent = [];
-  fakeAppBridge({
-    act: (request: { kind: string }) => {
-      sent.push({ kind: request.kind });
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-    },
+  fakeAppBridge({});
+  fakeActPortAnswering((request) => {
+    sent.push({ kind: request.kind });
+    return Promise.resolve(undefined);
   });
   handCapabilities(DESKTOP_CAPABILITIES);
 });

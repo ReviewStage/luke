@@ -28,13 +28,13 @@ The runtime beside that registry is **the bundle's one Effect edge**. Work that 
 a fiber of its own runs under the services it was built over, read through
 `rendererServicesNow`, so nothing here builds a second runtime to fork on.
 
-Effects leave on `app:act` alone, one invoke carrying one `{kind, payload}` from
-`ACT_KIND`, parsed here and again in `@luke/host/act-router`, answered as an
-`ActOutcome` so nothing an exception happened to carry ever crosses back.
-`act.ts` is the only caller — `act` when a row reads the answer, `tell`
-when nothing does. **A new command is a new `ACT_KIND` entry with its payload
-schema, its answer's guard, and its one router row. There is no second write path
-to add one on.**
+Effects leave on the window's act port alone, one oRPC call per kind from
+`ACT_KIND`, its payload and answer checked against `@luke/host/contract`, a
+refusal crossing back as the declared `REFUSED` error so nothing an exception
+happened to carry ever crosses back. `act.ts` is the only caller — `act` when a
+row reads the answer, `tell` when nothing does. **A new command is a new
+`ACT_KIND` entry with its contract procedure and its one act-port procedure.
+There is no second write path to add one on.**
 
 ## Panel motion
 

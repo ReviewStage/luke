@@ -1,4 +1,4 @@
 {
   "type": "string",
-  "maxLength": 81
+  "maxLength": 512
 }

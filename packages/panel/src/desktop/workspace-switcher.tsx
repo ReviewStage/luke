@@ -21,8 +21,7 @@ import { WorkspaceTile } from "./workspace-tile.js";
  * A workspace is a team's shared tasks, the first one made for the account
  * among them, and the sidebar lists one at a time. Its head stands at the
  * sidebar's top left, where Slack, Linear, and Vercel name the scope
- * everything under it belongs to (`docs/proposals/workspace-clarity.md`,
- * variant A): the workspace's tile, its name, and under it who shares it,
+ * everything under it belongs to: the workspace's tile, its name, and under it who shares it,
  * "5 members", or "Personal workspace" for the account's own first
  * workspace while no one else is in it (`automations-page.tsx` reads the
  * first listed as the account's own too). A press

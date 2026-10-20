@@ -1,4 +1,4 @@
-import type { ClientSettingSideEffects } from "@luke/host/act-router";
+import type { ClientSettingSideEffects } from "@luke/host/act-port";
 import { SETTING_SIDE_EFFECT } from "@luke/settings";
 import type { MediaDuckController } from "../native/media-duck";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";

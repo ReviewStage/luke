@@ -9,10 +9,13 @@ import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import { LINK_PLACE, linkOf } from "@luke/features/luke-link";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
-import { TASK_BOUNDS } from "@luke/features/task-wire";
+import { TASK_BOUNDS, TASK_STATUS } from "@luke/features/task-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { SHORTCUT_KEY, type ShortcutChord, shortcutMatches } from "@luke/settings/shortcuts";
 import {
+  BUTTON_SIZE,
+  BUTTON_VARIANT,
+  Button,
   CHIP_LOOK,
   CHIP_WIDTH,
   Chip,
@@ -43,6 +46,7 @@ import { PICKER_ALIGN } from "../settings/picker-row.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentComposer, type ComposerWords } from "./agent-composer.js";
 import { ISSUE_CHORD, IssuePickerChip } from "./issue-picker-chip.js";
+import { MENTION_MENU_SIDE } from "./mention-picker.js";
 import { NEW_TASK_MODE, type NewTaskMode, useNewTaskMode } from "./new-task-mode.js";
 import { CHIP_PLACE, RepositoryChip } from "./repository-chip.js";
 import { keptSkills } from "./repository-skills.js";
@@ -62,8 +66,10 @@ import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./u
  * The card is the agent box's own (`agent-composer.tsx`): the words field,
  * the "+" that attaches files, with an image pasted or files dropped taken
  * too, dictation, the model chip, and the round Start button, with the
- * Plan toggle at the foot's right, before the model chip. New task's own
- * chips stand in a head row over the card where the owner hands a title, as
+ * Plan toggle at the foot's right, before the model chip, drawing its
+ * pencil alone where the card is too narrow for its word, as on a phone.
+ * New task's own chips stand in a head row over the card where the owner
+ * hands a title, as
  * the dialog does (`heading`): the title, then the repository the task is
  * about (`repository-chip.tsx`), and at the row's right end the Issue
  * chip, where the workspace offers its own issues or has Linear connected
@@ -121,7 +127,12 @@ import type { NewTaskAgent, NewTaskIssue, NewTaskStart, TasksControl } from "./u
  *
  * Return starts, Shift+Return is a new line, and ⌘Return on an Agent-mode
  * box with neither words nor files starts a bare task: an empty plan, no
- * call, and no agent. Escape closes a menu or a dictation standing first,
+ * call, and no agent. File for later, beside Start in either mode but on
+ * a card opened to start an agent, files the task in the backlog instead:
+ * no call and no agent, named by its issue where one was picked and else
+ * by the words' first line, the words kept as its brief for whoever takes
+ * it up; it stands once there are words or an issue. Start's task starts
+ * to do. Escape closes a menu or a dictation standing first,
  * and then whatever the owner says (`onLeave`), the dialog's card. A start
  * that was refused keeps the card and its words, with why under it and
  * Retry. Nothing typed here reaches the model as conversation.
@@ -180,7 +191,26 @@ const COMPOSER_WORDS = {
   TOGGLE_KEYS: "Shift+Tab",
   DROP_ISSUE: "Remove issue",
   NEEDS_REPOSITORY: "An agent needs a repository to work in. Choose one, or turn on Plan.",
+  FILE: "File for later",
+  FILE_HINT: "Add it to the backlog without starting it",
 } as const;
+
+/**
+ * The name a task filed for later stands under: its issue's, else its
+ * words' first line, cut to a name's bound. Note that the bound counts
+ * UTF-16 units, as the wire does, and the cut falls between characters, so
+ * an emoji is kept whole or left out rather than split.
+ */
+function filedName(issueName: string | undefined, said: string): string {
+  if (issueName !== undefined) return issueName;
+  const line = said.split("\n", 1)[0]?.trim() ?? "";
+  let name = "";
+  for (const character of line) {
+    if (name.length + character.length > TASK_BOUNDS.MAX_NAME_CHARS) break;
+    name += character;
+  }
+  return name;
+}
 
 /** What one Agent-mode press asked beside its key: the task's name, repository, workspace, and issues, and the agent's words, files, and model. */
 interface AgentAsk {
@@ -421,7 +451,7 @@ export function NewTaskComposer({
   const begin = (
     name: string,
     withCall: boolean,
-    handing: Pick<NewTaskStart, "agent" | "handed" | "brief"> = {},
+    handing: Pick<NewTaskStart, "agent" | "handed" | "brief" | "status"> = {},
   ) => {
     if (starting) return;
     setStarting(true);
@@ -450,8 +480,11 @@ export function NewTaskComposer({
   };
   // Note that an agent on the workspace's own issue with nothing written is
   // started on the task's plan, the issue's, as its Start agent… starts one.
+  // Which press a Retry repeats: Start's, or File for later's.
+  const filing = useRef(false);
   const start = () => {
     if (!canStart) return;
+    filing.current = false;
     if (planning) begin(issueName ?? "", true, said === "" ? {} : { brief: said });
     else if (!filled && issue === undefined) begin(issueName ?? "", false, { agent: true });
     else {
@@ -471,7 +504,20 @@ export function NewTaskComposer({
     }
   };
   // ⌘Return on an Agent-mode box with nothing in it starts a bare task: no call and no agent.
-  const bare = () => begin(issueName ?? "", false);
+  const bare = () => {
+    filing.current = false;
+    begin(issueName ?? "", false);
+  };
+  // File for later is a bare task in the backlog, its words kept as its brief.
+  const filable = said !== "" || named !== undefined;
+  const file = () => {
+    if (!filable) return;
+    filing.current = true;
+    begin(filedName(issueName, said), false, {
+      status: TASK_STATUS.BACKLOG,
+      ...(said === "" ? undefined : { brief: said }),
+    });
+  };
 
   const onKey = (event: KeyboardEvent): boolean => {
     if (turnsMode(event) && !agentOnly) {
@@ -551,7 +597,7 @@ export function NewTaskComposer({
     note,
     closed: undefined,
     send: start,
-    retry: start,
+    retry: () => (filing.current ? file() : start()),
     sent: [],
   };
 
@@ -587,6 +633,8 @@ export function NewTaskComposer({
         onKey={onKey}
         onLeave={onLeave}
         focusedByOwner={focusedByOwner}
+        // Note that Home's card stands at the top of its page, where a list risen over it is cut off under the page's head.
+        listSide={heading === undefined ? MENTION_MENU_SIDE.BELOW : MENTION_MENU_SIDE.ABOVE}
         above={
           // Note that the issue the card was opened on is named in the owner's title instead.
           pickedIssue === undefined ? undefined : (
@@ -601,24 +649,41 @@ export function NewTaskComposer({
           )
         }
         tools={heading === undefined ? chips : undefined}
-        actions={
+        beforeSend={
           agentOnly ? undefined : (
-            <span className="new-task-plan-toggle">
-              <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
-                <Chip
-                  look={CHIP_LOOK.FILTER}
-                  aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
-                  aria-pressed={planning}
-                  aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
-                  disabled={starting}
-                  onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
-                >
-                  <PencilIcon />
-                  <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
-                </Chip>
-              </Tooltip>
-            </span>
+            <Tooltip label={COMPOSER_WORDS.FILE_HINT}>
+              <Button
+                variant={BUTTON_VARIANT.OUTLINE}
+                size={BUTTON_SIZE.COMPACT}
+                disabled={starting || !filable}
+                onClick={file}
+              >
+                {COMPOSER_WORDS.FILE}
+              </Button>
+            </Tooltip>
           )
+        }
+        actions={
+          agentOnly
+            ? undefined
+            : (narrow) => (
+                <span className="new-task-plan-toggle">
+                  <Tooltip label={COMPOSER_WORDS.TOGGLE_LABEL}>
+                    <Chip
+                      look={CHIP_LOOK.FILTER}
+                      iconOnly={narrow}
+                      aria-label={COMPOSER_WORDS.TOGGLE_LABEL}
+                      aria-pressed={planning}
+                      aria-keyshortcuts={COMPOSER_WORDS.TOGGLE_KEYS}
+                      disabled={starting}
+                      onClick={() => setMode(planning ? NEW_TASK_MODE.AGENT : NEW_TASK_MODE.PLAN)}
+                    >
+                      <PencilIcon />
+                      <ChipName>{COMPOSER_WORDS.PLAN}</ChipName>
+                    </Chip>
+                  </Tooltip>
+                </span>
+              )
         }
       />
       {blocked ? (

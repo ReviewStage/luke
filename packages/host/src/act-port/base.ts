@@ -15,10 +15,10 @@ import { ACT_ERROR, actPortContract } from "../contract/index.js";
  * runtime rather than under a context of its own.
  */
 
-/** What every act procedure is called with. */
-export interface ActPortContext extends WithEffectContext<never> {
+/** What every act procedure is called with, `Sender` being the platform's own handle on the window that asked. */
+export interface ActPortContext<Sender = unknown> extends WithEffectContext<never> {
   /** The window that asked, and which surface it is drawing. */
-  readonly actor: ActSender;
+  readonly actor: ActSender<Sender>;
   /** Whether that window's frame is this build's own renderer. */
   readonly trusted: boolean;
 }
@@ -42,13 +42,19 @@ export function isRefusal(error: unknown): error is ORPCError<string, unknown> {
 }
 
 /**
- * The act port's contract to implement. Every procedure first refuses a sender this
- * build does not trust, in its own sentence, before its input is read or
- * its row asks anything.
+ * The act port's contract to implement, for a platform whose handle on a window is
+ * a `Sender`. Every procedure first refuses a sender this build does not
+ * trust, in its own sentence, before its input is read or its row asks
+ * anything.
  */
-export const actPort = implement(actPortContract)
-  .$context<ActPortContext>()
-  .use(({ context, next, procedure }) => {
-    if (!context.trusted) throw refusedBy(procedure);
-    return next();
-  });
+export function actPortFor<Sender>() {
+  return implement(actPortContract)
+    .$context<ActPortContext<Sender>>()
+    .use(({ context, next, procedure }) => {
+      if (!context.trusted) throw refusedBy(procedure);
+      return next();
+    });
+}
+
+/** The act contract to implement, for the host's own procedures, which read no platform's handle on a window. */
+export const actPort = actPortFor<unknown>();

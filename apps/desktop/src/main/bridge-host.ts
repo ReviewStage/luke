@@ -44,7 +44,7 @@ export interface BridgeHostDependencies {
   /** Every act's Effect, run on the desktop's own runtime rather than a second one. */
   run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   /** The act port's server, which every window's port is upgraded with. */
-  actPort: ActPortHandler;
+  actPort: ActPortHandler<WebContents>;
   /** The desktop runtime's own services, which every act port procedure's effect runs on. */
   services: Context.Context<never>;
   reports: ReportHandlers;

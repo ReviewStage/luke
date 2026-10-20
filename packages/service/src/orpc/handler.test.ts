@@ -31,7 +31,7 @@ import {
 } from "../http/http-effect.js";
 import type { WebServices } from "../runtime.js";
 import type { HostedContext } from "./base.js";
-import { hostedFetch } from "./handler.js";
+import { HOSTED_BODY_CEILING_BYTES, hostedFetch } from "./handler.js";
 
 const ORIGIN = "https://luke.test";
 const WHEN_PATH = "/api/test/{id}/when";
@@ -189,4 +189,37 @@ it.effect("a defect is a bare 500, as the platform's web handler answered one", 
     assert.deepEqual(orpc, old);
     assert.equal(orpc.status, HOSTED_HTTP_STATUS.INTERNAL_ERROR);
   }),
+);
+
+it.effect(
+  "a body past the handler's ceiling is refused as too large while it streams in, with no length stated, as readBodyBytesEffect refused one",
+  () =>
+    Effect.gen(function* () {
+      const past = new TextEncoder().encode(
+        JSON.stringify({ name: "x".repeat(HOSTED_BODY_CEILING_BYTES) }),
+      );
+      // SAFETY: Node's fetch takes a streamed body only half-duplex, which the DOM's RequestInit does not name.
+      const request = new Request(new URL(ITEMS_PATH, ORIGIN), {
+        method: HTTP_METHOD.POST,
+        headers: { "content-type": "application/json" },
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(past);
+            controller.close();
+          },
+        }),
+        duplex: "half",
+      } as RequestInit);
+      // SAFETY: the test procedures yield no service, so an empty context stands in for the web runtime's.
+      const services = Context.empty() as Context.Context<WebServices>;
+      const answered = yield* read(
+        yield* Effect.promise(() => hostedFetch(testRouter)(request, services)),
+      );
+      assert.deepEqual(answered, {
+        status: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
+        contentType: "application/json",
+        cacheControl: null,
+        text: '{"error":"request-too-large"}',
+      });
+    }),
 );

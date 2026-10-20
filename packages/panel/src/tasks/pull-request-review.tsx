@@ -19,12 +19,13 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { MessageSquarePlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { PopoverPanel } from "../popover-panel.js";
+import { Tooltip } from "../tooltip.js";
 import type { PendingReview } from "./line-comment.js";
 import { MarkdownField } from "./markdown-field.js";
 import { PullRequestWriteNote, type PullRequestWrites } from "./pull-request-writes.js";
 
 /**
- * pull-request-review.tsx -- the review a member submits on an agent's pull request from its Pull request tab: the bar's Review press and the panel it opens, as stage-cli's review panel.
+ * pull-request-review.tsx -- the review a member submits on an agent's pull request from its Pull request tab: the Review press at the end of its tabs' row and the panel it opens, as stage-cli's review panel.
  *
  * The panel asks what the review says of the pull request, Comment,
  * Approve, or Request changes, and its optional words, written as
@@ -67,14 +68,14 @@ const DISCARD_QUESTION: DialogQuestion = {
   running: "Discarding",
 };
 
-/** What the review may say, in the order GitHub's own review box offers it, and what each means. */
+/** What the review may say, in the order GitHub's own review box offers it, and what the two that need it mean. */
 const EVENT_OPTIONS = [
   {
     value: REVIEW_EVENT.COMMENT,
     label: "Comment",
     detail: "Submit general feedback without approval.",
   },
-  { value: REVIEW_EVENT.APPROVE, label: "Approve", detail: "Approve this pull request." },
+  { value: REVIEW_EVENT.APPROVE, label: "Approve" },
   {
     value: REVIEW_EVENT.REQUEST_CHANGES,
     label: "Request changes",
@@ -194,7 +195,7 @@ function ReviewPanel({
 }
 
 /**
- * The bar's Review press and the panel it opens, holding the review being
+ * The tabs' row's Review press and the panel it opens, holding the review being
  * written for as long as the tab stands, so a panel closed by a stray
  * click opens again on the same words.
  */
@@ -252,26 +253,29 @@ export function PullRequestReview({
 
   return (
     <div className="pull-request-review" ref={root}>
-      <Button
-        ref={trigger}
-        icon={<MessageSquarePlusIcon aria-hidden="true" />}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        aria-controls={open ? panelId : undefined}
-        label={
-          pending == null || pending.comments === 0
-            ? undefined
-            : REVIEW_WORDS.openWith(pending.comments)
-        }
-        onClick={() => setOpen(!open)}
-      >
-        {REVIEW_WORDS.OPEN}
-        {pending == null || pending.comments === 0 ? null : (
-          <span className="pull-request-review-count" aria-hidden="true">
-            {pending.comments}
-          </span>
-        )}
-      </Button>
+      {/* Note that a narrow row draws the glyph and the count alone, so the word stands in the hint and the name. */}
+      <Tooltip label={REVIEW_WORDS.OPEN}>
+        <Button
+          ref={trigger}
+          icon={<MessageSquarePlusIcon aria-hidden="true" />}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-controls={open ? panelId : undefined}
+          label={
+            pending == null || pending.comments === 0
+              ? REVIEW_WORDS.OPEN
+              : REVIEW_WORDS.openWith(pending.comments)
+          }
+          onClick={() => setOpen(!open)}
+        >
+          <span className="pull-request-review-words">{REVIEW_WORDS.OPEN}</span>
+          {pending == null || pending.comments === 0 ? null : (
+            <span className="pull-request-review-count" aria-hidden="true">
+              {pending.comments}
+            </span>
+          )}
+        </Button>
+      </Tooltip>
       {open ? (
         <AnchoredPopover align={POPOVER_ALIGN.END} width={PANEL_WIDTH}>
           <ReviewPanel
