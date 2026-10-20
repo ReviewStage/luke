@@ -5,10 +5,12 @@ import {
   type DrawingElement,
   drawingElementsSchema,
 } from "@luke/features/board-wire";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
-import { Database, type DatabaseServices } from "../core/query.js";
+import { type LiveStatement, liveSelection, liveStatementOf } from "../core/live-statement.js";
+import { Database, type DatabaseServices, queryBuilder } from "../core/query.js";
+import { member } from "../schemas/auth.js";
 import { task, taskBoard } from "../schemas/task.js";
 import { TaskArchived, type TaskStoreEffect, type TaskStoreFailure } from "./task-store.js";
 import { reachableTask } from "./workspace-store.js";
@@ -32,6 +34,11 @@ import { reachableTask } from "./workspace-store.js";
  * drawn as a PNG, which the board keeps until the next such save, so it
  * shows the drawing the scene holds; only `look_at_board` reads it
  * (`readBoardImage`), and a board read never carries it.
+ *
+ * Where the board stands is also written for Neon Realtime
+ * (`boardLiveStatement`), so the desktop reads it again the moment Luke
+ * draws or a save lands rather than when the call's activity suggests one
+ * might have.
  */
 
 const TaskKeySchema = Schema.Struct({ userId: Schema.String, taskId: Schema.String });
@@ -234,5 +241,37 @@ export function writeDrawing(
   // An upsert that returned no row is the database breaking its own contract, not an outcome.
   return underTaskLock(userId, taskId, (now) =>
     upsertDrawing(drawing)({ taskId, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
+  );
+}
+
+/**
+ * Where the task's board stands, written for Neon Realtime: the number of
+ * Luke's latest drawing, the drawing the scene holds, and whether the scene
+ * holds its image, as one row a board, none before the board was first
+ * written. It is a mark, none of the elements or the image it marks, which
+ * the desktop reads again (`readBoard`) once the row moves. The account is
+ * joined through its membership of the task's workspace, as Neon's guide
+ * authorizes a live read, so one that leaves the workspace stops seeing the
+ * row. None where a value cannot be carried, which a caller answers as the
+ * board not being live.
+ */
+export function boardLiveStatement(userId: string, taskId: string): Option.Option<LiveStatement> {
+  return liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection({
+          taskId: taskBoard.taskId,
+          drawingNumber: taskBoard.drawingNumber,
+          appliedDrawing: taskBoard.appliedDrawing,
+          imaged: sql<boolean>`${taskBoard.image} is not null`,
+        }),
+      )
+      .from(taskBoard)
+      .innerJoin(task, eq(task.id, taskBoard.taskId))
+      .innerJoin(
+        member,
+        and(eq(member.organizationId, task.organizationId), eq(member.userId, userId)),
+      )
+      .where(eq(taskBoard.taskId, taskId)),
   );
 }
