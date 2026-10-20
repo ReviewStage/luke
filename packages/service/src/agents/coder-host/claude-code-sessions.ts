@@ -677,14 +677,19 @@ export const claudeCodeSessions = <Turn extends BrainHostTurn = BrainHostTurn>(
           const sandboxes = yield* api.listTagged(sessionId);
           if (sandboxes.length === 0)
             return { outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const;
+          let retired = 0;
           for (const sandbox of sandboxes) {
             if (!(yield* ownsSandbox(sandbox))) continue;
+            retired += 1;
             // The bearer goes first, so a runner still up is refused by Luke before its sandbox is gone.
             const agentId = sandbox.tags?.[RUNNER_TAG.AGENT];
             if (agentId !== undefined) yield* recordCodingAgentRunnerToken(userId, agentId, null);
             yield* api.deleteSandbox(sandbox.name);
           }
-          return { outcome: EVE_RESET_OUTCOME.RESET } as const;
+          // A session whose sandboxes are all another account's agents' is none of this account's to retire.
+          return retired === 0
+            ? ({ outcome: EVE_RESET_OUTCOME.NO_ACTIVE_SESSION } as const)
+            : ({ outcome: EVE_RESET_OUTCOME.RESET } as const);
         }).pipe(
           Effect.catch((failure) =>
             Effect.as(Effect.logWarning(`A Claude Code reset failed: ${failure._tag}`), {

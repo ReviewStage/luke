@@ -714,7 +714,7 @@ it.layer(getTestDB())("a coding agent's sessions on Claude Code", (it) => {
 
       assert.deepEqual(sent, { outcome: EVE_SEND_OUTCOME.RETIRED });
       assert.equal(cancelled.outcome, EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN);
-      assert.equal(reset.outcome, EVE_RESET_OUTCOME.RESET);
+      assert.equal(reset.outcome, EVE_RESET_OUTCOME.NO_ACTIVE_SESSION);
       assert.equal(api.sandboxes[0]?.deleted, false);
       assert.equal(linesOf(api.commands[0]).length, 2);
     }),
