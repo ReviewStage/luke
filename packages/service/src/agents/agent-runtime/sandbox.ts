@@ -7,7 +7,7 @@
  * of pull requests, the runtimes a repository's checks are likely
  * to need, which the base image carries or `prepare` installs, and
  * Playwright with its Chromium, which an agent screenshots what it built
- * with, and GTK 3, the one library an Electron app needs beyond Chromium's,
+ * with and which the agent's own browser runs headful, and GTK 3, the one library an Electron app needs beyond Chromium's,
  * so an agent runs a desktop app under Xvfb the same way. Node is the
  * image's own; pnpm and Python are added where absent. Every command runs
  * with `NO_COLOR` set, so a test runner's output reaches the model as words
@@ -240,11 +240,12 @@ export const PREPARE_SCRIPT = [
   ...PREPARE_TMUX,
   // Playwright and its Chromium, so a coding agent opens what it built and screenshots it; the
   // browser's system libraries are installed through sudo by Playwright itself, the browser for the user.
-  // Note that we install only the headless shell, because nothing here launches headed Chromium
-  // (`playwright screenshot` runs headless, Electron ships its own), and the full browser
-  // would be hundreds of megabytes in every snapshot for nothing.
+  // Note that we install the full browser beside the headless shell `playwright screenshot` runs,
+  // though it costs about 400 MB in every snapshot, because the agent's own browser
+  // (`../browser/sandbox-browser.ts`) runs it headful under Xvfb, where a site sees an ordinary
+  // Chrome rather than a headless one that a sign-in would refuse.
   `npm install -g playwright@${PLAYWRIGHT_VERSION}`,
-  "playwright install --with-deps --only-shell chromium",
+  "playwright install --with-deps chromium",
   // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
   INSTALL_GTK,
   ...INSTALL_GH_STACK,
