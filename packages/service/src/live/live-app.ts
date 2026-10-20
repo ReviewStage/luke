@@ -39,7 +39,8 @@ import { type LiveSealer, LiveSealing } from "./realtime.js";
  *
  * `GET /api/live/task-inbox?id=` and `GET /api/live/agent-inbox?id=` answer
  * one plan's inbox, or one agent's, the same way: its open items and its
- * latest settled ones as one statement, after the plan or the agent is read as the account,
+ * latest settled ones as one statement, their threads and files as two
+ * more, after the plan or the agent is read as the account,
  * so one it does not reach is not found, as its held read answers.
  * Nothing else here reads a row: the store is read by Realtime.
  */
@@ -101,9 +102,11 @@ const sealedScope = (
       return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
     }
     const { seal, url } = sealing.value;
-    const queries = yield* Effect.all({ items: seal(statements.value.items) }).pipe(
-      Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
-    );
+    const queries = yield* Effect.all({
+      items: seal(statements.value.items),
+      messages: seal(statements.value.messages),
+      files: seal(statements.value.files),
+    }).pipe(Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { url, queries });
   });
 

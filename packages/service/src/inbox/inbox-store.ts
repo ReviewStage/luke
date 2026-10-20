@@ -98,7 +98,7 @@ import {
   type SQL,
   sql,
 } from "drizzle-orm";
-import type { AnyPgColumn, AnyPgTable } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, type AnyPgTable, alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/sql";
 
@@ -1417,21 +1417,35 @@ export function accountInboxLiveStatements(
   );
 }
 
-/** The statement a plan's or an agent's inbox is subscribed to live: its open items and its latest settled ones, as one result. */
+/**
+ * The statements a plan's or an agent's inbox is subscribed to live: its
+ * open items and its latest settled ones, as one result, and the threads
+ * and files they carry, each its own.
+ */
 export interface ScopeInboxLiveStatements {
   readonly items: LiveStatement;
+  readonly messages: LiveStatement;
+  readonly files: LiveStatement;
 }
+
+/** A scope's thread read under its own name, so a message's latest siblings are read beside it. */
+const sibling = alias(inboxMessage, "sibling");
 
 /**
  * A scope's items written for Neon Realtime: the same rows, joins, bound,
  * and rule of who may read them as `scopeItems` with `MAX_ITEMS_READ`, and
- * the same columns, each item's thread, files, and whether it is unread for
- * the reader among them, each
+ * the same columns, whether each is unread for the reader among them, each
  * column under the key `live-wire.ts` reads it by and each instant in epoch
  * milliseconds. The open items and the latest settled ones are one
  * statement, so an item settling moves from one to the other in one change
  * rather than leaving the reader a moment holding neither. The order is the
  * reader's to keep, since Realtime keeps none.
+ *
+ * Note that each item's thread, its latest `MAX_MESSAGES_READ` messages, and
+ * the files its answer and its messages carried are statements of their own,
+ * which the reader joins to the items, rather than lists the item's row
+ * aggregates, because `jsonb_agg` and `jsonb_build_object` are only stable
+ * and Realtime refuses any function that is not immutable.
  */
 function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveStatements> {
   const latestSettled = queryBuilder
@@ -1440,46 +1454,102 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
     .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
     .orderBy(...LATEST_FIRST)
     .limit(INBOX_BOUNDS.MAX_ITEMS_READ);
-  return Option.map(
-    liveStatementOf(
+  const read = and(
+    inScope(scope),
+    or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
+  );
+  const itemIds = queryBuilder.select({ id: inboxItem.id }).from(inboxItem).where(read);
+  const latestMessage = and(
+    inArray(inboxMessage.itemId, itemIds),
+    inArray(
+      MESSAGE.id,
       queryBuilder
-        .select(
-          liveSelection(
-            {
-              id: inboxItem.id,
-              agentId: inboxItem.agentId,
-              key: inboxItem.key,
-              revision: inboxItem.revision,
-              version: inboxItem.version,
-              title: inboxItem.title,
-              blocks: inboxItem.blocks,
-              response: inboxItem.response,
-              needsReply: inboxItem.needsReply,
-              status: inboxItem.status,
-              startedBy: inboxItem.userId,
-              startedByName: INBOX_ITEM_COLUMNS.startedByName,
-              answer: inboxItem.answer,
-              answerFiles: ANSWER_FILES,
-              answeredBy: inboxItem.answeredBy,
-              answeredByName: INBOX_ITEM_COLUMNS.answeredByName,
-              closedReason: inboxItem.closedReason,
-              messages: MESSAGES,
-              settledAt: SETTLED_AT,
-              unread: unreadFor(scope.userId),
-            },
-            { postedAt: inboxItem.postedAt, updatedAt: inboxItem.updatedAt },
-          ),
-        )
-        .from(inboxItem)
-        .where(
+        .select({ id: sibling.id })
+        .from(sibling)
+        .where(eq(sibling.itemId, qualified(inboxMessage, inboxMessage.itemId)))
+        .orderBy(desc(sibling.createdAt), desc(sibling.id))
+        .limit(INBOX_BOUNDS.MAX_MESSAGES_READ),
+    ),
+  );
+  const items = liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: inboxItem.id,
+            agentId: inboxItem.agentId,
+            key: inboxItem.key,
+            revision: inboxItem.revision,
+            version: inboxItem.version,
+            title: inboxItem.title,
+            blocks: inboxItem.blocks,
+            response: inboxItem.response,
+            needsReply: inboxItem.needsReply,
+            status: inboxItem.status,
+            startedBy: inboxItem.userId,
+            startedByName: INBOX_ITEM_COLUMNS.startedByName,
+            answer: inboxItem.answer,
+            answeredBy: inboxItem.answeredBy,
+            answeredByName: INBOX_ITEM_COLUMNS.answeredByName,
+            closedReason: inboxItem.closedReason,
+            unread: unreadFor(scope.userId),
+          },
+          {
+            postedAt: inboxItem.postedAt,
+            updatedAt: inboxItem.updatedAt,
+            // As `SETTLED_AT` reads it, the instant read at UTC as every live instant is.
+            settledAt: sql`coalesce(${inboxItem.settledAt}, case when ${SETTLED} then ${inboxItem.updatedAt} end)`,
+          },
+        ),
+      )
+      .from(inboxItem)
+      .where(read),
+  );
+  const messages = liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection(
+          {
+            id: MESSAGE.id,
+            itemId: qualified(inboxMessage, inboxMessage.itemId),
+            author: MESSAGE.author,
+            userId: MESSAGE.userId,
+            name: sql`(select "name" from ${user} where ${user.id} = ${MESSAGE.userId})`,
+            text: MESSAGE.text,
+          },
+          { createdAt: MESSAGE.createdAt },
+        ),
+      )
+      .from(inboxMessage)
+      .where(latestMessage),
+  );
+  const files = liveStatementOf(
+    queryBuilder
+      .select(
+        liveSelection({
+          attachmentId: attachment.id,
+          answerOf: sql`case when ${attachment.kind} = ${INBOX_ATTACHMENT_KIND.ANSWER} then ${attachment.inboxItemId} end`,
+          messageId: attachment.inboxMessageId,
+          name: attachment.name,
+          mediaType: attachment.contentType,
+          position: attachment.position,
+        }),
+      )
+      .from(attachment)
+      .where(
+        or(
           and(
-            inScope(scope),
-            or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
+            eq(attachment.kind, INBOX_ATTACHMENT_KIND.ANSWER),
+            inArray(attachment.inboxItemId, itemIds),
+          ),
+          inArray(
+            attachment.inboxMessageId,
+            queryBuilder.select({ id: MESSAGE.id }).from(inboxMessage).where(latestMessage),
           ),
         ),
-    ),
-    (items) => ({ items }),
+      ),
   );
+  return Option.all({ items, messages, files });
 }
 
 /** One plan's inbox written for Neon Realtime, as `taskInboxItems` reads it. */

@@ -234,7 +234,12 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.ok(Result.isSuccess(open));
         assert.ok(Result.isSuccess(yield* postInboxItem(agent, { ...SETTINGS, key: "closed" })));
         assert.ok(
-          Option.isSome(yield* answerInboxItem(teammate, posted.success.id, 1, DONE, randomUUID())),
+          Option.isSome(
+            yield* answerInboxItem(teammate, posted.success.id, 1, DONE, randomUUID(), [
+              attached("first.txt", "text/plain", TRACE),
+              attached("second.txt", "text/plain", TRACE),
+            ]),
+          ),
         );
         assert.ok(Option.isSome(yield* closeInboxItem(agent, "closed", "Not needed after all")));
         // The teammate's message on the open item, with a file, leaves it read for them and unread for its starter.
@@ -256,6 +261,8 @@ it.layer(getTestDB())("the inbox store", (it) => {
               const sql = yield* SqlClient.SqlClient;
               const rows = yield* Effect.all({
                 items: sql.unsafe(statements.items.sql, [...statements.items.params]),
+                messages: sql.unsafe(statements.messages.sql, [...statements.messages.params]),
+                files: sql.unsafe(statements.files.sql, [...statements.files.params]),
               });
               return inboxOfLiveRows(
                 yield* Schema.decodeUnknownEffect(scopeInboxLiveRowsSchema)(rows),
@@ -274,6 +281,10 @@ it.layer(getTestDB())("the inbox store", (it) => {
         assert.deepEqual(
           openOf(read)?.messages?.map((message) => [message.text, message.files?.length]),
           [["Here is the trace.", 1]],
+        );
+        assert.deepEqual(
+          read.find((item) => item.id === posted.success.id)?.answerFiles?.map((file) => file.name),
+          ["first.txt", "second.txt"],
         );
         assert.deepEqual(read.map((item) => item.status).toSorted(), [
           INBOX_STATUS.ANSWERED,

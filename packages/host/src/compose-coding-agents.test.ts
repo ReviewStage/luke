@@ -1239,7 +1239,7 @@ it.effect(
 
 const SEALED_SCOPE: ScopeInboxLiveAnswer = {
   url: "wss://realtime.example/v1",
-  queries: { items: sealed("items") },
+  queries: { items: sealed("items"), messages: sealed("messages"), files: sealed("files") },
 };
 
 /** That item as its row delivers it, what it leaves out held as null. */
@@ -1251,11 +1251,9 @@ const ITEM_ROW = {
   startedBy: "user-dana",
   startedByName: null,
   answer: null,
-  answerFiles: [],
   answeredBy: null,
   answeredByName: null,
   closedReason: null,
-  messages: [],
   settledAt: null,
 };
 
@@ -1270,6 +1268,8 @@ it.effect(
       );
       yield* settled;
       assert.deepEqual(realtime.opened, [SEALED_SCOPE.url]);
+      realtime.deliver("messages", []);
+      realtime.deliver("files", []);
       realtime.deliver("items", [ITEM_ROW]);
       yield* settled;
       const answered = yield* Fiber.join(first);
@@ -1339,6 +1339,8 @@ it.effect(
         );
       const broken = yield* read();
       yield* settled;
+      realtime.deliver("messages", []);
+      realtime.deliver("files", []);
       realtime.deliver("items", [{ id: "not an item" }]);
       yield* settled;
       assert.deepEqual(yield* Fiber.join(broken), {
@@ -1347,6 +1349,8 @@ it.effect(
 
       const again = yield* read();
       yield* settled;
+      realtime.deliver("messages", []);
+      realtime.deliver("files", []);
       realtime.deliver("items", [ITEM_ROW]);
       yield* settled;
       const answered = yield* Fiber.join(again);
