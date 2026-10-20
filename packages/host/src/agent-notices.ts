@@ -33,6 +33,9 @@ import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "
 import type { AppInboxSlice, AppInboxWaitingItem } from "./app-state.js";
 import type { ChatShown } from "./contract/agents.js";
 
+/** A look at the account inbox that heard no answer for the account still signed in. */
+const UNANSWERED_LOOK = "unanswered";
+
 /**
  * agent-notices.ts -- tells the developer when a coding agent's turn ends or an inbox item lands: the ledger of where each agent stands, the poll that keeps it current while no tab does, the held read of what waits across the account, and the notification, toast, and badge they announce by.
  *
@@ -985,27 +988,29 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         publishWaiting({ items: [], plans: [] }, []);
         if (reader === undefined) return Effect.void;
         let cursor = INBOX_CURSOR_START;
+        // A read left unanswered, or answered for an account that has since left, is no answer: it is asked again on the watch's clock.
         const look = Effect.gen(function* () {
           const answer = yield* dependencies.readAccountInbox(cursor);
           if (dependencies.signedInAs() !== reader || "failure" in answer) {
-            return yield* Effect.sleep(interval);
+            return yield* Effect.fail(UNANSWERED_LOOK);
           }
           cursor = answer.cursor;
           observeWaiting(answer);
         });
         // A look that died is reported and asked again on the watch's clock, as a tick of the watch is.
-        return Effect.forever(
-          Effect.catchDefect(look, (defect) =>
-            Effect.andThen(
-              Effect.sync(() =>
-                report(
-                  `the inbox read failed: ${defect instanceof Error ? defect.message : String(defect)}`,
-                ),
+        const reported = Effect.catchDefect(look, (defect) =>
+          Effect.andThen(
+            Effect.sync(() =>
+              report(
+                `the inbox read failed: ${defect instanceof Error ? defect.message : String(defect)}`,
               ),
-              Effect.sleep(interval),
             ),
+            Effect.fail(UNANSWERED_LOOK),
           ),
         );
+        // An answered read is followed at once by the next, held from its cursor.
+        // The schedule never runs out, so no failure is left once it is retried.
+        return Effect.forever(Effect.ignore(Effect.retry(reported, Schedule.spaced(interval))));
       });
 
     /** One agent as an answer carried it, against where the ledger last had it. */
