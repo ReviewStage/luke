@@ -6,6 +6,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig, type PluginOption } from "vite";
 import { bundleBudget } from "./scripts/bundle-budget";
 import { panelBuild } from "./scripts/panel-build";
+import { releaseMeta } from "./scripts/release-meta";
 
 const resolveEntry = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
@@ -83,6 +84,8 @@ export default defineConfig(({ isSsrBuild }) => {
       react(),
       tailwindcss(),
       ...panelBuild(),
+      // The app's page names the commit it was built from, which a tab open across a release reads.
+      releaseMeta(process.env.VERCEL_GIT_COMMIT_SHA ?? ""),
       bundleBudget({
         budgetFile: resolveEntry("./bundle-budget.json"),
         entry: resolveEntry("./app.html"),

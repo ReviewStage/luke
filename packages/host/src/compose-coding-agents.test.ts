@@ -56,12 +56,12 @@ import {
 } from "@luke/gateway";
 import type { WireRecord, WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Duration, Effect, ErrorReporter, Layer, Option, Schema } from "effect";
+import { Duration, Effect, ErrorReporter, Layer, Option, Queue, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, vi } from "vitest";
 import { type LiveClient, openRealtimeClient } from "./account-inbox-follow.js";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
-import { reporterLayer } from "./effect/seams.js";
+import { PageReturns, reporterLayer } from "./effect/seams.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -539,6 +539,8 @@ function subject(
     sendsNetwork?: boolean;
     /** Whether the account inbox is followed over Realtime's own client, through the socket the test stubs, in place of the scripted one. */
     ownRealtime?: boolean;
+    /** Each time the page came back, as the shell says it. */
+    returns?: Stream.Stream<void>;
   } = {},
 ) {
   return Effect.gen(function* () {
@@ -556,7 +558,10 @@ function subject(
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
       openLive: options.ownRealtime === true ? openRealtimeClient : realtime.open,
-    }).pipe(Effect.provide(noNetwork));
+    }).pipe(
+      Effect.provide(noNetwork),
+      Effect.provideService(PageReturns, options.returns ?? Stream.never),
+    );
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
@@ -686,6 +691,9 @@ function fakeRealtime() {
       assert.ok(listener, `no subscription to ${part}`);
       listener({ status: "live", data });
     },
+    /** The part's socket gone, as Realtime says while it reconnects: still holding its rows, no longer live. */
+    drop: (part: string) =>
+      listeners.get(`capability-${part}`)?.({ status: "connecting", data: [] }),
     fail: (part: string) => listeners.get(`capability-${part}`)?.({ status: "error", data: [] }),
     subscribed: () => [...listeners.keys()].toSorted(),
   };
@@ -1511,5 +1519,143 @@ it.effect(
       yield* live.reset;
       yield* settled;
       assert.deepEqual(live.realtime.closed, [SEALED.url, SEALED.url]);
+    }),
+);
+
+/** Every part of the account inbox, as the service seals them. */
+const PARTS = [
+  "items",
+  "planless",
+  "plans",
+  "automations",
+  "failedRuns",
+  "chatAsks",
+  "chatNotices",
+] as const;
+
+/** A follow under a page that says when it came back, and the way to say it. */
+function returning() {
+  return Effect.gen(function* () {
+    const returns = yield* Queue.unbounded<void>();
+    const followed = yield* subject({ returns: Stream.fromQueue(returns) });
+    followed.seal(SEALED);
+    yield* followed.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+    yield* settled;
+    for (const part of PARTS) followed.realtime.deliver(part, []);
+    yield* settled;
+    return { ...followed, returned: Queue.offer(returns, undefined) };
+  });
+}
+
+it.effect(
+  "a page that comes back while a part's socket is reconnecting starts the follow again at once, without waiting out Realtime's backoff",
+  () =>
+    Effect.gen(function* () {
+      const { realtime, returned } = yield* returning();
+      realtime.drop("items");
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url]);
+
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.closed, [SEALED.url]);
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+    }),
+);
+
+it.effect("a page that comes back while every part is live leaves the follow standing", () =>
+  Effect.gen(function* () {
+    const { realtime, returned } = yield* returning();
+    yield* returned;
+    yield* settled;
+    assert.deepEqual(realtime.opened, [SEALED.url]);
+    assert.deepEqual(realtime.closed, []);
+  }),
+);
+
+it.effect(
+  "a page that comes back while a stopped subscription waits to start again starts it at once",
+  () =>
+    Effect.gen(function* () {
+      const { realtime, returned } = yield* returning();
+      realtime.fail("items");
+      yield* settled;
+      assert.deepEqual(realtime.closed, [SEALED.url]);
+
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+    }),
+);
+
+it.effect(
+  "returns back to back, as a restore from the back-forward cache says them, start a dropped follow again only once",
+  () =>
+    Effect.gen(function* () {
+      const { realtime, returned } = yield* returning();
+      realtime.drop("items");
+      yield* settled;
+
+      yield* returned;
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+
+      // The second subscription is still connecting, and a later return leaves it to connect.
+      yield* TestClock.adjust("2 seconds");
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+    }),
+);
+
+it.effect("a return while the follow is still connecting leaves the connect alone", () =>
+  Effect.gen(function* () {
+    const returns = yield* Queue.unbounded<void>();
+    const { call, seal, realtime } = yield* subject({ returns: Stream.fromQueue(returns) });
+    seal(SEALED);
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+    yield* settled;
+
+    yield* Queue.offer(returns, undefined);
+    yield* settled;
+    assert.deepEqual(realtime.opened, [SEALED.url]);
+    assert.deepEqual(realtime.closed, []);
+  }),
+);
+
+it.effect(
+  "a return that found the follow live holds no later return back: one that drops and is returned to under a second later starts again",
+  () =>
+    Effect.gen(function* () {
+      const { realtime, returned } = yield* returning();
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url]);
+
+      yield* TestClock.adjust("200 millis");
+      realtime.drop("items");
+      yield* TestClock.adjust("500 millis");
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+    }),
+);
+
+it.effect(
+  "a connect that has not gone live five seconds on, as one begun offline, is started again by a return such as coming back online",
+  () =>
+    Effect.gen(function* () {
+      const returns = yield* Queue.unbounded<void>();
+      const { call, seal, realtime } = yield* subject({ returns: Stream.fromQueue(returns) });
+      seal(SEALED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+
+      yield* TestClock.adjust("5 seconds");
+      yield* Queue.offer(returns, undefined);
+      yield* settled;
+      assert.deepEqual(realtime.closed, [SEALED.url]);
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
     }),
 );

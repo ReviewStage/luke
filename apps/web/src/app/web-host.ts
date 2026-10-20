@@ -60,6 +60,7 @@ import {
   hostKernelLayer,
   hostStandingLayer,
   IdSource,
+  PageReturns,
   RunMode,
   reporterLayer,
   ServiceOrigin,
@@ -70,6 +71,7 @@ import {
 } from "@luke/host/effect";
 import { effectServiceLayer } from "@luke/host/service-layer";
 import type { AppPlatform } from "@luke/panel/app-platform";
+import { showToast, TOAST_TONE, withdrawToast } from "@luke/panel/toast";
 import { HOST_CAPABILITY, SETTING_SIDE_EFFECT } from "@luke/settings";
 import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
 import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
@@ -79,6 +81,7 @@ import packageJson from "../../package.json";
 import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
 import { FILES_KEY, localStorageFileSystem } from "./local-storage-file-system";
 import { type PageLeave, tabLeave } from "./page-leave";
+import { backOnline, followRelease, pageShownAgain } from "./stale-release";
 import {
   notificationsOffered,
   notificationsStatusNow,
@@ -100,6 +103,12 @@ const CONTACT_MAILTO = "mailto:founders@stagereview.app";
 
 /** The path feedback is posted to on the tab's own origin, which takes no credential (`server/feedback.mjs`). */
 const FEEDBACK_PATH = "/api/feedback";
+
+/** What the tab offers while a page holds unsaved work and a newer release is served, and the one press that takes it. */
+const NEW_RELEASE_WORDS = "A new version of Luke is ready";
+const NEW_RELEASE_RELOAD = "Reload";
+/** What the offer is about, so a newer release's offer takes the older one's place. */
+const NEW_RELEASE_SUBJECT = "new-release";
 
 /** The page every act is from: a tab holds one panel and nothing else. */
 type WebSender = Window;
@@ -124,6 +133,8 @@ export interface WebHostOptions {
   readonly run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   /** The platform the tab runs on, which is offered the Mac app only where it is a Mac; the browser's own word where none is given. */
   readonly linkPlatform?: LinkPlatform;
+  /** The commit this build is from, which a tab open across a release is reloaded off (`stale-release.ts`); empty or none where the build names none. */
+  readonly release?: string;
 }
 
 /** The web host as built, with the operator its launch starts beside it. */
@@ -190,8 +201,39 @@ function seamLayers() {
     Layer.succeed(ServiceOrigin, location.origin),
     Layer.succeed(VoiceSocket, refusedVoiceSocket),
     Layer.succeed(SettingsChangedElsewhere, filesChangedElsewhere()),
+    // A phone drops the tab's sockets in the background, so its live follows start again as it returns.
+    Layer.succeed(PageReturns, Stream.merge(pageShownAgain(), backOnline())),
   );
 }
+
+/**
+ * Reloads a tab left open across a release as it comes back to the front,
+ * or, while a page holds unsaved work, offers the reload as a toast that
+ * stands until it is pressed or dismissed; the press still asks before a
+ * page's work is lost. It runs for as long as the host stands.
+ */
+const reloadOnNewRelease = (tab: PageLeave, release: string) => {
+  const reload = () => tab.leave(() => location.reload());
+  return Effect.forkScoped(
+    followRelease({
+      release,
+      origin: location.origin,
+      returns: pageShownAgain(),
+      unsavedWork: tab.holdsUnsavedWork,
+      reload,
+      offerReload: () => {
+        withdrawToast(NEW_RELEASE_SUBJECT);
+        showToast({
+          words: NEW_RELEASE_WORDS,
+          tone: TOAST_TONE.ASK,
+          subject: NEW_RELEASE_SUBJECT,
+          action: { label: NEW_RELEASE_RELOAD, onPress: reload },
+          persists: true,
+        });
+      },
+    }),
+  );
+};
 
 /**
  * Where an agent's end, an inbox item, a failed run, or a chat message is
@@ -376,6 +418,7 @@ const composedWeb = (
   run: WebHostOptions["run"],
   tab: PageLeave,
   linkPlatform: LinkPlatform | undefined,
+  release: string,
 ) =>
   Layer.effect(
     ComposedWebTag,
@@ -418,6 +461,7 @@ const composedWeb = (
       // No voice window and no talk key stand beside the panel.
       operator.link({ sendToVoice: () => undefined, reapplyTalkHotkey: () => undefined });
       yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
+      yield* reloadOnNewRelease(tab, release);
 
       // The notices' toasts reach the panel through the bridge, which is built
       // after the notices, so they find it late.
@@ -475,7 +519,7 @@ const composedWeb = (
 export function composeWeb(
   options: WebHostOptions,
 ): Layer.Layer<WebHostTag | HostTag, DuplicateGatewayMethod> {
-  const { httpClient, run, linkPlatform } = options;
+  const { httpClient, run, linkPlatform, release = "" } = options;
   // The tab's one way out past the panel's leave guard, which the sign-in, a connect, and the platform share.
   const tab = tabLeave();
   const assembly = Layer.provide(
@@ -502,7 +546,7 @@ export function composeWeb(
     ),
   );
   return launched.pipe(
-    Layer.provideMerge(composedWeb(run, tab, linkPlatform)),
+    Layer.provideMerge(composedWeb(run, tab, linkPlatform, release)),
     Layer.provideMerge(assembly),
     Layer.provide(httpClient),
   );

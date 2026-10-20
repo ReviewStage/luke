@@ -79,8 +79,9 @@ export async function mountWebApp(
   const loadedAt = location.href;
   const loadedFresh = browserLoadedFresh();
   const linkPlatform = options.linkPlatform ?? browserLinkPlatform();
+  const build = options.sentry ?? webSentryBuild();
   // Never awaited: the SDK is a chunk of its own, and what is reported before it lands waits for it.
-  const sentry = startWebSentry(options.sentry ?? webSentryBuild());
+  const sentry = startWebSentry(build);
   const httpClient = options.httpClient ?? FetchHttpClient.layer;
   // Note that an act runs only once the host stands, by which time the runtime is set.
   let runtime: ManagedRuntime.ManagedRuntime<WebHostTag | HostTag, DuplicateGatewayMethod>;
@@ -89,7 +90,11 @@ export async function mountWebApp(
     runtime.runPromise(Effect.withErrorReporting(effect, { defectsOnly: true }));
   // Sentry's reporter stands beneath the host, so every fiber it forks and every act reports through it.
   runtime = ManagedRuntime.make(
-    Layer.provideMerge(composeWeb({ httpClient, run, linkPlatform }), sentry.errorReporting),
+    Layer.provideMerge(
+      // The release Sentry files reports under is the build's commit, which a tab left open across a release is reloaded off.
+      composeWeb({ httpClient, run, linkPlatform, release: build.release }),
+      sentry.errorReporting,
+    ),
   );
   // What the tab installed, taken down again in the reverse order as it closes.
   const installed: (() => void)[] = [];
