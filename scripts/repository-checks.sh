@@ -508,7 +508,11 @@ node --input-type=module -e '
 # no such name, has tests nothing runs, and CI stays green over them; one that
 # loses its config and stays on the list fails the run outright. All three are
 # the same drift. A suite cut into shards must declare every shard, or the
-# files hashed to the missing one never run.
+# files hashed to the missing one never run. CI's job for the whole task may
+# leave a workspace out with `--filter=!<name>` only where another job in
+# `ci.yml` runs that task for it alone with `--filter=<name>`, and no job may
+# run one the whole task's job still runs, so each workspace's tests run in
+# exactly one job.
 node --input-type=module -e '
   import { glob, readFile } from "node:fs/promises";
   import path from "node:path";
@@ -525,19 +529,33 @@ node --input-type=module -e '
   const missing = configured.filter((one) => !listed.includes(one)).sort();
   const stale = listed.filter((one) => !configured.includes(one)).sort();
   const untasked = [];
+  const wholeNames = [];
   for (const one of configured.sort()) {
     const scripts = JSON.parse(await readFile(path.join(root, one, "package.json"), "utf8")).scripts ?? {};
     const named = Object.keys(scripts).filter((script) => script.startsWith(WHOLE));
     const whole = named.length === 1 && named[0] === WHOLE;
     const sharded = named.length === SHARDS.length && SHARDS.every((shard) => named.includes(shard));
     if (!whole && !sharded) untasked.push(one);
+    if (whole) wholeNames.push(JSON.parse(await readFile(path.join(root, one, "package.json"), "utf8")).name);
   }
-  if (missing.length > 0 || stale.length > 0 || untasked.length > 0) {
+  const workflow = await readFile(path.join(root, ".github/workflows/ci.yml"), "utf8");
+  const excluded = [];
+  const alone = [];
+  for (const [, filters] of workflow.matchAll(new RegExp(WHOLE + "((?:[ \\t]+--filter=\\S+)+)", "gu"))) {
+    for (const [, negated, name] of filters.matchAll(/--filter=(!?)(\S+)/gu)) (negated ? excluded : alone).push(name);
+  }
+  const unrun = excluded.filter((name) => !alone.includes(name));
+  const doubled = alone.filter((name) => !excluded.includes(name));
+  const unknown = [...new Set([...excluded, ...alone])].filter((name) => !wholeNames.includes(name));
+  if (missing.length > 0 || stale.length > 0 || untasked.length > 0 || unrun.length > 0 || doubled.length > 0 || unknown.length > 0) {
     process.stderr.write(
       `error: the root vitest.config.ts projects list, the workspaces holding a vitest.config.ts, and their turbo test tasks have drifted apart:\n${[
         ...missing.map((one) => `  ${one} has a vitest.config.ts and the list never names it, so nothing runs its tests`),
         ...stale.map((one) => `  ${one} is on the list and holds no vitest.config.ts`),
         ...untasked.map((one) => `  ${one} runs its tests under neither "${WHOLE}" alone nor all of ${SHARDS.map((shard) => `"${shard}"`).join(", ")}, so the checks and CI never run them`),
+        ...unrun.map((name) => `  .github/workflows/ci.yml leaves ${name} out of the "${WHOLE}" job and no job runs "${WHOLE} --filter=${name}", so CI never runs its tests`),
+        ...doubled.map((name) => `  .github/workflows/ci.yml runs "${WHOLE} --filter=${name}" in a job of its own and never leaves ${name} out of the "${WHOLE}" job, so CI runs its tests twice`),
+        ...unknown.map((name) => `  .github/workflows/ci.yml filters "${WHOLE}" by ${name}, which names no workspace running its tests under "${WHOLE}" alone`),
       ].join("\n")}\n`,
     );
     process.exit(1);

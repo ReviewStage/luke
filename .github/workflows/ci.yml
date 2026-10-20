@@ -41,12 +41,15 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  # The four jobs keep the names the ruleset requires. @luke/service's suite
-  # is the largest, so it is cut into three vitest shards, one per job, and
-  # the fourth job runs every other workspace's tests, one
-  # workspace at a time (`scripts/check.mjs` says why). Every workspace with
-  # tests runs under one of these names or `scripts/repository-checks.sh`
-  # fails, so no test file can fall outside all four jobs.
+  # The four jobs keep the names the ruleset requires. @luke/service's and
+  # @luke/panel's suites are the largest, so each is cut into three vitest
+  # shards, one per job, and the fourth job runs every other workspace's
+  # tests, one workspace at a time (`scripts/check.mjs` says why), bar the
+  # ones it leaves out with `--filter=!`, which `database-tests` below runs on
+  # a runner of its own so the fourth job is not the run's longest. Every
+  # workspace with tests runs under exactly one of these jobs or
+  # `scripts/repository-checks.sh` fails, so no test file can fall outside
+  # every job.
   tests:
     name: Tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
@@ -62,11 +65,25 @@ jobs:
           - shard: 3
             task: test:vitest:3
           - shard: 4
-            task: test:vitest
+            task: test:vitest --filter=!@luke/database
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
       - run: node scripts/turbo.mjs run ${{ matrix.task }} --concurrency=1
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+  # @luke/database's suite, the longest after @luke/web's, on a runner of its
+  # own beside the fourth job rather than after it in that job.
+  database-tests:
+    name: Tests (database)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+      - run: node scripts/turbo.mjs run test:vitest --filter=@luke/database
         env:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
