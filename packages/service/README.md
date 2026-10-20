@@ -382,7 +382,8 @@ policy keeps an SVG's script from running as this origin.
 
 ## The dictation group
 
-`src/dictation/dictation-app.ts` answers `POST /api/dictation`: one clip the
+`src/dictation/dictation-procedures.ts` answers `POST /api/dictation` on the
+hosted oRPC router (`src/orpc/`): one clip the
 developer dictated into a message box, `{ audio, durationMs, keywords }`
 (`@luke/features/dictation-wire`), answered `{ text }`. The clip is WebM
 with Opus in base64, held to two minutes and a megabyte and refused past
@@ -397,7 +398,7 @@ event; a failure logs OpenAI's status alone and answers `unavailable`, as a
 deployment without `OPENAI_API_KEY` does. The day is metered one call and the
 seconds OpenAI billed, or the clip's own length where the answer reports none,
 and a meter the database refused is logged while the text is still answered.
-There is no path on an account's own key. `src/dictation/dictation-app.test.ts`
+There is no path on an account's own key. `src/dictation/dictation-procedures.test.ts`
 answers the route over a scripted OpenAI at its HTTP door.
 
 ## The models group
@@ -1772,7 +1773,8 @@ its membership of the task's workspace, so a teammate's task reads and
 writes as the account's own, and a task of a workspace the account is not in
 answers exactly as none does.
 
-`src/github/repository-pins-app.ts` answers `/api/repository-pins`, the
+`src/github/repository-pins-procedures.ts` answers `/api/repository-pins` on
+the hosted oRPC router, the
 repositories the account pinned in the sidebar, whose groups of tasks stand
 above the rest: `GET` reads them newest pinned first, and `PUT` pins or
 unpins one and answers them all as they then stand. A pin is a row of
