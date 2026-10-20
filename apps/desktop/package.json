@@ -31,7 +31,7 @@
     "release": "LUKE_ELECTRON_BUILDER_NOTARIZE=1 pnpm package",
     "start": "pnpm build:native && pnpm build && electron .",
     "test:vitest": "vitest run",
-    "typecheck": "tsc --project tsconfig.json"
+    "typecheck": "NODE_OPTIONS=--max-old-space-size=4096 tsc --project tsconfig.json"
   },
   "devDependencies": {
     "@effect/atom-react": "catalog:",

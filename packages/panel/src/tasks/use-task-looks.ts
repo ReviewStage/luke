@@ -7,7 +7,7 @@ import {
 } from "@luke/features/task-wire";
 import { Option, Schema, SchemaTransformation } from "effect";
 import { Atom } from "effect/reactivity";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /**
  * use-task-looks.ts -- what changed since the developer last looked at a task on this Mac: the open plan's sections, and the sidebar's unread tasks.
@@ -324,16 +324,16 @@ export function useTaskLooks(task: Task | undefined, readerId: string | undefine
     return () => watch(undefined);
   }, [taskId, watch]);
 
-  return {
-    changed: current.changed,
-    dismiss: () => {
-      setVisit((held) =>
-        held.taskId === taskId ? { ...held, mark: held.opened, changed: NOTHING_CHANGED } : held,
-      );
-      if (taskId !== undefined && newest !== undefined)
-        keep({ change: raised({ [taskId]: newest }, false), seeded: false });
-    },
-  };
+  const dismiss = useCallback(() => {
+    setVisit((held) =>
+      held.taskId === taskId ? { ...held, mark: held.opened, changed: NOTHING_CHANGED } : held,
+    );
+    if (taskId !== undefined && newest !== undefined)
+      keep({ change: raised({ [taskId]: newest }, false), seeded: false });
+  }, [taskId, newest, keep]);
+  // The same looks across draws while neither moves, so the plan they are handed to is not drawn again for new ones.
+  const { changed } = current;
+  return useMemo(() => ({ changed, dismiss }), [changed, dismiss]);
 }
 
 /**

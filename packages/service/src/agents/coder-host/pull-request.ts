@@ -6,6 +6,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, type Redacted, Result, Schema } from "effect";
@@ -40,7 +41,10 @@ import { agentPublished } from "./published.js";
  * every repository they and the App reach. So the most a teammate can do
  * through the agent as the developer is open a pull request on its one
  * repository. An agent that writes as the App has its pull request opened
- * on the App's token for that repository, as every push already goes.
+ * on the App's token for that repository, as every push already goes. An
+ * agent on its starter's own GitHub token, which no installation reaches
+ * the repository for, has it opened on that token alone, as them, and a
+ * refusal of the token opens nothing.
  *
  * Where GitHub refuses the developer's token, or their sign-in no longer
  * yields one, the pull request is opened as the App instead and the agent's
@@ -122,6 +126,8 @@ const PULL_REQUEST_REFUSAL = {
   UNAVAILABLE: "Not opened: GitHub could not be reached. The call may be made again.",
   RATE_LIMITED:
     "Not opened: GitHub is limiting how fast requests may come. Make the call again in a minute.",
+  TOKEN_REFUSED:
+    "Not opened: GitHub refused the developer's own GitHub token on this repository. Tell them.",
 } as const;
 
 /** The headers GitHub marks a rate limit with, which it may answer 403 rather than 429. */
@@ -337,10 +343,12 @@ function answerOf(ended: Settled, openedAs: OpenedAs, note?: string): PullReques
 }
 
 /**
- * One call's opening: the pull request opened as the developer where the
- * agent writes as them and GitHub takes their token, and as the App
- * otherwise, the App's opening in the developer's place recorded on the
- * agent's row with why; or GitHub's reason it opened none.
+ * One call's opening: the pull request opened on the developer's own token
+ * where that is the agent's credential, with nothing in its place; as the
+ * developer where the agent writes as them and GitHub takes their sign-in's
+ * token, and as the App otherwise, the App's opening in the developer's
+ * place recorded on the agent's row with why; or GitHub's reason it opened
+ * none.
  */
 const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening")(function* (
   target: ConversationTarget,
@@ -351,13 +359,20 @@ const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening"
   if (Result.isFailure(read)) return pullRequestRejected(PULL_REQUEST_REFUSAL.UNREADABLE);
   const minted = yield* Effect.result(agentRepositoryToken(target, agent));
   if (Result.isFailure(minted)) return pullRequestRejected(`Not opened: ${minted.failure.reason}`);
-  const { token: appToken, fullName, defaultBranch } = minted.success;
+  const { token, fullName, defaultBranch, access } = minted.success;
   const pullRequest = pullRequestOf(read.success, defaultBranch);
+  // Note that an agent on its starter's own token opens on it alone, since no installation reaches the repository.
+  if (access.kind === GITHUB_ACCESS.TOKEN) {
+    const asMember = yield* attempt(token, fullName, pullRequest);
+    return asMember.kind === ATTEMPT.TOKEN_REFUSED
+      ? pullRequestRejected(PULL_REQUEST_REFUSAL.TOKEN_REFUSED)
+      : answerOf(asMember, OPENED_AS.DEVELOPER);
+  }
   const asDeveloper = yield* attemptAsDeveloper(target, agent, fullName, pullRequest);
   if (asDeveloper !== undefined && asDeveloper.kind !== ATTEMPT.TOKEN_REFUSED) {
     return answerOf(asDeveloper, OPENED_AS.DEVELOPER);
   }
-  const asApp = yield* attempt(appToken, fullName, pullRequest);
+  const asApp = yield* attempt(token, fullName, pullRequest);
   if (asApp.kind === ATTEMPT.TOKEN_REFUSED) {
     return pullRequestRejected(PULL_REQUEST_REFUSAL.UNAVAILABLE);
   }

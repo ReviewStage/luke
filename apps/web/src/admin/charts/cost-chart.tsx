@@ -22,7 +22,7 @@ import {
 import { partialDayKey, seriesHasNoData } from "@luke/ui/daily-series";
 import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { barTopRadius } from "./bar-radius";
-import { ChartEmpty, ChartFrame } from "./chart-frame";
+import { ChartEmpty, ChartFrame, LEGEND, LEGEND_ENTRY } from "./chart-frame";
 
 /** Each source's name and its series colour, in the order the bars stack them from the axis up. */
 const COST_CHART = {
@@ -46,9 +46,9 @@ const SWATCH = {
 
 function CostLegend(): React.JSX.Element {
   return (
-    <span className="flex flex-wrap gap-x-4 gap-y-1">
+    <span className={LEGEND}>
       {SOURCES.map((source) => (
-        <span key={source} className="inline-flex items-center gap-1.5">
+        <span key={source} className={LEGEND_ENTRY}>
           <span
             className={`inline-block size-2.5 rounded-sm ${SWATCH[source]}`}
             aria-hidden="true"

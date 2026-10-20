@@ -144,6 +144,11 @@ function HoverCards(): React.JSX.Element {
                 <HoverCardNote oneLine>
                   Reading packages/service/src/maintenance/maintenance-sweep.ts and its tests
                 </HoverCardNote>
+                <HoverCardRow
+                  look={HOVER_CARD_ROW_LOOK.DETAIL}
+                  glyph={<FolderIcon />}
+                  label="an-organisation-with-a-long-name/a-repository-named-at-length"
+                />
               </HoverCard>
             }
           />

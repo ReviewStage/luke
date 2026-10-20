@@ -1,0 +1,4 @@
+{
+  "placeholder": true,
+  "note": "Not recorded yet. The developer's one live run of `pnpm probe:claude-code` (P00, Gate A) writes the sanitized report here: pins, query options, the image's findings, the session's files, and every condition of both checks."
+}

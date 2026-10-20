@@ -101,7 +101,9 @@ past its bound (`packages/database/src/models/abandoned-turns.ts`'s
 `TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
 agent's turn, whose one turn is its whole run), and ends on Luke's key every
 voice session whose device detached and did not come back within the grace. It
-reads no account's words and runs no model.
+also starts due automation runs, and for coding agents on a member's GitHub
+token it reads their open pull requests' reviews, comments, and checks on that
+token and wakes the agent with them, as the webhook does for the App.
 
 ## Testing
 
@@ -243,7 +245,8 @@ the AI SDK's async middleware, and `packages/service/src/agents/brain-host/door.
 foreign boundaries the effects around them compose over rather than
 replace, `apps/web/server/db/migrate.ts` (the migration command, through
 `NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape
-probe, same terms), and `tools/trace-export/src/cli.ts` (the trace command).
+probe, same terms), `tools/claude-code-probe/src/cli.ts` (the Claude Code
+sandbox probe, same terms), and `tools/trace-export/src/cli.ts` (the trace command).
 `Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, their
 `runPromiseExit`/`runSyncExit`/`runCallback` siblings, and the `…With` form of
 any of them — which is where a `Runtime<R>` went, v4 having removed the type —

@@ -21,7 +21,6 @@ import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
   ANSWER_TONE,
-  answeredWords,
   attachedStamp,
   CODE_READ,
   codeNotice,
@@ -61,6 +60,7 @@ import {
   SETTLED_BY,
   sentStamp,
   settlementOf,
+  shownTicks,
   taskHolder,
   tasklessGroups,
   withChoice,
@@ -1321,7 +1321,7 @@ test("an item is drawn as its thread where the thread asks, or where the agent's
   assert.equal(inboxThreadOf(item({ id: QUEUE.id })), undefined);
 });
 
-test("a reply on a thread is plain unless an answer is attached: a pick, a press, or Submit; an attached answer the ask would refuse sends nothing, as Answer with no words or Mark done with a step unticked", () => {
+test("a reply on a thread is plain unless an answer is attached: a pick, a press, or Submit; an attached answer the ask would refuse sends nothing, as Answer with no words", () => {
   const pick: InboxAsk = { type: INBOX_ASK.DECIDE, options: [{ label: "A" }, { label: "B" }] };
   const decide = [asking(pick)];
   const draft: InboxDraft = { ...EMPTY_INBOX_DRAFT, note: "  Why not C?  " };
@@ -1345,15 +1345,19 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
     reply: INBOX_REPLY.ANSWERED,
   });
 
-  const steps = [asking({ type: INBOX_ASK.DO, steps: ["One", "Two"] })];
+  const toDo = { type: INBOX_ASK.DO, steps: ["One", "Two"] } as const;
+  const steps = [asking(toDo)];
   const done: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.DONE, steps: [1] };
-  assert.equal(inboxThreadSend(steps, done), undefined);
   assert.deepEqual(inboxThreadSend(steps, { ...done, press: INBOX_REPLY.NOT_DONE })?.answers, {
     ask: ASKING_ID,
     reply: INBOX_REPLY.NOT_DONE,
     steps: [1],
   });
-  assert.deepEqual(inboxThreadSend(steps, withStep(done, 0))?.answers?.steps, [0, 1]);
+  assert.deepEqual(
+    inboxThreadSend(steps, withStep(toDo, { ...done, press: INBOX_REPLY.NOT_DONE }, 0))?.answers
+      ?.steps,
+    [0, 1],
+  );
 
   const settled: InboxMessage = {
     ...asking(pick),
@@ -1364,6 +1368,36 @@ test("a reply on a thread is plain unless an answer is attached: a pick, a press
     { text: "x", attachments: [] },
     "a pick on a settled ask is no answer",
   );
+});
+
+test("Mark done ticks every step of a to-do, ticked by hand or not, while Couldn't do it still sends only those ticked by hand", () => {
+  const ask = { type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] } as const;
+  const steps = [asking(ask)];
+  const done: InboxDraft = { ...EMPTY_INBOX_DRAFT, press: INBOX_REPLY.DONE };
+  assert.deepEqual(shownTicks(ask, done), [0, 1, 2], "the checklist shows every step ticked");
+  assert.deepEqual(inboxThreadSend(steps, done)?.answers, {
+    ask: ASKING_ID,
+    reply: INBOX_REPLY.DONE,
+    steps: [0, 1, 2],
+  });
+  const byHand: InboxDraft = { ...withStep(ask, EMPTY_INBOX_DRAFT, 1), press: INBOX_REPLY.DONE };
+  assert.deepEqual(inboxThreadSend(steps, byHand)?.answers?.steps, [0, 1, 2]);
+
+  const failed: InboxDraft = { ...byHand, press: INBOX_REPLY.NOT_DONE };
+  assert.deepEqual(shownTicks(ask, failed), [1]);
+  assert.deepEqual(
+    inboxThreadSend(steps, failed)?.answers?.steps,
+    [1],
+    "Couldn't do it after Mark done sends only the step ticked by hand",
+  );
+
+  const letGo = withStep(ask, done, 2);
+  assert.equal(letGo.press, undefined, "letting a step go takes Mark done off");
+  assert.deepEqual(shownTicks(ask, letGo), [0, 1]);
+
+  const titled = { type: INBOX_ASK.DO, steps: [] } as const;
+  assert.deepEqual(shownTicks(titled, done), [0], "the title standing as the one step is ticked");
+  assert.deepEqual(inboxThreadSend([asking(titled)], done)?.answers?.steps, []);
 });
 
 test("an answer's stamp names a pair of buttons' pick in the past where it can and which way it goes, any other pick by its options, and a to-do by the steps it ticked", () => {
@@ -1388,7 +1422,6 @@ test("an answer's stamp names a pair of buttons' pick in the past where it can a
     tone: ANSWER_TONE.BACK,
     words: "Request changes",
   });
-  assert.equal(answeredWords(chose("Request changes"), pair), "requested changes");
   assert.equal(sentStamp(chose("7 days"), undefined).words, "Chose 7 days");
   assert.equal(attachedStamp(chose("7 days"), undefined).words, 'Choose "7 days"');
 

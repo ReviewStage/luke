@@ -294,6 +294,12 @@
     cursor: default;
   }
 
+  /* A read-only button records a press, so it stands at full strength:
+     the press given, never one faded while it waits. */
+  .luke-button[data-read-only="true"]:disabled {
+    opacity: 1;
+  }
+
   .luke-button[aria-disabled="true"]:not([aria-busy="true"]) {
     --luke-button-fill-faded: color-mix(in srgb, var(--luke-button-fill) 45%, transparent);
     background: var(--luke-button-fill-faded);

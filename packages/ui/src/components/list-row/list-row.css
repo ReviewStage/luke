@@ -142,6 +142,18 @@
     min-width: 0;
   }
 
+  /* A dense row's description is a label beside its title, so it fades as
+     the title does (below) rather than ending in an ellipsis. */
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+  .luke-list-row-description[data-overflow] {
+    text-overflow: clip;
+  }
+
+  :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
+    .luke-list-row-description[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
+  }
+
   :is(.luke-list[data-density="dense"] > .luke-list-row, .luke-list-row[data-density="dense"])
     > .luke-list-row-actions {
     padding-inline-end: var(--luke-space-8);
@@ -243,16 +255,16 @@
     font-weight: var(--luke-weight-medium);
   }
 
-  /* A title that fades rather than ending in an ellipsis (a row whose acts
-     come in on hover) fades out over its last few pixels only while it is
-     measured cut short, so a short one ends on its last letter. The mask
-     fades the words themselves, so it reads alike over every fill the row
-     wears. */
-  .luke-list-row-title[data-end="fade"] {
+  /* A title fades rather than ending in an ellipsis, as a browser's tab
+     does, out over its last few pixels only while it is measured cut short,
+     so a short one ends on its last letter; a row whose acts come in on
+     hover reads the cut sliding as they come and go. The mask fades the
+     words themselves, so it reads alike over every fill the row wears. */
+  .luke-list-row-title[data-overflow] {
     text-overflow: clip;
   }
 
-  .luke-list-row-title[data-end="fade"][data-overflow="true"] {
+  .luke-list-row-title[data-overflow="true"] {
     mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
   }
 
@@ -309,8 +321,12 @@
   .luke-list-row-lead-label {
     min-width: 0;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* The name of what a row belongs to fades where its chip cuts it short. */
+  .luke-list-row-lead-label[data-overflow="true"] {
+    mask-image: linear-gradient(to left, transparent, #000 20px); /* off-scale: a label's fade */
   }
 
   /* The title gives way first; past it, the metadata is cut short rather

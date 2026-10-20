@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from "react";
 import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
+import { useClipped } from "../../use-clipped.js";
 
 /**
  * chip.tsx -- the one chip: a button naming a value or a thing, drawn in the look of the place it stands.
@@ -40,10 +41,11 @@ import { ChevronDownIcon, RemoveIcon } from "../../face/glyphs.js";
  *
  * A chip that opens a menu of values ends in the menu's small, muted
  * chevron where `chevron` asks for one. Its words go in a `ChipName`, which
- * cuts them short rather than letting them push past the row around it, in
- * the code face where they name code (`mono`, a branch), at their end, or in
- * their middle where their end is what tells one from another (`cut`, a
- * branch's last words, as GitHub cuts one). A leading mark, a
+ * cuts them short rather than letting them push past the row around it,
+ * fading out at their end while it does, as a browser's tab does, or, where
+ * their end is what tells one from another, in their middle at an ellipsis
+ * (`cut`, a branch's last words, as GitHub cuts one), in the code face where
+ * they name code (`mono`, a branch). A leading mark, a
  * glyph or a picture, stands at the control's glyph size. It takes no class
  * or style: its outer layout is its container's.
  */
@@ -225,14 +227,22 @@ type ChipNameProps = {
     }
 );
 
-/** A chip's words, cut short rather than pushing past the row it stands in, at their end or in their middle; in the code face where they name code. */
+/**
+ * A chip's words, cut short rather than pushing past the row it stands in:
+ * fading out at their end, or cut in their middle at an ellipsis, which says
+ * a cut stands there where a fade with words after it would not; in the code
+ * face where they name code.
+ */
 export function ChipName(props: ChipNameProps): React.JSX.Element {
+  const [measured, clipped] = useClipped();
   const kept = props.cut === CHIP_CUT.MIDDLE ? keptEnd(props.children) : "";
   return (
     <span
+      ref={measured}
       className="luke-chip-name"
       data-mono={props.mono === true ? "true" : undefined}
       data-cut={kept === "" ? undefined : CHIP_CUT.MIDDLE}
+      data-overflow={String(clipped)}
     >
       {props.cut !== CHIP_CUT.MIDDLE || kept === "" ? (
         props.children

@@ -137,6 +137,8 @@ export const CODING_AGENT_AUTHOR = {
   APP_AUTOMATION: "app-automation",
   /** The App: GitHub could not be read as the agent started, so the developer's reach went unknown. */
   APP_UNREAD: "app-unread",
+  /** The developer who started the agent, through their own GitHub personal access token, where no installation reaches the repository. */
+  TOKEN: "token",
 } as const;
 
 export type CodingAgentAuthor = (typeof CODING_AGENT_AUTHOR)[keyof typeof CODING_AGENT_AUTHOR];

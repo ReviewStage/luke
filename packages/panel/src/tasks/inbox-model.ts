@@ -537,17 +537,36 @@ function tickedSteps(draft: InboxDraft): readonly number[] {
   return [...new Set(draft.steps ?? [])].toSorted((a, b) => a - b);
 }
 
-/** Whether every step the ask shows is ticked, which Mark done waits for. */
-export function everyStepTicked(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): boolean {
-  const ticked = new Set(draft.steps ?? []);
-  return Array.from({ length: shownSteps(ask) }, (_, at) => at).every((at) => ticked.has(at));
+/** Every step a `do` ask shows, by place, in order. */
+function everyStep(ask: Pick<InboxDoAsk, "steps">): readonly number[] {
+  return Array.from({ length: shownSteps(ask) }, (_, at) => at);
 }
 
-/** The draft with the step at `at` ticked, or let go where it was. */
-export function withStep(draft: InboxDraft, at: number): InboxDraft {
-  const ticked = tickedSteps(draft);
-  const steps = ticked.includes(at) ? ticked.filter((each) => each !== at) : [...ticked, at];
-  return { ...draft, steps };
+/**
+ * The steps a `do` ask's card shows ticked: every one while Mark done is
+ * pressed, which ticks them all, or else those the reader ticked by hand,
+ * which the draft keeps apart so Couldn't do it still sends only those.
+ */
+export function shownTicks(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): readonly number[] {
+  return draft.press === INBOX_REPLY.DONE ? everyStep(ask) : tickedSteps(draft);
+}
+
+/**
+ * The draft with the step at `at` ticked, or let go where the card shows
+ * it ticked. Note that letting a step go under Mark done takes the press
+ * off and keeps the others ticked, as the card showed them.
+ */
+export function withStep(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: InboxDraft,
+  at: number,
+): InboxDraft {
+  const ticked = shownTicks(ask, draft);
+  if (!ticked.includes(at)) return { ...draft, steps: [...ticked, at] };
+  const steps = ticked.filter((each) => each !== at);
+  return draft.press === INBOX_REPLY.DONE
+    ? { ...draft, steps, press: undefined }
+    : { ...draft, steps };
 }
 
 /** Whether a form's required fields are filled as the draft holds them, which Submit waits for. */
@@ -558,8 +577,8 @@ export function formFilled(form: Pick<InboxForm, "fields">, draft: InboxDraft): 
 
 /**
  * The answer the draft attaches to the reply for the open ask, or none: a
- * `decide`'s options picked, a `do`'s Mark done or Couldn't do it with the
- * steps ticked, an `answer`'s Submit with its fields' values, or its Answer,
+ * `decide`'s options picked, a `do`'s Mark done with every step ticked or
+ * Couldn't do it with the steps ticked, an `answer`'s Submit with its fields' values, or its Answer,
  * whose words are the reply's own. Note that the title standing as a `do`'s
  * one step is ticked on the card alone, since the ask names no such step.
  */
@@ -575,7 +594,10 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
     case INBOX_ASK.DO: {
       if (draft.press !== INBOX_REPLY.DONE && draft.press !== INBOX_REPLY.NOT_DONE)
         return undefined;
-      const steps = tickedSteps(draft).filter((at) => at < ask.steps.length);
+      const steps =
+        draft.press === INBOX_REPLY.DONE
+          ? everyStep(ask).filter((at) => at < ask.steps.length)
+          : tickedSteps(draft).filter((at) => at < ask.steps.length);
       return { ask: id, reply: draft.press, steps };
     }
     case INBOX_ASK.ANSWER:
@@ -592,6 +614,49 @@ export function attachedAnswers(asking: InboxAsking, draft: InboxDraft): InboxAn
         ? { ask: id, reply: INBOX_REPLY.ANSWERED }
         : undefined;
   }
+}
+
+/**
+ * A settled ask's answer as the draft its controls held when it was sent,
+ * which its box draws them filled in with: a `decide`'s picks, a `do`'s
+ * steps ticked and its press, the title standing as the one step of a
+ * `do` that names none ticked where it was marked done, and an `answer`'s
+ * values. A field or a step the answer left empty stands empty.
+ */
+export function answeredDraft(ask: InboxKnownAsk, answers: InboxAnswers): InboxDraft {
+  const titleStep = ask.type === INBOX_ASK.DO && ask.steps.length === 0;
+  const done = answers.reply === INBOX_REPLY.DONE;
+  return {
+    ...EMPTY_INBOX_DRAFT,
+    choices: answers.choices ?? [],
+    values: answers.values ?? [],
+    steps: titleStep ? (done ? [0] : []) : (answers.steps ?? []),
+    press: answers.reply,
+  };
+}
+
+/** The decisions an approval's or a to-do's answer may be, each held as the card's one pick. */
+const DECISION_REPLIES: ReadonlySet<InboxReplyKind> = new Set([
+  INBOX_REPLY.APPROVED,
+  INBOX_REPLY.DECLINED,
+  INBOX_REPLY.DONE,
+  INBOX_REPLY.NOT_DONE,
+]);
+
+/**
+ * A settled item's answer, from before version 5, as the draft its card
+ * held when it was sent, which its question draws its controls filled in
+ * with: a choice's picks, an approval's or a to-do's decision, and a form's
+ * values; a choice answered in the developer's own words picks nothing.
+ */
+export function repliedDraft(answer: InboxReply): InboxDraft {
+  const choices =
+    answer.reply === INBOX_REPLY.CHOSE
+      ? (answer.choices ?? [])
+      : DECISION_REPLIES.has(answer.reply)
+        ? [answer.reply]
+        : [];
+  return { ...EMPTY_INBOX_DRAFT, choices, values: answer.values ?? [] };
 }
 
 /**
@@ -649,7 +714,7 @@ export const ANSWER_TONE = {
   BACK: "back",
 } as const;
 
-type AnswerTone = (typeof ANSWER_TONE)[keyof typeof ANSWER_TONE];
+export type AnswerTone = (typeof ANSWER_TONE)[keyof typeof ANSWER_TONE];
 
 /** An answer as words: what the reply's stamp says, attached or sent, and which way it goes. */
 export interface AnswerStamp {
@@ -761,21 +826,6 @@ export function attachedStamp(answers: InboxAnswers, ask: InboxReadAsk | undefin
     return { tone, words: `${PRESS_WORDS[INBOX_REPLY.CHOSE]} ${picked}` };
   }
   return { tone, words: PRESS_WORDS[answers.reply] };
-}
-
-/**
- * What a settled ask's line says its answerer did, after who they are:
- * "requested changes", "chose 7 days", "marked it done", or what any other
- * answer is called on an item (`REPLY_WORDS`).
- */
-export function answeredWords(answers: InboxAnswers, ask: InboxReadAsk | undefined): string {
-  const pick = buttonPick(answers, ask);
-  const done = pick === undefined ? undefined : DONE_WORDS.get(pick.label);
-  if (done !== undefined) return done.toLowerCase();
-  if (answers.reply === INBOX_REPLY.CHOSE) {
-    return `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answers.choices ?? []).join(", ")}`;
-  }
-  return REPLY_WORDS[answers.reply];
 }
 
 /** The message that answers an ask, where the thread read carries it. */

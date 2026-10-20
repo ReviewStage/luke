@@ -673,6 +673,14 @@ export interface GitHubAppService {
     token: Redacted.Redacted,
   ) => Effect.Effect<GitHubUser, GitHubReadFailure, HttpClient.HttpClient>;
   /**
+   * The GitHub account a token belongs to, read on it (`GET /user`,
+   * https://docs.github.com/en/rest/users/users#get-the-authenticated-user):
+   * whose a member's own token is, as their commits name them.
+   */
+  readonly tokenUser: (
+    token: Redacted.Redacted,
+  ) => Effect.Effect<GitHubUser, GitHubReadFailure, HttpClient.HttpClient>;
+  /**
    * The user's GitHub App token off their sign-in, refreshed and re-sealed on
    * its row when it is about to expire; read for GitHub's MCP server alone.
    * The read and the refresh run under a lock on the row, because GitHub
@@ -1895,6 +1903,11 @@ function githubAppService(
         Effect.gen(function* () {
           const app = yield* ready;
           const response = yield* send(githubRead(`/users/${app.slug}${BOT_LOGIN_SUFFIX}`, token));
+          return userOf(yield* readBody(response, UserSchema));
+        }).pipe(Effect.scoped),
+      tokenUser: (token) =>
+        Effect.gen(function* () {
+          const response = yield* send(githubRead("/user", token));
           return userOf(yield* readBody(response, UserSchema));
         }).pipe(Effect.scoped),
       userToken,

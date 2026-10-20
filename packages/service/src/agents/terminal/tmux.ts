@@ -24,7 +24,7 @@ import type { TerminalSummary } from "@luke/features/terminal-wire";
 import { readEither } from "@luke/wire/effect";
 import { Result } from "effect";
 import { unparsedWire, wireUuidSchema } from "../../core.js";
-import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
 export const TMUX = {

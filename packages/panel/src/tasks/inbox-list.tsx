@@ -72,6 +72,7 @@ import {
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
+import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { Tooltip } from "../tooltip.js";
 import { AgentMarkRef, type AgentSubject, lineSubject, tasklessSubject } from "./agent-ref.js";
@@ -545,7 +546,9 @@ export function InboxItemRow({
         meta={
           <span className="home-row-meta">
             {unread ? <span className="visually-hidden">{UNREAD}</span> : null}
-            {context === undefined ? null : <span className="home-row-context">{context}</span>}
+            {context === undefined ? null : (
+              <FadingWords className="home-row-context" words={context} />
+            )}
             {starter === undefined || !face ? null : (
               <ActorMark actor={starter} size={ACTOR_SIZE.MARK} />
             )}

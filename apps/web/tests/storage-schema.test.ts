@@ -106,6 +106,7 @@ const DECLARED_TABLES = [
   "task_pin",
   "task_section",
   "task_section_entry",
+  "token_pull_request_poll",
   "turns",
   "user",
   "verification",

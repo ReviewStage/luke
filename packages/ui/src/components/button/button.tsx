@@ -44,6 +44,12 @@ import { SpinnerRing } from "../spinner/spinner.js";
  * motion and a capture run. The keyboard's ring is the app's own, drawn by
  * its reset for every control alike.
  *
+ * A labelled Button may be a record of a press rather than an offer of
+ * one: `readOnly`, it takes no press and no Tab stop, as an unavailable one
+ * does, yet stands at full strength, so it reads as a press given rather
+ * than one waiting; `pressed` draws the one that was given as a toggle
+ * standing on.
+ *
  * A ButtonLink is a Button's look on a link, for an act that is going
  * somewhere: a download, another site, an app's own scheme. The browser
  * follows its address, so it opens in a new tab, copies, and hands off as
@@ -227,6 +233,8 @@ export function Button({
   icon,
   label,
   size,
+  pressed,
+  readOnly = false,
   children,
   ...props
 }: ButtonBase & {
@@ -235,13 +243,19 @@ export function Button({
   /** Its accessible name where its words say less, which holds its words ("Start a coding agent" over "Start"). */
   label?: string | undefined;
   size?: ButtonSize | undefined;
+  /** Whether a toggle stands on, or a press recorded was the one given, which it is drawn and announced as. */
+  pressed?: boolean | undefined;
+  /** Whether it records a press rather than offering one: it takes none, at full strength. */
+  readOnly?: boolean | undefined;
   children: ReactNode;
 }): React.JSX.Element {
   return (
     <button
       className="luke-button"
       data-size={size === BUTTON_SIZE.COMPACT ? BUTTON_SIZE.COMPACT : undefined}
-      {...stateProps(props, label)}
+      data-read-only={readOnly || undefined}
+      aria-pressed={pressed}
+      {...stateProps(readOnly ? { ...props, disabled: true } : props, label)}
     >
       <span className="luke-button-face">
         {icon}

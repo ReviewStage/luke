@@ -202,6 +202,12 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   /** One provider's key removed on the service; the keys as they then stand. */
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** The member's own GitHub token, read from the service now as its login, hint, and status; never the token. */
+  GITHUB_TOKEN_READ: "githubToken.read",
+  /** The member's GitHub token saved on the service, carried once in the params; the token as it then stands, or why nothing was kept. */
+  GITHUB_TOKEN_SAVE: "githubToken.save",
+  /** The member's GitHub token removed on the service; none then stands. */
+  GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /** The Markdown the account's new tasks start from, read from the service now: its own, or the default while it keeps none. */
   PLAN_TEMPLATE_READ: "planTemplate.read",
   /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */

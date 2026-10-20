@@ -2,14 +2,16 @@
 
 import { act, cloneElement, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { IconButton } from "../button/button.js";
 import { Menu, useMenu } from "../menu/menu.js";
 import {
+  LIST_DENSITY,
   LIST_ROW_ACTIONS,
   LIST_ROW_CURRENT,
   LIST_ROW_META,
   List,
+  type ListDensity,
   ListRow,
   type ListRowHint,
 } from "./list-row.js";
@@ -34,7 +36,9 @@ import {
  * takes the focus it is handed; one unavailable refuses its press; one a
  * field drives is found by its id; a chevron and attachments say nothing to a reader; acts
  * shown on hover are still a Tab stop after the row; and an app hears
- * whether the title is cut short. Synthetic
+ * whether the title is cut short. A title cut short fades, and so do a dense
+ * row's description and a row's lead, while a regular row's description and
+ * any row's metadata keep their ellipsis. Synthetic
  * members.
  */
 
@@ -53,6 +57,12 @@ const MEMBERS = [
 const ignore = () => undefined;
 
 const roots: Root[] = [];
+
+// Note that every row measures its title, so each test draws beside a
+// ResizeObserver, which jsdom lacks; one that resizes stubs its own.
+beforeEach(() => {
+  standInResizeObserver();
+});
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -520,21 +530,29 @@ test("a row's attachments stand under its description, hidden from a reader, so 
 /**
  * Stands in for the browser's ResizeObserver, which jsdom lacks, since it
  * lays nothing out: the widths it would measure are stubbed by each test,
- * and the function handed back fires the last observer made, as a resize would.
+ * and the function handed back fires every observer still watching, as a
+ * resize would.
  */
 function standInResizeObserver(): () => void {
-  let resized: () => void = () => undefined;
+  const watching = new Set<() => void>();
   vi.stubGlobal(
     "ResizeObserver",
     class {
+      readonly #callback: () => void;
       constructor(callback: () => void) {
-        resized = callback;
+        this.#callback = callback;
       }
-      observe(): void {}
-      disconnect(): void {}
+      observe(): void {
+        watching.add(this.#callback);
+      }
+      disconnect(): void {
+        watching.delete(this.#callback);
+      }
     },
   );
-  return () => resized();
+  return () => {
+    for (const callback of [...watching]) callback();
+  };
 }
 
 test("acts shown only on hover are still met by Tab after their row, and pressed without it", () => {
@@ -584,33 +602,129 @@ test("an app hears whether a row's title is cut short, whenever its box resizes"
   expect(heard).toEqual([false, true]);
 });
 
-test("a row whose acts come in on hover fades its title only while it is cut short, and one whose acts always stand keeps its ellipsis", () => {
+test("a row whose acts come in on hover fades its title only while it is cut short", () => {
   const resized = standInResizeObserver();
   let width = 120;
   vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => width);
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
-  const row = (actionsAt: (typeof LIST_ROW_ACTIONS)[keyof typeof LIST_ROW_ACTIONS]) =>
-    createElement(ListRow, {
-      title: "Fix pin and archive overlapping the sidebar row's name",
-      meta: "2m",
-      onPress: () => undefined,
-      actionsAt,
-      actions: createElement(IconButton, { icon: null, label: "Archive" }),
-    });
   const hovered = draw(
-    createElement(List, { label: "Tasks", children: row(LIST_ROW_ACTIONS.HOVER) }),
+    createElement(List, {
+      label: "Tasks",
+      children: createElement(ListRow, {
+        title: "Fix pin and archive overlapping the sidebar row's name",
+        meta: "2m",
+        onPress: () => undefined,
+        actionsAt: LIST_ROW_ACTIONS.HOVER,
+        actions: createElement(IconButton, { icon: null, label: "Archive" }),
+      }),
+    }),
   );
-  const title = () => hovered.querySelector(".luke-list-row-title");
+  const overflow = () =>
+    hovered.querySelector(".luke-list-row-title")?.getAttribute("data-overflow");
   act(() => resized());
-  expect(title()?.getAttribute("data-end")).toBe("fade");
-  expect(title()?.getAttribute("data-overflow")).toBe("false");
+  expect(overflow()).toBe("false");
   width = 320;
   act(() => resized());
-  expect(title()?.getAttribute("data-overflow")).toBe("true");
-  const beside = draw(
-    createElement(List, { label: "Members", children: row(LIST_ROW_ACTIONS.ALWAYS) }),
+  expect(overflow()).toBe("true");
+});
+
+test("a row with no acts fades its title while it is cut short, and ends it on its last letter while it fits", () => {
+  const resized = standInResizeObserver();
+  let width = 120;
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(() => width);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+  const container = draw(
+    createElement(List, {
+      label: "Tabs",
+      density: LIST_DENSITY.DENSE,
+      children: createElement(ListRow, {
+        title: "Draw the summary panel's tabs with a fade",
+        onPress: () => undefined,
+      }),
+    }),
   );
-  expect(beside.querySelector(".luke-list-row-title")?.hasAttribute("data-end")).toBe(false);
+  const overflow = () =>
+    container.querySelector(".luke-list-row-title")?.getAttribute("data-overflow");
+  act(() => resized());
+  expect(overflow()).toBe("false");
+  width = 320;
+  act(() => resized());
+  expect(overflow()).toBe("true");
+});
+
+/** Each slot of a row drawn with `density`, by whether it fades: cut short, fitting, or not measured at all and ending in an ellipsis. */
+function slotsOf(density: ListDensity) {
+  const resized = standInResizeObserver();
+  // Note that every box is cut short, so a slot measured says it fades and one never measured says nothing.
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(320);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+  const container = draw(
+    createElement(List, {
+      label: "Pages",
+      density,
+      children: createElement(ListRow, {
+        title: "Invite funnel",
+        description: "The weekly invite funnel, by the workspace each invite was sent from",
+        lead: { icon: glyph(), label: "Billing usage alerts for every workspace" },
+        meta: "2h",
+        onPress: () => undefined,
+      }),
+    }),
+  );
+  act(() => resized());
+  const slot = (name: string) =>
+    container.querySelector(`.luke-list-row-${name}`)?.getAttribute("data-overflow");
+  return {
+    title: slot("title"),
+    description: slot("description"),
+    lead: slot("lead-label"),
+    meta: slot("meta"),
+  };
+}
+
+test("a dense row's description fades while it is cut short, as its title and its lead do; its metadata keeps its ellipsis", () => {
+  expect(slotsOf(LIST_DENSITY.DENSE)).toEqual({
+    title: "true",
+    description: "true",
+    lead: "true",
+    meta: null,
+  });
+});
+
+test("a regular row's description, a preview's prose, keeps its ellipsis, while its title and its lead fade", () => {
+  expect(slotsOf(LIST_DENSITY.REGULAR)).toEqual({
+    title: "true",
+    description: null,
+    lead: "true",
+    meta: null,
+  });
+});
+
+test("a list made dense fades its rows' descriptions cut short, and made regular again gives them back their ellipsis", () => {
+  const resized = standInResizeObserver();
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(320);
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(200);
+  const pages = (density: ListDensity) =>
+    createElement(List, {
+      label: "Pages",
+      density,
+      children: createElement(ListRow, {
+        title: "Invite funnel",
+        description: "The weekly invite funnel, by the workspace each invite was sent from",
+        onPress: () => undefined,
+      }),
+    });
+  const container = draw(pages(LIST_DENSITY.REGULAR));
+  const root = roots.at(-1);
+  const overflow = () =>
+    container.querySelector(".luke-list-row-description")?.getAttribute("data-overflow");
+  act(() => resized());
+  expect(overflow()).toBeNull();
+  act(() => root?.render(pages(LIST_DENSITY.DENSE)));
+  act(() => resized());
+  expect(overflow()).toBe("true");
+  act(() => root?.render(pages(LIST_DENSITY.REGULAR)));
+  expect(overflow()).toBeNull();
 });
 
 test("a title renamed longer or shorter is measured again, though its box keeps its width", async () => {

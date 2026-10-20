@@ -192,9 +192,11 @@ test("a finished turn's fold names its subagents apart from its other calls, in 
   );
   assert.equal(
     summaryOf(
-      workTurn(TASK_WORK_STATE.DONE, [workerCall(compare), words("Queue A is the one to use.")], {
-        workers: [compare],
-      }),
+      workTurn(
+        TASK_WORK_STATE.DONE,
+        [thought("Compare them."), workerCall(compare), words("Queue A is the one to use.")],
+        { workers: [compare] },
+      ),
     ),
     "1 subagent",
   );
@@ -249,7 +251,13 @@ test("a finished turn's fold names the coding agents it started apart from its t
     "2 coding agents",
   );
   assert.equal(
-    summaryOf(workTurn(TASK_WORK_STATE.DONE, [refused, words("That did not start.")])),
+    summaryOf(
+      workTurn(TASK_WORK_STATE.DONE, [
+        thought("Start one."),
+        refused,
+        words("That did not start."),
+      ]),
+    ),
     "1 tool call",
   );
 });

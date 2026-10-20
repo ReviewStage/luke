@@ -35,15 +35,18 @@ export function ClippedLine({
   as: Element,
   end,
   hint,
+  words,
   children,
 }: {
   className?: string;
   as: OneLineElement;
   end: OneLineEnd;
   hint?: OneLineHint | undefined;
+  /** The words as a string, where they are one, measured as they change rather than watched for. */
+  words?: string | undefined;
   children: ReactNode;
 }): React.JSX.Element {
-  const [measured, clipped] = useClipped();
+  const [measured, clipped] = useClipped(words);
   const line = (
     <Element
       ref={measured}

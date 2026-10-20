@@ -899,49 +899,34 @@ test("the Checks tab lists the head's deployments over its checks: each environm
   assert.equal(none.querySelector('[aria-label="Deployments"]'), null);
 });
 
-test("past five checks the list folds behind Show all, keeping every one that failed or still runs above the fold, and folds again on Show less", async () => {
+test("every check is listed, however many there are, those that failed first, then those still running, then the rest, with no control folding any away", async () => {
   const passing = Array.from({ length: 6 }, (_, at) => check(`test ${at}`, CHECK_STATE.PASSED));
-  const few: CodingAgentOverviewChecks = {
-    checks: [check("lint", CHECK_STATE.FAILED), check("build", CHECK_STATE.PENDING), ...passing],
-  };
-  const tab = await draw(controlAnswering({ checks: () => Promise.resolve({ pullRequest: few }) }));
-  await choose(tab, "Checks");
-  const fold = () => buttonWith(tab, /^Show (all \d+|less)$/u) ?? assert.fail("the list folds");
-  assert.deepEqual(words(tab, "li .luke-list-row-title"), [
-    "lint, failed",
-    "build, running",
-    "test 0, passed",
-    "test 1, passed",
-    "test 2, passed",
-  ]);
-  assert.equal(fold().textContent, "Show all 8");
-  assert.equal(fold().getAttribute("aria-expanded"), "false");
-
-  act(() => fold().click());
-  assert.equal(words(tab, "li .luke-list-row-title").length, 8);
-  assert.equal(fold().textContent, "Show less");
-  assert.equal(fold().getAttribute("aria-expanded"), "true");
-
-  act(() => fold().click());
-  assert.equal(words(tab, "li .luke-list-row-title").length, 5);
-});
-
-test("a check that failed or still runs never folds away, however many there are, and five or fewer checks do not fold", async () => {
-  const failing = Array.from({ length: 6 }, (_, at) => check(`lint ${at}`, CHECK_STATE.FAILED));
   const many: CodingAgentOverviewChecks = {
-    checks: [...failing, check("build", CHECK_STATE.PENDING), check("test", CHECK_STATE.PASSED)],
+    checks: [
+      check("lint", CHECK_STATE.FAILED),
+      check("types", CHECK_STATE.FAILED),
+      check("build", CHECK_STATE.PENDING),
+      ...passing,
+      check("deploy", CHECK_STATE.SKIPPED),
+    ],
   };
   const tab = await draw(
     controlAnswering({ checks: () => Promise.resolve({ pullRequest: many }) }),
   );
   await choose(tab, "Checks");
-  assert.equal(words(tab, "li .luke-list-row-title").length, 7);
-  assert.equal(buttonWith(tab, /^Show all/u)?.textContent, "Show all 8");
-
-  act(() => root?.unmount());
-  const five = await draw(controlAnswering());
-  await choose(five, "Checks");
-  assert.equal(buttonWith(five, /^Show all/u), undefined);
+  assert.deepEqual(words(tab, "li .luke-list-row-title"), [
+    "lint, failed",
+    "types, failed",
+    "build, running",
+    "test 0, passed",
+    "test 1, passed",
+    "test 2, passed",
+    "test 3, passed",
+    "test 4, passed",
+    "test 5, passed",
+    "deploy, skipped",
+  ]);
+  assert.equal(buttonWith(tab, /^Show (all|less)/u), undefined, "nothing folds the list");
 });
 
 test("the earlier entries a read left on GitHub are counted first, in the heading too, and open the pull request", async () => {
@@ -1350,12 +1335,21 @@ test("Add reaction opens one row of GitHub's eight, each named, the arrows movin
   );
 });
 
-/** The switch of the Conversation's filter named as given. */
+/** The chip of the Conversation's filter named as given, at the end of the Conversation's heading. */
 function filter(tab: HTMLElement, name: string): HTMLButtonElement {
   return (
     tab.querySelector<HTMLButtonElement>(
-      `.pull-request-filter [role="switch"][aria-label="${name}"]`,
+      `section[aria-label="Conversation"] .pull-request-section-head .pull-request-filter button[aria-label="${name}"]`,
     ) ?? assert.fail(`the conversation offers ${name}`)
+  );
+}
+
+/** The heading of the Conversation view's section named as given, which folds it. */
+function sectionHead(tab: HTMLElement, name: string): HTMLElement {
+  return (
+    tab.querySelector<HTMLElement>(
+      `section[aria-label="${name}"] > details > summary.pull-request-section-head`,
+    ) ?? assert.fail(`the ${name} folds under its heading`)
   );
 }
 
@@ -1433,7 +1427,7 @@ test("Hide bots and Hide resolved each count what they leave out, leave it out w
   const tab = await draw(control);
 
   assert.deepEqual(
-    words(tab, ".pull-request-filter label"),
+    words(tab, ".pull-request-filter button"),
     ["Hide resolved3", "Hide bots2"],
     "each counts what it would leave out, resolved threads and bots' entries",
   );
@@ -1449,7 +1443,12 @@ test("Hide bots and Hide resolved each count what they leave out, leave it out w
   assert.deepEqual(drawnEntries(tab), all, "both start off, everything drawn");
 
   act(() => filter(tab, "Hide bots").click());
-  assert.equal(filter(tab, "Hide bots").getAttribute("aria-checked"), "true");
+  assert.equal(filter(tab, "Hide bots").getAttribute("aria-pressed"), "true");
+  assert.equal(
+    sectionHead(tab, "Conversation").getAttribute("aria-expanded"),
+    "true",
+    "a press on a filter in the heading folds nothing",
+  );
   assert.deepEqual(drawnEntries(tab), ["Charles Pan 2", "Charles Pan 1", "Charles Pan 0"]);
 
   act(() => filter(tab, "Hide bots").click());
@@ -1467,7 +1466,7 @@ test("Hide bots and Hide resolved each count what they leave out, leave it out w
   const again = await draw(control);
   assert.deepEqual(
     [filter(again, "Hide resolved"), filter(again, "Hide bots")].map((each) =>
-      each.getAttribute("aria-checked"),
+      each.getAttribute("aria-pressed"),
     ),
     ["true", "true"],
     "the choice stands for the next conversation drawn",
@@ -1501,6 +1500,93 @@ test("where the filters leave nothing of the conversation, it says no comment ma
     conversation.querySelector(".pull-request-none")?.textContent,
     "No matching comments.",
   );
+});
+
+test("the Description and the Conversation each fold under a heading pressed across its row, both open at first, and each stays as left, on its own, for the next pull request drawn", async () => {
+  const control = controlAnswering();
+  const tab = await draw(control);
+  const description = sectionHead(tab, "Description");
+  const conversation = sectionHead(tab, "Conversation");
+  assert.deepEqual(
+    [description, conversation].map((head) => head.getAttribute("aria-expanded")),
+    ["true", "true"],
+    "both start open",
+  );
+  assert.ok(description.querySelector(".luke-disclosure-turn"), "a chevron leads the heading");
+  assert.ok(tab.querySelector('[aria-label="Description"] .pull-request-words'));
+  assert.ok(tab.querySelector('[aria-label="Conversation"] .pull-request-entry'));
+
+  act(() => description.click());
+  assert.equal(description.getAttribute("aria-expanded"), "false");
+  assert.equal(tab.querySelector('[aria-label="Description"] .pull-request-words'), null);
+  assert.ok(tab.querySelector(".pull-request-entry"), "the Conversation stays open");
+
+  act(() => conversation.click());
+  assert.equal(conversation.getAttribute("aria-expanded"), "false");
+  assert.equal(tab.querySelector(".pull-request-entry"), null);
+  assert.equal(
+    tab.querySelector('[aria-label="Conversation"] .pull-request-count')?.textContent,
+    "2",
+    "a folded Conversation still counts what it holds",
+  );
+
+  act(() => root?.unmount());
+  root = undefined;
+  document.body.innerHTML = "";
+  const again = await draw(control);
+  assert.deepEqual(
+    ["Description", "Conversation"].map((name) =>
+      sectionHead(again, name).getAttribute("aria-expanded"),
+    ),
+    ["false", "false"],
+    "each fold stands for the next pull request drawn",
+  );
+  act(() => sectionHead(again, "Description").click());
+  assert.ok(again.querySelector('[aria-label="Description"] .pull-request-words'));
+  assert.equal(
+    sectionHead(again, "Conversation").getAttribute("aria-expanded"),
+    "false",
+    "opening one leaves the other as it was kept",
+  );
+});
+
+test("the Conversation scrolls in a box whose fade begins beneath a band, each section's heading the sticky band at its top, and the filters stand at the end of the Conversation's heading rather than in a row of their own", async () => {
+  const tab = await draw(controlAnswering());
+  const scroller =
+    tab.querySelector<HTMLElement>('[role="region"][aria-label="Pull request conversation"]') ??
+    assert.fail("the conversation scrolls");
+  assert.ok(scroller.classList.contains("luke-scroll-area"));
+  assert.equal(scroller.dataset.fade, "start");
+  assert.equal(scroller.dataset.fadeInset, "band");
+  const page = scroller.querySelector(":scope > .pull-request-page") ?? assert.fail("its page");
+  assert.deepEqual(
+    [...page.querySelectorAll(":scope > section")].map((each) => each.getAttribute("aria-label")),
+    ["Description", "Conversation", "Add a comment"],
+  );
+  for (const name of ["Description", "Conversation"]) {
+    const head = sectionHead(tab, name);
+    assert.equal(
+      head.querySelector(":scope > h3.pull-request-heading")?.firstChild?.textContent,
+      name,
+    );
+    assert.ok(
+      head.nextElementSibling?.querySelector(".pull-request-section-body"),
+      `${name}'s body follows its band`,
+    );
+  }
+  assert.deepEqual(words(sectionHead(tab, "Conversation"), ".pull-request-section-end button"), [
+    "Hide resolved0",
+    "Hide bots0",
+  ]);
+  for (const chip of sectionHead(tab, "Conversation").querySelectorAll<HTMLElement>(
+    ".pull-request-section-end button",
+  )) {
+    // Drawn as the tasks board's view filter in its toolbar: a filter chip at the control's size, never a reaction's compact pill.
+    assert.equal(chip.dataset.look, "filter");
+    assert.equal(chip.dataset.size, undefined, `${chip.textContent} stands at the control's size`);
+  }
+  assert.equal(sectionHead(tab, "Description").querySelector(".pull-request-section-end"), null);
+  assert.equal(tab.querySelector(".pull-request-filters"), null, "no row of filters stands");
 });
 
 test("opened on its files, as a link to its changes opens it, the header stands above them with where each reviewer stands, and switching between the tabs draws each as it was", async () => {
@@ -1822,7 +1908,7 @@ async function phoneTab(conversationRuns: number) {
   const tab = await draw(controlAnswering());
   const header = tab.querySelector(".pull-request-header") ?? assert.fail("the header stands");
   const conversation =
-    tab.querySelector("section[aria-label='Pull request conversation'] .luke-detail-page-main") ??
+    tab.querySelector("[aria-label='Pull request conversation']") ??
     assert.fail("the conversation scrolls");
   sized(header, { height: 200 });
   sized(conversation, { height: 400, content: conversationRuns });
@@ -1873,7 +1959,7 @@ test("an agent with no pull request yet says so, and the toolbar's ⋯ offers no
     }),
   );
   assert.match(none.textContent ?? "", /No pull request yet\./u);
-  assert.equal(none.querySelector("section[aria-label='Pull request conversation']"), null);
+  assert.equal(none.querySelector("[aria-label='Pull request conversation']"), null);
   assert.deepEqual(toolbarItems(none), []);
 });
 
@@ -4613,6 +4699,71 @@ test("a thread on a line no hunk shows, and one a later push outdated, land on t
   assert.deepEqual(opened, [true, true], "the outdated thread is opened above the diff");
 });
 
+test("a link to a thread opens a folded Conversation to land on it, centring it in the room under the heading stuck at the top, and a card taller than that room landing with its top just under the heading", async () => {
+  window.localStorage.setItem(
+    "luke.conversation-filters",
+    JSON.stringify({ hideBots: false, hideResolved: false, conversationOpen: false }),
+  );
+  const heard: ReadLink[] = [];
+  const tab = await drawn(
+    createElement(Routed, { control: jumpControl([thread({ id: JUMPED })]), heard }),
+  );
+  assert.equal(sectionHead(tab, "Conversation").getAttribute("aria-expanded"), "false");
+  assert.equal(tab.querySelector(".pull-request-thread"), null, "a folded Conversation draws none");
+
+  // The scroller jsdom lays out none for: 400px tall over a long run, clearing 58px at its top for its heading and fade.
+  const scroller =
+    tab.querySelector<HTMLElement>("[aria-label='Pull request conversation']") ??
+    assert.fail("the conversation scrolls");
+  scroller.style.overflowY = "auto";
+  scroller.style.scrollPaddingTop = "58px";
+  sized(scroller, { height: 400, content: 4000 });
+  let top = 0;
+  Object.defineProperty(scroller, "scrollTop", {
+    configurable: true,
+    get: () => top,
+    set: (value: number) => {
+      top = value;
+    },
+  });
+  let cardHeight = 100;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this === scroller) return DOMRect.fromRect({ x: 0, y: 0, width: 600, height: 400 });
+    if (this.classList.contains("pull-request-thread")) {
+      return DOMRect.fromRect({ x: 0, y: 900, width: 600, height: cardHeight });
+    }
+    return DOMRect.fromRect({ x: 0, y: 0, width: 0, height: 0 });
+  });
+  const reveal = async () => {
+    act(() =>
+      routeOpen({
+        workspace: "acme",
+        place: {
+          kind: LINK_PLACE.PULL_REQUEST_THREAD,
+          planId: AGENT.planId ?? "",
+          agentId: AGENT.id,
+          threadId: JUMPED,
+          view: PULL_REQUEST_THREAD_VIEW.CONVERSATION,
+        },
+      }),
+    );
+    await settle();
+    await frames();
+  };
+
+  await reveal();
+  assert.equal(sectionHead(tab, "Conversation").getAttribute("aria-expanded"), "true");
+  const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread is drawn");
+  assert.equal(card.hasAttribute("data-search-landed"), true, "the thread is landed on");
+  assert.equal(top, 900 + 100 / 2 - (58 + (400 - 58) / 2), "centred under the heading's band");
+
+  ringEnds(card);
+  top = 0;
+  cardHeight = 600;
+  await reveal();
+  assert.equal(top, 900 - 58, "a tall card's top stands just under the heading's band");
+});
+
 test("a thread whose file the changes no longer hold stays in the Conversation, brought into view there; a link to one the conversation no longer holds is let go", async () => {
   const heard: ReadLink[] = [];
   const tab = await drawn(
@@ -4647,6 +4798,42 @@ test("a thread whose file the changes no longer hold stays in the Conversation, 
   await settle();
   await frames();
   assert.equal(card.hasAttribute("data-search-landed"), false, "nothing is landed on");
+});
+
+test("every review thread's head leads with its chevron and ends with its ⋯, in the Conversation as on its line in Files changed, and a press on the row folds it", async () => {
+  const tab = await drawn(
+    createElement(Routed, {
+      control: jumpControl([thread({ id: JUMPED })]),
+      heard: [],
+      first: PULL_REQUEST_VIEW.FILES,
+    }),
+  );
+  const inline = (lists.at(-1) ?? assert.fail("the files are drawn")).renderAnnotation(
+    INVITE_FILE.path,
+    `${PAGE}#discussion_r1`,
+  );
+  document.body.appendChild(inline);
+  await choose(tab, "Conversation");
+  const card = tab.querySelector(".pull-request-thread") ?? assert.fail("the thread is drawn");
+  for (const [where, root] of [
+    ["the Conversation", card],
+    ["its line", inline],
+  ] as const) {
+    const head =
+      root.querySelector<HTMLElement>("summary.pull-request-thread-head") ??
+      assert.fail(`the thread on ${where} has a head`);
+    assert.ok(
+      head.firstElementChild?.classList.contains("luke-disclosure-turn"),
+      `on ${where}, the chevron leads the head`,
+    );
+    assert.ok(
+      head.lastElementChild?.classList.contains("pull-request-thread-menu"),
+      `on ${where}, the ⋯ ends it`,
+    );
+    assert.equal(head.getAttribute("aria-expanded"), "true");
+    act(() => head.click());
+    assert.equal(head.getAttribute("aria-expanded"), "false", `on ${where}, the row folds it`);
+  }
 });
 
 test("a thread's ⋯ in Files changed shows it in the Conversation through the same route, standing through Hide resolved, ringed and focused there", async () => {

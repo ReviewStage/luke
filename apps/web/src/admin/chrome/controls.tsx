@@ -1,5 +1,5 @@
 import { ADMIN_METRICS_WINDOW, type AdminMetricsWindow } from "@luke/service/admin/http";
-import { CHOICE_BAR_LOOK, Checkbox, ChoiceBar, ErrorState, Stack } from "@luke/ui";
+import { CHOICE_BAR_LOOK, Checkbox, ChoiceBar, ErrorState, GAP, Stack } from "@luke/ui";
 
 /** A window by the constant's own name for it, which is how the segmented control keys its options. */
 type WindowName = keyof typeof ADMIN_METRICS_WINDOW;
@@ -16,6 +16,8 @@ const WINDOW_OPTIONS = Object.entries(ADMIN_METRICS_WINDOW).map(([name, windowDa
  * the numbers on screen are still the last ones actually read, and the
  * failure says the newer read did not arrive, with Retry beside it, which
  * refuses a press while a read is out rather than abort it and start over.
+ * What it holds are the page's parts, its sections and whatever leads them,
+ * a section's gap apart, as an app page with several sections stands them.
  */
 export function Refreshing({
   failure,
@@ -34,12 +36,12 @@ export function Refreshing({
       data-busy={refreshing}
       aria-busy={refreshing}
     >
-      {children}
+      <Stack gap={GAP.SECTION}>{children}</Stack>
     </div>
   );
   if (failure === undefined) return dimmed;
   return (
-    <Stack>
+    <Stack gap={GAP.SECTION}>
       <ErrorState
         onRetry={() => {
           if (!refreshing) onRetry();

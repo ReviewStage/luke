@@ -15,7 +15,6 @@ import {
   BUTTON_SIZE,
   Button,
   Checkbox,
-  CopyIcon,
   DownloadIcon,
   EmptyState,
   ERROR_STATE_PLACEMENT,
@@ -24,8 +23,8 @@ import {
   TEXT_BUTTON_TONE,
   TextButton,
 } from "@luke/ui";
-import { fileName } from "@luke/voice/code-pane-model";
 import {
+  CheckIcon,
   ChevronsDownUpIcon,
   ChevronsUpDownIcon,
   ClipboardCopyIcon,
@@ -50,7 +49,6 @@ import {
 } from "../diff-view/contract.js";
 import { SpinnerRegion } from "../spinner.js";
 import { Tooltip } from "../tooltip.js";
-import { LinesChanged } from "./agent-published.js";
 import {
   type ChangesList,
   FileHead,
@@ -71,14 +69,12 @@ import {
   type ExpansionRefusal,
   expandable,
   fileNotice,
-  filePatch,
   gapLines,
   headerPatch,
-  linesChanged,
   listPatch,
+  pullRequestPatch,
+  pullRequestPatchName,
   rowPlace,
-  STATUS_LETTER,
-  STATUS_WORDS,
   suggestedLines,
   textsOf,
   threadsOn,
@@ -104,7 +100,7 @@ import {
   PierreDiffList,
 } from "./diff-list.js";
 import { useDiffLook, useSplitRoom } from "./file-diff.js";
-import { BarMenu, copyPathAction, useSaveText } from "./file-menu.js";
+import { BarMenu, useSaveText } from "./file-menu.js";
 import { FileTreePane } from "./file-tree-pane.js";
 import { FileViewBar, type TreeShown, usePaneRoom, useTreeEdge } from "./file-view.js";
 import { useFileViewSettings } from "./file-view-settings.js";
@@ -144,27 +140,22 @@ import { useViewedFiles, type ViewedFiles } from "./viewed-files.js";
  * under a header of its own that folds it, names it, with the letter of
  * what became of it and the lines it adds and removes, and stays at the top
  * while its lines scroll by; a file with no hunks says why under its header.
- * Its bar names the file the keys stand on, or else the one at the top of
- * the list, as breadcrumbs, whose trees list only the changed files, the
- * same letter and lines quietly beside, then the pull request's files on
- * GitHub, the diff settings, every one stage-cli offers in a popover
- * (`view-settings.tsx`), Collapse all or Expand all, the ⋯ (the file's name
- * or its patch copied, the patch saved, the changes read again, the File
- * tabs' two settings, and two of the diff's as quick checks: Split view,
- * offered dimmed while the list is too narrow to split (`file-diff.tsx`),
- * and Highlight changed words), and the tree's toggle, which shows and
- * hides the tree for every File and Changes tab alike. The tree is a File
+ * Its bar leads with how many of the files the member marked viewed
+ * (`ViewedCount`), then the pull request's files on GitHub, the diff
+ * settings, every one stage-cli offers in a popover (`view-settings.tsx`),
+ * Collapse all or Expand all, the ⋯ (the pull request's patch copied or
+ * saved, and the changes read again), and the tree's toggle, which shows
+ * and hides the tree for every File and Changes tab alike. The tree is a File
  * tab's own pane (`file-tree-pane.tsx`) narrowed to the changed files,
  * every folder open, each row lettered A, M, D, or R, and ending, as
  * stage-cli's do, in how many review threads stand on its file, the lines
  * it adds and removes where the tree has room, and a Viewed toggle that
  * marks it as its header's box does, its row dimmed once viewed; its search the
  * list's filter, narrowing the list to the files whose path holds it as it
- * narrows the rows, said over the list while the tree is hidden, with the
- * pull request's count under it, or under the list while the tree is
- * hidden; choosing a file there or in a crumb's tree scrolls the list to
- * it. stage-cli's keys walk the list (`changes-list.tsx`), and `?` opens a
- * sheet listing them (`files-changed-keys.tsx`). The diffs are
+ * narrows the rows, said over the list while the tree is hidden; choosing
+ * a file there scrolls the list to it. stage-cli's keys walk the list
+ * (`changes-list.tsx`), and `?` opens a sheet listing them
+ * (`files-changed-keys.tsx`). The diffs are
  * drawn by Pierre's diffs in a bundle of its own (`../diff-view/`), on the
  * File tab's ground, in its type and colours, unified or split, numbered
  * and wrapped as the File tabs' settings say, their numbers left out of the
@@ -235,59 +226,109 @@ export function useAgentRead<A>(
   return { answer, out, ask };
 }
 
-/** What became of the chosen file, quiet beside its path in the bar: its letter, named in its hint, and the lines it adds and removes. */
-function ChangeBeside({ file }: { file: CodingAgentChangedFile }): React.JSX.Element {
+/**
+ * How many of the files drawn the member marked viewed, leading the bar as
+ * stage-cli's Files tab counts them: "3 / 12 files viewed" by the same marks
+ * the headers' boxes, V, and the tree draw, so a box ticked counts at once
+ * and one GitHub refuses counts again as it goes back; "All 12 files viewed"
+ * with a check, quietly in the palette's green, once every one is; and only
+ * how many files there are while no marks are read (no sign-in, a read
+ * refused, or still reading), rather than a count the marks cannot vouch
+ * for. A read that stopped short of every file is never all viewed, since
+ * the files it left out are not. It is words, not a control, and a change is
+ * read out politely.
+ */
+function ViewedCount({
+  files,
+  viewed,
+  truncated,
+}: {
+  files: readonly CodingAgentChangedFile[];
+  /** Whether a file is marked viewed; none while the marks are not read. */
+  viewed: ((path: string) => boolean) | undefined;
+  /** Whether the read stopped short of every file of the pull request. */
+  truncated: boolean;
+}): React.JSX.Element {
+  const count = files.length;
+  const seen = viewed === undefined ? undefined : files.filter((file) => viewed(file.path)).length;
+  const complete = seen === count && !truncated;
   return (
-    <>
-      <Tooltip label={STATUS_WORDS[file.status]}>
-        <span className="file-view-status" data-status={file.status}>
-          {STATUS_LETTER[file.status]}
-        </span>
-      </Tooltip>
-      <LinesChanged additions={file.additions} deletions={file.deletions} />
-    </>
+    <p className="files-viewed" aria-live="polite" data-complete={complete ? "" : undefined}>
+      {complete ? <CheckIcon aria-hidden="true" /> : null}
+      <span className="files-viewed-words">
+        {seen === undefined
+          ? LIST_WORDS.filesOf(count)
+          : complete
+            ? LIST_WORDS.allViewed(count)
+            : LIST_WORDS.viewedOf(seen, count)}
+      </span>
+    </p>
   );
 }
 
-/** The bar's ⋯ over a diff: the file's name, its path, or its patch copied, the patch saved, and the changes read again. */
+/** What the bar's ⋯ says. */
+const CHANGES_MENU_WORDS = {
+  COPY_PATCH: "Copy PR patch",
+  DOWNLOAD_PATCH: "Download PR patch",
+  PATCH_COPIED: "Patch copied",
+  /** Why the patch is not offered where the read stopped short of every file. */
+  TRUNCATED: "Only the first files were read",
+  /** Why the patch is not offered where no file has lines to copy. */
+  NO_PATCH: "No file has lines to copy",
+} as const;
+
+/**
+ * The bar's ⋯ over the diffs, which acts on the whole pull request since the
+ * bar names no file: its patch copied or saved, every file the read holds
+ * in the list's order (`pullRequestPatch`), and the changes read again. The
+ * patch is not offered, and says why, where the read stopped short of every
+ * file, since it would not be the pull request's. A file's own path is
+ * copied from its header (`FileHead`).
+ */
 function ChangesMenu({
-  file,
+  pullRequest,
   reading,
   onRefresh,
 }: {
-  file: CodingAgentChangedFile;
+  pullRequest: {
+    readonly url: string;
+    readonly truncated: boolean;
+    readonly files: readonly CodingAgentChangedFile[];
+  };
   /** Whether a read is out, which a refresh would only repeat. */
   reading: boolean;
   onRefresh: () => void;
 }): React.JSX.Element {
   const copyWithToast = useCopyToast();
   const saveText = useSaveText();
-  const name = fileName(file.path);
-  const patch = filePatch(file);
+  const patch = pullRequest.truncated ? undefined : pullRequestPatch(treeOrder(pullRequest.files));
+  const why = pullRequest.truncated
+    ? CHANGES_MENU_WORDS.TRUNCATED
+    : patch === undefined
+      ? CHANGES_MENU_WORDS.NO_PATCH
+      : undefined;
   return (
     <BarMenu
       label="Changes actions"
       actions={[
         {
-          label: "Copy file name",
-          icon: <CopyIcon />,
-          onSelect: () => copyWithToast(name, "File name copied"),
-        },
-        copyPathAction(file.path, copyWithToast),
-        {
-          label: "Copy patch",
+          label: CHANGES_MENU_WORDS.COPY_PATCH,
           icon: <ClipboardCopyIcon aria-hidden="true" />,
+          detail: why,
           disabled: patch === undefined,
           onSelect: () => {
-            if (patch !== undefined) copyWithToast(patch, "Patch copied");
+            if (patch !== undefined) copyWithToast(patch, CHANGES_MENU_WORDS.PATCH_COPIED);
           },
         },
         {
-          label: "Download patch",
+          label: CHANGES_MENU_WORDS.DOWNLOAD_PATCH,
           icon: <DownloadIcon />,
+          detail: why,
           disabled: patch === undefined,
           onSelect: () => {
-            if (patch !== undefined) saveText(`${name}.patch`, patch).catch(() => undefined);
+            if (patch !== undefined) {
+              saveText(pullRequestPatchName(pullRequest.url), patch).catch(() => undefined);
+            }
           },
         },
         {
@@ -1607,7 +1648,7 @@ export function AgentChangesTab({
   control: CodingAgentsControl;
   /** Whether the panel is on screen, which is when the tab reads. */
   shown: boolean;
-  /** The task's repository, which the agent works in and the breadcrumbs name; none names the path plain. */
+  /** The task's repository, which the agent works in, and whose files a gap between hunks is read from; none opens no gap. */
   repository: string | null;
   /** Whether the tree beside File and Changes tabs is open, and its toggle. */
   tree: TreeShown;
@@ -1723,23 +1764,6 @@ export function AgentChangesTab({
   if (shownFile === undefined) {
     return <EmptyState icon={<FileDiffIcon />}>{CHANGES_WORDS.EMPTY}</EmptyState>;
   }
-  const count = changed.files.length;
-  const total = linesChanged(changed.files);
-  const counted = (
-    <>
-      {count} {count === 1 ? "file" : "files"} changed{" "}
-      <LinesChanged additions={total.additions} deletions={total.deletions} />
-      {list.viewed === undefined ? null : (
-        <span className="diff-list-progress">
-          {" · "}
-          {LIST_WORDS.viewedOf(
-            changed.files.filter((file) => list.viewed?.(file.path) === true).length,
-            count,
-          )}
-        </span>
-      )}
-    </>
-  );
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the view hears stage-cli's keys from whatever in it has the focus, the list's own scroller among them.
     <div
@@ -1751,20 +1775,19 @@ export function AgentChangesTab({
       }}
     >
       <FileViewBar
-        path={{
-          path: shownFile.path,
-          browse:
-            repository === null
-              ? undefined
-              : { repository, listFolder: changed.folders, onOpen: choose },
-        }}
-        beside={<ChangeBeside file={shownFile} />}
+        lead={
+          <ViewedCount
+            files={changed.files}
+            viewed={list.viewed}
+            truncated={pullRequest.truncated}
+          />
+        }
         onGitHub={() => appPlatform().openGitHub(`${pullRequest.url}/files`)}
         menu={
           <>
             <ViewSettingsButton scope={{ kind: VIEW_SETTINGS_SCOPE.DIFF, roomy }} />
             <FoldAllButton list={list} />
-            <ChangesMenu file={shownFile} reading={out} onRefresh={refresh} />
+            <ChangesMenu pullRequest={pullRequest} reading={out} onRefresh={refresh} />
           </>
         }
         tree={room.toggles}
@@ -1798,7 +1821,6 @@ export function AgentChangesTab({
             only={changed.paths}
             marks={marks}
             label="Changed files"
-            foot={counted}
             listFolder={changed.folders}
             search={{ query: list.query, onQuery: list.onQuery }}
             onOpen={choose}
@@ -1819,9 +1841,6 @@ export function AgentChangesTab({
           />
         )}
       </div>
-      {/* The count stands under the tree, and under the list while the tree
-          stands nowhere beside it, which the stylesheet says (tasks.css). */}
-      <p className="file-tree-foot">{counted}</p>
       {shown && list.keysShown ? <FilesChangedKeysSheet onDismiss={hideKeys} /> : null}
     </div>
   );

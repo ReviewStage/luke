@@ -30,6 +30,7 @@
     "apps/web/server/terminal/function.ts",
     "apps/web/server/voice/function.ts",
     "apps/web/src/app/web-root.tsx",
+    "tools/claude-code-probe/src/cli.ts",
     "tools/trace-export/src/cli.ts"
   ],
   "runShims": [

@@ -590,6 +590,22 @@ test("the sidebar offers no Issues row, with every experiment on, since Luke kee
   assert.equal(placeRow(page, "Issues"), undefined);
 });
 
+test("the Board's sidebar row is the Tasks page's, named Tasks, while the account has the inbox-first sidebar on", async () => {
+  handState({});
+  const off = mount(false);
+  await settle();
+  assert.ok(placeRow(off, "Board"));
+  assert.equal(placeRow(off, "Tasks"), undefined);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handState(experimentsOn(EXPERIMENT.INBOX_FIRST));
+  const on = mount(false);
+  await settle();
+  assert.ok(placeRow(on, "Tasks"));
+  assert.equal(placeRow(on, "Board"), undefined);
+});
+
 test("the Automations page's sidebar row and its command stand with no experiment on", async () => {
   handState({});
   const page = mount(false);
