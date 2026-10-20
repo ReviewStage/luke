@@ -39,14 +39,14 @@ afterEach(() => {
   for (const port of ports.splice(0)) port.close();
 });
 
-function fixture() {
+function fixture(answer: UpdateSnapshot = SNAPSHOT) {
   const heard: string[] = [];
   const port = testActPort(
     updateProcedures({
       updates: {
         check: async () => {
           heard.push("check");
-          return SNAPSHOT;
+          return answer;
         },
         install: () => heard.push("install"),
         openLatestRelease: () => heard.push("release"),
@@ -78,4 +78,13 @@ it("a sender this build does not trust, and a payload a kind takes none of, are 
     refused: "Could not check for updates on this system.",
   });
   assert.deepEqual(heard, []);
+});
+
+it("a check whose answer is no state of the updater is refused, where app:act passed any clonable answer", async () => {
+  // SAFETY: a forged answer, as an updater a newer build wrote might give it; no state is spelled so.
+  const { port } = fixture({ ...SNAPSHOT, status: "paused" } as unknown as UpdateSnapshot);
+
+  assert.deepEqual(await port.call(PANEL, KIND.UPDATE_CHECK), {
+    refused: "Could not check for updates on this system.",
+  });
 });
