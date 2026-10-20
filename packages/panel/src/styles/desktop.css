@@ -2310,6 +2310,19 @@ ul.actor-stack {
   max-width: 100%;
 }
 
+/* A phone's column is too narrow for a long sender beside the buttons and
+   the time, and a line ending at the bubble's right edge would push its
+   buttons off the column's left one, so there who sent it gives way, cut
+   short with an ellipsis (`@luke/ui`'s inline ref), and the buttons and the
+   time keep their whole width inside the column. */
+.desktop-shell[data-room="narrow"] .message-meta > .message-sender {
+  min-width: 0;
+}
+
+.desktop-shell[data-room="narrow"] .message-meta > :is(.message-actions, .message-sent-at) {
+  flex: none;
+}
+
 /* When it was sent, in the sender's own muted meta voice, its digits even. */
 .message-sent-at {
   display: flex;

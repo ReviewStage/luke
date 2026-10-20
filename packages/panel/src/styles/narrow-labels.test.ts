@@ -5,8 +5,8 @@ import { afterEach, test } from "vitest";
 import { layContainersAt, shown } from "../testing/container-width.js";
 
 /**
- * narrow-labels.test.ts -- a phone's tabs, crumbs, and Start say what they
- * are. On the desktop a tab other than the chosen one narrower than 72px
+ * narrow-labels.test.ts -- a phone's tabs, crumbs, Start, and bylines say
+ * what they are, within the column. On the desktop a tab other than the chosen one narrower than 72px
  * turns to its glyph, its hint naming it under the pointer; a phone has no pointer to
  * hover, and two agents' glyphs look alike, so in a narrow room every tab
  * keeps its label and the strip scrolls instead. jsdom lays nothing out, so
@@ -14,7 +14,9 @@ import { layContainersAt, shown } from "../testing/container-width.js";
  * (`testing/container-width.ts`) and the strip is built in the markup
  * `tab-strip.tsx` draws. An Inbox item's crumbs, squeezed beside its bar's
  * buttons to a glyph and a letter, take a line of their own there, and Start
- * keeps its word rather than folding to ▶.
+ * keeps its word rather than folding to ▶. A sent message's byline, ending
+ * at the bubble's right edge, cuts a long sender short rather than pushing
+ * its buttons off the column's left edge.
  */
 
 let laid: HTMLStyleElement | undefined;
@@ -110,4 +112,31 @@ test("in a narrow room Start keeps its word however narrow the task's bar, since
 
 test("on the desktop's width Start folds to its glyph in a bar that narrow, as it did", () => {
   assert.equal(startFold("wide"), "bare");
+});
+
+/** A sent message's byline in a shell of the room given: its actions, who sent it, and when. */
+function byline(room: string) {
+  laid = layContainersAt({}, { touch: room === "narrow" });
+  const shell = document.body.appendChild(document.createElement("div"));
+  shell.className = "desktop-shell";
+  shell.dataset.room = room;
+  const meta = shell.appendChild(document.createElement("div"));
+  meta.className = "message-meta";
+  const part = (className: string) => {
+    const element = meta.appendChild(document.createElement("div"));
+    element.className = className;
+    return getComputedStyle(element);
+  };
+  return {
+    actions: part("message-actions"),
+    sender: part("message-sender"),
+    sentAt: part("message-sent-at"),
+  };
+}
+
+test("in a narrow room a sent message's byline keeps its buttons and its time inside the column, who sent it giving way to an ellipsis", () => {
+  const { actions, sender, sentAt } = byline("narrow");
+  assert.equal(sender.minWidth, "0px", "who sent it may narrow past its name");
+  assert.equal(actions.flexShrink, "0", "the buttons keep their width");
+  assert.equal(sentAt.flexShrink, "0", "the time keeps its width");
 });
