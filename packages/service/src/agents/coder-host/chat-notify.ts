@@ -22,19 +22,21 @@ import { chatNoticeKey } from "@luke/database/models/ids";
 import { isWorkspaceMember } from "@luke/database/models/workspace-store";
 import type { LineSender, StoreWriter } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
-import { type ChatMemberMention, chatWordsForAgents } from "@luke/features/chat-mentions";
 import {
   CHANNEL_KIND,
   CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_MEMBER_LABEL,
   CHAT_NOTICE_LEAD,
   type ChatReadBlock,
   chatNoticeAsksLine,
   chatNoticeReplyLine,
   MEMBER_KIND,
+  type MemberKind,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_BOUNDS } from "@luke/features/coding-agent-wire";
-import { MENTION_KIND } from "@luke/features/mention-link";
+import { mentionLinksIn } from "@luke/features/mention-link";
+import { CHAT_NOTICE_FROM_CHARS } from "@luke/wire";
 import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
@@ -46,6 +48,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../../http/http-effect.js";
 import type { EveSessions } from "../brain-host/eve-sessions.js";
+import { type ChatNames, chatNamesOf } from "./chat-names.js";
 import { steerCodingAgent } from "./steer.js";
 
 /**
@@ -80,10 +83,13 @@ import { steerCodingAgent } from "./steer.js";
  * not. A plan's planner and a person are handed to doors of
  * their own: a person is told through their window's account-wide read
  * (`tellPerson`), and the planner's holds the message until Luke's report
- * turn fills it. What each member came to is the
- * receipt the poster reads: told, held, left, and the handles that named no
- * one. A name marked `@public` is what the coder's tools, Luke's planner,
- * the window's route, and its announcements read as they land.
+ * turn fills it. A notice names who said it by their mention link, and
+ * hands the words as they were written, every link in them whole
+ * (`chat-names.ts`). What each member came to is the
+ * receipt the poster reads, each member by its mention link: told, held,
+ * left, and the labels of the links that named no one. A name marked
+ * `@public` is what the coder's tools, Luke's planner, the window's route,
+ * and its announcements read as they land.
  */
 
 /**
@@ -103,7 +109,7 @@ export const NOTICE_OUTCOME = {
 export type NoticeOutcome = (typeof NOTICE_OUTCOME)[keyof typeof NOTICE_OUTCOME];
 
 /**
- * What a post's poster reads back: the handles told now, held, and left, and the handles mentioned that name no member.
+ * What a post's poster reads back: the members told now, held, and left, each by its mention link or a plain label where none can be written, and the labels of the mention links that name no member.
  * @public
  */
 export type ChatReceipt = {
@@ -114,13 +120,14 @@ export type ChatReceipt = {
 };
 
 /**
- * A message as a door tells it: the message, the line that tells it, and who posted it.
+ * A message as a door tells it: the message, the line that tells it, who posted it, and what they are called.
  * @public
  */
 export interface ChatNotice {
   readonly message: ChatMessageRow;
   readonly text: string;
   readonly from: ChatMemberRow;
+  readonly fromName: string;
 }
 
 /** How Luke and a person are told, each a door its own chain fills. */
@@ -204,11 +211,12 @@ const GONE_REFUSALS: ReadonlySet<string> = new Set([
 
 /**
  * What sent a notice, as the row keeps it: a person by their account, Luke
- * for a planner, and an agent by its handle and, where the member still
- * names one the poster reaches, its agent and the model it runs on as it
- * posts, which its line's mark is drawn by for good.
+ * for a planner, and an agent by its name, its title or else its model's id
+ * as `message_agent` names one, and, where the member still names one the
+ * poster reaches, its agent and the model it runs on as it posts, which its
+ * line's mark is drawn by for good.
  */
-function senderOf(userId: string, from: ChatMemberRow) {
+function senderOf(userId: string, from: ChatMemberRow, name: string) {
   return Effect.gen(function* () {
     if (from.kind === MEMBER_KIND.HUMAN && from.userId !== null) {
       return { kind: MESSAGE_SENDER.MEMBER, userId: from.userId } satisfies LineSender;
@@ -222,7 +230,7 @@ function senderOf(userId: string, from: ChatMemberRow) {
         : yield* hostedStoreOrUnavailable(readCodingAgent(userId, from.agentId));
     const sender: LineSender = {
       kind: MESSAGE_SENDER.AGENT,
-      name: from.handle,
+      name,
       ...(Option.isNone(agent) ? undefined : { agentId: agent.value.id, model: agent.value.model }),
     };
     return sender;
@@ -236,11 +244,11 @@ const AUTHOR_OF_KIND = {
   [MEMBER_KIND.HUMAN]: MESSAGE_AUTHOR.HUMAN,
 } as const;
 
-/** One block as a notice's line reads it, and a read of the chat: words as written, anything else named by what it is. */
-export function blockWords(block: ChatReadBlock, handleOf: HandleOf = NO_HANDLES): string {
+/** One block as a notice's line reads it, and a read of the chat: words as written, every mention link in them whole, anything else named by what it is. */
+export function blockWords(block: ChatReadBlock): string {
   switch (block.type) {
     case CHAT_BLOCK.MARKDOWN:
-      return "text" in block ? chatWordsForAgents(block.text, handleOf) : "";
+      return "text" in block ? block.text : "";
     case CHAT_BLOCK.LINK:
       return "url" in block ? `${block.label} (${block.url})` : "";
     case CHAT_BLOCK.CODE:
@@ -254,30 +262,6 @@ export function blockWords(block: ChatReadBlock, handleOf: HandleOf = NO_HANDLES
   }
 }
 
-/** The handle of the member a mention link names, where one is; how an agent reads a person's chip. */
-type HandleOf = (mention: ChatMemberMention) => string | undefined;
-
-/** No member known, so each member's link reads as its label. */
-const NO_HANDLES: HandleOf = () => undefined;
-
-/** The handles of the members given, by what each is: a person by their account, an agent by its id, a Luke by his task. */
-export function handlesIn(members: Iterable<ChatMemberRow>): HandleOf {
-  const rows = [...members];
-  return (mention) => rows.find((row) => namesMember(mention, row))?.handle;
-}
-
-/** Whether a mention link names the member: a person by their account, an agent by its id, a Luke by his task. */
-function namesMember(mention: ChatMemberMention, row: ChatMemberRow): boolean {
-  switch (mention.kind) {
-    case MENTION_KIND.PERSON:
-      return row.kind === MEMBER_KIND.HUMAN && row.userId === mention.userId;
-    case MENTION_KIND.AGENT:
-      return row.kind === MEMBER_KIND.AGENT && row.agentId === mention.agentId;
-    case MENTION_KIND.LUKE:
-      return row.kind === MEMBER_KIND.LUKE && row.taskId === mention.taskId;
-  }
-}
-
 /** Where a message was said, as a notice names it. */
 function whereSaid(channel: ChatChannelRow, message: ChatMessageRow): string {
   const room = channel.kind === CHANNEL_KIND.DM ? "to you" : `in #${channel.name ?? ""}`;
@@ -287,21 +271,38 @@ function whereSaid(channel: ChatChannelRow, message: ChatMessageRow): string {
 /** What a paragraph break between a notice's parts takes of its bound. */
 const PARAGRAPH_BREAK = "\n\n";
 
+/** What a sender is called where their name holds nothing to call them by, by their kind. */
+const BLANK_NAME = {
+  [MEMBER_KIND.LUKE]: CHAT_MEMBER_LABEL.LUKE,
+  [MEMBER_KIND.AGENT]: CHAT_MEMBER_LABEL.FORMER_AGENT,
+  [MEMBER_KIND.HUMAN]: CHAT_MEMBER_LABEL.FORMER_PERSON,
+} as const satisfies Record<MemberKind, string>;
+
 /**
- * The line a notice is: who said it where and at what place, the words,
+ * What a notice's row names its sender by: their name within the metadata's
+ * bound, cut between two characters so no emoji is split, or their kind's
+ * plain label where nothing of the name is left.
+ */
+function noticeFrom(name: string, kind: MemberKind): string {
+  let kept = "";
+  for (const character of name.trim()) {
+    if (kept.length + character.length > CHAT_NOTICE_FROM_CHARS) break;
+    kept += character;
+  }
+  const trimmed = kept.trim();
+  return trimmed === "" ? BLANK_NAME[kind] : trimmed;
+}
+
+/**
+ * The line a notice is: who said it, by their mention link, where and at what place, the words, cut outside any link,
  * what it asks where it asks, and how to answer. Bounded to a message's own
  * bound by the words alone, so the head and the closing lines always stand
  * whole: the agent always reads how to answer, and a window reading the
  * notice back always finds its closing lines in their whole shape
  * (`chatNoticeWords`).
  */
-function noticeText(
-  from: ChatMemberRow,
-  channel: ChatChannelRow,
-  message: ChatMessageRow,
-  handleOf: HandleOf,
-): string {
-  const header = `${CHAT_NOTICE_LEAD} · @${from.handle} ${whereSaid(channel, message)} (m ${message.seq}):`;
+function noticeText(from: string, channel: ChatChannelRow, message: ChatMessageRow): string {
+  const header = `${CHAT_NOTICE_LEAD} · ${from} ${whereSaid(channel, message)} (m ${message.seq}):`;
   const closings = [
     ...(message.ask === null ? [] : [chatNoticeAsksLine(message.ask.response.type)]),
     chatNoticeReplyLine(message.seq),
@@ -309,11 +310,22 @@ function noticeText(
   const kept = [header, ...closings].join(PARAGRAPH_BREAK);
   const room = CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS - kept.length - PARAGRAPH_BREAK.length;
   const words = message.blocks
-    .map((block) => blockWords(block, handleOf))
+    .map((block) => blockWords(block))
     .filter((part) => part !== "")
-    .join(PARAGRAPH_BREAK)
-    .slice(0, Math.max(room, 0));
-  return [header, words, ...closings].filter((part) => part !== "").join(PARAGRAPH_BREAK);
+    .join(PARAGRAPH_BREAK);
+  const cut = words.slice(0, wholeLinksEnd(words, Math.max(room, 0)));
+  return [header, cut, ...closings].filter((part) => part !== "").join(PARAGRAPH_BREAK);
+}
+
+/**
+ * Where words cut at the bound end, never inside a mention link: a link the
+ * bound falls inside is left out whole, so every link a notice carries is
+ * one the agent can copy to address its member.
+ */
+function wholeLinksEnd(words: string, bound: number): number {
+  if (words.length <= bound) return words.length;
+  const straddling = mentionLinksIn(words).find((link) => link.start < bound && link.end > bound);
+  return straddling?.start ?? bound;
 }
 
 /**
@@ -367,7 +379,7 @@ function tellAgent(
     const eve = telling.eveFor(agent.value.userId);
     if (eve === undefined) return NOTICE_OUTCOME.HELD;
     // Note that who sent it is read before the notice is claimed, because a read that fails after the claim would hold the notice with nothing to release it.
-    const sender = yield* senderOf(userId, notice.from);
+    const sender = yield* senderOf(userId, notice.from, notice.fromName);
     const claimed = yield* hostedStoreOrUnavailable(
       markNoticed(userId, organizationId, member.id, notice.message.channelId, place),
     );
@@ -381,7 +393,7 @@ function tellAgent(
         author: AUTHOR_OF_KIND[notice.from.kind],
         channel: MESSAGE_CHANNEL.CHAT,
         chat_seq: notice.message.seq,
-        from: notice.from.handle,
+        from: noticeFrom(notice.fromName, notice.from.kind),
       },
     }).pipe(Effect.result);
     if (Result.isSuccess(steered)) return NOTICE_OUTCOME.TOLD;
@@ -400,8 +412,9 @@ function tellAgent(
  * Tells a message just posted to the members it addresses, each through
  * the way its kind is told, and answers the receipt: what `postChat` does
  * after a post, and what an ask's post or an answer's reply calls itself.
- * The handles that named no one when it was posted are the caller's to
- * pass on.
+ * Every member is named by its mention link as the poster's account reads
+ * the workspace; the labels of the links that named no one when it was
+ * posted are the caller's to pass on.
  * @public
  */
 export function tellMessage(
@@ -426,10 +439,14 @@ export function tellMessage(
     );
     const from = members.get(message.authorMemberId);
     if (from === undefined) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const names: ChatNames = yield* hostedStoreOrUnavailable(
+      chatNamesOf(userId, organizationId, members.values()),
+    );
     const notice = {
       message,
-      text: noticeText(from, channel.value, message, handlesIn(members.values())),
+      text: noticeText(names.mention(from), channel.value, message),
       from,
+      fromName: names.name(from),
     };
     const told = toldBy({
       authorMemberId: message.authorMemberId,
@@ -453,12 +470,12 @@ export function tellMessage(
           }));
       }
     });
-    const handles = (outcome: NoticeOutcome) =>
-      outcomes.filter((each) => each.outcome === outcome).map((each) => each.member.handle);
+    const named = (outcome: NoticeOutcome) =>
+      outcomes.filter((each) => each.outcome === outcome).map((each) => names.mention(each.member));
     return {
-      told: handles(NOTICE_OUTCOME.TOLD),
-      held: handles(NOTICE_OUTCOME.HELD),
-      left: handles(NOTICE_OUTCOME.LEFT),
+      told: named(NOTICE_OUTCOME.TOLD),
+      held: named(NOTICE_OUTCOME.HELD),
+      left: named(NOTICE_OUTCOME.LEFT),
       unresolved,
     };
   });

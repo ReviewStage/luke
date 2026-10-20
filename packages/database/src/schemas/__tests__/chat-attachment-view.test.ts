@@ -73,7 +73,7 @@ const openMessage = (pictureIds: readonly string[]) =>
           attachmentId,
           alt: "The rendered invite.",
         })),
-        mentions: [],
+
         clientKey: randomUUID(),
       }),
     );
