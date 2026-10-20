@@ -1,3 +1,5 @@
+import { agentSandboxDoors } from "@luke/service/agents/luke-mcp/sandbox-door";
+import { deploymentOidcToken } from "@luke/service/agents/vercel-sandbox-api";
 import { sentryLayer } from "@luke/service/observability/sentry";
 import { type WebServices, type WebServicesError, webServices } from "@luke/service/runtime";
 import { type Effect, Layer, ManagedRuntime } from "effect";
@@ -25,6 +27,14 @@ function webRuntime(): ManagedRuntime.ManagedRuntime<WebServices, WebServicesErr
 export function runWeb<A, E>(effect: Effect.Effect<A, E, WebServices>): Promise<A> {
   return webRuntime().runPromise(effect);
 }
+
+/**
+ * The doors to a native agent's sandbox, for Luke's MCP server's tools that
+ * read a file the agent names or run `show_code` in its checkout: their calls run on this runtime, under the
+ * function's own OIDC token, as every other call of Luke's to Vercel
+ * Sandbox is made.
+ */
+export const webAgentSandboxDoor = agentSandboxDoors(runWeb, deploymentOidcToken);
 
 /**
  * Releases what the layer acquired and leaves the next call to build it again.

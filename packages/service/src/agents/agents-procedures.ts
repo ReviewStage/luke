@@ -12,7 +12,9 @@
  * A Start (`POST /api/plans/{id}/agents`) takes the one path a start takes
  * (`coder-host/start.ts`), reaching eve as the request's own caller
  * (`coder-host/stop.ts`'s `eveFor`), and answers 201 for the agent it made
- * or 200 for the one a retry under the same key made before. A change
+ * or 200 for the one a retry under the same key made before; a blank one
+ * hands the agent nothing and reaches no eve. The calls into an agent
+ * (`GET /api/agents/{id}/calls`) are read as a task's are, by the agent. A change
  * (`PATCH /api/agents/{id}`) names one of a title, an archive, a pin, the
  * MCP servers switched off, or a model and effort, and answers the agent as
  * it then stands.
@@ -41,6 +43,7 @@ import {
 } from "@luke/database/models/coding-agent-store";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { readTaskWorkspace } from "@luke/database/models/task-store";
+import { readAgentTranscript } from "@luke/database/models/transcript-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import {
@@ -296,6 +299,20 @@ export function agentsProcedures(seams: AgentsProcedureSeams) {
           continuedBy(agent.id),
         ),
       };
+    }),
+    /**
+     * What was said on every member's calls into the agent, oldest call
+     * first, with each call's record (`readAgentTranscript`): read under
+     * the caller's membership of the agent's workspace, so an agent of any
+     * other is not found, as one that is no agent is.
+     */
+    calls: signedIn.calls.effect(function* ({ input, context }) {
+      const agentId = yield* pathUuid(input.id);
+      const transcript = yield* hostedStoreOrUnavailable(
+        readAgentTranscript(context.userId, agentId),
+      );
+      if (Option.isNone(transcript)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { transcript: transcript.value };
     }),
     /**
      * The agent changed for what follows, answered as it then stands. A

@@ -2,7 +2,7 @@
  * native-sandbox-sweep.ts -- the scheduled sweep's stop of a native agent's sandbox whose run ended and which no Terminal holds.
  *
  * A native harness's sandbox (Claude Code's or Codex's, which Luke opens
- * itself, `coder-host/claude-code-sessions.ts`) is stopped when its runner
+ * itself, `coder-host/runner-sessions.ts`) is stopped when its runner
  * ends: the events route calls `runnerEnded` on the runner's END. A stop
  * that failed there is logged and not retried, so the sandbox would idle
  * until its timeout. This sweep retries it: it pages through the project's
@@ -27,7 +27,7 @@ import { readNativeRunStanding } from "@luke/database/models/coding-agent-store"
 import { sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { Duration, Effect, Option, Result, type Schema } from "effect";
 import type { HttpClient } from "effect/http";
-import { NATIVE_NAME, RUNNER_TAG } from "../agents/coder-host/claude-code-sessions.js";
+import { RUNNER_TAG, SANDBOX_NAME } from "../agents/coder-host/runner-sessions.js";
 import { OPEN_INTERNET_POLICY } from "../agents/terminal/agent-sandbox.js";
 import {
   deploymentOidcToken,
@@ -78,7 +78,7 @@ interface NativeSandbox {
 }
 
 function nativeSandboxOf(sandbox: ListedSandbox): NativeSandbox | undefined {
-  if (!sandbox.name.startsWith(NATIVE_NAME.SANDBOX)) return undefined;
+  if (!sandbox.name.startsWith(SANDBOX_NAME)) return undefined;
   // A page may name a sandbox that stopped since it was asked for, as Vercel recovers overdue sessions.
   if (sandbox.status !== RUNNING_STATUS || sandbox.currentSessionId === undefined) return undefined;
   const agentId = sandbox.tags?.[RUNNER_TAG.AGENT];

@@ -29,6 +29,7 @@ import type * as Path from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process";
 import { composeAccount } from "./compose-account.js";
 import { composeAutomations } from "./compose-automations.js";
+import { composeChatGptSignIn } from "./compose-chatgpt-sign-in.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeFactory } from "./compose-factory.js";
 import { composeIntegrations } from "./compose-integrations.js";
@@ -48,6 +49,7 @@ import {
   type Environment,
   Reporter,
   ShutdownSignal,
+  SignInConsent,
   TerminalSocket,
   VoiceSocket,
 } from "./effect/seams.js";
@@ -98,6 +100,7 @@ interface PlatformConcernRequirements {
   [HOST_PLATFORM_CONCERN.MAC_COMMANDS]: ChildProcessSpawner.ChildProcessSpawner;
   [HOST_PLATFORM_CONCERN.MAC_TERMINAL]: never;
   [HOST_PLATFORM_CONCERN.TERMINALS]: TerminalSocket;
+  [HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN]: SignInConsent;
 }
 
 /**
@@ -240,6 +243,14 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
           openSocket: yield* TerminalSocket,
         })
       : { ...unavailableConcern(HOST_PLATFORM_CONCERN.TERMINALS), reset: Effect.void };
+    const chatGptSignIn = platform.has(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN)
+      ? yield* composeChatGptSignIn({
+          kernel,
+          account,
+          client: codingAgentClient,
+          openConsent: (yield* SignInConsent).open,
+        })
+      : { ...unavailableConcern(HOST_PLATFORM_CONCERN.CHATGPT_SIGN_IN), reset: Effect.void };
     activeTaskId = tasks.activeTaskId;
     showPlanDraft = tasks.showDraft;
     showTaskActivity = tasks.showActivity;
@@ -267,6 +278,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       yield* tasks.reset;
       yield* codingAgents.reset;
       yield* terminals.reset;
+      yield* chatGptSignIn.reset;
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
@@ -301,6 +313,7 @@ export function hostAssemblyLayer<const Chosen extends HostPlatformConcern>(
       [HOST_CONCERN.MAC_COMMANDS]: macCommands,
       [HOST_CONCERN.MAC_TERMINAL]: macTerminal,
       [HOST_CONCERN.TERMINALS]: terminals,
+      [HOST_CONCERN.CHATGPT_SIGN_IN]: chatGptSignIn,
     } satisfies Readonly<Record<HostConcern, Composer>>;
     // Note that the platform concerns are the only ones a host may leave out.
     const running = (name: HostConcern) => !isPlatformConcern(name) || platform.has(name);

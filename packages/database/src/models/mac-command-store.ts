@@ -1,5 +1,8 @@
 import {
+  isMacBrowserResult,
+  MAC_COMMAND_IMAGE_TYPE,
   MAC_COMMAND_KIND,
+  type MacBrowserResult,
   type MacCommand,
   type MacCommandKind,
   type MacCommandResult,
@@ -19,7 +22,9 @@ import type { TaskStoreEffect } from "./task-store.js";
  * account, so no account claims, settles, or reads another's commands. A
  * command is claimed once, by the first Mac whose read names its kind and
  * takes it, and settled once, by a Mac after it was claimed; the call that
- * queued it reads the result and withdraws the row.
+ * queued it reads the result and withdraws the row. A browser command's
+ * image is kept as bytes beside its JSON result, never in it, and read
+ * back with it once, as the result is found.
  */
 
 const CommandKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
@@ -27,6 +32,11 @@ const CommandKeySchema = Schema.Struct({ userId: Schema.String, id: Schema.Strin
 const KindSchema = Schema.Literals(Object.values(MAC_COMMAND_KIND));
 
 const KindsSchema = Schema.Array(KindSchema);
+
+const ImageTypeSchema = Schema.Literals(Object.values(MAC_COMMAND_IMAGE_TYPE));
+
+/** An image's bytes as the wire spells them, base64, and as the column keeps them, raw. */
+const ImageBytesSchema = Schema.flip(Schema.Uint8ArrayFromBase64);
 
 /**
  * A claimed row as the Mac is handed it, by its kind: a shell command's
@@ -204,13 +214,50 @@ const writeResult = SqlSchema.findAll({
     ),
 });
 
+const writeBrowserResult = SqlSchema.findAll({
+  Request: Schema.Struct({
+    ...CommandKeySchema.fields,
+    output: Schema.Json,
+    image: Schema.NullOr(Schema.Struct({ mediaType: ImageTypeSchema, data: ImageBytesSchema })),
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, id, output, image }) =>
+    Database.use((db) =>
+      db
+        .update(macCommand)
+        .set({
+          result: { output },
+          resultImage: image?.data ?? null,
+          resultImageType: image?.mediaType ?? null,
+        })
+        .where(
+          and(
+            eq(macCommand.id, id),
+            eq(macCommand.userId, userId),
+            eq(macCommand.kind, MAC_COMMAND_KIND.BROWSER),
+            isNotNull(macCommand.claimedAt),
+            isNull(macCommand.result),
+          ),
+        )
+        .returning({ id: macCommand.id }),
+    ),
+});
+
 const findResult = SqlSchema.findOneOption({
   Request: CommandKeySchema,
-  Result: Schema.Struct({ result: macCommandResultSchema }),
+  Result: Schema.Struct({
+    result: macCommandResultSchema,
+    image: Schema.NullOr(ImageBytesSchema),
+    imageType: Schema.NullOr(ImageTypeSchema),
+  }),
   execute: ({ userId, id }) =>
     Database.use((db) =>
       db
-        .select({ result: macCommand.result })
+        .select({
+          result: macCommand.result,
+          image: macCommand.resultImage,
+          imageType: macCommand.resultImageType,
+        })
         .from(macCommand)
         .where(
           and(eq(macCommand.id, id), eq(macCommand.userId, userId), isNotNull(macCommand.result)),
@@ -312,14 +359,36 @@ export function settleMacCommand(
   return Effect.map(writeResult({ userId, id, result }), (rows) => rows.length > 0);
 }
 
-/** A command's result once a Mac settled it; nothing while it waits or runs. */
+/**
+ * Keeps a claimed browser command's result, its image as bytes beside the
+ * JSON; false where the account holds no such browser command claimed and
+ * unsettled, so an image never lands on a command of another kind.
+ */
+export function settleMacBrowserResult(
+  userId: string,
+  id: string,
+  result: MacBrowserResult,
+): TaskStoreEffect<boolean> {
+  const written = writeBrowserResult({
+    userId,
+    id,
+    output: result.output,
+    image: result.image ?? null,
+  });
+  return Effect.map(written, (rows) => rows.length > 0);
+}
+
+/** A command's result once a Mac settled it, a browser command's image with it; nothing while it waits or runs. */
 export function macCommandResult(
   userId: string,
   id: string,
 ): TaskStoreEffect<Option.Option<MacCommandResult>> {
   return Effect.map(
     findResult({ userId, id }),
-    Option.map((row) => row.result),
+    Option.map(({ result, image, imageType }): MacCommandResult => {
+      if (image === null || imageType === null || !isMacBrowserResult(result)) return result;
+      return { ...result, image: { mediaType: imageType, data: image } };
+    }),
   );
 }
 

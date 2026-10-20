@@ -55,6 +55,7 @@ import {
 } from "./pull-request-write-wire.js";
 import { repositoryUnreachedSchema } from "./repository-reach-wire.js";
 import { planRevisionSeqSchema } from "./task-wire.js";
+import { taskTranscriptAnswerSchema } from "./transcript-wire.js";
 
 /**
  * coding-agent-view.ts -- a task's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
@@ -144,6 +145,22 @@ export type CodingAgentDefaultAnswer = typeof codingAgentDefaultAnswerViewSchema
 export const providerKeysAnswerViewSchema = EffectSchema.Union([providerKeysAnswerSchema, failed]);
 
 export type ProviderKeysAnswerView = typeof providerKeysAnswerViewSchema.Type;
+
+/**
+ * A ChatGPT sign-in, as the window hears it end: the keys as they then
+ * stand, the sign-in among their subscriptions; why nothing was kept, in a
+ * sentence for the row; that the developer withdrew it; or why there was no
+ * answer. Never a token: the sign-in's credentials go from the host to the
+ * service and nowhere else.
+ */
+export const chatGptSignInAnswerViewSchema = EffectSchema.Union([
+  providerKeysAnswerSchema,
+  EffectSchema.Struct({ refused: EffectSchema.String }),
+  EffectSchema.Struct({ cancelled: EffectSchema.Literal(true) }),
+  failed,
+]);
+
+export type ChatGptSignInAnswerView = typeof chatGptSignInAnswerViewSchema.Type;
 
 /** Saving a key, as the window asks it: the provider and the key, once. */
 export const providerKeySaveParamsSchema = providerKeySaveRequestSchema;
@@ -381,6 +398,11 @@ export const codingAgentPageAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentPageAnswerView = typeof codingAgentPageAnswerViewSchema.Type;
+
+/** The calls into one agent, as the window hears them: each call's lines and its record, or why there is no answer. */
+const codingAgentCallsAnswerViewSchema = EffectSchema.Union([taskTranscriptAnswerSchema, failed]);
+
+export type CodingAgentCallsAnswerView = typeof codingAgentCallsAnswerViewSchema.Type;
 
 /** One agent, as the window asks what it published. */
 export const codingAgentPullRequestParamsSchema = EffectSchema.Struct({

@@ -239,6 +239,7 @@ const DEPLOYMENT = {
   secret: Redacted.make(DEPLOYMENT_SECRET),
   admits: DEPLOYMENT_TURNS,
   presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+  streams: true,
 };
 
 /** A request under the deployment's secret naming the account, on the message route, for the kind of turn given. */

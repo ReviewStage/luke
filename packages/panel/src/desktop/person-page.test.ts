@@ -457,7 +457,7 @@ test("the reader's own page lists no question of an agent with no task, whose st
 });
 
 /** The sidebar's views as this Mac keeps them, by workspace. */
-function keptViews(): Record<string, { createdBy?: string }> {
+function keptViews(): Record<string, { createdBy?: string; assignedTo?: string }> {
   return JSON.parse(window.localStorage.getItem("luke.sidebarTaskViews") ?? "{}");
 }
 
@@ -467,6 +467,21 @@ test("Their tasks in sidebar lists the sidebar's tasks by them", async () => {
 
   button(page, "Their tasks in sidebar").click();
   assert.equal(keptViews()[ACME.id]?.createdBy, CHARLES.userId);
+});
+
+test("Their tasks in sidebar lists every task they created, letting go of a filter by assignee", async () => {
+  window.localStorage.setItem(
+    "luke.sidebarTaskViews",
+    JSON.stringify({
+      [ACME.id]: { grouping: "repository", order: "updated", assignedTo: DEAN.userId },
+    }),
+  );
+  const { page } = mount(CHARLES.userId);
+  await settle();
+
+  button(page, "Their tasks in sidebar").click();
+  const kept = keptViews()[ACME.id];
+  assert.deepEqual([kept?.createdBy, kept?.assignedTo], [CHARLES.userId, undefined]);
 });
 
 test("a workspace of one offers no sidebar filter, since its sidebar filters by nobody", async () => {

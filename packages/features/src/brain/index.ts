@@ -2,7 +2,6 @@ export { BRAIN_OPENAI_DEFAULTS } from "./model-defaults.js";
 export {
   addModelUsage,
   BRAIN_REQUEST_FAILURE,
-  BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   type BrainModelUsage,
   type BrainRequestFailure,

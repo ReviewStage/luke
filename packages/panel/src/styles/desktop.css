@@ -1955,7 +1955,9 @@ ul.actor-stack {
    measure in the middle of the column, as they keep to it in a wide side
    panel, so the list's card and the composer's share both edges. The
    Inbox's pane is laid out the same way, its thread at that measure, the
-   box flowing at the thread's end, and what stands docked under it too. */
+   box flowing at the thread's end, and what stands docked under it too.
+   The thread's log is named by both its classes, so it keeps this inset
+   over the one a side panel gives a transcript's log. */
 .desktop-agent,
 .desktop-inbox {
   --reading-room: calc((100% - var(--luke-page-measure)) / 2);
@@ -1971,7 +1973,7 @@ ul.actor-stack {
 .desktop-agent .agent-published-dock,
 .desktop-agent .draft-fork-dock,
 .desktop-agent .agent-composer,
-.desktop-inbox .inbox-board,
+.desktop-inbox .conversation-log.inbox-board,
 .desktop-inbox > .agent-composer,
 .desktop-inbox .inbox-next-dock {
   padding-inline: max(var(--content-inset), var(--reading-room));
@@ -2142,9 +2144,10 @@ ul.actor-stack {
   white-space: pre;
 }
 
-/* The transcript's way back to its newest line stands on the column's own
-   ground rather than the panel's. */
-.desktop-agent .conversation-scroll {
+/* The transcript's way back to its newest line, and an Inbox thread's,
+   stands on the column's own ground rather than the panel's. */
+.desktop-agent .conversation-scroll,
+.desktop-inbox .conversation-scroll {
   --luke-button-ground: var(--luke-color-ground);
 }
 
@@ -2981,29 +2984,7 @@ ul.actor-stack {
   display: none;
 }
 
-/* The band the list's tabs stand in under its title, whose hairline is the
-   band's rather than the tabs'. */
-.inbox-show-tabs {
-  flex: none;
-  min-width: 0;
-  padding-block: var(--luke-space-6);
-  border-bottom: 1px solid var(--luke-color-border);
-}
-
-/* Under a finger each tab is a finger's height. A row of them wider than
-   the list scrolls sideways (the fill bar's own), and a swipe that reaches
-   its end stops there rather than going on to the browser's Back. */
-@media (pointer: coarse) {
-  .inbox-show-tabs .luke-choice-bar[data-look="fill"][data-size="compact"] .luke-choice-bar-option {
-    height: var(--luke-touch-target);
-  }
-
-  .inbox-show-tabs .luke-choice-bar[data-look="fill"] {
-    overscroll-behavior-x: contain;
-  }
-}
-
-/* The chip saying whose items the list holds, under its tabs and over its
+/* The chip saying whose items the list holds, under its head and over its
    rows, on the rows' inset. */
 .inbox-tasks-chips {
   display: flex;
@@ -3642,23 +3623,6 @@ ul.actor-stack {
   overflow-wrap: anywhere;
 }
 
-/* "Waiting on you" at an open ask's head, in the attention ink after its dot. */
-.inbox-waiting {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--luke-space-6);
-  color: var(--luke-color-attention);
-}
-
-.inbox-waiting::after {
-  order: -1;
-  width: 6px; /* off-scale: the attention dot */
-  height: 6px; /* off-scale: the attention dot */
-  border-radius: var(--luke-radius-full);
-  background: currentColor;
-  content: "";
-}
-
 /* A teammate's open ask names who it waits on in the line's own muted ink,
    as the list's Waiting on others does. */
 .inbox-waiting-on {
@@ -3807,9 +3771,8 @@ ul.actor-stack {
 }
 
 /* An open ask's marker ending the agent's message (`inbox-pane.tsx`'s
-   AskMarker): a small pill saying whom it waits on, after a
-   dot in the attention ink where it waits on the reader, and the muted ink
-   where it waits on a teammate. */
+   AskMarker): a small pill saying which teammate it waits on, after a dot
+   in the muted ink. An ask waiting on the reader draws none. */
 .inbox-ask-marker {
   display: inline-flex;
   max-width: 100%;
@@ -3826,16 +3789,12 @@ ul.actor-stack {
 }
 
 .inbox-ask-marker::before {
-  width: 6px; /* off-scale: the attention dot */
-  height: 6px; /* off-scale: the attention dot */
+  width: 6px; /* off-scale: the marker's dot */
+  height: 6px; /* off-scale: the marker's dot */
   flex: none;
   border-radius: var(--luke-radius-full);
-  background: var(--luke-color-attention);
-  content: "";
-}
-
-.inbox-ask-marker[data-inbox-waiting="teammate"]::before {
   background: var(--luke-color-text-subtle);
+  content: "";
 }
 
 /* The reader's draft reply, the thread's last comment: the box stands in

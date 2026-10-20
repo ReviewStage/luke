@@ -20,6 +20,7 @@ import type { SessionOwnership } from "./brain-host/door.js";
 import { productionBrainHostSeams } from "./brain-host/production.js";
 import {
   CODER_DEPLOYMENT_PRESENCE,
+  CODER_DEPLOYMENT_STREAMS,
   CODER_DEPLOYMENT_TURNS,
   coderChannelInput,
 } from "./coder-host/channel.js";
@@ -91,6 +92,7 @@ const doorsFrom = (variables: {
         secret: brain.deploymentSecret(),
         admits: DEPLOYMENT_TURNS,
         presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+        streams: true,
       }).auth,
       coder: coderChannelInput(
         noAccount,
@@ -99,6 +101,7 @@ const doorsFrom = (variables: {
           secret: coder.deploymentSecret(),
           admits: CODER_DEPLOYMENT_TURNS,
           presents: CODER_DEPLOYMENT_PRESENCE,
+          streams: CODER_DEPLOYMENT_STREAMS,
         },
         async () => undefined,
       ).auth,

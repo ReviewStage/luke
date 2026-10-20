@@ -235,3 +235,5 @@ export type ChatGptCredentialsSaveRequest = typeof chatGptCredentialsSaveRequest
 export const chatGptHostAnswerSchema = EffectSchema.Struct({
   extAgentHostId: EffectSchema.String,
 });
+
+export type ChatGptHostAnswer = typeof chatGptHostAnswerSchema.Type;

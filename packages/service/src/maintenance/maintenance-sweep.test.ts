@@ -43,6 +43,7 @@ interface Recorded {
   automated: number[];
   pictures: number[];
   tokenPullRequests: number[];
+  imageTemplates: number[];
 }
 
 function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
@@ -57,6 +58,7 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
     automated: [],
     pictures: [],
     tokenPullRequests: [],
+    imageTemplates: [],
   };
   const options: MaintenanceSweepOptions = {
     request: sweepRequest(),
@@ -112,6 +114,11 @@ function sweepOptions(overrides: Partial<MaintenanceSweepOptions> = {}) {
         recorded.tokenPullRequests.push(now);
         return { polled: 2, told: 1 };
       }),
+    sweepImageTemplates: (now) =>
+      Effect.sync(() => {
+        recorded.imageTemplates.push(now);
+        return { current: "ready" as const, deleted: 1 };
+      }),
     ...overrides,
   };
   return { options, recorded };
@@ -142,6 +149,7 @@ it.effect("a deployment without CRON_SECRET answers unavailable and sweeps nothi
       automated: [],
       pictures: [],
       tokenPullRequests: [],
+      imageTemplates: [],
     });
   }),
 );
@@ -167,6 +175,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       automated: [],
       pictures: [],
       tokenPullRequests: [],
+      imageTemplates: [],
     });
     assert.deepEqual(missing.recorded, {
       purged: [],
@@ -179,6 +188,7 @@ it.effect("a wrong or missing bearer is refused and sweeps nothing", () =>
       automated: [],
       pictures: [],
       tokenPullRequests: [],
+      imageTemplates: [],
     });
   }),
 );
@@ -196,6 +206,7 @@ it.effect(
       assert.deepEqual(answer.body.sandboxes, SANDBOXED);
       assert.equal(answer.body.purgedPictures, 4);
       assert.deepEqual(answer.body.tokenPullRequests, { polled: 2, told: 1 });
+      assert.deepEqual(answer.body.imageTemplates, { current: "ready", deleted: 1 });
       const [instant] = recorded.terminals;
       assert.ok(instant !== undefined);
       assert.deepEqual(recorded, {
@@ -209,6 +220,7 @@ it.effect(
         automated: [instant],
         pictures: [instant],
         tokenPullRequests: [instant],
+        imageTemplates: [instant],
       });
     }),
 );

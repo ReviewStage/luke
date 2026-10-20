@@ -16,7 +16,7 @@ import { FIND_PAGE, PageFind } from "../find-in-tab.js";
 import { MemberDirectory } from "../member-directory.js";
 import { NOT_FOUND_THING, NotFound } from "../not-found.js";
 import { INBOX_COLUMNS, useInboxColumns } from "../tasks/inbox-columns.js";
-import { InboxList, InboxListNote, ItemMark } from "../tasks/inbox-list.js";
+import { INBOX_SCOPES, InboxList, InboxListNote, ItemMark } from "../tasks/inbox-list.js";
 import {
   anyUnread,
   INBOX_HOLDER,
@@ -63,15 +63,15 @@ import { taskCardOf } from "./task-card.js";
  * workspace the sidebar lists that main says holds one (the switcher counts
  * what waits in the others), needing the developer or settled, each task read whole
  * as main says it changed (`use-inbox-items.ts`), under its task, its
- * person, its status, or in one run, the latest first or the longest
- * waiting first, what needs them, what is unread, every open item, or
+ * person, its status, or in one run, the latest first or the oldest
+ * first, To do, what needs them and what of theirs is unread, or All,
  * everything, of everyone's, theirs, or one teammate's, as the developer
  * last chose; Needs
  * you is the Inbox's one name for an item not yet answered
  * (`inbox-model.ts`'s `NEEDS_YOU`), and the sidebar's Inbox row counts the
  * same items. An archived task's items are put away with it rather than
- * dropped: no other tab lists or counts them, and the Archived tab beside
- * the others lists them, read only while it is shown and counted by main's
+ * dropped: no other scope lists or counts them, and Archived, offered beside
+ * the others in the view's menu, lists them, read only while it is shown and counted by main's
  * word of each task, each drawn as it stood but answered no longer, the
  * pane's box giving way to Unarchive, which brings the task back and its
  * items with it as they stood. A press on a row chooses it, and the pane beside the
@@ -86,8 +86,8 @@ import { taskCardOf } from "./task-card.js";
  * pages, or one of its agents' pull requests (`inbox-panel-link.ts`). The
  * panel's toggle, its width, and its keys are a task's own, and ⌘F finds in
  * the panel while it holds the keys, as on a task. With nothing listed, it says so under the Inbox's
- * glyph (`@luke/ui`'s `EmptyState`); with its tab leaving out every item, the list
- * says so and offers the tab beside it, while the pane goes on showing the item
+ * glyph (`@luke/ui`'s `EmptyState`); with its scope leaving out every item, the list
+ * says so and offers the scope that holds something, while the pane goes on showing the item
  * chosen, answered, though the list draws it no row. Escape never leaves it, a stray press
  * being no reason to lose the item being read; any row of the sidebar does, and so does Back. Too narrow for the list and the item
  * side by side, it shows one at a time (`inbox-columns.ts`): the chosen
@@ -365,7 +365,7 @@ function InboxShown({
                     head={{
                       shown: tasks.shown,
                       show: choices,
-                      counts,
+                      scopes: INBOX_SCOPES.WINDOW,
                       view: { choices, folds },
                       // Note that Mark all as read marks what the service's own mark reaches, which leaves the archived tasks' items be.
                       readAll: {

@@ -220,13 +220,15 @@ interface AppNetworkSlice {
 /**
  * What the signed-in account may open in the app, as the host last read it
  * from the service for that account (`account-access-client.ts`): whether
- * it is an admin, which the sidebar offers the admin dashboard by. Never an
- * admin while nobody is signed in, for another account than the one read,
- * or where the read failed. A window draws by it and authorizes nothing:
+ * it is an admin, which the sidebar offers the admin dashboard by, and
+ * whether it is in the native-agents cohort. Neither while nobody is signed
+ * in, for another account than the one read, or where the read failed. A window draws by it and authorizes nothing:
  * the dashboard's own gate on the service decides every admin read.
  */
 export interface AppAccessSlice {
   admin: boolean;
+  /** Whether the account is in the cohort whose coding agents may run on a provider's plan, which draws the plan sign-ins in Settings. */
+  nativeAgents: boolean;
 }
 
 /**
@@ -327,3 +329,6 @@ export function sessionReplayBootstrap(
     ...(state.sessionReplay.accountId ? { accountId: state.sessionReplay.accountId } : undefined),
   };
 }
+
+/** The access of nobody, of another account, or of a read that failed: nothing opened. */
+export const NO_ACCESS: AppAccessSlice = { admin: false, nativeAgents: false };

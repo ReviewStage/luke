@@ -160,11 +160,12 @@ export const CODING_AGENT_PAYER = {
 
 export type CodingAgentPayer = (typeof CODING_AGENT_PAYER)[keyof typeof CODING_AGENT_PAYER];
 
-/** What an agent was handed as its first message: the task's document, or a prompt the developer wrote in its place. */
+/** What an agent was handed as its first message: the task's document, a prompt the developer wrote in its place, or nothing, for an agent started blank, whose first words come later, typed or spoken. */
 export const CODING_AGENT_BRIEF = {
   PLAN: "plan",
   // Note that the value says "task", because a released desktop decodes it.
   PROMPT: "task",
+  BLANK: "blank",
 } as const;
 
 export type CodingAgentBrief = (typeof CODING_AGENT_BRIEF)[keyof typeof CODING_AGENT_BRIEF];
@@ -404,7 +405,11 @@ export type CodingAgentStartFrom = typeof codingAgentStartFromSchema.Type;
  * so it names no prompt of its own, and it runs on that agent's choice and
  * servers where it names none. A note, bounded as a message is, goes only
  * beside such a source, written after the replay as the developer's, and
- * files go with it there as they go with a prompt.
+ * files go with it there as they go with a prompt. A Start `blank` hands the
+ * agent nothing at all, neither the plan nor a prompt, so it names no
+ * prompt, files, source, or note; its first words come later, typed or
+ * spoken, and it may start on a task with no repository, where it works in
+ * none.
  */
 export const codingAgentStartRequestFields = {
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
@@ -416,6 +421,7 @@ export const codingAgentStartRequestFields = {
   disabledServers: EffectSchema.optionalKey(disabledServersSchema),
   from: EffectSchema.optionalKey(codingAgentStartFromSchema),
   note: EffectSchema.optionalKey(messageWordsSchema),
+  blank: EffectSchema.optionalKey(EffectSchema.Boolean),
 };
 
 /** Whether `words` carry the files, as a prompt or a note does: no files without them, and words, files, or both with them. */
@@ -426,22 +432,28 @@ function carriesFiles(
   return words === undefined ? attachments === undefined : hasWordsOrFiles(words, attachments);
 }
 
-/** A Start's words or files: a prompt and its files afresh, never a note; from another agent, whose brief it is handed, no prompt, and a note and its files. */
+/** A Start's words or files: a prompt and its files afresh, never a note; from another agent, whose brief it is handed, no prompt, and a note and its files; blank, none of them. */
 export const startBrief = EffectSchema.makeFilter(
   ({
     prompt,
     attachments,
     from,
     note,
+    blank,
   }: {
     readonly prompt?: string;
     readonly attachments?: readonly CodingAgentAttachment[];
     readonly from?: CodingAgentStartFrom;
     readonly note?: string;
-  }) =>
-    from === undefined
+    readonly blank?: boolean;
+  }) => {
+    if (blank === true) {
+      return [prompt, attachments, from, note].every((each) => each === undefined);
+    }
+    return from === undefined
       ? note === undefined && carriesFiles(prompt, attachments)
-      : prompt === undefined && carriesFiles(note, attachments),
+      : prompt === undefined && carriesFiles(note, attachments);
+  },
 );
 
 /** The Start request as a caller holds it, before it is put on the wire. */
@@ -632,9 +644,9 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   runStartedAt: EffectSchema.optionalKey(countedNumber),
   /**
    * What the agent was handed as its first message, so its tab draws a
-   * plan as the plan's card and a task as the developer's own message.
-   * Absent from a service older than the task, which handed every agent
-   * the plan.
+   * plan as the plan's card, a task as the developer's own message, and,
+   * for an agent started blank, its first line as any other line. Absent
+   * from a service older than the task, which handed every agent the plan.
    */
   brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF))),
   /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
@@ -747,30 +759,6 @@ export type CodingAgentPage = typeof codingAgentPageSchema.Type;
 /** One agent read by its id (GET), on a task or with none. */
 export const codingAgentPageAnswerSchema = EffectSchema.Struct({ agent: codingAgentPageSchema });
 
-/**
- * One agent with no plan as the plan list carries it beside the plans, so
- * the sidebar lists it among them: the agent as the tabs draw it, its
- * automation's name among them, the automation, workspace, and repository
- * its own page names, and when it last moved, which orders it among the
- * plans by their last update, and when the reader pinned it, where they did.
- * The run that started it is its page's alone, so a list of many carries no
- * prompt.
- */
-export const tasklessAgentSchema = EffectSchema.Struct({
-  ...codingAgentSummarySchema.fields,
-  automationId: codingAgentPageSchema.fields.automationId,
-  workspaceId: codingAgentPageSchema.fields.workspaceId,
-  repository: codingAgentPageSchema.fields.repository,
-  /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
-  activityAt: countedNumber,
-  /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
-  pinnedAt: EffectSchema.optionalKey(countedNumber),
-  /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
-  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
-});
-
-export type TasklessAgent = typeof tasklessAgentSchema.Type;
-
 /** The task's agents (GET), in the order they were started. */
 export const codingAgentListAnswerSchema = EffectSchema.Struct({
   agents: EffectSchema.Array(codingAgentSummarySchema),
@@ -824,6 +812,41 @@ export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentPullRequestAnswer = typeof codingAgentPullRequestAnswerSchema.Type;
+
+/**
+ * One agent with no plan as the plan list carries it beside the plans, so
+ * the sidebar lists it among them: the agent as the tabs draw it, its
+ * automation's name among them, the automation, workspace, and repository
+ * its own page names, and when it last moved, which orders it among the
+ * plans by their last update, when the reader pinned it, where they did,
+ * and the pull request it opened, where it opened one.
+ * The run that started it is its page's alone, so a list of many carries no
+ * prompt.
+ */
+export const tasklessAgentSchema = EffectSchema.Struct({
+  ...codingAgentSummarySchema.fields,
+  automationId: codingAgentPageSchema.fields.automationId,
+  workspaceId: codingAgentPageSchema.fields.workspaceId,
+  repository: codingAgentPageSchema.fields.repository,
+  /** Epoch milliseconds the agent last moved: its start, its newest run's start, or that run's end, whichever is latest. */
+  activityAt: countedNumber,
+  /** Epoch milliseconds the reader pinned the agent, a pin being each member's own; absent while they have not, and from a service before agents were pinned. */
+  pinnedAt: EffectSchema.optionalKey(countedNumber),
+  /** Where the reader's pin stands in the sidebar's Pinned section once they dragged it (`pin-order.ts`); absent while it stands by `pinnedAt`. */
+  pinPosition: EffectSchema.optionalKey(EffectSchema.String),
+  /** The pull request it opened, as GitHub last answered the service, which its row's card shows as a task's row's card shows its own; absent while it opened none, and from a service before it was sent. */
+  pullRequest: EffectSchema.optionalKey(
+    EffectSchema.Struct({
+      number: codingAgentPullRequestSchema.fields.number,
+      title: codingAgentPullRequestSchema.fields.title,
+      url: codingAgentPullRequestSchema.fields.url,
+      state: codingAgentPullRequestSchema.fields.state,
+      checks: codingAgentPullRequestSchema.fields.checks,
+    }),
+  ),
+});
+
+export type TasklessAgent = typeof tasklessAgentSchema.Type;
 
 /** What became of one file: made, changed in place, removed, or moved, with or without changes. */
 export const CHANGED_FILE_STATUS = {
@@ -1713,7 +1736,12 @@ const codingAgentMessageSchema = EffectSchema.Struct({
   metadata: EffectSchema.optionalKey(storedObjectSchema),
   /** What sent one of the developer's messages to a coding agent (`codingAgentSenderSchema`); absent on every other row, on a message written before senders were kept, and from a service older than it. */
   sentBy: EffectSchema.optionalKey(codingAgentSenderSchema),
-  /** Epoch milliseconds one of the developer's lines was sent, which the tab names under its bubble; absent on every other row, and from a service older than it. */
+  /**
+   * Epoch milliseconds one of the developer's lines was sent, which the tab
+   * names under its bubble, or a line said on a call into the agent began,
+   * either speaker's, its metadata naming the voice channel and its call;
+   * absent on every other row, and from a service older than it.
+   */
   sentAt: EffectSchema.optionalKey(countedNumber),
   /**
    * Where in a turn under way one of the developer's lines arrived: the

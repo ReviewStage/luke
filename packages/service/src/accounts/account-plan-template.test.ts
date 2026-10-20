@@ -73,7 +73,6 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   nativeAgentAccounts: [],
-  agentSandboxSnapshot: undefined,
 };
 
 /** The catalog a coding-agent choice is checked against: the default model and one other. */

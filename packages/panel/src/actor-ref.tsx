@@ -321,6 +321,12 @@ export function CreatorHeard({ actor }: { actor: Actor }): React.JSX.Element {
   return <span className="visually-hidden">{`(created by ${actorName(actor)}${left})`}</span>;
 }
 
+/** What a reader of the screen hears of a row's assignee, whose face says it on screen: their name, and that they left where they did. */
+export function AssigneeHeard({ actor }: { actor: Actor }): React.JSX.Element {
+  const left = leftWithFace(actor) ? ", who left" : "";
+  return <span className="visually-hidden">{`(assigned to ${actorName(actor)}${left})`}</span>;
+}
+
 /** The quiet badge the reader's own account wears beside its name. */
 export function YouBadge(): React.JSX.Element {
   return <span className="actor-you">You</span>;

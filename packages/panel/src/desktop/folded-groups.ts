@@ -27,14 +27,16 @@ import {
  * account's own sections, each by its id. A fixture run starts with every group open
  * and keeps nothing, so its frames never wear a developer's folds. The
  * Inbox's task groups are kept on the same terms, each by its task's id,
- * and so are its view choices, the tab it shows, how it groups and sorts,
+ * and so are its view choices, the scope it shows, how it groups and sorts,
  * whose items it lists, a teammate by their account's id, and whether its
  * rows show their media, and its list's width; a task's own Inbox keeps a
- * tab of its own, one for every task, apart from the window's, and shows
- * no media. A tab kept before the tabs were, the Needs
- * you button's press, is read as the Needs you tab where it was pressed and
- * Everything where it was not, which is what that list then held; a fixture run draws no inbox, so it has nothing staged to
- * keep apart. An automation's Runs panel keeps its width and whether it
+ * scope of its own, one for every task, apart from the window's, and shows
+ * no media. A choice kept before its scope was is read as the scope that
+ * now lists what it listed: a tab kept before the scopes, Needs you or
+ * Unread, as To do, and All open or Everything as All; the Needs you
+ * button's press, kept before the tabs, as To do where it was pressed and
+ * All where it was not; and the sort Waiting longest as Oldest first. A
+ * fixture run draws no inbox, so it has nothing staged to keep apart. An automation's Runs panel keeps its width and whether it
  * stands on the same terms, one for every automation, as the side panel
  * keeps one for every plan, and so does the tree beside every File and
  * Changes tab, one width for them all.
@@ -51,7 +53,7 @@ const STORAGE_KEY = {
   INBOX_TASKS_EARLIER: "luke.inboxFoldedPlans",
   INBOX_SHOW: "luke.inboxShow",
   TASK_INBOX_SHOW: "luke.taskInboxShow",
-  /** Where the Inbox's Needs you button kept its press, before its tabs. */
+  /** Where the Inbox's Needs you button kept its press, before its tabs, which stood before its scopes. */
   INBOX_WAITING_ONLY: "luke.inboxWaitingOnly",
   TASK_INBOX_WAITING_ONLY: "luke.taskInboxWaitingOnly",
   INBOX_GROUPING: "luke.inboxGrouping",
@@ -119,6 +121,14 @@ const storedGrouping = Schema.fromJsonString(Schema.Literals(Object.values(INBOX
 /** How the Inbox sorts its items. */
 const storedSort = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_SORT)));
 
+/** The sort an earlier version kept that the sorts no longer name: the open items first, the one waiting longest first. */
+const EARLIER_SORT = { WAITING: "waiting" } as const;
+
+/** How the Inbox sorts its items, as any version kept it. */
+const storedEarlierSort = Schema.fromJsonString(
+  Schema.Literals([...Object.values(INBOX_SORT), ...Object.values(EARLIER_SORT)]),
+);
+
 /** Whose items the Inbox lists. */
 const storedWhose = Schema.fromJsonString(
   Schema.Union([
@@ -132,8 +142,29 @@ const storedWhose = Schema.fromJsonString(
   ]),
 );
 
-/** Which tab the Inbox shows. */
+/** Which scope the Inbox shows. */
 const storedShow = Schema.fromJsonString(Schema.Literals(Object.values(INBOX_SHOW)));
+
+/** The tabs an earlier version kept, before the scopes: Needs you, Unread, and All open; Everything was kept as All is. */
+const EARLIER_SHOW = { NEEDS_YOU: "needs-you", UNREAD: "unread", OPEN: "open" } as const;
+
+/** Which scope, or tab before the scopes, the Inbox shows, as any version kept it. */
+const storedEarlierTab = Schema.fromJsonString(
+  Schema.NullOr(Schema.Literals([...Object.values(INBOX_SHOW), ...Object.values(EARLIER_SHOW)])),
+);
+
+/** The scope each kept value now stands for: a tab before the scopes as the scope listing what it did, and Archived as To do, since it is never where an Inbox opens. */
+const SHOW_OF_KEPT = {
+  [INBOX_SHOW.TO_DO]: INBOX_SHOW.TO_DO,
+  [INBOX_SHOW.ALL]: INBOX_SHOW.ALL,
+  [INBOX_SHOW.ARCHIVED]: INBOX_SHOW.TO_DO,
+  [EARLIER_SHOW.NEEDS_YOU]: INBOX_SHOW.TO_DO,
+  [EARLIER_SHOW.UNREAD]: INBOX_SHOW.TO_DO,
+  [EARLIER_SHOW.OPEN]: INBOX_SHOW.ALL,
+} as const satisfies Record<
+  InboxShow | (typeof EARLIER_SHOW)[keyof typeof EARLIER_SHOW],
+  InboxShow
+>;
 
 /** Whether the Needs you button was pressed, before the tabs; null where nothing was kept. */
 const storedEarlierShow = Schema.fromJsonString(Schema.NullOr(Schema.Boolean));
@@ -284,7 +315,7 @@ export function useInboxTaskFolds(): InboxTaskFolds {
   };
 }
 
-/** Which tab an Inbox shows, and the press that shows another. */
+/** Which scope an Inbox shows, and the press that shows another. */
 export interface InboxShowChoice {
   show: InboxShow;
   onShow: (show: InboxShow) => void;
@@ -310,13 +341,14 @@ export interface InboxWhoseChoice {
   onWhose: (whose: InboxWhose) => void;
 }
 
-/** A view choice, `fallback` until first changed, kept under `key` as it is changed. */
+/** A view choice, `fallback` until first changed, or what `read` makes of what an earlier version kept, and kept under `key` as it is changed. */
 function useKeptChoice<A>(
   key: string,
   schema: Schema.Codec<A, string>,
   fallback: A,
+  read: () => A = () => readKept(key, schema, fallback),
 ): readonly [A, (next: A) => void] {
-  const [value, setValue] = useState<A>(() => readKept(key, schema, fallback));
+  const [value, setValue] = useState<A>(read);
   return [
     value,
     (next) => {
@@ -327,21 +359,28 @@ function useKeptChoice<A>(
 }
 
 /**
- * The tab kept under `key`, or, where none is, the one the Needs you button
- * kept under `earlier` stood for: Needs you where it was pressed, and
- * Everything, all it then listed, where it was not; All open where neither
- * was kept.
+ * The scope kept under `key`, a tab kept there before the scopes read as
+ * the scope that lists what it did (`SHOW_OF_KEPT`); or, where none is, the
+ * one the Needs you button kept under `earlier` stood for: To do where it
+ * was pressed, and All, all it then listed, where it was not; To do where
+ * neither was kept.
  */
 function readShow(key: string, earlier: string): InboxShow {
   const pressed = readKept(earlier, storedEarlierShow, null);
-  const fallback =
-    pressed === null ? INBOX_SHOW.OPEN : pressed ? INBOX_SHOW.NEEDS_YOU : INBOX_SHOW.ALL;
-  return readKept(key, storedShow, fallback);
+  const fallback = pressed === false ? INBOX_SHOW.ALL : INBOX_SHOW.TO_DO;
+  const kept = readKept(key, storedEarlierTab, null);
+  return kept === null ? fallback : SHOW_OF_KEPT[kept];
+}
+
+/** The sort kept, Waiting longest, which the sorts no longer name, read as Oldest first; the latest first where none is. */
+function readSort(): InboxSort {
+  const kept = readKept(STORAGE_KEY.INBOX_SORT, storedEarlierSort, INBOX_SORT.LATEST);
+  return kept === EARLIER_SORT.WAITING ? INBOX_SORT.OLDEST : kept;
 }
 
 /**
- * An Inbox's tab, read from `key` (or `earlier`'s press) and kept there as
- * it is pressed. Note that Archived is never kept, because it is a look into
+ * An Inbox's scope, read from `key` (or `earlier`'s press) and kept there as
+ * it is chosen. Note that Archived is never kept, because it is a look into
  * the archive rather than where the Inbox should open on what waits.
  */
 function useKeptShow(key: string, earlier: string): InboxShowChoice {
@@ -355,12 +394,12 @@ function useKeptShow(key: string, earlier: string): InboxShowChoice {
   };
 }
 
-/** A task's own Inbox's tab, All open until first pressed, kept apart from the window's and shared by every task. */
+/** A task's own Inbox's scope, To do until first chosen, kept apart from the window's and shared by every task. */
 export function useTaskInboxShow(): InboxShowChoice {
   return useKeptShow(STORAGE_KEY.TASK_INBOX_SHOW, STORAGE_KEY.TASK_INBOX_WAITING_ONLY);
 }
 
-/** The Inbox's view choices, All open of everyone's, grouped by task, the latest first, with no media shown, until first changed, and kept as each is pressed. */
+/** The Inbox's view choices, To do of everyone's, grouped by task, the latest first, with no media shown, until first changed, and kept as each is pressed. */
 export function useInboxViewChoices(): InboxViewChoices {
   const shown = useKeptShow(STORAGE_KEY.INBOX_SHOW, STORAGE_KEY.INBOX_WAITING_ONLY);
   const [grouping, onGrouping] = useKeptChoice<InboxGrouping>(
@@ -372,6 +411,7 @@ export function useInboxViewChoices(): InboxViewChoices {
     STORAGE_KEY.INBOX_SORT,
     storedSort,
     INBOX_SORT.LATEST,
+    readSort,
   );
   const [whose, onWhose] = useKeptChoice<InboxWhose>(
     STORAGE_KEY.INBOX_WHOSE,

@@ -65,7 +65,6 @@ const NO_KEYS: HostedEnvironmentValues = {
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
   nativeAgentAccounts: [],
-  agentSandboxSnapshot: undefined,
 };
 
 const WITH_SECRET = Layer.succeed(HostedEnvironment, {
@@ -124,6 +123,7 @@ function brainBehindDoor(members: ReadonlySet<string>, conversationId: string) {
       secret: Redacted.make(SECRET),
       admits: DEPLOYMENT_TURNS,
       presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+      streams: true,
     },
   ).auth;
   const layer = fakeHttpClientLayer(async (url, init) => {

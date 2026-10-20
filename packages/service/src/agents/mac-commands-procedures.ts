@@ -7,12 +7,14 @@
  * kinds waiting for the account, claimed for this Mac, as soon as one
  * waits, or none once the hold ends (`agents/mac-command.ts`). `POST` keeps one claimed command's result,
  * which the agent's call is looking for; a command the account does not
- * hold claimed and unsettled is not found. Every request resolves the
+ * hold claimed and unsettled is not found. `POST /api/mac-commands/browser`
+ * keeps a browser command's result, image and all, on the same terms, and
+ * finds only a browser command. Every request resolves the
  * bearer before it touches a row, and every row it touches is the
  * bearer's account's own.
  */
 
-import { settleMacCommand } from "@luke/database/models/mac-command-store";
+import { settleMacBrowserResult, settleMacCommand } from "@luke/database/models/mac-command-store";
 import { macCommandKindsRead } from "@luke/features/mac-command-wire";
 import { Effect } from "effect";
 import {
@@ -45,6 +47,13 @@ export function macCommandsProcedures(seams: MacCommandsProcedureSeams) {
     settle: macCommands.settle.effect(function* ({ context, input }) {
       const settled = yield* hostedStoreOrUnavailable(
         settleMacCommand(context.userId, input.id, input.result),
+      );
+      if (!settled) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { settled: true } as const;
+    }),
+    settleBrowser: macCommands.settleBrowser.effect(function* ({ context, input }) {
+      const settled = yield* hostedStoreOrUnavailable(
+        settleMacBrowserResult(context.userId, input.id, input.result),
       );
       if (!settled) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
       return { settled: true } as const;

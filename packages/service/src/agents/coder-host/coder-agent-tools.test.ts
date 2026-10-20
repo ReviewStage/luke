@@ -107,7 +107,12 @@ import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
-import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
+import {
+  CODER_DEPLOYMENT_PRESENCE,
+  CODER_DEPLOYMENT_STREAMS,
+  CODER_DEPLOYMENT_TURNS,
+  coderChannelInput,
+} from "./channel.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import type { CoderHostSeams } from "./production.js";
 import type { SummaryModelOf } from "./replay-summary.js";
@@ -2301,7 +2306,12 @@ function sessionEndsOf(host: CoderHost) {
   const { events } = coderChannelInput(
     async () => undefined,
     { reachesSession: async () => false, reachesConversation: async () => false },
-    { secret: undefined, admits: CODER_DEPLOYMENT_TURNS, presents: CODER_DEPLOYMENT_PRESENCE },
+    {
+      secret: undefined,
+      admits: CODER_DEPLOYMENT_TURNS,
+      presents: CODER_DEPLOYMENT_PRESENCE,
+      streams: CODER_DEPLOYMENT_STREAMS,
+    },
     (sessionId) => database.run(host.sessionEnded(sessionId)),
   );
   const failed = events?.["session.failed"];

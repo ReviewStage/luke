@@ -118,13 +118,3 @@ test("the native agent cohort is read as a list of its accounts, each once, and 
   assert.deepEqual(blank.nativeAgentAccounts, []);
   assert.deepEqual(listed.nativeAgentAccounts, ["user-1", "user-2", "user-3"]);
 });
-
-test("the native agents' snapshot is read trimmed, and a blank one is unset", async () => {
-  const set = await environmentOver({
-    [CODER_ENVIRONMENT.AGENT_SANDBOX_SNAPSHOT]: " snap_fixture\n",
-  });
-  const blank = await environmentOver({ [CODER_ENVIRONMENT.AGENT_SANDBOX_SNAPSHOT]: "  " });
-
-  assert.equal(set.agentSandboxSnapshot, "snap_fixture");
-  assert.equal(blank.agentSandboxSnapshot, undefined);
-});

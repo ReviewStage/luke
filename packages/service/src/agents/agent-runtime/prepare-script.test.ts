@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { temporaryDirectory } from "@luke/wire/testing";
 import { type TestContext, test } from "vitest";
-import { PREPARE_SCRIPT } from "./sandbox.js";
+import { PREPARE_SCRIPT } from "./sandbox-image.js";
 
 /**
  * The image's preparation as a sandbox's shell runs it: it installs

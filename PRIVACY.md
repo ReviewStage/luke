@@ -370,6 +370,25 @@ service holds the key again, and we never log it or send it to our analytics,
 crash reports, or screen recordings. Removing it in Settings, or deleting your
 account, deletes it.
 
+**Your ChatGPT plan.** Where Settings offers it, Continue with ChatGPT signs
+Luke in to your ChatGPT account through OpenAI's own page in your browser,
+which hands a one-time code back to Luke on your Mac over a connection that
+never leaves it (`127.0.0.1`). Your Mac trades that code with OpenAI for an
+access token, a renewable refresh token, and an ID token, checks the ID
+token's signature and that it was issued to Luke for this sign-in, and sends
+them, with the client id OpenAI issued Luke and your ChatGPT account's id
+(the ID token's subject), once, over HTTPS, to our service. It keeps nothing
+of them itself. The service stores them under your account encrypted exactly
+as your own API keys are, with the scopes OpenAI granted and when the access
+token expires, beside a host id it made for your account, which names Luke's
+hosted runtime to OpenAI and is kept after you disconnect. It renews the
+access token with OpenAI as it nears its expiry. You are shown that you are
+connected and when, never a token, and we never log one or send it to our
+analytics, crash reports, or screen recordings. Disconnecting in Settings
+asks OpenAI to end the sign-in and deletes it whether or not OpenAI confirms;
+where OpenAI did not confirm, Settings says so, and you can remove Luke in
+your ChatGPT settings to end it there. Deleting your account deletes it too.
+
 **Your own GitHub token.** If you save a GitHub personal access token (classic)
 in Settings › Profile, your Mac sends it once, over HTTPS, to our service,
 which asks GitHub whose it is with one request and keeps it only if GitHub

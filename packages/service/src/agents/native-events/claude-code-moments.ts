@@ -172,15 +172,15 @@ const CLI_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(CLAUDE_CODE_TO
 /** The name of a call the projection holds, by its id; nothing for a call it does not hold. */
 export type HeldCallName = (callId: string) => string | undefined;
 
-/** A tool's answer as the text the model read: its text blocks joined, a picture standing in for its bytes. */
-function answerText(content: string | readonly WireValue[] | undefined): string {
+/** A tool's answer as the text the model read: its text blocks joined, a picture standing in for its bytes where `pictures` asks, and left out otherwise. */
+function answerText(content: string | readonly WireValue[] | undefined, pictures: boolean): string {
   if (content === undefined) return "";
   if (Predicate.isString(content)) return content;
   return content
-    .map((block) =>
+    .flatMap((block) =>
       Option.match(readTextBlock(block), {
-        onSome: ({ text }) => text,
-        onNone: () => PICTURE_STAND_IN,
+        onSome: ({ text }) => [text],
+        onNone: () => (pictures ? [PICTURE_STAND_IN] : []),
       }),
     )
     .join("\n");
@@ -191,9 +191,16 @@ function answerText(content: string | readonly WireValue[] | undefined): string 
  * flagged is a refusal carrying the text, and any other answer is available,
  * kept as the text a CLI tool answered, or read as the JSON a tool of Luke's
  * MCP server answers, so its status word counts as the eve relay counts it.
+ * A CLI tool's pictures stand in as `[image]`; a Luke tool's pictures are left
+ * out, as eve's relay leaves out a look's picture, so its JSON still reads.
  */
-function settlementOf(storedName: string, text: string, isError: boolean): ToolCallSettlement {
+function settlementOf(
+  storedName: string,
+  content: string | readonly WireValue[] | undefined,
+  isError: boolean,
+): ToolCallSettlement {
   const lukeTool = !CLI_TOOL_NAMES.has(storedName);
+  const text = answerText(content, !lukeTool);
   const output: UnparsedWireValue = lukeTool ? valueFromJsonText(text) : text;
   if (isError) {
     return {
@@ -257,11 +264,7 @@ function userMoments(message: WireValue, heldCallName: HeldCallName): readonly N
     moments.push({
       kind: NATIVE_MOMENT.TOOL_SETTLED,
       callId: answer.value.tool_use_id,
-      settlement: settlementOf(
-        name,
-        answerText(answer.value.content),
-        answer.value.is_error === true,
-      ),
+      settlement: settlementOf(name, answer.value.content, answer.value.is_error === true),
     });
   }
   return moments.length === 0 ? [] : [...moments, { kind: NATIVE_MOMENT.STEP_CLOSED }];

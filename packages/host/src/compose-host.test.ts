@@ -90,36 +90,41 @@ const askedOfStandingHost = Effect.gen(function* () {
   const { gateway } = yield* HostTag;
   const repositories = yield* gateway.call(GATEWAY_METHOD.MAC_REPOSITORIES_READ);
   const terminals = yield* gateway.call(GATEWAY_METHOD.TERMINALS_LIST, { agentId: "agent" });
-  return { concerns, repositories, terminals };
+  const chatGptSignIn = yield* gateway.call(GATEWAY_METHOD.CHATGPT_SIGN_IN);
+  return { concerns, repositories, terminals, chatGptSignIn };
 });
 
 describe("the host's platform concerns", () => {
-  it.effect("left out, need no spawner or terminal socket, and refuse their methods", () =>
-    Effect.gen(function* () {
-      const stateRoot = yield* temporaryDirectoryScoped("luke-host-browser-");
-      // Note that nothing here provides a `ChildProcessSpawner` or a
-      // `TerminalSocket`. The layer's type, narrowed to the concerns chosen,
-      // asks for neither, and a build that reached for one anyway would die
-      // here on the missing service.
-      const browser = hostStandingLayer.pipe(
-        Layer.provideMerge(hostAssemblyLayer([])),
-        Layer.provide(Layer.merge(machineOver(stateRoot), fixedAccountSource())),
-      );
+  it.effect(
+    "left out, need no spawner, terminal socket or sign-in consent, and refuse their methods",
+    () =>
+      Effect.gen(function* () {
+        const stateRoot = yield* temporaryDirectoryScoped("luke-host-browser-");
+        // Note that nothing here provides a `ChildProcessSpawner`, a
+        // `TerminalSocket`, or a `SignInConsent`. The layer's type, narrowed to the concerns chosen,
+        // asks for neither, and a build that reached for one anyway would die
+        // here on the missing service.
+        const browser = hostStandingLayer.pipe(
+          Layer.provideMerge(hostAssemblyLayer([])),
+          Layer.provide(Layer.merge(machineOver(stateRoot), fixedAccountSource())),
+        );
 
-      const asked = yield* Effect.provide(askedOfStandingHost, browser);
+        const asked = yield* Effect.provide(askedOfStandingHost, browser);
 
-      const notHere = {
-        ok: false,
-        error: { code: GATEWAY_ERROR.REFUSED, message: NOT_ON_THIS_PLATFORM },
-      };
-      assert.deepEqual(asked.repositories, notHere);
-      assert.deepEqual(asked.terminals, notHere);
-      assert.equal(asked.concerns.has(HOST_CONCERN.MAC_COMMANDS), false);
-      assert.equal(asked.concerns.has(HOST_CONCERN.MAC_TERMINAL), false);
-      assert.equal(asked.concerns.has(HOST_CONCERN.TERMINALS), false);
-      assert.equal(asked.concerns.has(HOST_CONCERN.TASKS), true);
-      assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.NOTIFICATIONS]);
-    }).pipe(Effect.provide(NodeFileSystem.layer)),
+        const notHere = {
+          ok: false,
+          error: { code: GATEWAY_ERROR.REFUSED, message: NOT_ON_THIS_PLATFORM },
+        };
+        assert.deepEqual(asked.repositories, notHere);
+        assert.deepEqual(asked.terminals, notHere);
+        assert.deepEqual(asked.chatGptSignIn, notHere);
+        assert.equal(asked.concerns.has(HOST_CONCERN.MAC_COMMANDS), false);
+        assert.equal(asked.concerns.has(HOST_CONCERN.CHATGPT_SIGN_IN), false);
+        assert.equal(asked.concerns.has(HOST_CONCERN.MAC_TERMINAL), false);
+        assert.equal(asked.concerns.has(HOST_CONCERN.TERMINALS), false);
+        assert.equal(asked.concerns.has(HOST_CONCERN.TASKS), true);
+        assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [HOST_CAPABILITY.NOTIFICATIONS]);
+      }).pipe(Effect.provide(NodeFileSystem.layer)),
   );
 
   it.effect("all chosen, as the desktop chooses them, answer", () =>
@@ -133,6 +138,7 @@ describe("the host's platform concerns", () => {
             desktopAccountSource,
             scriptedSpawner(() => ({ exitCode: 0 })).layer,
             Layer.succeed(TerminalSocket, () => Effect.succeed({ unreachable: true as const })),
+            Layer.succeed(SignInConsent, { open: loopbackConsent }),
           ),
         ),
       );
@@ -145,6 +151,8 @@ describe("the host's platform concerns", () => {
         ok: false,
         error: { code: GATEWAY_ERROR.REFUSED, message: "signed out" },
       });
+      // The ChatGPT sign-in answers too, unanswered behind the closed account gate, and opens no browser.
+      assert.deepEqual(asked.chatGptSignIn, { ok: true, result: { failure: "unanswered" } });
       for (const concern of ALL_HOST_PLATFORM_CONCERNS)
         assert.equal(asked.concerns.has(concern), true);
       assert.deepEqual(hostCapabilities(asked.concerns, CLIENT), [
@@ -152,6 +160,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.CHATGPT_SIGN_IN,
       ]);
       // The desktop answers every client capability too: its Zoom, login item and Keyboard shortcuts page stand on DESKTOP_APP.
       assert.deepEqual(hostCapabilities(asked.concerns, ALL_CLIENT_CAPABILITIES), [
@@ -162,6 +171,7 @@ describe("the host's platform concerns", () => {
         HOST_CAPABILITY.MAC_COMMANDS,
         HOST_CAPABILITY.MAC_TERMINAL,
         HOST_CAPABILITY.TERMINALS,
+        HOST_CAPABILITY.CHATGPT_SIGN_IN,
         HOST_CAPABILITY.BROWSER,
         HOST_CAPABILITY.DESKTOP_APP,
       ]);

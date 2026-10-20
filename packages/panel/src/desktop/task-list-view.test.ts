@@ -638,7 +638,7 @@ test("⌘K offers each view choice only while it would change the list, and runn
   act(() => {
     runAppCommand(APP_COMMAND.SHOW_MY_TASKS);
   });
-  assert.equal(chipWords(sidebar), "Created by me");
+  assert.equal(chipWords(sidebar), "Assigned to me");
   assert.equal(appCommandOffered(APP_COMMAND.SHOW_EVERYONES_TASKS), true);
 
   act(() => {
@@ -816,7 +816,7 @@ test("a one-off agent's menu goes with a floating sidebar as it is put away", as
 
   float(SIDEBAR_OVERLAY.CLOSED);
 
-  assert.equal(opened, 3);
+  assert.equal(opened, 4);
   assert.equal(document.querySelectorAll('[role="menuitem"]').length, 0);
 });
 
@@ -852,7 +852,7 @@ test("a pinned one-off agent stands under Pinned beside the pinned tasks, newest
   assert.ok(taskRows(sidebar).some((row) => row.name === "Sweep flaky tests"));
 });
 
-test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and Archive agent last, and an archived one offers no pin but Unarchive", async () => {
+test("a one-off agent's row offers Pin after Copy link, Rename beside it, Unpin once pinned, and Archive agent last, and an archived one offers no pin nor Rename but Unarchive", async () => {
   const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
   const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [
     TRIAGE,
@@ -862,12 +862,14 @@ test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and A
 
   assert.deepEqual(agentMenu(sidebar, "Triage overnight issues"), [
     "Copy link",
+    "Rename",
     "Pin",
     "Archive agent",
   ]);
   await act(async () => menuItem("Pin").click());
   assert.deepEqual(agentMenu(sidebar, "Sweep flaky tests"), [
     "Copy link",
+    "Rename",
     "Unpin",
     "Archive agent",
   ]);
@@ -876,6 +878,37 @@ test("a one-off agent's row offers Pin after Copy link, Unpin once pinned, and A
 
   toggleArchived(sidebar);
   assert.deepEqual(agentMenu(sidebar, "Digest of open pull requests"), ["Copy link", "Unarchive"]);
+});
+
+/** The buttons a sidebar row named `title` draws at its end, by their names. */
+function rowMarks(sidebar: HTMLElement, title: string): string[] {
+  const item = [...sidebar.querySelectorAll<HTMLElement>(".sidebar-tasks > li")].find(
+    (each) => each.querySelector("button")?.textContent?.includes(title) === true,
+  );
+  assert.ok(item, `the row of ${title} stands`);
+  return [...item.querySelectorAll(".luke-list-row-actions button")].map(
+    (button) => button.getAttribute("aria-label") ?? "",
+  );
+}
+
+test("a one-off agent's row draws Pin and Archive at its end as a task's row does, Unpin once pinned and Unarchive once archived, and its Pin pins it", async () => {
+  const shelved = oneOff("a-3", "Digest of open pull requests", "acme/relay", DEAN, 45, 60);
+  const sidebar = await mountRead({ ...ACME, slug: "acme" }, TASKS, ARCHIVED, [TRIAGE, shelved]);
+  const task = TASKS[0] ?? assert.fail("a task stands");
+
+  assert.deepEqual(rowMarks(sidebar, "Triage overnight issues"), rowMarks(sidebar, task.name));
+  assert.deepEqual(rowMarks(sidebar, "Triage overnight issues"), ["Pin", "Archive"]);
+  const pin = [
+    ...(sidebar.querySelectorAll<HTMLButtonElement>(
+      '.luke-list-row-actions button[aria-label="Pin"]',
+    ) ?? []),
+  ].find((button) => button.closest("li")?.textContent?.includes("Triage overnight issues"));
+  assert.ok(pin);
+  await act(async () => pin.click());
+  assert.deepEqual(pinsAsked, ["a-1:true"]);
+
+  toggleArchived(sidebar);
+  assert.deepEqual(rowMarks(sidebar, "Digest of open pull requests"), ["Unarchive"]);
 });
 
 /** A task of the workspace's standing in `status`. */
@@ -961,4 +994,104 @@ test("a task from a service before statuses, and the archived tasks, stand whate
     ["Old spike"],
   );
   assert.equal(hiddenLine(sidebar), null);
+});
+
+/** The tasks with Charles's Fix flaky deploy assigned to Dean, and Retry webhooks to Charles. */
+const ASSIGNED = TASKS.map((each) =>
+  each.id === "t-2"
+    ? { ...each, assignee: { userId: DEAN, name: "Dean Stratakos" } }
+    : each.id === "t-1"
+      ? { ...each, assignee: { userId: CHARLES, name: "Charles Pan" } }
+      : each,
+);
+
+/** What a reader of the screen hears each row of the Tasks section say of whose face it wears, by the row's name. */
+function heardFaces(sidebar: HTMLElement): [string, string | undefined][] {
+  const tasks = sidebar.querySelector(TASK_LIST);
+  assert.ok(tasks, "the Tasks section stands");
+  return [...tasks.querySelectorAll(".sidebar-tasks > li > button")].map((row) => [
+    row.querySelector(".luke-list-row-title")?.firstChild?.textContent ?? "",
+    row.querySelector(".luke-list-row-title .visually-hidden:last-child")?.textContent ?? undefined,
+  ]);
+}
+
+test("a row wears its assignee's face where someone else is on it, none where you are, and its creator's where no one is", async () => {
+  const sidebar = await mountRead(ACME, ASSIGNED);
+  choose(sidebar, "Group by", "None");
+
+  assert.deepEqual(heardFaces(sidebar), [
+    ["Billing empty states", "(created by Charles Pan)"],
+    ["Retry webhooks", "(assigned to Charles Pan)"],
+    ["Fix flaky deploy", undefined],
+  ]);
+});
+
+test("Assigned to › Me lists only the tasks you are on, wearing no faces, says so in a chip and a dot, and the chip's × lists anyone's again", async () => {
+  const sidebar = await mountRead(ACME, ASSIGNED);
+  choose(sidebar, "Assigned to", "Me");
+
+  assert.deepEqual(taskRows(sidebar), [
+    { name: "Fix flaky deploy", repository: undefined, face: false },
+  ]);
+  assert.equal(chipWords(sidebar), "Assigned to me");
+  const options = sidebar.querySelector('button[aria-label="View options"]');
+  assert.equal(options?.getAttribute("aria-description"), "Filtered");
+
+  const clear = chip(sidebar)?.querySelector("button");
+  assert.ok(clear, "the chip offers its ×");
+  act(() => clear.click());
+  assert.equal(chip(sidebar), null);
+  assert.equal(taskRows(sidebar).length, 3);
+});
+
+test("Assigned to a teammate, with nothing of theirs, says so, and Show all lists everyone's again", async () => {
+  const sidebar = await mountRead(ACME, TASKS);
+  choose(sidebar, "Assigned to", "Charles Pan");
+
+  assert.equal(chipWords(sidebar), "Assigned to Charles Pan");
+  assert.equal(taskRows(sidebar).length, 0);
+  const note = [...sidebar.querySelectorAll(".sidebar-note")].find((each) =>
+    each.textContent?.startsWith("Nothing assigned to them here."),
+  );
+  const showAll = note?.querySelector("button");
+  assert.ok(showAll, "the note offers Show all");
+  act(() => showAll.click());
+  assert.equal(taskRows(sidebar).length, 3);
+});
+
+test("⌘K's Show my tasks lists the tasks you are on, whoever created them, and Show everyone's tasks lets go of both filters", async () => {
+  const sidebar = await mountRead(ACME, ASSIGNED);
+  // Created by › Me holds none of the tasks Dean is on, which Show my tasks lists whoever created them.
+  choose(sidebar, "Created by", "Me");
+  act(() => runAppCommand(APP_COMMAND.SHOW_MY_TASKS));
+
+  assert.deepEqual(
+    taskRows(sidebar).map((row) => row.name),
+    ["Fix flaky deploy"],
+  );
+  assert.equal(chipWords(sidebar), "Assigned to me");
+  assert.equal(appCommandOffered(APP_COMMAND.SHOW_MY_TASKS), false);
+  act(() => runAppCommand(APP_COMMAND.SHOW_EVERYONES_TASKS));
+  assert.equal(taskRows(sidebar).length, 3);
+  assert.equal(chip(sidebar), null);
+});
+
+test("a list that names the creator, by its filter or its groups, still wears the face of whoever else is assigned", async () => {
+  const assignedToMaya = TASKS.map((each) =>
+    each.id === "t-2" ? { ...each, assignee: { userId: "user-maya", name: "Maya Okafor" } } : each,
+  );
+  const sidebar = await mountRead(ACME, assignedToMaya);
+  choose(sidebar, "Created by", "Charles Pan");
+
+  assert.deepEqual(heardFaces(sidebar), [
+    ["Billing empty states", undefined],
+    ["Fix flaky deploy", "(assigned to Maya Okafor)"],
+  ]);
+
+  choose(sidebar, "Created by", "Anyone");
+  choose(sidebar, "Group by", "Creator");
+  assert.deepEqual(
+    heardFaces(sidebar).filter(([, heard]) => heard !== undefined),
+    [["Fix flaky deploy", "(assigned to Maya Okafor)"]],
+  );
 });

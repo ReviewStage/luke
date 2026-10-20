@@ -231,7 +231,13 @@ export function loopbackConsent<Grant extends object>(
       const refused = parameter(parameters, "error");
       const code = parameter(parameters, "code");
       if (!refused && code) {
-        outcome = yield* options.exchange({ code, state, redirectUri, codeVerifier });
+        outcome = yield* options.exchange({
+          code,
+          state,
+          redirectUri,
+          codeVerifier,
+          clientId: parameter(parameters, "client_id"),
+        });
       }
       const granted = !("reason" in outcome);
       // Note that a continuation is read only off a grant, and asked of the
