@@ -10,6 +10,7 @@ import {
   INBOX_FIELD,
   INBOX_MESSAGE_AUTHOR,
   INBOX_MESSAGE_LEAD,
+  INBOX_RESPONSE,
   INBOX_STATUS,
   INBOX_TOOL,
   type InboxAnswers,
@@ -274,19 +275,28 @@ function closerOf(item: InboxItem): Pick<AgentInboxLine, "closedBy"> {
 }
 
 /**
+ * Whether the item is a notice still open: a post that asked nothing,
+ * waiting on the developer's nod alone, which the agent never hears, so it
+ * reads as no ask of the agent's.
+ */
+function openNotice(item: InboxItem): boolean {
+  return item.status === INBOX_STATUS.OPEN && item.response.type === INBOX_RESPONSE.NONE;
+}
+
+/**
  * What an item from before threads carries on itself rather than on a
  * message: what it asks while open, how it was answered, and why it was
  * closed. Note that an item posted since carries each on its messages, so
- * none is repeated where a message asks or answers.
+ * none is repeated where a message asks or answers, and a notice's empty
+ * view is left out, since it asks nothing.
  */
 function legacyOf(item: InboxItem, messages: readonly InboxMessage[]): Partial<AgentInboxLine> {
   if (messages.some((message) => message.ask !== undefined || message.answers !== undefined)) {
     return {};
   }
+  const asks = item.status === INBOX_STATUS.OPEN && !(openNotice(item) && item.blocks.length === 0);
   return {
-    ...(item.status === INBOX_STATUS.OPEN
-      ? { blocks: item.blocks, response: item.response }
-      : undefined),
+    ...(asks ? { blocks: item.blocks, response: item.response } : undefined),
     ...(item.answer === undefined ? undefined : { answer: item.answer }),
     ...(item.answerFiles === undefined
       ? undefined
@@ -326,7 +336,7 @@ function lineOf(item: InboxItem): AgentInboxLine {
     key: item.key,
     title: item.title,
     status: item.status,
-    ...(open ? { waits: item.needsReply } : undefined),
+    ...(open && !openNotice(item) ? { waits: item.needsReply } : undefined),
     ...(earlier > 0 ? { earlier } : undefined),
     thread: told.map(threadLineOf),
     ...closerOf(item),

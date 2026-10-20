@@ -48,6 +48,7 @@ import {
   taskInboxItems,
   withdrawInboxAnswer,
   withdrawInboxClose,
+  withdrawInboxMessage,
 } from "../../inbox/inbox-store.js";
 
 /**
@@ -55,7 +56,8 @@ import {
  * functions against a real dialect: every post is the agent's message on
  * the thread, the ask it ends with held open and the one before replaced,
  * the item's own fields a view of that ask for a desktop before version 5;
- * a post that asks nothing waits on nobody; the revision moves only with
+ * a post that asks nothing is a notice, open until the developer's nod
+ * and holding no ask; the revision moves only with
  * what the agent asks; an older desktop's answer by revision is written as
  * the member's message that answers the open ask, and an answer by the
  * ask's message is checked against it; a read's `messages` leave out what
@@ -260,7 +262,7 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
   );
 
   it.effect(
-    "a post that asks nothing replaces the ask held open and waits on nobody: the item stands as a note already settled, its words its message, and no read of what waits counts it",
+    "a post that asks nothing replaces the ask held open with a notice: the item stands open as a note to nod to, its words its message, and the read of what waits counts it",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -278,16 +280,21 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
 
         assert.deepEqual(
           [note.status, note.response, note.blocks, note.needsReply, note.revision],
-          [INBOX_STATUS.ANSWERED, { type: INBOX_RESPONSE.NONE }, [], false, 2],
+          [INBOX_STATUS.OPEN, { type: INBOX_RESPONSE.NONE }, [], false, 2],
         );
-        assert.deepEqual([note.answer, note.answeredBy], [undefined, undefined]);
-        assert.equal(note.settledAt, note.updatedAt);
+        assert.deepEqual(
+          [note.answer, note.answeredBy, note.settledAt],
+          [undefined, undefined, undefined],
+        );
         assert.deepEqual(plainWords(note), ["Main now needs one review."]);
         assert.deepEqual(asksOf(note), [
           [INBOX_MESSAGE_AUTHOR.AGENT, INBOX_ASK.DO, INBOX_ASK_STATUS.REPLACED],
           [INBOX_MESSAGE_AUTHOR.AGENT, undefined, undefined],
         ]);
-        assert.deepEqual(yield* accountWaitingItems(agent.userId), []);
+        assert.deepEqual(
+          (yield* accountWaitingItems(agent.userId)).map((entry) => entry.id),
+          [note.id],
+        );
       }),
   );
 
@@ -571,7 +578,7 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
   );
 
   it.effect(
-    "a post from version 5 that asks nothing is a message on the thread of the item under its key, moving nothing but its last change, and under a new key opens a thread that waits on nobody",
+    "a post from version 5 that asks nothing is a message on a thread whose ask stands open, moving nothing but its last change, and under a new key opens a notice waiting on the developer's nod",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -610,8 +617,8 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
           }),
         );
         assert.deepEqual(
-          [opened.status, opened.response, opened.blocks, opened.revision],
-          [INBOX_STATUS.ANSWERED, { type: INBOX_RESPONSE.NONE }, [], 1],
+          [opened.status, opened.response, opened.blocks, opened.needsReply, opened.revision],
+          [INBOX_STATUS.OPEN, { type: INBOX_RESPONSE.NONE }, [], false, 1],
         );
         assert.deepEqual(plainWords(opened), ["It deploys from main."]);
       }),
@@ -949,10 +956,19 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
   );
 
   it.effect(
-    "a post that asks nothing takes no place among the open items, so an agent holding as many as it may still posts one",
+    "a post that asks nothing takes no place among the open asks, so an agent holding as many as it may still posts one, and notices left open keep no ask from being posted",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
+        for (let at = 0; at < INBOX_BOUNDS.MAX_OPEN_PER_AGENT; at += 1) {
+          posted(
+            yield* postInboxThread(agent, {
+              key: `notice-${at}`,
+              title: "The preview is up",
+              body: "It deploys from main.",
+            }),
+          );
+        }
         for (let at = 0; at < INBOX_BOUNDS.MAX_OPEN_PER_AGENT; at += 1) {
           posted(yield* postInboxItem(agent, { ...SETTINGS, key: `open-${at}` }));
         }
@@ -965,7 +981,113 @@ it.layer(getTestDB())("an inbox item's thread", (it) => {
         });
 
         assert.ok(Result.isFailure(refused));
-        assert.equal(posted(note).status, INBOX_STATUS.ANSWERED);
+        assert.equal(posted(note).status, INBOX_STATUS.OPEN);
+      }),
+  );
+
+  it.effect(
+    "a post that asks nothing on a thread holding no open ask brings it back as a notice, its revision moved on, until the developer's Got it settles it without a message; a member's close settles one too",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const asked = posted(
+          yield* postInboxThread(agent, {
+            key: "deploy-region",
+            title: "Where should the preview deploy?",
+            body: "Two regions are free.",
+            ask: DECIDE,
+          }),
+        );
+        const ask = asked.thread?.[0]?.id ?? "";
+        const answers = { ask, reply: INBOX_REPLY.CHOSE, choices: ["iad1"] };
+        yield* later;
+        yield* answerInboxAsk(agent.userId, asked.id, {
+          answers,
+          text: "",
+          clientKey: randomUUID(),
+        });
+        yield* later;
+
+        const followed = posted(
+          yield* postInboxThread(agent, { key: "deploy-region", body: "Deployed to iad1." }),
+        );
+        assert.deepEqual(
+          [followed.status, followed.response, followed.title, followed.revision],
+          [INBOX_STATUS.OPEN, { type: INBOX_RESPONSE.NONE }, asked.title, asked.revision + 1],
+        );
+        assert.deepEqual(asksOf(followed), [
+          [INBOX_MESSAGE_AUTHOR.AGENT, INBOX_ASK.DECIDE, INBOX_ASK_STATUS.ANSWERED],
+          [INBOX_MESSAGE_AUTHOR.MEMBER, undefined, undefined],
+          [INBOX_MESSAGE_AUTHOR.AGENT, undefined, undefined],
+        ]);
+        const waiting = Effect.map(accountWaitingItems(agent.userId), (entries) =>
+          entries.map((entry) => entry.id),
+        );
+        assert.deepEqual(yield* waiting, [asked.id]);
+        yield* later;
+
+        const nodded = Option.getOrThrow(
+          yield* answerInboxItem(
+            agent.userId,
+            asked.id,
+            followed.revision,
+            { reply: INBOX_REPLY.ACKNOWLEDGED },
+            randomUUID(),
+          ),
+        );
+        assert.deepEqual(
+          [nodded.status, nodded.answer, nodded.answeredBy?.userId],
+          [INBOX_STATUS.ANSWERED, { reply: INBOX_REPLY.ACKNOWLEDGED }, agent.userId],
+        );
+        assert.equal(nodded.thread?.length, 3, "a nod writes no message on the thread");
+        assert.deepEqual(yield* waiting, []);
+
+        const closing = posted(
+          yield* postInboxThread(agent, {
+            key: "preview-up",
+            title: "The preview is up",
+            body: "It deploys from main.",
+          }),
+        );
+        const closed = Option.getOrThrow(
+          yield* closeInboxItemAsMember(agent.userId, closing.id, closing.revision, randomUUID()),
+        );
+        assert.equal(closed.status, INBOX_STATUS.CLOSED);
+        assert.deepEqual(yield* waiting, []);
+      }),
+  );
+
+  it.effect(
+    "a member's words on a notice settle it as their nod, and taken back for a hand-off that failed leave it waiting again; the agent's withdrawal finds no ask on it",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const notice = posted(
+          yield* postInboxThread(agent, {
+            key: "preview-up",
+            title: "The preview is up",
+            body: "It deploys from main.",
+          }),
+        );
+        assert.ok(Option.isNone(yield* closeInboxItem(agent, "preview-up", "No longer needed.")));
+        yield* later;
+
+        const clientKey = randomUUID();
+        const written = Option.getOrThrow(
+          yield* postInboxMessage(agent.userId, notice.id, { text: "Looks good.", clientKey }),
+        );
+        assert.deepEqual(
+          [written.item.status, written.item.answer, written.item.answeredBy?.userId],
+          [INBOX_STATUS.ANSWERED, { reply: INBOX_REPLY.ACKNOWLEDGED }, agent.userId],
+        );
+        assert.deepEqual(yield* accountWaitingItems(agent.userId), []);
+
+        yield* withdrawInboxMessage(agent.userId, notice.id, clientKey);
+        const back = Option.getOrThrow(yield* readInboxItem(agent.userId, notice.id)).item;
+        assert.deepEqual(
+          [back.status, back.answer, back.thread?.map((message) => message.text)],
+          [INBOX_STATUS.OPEN, undefined, ["It deploys from main."]],
+        );
       }),
   );
 

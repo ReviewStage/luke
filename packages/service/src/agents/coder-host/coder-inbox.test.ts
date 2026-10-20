@@ -222,7 +222,7 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "a first post naming no title is refused and writes nothing; a first post that asks nothing opens a thread that waits on nobody",
+    "a first post naming no title is refused and writes nothing; a first post that asks nothing opens a notice the agent reads as no ask of its own, which no withdrawal finds",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -237,11 +237,17 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
             {
               key: "pr-ready",
               title: "PR ready",
-              status: INBOX_STATUS.ANSWERED,
+              status: INBOX_STATUS.OPEN,
               thread: [{ from: "you", text: "Opened." }],
             },
           ],
         });
+        const notice = yield* onlyItem(agent);
+        assert.deepEqual([notice.status, notice.needsReply], [INBOX_STATUS.OPEN, false]);
+        assert.equal(
+          refusalOf(yield* withdrawAsk(agent, input({ key: "pr-ready", reason: "Merged." }))),
+          INBOX_REFUSAL.NO_OPEN_ASK,
+        );
       }),
   );
 
