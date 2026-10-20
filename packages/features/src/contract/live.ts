@@ -16,7 +16,8 @@
  * chat, named by `?workspaceId=`, as the statements the window's chat read
  * is built from, once the account has joined it; and the account's
  * workspaces, as the statements of the workspaces and of the GitHub
- * installations connected to them. Each
+ * installations connected to them; and one workspace's people, named by
+ * `?workspaceId=`, as its members and who its work names but left. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
  * a reader polling while Realtime fails or is off; with `&after=` too, the
  * poll is held until the rows move past it, or answered unchanged. Each
@@ -45,7 +46,7 @@ import {
 } from "../live-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
 import { taskListLiveAnswerSchema } from "../task-list-live.js";
-import { workspacesLiveAnswerSchema } from "../workspace-live.js";
+import { workspaceMembersLiveAnswerSchema, workspacesLiveAnswerSchema } from "../workspace-live.js";
 import { hostedProcedure } from "./base.js";
 
 /** Whether the reader asks for the rows inline, polling while Realtime fails it (`LIVE_POLL`). */
@@ -108,6 +109,14 @@ const liveTaskWorkerSchema = EffectSchema.Struct({
 
 /** The workspace whose chat is followed, read as text, a workspace of no shape answered as invalid. */
 const liveChatSchema = EffectSchema.Struct({
+  workspaceId: EffectSchema.String,
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+  [LIVE_USER_QUERY]: userField,
+});
+
+/** The workspace a live read is followed for; one that names no workspace of the account's is answered as not found, so it is read as text here. */
+const liveWorkspaceSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.String,
   [LIVE_POLL.QUERY]: pollField,
   [LIVE_POLL.AFTER]: afterField,
@@ -188,4 +197,8 @@ export const liveContract = {
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACES }))
     .input(liveReadSchema)
     .output(EffectSchema.flip(workspacesLiveAnswerSchema)),
+  workspaceMembers: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.LIVE_WORKSPACE_MEMBERS }))
+    .input(liveWorkspaceSchema)
+    .output(EffectSchema.flip(workspaceMembersLiveAnswerSchema)),
 };

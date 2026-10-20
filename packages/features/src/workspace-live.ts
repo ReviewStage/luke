@@ -2,10 +2,16 @@ import { Schema as EffectSchema } from "effect";
 import { pinnedPictureUrl } from "./account-picture.js";
 import { sealedLiveQuerySchema } from "./live-wire.js";
 import { countedNumber } from "./service-wire.js";
-import { roleOf, type Workspace } from "./workspace-wire.js";
+import {
+  roleOf,
+  WORKSPACE_ROLE,
+  type Workspace,
+  type WorkspaceMembersAnswer,
+  type WorkspaceRole,
+} from "./workspace-wire.js";
 
 /**
- * workspace-live.ts -- the account's workspaces as the desktop follows them over Neon Realtime: the sealed statements the service answers, and the rows they deliver.
+ * workspace-live.ts -- the account's workspaces, and one workspace's people, as the desktop follows them over Neon Realtime: the sealed statements the service answers, and the rows they deliver.
  *
  * Neon's guide is followed as `live-wire.ts` follows it: the service builds
  * each statement with the account's id in it and seals it, and the desktop
@@ -118,4 +124,81 @@ export function workspacesOfLiveRows(
       (a, b) => Number(b.own) - Number(a.own) || byText(a.name, b.name) || byText(a.id, b.id),
     )
     .map((row) => workspaceOfLiveRow(row, installations.get(row.id) ?? []));
+}
+
+/**
+ * One workspace's people sealed for following, read for the account asking:
+ * the address, and two statements, its members and who its work names but
+ * left. The service answers `not-found` for a workspace the account is not
+ * a member of; asked to poll, or where Realtime cannot seal them, it answers
+ * each statement's rows inline instead (`LIVE_POLL`).
+ */
+export const workspaceMembersLiveAnswerSchema = EffectSchema.Struct({
+  url: EffectSchema.String,
+  queries: EffectSchema.Struct({
+    members: sealedLiveQuerySchema,
+    former: sealedLiveQuerySchema,
+  }),
+});
+
+/** A workspace's people as their rows deliver them: each sign-in picture as the account holds it, null for none. */
+export const workspaceMembersLiveRowsSchema = EffectSchema.Struct({
+  members: EffectSchema.Array(
+    EffectSchema.Struct({
+      userId: EffectSchema.String,
+      name: EffectSchema.String,
+      email: EffectSchema.String,
+      /** The plugin's role text, which may list several roles comma-separated. */
+      role: EffectSchema.String,
+      image: EffectSchema.NullOr(EffectSchema.String),
+    }),
+  ),
+  former: EffectSchema.Array(
+    EffectSchema.Struct({
+      userId: EffectSchema.String,
+      name: EffectSchema.String,
+      image: EffectSchema.NullOr(EffectSchema.String),
+    }),
+  ),
+});
+
+/** The order roles are listed in: owners, then admins, then members. */
+const ROLE_ORDER: readonly WorkspaceRole[] = [
+  WORKSPACE_ROLE.OWNER,
+  WORKSPACE_ROLE.ADMIN,
+  WORKSPACE_ROLE.MEMBER,
+];
+
+/** By name, then by id, as the held read orders people. */
+function byName(
+  a: { readonly name: string; readonly userId: string },
+  b: { readonly name: string; readonly userId: string },
+): number {
+  return byText(a.name, b.name) || byText(a.userId, b.userId);
+}
+
+/** A picture the renderer may draw, under the key the wire carries it by; nothing for any other. */
+function pictureOf(image: string | null): { readonly pictureUrl?: string } {
+  const pictureUrl = pinnedPictureUrl(image);
+  return pictureUrl === undefined ? {} : { pictureUrl };
+}
+
+/**
+ * A workspace's people as the held read answers them: the members owners
+ * first, then admins, then members, each by name, and who left by name,
+ * absent where nobody did.
+ */
+export function workspaceMembersOfLiveRows(
+  rows: typeof workspaceMembersLiveRowsSchema.Type,
+): WorkspaceMembersAnswer {
+  const members = rows.members
+    .toSorted(byName)
+    .map(({ image, role, ...member }) => ({ ...member, role: roleOf(role), ...pictureOf(image) }));
+  const former = rows.former
+    .toSorted(byName)
+    .map(({ image, ...person }) => ({ ...person, ...pictureOf(image) }));
+  return {
+    members: ROLE_ORDER.flatMap((role) => members.filter((one) => one.role === role)),
+    ...(former.length === 0 ? undefined : { former }),
+  };
 }
