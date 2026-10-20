@@ -7,6 +7,7 @@ import type {
   ComposerQuote,
   ComposerTrigger,
   MentionNode,
+  MentionNodeDoors,
   PlanEditorModule,
 } from "../plan-editor/contract.js";
 
@@ -53,7 +54,7 @@ interface DrawnChip {
   readonly element: HTMLElement;
   readonly chip:
     | ComposerChip
-    | { readonly mention: MentionNode }
+    | { readonly mention: MentionNode; readonly node: MentionNodeDoors }
     | { readonly quote: ComposerQuote };
   readonly key: number;
 }
@@ -61,7 +62,8 @@ interface DrawnChip {
 /** What the box's mentions are picked and drawn with: the `@` word's report, and each mention's look. */
 export interface ComposerFieldMentions {
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
-  readonly chip: (mention: MentionNode) => ReactNode;
+  /** A mention's chip, handed the doors to its node. */
+  readonly chip: (mention: MentionNode, node: MentionNodeDoors) => ReactNode;
   /** The mention words pasted whole stand for; nothing for words that paste as words. */
   readonly pasted: (words: string) => MentionNode | undefined;
   /** The `#` word's report, where the box names channels; none where it names none, read as it mounts. */
@@ -184,7 +186,7 @@ export function ComposerField({
           ? undefined
           : {
               onTrigger: (trigger) => latest.current.mentions?.onTrigger(trigger),
-              drawMention: (element, mention) => draw(element, { mention }),
+              drawMention: (element, mention, node) => draw(element, { mention, node }),
               pasted: (words) => latest.current.mentions?.pasted(words),
               onChannelTrigger:
                 now.mentions.onChannelTrigger === undefined
@@ -222,7 +224,7 @@ export function ComposerField({
       {chips.map((each) =>
         createPortal(
           "mention" in each.chip
-            ? (mentions?.chip(each.chip.mention) ?? `@${each.chip.mention.name}`)
+            ? (mentions?.chip(each.chip.mention, each.chip.node) ?? `@${each.chip.mention.name}`)
             : "quote" in each.chip
               ? (quote?.(each.chip.quote) ?? each.chip.quote.words)
               : chip(each.chip),

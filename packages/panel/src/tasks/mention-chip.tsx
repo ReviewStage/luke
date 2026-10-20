@@ -1,5 +1,11 @@
 import { CHECK_SUMMARY } from "@luke/features/coding-agent-wire";
-import { dateChipText, dateDistance, dateWhole, readerZone } from "@luke/features/date-mention";
+import {
+  type DateSpan,
+  dateChipText,
+  dateDistance,
+  dateWhole,
+  readerZone,
+} from "@luke/features/date-mention";
 import { issueAddressOf, pullRequestAddressOf } from "@luke/features/github-repositories-wire";
 import { LINK_PLACE, type LinkPlace, readLink } from "@luke/features/luke-link";
 import {
@@ -50,7 +56,7 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { InlineRef } from "../inline-ref.js";
 import type { LinkDrawer } from "../markdown-message.js";
 import { usePerson } from "../member-directory.js";
-import type { HeadingsChange, MentionNode } from "../plan-editor/contract.js";
+import type { HeadingsChange, MentionNode, MentionNodeDoors } from "../plan-editor/contract.js";
 import { useAppState } from "../use-app-state.js";
 import {
   AutomationChipCard,
@@ -62,6 +68,12 @@ import {
   VersionChipCard,
 } from "./chip-cards.js";
 import { providerOf } from "./coding-agent-model.js";
+import {
+  DATE_PICKER_CLOSE,
+  type DatePicked,
+  type DatePickerOpening,
+  dateMentionNode,
+} from "./date-picker.js";
 import { FileCard } from "./file-ref.js";
 import { shortCommit } from "./file-tab-model.js";
 import { FileTypeIcon } from "./file-type-icon.js";
@@ -140,8 +152,10 @@ import { useOpenLink } from "./use-open-link.js";
  * A date is said from where the reader stands rather than by the words it
  * was written with (`@luke/features/date-mention`): Today, Tomorrow,
  * Friday 3:00 PM, in the reader's own zone, said again as the minute turns
- * (`useMinute`), and its card says it in full and how far off it is. It
- * opens nothing, since a day has no page.
+ * (`useMinute`), and its card says it in full and how far off it is. A day
+ * has no page, so in words that take no change it opens nothing; in an
+ * editor's words a press opens the date's picker, which names the chip
+ * anew in place or takes it out (`date-picker.tsx`).
  *
  * A section is known by its heading's anchor, so a section of the plan
  * drawn here whose anchor no heading of the plan spells any longer is gone:
@@ -689,8 +703,15 @@ function DateCard({ date }: { date: DateMention }): React.JSX.Element {
   );
 }
 
-/** A date in words: its chip, saying it from the reader's today and moving on as the minute turns, hanging its card. */
-function DateChip({ date }: { date: DateMention }): React.JSX.Element {
+/** A date in words: its chip, saying it from the reader's today and moving on as the minute turns, hanging its card, and opening its picker where `onPick` is given. */
+function DateChip({
+  date,
+  onPick,
+}: {
+  date: DateMention;
+  /** Opens the date's picker hung from the chip; none where the words take no change. */
+  onPick?: ((chip: Element) => void) | undefined;
+}): React.JSX.Element {
   const now = useMinute();
   return (
     <InlineRef
@@ -698,6 +719,15 @@ function DateChip({ date }: { date: DateMention }): React.JSX.Element {
       glyph={<CalendarIcon aria-hidden="true" />}
       label={dateChipText(date, now, readerZone())}
       card={<DateCard date={date} />}
+      onPress={
+        onPick === undefined
+          ? undefined
+          : (event) => {
+              // Note that the press stops here, as a mention's does, because a click into a section opens its editor.
+              event.stopPropagation();
+              onPick(event.currentTarget);
+            }
+      }
       data-mention-ref=""
       data-kind={date.kind}
       data-state={MENTION_STATE.FOUND}
@@ -974,16 +1004,63 @@ export function pastedMentionNode(
       };
 }
 
-/** A mention an editor holds, as its node names it: its chip where its target names a mention, and its words where it names none. */
+/** What an editor hands a chip it holds: the doors to its node, and what opens the date picker over its words. */
+export interface MentionNodeEdit {
+  readonly node: MentionNodeDoors;
+  readonly pickDate: (opening: DatePickerOpening) => void;
+}
+
+/**
+ * A date's picker closed over its chip: Clear takes the chip out, a date
+ * changed names it anew in place, and a key hands the caret back after it.
+ */
+function datePicked(
+  node: MentionNodeDoors,
+  was: DateSpan,
+  picked: DatePicked,
+  place: MentionPlace,
+): void {
+  if (picked.how === DATE_PICKER_CLOSE.CLEAR) {
+    node.remove();
+    return;
+  }
+  const keyed = picked.how === DATE_PICKER_CLOSE.KEY;
+  const { date } = picked;
+  const moved =
+    picked.changed && date !== undefined && (date.start !== was.start || date.end !== was.end);
+  if (moved) node.rename(dateMentionNode(date, place), keyed);
+  else if (keyed) node.focusAfter();
+}
+
+/** A mention an editor holds, as its node names it: its chip where its target names a mention, and its words where it names none; a date's opens its picker where the editor hands what changes it. */
 export function MentionNodeChip({
   mention,
   doors,
+  edit,
 }: {
   mention: MentionNode;
   doors: MentionDoors;
+  /** What changes the node; none where the editor hands nothing. */
+  edit?: MentionNodeEdit | undefined;
 }): React.JSX.Element {
   const named = decodeMention(mention.target, doors.place.repository);
   if (named === undefined) return <>{`@${mention.name}`}</>;
-  if (named.kind === MENTION_KIND.DATE) return <DateChip date={named} />;
+  if (named.kind === MENTION_KIND.DATE) {
+    return (
+      <DateChip
+        date={named}
+        onPick={
+          edit === undefined
+            ? undefined
+            : (chip) =>
+                edit.pickDate({
+                  at: chip,
+                  date: named,
+                  onClose: (picked) => datePicked(edit.node, named, picked, doors.place),
+                })
+        }
+      />
+    );
+  }
   return <MentionChip mention={named} target={mention.target} name={mention.name} doors={doors} />;
 }

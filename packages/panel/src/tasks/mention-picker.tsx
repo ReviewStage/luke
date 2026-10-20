@@ -55,6 +55,13 @@ import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { type IntegrationToolsReads, useIntegrationTools } from "../integration-tools.js";
 import { useMemberDirectory } from "../member-directory.js";
 import type { ComposerTrigger, MentionNode } from "../plan-editor/contract.js";
+import {
+  DATE_PICKER_CLOSE,
+  type DatePicked,
+  type DatePickerOpening,
+  dateMentionNode,
+  useDatePicker,
+} from "./date-picker.js";
 import { FileTypeIcon } from "./file-type-icon.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { AgentMark } from "./tab-look.js";
@@ -220,6 +227,17 @@ const ISSUE_DETAIL = "Issue";
 /** What the Dates kind's row says beside its name. */
 const DATES_DETAIL = "A day, a time, or a range";
 
+/** The row of a list narrowed to dates that opens the date picker, to write the day picked there. */
+const PICK_DATE_ROW: MentionRow = {
+  picksDate: true,
+  name: "Pick a date…",
+  detail: undefined,
+  terms: "Pick a date",
+};
+
+/** The key the picker's row stands under, which no mention's or kind's key spells. */
+const PICK_DATE_KEY = "pick-date";
+
 /** What a skill's row says beside its name. */
 const SKILL_DETAIL = "Skill";
 
@@ -296,7 +314,12 @@ type MentionRow = {
   readonly actor?: Actor | undefined;
   /** A pull request, whose mark its row wears for where it stands; none for any other row. */
   readonly pullRequest?: MentionablePullRequest | undefined;
-} & ({ readonly mention: Mention } | { readonly skill: string } | { readonly from: MentionKind });
+} & (
+  | { readonly mention: Mention }
+  | { readonly skill: string }
+  | { readonly from: MentionKind }
+  | { readonly picksDate: true }
+);
 
 interface MentionGroup {
   readonly label: string;
@@ -639,14 +662,18 @@ function dateRow(date: DateSpan, now: number, zone: string): MentionRow {
 /**
  * The dates the list offers for the words: the one they name, or, narrowed
  * to dates with nothing typed, today, tomorrow, and next Monday; none for
- * a wide list with nothing typed.
+ * a wide list with nothing typed. A list narrowed to dates ends on the row
+ * that opens the date picker.
  */
 function dateRows(term: string, narrowed: boolean, now: number, zone: string): MentionRow[] {
+  const pick = narrowed ? [PICK_DATE_ROW] : [];
   if (term.trim() === "") {
-    return narrowed ? suggestedDates(now, zone).map((date) => dateRow(date, now, zone)) : [];
+    return narrowed
+      ? [...suggestedDates(now, zone).map((date) => dateRow(date, now, zone)), ...pick]
+      : [];
   }
   const date = dateOfWords(term, now, zone);
-  return date === undefined ? [] : [dateRow(date, now, zone)];
+  return [...(date === undefined ? [] : [dateRow(date, now, zone)]), ...pick];
 }
 
 /** Each of the repository's skills' rows, found by its name and what it says it is for. */
@@ -811,6 +838,7 @@ function KindGlyph({ kind }: { kind: MentionKind }): React.JSX.Element {
 function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
   if ("skill" in row) return <BookOpenIcon aria-hidden="true" />;
   if ("from" in row) return <KindGlyph kind={row.from} />;
+  if ("picksDate" in row) return <CalendarIcon aria-hidden="true" />;
   if (row.pullRequest !== undefined) return <PullRequestMark pullRequest={row.pullRequest} />;
   const { mention } = row;
   switch (mention.kind) {
@@ -852,6 +880,7 @@ function RowGlyph({ row }: { row: MentionRow }): React.JSX.Element {
 /** A row's key, stable while it stands: its skill's name, its kind's narrowing, or its mention. */
 function rowKey(row: MentionRow): string {
   if ("skill" in row) return row.skill;
+  if ("picksDate" in row) return PICK_DATE_KEY;
   return JSON.stringify("from" in row ? row.from.narrow : row.mention);
 }
 
@@ -957,11 +986,12 @@ function MentionMenu({
   );
 }
 
-/** What an editor drawing an `@` list wires: the list while it stands, and the report and keys the editor hands it. */
+/** What an editor drawing an `@` list wires: the list and the date picker while they stand, the report and keys the editor hands it, and what opens the date picker over a chip. */
 export interface MentionPicker {
   readonly menu: React.ReactNode;
   readonly onTrigger: (trigger: ComposerTrigger | undefined) => void;
   readonly onKey: (event: KeyboardEvent) => boolean;
+  readonly pickDate: (opening: DatePickerOpening) => void;
 }
 
 /** Which side of the word the list stands: under it, as in the plan, or over it, as at the foot of an agent's tab. */
@@ -1400,11 +1430,33 @@ export function useMentionPicker({
   };
   const backTo = trigger === undefined ? undefined : backFrom(scope, trigger.start);
   const back = backTo === undefined ? undefined : () => narrowTo(backTo.to);
-  // A skill is written as the `/name` chip its own list writes; a kind's row opens; anything else is written as its mention.
+  // The date picker opened from the list hangs from the word and writes the date picked in its place.
+  const datePicker = useDatePicker(room);
+  const pickNewDate = (word: ComposerTrigger) => {
+    // Note that the editor is handed the caret back before a pick is written, because it finds the `@` word only while it has it.
+    const editing = document.activeElement;
+    setClosedAt(word.start);
+    datePicker.open({
+      at: word.rect,
+      date: undefined,
+      onClose: ({ date, changed, how }: DatePicked) => {
+        const kept = how === DATE_PICKER_CLOSE.CLEAR || !changed ? undefined : date;
+        if (
+          (kept !== undefined || how !== DATE_PICKER_CLOSE.LEAVE) &&
+          editing instanceof HTMLElement
+        )
+          editing.focus();
+        if (kept !== undefined) onChoose(dateMentionNode(kept, place));
+      },
+    });
+  };
+  // A skill is written as the `/name` chip its own list writes; a kind's row opens; the picker's row opens the picker; anything else is written as its mention.
   const choose = (row: MentionRow) => {
     if ("from" in row) openRow(row);
     else if ("skill" in row) skills?.onChoose(row.skill);
-    else onChoose({ name: row.written ?? row.name, target: encodeMention(row.mention, place) });
+    else if ("picksDate" in row) {
+      if (trigger !== undefined) pickNewDate(trigger);
+    } else onChoose({ name: row.written ?? row.name, target: encodeMention(row.mention, place) });
   };
 
   // ↑, ↓, Home, End, Enter and Escape steer the list as any combobox's do;
@@ -1477,7 +1529,7 @@ export function useMentionPicker({
       ? { left, top: word.rect.bottom - at.top + MENU_GAP }
       : { left, top: "auto", bottom: at.bottom - word.rect.top + MENU_GAP };
   };
-  const menu =
+  const list =
     !shown || box === null || placed === undefined ? null : (
       <MentionMenu
         crumb={
@@ -1494,5 +1546,12 @@ export function useMentionPicker({
       />
     );
 
-  return { menu, onTrigger: setTrigger, onKey };
+  const menu = (
+    <>
+      {list}
+      {datePicker.popover}
+    </>
+  );
+
+  return { menu, onTrigger: setTrigger, onKey, pickDate: datePicker.open };
 }

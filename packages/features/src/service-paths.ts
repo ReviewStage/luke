@@ -313,57 +313,14 @@ export function taskPath(taskId: string): string {
   return `${HOSTED_SERVICE_PATH.TASKS}/${encodeURIComponent(taskId)}`;
 }
 
-/** Every code Luke showed on one task, oldest first (GET). */
-export function taskCodePath(taskId: string): string {
-  return `${taskPath(taskId)}/code`;
-}
-
-/** One window of a file of one task's repository, as GitHub holds it now (GET): the path, and its first and last line; `raw=1` for its whole text uncut. */
-export function taskFilePath(
-  taskId: string,
-  window: {
-    readonly path: string;
-    readonly firstLine: number;
-    readonly lastLine: number;
-    readonly raw?: boolean;
-    readonly ref?: string;
-  },
-): string {
-  const query = new URLSearchParams({
-    path: window.path,
-    first: String(window.firstLine),
-    last: String(window.lastLine),
-  });
-  if (window.raw === true) query.set("raw", "1");
-  if (window.ref !== undefined) query.set("ref", window.ref);
-  return `${taskPath(taskId)}/file?${query}`;
-}
-
-/** One folder of one task's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one, and `recursive=1` for everything under it. */
-export function taskTreePath(
-  taskId: string,
-  folder: { readonly path: string; readonly recursive?: boolean },
-): string {
-  const path = `${taskPath(taskId)}/tree`;
-  const query = new URLSearchParams();
-  if (folder.path !== "") query.set("path", folder.path);
-  if (folder.recursive === true) query.set("recursive", "1");
-  return query.size === 0 ? path : `${path}?${query}`;
-}
-
-/** The skills a developer may choose of one task's repository, as GitHub holds it now (GET). */
-export function taskSkillsPath(taskId: string): string {
-  return `${taskPath(taskId)}/skills`;
-}
-
 /** A repository as a read with no plan names it: the workspace whose installation reaches it, and the repository, `owner/name`. */
 export interface RepositoryPlace {
   readonly workspaceId: string;
   readonly repository: string;
 }
 
-/** One plan's pictures: one kept on the plan (POST). */
-export function planAttachmentsPath(taskId: string): string {
+/** One plan's pictures, under which each is served as its bytes (`planAttachmentPath`). */
+function planAttachmentsPath(taskId: string): string {
   return `${taskPath(taskId)}/attachments`;
 }
 
@@ -387,16 +344,6 @@ export function planCommentThreadPath(planId: string, threadId: string): string 
 /** One picture of one plan, as its bytes (GET). */
 export function planAttachmentPath(taskId: string, attachmentId: string): string {
   return `${planAttachmentsPath(taskId)}/${encodeURIComponent(attachmentId)}`;
-}
-
-/** One plan's pages (GET): each page's newest version, the most recently written first. */
-export function taskPagesPath(taskId: string): string {
-  return `${taskPath(taskId)}/pages`;
-}
-
-/** One version of one page of one plan, with its HTML (GET). */
-export function planPageVersionPath(taskId: string, pageId: string, version: number): string {
-  return `${taskPagesPath(taskId)}/${encodeURIComponent(pageId)}/versions/${version}`;
 }
 
 /** One task's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */

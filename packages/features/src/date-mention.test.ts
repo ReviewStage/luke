@@ -5,7 +5,10 @@ import {
   dateChipText,
   dateDistance,
   dateLabel,
+  dateOfWall,
   dateOfWords,
+  dateToday,
+  dateWall,
   dateWhole,
   isDateMoment,
   isDateRange,
@@ -215,4 +218,45 @@ test("a time zone is one that stands, named as IANA names it, and nothing else",
   assert.equal(isTimeZone("Mars/Olympus_Mons"), false);
   assert.equal(isTimeZone(""), false);
   assert.equal(isTimeZone(`America/${"A".repeat(200)}`), false);
+});
+
+test("a picker's ends read as the reader's zone reads them, a time to the minute", () => {
+  assert.deepEqual(dateWall({ start: "2026-10-20" }, TOKYO), { start: { day: "2026-10-20" } });
+  assert.deepEqual(
+    dateWall({ start: "2026-10-20T15:00-07:00", end: "2026-10-20T17:30-07:00" }, TOKYO),
+    {
+      start: { day: "2026-10-21", time: "07:00" },
+      end: { day: "2026-10-21", time: "09:30" },
+    },
+  );
+  assert.equal(dateToday(NOW, TOKYO), "2026-10-20");
+});
+
+test("a picker's ends are spelled as a mention holds them, a time with its zone's offset then", () => {
+  assert.deepEqual(dateOfWall({ start: { day: "2026-10-20" } }, LOS_ANGELES), {
+    start: "2026-10-20",
+  });
+  assert.deepEqual(
+    dateOfWall(
+      { start: { day: "2026-11-02", time: "09:00" }, end: { day: "2026-11-02", time: "10:00" } },
+      LOS_ANGELES,
+    ),
+    { start: "2026-11-02T09:00-08:00", end: "2026-11-02T10:00-08:00" },
+  );
+});
+
+test("a picker's range is put in order, and one whose ends are the same moment is its start alone", () => {
+  assert.deepEqual(
+    dateOfWall({ start: { day: "2026-10-26" }, end: { day: "2026-10-23" } }, LOS_ANGELES),
+    { start: "2026-10-23", end: "2026-10-26" },
+  );
+  assert.deepEqual(
+    dateOfWall({ start: { day: "2026-10-23" }, end: { day: "2026-10-23" } }, LOS_ANGELES),
+    { start: "2026-10-23" },
+  );
+  assert.equal(dateOfWall({ start: { day: "2026-02-30" } }, LOS_ANGELES), undefined);
+  assert.deepEqual(
+    dateOfWall({ start: { day: "2026-10-23", time: "25:00" } }, LOS_ANGELES),
+    undefined,
+  );
 });
