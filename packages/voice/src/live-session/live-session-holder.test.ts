@@ -25,6 +25,8 @@ import { LiveSessionHolder } from "./live-session-holder.js";
  */
 
 const INVITES_TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+/** The agent of a task every call in these tests speaks into; only its task matters to the holder. */
+const INVITES_AGENT = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 
 class FakeSideband implements LiveSideband {
   readonly sent: LiveClientEvent[] = [];
@@ -255,7 +257,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       },
       open: (taskId = INVITES_TASK) =>
         Effect.gen(function* () {
-          const created = yield* holder.createSession("offer", taskId);
+          const created = yield* holder.createSession("offer", { taskId, agentId: INVITES_AGENT });
           assert.ok(created);
           const sideband = sidebands[sidebands.length - 1];
           assert.ok(sideband);
@@ -276,7 +278,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const created = yield* f.holder.createSession("offer", INVITES_TASK);
+      const created = yield* f.holder.createSession("offer", {
+        taskId: INVITES_TASK,
+        agentId: INVITES_AGENT,
+      });
       assert.deepEqual(created, {
         sessionId: "sess-1",
         sdpAnswer: "answer-for-offer",

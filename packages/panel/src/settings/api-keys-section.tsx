@@ -33,9 +33,9 @@ import { dayText } from "../tasks/task-time.js";
 import { MenuRow } from "./menu-row.js";
 
 /**
- * api-keys-section.tsx -- Settings › Coding agents › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
+ * api-keys-section.tsx -- Settings › Agents › API keys: the account's own Anthropic and OpenAI keys a coding agent runs on.
  *
- * A group of the Coding agents page, under the default model it runs. One
+ * A group of the Agents page, under the default model it runs. One
  * row per provider. A provider with no key of the account's offers Add key;
  * one with a key draws how the provider last answered it, its hint — its
  * prefix and last four characters, as the service answers it — and when it

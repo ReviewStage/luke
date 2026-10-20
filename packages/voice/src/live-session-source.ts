@@ -105,8 +105,10 @@ const UNAVAILABLE_STATUS = 503;
 export interface LiveSessionCreateInput {
   /** The renderer's SDP offer, as written. */
   sdpOffer: string;
-  /** The task the call is about. */
+  /** The task the call's agent is on. */
   taskId: string;
+  /** The agent the call speaks into, which the service reads and checks is on the task. */
+  agentId: string;
 }
 
 /**
@@ -426,10 +428,11 @@ class ServiceLiveSessionSource {
         type: VOICE_SERVICE_FRAME.SESSION_CREATE,
         sdp: input.sdpOffer,
         voice: this.#voice,
-        // A task call is seeded with nothing from here: the service seeds
-        // it with the plan and what was said on the task's earlier calls.
+        // A call is seeded with nothing from here: the service seeds it with
+        // what the agent knows and what was said on its earlier calls.
         input: [],
         planId: input.taskId,
+        agentId: input.agentId,
         // The brain's turns on the call count the developer's days and spell their times in it.
         timeZone: this.#timeZone(),
       };

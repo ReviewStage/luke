@@ -66,23 +66,6 @@ export interface AppAudioSlice {
   outputAudio?: OutputAudioState;
 }
 
-export interface AppHotkeysSlice {
-  /**
-   * The accelerator each key was registered as, absent where the system
-   * refused one — a chord nothing can trigger must not be drawn as though it
-   * works. Raw rather than labelled, because the panel draws the keys apart
-   * and says the chord whole.
-   */
-  talk?: string;
-  /**
-   * Whether the talk key reports being let go of. Only a key that does can
-   * hold a turn open for as long as it is down; the fallback can only toggle
-   * one, and the panel says which of the two the developer actually has.
-   */
-  talkHeld: boolean;
-  stop?: string;
-}
-
 interface AppVoiceSlice {
   /**
    * The live conversation as the voice window last reported it, so a panel
@@ -250,13 +233,12 @@ export interface AppState {
   access: AppAccessSlice;
   update: UpdateSnapshot;
   audio: AppAudioSlice;
-  hotkeys: AppHotkeysSlice;
   voice: AppVoiceSlice;
   /**
    * The Tasks tab's named tasks as the host's reads of the service
    * hold them: the list, the one active task, and its saved document. Only
-   * the panel's Tasks tab draws it, and the active task is the one a voice
-   * session and the talk key bind to.
+   * the panel's Tasks tab draws it, and the active task is the one whose
+   * agents a voice session may be created into.
    */
   tasks: TasksView;
   codingAgents: AppCodingAgentsSlice;

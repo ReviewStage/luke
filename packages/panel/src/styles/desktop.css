@@ -1633,17 +1633,6 @@ ul.actor-stack {
   padding-right: var(--column-inset);
 }
 
-/* A pane sliding in finds the work column already narrowed for it, so the
-   column's bars draw on past both its sides, beneath everything else, and
-   no gap opens between the column and a pane still on its way. */
-.desktop-call-bar::before {
-  position: absolute;
-  z-index: -1;
-  right: -100vw;
-  left: -100vw;
-  content: "";
-}
-
 /* The plan's toolbar leads with its tab rather than a title, so it starts
    the tab's pill a row's inset in, as the side panel's row starts its own;
    the Inbox pane's bar leads with its crumbs, drawn as tabs, alike. */
@@ -2284,51 +2273,54 @@ ul.actor-stack {
 
 /* The call bar ------------------------------------------------------------- */
 
-/* It answers the column's width, so a narrow column gives the call bar and
-   the captions above it the room the summary's rail reserves. */
-.desktop-call-bar {
+/* A call into an agent stands at its tab's foot, over its composer: the
+   avatar's video, the captions, and the call bar, which answers the tab's
+   width, so a narrow tab stacks the bar's status over its controls. */
+.agent-call-foot {
   container: plan-call-bar / inline-size;
   position: relative;
-  flex: 0 0 auto;
-  padding: var(--luke-space-12) calc(var(--luke-page-inset) + var(--summary-room))
-    var(--luke-space-12) var(--luke-page-inset);
-  border-top: 1px solid var(--luke-color-border);
-  background: var(--luke-color-well);
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-8);
+  padding-bottom: var(--luke-space-8);
 }
 
-.desktop-call-bar::before {
-  top: -1px;
-  bottom: 0;
-  border-top: 1px solid var(--luke-color-border);
-  background: var(--luke-color-well);
+/* The bar spans the tab's measure, as it spanned the column, so the call's
+   two lines keep their room at its left beside the controls. */
+.agent-call-foot > .call-bar {
+  width: 100%;
 }
 
-/* The live captions stand just above the call bar, centred on its row, so
-   they cover neither the call's controls nor the side panel beside the
-   column. */
-.desktop-call-bar .voice-caption {
+/* The live captions stand just above the call bar, centred on the tab, so
+   they cover neither the call's controls nor the composer under them. */
+.agent-call-foot .voice-caption {
   bottom: calc(100% + var(--luke-space-12));
-  left: calc(50% - var(--summary-room) / 2);
-  width: min(var(--caption-width-max), 100% - 2 * var(--luke-page-inset) - var(--summary-room));
+  left: 50%;
+  width: min(var(--caption-width-max), 100% - 2 * var(--luke-page-inset));
 }
 
-/* Too narrow a column to keep the rail's room: the bar, which stands under
-   the rail rather than beside it, runs to the page's inset at its right,
-   and the captions span the column to its insets, centred on it, their
-   volume hint wrapping rather than cut. */
+/* Too narrow a tab: the captions span it to its insets, their volume hint
+   wrapping rather than cut. */
 @container plan-call-bar (max-width: 359px) {
-  .desktop-call-bar > .call-bar {
-    margin-right: calc(-1 * var(--summary-room));
-  }
-
-  .desktop-call-bar .voice-caption {
-    left: 50%;
+  .agent-call-foot .voice-caption {
     width: calc(100% - 2 * var(--column-inset));
   }
 
-  .desktop-call-bar .volume-hint-text {
+  .agent-call-foot .volume-hint-text {
     white-space: normal;
   }
+}
+
+/* A task's column with no agent tab to show: the two ways to start one,
+   side by side in the middle of the room the plan's side panel leaves. */
+.desktop-no-agent {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-page-inset);
 }
 
 /* Anywhere no call bar is drawn (Settings, the home page, a panel
@@ -7706,8 +7698,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* New task's composer (`new-task-composer.tsx`): the agent box's own card
-   on the dialog's inset rather than a tab's foot, the reason Agent mode's
-   Start is held under it. */
+   on the dialog's inset rather than a tab's foot, the reason its Start is
+   held under it. */
 .new-task-composer {
   display: flex;
   min-width: 0;
@@ -7759,18 +7751,14 @@ polygon.factory-campus-edge[data-edge="selected"] {
 
 /* The foot's short chips stand whole, so the repository's name is what
    gives way, ellipsized, where the card is narrow. */
-:is(
-  .new-task-plan-toggle,
-  .new-task-composer .issue-picker-chip,
-  .new-task-composer .agent-model-chip
-) {
+:is(.new-task-composer .issue-picker-chip, .new-task-composer .agent-model-chip) {
   display: flex;
   flex-shrink: 0;
 }
 
 /* A card too narrow for every press's words, as on a phone, keeps its
-   round Start at the row's end: the Plan toggle and File for later draw
-   their marks alone (`new-task-composer.tsx`), the model chip's words are
+   round Start at the row's end: File for later draws its mark alone
+   (`new-task-composer.tsx`), the model chip's words are
    what give way, cut short, and the microphone stands in the row in place
    of a ⋯ that would hold it alone. */
 @container composer (max-width: 399px) {

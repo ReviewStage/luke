@@ -91,8 +91,6 @@ export const GATEWAY_METHOD = {
   TASKS_COMMENT_ACT: "tasks.commentAct",
   /** One revision of one plan put back as its content on the service; the view takes the task as the service answered it. */
   TASKS_RESTORE: "tasks.restore",
-  /** The turn Luke is running on one task stopped on the service. */
-  TASKS_STOP_WORK: "tasks.stopWork",
   /** The developer's scene of the open task's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   TASKS_BOARD_SAVE: "tasks.boardSave",
   /** The account's workspaces read again from the service where the last read is a minute old or none stands; the view takes them. */
@@ -178,6 +176,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_PIN: "codingAgents.pin",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PAGE: "codingAgents.page",
+  /** The calls into one agent, oldest first, each with its lines and its record, which its tab draws a call's span from. */
+  CODING_AGENTS_CALLS: "codingAgents.calls",
   AUTOMATIONS_LIST: "automations.list",
   AUTOMATIONS_CREATE: "automations.create",
   AUTOMATIONS_CHANGE: "automations.change",
@@ -441,14 +441,14 @@ function keptText(max: number): Schema.Codec<string, string> {
 const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 
 /**
- * `voice.createLiveSession`: the peer's SDP offer, the task the call is
- * about, and the agent of that task it speaks into, where it names one. The
- * host creates a call only for the task the panel has open.
+ * `voice.createLiveSession`: the peer's SDP offer, and the agent the call
+ * speaks into with the task it is on. The host creates a call only into an
+ * agent of the task the panel has open.
  */
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({
   sdp: sdpSchema,
   taskId: text,
-  agentId: Schema.optionalKey(text),
+  agentId: text,
 });
 
 /**

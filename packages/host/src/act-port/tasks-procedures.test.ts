@@ -33,6 +33,7 @@ import {
   type TasksPageSourceAnswer,
   type TasksStartAnswer,
 } from "@luke/features/tasks-view";
+import type { VoiceCallAbout } from "@luke/voice/voice-view";
 import { ORPCError } from "@orpc/client";
 import { Effect } from "effect";
 import { GITHUB_LAST_SIGN_IN_REFUSAL } from "../acts.js";
@@ -57,6 +58,7 @@ const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 const CALL: ActSender = { ...PANEL, panel: false, call: true };
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 const SERVICE = "https://luke.test";
 const CONNECT_PAGE = `${SERVICE}/connect-github.html?intent=intent-1`;
 
@@ -81,7 +83,7 @@ const REFUSAL = {
   [TASKS_ACT_KIND.GITHUB_CONNECT]: "Could not open GitHub's connection page on this system.",
   [TASKS_ACT_KIND.ADMIN_OPEN]: "Could not open the admin dashboard on this system.",
   [TASKS_ACT_KIND.GITHUB_DISCONNECT]: "Could not disconnect GitHub on this system.",
-  [TASKS_ACT_KIND.TASKS_TALK]: "Could not talk about that task on this system.",
+  [TASKS_ACT_KIND.TASKS_TALK]: "Could not call that agent on this system.",
   [TASKS_ACT_KIND.TASKS_BOARD_SAVE]: "Could not save the board on this system.",
   [TASKS_ACT_KIND.TASKS_SET_STANDING]: "Could not change where that task stands on this system.",
   [TASKS_ACT_KIND.TASKS_WORK_EARLIER]: "Could not read that task's earlier work on this system.",
@@ -185,7 +187,7 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
   { kind: TASKS_ACT_KIND.GITHUB_CONNECT, payload: undefined },
   { kind: TASKS_ACT_KIND.ADMIN_OPEN, payload: undefined },
   { kind: TASKS_ACT_KIND.GITHUB_DISCONNECT, payload: undefined },
-  { kind: TASKS_ACT_KIND.TASKS_TALK, payload: undefined },
+  { kind: TASKS_ACT_KIND.TASKS_TALK, payload: { agentId: AGENT_ID } },
   { kind: TASKS_ACT_KIND.TASKS_BOARD_SAVE, payload: BOARD },
   { kind: TASKS_ACT_KIND.TASKS_SET_STANDING, payload: { ...TASK, status: "done" } },
   { kind: TASKS_ACT_KIND.TASKS_WORK_EARLIER, payload: undefined },
@@ -219,10 +221,6 @@ const ACTS: readonly { kind: TasksKind; payload: AnyPayload }[] = [
 interface Script {
   /** What a start answers. */
   start: TasksStartAnswer;
-  /** Whether a call could open now. */
-  voiceReady: boolean;
-  /** Whether a call is already in progress, about whichever task. */
-  callStanding: boolean;
   /** The task the host has open, if any. */
   activeTaskId: string | undefined;
   /** The page the host names to connect the account's own GitHub, or none. */
@@ -251,11 +249,9 @@ function windowPort(
 ) {
   const asked: string[] = [];
   const browsed: string[] = [];
-  const talked: string[] = [];
+  const talked: VoiceCallAbout[] = [];
   const script: Script = {
     start: { failure: TASK_CALL_FAILURE.UNANSWERED },
-    voiceReady: true,
-    callStanding: false,
     activeTaskId: TASK_ID,
     connectPage: CONNECT_PAGE,
     lastSignIn: false,
@@ -390,11 +386,9 @@ function windowPort(
       },
       serviceBaseUrl: options.serviceBaseUrl ?? SERVICE,
       activeTaskId: () => script.activeTaskId,
-      talkAboutTask: (taskId) => {
-        talked.push(taskId);
+      talkTo: (about) => {
+        talked.push(about);
       },
-      voiceReady: () => script.voiceReady,
-      callStanding: () => script.callStanding,
     }),
   );
   ports.push(port);
@@ -506,27 +500,21 @@ it("the task acts reach the host from a panel and answer what it answered", asyn
   ]);
 });
 
-it("a started task opens its call, and one started without planning, with an agent, without voice ready, or over a standing call opens none", async () => {
+it("a started task opens no call, with an agent or without", async () => {
   const { client, talked, script } = windowPort(PANEL);
   script.start = { planId: TASK_ID };
   const start = (payload: AnyPayload) => settled(client, TASKS_ACT_KIND.TASKS_START, payload);
 
-  const planned = await start({ name: "Invitations" });
-  const unplanned = await start({ name: "Typo", planning: false });
+  const bare = await start({ name: "Typo", planning: false });
   const withAgent = await start({
     name: "Expiry",
     repository: "acme/relay",
     agent: { idempotencyKey: "start-1", prompt: "Expire invitations." },
   });
-  script.voiceReady = false;
-  const unready = await start({ name: "Quiet" });
-  script.voiceReady = true;
-  script.callStanding = true;
-  const overCall = await start({ name: "Busy" });
 
-  assert.deepEqual(planned, { answer: { planId: TASK_ID } });
-  for (const other of [unplanned, withAgent, unready, overCall]) assert.deepEqual(other, planned);
-  assert.deepEqual(talked, [TASK_ID]);
+  assert.deepEqual(bare, { answer: { planId: TASK_ID } });
+  assert.deepEqual(withAgent, bare);
+  assert.deepEqual(talked, []);
 });
 
 it("a key the host's answer carries beside what the kind's schema names reaches the window no more, the answer encoded by the kind's own schema", async () => {
@@ -548,17 +536,17 @@ it("a start the host could not make is answered with why, and opens no call", as
   assert.deepEqual(talked, []);
 });
 
-it("the microphone's press opens a call about the task the host has open, and is refused in its own words where none is open", async () => {
+it("an agent's Call press opens a call into it on the task the host has open, and is refused in its own words where none is open", async () => {
   const { client, talked, script } = windowPort(PANEL);
 
-  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, undefined), {
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, { agentId: AGENT_ID }), {
     answer: undefined,
   });
   script.activeTaskId = undefined;
-  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, undefined), {
+  assert.deepEqual(await settled(client, TASKS_ACT_KIND.TASKS_TALK, { agentId: AGENT_ID }), {
     refused: REFUSAL[TASKS_ACT_KIND.TASKS_TALK],
   });
-  assert.deepEqual(talked, [TASK_ID]);
+  assert.deepEqual(talked, [{ taskId: TASK_ID, agentId: AGENT_ID }]);
 });
 
 it("a web link opens an http or https address in the browser, and no other scheme nor an address past the cap", async () => {

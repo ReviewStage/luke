@@ -121,7 +121,7 @@ function mount(shown: "agent" | "plan", linkWorkspace?: string) {
     }),
     mainTabs: {
       ...base.mainTabs,
-      tabs: [base.mainTabs.tab, { agent: AGENT.id }],
+      tabs: [{ agent: AGENT.id }],
       tab: shown === "agent" ? { agent: AGENT.id } : base.mainTabs.tab,
     },
   });

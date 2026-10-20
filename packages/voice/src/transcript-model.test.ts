@@ -9,6 +9,7 @@ import { LIVE_CLOSE_REASON, LIVE_DEFAULTS, TRANSCRIPT_SPEAKER } from "@luke/live
 import { test } from "vitest";
 import {
   callEndedLine,
+  callPlaces,
   type HeardCall,
   heardCalls,
   messageText,
@@ -18,6 +19,8 @@ import {
 
 /** Synthetic task, calls, and words throughout. */
 const TASK = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const AGENT = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
+const CALL = { taskId: TASK, agentId: AGENT } as const;
 const EARLIER_CALL = "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81";
 const LIVE_CALL = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
 const NEXT_CALL = "2a4c6e8f-0b1d-4f3a-a5c7-9e1b3d5f7a9c";
@@ -44,7 +47,7 @@ const STORED: TaskTranscript = {
 
 function liveReport(voiceSessionId: string, words: string) {
   return {
-    callTaskId: TASK,
+    call: CALL,
     callTranscript: {
       voiceSessionId,
       lines: [
@@ -54,7 +57,7 @@ function liveReport(voiceSessionId: string, words: string) {
   };
 }
 
-const NO_CALL = { callTaskId: undefined, callTranscript: undefined };
+const NO_CALL = { call: undefined, callTranscript: undefined };
 
 test("the stored calls are drawn oldest first as messages with their words settled, and blank lines left out", () => {
   const region = transcriptRegion({
@@ -116,7 +119,7 @@ test("the live call follows the stored calls, and its words outlast the call unt
   const live = heardCalls({
     held: [],
     voice: liveReport(LIVE_CALL, "Seven days, then."),
-    taskId: TASK,
+    agentId: AGENT,
     now: 5_000,
   });
   const ready = (transcript: TaskTranscript, heard: readonly HeardCall[]) =>
@@ -132,7 +135,7 @@ test("the live call follows the stored calls, and its words outlast the call unt
   ]);
 
   // Hung up: the heard words stay until the record has as many.
-  const ended = heardCalls({ held: live, voice: NO_CALL, taskId: TASK, now: 9_000 });
+  const ended = heardCalls({ held: live, voice: NO_CALL, agentId: AGENT, now: 9_000 });
   assert.deepEqual(drawn(ready(STORED, ended)), [
     [EARLIER_CALL, false, "Invites should expire."],
     [LIVE_CALL, false, "Seven days, then."],
@@ -151,24 +154,24 @@ test("the live call is drawn while the stored transcript is still being read", (
   const heard = heardCalls({
     held: [],
     voice: liveReport(LIVE_CALL, "Seven days."),
-    taskId: TASK,
+    agentId: AGENT,
     now: 5_000,
   });
   const region = transcriptRegion({ transcript: { status: TASKS_READ.READING }, heard });
   assert.equal(region.kind, TRANSCRIPT_REGION.READY);
 });
 
-test("the same call keeps when it was first heard, a call begun at once keeps the last one's words, and another plan's call is not this tab's", () => {
+test("the same call keeps when it was first heard, a call begun at once keeps the last one's words, and another agent's call is not this tab's", () => {
   const first = heardCalls({
     held: [],
     voice: liveReport(LIVE_CALL, "Seven"),
-    taskId: TASK,
+    agentId: AGENT,
     now: 5_000,
   });
   const grown = heardCalls({
     held: first,
     voice: liveReport(LIVE_CALL, "Seven days."),
-    taskId: TASK,
+    agentId: AGENT,
     now: 6_000,
   });
   assert.deepEqual(
@@ -176,11 +179,11 @@ test("the same call keeps when it was first heard, a call begun at once keeps th
     [[5_000, "Seven days."]],
   );
 
-  const ended = heardCalls({ held: grown, voice: NO_CALL, taskId: TASK, now: 7_000 });
+  const ended = heardCalls({ held: grown, voice: NO_CALL, agentId: AGENT, now: 7_000 });
   const next = heardCalls({
     held: ended,
     voice: liveReport(NEXT_CALL, "Back again."),
-    taskId: TASK,
+    agentId: AGENT,
     now: 8_000,
   });
   assert.deepEqual(
@@ -200,14 +203,17 @@ test("the same call keeps when it was first heard, a call begun at once keeps th
   assert.deepEqual(
     heardCalls({
       held: [],
-      voice: { ...liveReport(LIVE_CALL, "Seven days."), callTaskId: "another-plan" },
-      taskId: TASK,
+      voice: {
+        ...liveReport(LIVE_CALL, "Seven days."),
+        call: { taskId: TASK, agentId: "another-agent" },
+      },
+      agentId: AGENT,
       now: 5_000,
     }),
     [],
   );
   assert.deepEqual(
-    heardCalls({ held: grown, voice: NO_CALL, taskId: "another-plan", now: 9_000 }),
+    heardCalls({ held: grown, voice: NO_CALL, agentId: "another-agent", now: 9_000 }),
     [],
   );
 });
@@ -223,7 +229,7 @@ test("a call that ended closes with a line saying so, one Luke ended says he did
   const heard = heardCalls({
     held: [],
     voice: liveReport(LIVE_CALL, "Hello again"),
-    taskId: TASK,
+    agentId: AGENT,
     now: 3_000,
   });
   const region = transcriptRegion({
@@ -269,7 +275,7 @@ test("a stored call carries what its record holds of how it ended, and the call 
     heard: heardCalls({
       held: [],
       voice: liveReport(LIVE_CALL, "Hello again"),
-      taskId: TASK,
+      agentId: AGENT,
       now: 11_000,
     }),
   });
@@ -283,7 +289,7 @@ test("a stored call carries what its record holds of how it ended, and the call 
 
 test("the call standing is dated from when it was first heard, less how far into the call its first line began, so a turn begun before any line stands ahead of them all", () => {
   const voice = {
-    callTaskId: TASK,
+    call: CALL,
     callTranscript: {
       voiceSessionId: LIVE_CALL,
       lines: [
@@ -297,7 +303,7 @@ test("the call standing is dated from when it was first heard, less how far into
       ],
     },
   };
-  const heard = heardCalls({ held: [], voice, taskId: TASK, now: 9_000 });
+  const heard = heardCalls({ held: [], voice, agentId: AGENT, now: 9_000 });
   const region = transcriptRegion({ transcript: { status: TASKS_READ.READING }, heard });
   assert.deepEqual(
     region.kind === TRANSCRIPT_REGION.READY ? region.calls.map((call) => call.startedAt) : [],
@@ -336,10 +342,10 @@ test("a teammate's call drawn from what was heard, while its record holds fewer 
   const live = heardCalls({
     held: [],
     voice: liveReport(LIVE_CALL, "Seven days, then."),
-    taskId: TASK,
+    agentId: AGENT,
     now: 5_000,
   });
-  const ended = heardCalls({ held: live, voice: NO_CALL, taskId: TASK, now: 9_000 });
+  const ended = heardCalls({ held: live, voice: NO_CALL, agentId: AGENT, now: 9_000 });
   const recorded = recordedSaying("Seven");
   const transcript: TaskTranscript = {
     ...recorded,
@@ -356,4 +362,78 @@ test("a teammate's call drawn from what was heard, while its record holds fewer 
     region.kind === TRANSCRIPT_REGION.READY ? region.calls.at(-1)?.caller : undefined,
     CHARLES,
   );
+});
+
+/** A row of an agent's transcript said on the call given, as the record holds it. */
+function spokenRow(id: string, call: string): { id: string; metadata: Record<string, string> } {
+  return { id, metadata: { channel: "voice", voice_session_id: call } };
+}
+
+test("an agent's transcript begins each call before its first line and closes an ended one after its last, and a typed row between stays inside", () => {
+  const rows = [
+    { id: "typed-0", metadata: { channel: "typed" } },
+    spokenRow("said-1", EARLIER_CALL),
+    { id: "turn-2" },
+    spokenRow("said-3", EARLIER_CALL),
+    { id: "typed-4", metadata: { channel: "typed" } },
+  ];
+  const region = transcriptRegion({
+    transcript: { status: TASKS_READ.READY, transcript: STORED },
+    heard: [],
+  });
+  const calls = region.kind === TRANSCRIPT_REGION.READY ? region.calls : [];
+  const places = callPlaces(rows, calls);
+
+  assert.deepEqual([...places.opens.keys()], ["said-1"]);
+  assert.deepEqual([...places.closes.keys()], ["said-3"]);
+  assert.equal(places.heard, undefined);
+});
+
+test("the call standing grows at the transcript's foot with the lines no row holds yet, under its divider only where no row of it stands above", () => {
+  const voice = {
+    call: CALL,
+    callTranscript: {
+      voiceSessionId: LIVE_CALL,
+      lines: [
+        {
+          rowId: "row-1",
+          speaker: TRANSCRIPT_SPEAKER.USER,
+          words: "Walk me through it.",
+          startMs: 0,
+          endMs: 900,
+        },
+        {
+          rowId: "row-2",
+          speaker: TRANSCRIPT_SPEAKER.ASSISTANT,
+          words: "It starts in the router.",
+          startMs: 1_000,
+          endMs: 2_000,
+        },
+      ],
+    },
+  };
+  const heard = heardCalls({ held: [], voice, agentId: AGENT, now: 9_000 });
+  const region = transcriptRegion({
+    transcript: { status: TASKS_READ.READY, transcript: { calls: [], earlierOmitted: false } },
+    heard,
+  });
+  const calls = region.kind === TRANSCRIPT_REGION.READY ? region.calls : [];
+
+  const none = callPlaces([{ id: "typed-0" }], calls);
+  assert.equal(
+    none.heard?.opened,
+    false,
+    "no row of the call stands, so its divider leads the lines heard",
+  );
+  assert.deepEqual(none.heard?.lines.map(messageText), [
+    "Walk me through it.",
+    "It starts in the router.",
+  ]);
+  assert.equal(none.opens.size, 0);
+
+  const one = callPlaces([{ id: "typed-0" }, spokenRow("said-1", LIVE_CALL)], calls);
+  assert.deepEqual([...one.opens.keys()], ["said-1"]);
+  assert.equal(one.heard?.opened, true);
+  assert.deepEqual(one.heard?.lines.map(messageText), ["It starts in the router."]);
+  assert.equal(one.closes.size, 0, "a call still standing has not closed");
 });

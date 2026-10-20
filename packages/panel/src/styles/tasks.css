@@ -1153,6 +1153,12 @@
   height: 14px;
 }
 
+/* An agent's glyph while a call into it is in progress: the divider's live
+   mark, in the same tint, in the glyph's own footprint (`tab-look.tsx`). */
+.agent-calling-glyph {
+  color: var(--luke-color-complete);
+}
+
 /* One line, as a teammate's heading already keeps (`.call-caller`), so a
    time that would wrap in a narrow panel cannot outgrow the band. */
 .checkpoint-log [data-checkpoint] {

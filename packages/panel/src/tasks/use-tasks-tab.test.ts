@@ -35,7 +35,7 @@ import { ACT_KIND } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
 import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
@@ -44,18 +44,11 @@ import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import {
-  messageText,
-  TRANSCRIPT_REGION,
-  type TranscriptRegion,
-} from "@luke/voice/transcript-model";
-import {
   IDLE_VOICE_VIEW,
   VOICE_COMMAND,
   type VoiceCallTranscript,
-  type VoiceCallTranscriptChange,
   type VoiceCommand,
   type VoiceView,
-  withCallTranscriptChange,
 } from "@luke/voice/voice-view";
 import { Duration, Effect, Option, Schema } from "effect";
 import type { AtomRegistry } from "effect/reactivity/AtomRegistry";
@@ -72,7 +65,7 @@ import {
 } from "../navigation-history.js";
 import { PANEL_TAB } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
-import { handState } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handCapabilities, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { newestToastAction, newestToastSays } from "../testing/toast.js";
@@ -118,11 +111,6 @@ const readShown = Schema.decodeUnknownOption(
       ),
     ),
   }),
-);
-
-/** A start's planning, read back where it names one. */
-const readPlanningNamed = Schema.decodeUnknownOption(
-  Schema.Struct({ planning: Schema.optionalKey(Schema.Boolean) }),
 );
 
 /** A voice command's payload, read back as the act's own schema admits it. */
@@ -519,14 +507,14 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
   await act(async () => {
     note = await tab
       .control()
-      .newTask.start("Dark mode", "acme/web", tab.control().newTask.workspaceId, true);
+      .newTask.start("Dark mode", "acme/web", tab.control().newTask.workspaceId);
   });
   assert.ok(note, "a refusal says why");
   assert.equal(tab.control().newTask.open, true, "a refusal keeps the dialog");
   await act(async () => {
     note = await tab
       .control()
-      .newTask.start("Dark mode", "acme/web", tab.control().newTask.workspaceId, true);
+      .newTask.start("Dark mode", "acme/web", tab.control().newTask.workspaceId);
   });
   assert.equal(note, undefined);
   assert.equal(tab.control().newTask.open, false, "a plan started closes the dialog");
@@ -550,9 +538,7 @@ test("a task started opens with the side panel shown on its plan, a refused star
   const send = () => {
     let note: Promise<string | undefined> = Promise.resolve(undefined);
     act(() => {
-      note = tab
-        .control()
-        .newTask.start("Dark mode", null, tab.control().newTask.workspaceId, true);
+      note = tab.control().newTask.start("Dark mode", null, tab.control().newTask.workspaceId);
     });
     return note;
   };
@@ -608,12 +594,6 @@ test("a planning worker's tab reads its session as an agent's worker's tab reads
   assert.deepEqual(read, page);
 });
 
-/** The words of every call the transcript draws, in order, with whether each call stands now. */
-function callsDrawn(region: TranscriptRegion): (readonly [boolean, string[]])[] {
-  if (region.kind !== TRANSCRIPT_REGION.READY) return [];
-  return region.calls.map((call) => [call.live, call.messages.map(messageText)] as const);
-}
-
 const EMPTY_BOARD: Board = { elements: [], appliedDrawing: 0 };
 
 /** A board holding Luke's drawing of one box, numbered as his `number`th. */
@@ -644,13 +624,6 @@ const _SHOWN_AGAIN: readonly TaskCodeShowing[] = [
   ...SHOWN,
   { callId: "show-2", turnId: "turn-1", shownAt: 1, code: CODE },
 ];
-
-/** A call in progress about the open task, which is what puts code on screen. */
-const ON_CALL: VoiceView = {
-  ...IDLE_VOICE_VIEW,
-  callTaskId: TASK.id,
-  voiceStatus: LIVE_STATUS.LISTENING,
-};
 
 /** The panel as the developer sees it: shown or not, and on which tab. */
 function panelOf(tab: ReturnType<typeof mount>) {
@@ -760,7 +733,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
     file,
   ];
   assert.deepEqual(panel().strip, strip);
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, { agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
   assert.equal(tab.control().onReopenClosedTab, undefined, "nothing closed, nothing to reopen");
 
   act(() => panel().onClose(SIDE_PANEL_TAB.CODE));
@@ -772,7 +745,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.COMMENTS,
   ]);
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL]);
+  assert.deepEqual(column().tabs, []);
 
   act(() => tab.control().onReopenClosedTab?.());
   assert.deepEqual(panel().strip, [
@@ -789,7 +762,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   );
 
   act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, { agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 
   act(() => tab.control().onReopenClosedTab?.());
@@ -798,7 +771,7 @@ test("⇧⌘T opens the tabs closed again, the latest first, each in its strip a
   assert.equal(tab.control().onReopenClosedTab, undefined);
 });
 
-test("the Call's tab closes beside another, stays closed across a launch until chosen again, and stands again, never closing, once nothing else does", async () => {
+test("a task opens on its plan until an agent's tab is chosen, keeps that tab across a launch, and is back on its plan once its last tab closes", async () => {
   const listed = {
     [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
   };
@@ -806,42 +779,36 @@ test("the Call's tab closes beside another, stays closed across a launch until c
   await settle();
   const column = () => tab.control().mainTabs;
   const agent = { agent: AGENT_ID };
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, agent]);
-
-  act(() => column().onClose(MAIN_TAB.CALL));
   assert.deepEqual(column().tabs, [agent]);
-  assert.deepEqual(column().tab, agent, "the column shows the tab beside it");
-  act(() => tab.control().onReopenClosedTab?.());
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, agent], "⇧⌘T opens it first again");
-  assert.equal(column().tab, MAIN_TAB.CALL);
-  act(() => column().onClose(MAIN_TAB.CALL));
+  assert.equal(column().tab, undefined, "a task never shown on an agent shows its plan");
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
+
+  act(() => column().onChoose(agent));
+  assert.deepEqual(column().tab, agent);
 
   const launched = mount({ shown: true, tasks: OPEN }, listed);
   await settle();
   const again = () => launched.control().mainTabs;
-  assert.deepEqual(again().tabs, [agent], "a launch keeps it closed");
+  assert.deepEqual(again().tab, agent, "a launch opens the task on the agent it last showed");
 
   act(() => again().onClose(agent));
-  assert.deepEqual(again().tabs, [MAIN_TAB.CALL]);
-  assert.equal(again().tab, MAIN_TAB.CALL, "a column with no other tab is back on the Call");
-  act(() => again().onClose(MAIN_TAB.CALL));
-  assert.deepEqual(again().tabs, [MAIN_TAB.CALL], "alone, it does not close");
-  act(() => again().onChoose(agent));
-  assert.deepEqual(again().tabs, [MAIN_TAB.CALL, agent], "it stays open beside a tab opened since");
+  assert.deepEqual(again().tabs, []);
+  assert.equal(again().tab, undefined, "a column with no tab left is back on the plan");
 });
 
-test("a column kept while the plan and the Inbox stood in it reads with both let go, its agents' order and the tab last viewed still standing", async () => {
+test("a column kept while the plan, the Inbox, and the Call stood in it reads with each let go, its agents' order and the tab last viewed still standing", async () => {
   window.localStorage.setItem(
     "luke.mainTabs",
     JSON.stringify({
       closedAgents: [],
       tasks: {
         [TASK.id]: {
-          recent: ["plan", { agent: AGENT_ID }, "inbox"],
-          order: [{ agent: AGENT_ID }, "inbox"],
+          recent: ["plan", { agent: AGENT_ID }, "inbox", "call"],
+          order: ["call", { agent: AGENT_ID }, "inbox"],
           inboxOpen: true,
           inboxSeen: ["item-1"],
           planClosed: true,
+          callClosed: true,
         },
       },
     }),
@@ -852,11 +819,11 @@ test("a column kept while the plan and the Inbox stood in it reads with both let
   );
   await settle();
   const column = () => tab.control().mainTabs;
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL, { agent: AGENT_ID }]);
+  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
   assert.deepEqual(column().tab, { agent: AGENT_ID });
 });
 
-test("a closed Call's tab that stands again because its last agent was archived stays open beside the next tab opened", async () => {
+test("a column whose last agent is archived is back on the plan, and a draft opened since stands alone", async () => {
   let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
   const archived = { ...RUNNING_AGENT, archivedAt: 5 };
   const tab = mount(
@@ -871,15 +838,16 @@ test("a closed Call's tab that stands again because its last agent was archived 
   );
   await settle();
   const column = () => tab.control().mainTabs;
-  act(() => column().onClose(MAIN_TAB.CALL));
-  assert.deepEqual(column().tabs, [{ agent: AGENT_ID }]);
+  act(() => column().onChoose({ agent: AGENT_ID }));
+  assert.deepEqual(column().tab, { agent: AGENT_ID });
 
   await act(() => tab.control().agents.onArchive(AGENT_ID, true));
   await settle();
-  assert.deepEqual(column().tabs, [MAIN_TAB.CALL]);
-  act(() => column().onChoose({ draft: tab.control().agents.onNewDraft() }));
-  assert.equal(column().tabs[0], MAIN_TAB.CALL, "the Call's tab stands beside the draft's");
-  assert.equal(column().tabs.length, 2);
+  assert.deepEqual(column().tabs, []);
+  assert.equal(column().tab, undefined);
+  const draft = { draft: tab.control().agents.onNewDraft() };
+  act(() => column().onChoose(draft));
+  assert.deepEqual(column().tabs, [draft]);
 });
 
 test("a tab closed on another plan opens that plan again, and the tab on it once the host has it open", () => {
@@ -1302,7 +1270,7 @@ test("a Luke link whose slug names no workspace of the account's leaves the list
   assert.equal(tab.control().automationsView.open, true);
 });
 
-test("a Luke link to a task's version opens its version history on that version, and one to its call opens its Call tab", () => {
+test("a Luke link to a task's version opens its version history on that version, and one to a turn of Luke's work opens its plan", () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
@@ -1318,13 +1286,13 @@ test("a Luke link to a task's version opens its version history on that version,
   act(() =>
     tab.control().onOpenLink({
       workspace: "acme",
-      place: { kind: LINK_PLACE.CALL, planId: TASK.id },
+      place: { kind: LINK_PLACE.TURN, planId: TASK.id, at: 7 },
     }),
   );
 
   assert.deepEqual(history, { open: true, spot: { revision: 3, opened: undefined } });
   assert.equal(tab.control().history.open, false);
-  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.CALL);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN });
 });
 
 test("a Luke link to a version of a task the service will not hand the reader leaves no version history standing over the task's Not found", () => {
@@ -1502,9 +1470,9 @@ test("the sidebar lists the first workspace's plans first, a workspace chosen li
     tasks: tab.control().listed.tasks.map((task) => task.id),
     archived: tab.control().listed.archived.map((task) => task.id),
   };
-  await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId, true);
+  await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId);
   act(() => tab.control().onChooseWorkspace(ACME.id));
-  await tab.control().newTask.start("Usage", "acme/relay", tab.control().newTask.workspaceId, true);
+  await tab.control().newTask.start("Usage", "acme/relay", tab.control().newTask.workspaceId);
 
   assert.deepEqual(personal, {
     workspace: PERSONAL.id,
@@ -2002,7 +1970,7 @@ test("a workspace chosen is chosen again on the next launch, and one the account
 test("before the workspaces are read every plan is listed and New plan names no workspace, so the service starts it in the first one", async () => {
   const tab = mount({ shown: true, tasks: { ...TWO_WORKSPACES, workspaces: [] } }, UNSTARTED);
 
-  await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId, true);
+  await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId);
 
   assert.equal(tab.control().workspace, undefined);
   assert.deepEqual(
@@ -2012,28 +1980,14 @@ test("before the workspaces are read every plan is listed and New plan names no 
   assert.deepEqual(startedIn(tab.payloads), [undefined]);
 });
 
-test("New plan with Plan off asks for a task without planning, and with it on names no planning, as every start did before", async () => {
+test("a task started hands on the brief it was given beside its issue, starts with no planning, and a blank brief is not sent", async () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
 
-  await tab.control().newTask.start("Typo", null, tab.control().newTask.workspaceId, false);
-  await tab.control().newTask.start("Invites", null, tab.control().newTask.workspaceId, true);
-
-  assert.deepEqual(
-    tab.payloads
-      .filter((asked) => asked.kind === ACT_KIND.TASKS_START)
-      .map((asked) => Option.getOrUndefined(readPlanningNamed(asked.payload))?.planning),
-    [false, undefined],
-  );
-});
-
-test("New plan hands Luke the brief it was given beside its issue, and a blank brief is not sent", async () => {
-  const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
-
-  await tab.control().newTask.start("", null, "workspace-acme", true, {
+  await tab.control().newTask.start("", null, "workspace-acme", {
     issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
     brief: "Keep the queue order stable.",
   });
-  await tab.control().newTask.start("", null, "workspace-acme", true, { brief: " \n " });
+  await tab.control().newTask.start("", null, "workspace-acme", { brief: " \n " });
 
   assert.deepEqual(
     tab.payloads
@@ -2044,8 +1998,9 @@ test("New plan hands Luke the brief it was given beside its issue, and a blank b
         workspaceId: "workspace-acme",
         issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
         brief: "Keep the queue order stable.",
+        planning: false,
       },
-      { workspaceId: "workspace-acme" },
+      { workspaceId: "workspace-acme", planning: false },
     ],
   );
 });
@@ -2980,7 +2935,7 @@ test("a task New task files for later asks the host to start it in the backlog, 
   );
   await settle();
   await act(async () => {
-    await tab.control().newTask.start("Rate limit search", "acme/web", "workspace-acme", false, {
+    await tab.control().newTask.start("Rate limit search", "acme/web", "workspace-acme", {
       status: TASK_STATUS.BACKLOG,
       brief: "Thirty a minute.",
     });
@@ -3031,7 +2986,7 @@ async function startAgentTask(tab: ReturnType<typeof mount>) {
   act(() => tab.control().onNewTask());
   let note: string | undefined = "unanswered";
   await act(async () => {
-    note = await tab.control().newTask.start("", "acme/web", undefined, false, {
+    note = await tab.control().newTask.start("", "acme/web", undefined, {
       handed: { idempotencyKey: AGENT_KEY, prompt, attachments: [], choice },
     });
   });
@@ -3162,53 +3117,85 @@ test("an agent's title first landing on a task still Untitled reads the tasks ag
   assert.equal(refreshes(named) - namedBefore, 0);
 });
 
-test("the live transcript draws the call's lines from the changes main splices into the document, and a panel opened mid-call draws the same", () => {
-  const session = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
-  const line = (rowId: string, speaker: "user" | "assistant", words: string) => ({
-    rowId,
-    speaker,
-    words,
-    startMs: 0,
-    endMs: 1_000,
-  });
-  // As the voice window reports them: a line once, then only the line still growing.
-  const changes: readonly VoiceCallTranscriptChange[] = [
-    { voiceSessionId: session, from: 0, lines: [line("row-1", "user", "Invites should expire.")] },
-    { voiceSessionId: session, from: 1, lines: [line("row-2", "assistant", "After how")] },
+/** An agent New voice chat started blank on the open task. */
+const VOICE_CHAT_AGENT: CodingAgentSummary = {
+  ...RUNNING_AGENT,
+  id: "2f4a6c8e-0b1d-4e3f-a5c7-9e1b3d5f7a90",
+  status: CODING_AGENT_STATUS.STARTING,
+};
+
+/** The payload of every act of `kind` the tab asked, in order. */
+function payloadsOf(tab: ReturnType<typeof mount>, kind: PortActKind): unknown[] {
+  return tab.payloads.filter((asked) => asked.kind === kind).map((asked) => asked.payload);
+}
+
+test("New voice chat starts an agent blank on the open task, opens its tab, and calls it; a platform with no voice offers none", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  let listed: readonly CodingAgentSummary[] = [RUNNING_AGENT];
+  const tab = mount(
+    { shown: true, tasks: OPEN },
     {
-      voiceSessionId: session,
-      from: 1,
-      lines: [line("row-2", "assistant", "After how many days?")],
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
+      [ACT_KIND.CODING_AGENTS_START]: () => {
+        listed = [RUNNING_AGENT, VOICE_CHAT_AGENT];
+        return Promise.resolve({ agent: VOICE_CHAT_AGENT });
+      },
+      [ACT_KIND.TASKS_TALK]: () => Promise.resolve(undefined),
     },
-  ];
-  const tasks: TasksView = { ...OPEN, transcript: NO_CALLS };
-  const tab = mount({ shown: true, tasks, voice: ON_CALL });
-  let held: VoiceCallTranscript | undefined;
-  for (const change of changes) {
-    held = withCallTranscriptChange(held, change);
-    tab.stand({ callTranscript: held });
-  }
-  const live = [[true, ["Invites should expire.", "After how many days?"]]];
-  assert.deepEqual(callsDrawn(tab.control().transcript.region), live);
-  // The last report heard again changes nothing.
-  const last = changes.at(-1);
-  assert.ok(last);
-  tab.stand({ callTranscript: withCallTranscriptChange(held, last) });
-  assert.deepEqual(callsDrawn(tab.control().transcript.region), live);
-
-  const opened = mount({ shown: true, tasks, voice: ON_CALL, callTranscript: held });
-  assert.deepEqual(callsDrawn(opened.control().transcript.region), live);
-
-  // The call gone clears the slice, and its words stay drawn until the record has them.
-  tab.stand({
-    voice: IDLE_VOICE_VIEW,
-    callTranscript: withCallTranscriptChange(held, {
-      voiceSessionId: undefined,
-      from: 0,
-      lines: [],
-    }),
+    AtomRegistryModule.make(),
+  );
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().onNewVoiceChat, "a desktop offers New voice chat");
   });
-  assert.deepEqual(callsDrawn(tab.control().transcript.region), [
-    [false, ["Invites should expire.", "After how many days?"]],
+  await act(async () => tab.control().onNewVoiceChat?.());
+  await settle();
+
+  const [start] = payloadsOf(tab, ACT_KIND.CODING_AGENTS_START);
+  assert.ok(start !== null && typeof start === "object");
+  assert.equal(Reflect.get(start, "blank"), true, "the agent starts blank");
+  assert.equal(Reflect.get(start, "taskId"), TASK.id);
+  assert.equal(Reflect.get(start, "prompt"), undefined, "and is handed no words");
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: VOICE_CHAT_AGENT.id });
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: VOICE_CHAT_AGENT.id }]);
+
+  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.VOICE));
+  const web = mount({ shown: true, tasks: OPEN }, {}, AtomRegistryModule.make());
+  await settle();
+  assert.equal(web.control().onNewVoiceChat, undefined);
+  assert.equal(web.control().calls, undefined, "and its agents' tabs take no calls");
+});
+
+test("an agent's Call press opens a call into it at once, and over another agent's call asks first, the press itself the answer", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES);
+  const otherCall: VoiceView = {
+    ...IDLE_VOICE_VIEW,
+    voiceStatus: LIVE_STATUS.LISTENING,
+    call: { taskId: TASK.id, agentId: VOICE_CHAT_AGENT.id },
+  };
+  const tab = mount(
+    { shown: true, tasks: OPEN },
+    {
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+      [ACT_KIND.TASKS_TALK]: () => Promise.resolve(undefined),
+    },
+    AtomRegistryModule.make(),
+  );
+  await vi.waitFor(async () => {
+    await settle();
+    assert.ok(tab.control().calls, "a desktop's agents take calls");
+  });
+  act(() => tab.control().calls?.onPress(AGENT_ID));
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [{ agentId: AGENT_ID }]);
+
+  tab.stand({ voice: otherCall });
+  act(() => tab.control().calls?.onPress(AGENT_ID));
+  assert.equal(payloadsOf(tab, ACT_KIND.TASKS_TALK).length, 1, "nothing is called before the ask");
+  assert.equal(tab.control().secondCall.confirm.standing, true, "the press asks first");
+  await act(async () => tab.control().secondCall.confirm.run());
+  await settle();
+  assert.deepEqual(payloadsOf(tab, ACT_KIND.TASKS_TALK), [
+    { agentId: AGENT_ID },
+    { agentId: AGENT_ID },
   ]);
 });

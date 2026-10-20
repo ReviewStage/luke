@@ -104,8 +104,7 @@ function lazySessionReplay(): AppPlatform["applySessionReplay"] {
 }
 
 /**
- * The tab's platform. A browser has no menu bar and no global keys, so those
- * answer nothing; focus is the tab's own, so bringing the panel forward is
+ * The tab's platform. A browser has no menu bar, so that answers nothing; focus is the tab's own, so bringing the panel forward is
  * asking the window for it; a surface event is counted by the host in the
  * tab, as every other event is; notifications are the browser's to grant,
  * for the site, asked for on Settings' press itself; unsaved work is held
@@ -124,7 +123,6 @@ export function webPlatform(
     pageFrameUrl: () => new URL(PAGE_IN_MAC_APP, location.origin).href,
     assetBase: () => new URL(PANEL_ASSET_BASE, location.origin).href,
     onMenuCommand: () => ignore,
-    setShortcutCapturing: ignore,
     recordSurfaceEvent: shell.recordSurfaceEvent,
     openGitHub: openGitHubTab,
     openWeb: openTab,

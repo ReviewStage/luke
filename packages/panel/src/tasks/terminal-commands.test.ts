@@ -22,7 +22,7 @@ import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js"
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
-import { MAIN_TAB, type MainTab } from "./use-main-tabs.js";
+import type { MainTab } from "./use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "./use-side-panel.js";
 import { NO_LOOKS } from "./use-task-looks.js";
 
@@ -139,8 +139,8 @@ async function mount(input: {
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...base.mainTabs,
-      tabs: [MAIN_TAB.CALL, ...agentTabs],
-      tab: input.main ?? MAIN_TAB.CALL,
+      tabs: agentTabs,
+      tab: input.main,
       openAgents: listed.map((each) => each.id),
     },
     sidePanel: {

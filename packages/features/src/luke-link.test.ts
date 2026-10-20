@@ -31,8 +31,6 @@ const LINKS: readonly (readonly [LinkPlace, string])[] = [
   ],
   [{ kind: LINK_PLACE.VERSION, planId: TASK, revision: 12 }, `${HOME}/plan/${TASK}/version/12`],
   [{ kind: LINK_PLACE.PAGE, planId: TASK, pageId: OTHER }, `${HOME}/plan/${TASK}/page/${OTHER}`],
-  [{ kind: LINK_PLACE.CALL, planId: TASK }, `${HOME}/plan/${TASK}/call`],
-  [{ kind: LINK_PLACE.CALL, planId: TASK, callId: "call_9" }, `${HOME}/plan/${TASK}/call/call_9`],
   [
     { kind: LINK_PLACE.TURN, planId: TASK, at: 1760000000000 },
     `${HOME}/plan/${TASK}/work/1760000000000`,
@@ -219,6 +217,9 @@ test("an address that names no place in Luke names nothing", () => {
     `${HOME}/plan/Fix%20billing#rollout`,
     `${HOME}/plan/${TASK}/version/latest`,
     `${HOME}/plan/${TASK}/call/call_9/more`,
+    // The task's Call tab is gone, and a link to it, or to a call there, names nothing.
+    `${HOME}/plan/${TASK}/call`,
+    `${HOME}/plan/${TASK}/call/call_9`,
     `${HOME}/inbox/${OTHER}`,
     `${HOME}/plan/${TASK}/agent/${AGENT}/inbox/${OTHER}`,
     `${HOME}/agent/${AGENT}/inbox/${OTHER}/answer`,

@@ -16,6 +16,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
   type CodingAgentArchiveParams,
+  type CodingAgentCallsAnswerView,
   type CodingAgentChangesAnswerView,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
@@ -83,6 +84,7 @@ export interface AgentProceduresDependencies {
     /** The plan list read again, which carries every agent with no plan beside the plans. */
     tasksRefresh(): Effect.Effect<void>;
     codingAgentPage(params: CodingAgentPageParams): Effect.Effect<CodingAgentPageAnswerView>;
+    codingAgentCalls(params: CodingAgentPageParams): Effect.Effect<CodingAgentCallsAnswerView>;
     codingAgentPullRequest(
       params: CodingAgentPullRequestReadParams,
     ): Effect.Effect<CodingAgentPullRequestAnswerView>;
@@ -371,6 +373,12 @@ export function agentProcedures(dependencies: AgentProceduresDependencies) {
       function* ({ input, context, errors }) {
         yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
         return yield* host.codingAgentPage(input);
+      },
+    ),
+    [AGENT_ACT_KIND.CODING_AGENTS_CALLS]: actPort[AGENT_ACT_KIND.CODING_AGENTS_CALLS].effect(
+      function* ({ input, context, errors }) {
+        yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+        return yield* host.codingAgentCalls(input);
       },
     ),
     [AGENT_ACT_KIND.CODING_AGENTS_PULL_REQUEST]: actPort[

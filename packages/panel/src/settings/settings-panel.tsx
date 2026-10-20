@@ -8,7 +8,6 @@ import { voiceAttentionNote } from "@luke/voice/microphone-access";
 import type {
   MicrophoneControl,
   NotificationsControl,
-  ShortcutControl,
   UpdateControl,
 } from "@luke/voice/settings-controls";
 import type { ActionResult } from "@luke/wire";
@@ -23,7 +22,6 @@ import { NotificationsSection } from "./notifications-section.js";
 import { settingsRowsInput } from "./settings-rows.js";
 import { WindowShortcutSections } from "./shortcuts-page.js";
 import { UpdatesSection } from "./updates.js";
-import { ShortcutSection } from "./voice-keys.js";
 import { VoiceSection } from "./voice-page.js";
 import { WorkspacePage, type WorkspaceSettingsControl } from "./workspace-page.js";
 import { useSettingsWrites } from "./writes.js";
@@ -51,7 +49,6 @@ export interface SettingsPanelProps {
   notifications: NotificationsControl;
   updates: UpdateControl;
   settings?: AppSettingsView;
-  shortcuts: ShortcutControl;
   /** What the platform offers, which decides the pages and rows of its features that stand. */
   capabilities: readonly HostCapability[];
   /** The workspaces the Workspace page shows, drawn while an account is signed in. */
@@ -87,7 +84,6 @@ export function SettingsPanel({
   notifications,
   updates,
   settings,
-  shortcuts,
   workspace,
   capabilities,
   integrationsFilter,
@@ -132,22 +128,13 @@ export function SettingsPanel({
         <IntegrationsSection signedIn={signedIn} filter={integrationsFilter} />
       ) : null}
 
-      {view === SETTINGS_VIEW.VOICE ? (
-        <>
-          {panelView ? (
-            <VoiceSection
-              view={panelView}
-              writes={writes}
-              microphone={microphone}
-              microphoneOffered={capabilities.includes(HOST_CAPABILITY.MICROPHONE)}
-            />
-          ) : null}
-          <ShortcutSection
-            shortcuts={shortcuts}
-            {...(panelView ? { view: panelView } : undefined)}
-            voiceAvailable={microphone.voiceAvailable}
-          />
-        </>
+      {view === SETTINGS_VIEW.VOICE && panelView ? (
+        <VoiceSection
+          view={panelView}
+          writes={writes}
+          microphone={microphone}
+          microphoneOffered={capabilities.includes(HOST_CAPABILITY.MICROPHONE)}
+        />
       ) : null}
 
       {view === SETTINGS_VIEW.APPEARANCE && panelView ? (

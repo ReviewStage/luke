@@ -10,7 +10,7 @@ import {
   type GatewayClient,
   type GatewayMethod,
 } from "@luke/gateway";
-import { APP_SETTING_SCHEMA } from "@luke/settings";
+import { APP_SETTING_SCHEMA, THEME } from "@luke/settings";
 import { appSettingsWire, settingsView } from "@luke/settings/testing";
 import type { AppSettings } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@luke/wire";
@@ -53,8 +53,8 @@ it.effect("a setting's value travels as the method's value field", () =>
     const operator = operatorOver(client);
 
     const result = yield* operator.updateSetting(
-      APP_SETTING_SCHEMA.voiceHotkey.field,
-      "Alt+Space",
+      APP_SETTING_SCHEMA.theme.field,
+      THEME.DARK,
       REPORTER,
     );
 
@@ -63,8 +63,8 @@ it.effect("a setting's value travels as the method's value field", () =>
     const [request] = requests;
     assert.equal(request?.method, GATEWAY_METHOD.SETTINGS_UPDATE);
     assert.deepEqual(request?.params, {
-      field: APP_SETTING_SCHEMA.voiceHotkey.field,
-      value: "Alt+Space",
+      field: APP_SETTING_SCHEMA.theme.field,
+      value: THEME.DARK,
       reporter: REPORTER,
     });
   }),
@@ -218,7 +218,7 @@ it.effect(
         operatorOver({
           call: () => Effect.succeed(answer),
           on: () => () => undefined,
-        }).updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, "Alt+Space", REPORTER);
+        }).updateSetting(APP_SETTING_SCHEMA.theme.field, THEME.DARK, REPORTER);
       // The router's own boundary, which every act's call through the operator runs under.
       const asked = (answer: GatewayCallResult) =>
         Effect.exit(Effect.withErrorReporting(answering(answer), { defectsOnly: true }));

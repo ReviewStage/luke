@@ -8,7 +8,7 @@ import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
@@ -300,12 +300,12 @@ function heard(node: Node): string {
 /** The open task's tab as `openTab` gives it, its column showing `tab` and its side panel as given. */
 function onTab(
   tasks: TasksControl,
-  tab: MainTab,
+  tab: MainTab | undefined,
   sidePanel: Partial<TasksControl["sidePanel"]> = {},
 ): TasksControl {
   return {
     ...tasks,
-    mainTabs: { ...tasks.mainTabs, tabs: [MAIN_TAB.CALL, AGENT_TAB], tab },
+    mainTabs: { ...tasks.mainTabs, tabs: [AGENT_TAB], tab },
     sidePanel: { ...tasks.sidePanel, ...sidePanel },
     agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
   };
@@ -360,11 +360,11 @@ test("a stranded plan's banner stands over every tab of the plan: its Call besid
     strip: [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.INBOX],
     tab: SIDE_PANEL_TAB.INBOX,
   };
-  const inbox = openTask(onTab(tasks, MAIN_TAB.CALL, inboxShown));
+  const inbox = openTask(onTab(tasks, undefined, inboxShown));
   layOutInbox(inbox, 700);
   const agent = openTask(onTab(tasks, AGENT_TAB, { open: true, tab: SIDE_PANEL_TAB.PLAN }));
   const full = openTask(
-    onTab(tasks, MAIN_TAB.CALL, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.PLAN }),
+    onTab(tasks, undefined, { open: true, fullScreen: true, tab: SIDE_PANEL_TAB.PLAN }),
   );
 
   assert.equal(inbox.querySelector(".inbox-view")?.getAttribute("data-columns"), "list");
@@ -394,7 +394,7 @@ test("no banner stands over any tab of a plan its own workspace reaches, one no 
     [{ ...TASK, ownerId: SAM }, [STUDIO, ACME]],
   ];
   const banners = cases.flatMap(([task, workspaces]) =>
-    [MAIN_TAB.CALL, AGENT_TAB].map((tab) => {
+    [undefined, AGENT_TAB].map((tab) => {
       const page = openTask(onTab(openTab(task, workspaces), tab));
       const found = strandedBanner(page) !== null;
       unmountAll();

@@ -50,8 +50,8 @@ import {
   type TerminalStripTab,
   tabKey,
 } from "@luke/ui/tab-strip-model";
+import type { CodeFeedCallSource } from "@luke/voice/code-pane-model";
 import { type ShownFile, shownFiles } from "@luke/voice/code-pane-model";
-import { TRANSCRIPT_REGION, type TranscriptRegion } from "@luke/voice/transcript-model";
 import {
   Fragment,
   Suspense,
@@ -205,6 +205,13 @@ const NO_CODE_LINE = "No code yet.";
 
 /** What the Code tab says where the task's code could not be read and none is held. */
 const UNREAD_CODE_LINE = "The code could not be read.";
+
+/**
+ * The calls the Code tab's feed groups its code under: none, since every
+ * call is an agent's now and drawn in that agent's tab, so the feed heads
+ * each code by the turn that showed it.
+ */
+const NO_CODE_CALLS: readonly CodeFeedCallSource[] = [];
 
 /** The task's work read that did not land, and its retry, which the Code tab offers while it holds no code. */
 interface CodeFailed {
@@ -1046,22 +1053,11 @@ function NoTabs({ entries }: { entries: readonly AddEntry[] }): React.JSX.Elemen
   );
 }
 
-/** What was said on the open task's calls, and the retry of a read that failed. */
-interface SidePanelTranscript {
-  region: TranscriptRegion;
-  onRetry: () => void;
-  /** The call a version's Open asked to bring into view. */
-  reveal?: { readonly call: string; readonly onRevealed: () => void } | undefined;
-}
-
-/** What the brain wrote and ran on the open task's calls. */
+/** What Luke's own brain ran on the open task, whose workers a subagent's tab reads. */
 interface SidePanelWork {
   conversation: TaskConversation;
-  onLoadEarlier: () => Promise<void>;
   /** Reads a brain's worker's session past a cursor, as an agent's worker's tab reads its own, the task standing in the agent's place. */
   readWorker: TranscriptReader;
-  /** The moment whose turn a version's Open asked to bring into view. */
-  reveal?: { readonly at: number; readonly onRevealed: () => void } | undefined;
 }
 
 /** An open page tab the task draws, with the page as the plan lists it. */
@@ -1381,7 +1377,7 @@ function TabContent({
   codeFailed,
   files,
   pages,
-  transcript,
+  work,
   workRows,
   agents,
   standings,
@@ -1417,7 +1413,7 @@ function TabContent({
   files: readonly OpenFile[];
   /** The plan's pages, which a page's tab draws its newest version of. */
   pages: readonly PageLine[];
-  transcript: SidePanelTranscript;
+  work: SidePanelWork;
   /** The task's work as rows, which a subagent's tab reads its session from. */
   workRows: readonly WorkTurnRow[];
   agents: CodingAgentsControl;
@@ -1640,11 +1636,7 @@ function TabContent({
           {NO_CODE_LINE}
         </EmptyState>
       ) : (
-        <CodePane
-          shown={shownCode}
-          calls={transcript.region.kind === TRANSCRIPT_REGION.READY ? transcript.region.calls : []}
-          onOpenFile={onOpenFile}
-        />
+        <CodePane shown={shownCode} calls={NO_CODE_CALLS} onOpenFile={onOpenFile} />
       );
     case SIDE_PANEL_TAB.COMMENTS:
       return (
@@ -1869,7 +1861,6 @@ export function SidePanel({
   shownCode,
   codeFailed,
   pages,
-  transcript,
   work,
   agents,
   openAgents,
@@ -1897,7 +1888,6 @@ export function SidePanel({
   codeFailed: CodeFailed | undefined;
   /** The pages agents wrote for the plan, each by its newest version; none where it has none. */
   pages: readonly PageLine[] | undefined;
-  transcript: SidePanelTranscript;
   work: SidePanelWork;
   agents: CodingAgentsControl;
   /** The task's agents whose tabs stand open in the task's column, whose workers' tabs stand here; nothing while unread. */
@@ -2150,7 +2140,7 @@ export function SidePanel({
             codeFailed={codeFailed}
             files={files}
             pages={taskPages}
-            transcript={transcript}
+            work={work}
             workRows={workRows}
             agents={agents}
             standings={standings}

@@ -76,16 +76,6 @@ const SETTINGS: SettingsPanelProps = {
     onInstall: ignore,
     onOpenLatest: ignore,
   },
-  shortcuts: {
-    voiceHotkeyHeld: false,
-    voiceChosen: false,
-    voiceOff: false,
-    onVoiceHotkeyChange: accepted,
-    stopChosen: false,
-    stopOff: false,
-    onStopHotkeyChange: accepted,
-    onCapture: ignore,
-  },
 };
 
 /** The task open in the window, holding a board, so its panel has a tab to show. */

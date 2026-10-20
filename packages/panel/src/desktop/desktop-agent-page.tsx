@@ -15,7 +15,6 @@ import {
   useMenu,
 } from "@luke/ui";
 import { type StripTab, sameTab } from "@luke/ui/tab-strip-model";
-import { TRANSCRIPT_REGION } from "@luke/voice/transcript-model";
 import { ACTION_RESULT_STATUS } from "@luke/wire";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useAct } from "../act.js";
@@ -111,12 +110,6 @@ const nothing = (): void => undefined;
 
 /** No tab arrived anything: arrivals are a plan's. */
 const NO_UNREAD: readonly StripTab[] = [];
-
-/** What the panel says of calls on an agent's page: none, there being no plan to call about. */
-const NO_CALLS = {
-  region: { kind: TRANSCRIPT_REGION.EMPTY },
-  onRetry: nothing,
-} as const;
 
 /** What the page's ⋯ is called. */
 const ACTIONS_LABEL = "Agent actions";
@@ -349,7 +342,6 @@ export function DesktopAgentPage({
   // An agent's workers are its delegations, read through its own transcript, so the panel's plan's work is none.
   const work = {
     conversation: undefined,
-    onLoadEarlier: () => Promise.resolve(),
     readWorker: control.readTranscript,
   };
   // A skill's file opens where a file the agent names does: its page on GitHub.
@@ -463,7 +455,6 @@ export function DesktopAgentPage({
                         shownCode={undefined}
                         codeFailed={undefined}
                         pages={undefined}
-                        transcript={NO_CALLS}
                         work={work}
                         agents={control}
                         openAgents={openAgents}

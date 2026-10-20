@@ -30,7 +30,7 @@ const GLIDERS = [
   ".desktop-toolbar-actions",
   ".desktop-document .plan-body",
   ".desktop-agent > *",
-  ".desktop-call-bar .call-bar",
+  ".agent-call-foot .call-bar",
   ".desktop-empty > *",
   ".automation-editor",
 ].join(", ");

@@ -19,8 +19,7 @@ import {
 } from "@luke/features/transcript-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { RUN_PROFILE } from "@luke/host/app-state";
-import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@luke/live";
-import type { VoiceCallTranscript, VoiceView } from "@luke/voice/voice-view";
+import { TRANSCRIPT_SPEAKER } from "@luke/live";
 import type { WireRecord, WireValue } from "@luke/wire";
 import { TOOL_STATE } from "../ai-elements/tool.js";
 import {
@@ -609,36 +608,6 @@ const FIXTURE_CODE_PANEL: SidePanelState = {
 const FIXTURE_BOARD_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.BOARD };
 const FIXTURE_DOCUMENT_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, tab: SIDE_PANEL_TAB.PLAN };
 const FIXTURE_CLOSED_PANEL: SidePanelState = { ...FIXTURE_CODE_PANEL, open: false };
-
-/**
- * The call a fixture run's status row and transcript read: listening, about
- * the fixture's open task, with what was said on it so far.
- */
-export const FIXTURE_TASKS_CALL: Pick<VoiceView, "voiceStatus" | "callTaskId"> & {
-  readonly callTranscript: VoiceCallTranscript;
-} = {
-  voiceStatus: LIVE_STATUS.LISTENING,
-  callTaskId: FIXTURE_TASK.id,
-  callTranscript: {
-    voiceSessionId: FIXTURE_LIVE_SESSION,
-    lines: [
-      {
-        rowId: "fixture-1",
-        speaker: USER,
-        words: "Picking up where we left off: who can withdraw an invite?",
-        startMs: 1_200,
-        endMs: 4_800,
-      },
-      {
-        rowId: "fixture-2",
-        speaker: ASSISTANT,
-        words: "Either the member who sent it or any admin. I'm checking how removal works now.",
-        startMs: 5_400,
-        endMs: 9_900,
-      },
-    ],
-  },
-};
 
 /**
  * The tasks a fixture run draws: the list with its first task open under the

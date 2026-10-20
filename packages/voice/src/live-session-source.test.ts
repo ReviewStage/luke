@@ -16,6 +16,7 @@ const SDP_ANSWER =
 const SESSION_ID = "ls_123";
 const SERVICE_ORIGIN = "wss://voice.example.test";
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const AGENT_ID = "0b5f8c1e-4d3a-4e6b-8f2c-9a1d7e3b5c40";
 /** The developer's zone, other than the machine's so the frame shows it was asked. */
 const TIME_ZONE = "Pacific/Chatham";
 const QUOTA = { used: 3, limit: 50, resetsAt: NOW + 3_600_000 };
@@ -50,13 +51,17 @@ function hosted(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOp
 }
 
 it.live(
-  "the hosted source opens one socket with the bearer on its handshake and sends the create frame first, naming its plan and the developer's time zone and seeding nothing",
+  "the hosted source opens one socket with the bearer on its handshake and sends the create frame first, naming its task, its agent, and the developer's time zone and seeding nothing",
   () =>
     Effect.gen(function* () {
       const script = scriptedOpenSocket([answering(createdFrame())]);
       const source = hosted(script, { voice: LIVE_VOICE.MARIN, timeZone: () => TIME_ZONE });
 
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID });
+      const opened = yield* source.create({
+        sdpOffer: SDP_OFFER,
+        taskId: TASK_ID,
+        agentId: AGENT_ID,
+      });
 
       assert.equal(opened?.sessionId, SESSION_ID);
       assert.equal(opened?.sdpAnswer, SDP_ANSWER);
@@ -73,6 +78,7 @@ it.live(
         voice: LIVE_VOICE.MARIN,
         input: [],
         planId: TASK_ID,
+        agentId: AGENT_ID,
         timeZone: TIME_ZONE,
       });
       const report = source.diagnostics();
@@ -86,7 +92,10 @@ it.live("the hosted source refuses to open without an access token and opens no 
     const script = scriptedOpenSocket([answering(createdFrame())]);
     const source = hosted(script, { readAccessToken: () => Effect.succeed(undefined) });
 
-    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID }), undefined);
+    assert.equal(
+      yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID, agentId: AGENT_ID }),
+      undefined,
+    );
     assert.equal(script.opens.length, 0);
     assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
   }),
@@ -110,7 +119,10 @@ it.live("the hosted source does not carry a renewed bearer for another account",
         }),
     });
 
-    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID }), undefined);
+    assert.equal(
+      yield* source.create({ sdpOffer: SDP_OFFER, taskId: TASK_ID, agentId: AGENT_ID }),
+      undefined,
+    );
     assert.equal(script.opens.length, 1);
     assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
   }),

@@ -16,7 +16,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { CodingAgentsControl } from "../tasks/use-coding-agents.js";
-import { MAIN_TAB, type MainTab } from "../tasks/use-main-tabs.js";
+import type { MainTab } from "../tasks/use-main-tabs.js";
 import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -107,7 +107,7 @@ async function mountEveryTab(
     region: { kind: DOCUMENT_REGION.READY, task: TASK },
     mainTabs: {
       ...tasksControl().mainTabs,
-      tabs: [MAIN_TAB.CALL, { agent: AGENT.id }, { draft: "draft-1" }],
+      tabs: [{ agent: AGENT.id }, { draft: "draft-1" }],
       tab: chosen.main,
       openAgents: [AGENT.id],
     },
@@ -255,11 +255,21 @@ test("an agent's tab and a subagent's put their right-click's content actions, a
   }
 });
 
-test("the Call's tab keeps the task's own ⋯ in its bar", async () => {
-  const container = await mountEveryTab({ main: MAIN_TAB.CALL, side: SIDE_PANEL_TAB.BOARD });
-  const [more, ...others] = slotButtons(bars(container).main);
-  assert.equal(more?.getAttribute("aria-label"), "Task actions");
-  assert.equal(others.length, 0);
+test("the task's own ⋯ stands in the column's toolbar beside the chosen tab's slot, on every tab", async () => {
+  for (const main of [{ agent: AGENT.id }, { draft: "draft-1" }] as const) {
+    const container = await mountEveryTab({ main, side: SIDE_PANEL_TAB.BOARD });
+    const toolbar = bars(container).main.closest(".desktop-toolbar");
+    assert.ok(toolbar?.querySelector('button[aria-label="Task actions"]'), "the task's ⋯ stands");
+    assert.equal(
+      slotButtons(bars(container).main).some(
+        (button) => button.getAttribute("aria-label") === "Task actions",
+      ),
+      false,
+      "and not in the tab's own slot",
+    );
+    act(() => roots.pop()?.unmount());
+    container.remove();
+  }
 });
 
 test("a tab with no content action shows no ⋯ in its bar, though its right-click still answers, and no tab wears a ⋯ of its own", async () => {
@@ -307,7 +317,7 @@ test("the Pull request tab's bar ⋯ offers Open on GitHub and Refresh before Co
   });
   const published = new Map([[AGENT.id, PULL_REQUEST]]);
   const container = await mountEveryTab(
-    { main: MAIN_TAB.CALL, side: { changes: AGENT.id } },
+    { main: { draft: "draft-1" }, side: { changes: AGENT.id } },
     published,
   );
   const { side } = bars(container);
@@ -328,7 +338,7 @@ test("the Pull request tab's bar ⋯ offers Open on GitHub and Refresh before Co
   container.remove();
 
   for (const other of [SUBAGENT, { page: PAGE_ID }, SIDE_PANEL_TAB.PLAN] as const) {
-    const each = await mountEveryTab({ main: MAIN_TAB.CALL, side: other }, published);
+    const each = await mountEveryTab({ main: { draft: "draft-1" }, side: other }, published);
     const items = pressBarMore(bars(each).side);
     assert.ok(
       !items.includes("Open on GitHub") && !items.includes("Refresh"),
@@ -346,24 +356,27 @@ function installClipboard(): string[] {
   return copied;
 }
 
-test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the Call tab's, the agent's, its worker's, its Changes', a page's, or the Plan tab's, the task's own", async () => {
+test("each tab whose thing has a link offers Copy link in its right-click and its bar's ⋯, copying the agent's, its worker's, its Changes', a page's, or the Plan tab's, the task's own", async () => {
   const copied = installClipboard();
   const task = `https://tryluke.dev/workspace-personal/plan/${TASK.id}`;
   const cases: [{ main: MainTab; side: SidePanelTab }, "main" | "side", string][] = [
-    [{ main: MAIN_TAB.CALL, side: SIDE_PANEL_TAB.BOARD }, "main", `${task}/call`],
     [
       { main: { agent: AGENT.id }, side: SIDE_PANEL_TAB.BOARD },
       "main",
       `${task}/agent/${AGENT.id}`,
     ],
-    [{ main: MAIN_TAB.CALL, side: SUBAGENT }, "side", `${task}/agent/${AGENT.id}/worker/call-1`],
     [
-      { main: MAIN_TAB.CALL, side: { changes: AGENT.id } },
+      { main: { draft: "draft-1" }, side: SUBAGENT },
+      "side",
+      `${task}/agent/${AGENT.id}/worker/call-1`,
+    ],
+    [
+      { main: { draft: "draft-1" }, side: { changes: AGENT.id } },
       "side",
       `${task}/agent/${AGENT.id}/changes`,
     ],
-    [{ main: MAIN_TAB.CALL, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
-    [{ main: MAIN_TAB.CALL, side: SIDE_PANEL_TAB.PLAN }, "side", task],
+    [{ main: { draft: "draft-1" }, side: { page: PAGE_ID } }, "side", `${task}/page/${PAGE_ID}`],
+    [{ main: { draft: "draft-1" }, side: SIDE_PANEL_TAB.PLAN }, "side", task],
   ];
   for (const [chosen, column] of cases) {
     const container = await mountEveryTab(chosen);

@@ -54,7 +54,6 @@ const LINK_THING = {
   TASK: "task",
   VERSION: "version",
   PAGE: "page",
-  CALL: "call",
   AGENT: "agent",
   WORKER: "worker",
   CHANGES: "pull request",
@@ -134,8 +133,6 @@ export function panelTabPlace(
 /** What a side panel tab's link is called, by the kind of place it names; none for a kind no tab of the panel shows. */
 function panelThing(place: LinkPlace): LinkThing | undefined {
   switch (place.kind) {
-    case LINK_PLACE.CALL:
-      return LINK_THING.CALL;
     case LINK_PLACE.PAGE:
       return LINK_THING.PAGE;
     case LINK_PLACE.CHANGES:
@@ -174,7 +171,7 @@ function taskLinks(tasks: TasksControl, at: WindowAt): readonly LinkAtHand[] {
         ];
   }
   const shown = tasks.mainTabs.tab;
-  const agentId = isAgentTab(shown) ? shown.agent : undefined;
+  const agentId = shown !== undefined && isAgentTab(shown) ? shown.agent : undefined;
   const agent: LinkAtHand | undefined =
     agentId === undefined
       ? undefined

@@ -1,15 +1,20 @@
 import type { PlanEditor } from "@luke/features/task-wire";
-import { TASKS_READ, type TasksView } from "@luke/features/tasks-view";
-import { TRANSCRIPT_PART_TYPE, type TranscriptCall } from "@luke/features/transcript-wire";
+import { TASKS_READ } from "@luke/features/tasks-view";
+import {
+  type TaskTranscript,
+  TRANSCRIPT_PART_TYPE,
+  type TranscriptCall,
+} from "@luke/features/transcript-wire";
+import { MESSAGE_CHANNEL } from "@luke/wire";
 import type { UIMessage } from "ai";
 import type { VoiceCallTranscript, VoiceView } from "./voice-view.js";
 
 /**
- * transcript-model.ts -- what the open task's Call tab draws, decided from the stored transcript and the call standing now.
+ * transcript-model.ts -- the calls into an agent as its tab draws them, decided from the record of its calls and the call standing now.
  *
- * Two sources make one list. The host reads what was said on the task's
- * calls from the record whenever the task opens and whenever a call about it
- * ends; the call standing now is not on record yet, so its words come from
+ * Two sources make one list. The window reads the agent's calls from the
+ * record whenever its tab opens and whenever a call into it ends; the call
+ * standing now is not on record yet, so its words come from
  * the voice window's report as they are said. The two are told apart by the
  * store's id for the call's session, which both carry: a call the record
  * already holds is drawn from the record once the record has caught up with
@@ -21,24 +26,30 @@ import type { VoiceCallTranscript, VoiceView } from "./voice-view.js";
  * a line on record is.
  */
 
-/** What the tab says before anything was said on any call about the task. */
-export const TRANSCRIPT_EMPTY_LINE = "Nothing said yet.";
-
 /** The quiet line a call that has ended closes with, and the one for a call Luke ended himself. */
 const CALL_ENDED_LINE = {
   ENDED: "Call ended",
   LUKE_ENDED: "Luke ended the call",
 } as const;
 
-/** Which state the tab draws. */
+/** Where the read of an agent's calls stands, with what it holds. */
 export const TRANSCRIPT_REGION = {
   READING: "reading",
-  /** The read failed and nothing is held: the failure and Try again. */
+  /** The read failed and nothing is held. */
   FAILED: "failed",
-  /** Nothing was said on any call about the task. */
+  /** No call into the agent was made. */
   EMPTY: "empty",
   READY: "ready",
 } as const;
+
+/**
+ * What was said on an agent's calls as last read: where the read stands, and
+ * the calls it read, kept through a later read that failed.
+ */
+export interface CallsRead {
+  readonly status: (typeof TASKS_READ)[keyof typeof TASKS_READ];
+  readonly transcript?: TaskTranscript | undefined;
+}
 
 /** What a call's record says of the call itself, as far as it says it: when and why it ended, what it metered, and its model. */
 export type CallRecord = Pick<TranscriptCall, "endedAt" | "ending" | "usage" | "model">;
@@ -82,7 +93,7 @@ export type TranscriptRegion =
  * past the call's end until the record's copy of it has caught up.
  */
 export interface HeardCall {
-  readonly taskId: string;
+  readonly agentId: string;
   readonly transcript: VoiceCallTranscript;
   /** When this window first heard the call, which its header shows. */
   readonly heardAt: number;
@@ -120,30 +131,29 @@ function wordCount(messages: readonly UIMessage[]): number {
 }
 
 /**
- * The calls heard on the open task, from the voice window's report and what
+ * The calls heard into the agent, from the voice window's report and what
  * was held before: the call reported is live and grows in place, every other
  * is held no longer live, so a call ended just before the next began keeps
- * its words until the record has them. Another task opening drops them all,
- * and a call about another task than the one open is not this tab's.
+ * its words until the record has them. A call into another agent is not
+ * this tab's.
  */
 export function heardCalls(input: {
   held: readonly HeardCall[];
   /** The call standing, and its transcript as the document holds it (`voice.callTranscript`). */
-  voice: Pick<VoiceView, "callTaskId"> & { callTranscript: VoiceCallTranscript | undefined };
-  taskId: string | undefined;
+  voice: Pick<VoiceView, "call"> & { callTranscript: VoiceCallTranscript | undefined };
+  agentId: string;
   now: number;
 }): readonly HeardCall[] {
-  const { voice, taskId, now } = input;
-  if (taskId === undefined) return [];
-  const held = input.held.filter((call) => call.taskId === taskId);
-  const reported = voice.callTaskId === taskId ? voice.callTranscript : undefined;
+  const { voice, agentId, now } = input;
+  const held = input.held.filter((call) => call.agentId === agentId);
+  const reported = voice.call?.agentId === agentId ? voice.callTranscript : undefined;
   const ended = (call: HeardCall): HeardCall => (call.live ? { ...call, live: false } : call);
   if (reported === undefined) return held.map(ended);
   // Note that a call reported again keeps its place and when it was first heard.
   const standing = held.find(
     (call) => call.live && call.transcript.voiceSessionId === reported.voiceSessionId,
   );
-  const live = { taskId, transcript: reported, heardAt: standing?.heardAt ?? now, live: true };
+  const live = { agentId, transcript: reported, heardAt: standing?.heardAt ?? now, live: true };
   const kept = held.map((call) => (call === standing ? live : ended(call)));
   return standing === undefined ? [...kept, live] : kept;
 }
@@ -188,7 +198,7 @@ function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
  * own state is drawn.
  */
 export function transcriptRegion(input: {
-  transcript: TasksView["transcript"];
+  transcript: CallsRead | undefined;
   heard: readonly HeardCall[];
   /** The store's id for the session of the last call Luke ended himself, which closes with a line saying so. */
   lukeEndedCall?: string | undefined;
@@ -250,4 +260,69 @@ const LIVE_CALL_SLACK_MS = 30_000;
 /** When a call started, as what it holds reads it: a live call a little before it was first heard. */
 export function callStart(call: Pick<TranscriptCallRow, "startedAt" | "live">): number {
   return call.live ? call.startedAt - LIVE_CALL_SLACK_MS : call.startedAt;
+}
+
+/** The store's id for the call a line of an agent's transcript was said on, read off the line's own metadata; none for a line said on no call. */
+export function callOfLine(message: { readonly metadata?: unknown }): string | undefined {
+  const { metadata } = message;
+  if (typeof metadata !== "object" || metadata === null) return undefined;
+  const channel: unknown = Reflect.get(metadata, "channel");
+  const session: unknown = Reflect.get(metadata, "voice_session_id");
+  return channel === MESSAGE_CHANNEL.VOICE && typeof session === "string" ? session : undefined;
+}
+
+/**
+ * Where an agent's transcript draws its calls: the checkpoint each begins at,
+ * before the first of its lines the transcript holds; the line each that
+ * ended closes with, after the last of them; and the lines of a call heard
+ * here that the transcript does not hold yet, which stand at its foot, with
+ * the call's checkpoint before them where none of its lines is held.
+ */
+export interface CallPlaces {
+  /** Each call by the transcript row it begins before. */
+  readonly opens: ReadonlyMap<string, TranscriptCallRow>;
+  /** Each ended call by the transcript row it closes after. */
+  readonly closes: ReadonlyMap<string, TranscriptCallRow>;
+  /** A call heard here whose newest lines the transcript does not hold yet: the call, whether its checkpoint stands above already, and those lines. */
+  readonly heard:
+    | {
+        readonly call: TranscriptCallRow;
+        readonly opened: boolean;
+        readonly lines: readonly UIMessage[];
+      }
+    | undefined;
+}
+
+/**
+ * The calls placed among an agent's transcript rows, matched by the store's
+ * id for each call, which every line said on it carries. Note that only a
+ * call heard here, standing or not yet on record, has lines the transcript
+ * may not hold: those the record holds are drawn as rows, and the rest from
+ * what was heard, in the order said, so the live call grows at the foot.
+ */
+export function callPlaces(
+  messages: readonly { readonly id: string; readonly metadata?: unknown }[],
+  calls: readonly TranscriptCallRow[],
+): CallPlaces {
+  const rowsOf = new Map<string, string[]>();
+  for (const message of messages) {
+    const call = callOfLine(message);
+    if (call !== undefined) rowsOf.set(call, [...(rowsOf.get(call) ?? []), message.id]);
+  }
+  const opens = new Map<string, TranscriptCallRow>();
+  const closes = new Map<string, TranscriptCallRow>();
+  let heard: CallPlaces["heard"];
+  for (const call of calls) {
+    const rows = rowsOf.get(call.key) ?? [];
+    const [first] = rows;
+    const last = rows.at(-1);
+    if (first !== undefined) opens.set(first, call);
+    const unheld = call.live || call.record === undefined ? call.messages.slice(rows.length) : [];
+    if (unheld.length > 0) {
+      heard = { call, opened: first !== undefined, lines: unheld };
+      continue;
+    }
+    if (!call.live && last !== undefined) closes.set(last, call);
+  }
+  return { opens, closes, heard };
 }
