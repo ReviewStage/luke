@@ -4398,6 +4398,62 @@ test("a message refused says why under the box, which keeps its words, and leave
   assert.deepEqual(subjectOf(page), ["How is a failed email retried?"]);
 });
 
+test("a message refused as naming no agent says the agent is archived where it is, with Unarchive after it, which brings the agent back and lets the note go, the box keeping its words; one whose agent is gone says it no longer exists", async () => {
+  listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.COMPLETED, archivedAt: 4_000 }];
+  const { page } = mount();
+  await settle();
+  act(() => rowNamed(page, "How is a failed email retried?").click());
+  await settle();
+  heldMessages(() => ({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND }));
+  const unarchived: { agentId: string; archived: boolean }[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_ARCHIVE) return previous(request);
+      unarchived.push(request.payload);
+      // Brought back, the agent is listed so from then on.
+      listedAgents = [{ ...AGENT, status: CODING_AGENT_STATUS.COMPLETED }];
+      return Promise.resolve({ status: FAKE_ANSWER.DONE, value: { agent: listedAgents[0] } });
+    },
+  });
+  const pane = itemPane(page);
+  const note = () => pane.querySelector('.agent-composer [role="alert"]');
+  const unarchive = () =>
+    [...pane.querySelectorAll<HTMLButtonElement>(".agent-composer-note button")].find(
+      (button) => button.textContent === "Unarchive",
+    );
+
+  typeInComposer(pane, "Page on-call at night too.");
+  act(() => pane.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+  await settle();
+
+  assert.match(note()?.textContent ?? "", /^This agent is archived\./u);
+  act(() => (unarchive() ?? assert.fail("Unarchive follows the note")).click());
+  await settle();
+  assert.deepEqual(unarchived, [{ agentId: AGENT.id, archived: false }]);
+  assert.equal(note(), null, "the note is let go once the agent is back");
+  assert.equal(composerEditor(pane).textContent, "Page on-call at night too.");
+
+  act(() => root?.unmount());
+  listedAgents = [];
+  const gone = mount().page;
+  await settle();
+  act(() => rowNamed(gone, "How is a failed email retried?").click());
+  await settle();
+  const goneItem = itemPane(gone);
+  typeInComposer(goneItem, "Page on-call at night too.");
+  act(() => goneItem.querySelector<HTMLButtonElement>('button[aria-label="Send"]')?.click());
+  await settle();
+
+  assert.equal(
+    goneItem.querySelector('.agent-composer [role="alert"]')?.textContent,
+    "This agent no longer exists.",
+  );
+  assert.equal(goneItem.querySelector(".agent-composer-note button"), null, "nothing to unarchive");
+});
+
 test("files alone make a message: sent from a settled item's box with no words, and drawn on the thread as the files alone", async () => {
   const { page } = mount();
   await settle();
