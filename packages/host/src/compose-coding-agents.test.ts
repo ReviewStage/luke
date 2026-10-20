@@ -1309,6 +1309,36 @@ it.effect(
 );
 
 it.effect(
+  "a plan's inbox read past its cursor wakes at once when the reader marks an item unread, though nothing else on it moved",
+  () =>
+    Effect.gen(function* () {
+      const { call, sealScope, realtime } = yield* subject();
+      sealScope(SEALED_SCOPE);
+      const first = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: INBOX_CURSOR_START }),
+      );
+      yield* settled;
+      realtime.deliver("messages", []);
+      realtime.deliver("files", []);
+      realtime.deliver("items", [ITEM_ROW]);
+      yield* settled;
+      const answered = yield* Fiber.join(first);
+      assert.ok(isRecord(answered) && isWireString(answered.cursor));
+
+      const next = yield* Effect.forkChild(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { taskId: TASK_ID, after: answered.cursor }),
+      );
+      yield* settled;
+      realtime.deliver("items", [{ ...ITEM_ROW, unread: true }]);
+      yield* settled;
+      const moved = yield* Fiber.join(next);
+      assert.ok(isRecord(moved));
+      assert.notEqual(moved.cursor, answered.cursor);
+      assert.deepEqual(moved.items, [{ ...LIVE_ITEM, unread: true }]);
+    }),
+);
+
+it.effect(
   "an agent's inbox the account does not reach is not found, one the service seals nothing for is unanswered, and either is asked for again on the next read",
   () =>
     Effect.gen(function* () {

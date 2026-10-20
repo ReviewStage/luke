@@ -67,13 +67,16 @@ type LiveState =
   | { readonly kind: "broken" };
 
 /**
- * A digest of where every item stands: any change to any of them moves it,
- * as the service's cursor moves. Note that it is Web Crypto's SHA-256, since
- * the host loads where no `node:` module does.
+ * A digest of where every item stands, and whether it is unread for the
+ * reader: any change to any of them, or the reader marking one read or
+ * unread, moves it, as the service's stamps do. Note that it is Web Crypto's
+ * SHA-256, since the host loads where no `node:` module does.
  */
 function cursorOf(items: readonly InboxItem[]): Effect.Effect<string> {
   const standing = items
-    .map((item) => [item.id, item.revision, item.status, item.updatedAt] as const)
+    .map(
+      (item) => [item.id, item.revision, item.status, item.updatedAt, item.unread ?? null] as const,
+    )
     .toSorted(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
   return Effect.map(
     Effect.promise(() =>
