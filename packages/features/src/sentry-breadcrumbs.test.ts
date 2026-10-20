@@ -249,6 +249,20 @@ test("a token in a span's fragment, path, or query is scrubbed from what is sent
   );
 });
 
+test("an address in a span's name is scrubbed, and other words of the name are kept", async () => {
+  const spans = await sentSpans(() => {
+    Sentry.startSpan(
+      { name: "GET https://luke.example.test/oauth/callback?code=fixture-code&sig=fixture-sig" },
+      () => {},
+    );
+    Sentry.startSpan({ name: "ui.click button#send" }, () => {});
+  });
+  assert.deepEqual(spans.map((span) => span.name).sort(), [
+    "GET https://luke.example.test/oauth/callback?code=[redacted]&sig=[redacted]",
+    "ui.click button#send",
+  ]);
+});
+
 test("a token named after a span starts, in its name or any attribute, is replaced", async () => {
   const spans = await sentSpans(() => {
     Sentry.startSpan({ name: "/panel.html", op: "pageload" }, () => {

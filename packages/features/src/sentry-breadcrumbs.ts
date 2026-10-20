@@ -31,7 +31,12 @@
  */
 
 import { Predicate } from "effect";
-import { isAddressAttribute, REDACTED, scrubbedAttributes } from "./sentry-addresses.js";
+import {
+  isAddressAttribute,
+  REDACTED,
+  scrubbedAttributes,
+  scrubbedUrl,
+} from "./sentry-addresses.js";
 
 /** What of a breadcrumb is read: its message and its request's URL. */
 interface BreadcrumbText {
@@ -75,6 +80,30 @@ function attributeWithoutAccessToken([name, value]: [string, unknown]): [string,
   return [name, !isAddressAttribute(name) && namesAccessToken([value]) ? REDACTED : value];
 }
 
+/**
+ * A word of a span's name that is an address: an absolute URL, or a path
+ * from the root. Note that other words are kept, because a name also holds
+ * words such as an element's selector (`button#send`), whose `#` is no
+ * fragment.
+ */
+function isAddressWord(word: string): boolean {
+  return word.includes("://") || word.startsWith("/");
+}
+
+/**
+ * A span's name as it may be sent: replaced whole where it names the token,
+ * and otherwise each address in it scrubbed as an attribute's is. Note that
+ * Sentry's own spans are named by method and host alone when streamed; this
+ * holds a name Luke gives a span to the same rule.
+ */
+function nameWithoutAccessToken(name: string): string {
+  if (namesAccessToken([name])) return REDACTED;
+  return name
+    .split(" ")
+    .map((word) => (isAddressWord(word) ? scrubbedUrl(word) : word))
+    .join(" ");
+}
+
 /** Whether a breadcrumb's text names the token, in its message or its request's URL. */
 function carriesAccessToken(breadcrumb: BreadcrumbText): boolean {
   return namesAccessToken([breadcrumb.message, breadcrumb.data?.url]);
@@ -109,8 +138,9 @@ export const SPANS_NAMING_ACCESS_TOKENS: IgnoredSpan[] = [
 
 /**
  * Sentry's streamed `beforeSendSpan`, which every span that was recorded
- * passes as it is sent: each address it carries scrubbed, and its name or
- * any other attribute that names the token replaced. Wrap it in the SDK's
+ * passes as it is sent: each address it carries, in its name or its
+ * attributes, scrubbed, and its name or any other attribute that names the
+ * token replaced. Wrap it in the SDK's
  * `withStreamedSpan`.
  */
 export function spanWithoutAccessTokens<Span extends SpanText>(span: Span): Span {
@@ -118,7 +148,7 @@ export function spanWithoutAccessTokens<Span extends SpanText>(span: Span): Span
   // SAFETY: each attribute keeps its name, and a value is replaced only by a string, as Sentry's own attributes allow.
   return {
     ...span,
-    name: namesAccessToken([span.name]) ? REDACTED : span.name,
+    name: nameWithoutAccessToken(span.name),
     attributes: Object.fromEntries(scrubbed.map(attributeWithoutAccessToken)),
   } as Span;
 }
