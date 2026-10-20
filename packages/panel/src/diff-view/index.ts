@@ -425,6 +425,14 @@ const FILL_CSS = `
   pre {
     min-height: 100%;
   }
+  /* A note under one patch's lines, Luke's under a Code card's snippet,
+     stands on the code's own ground, its numbers' column too, rather than
+     Pierre's context ground, which sets a comment's row apart in a diff:
+     a snippet's lines are a file's, so none of them stands apart. */
+  [data-line-annotation],
+  [data-gutter-buffer="annotation"] {
+    --diffs-annotation-bg: var(--diffs-bg);
+  }
 }
 `;
 

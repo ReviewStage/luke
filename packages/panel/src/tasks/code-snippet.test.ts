@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import type { InboxCodeBlock } from "@luke/features/inbox-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
+import { TASK_FILE_REFUSAL } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksFileAnswer } from "@luke/features/tasks-view";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -12,11 +13,13 @@ import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { type SideBundles, sideBundles, usePrefetchDiffBundle } from "../bundle-loader.js";
 import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { diffView } from "../diff-view/index.js";
+import { FindScope } from "../find-in-tab.js";
 import { copyingInto, DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { landedBundles, onSideBundles } from "../testing/side-bundles.js";
 import { CodePane } from "./code-pane.js";
+import { FileTab } from "./file-tab.js";
 import { InboxCodeCard } from "./inbox-code-card.js";
 import { OpenLinkProvider } from "./use-open-link.js";
 
@@ -286,4 +289,45 @@ test("the diff bundle starts loading once a call stands, and not before", async 
   render(true);
   await settle();
   assert.equal(imports, 1, "the call starts it");
+});
+
+test("a File tab whose file is refused draws Luke's lines as a card does, his notes on them under their lines, scrolling in the room the notice leaves", async () => {
+  const { code } = SHOWING;
+  const container = await draw(
+    createElement(
+      FindScope,
+      { active: true, subject: { task: TASK_ID, tab: { file: code.ref.path } } },
+      createElement(FileTab, {
+        file: { path: code.ref.path, range: { startLine: 13, endLine: 14 }, opened: 1 },
+        snippet: code,
+        notes: {
+          notes: [
+            { callId: "call-1", shownAt: SHOWN_AT, startLine: 13, endLine: 14, note: NOTE },
+            { callId: "call-2", shownAt: SHOWN_AT, startLine: 15, endLine: 20, note: "Runs past." },
+            { callId: "call-3", shownAt: SHOWN_AT, startLine: 30, endLine: 31, note: "Elsewhere." },
+          ],
+          folded: [],
+          onFold: () => {},
+          taskId: TASK_ID,
+        },
+        readFile: () => Promise.resolve({ refusal: TASK_FILE_REFUSAL.MISSING }),
+        onRead: () => {},
+      }),
+    ),
+  );
+  assert.match(
+    container.querySelector(".file-tab-notice")?.textContent ?? "",
+    /no file at this path/u,
+  );
+  assert.deepEqual(drawnLines(container), [12, 13, 14, 15]);
+  assert.deepEqual(litLines(container), [13, 14]);
+  const slots = [...container.querySelectorAll(".code-snippet .file-note")].map((note) =>
+    note.closest(".diff-note")?.parentElement?.getAttribute("slot"),
+  );
+  assert.deepEqual(
+    slots,
+    ["annotation-additions-14", "annotation-additions-15"],
+    "a note running past the snippet stands under its last line; one past it stands nowhere",
+  );
+  assert.ok(container.querySelector("[data-axis] .code-snippet"), "the lines scroll");
 });
