@@ -711,6 +711,12 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
             arguments: { connection: "linear", tool: "draw" },
           }),
         );
+        const attached = yield* Effect.promise(() =>
+          client.callTool({
+            name: "connection_execute",
+            arguments: { connection: "linear", tool: "attach" },
+          }),
+        );
         const unsigned = yield* Effect.promise(() =>
           client.callTool({
             name: "connection_execute",
@@ -728,6 +734,14 @@ it.layer(getTestDB())("Luke's MCP server", (it) => {
         assert.deepEqual(drawn.content, [
           { type: "text", text: "A chart:" },
           { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+        ]);
+        assert.deepEqual(attached.content, [
+          { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+          {
+            type: "text",
+            text: "Resource: file:///notes.pdf (application/pdf, binary, not shown)",
+          },
+          { type: "image", data: "R0lGODlh", mimeType: "image/gif" },
         ]);
         assert.equal(unsigned.isError, true);
         assert.deepEqual(

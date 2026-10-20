@@ -99,7 +99,7 @@ it.layer(getTestDB())("the integrations' door", (it) => {
         );
 
         assert.ok("tools" in found);
-        assert.equal(found.total, 4);
+        assert.equal(found.total, 5);
         assert.deepEqual(
           found.tools.find((tool) => tool.tool === "list_issues"),
           {
@@ -155,9 +155,9 @@ it.layer(getTestDB())("the integrations' door", (it) => {
       assert.equal(ranked.unavailable, undefined);
       assert.deepEqual(
         paged.tools.map((tool) => tool.tool),
-        ["draw"],
+        ["create_issue"],
       );
-      assert.equal(paged.total, 4);
+      assert.equal(paged.total, 5);
     }),
   );
 

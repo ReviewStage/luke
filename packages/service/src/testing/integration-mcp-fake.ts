@@ -71,6 +71,7 @@ export const LINEAR_TOOLS = [
   },
   { name: "fail", description: "Always fails.", inputSchema: { type: "object" } },
   { name: "draw", description: "Draws a picture.", inputSchema: { type: "object" } },
+  { name: "attach", description: "Attaches files.", inputSchema: { type: "object" } },
 ];
 
 /** What Linear's fake server heard: each call's tool and arguments, and the bearers it was sent. */
@@ -115,6 +116,24 @@ export function linearServer(bearer: string, heard: Heard) {
             content: [
               { type: "text", text: "A chart:" },
               { type: "image", data: "iVBORw0KGgo=", mimeType: "image/png" },
+            ],
+          };
+        case "attach":
+          return {
+            content: [
+              {
+                type: "resource",
+                resource: { uri: "file:///chart.png", mimeType: "image/png", blob: "iVBORw0KGgo=" },
+              },
+              {
+                type: "resource",
+                resource: {
+                  uri: "file:///notes.pdf",
+                  mimeType: "application/pdf",
+                  blob: "JVBERi0=",
+                },
+              },
+              { type: "image", data: "R0lGODlh", mimeType: "image/gif" },
             ],
           };
         default:

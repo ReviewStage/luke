@@ -250,9 +250,19 @@ function remoteBlock(block: WireValue): readonly McpContent[] {
     return typeof mimeType === "string" ? [{ type, data, mimeType }] : [];
   }
   if (type === "resource" && isRecord(block.resource)) {
-    const { uri, text: words } = block.resource;
-    if (typeof words !== "string") return [];
-    return [{ type: "text", text: typeof uri === "string" ? `${uri}\n${words}` : words }];
+    const { uri, text: words, blob, mimeType: blobType } = block.resource;
+    const named = typeof uri === "string" ? uri : undefined;
+    if (typeof words === "string") {
+      return [{ type: "text", text: named === undefined ? words : `${named}\n${words}` }];
+    }
+    if (typeof blob !== "string") return [];
+    // Note that a picture or a sound a resource carries is shown as one, and any other bytes are named, so none is dropped unsaid.
+    const kind = typeof blobType === "string" ? blobType : "application/octet-stream";
+    if (kind.startsWith("image/")) return [{ type: "image", data: blob, mimeType: kind }];
+    if (kind.startsWith("audio/")) return [{ type: "audio", data: blob, mimeType: kind }];
+    return [
+      { type: "text", text: `Resource: ${named ?? "resource"} (${kind}, binary, not shown)` },
+    ];
   }
   if (type === "resource_link") {
     const name = typeof block.name === "string" ? block.name : "resource";
