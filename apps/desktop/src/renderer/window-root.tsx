@@ -17,7 +17,7 @@ import { installAppPlatform } from "@luke/panel/app-platform";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
 import { Effect } from "effect";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
 import { startDesktopSentry } from "./desktop-sentry";
@@ -27,6 +27,22 @@ import { startDesktopSentry } from "./desktop-sentry";
  * Sentry's SDK anyway, so a window that is never idle still reports.
  */
 const SENTRY_LOAD_DEADLINE_MS = 2_000;
+
+/**
+ * Loads Sentry's SDK in the first idle moment after the window's first
+ * commit. Note that this waits on a passive effect rather than on
+ * `root.render` returning, because a concurrent root commits later than
+ * that, and a passive effect runs once the commit is done; the idle callback
+ * then waits past the frame that paints it. Note too that it waits on no
+ * animation frame, because the hidden voice window draws none.
+ */
+function LoadAfterFirstPaint({ load }: { readonly load: () => void }): null {
+  useEffect(() => {
+    const idle = requestIdleCallback(load, { timeout: SENTRY_LOAD_DEADLINE_MS });
+    return () => cancelIdleCallback(idle);
+  }, [load]);
+  return null;
+}
 
 /**
  * Installs the window's bridge and platform, draws `surface` into its root
@@ -83,9 +99,10 @@ export function mountWindow(surface: ReactNode): void {
       return;
     }
     root.render(
-      <RegistryContext.Provider value={rendererRegistry}>{surface}</RegistryContext.Provider>,
+      <RegistryContext.Provider value={rendererRegistry}>
+        {surface}
+        <LoadAfterFirstPaint load={sentry.load} />
+      </RegistryContext.Provider>,
     );
-    // The SDK loads in the first idle moment after the root's first paint.
-    requestIdleCallback(sentry.load, { timeout: SENTRY_LOAD_DEADLINE_MS });
   })();
 }

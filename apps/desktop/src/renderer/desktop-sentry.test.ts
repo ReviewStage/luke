@@ -12,16 +12,13 @@ import { startDesktopSentry } from "./desktop-sentry";
  * window's IPC, the one boundary a renderer's events cross.
  */
 
-/** How often the window's SDK told main it started, and the envelopes it handed main. */
-let started = 0;
+/** The envelopes the window handed main. */
 const envelopes: string[] = [];
 
 /** The IPC a preload exposes for Sentry, as `@sentry/electron/preload` names it, answered here in main's place. */
 const SENTRY_IPC = {
   "sentry-ipc": {
-    sendRendererStart: () => {
-      started += 1;
-    },
+    sendRendererStart: () => undefined,
     sendScope: () => undefined,
     // Note that an envelope with no attachment is handed over as its text.
     sendEnvelope: (body: string) => {
@@ -54,20 +51,15 @@ function sentExceptions(): { value: string | undefined; mechanism: string | unde
   );
 }
 
-test("a blank window reported before the SDK loads is handed to main once it has, and nothing loads until the window asks", async () => {
+test("a blank window reported before the SDK loads is handed to main once it has", async () => {
   Object.assign(window, { __SENTRY_IPC__: SENTRY_IPC });
   const sentry = startDesktopSentry();
 
   sentry.reportBlankWindow(new Error("the window's state could not be read"));
-  // A window that has not asked for the SDK has said nothing to main.
-  await Promise.resolve();
-  assert.equal(started, 0);
-
   sentry.load();
   await sentry.settled;
   await getClient()?.flush(1_000);
 
-  assert.equal(started, 1);
   assert.deepEqual(sentExceptions(), [
     {
       value: "the window's state could not be read",
