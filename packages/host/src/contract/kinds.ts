@@ -96,6 +96,12 @@ export const AGENT_ACT_KIND = {
   CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
   CODING_AGENTS_START: "codingAgents.start",
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  /**
+   * One agent's transcript, a worker's, or a task's planning worker's,
+   * followed while the window holds the stream open: its pages, the first
+   * from the start and each later one what moved past the last.
+   */
+  CODING_AGENTS_TRANSCRIPT: "codingAgents.transcript",
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
   CODING_AGENTS_RENAME: "codingAgents.rename",

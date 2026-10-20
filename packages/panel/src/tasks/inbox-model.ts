@@ -49,7 +49,6 @@ import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { isWireString } from "@luke/wire";
 import type { CountNoun } from "../desktop/sidebar-group-header.js";
 import { refusalLine, refusalPasses } from "./file-tab-model.js";
-import { askHeadWords } from "./inbox-ask-words.js";
 import { plainWords } from "./tool-call-model.js";
 
 /**
@@ -605,7 +604,7 @@ function shownSteps(ask: Pick<InboxDoAsk, "steps">): number {
 }
 
 /** The steps the draft ticks, in order, each once. */
-function tickedSteps(draft: InboxDraft): readonly number[] {
+function tickedSteps(draft: Pick<InboxDraft, "steps">): readonly number[] {
   return [...new Set(draft.steps ?? [])].toSorted((a, b) => a - b);
 }
 
@@ -619,7 +618,10 @@ function everyStep(ask: Pick<InboxDoAsk, "steps">): readonly number[] {
  * pressed, which ticks them all, or else those the reader ticked by hand,
  * which the draft keeps apart so Couldn't do it still sends only those.
  */
-export function shownTicks(ask: Pick<InboxDoAsk, "steps">, draft: InboxDraft): readonly number[] {
+export function shownTicks(
+  ask: Pick<InboxDoAsk, "steps">,
+  draft: Pick<InboxDraft, "steps" | "press">,
+): readonly number[] {
   return draft.press === INBOX_REPLY.DONE ? everyStep(ask) : tickedSteps(draft);
 }
 
@@ -742,11 +744,6 @@ export function askNumberedPick(
   return option === undefined ? undefined : withChoice(ask, draft, option.label);
 }
 
-/** The draft with its attached answer taken off: the pick let go, a form's fields emptied, or the press. */
-export function withoutAnswer(draft: InboxDraft): InboxDraft {
-  return { ...draft, choices: [], values: [], press: undefined };
-}
-
 /** What a reply sends on a thread: its words, its files, and the answer to the open ask it carries, if any. */
 export interface InboxThreadSend {
   readonly text: string;
@@ -843,18 +840,6 @@ const SENT_WORDS = {
   [INBOX_REPLY.ACKNOWLEDGED]: "acknowledged",
 } as const satisfies Record<InboxReplyKind, string>;
 
-/** What each press attached to a reply says, and what the send it renames reads. */
-const PRESS_WORDS = {
-  [INBOX_REPLY.CHOSE]: "Choose",
-  [INBOX_REPLY.APPROVED]: "Approve",
-  [INBOX_REPLY.DECLINED]: "Decline",
-  [INBOX_REPLY.ANSWERED]: "Answer",
-  [INBOX_REPLY.DONE]: "Mark done",
-  [INBOX_REPLY.NOT_DONE]: "Couldn't do it",
-  [INBOX_REPLY.SUBMITTED]: "Send",
-  [INBOX_REPLY.ACKNOWLEDGED]: "Got it",
-} as const satisfies Record<InboxReplyKind, string>;
-
 /**
  * What a sent answer's stamp says on the thread, in the past: "Approved",
  * "Requested changes", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
@@ -878,30 +863,6 @@ export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined):
     }
   })();
   return { tone, words };
-}
-
-/**
- * What an attached answer's stamp says over the box, and what the send it
- * renames reads: the button pressed, "Approve" or "Request changes", the
- * options picked, `Choose "7 days"`, a form's values counted, "Send 2
- * fields", or the press, "Mark done".
- */
-export function attachedStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerStamp {
-  const tone = toneOf(answers, ask);
-  const pick = buttonPick(answers, ask);
-  if (pick !== undefined) return { tone, words: pick.label };
-  if (answers.reply === INBOX_REPLY.CHOSE) {
-    const picked = (answers.choices ?? []).map((choice) => `"${choice}"`).join(", ");
-    return { tone, words: `${PRESS_WORDS[INBOX_REPLY.CHOSE]} ${picked}` };
-  }
-  if (answers.reply === INBOX_REPLY.SUBMITTED) {
-    const count = answers.values?.length ?? 0;
-    return {
-      tone,
-      words: `${PRESS_WORDS[INBOX_REPLY.SUBMITTED]} ${count} ${count === 1 ? "field" : "fields"}`,
-    };
-  }
-  return { tone, words: PRESS_WORDS[answers.reply] };
 }
 
 /** The message that answers an ask, where the thread read carries it. */
@@ -1297,17 +1258,17 @@ function threadMedia(item: InboxItem, thread: readonly InboxMessage[]): readonly
 }
 
 /**
- * The last word in an item's thread, as its row's second line says it,
- * led by who said it: a message on the thread by its writer, "Agent" for
- * the item's own and a member by `nameOf`, which says "You" for the
- * reader; the answer by its answerer, in a few words; the agent taking the
- * item back as "Withdrawn" and why; a member's close by who closed it;
- * and, on an open item nobody has
- * written on, what it asks, "Choice · 3 options, one recommended". An item
- * drawn as its thread from version 5 (`inboxThreadOf`) says its latest
- * message, after what its open ask asks while one waits, as its box leads
- * with it (`askHeadWords`), "Pick one · Agent: Which window?", the steps
- * counted as the reader's draft ticks them (`ticked`).
+ * An item's row's second line, what it asks or how it ended rather than who
+ * said it last, since the row's tile names the agent and its title asks the
+ * question. While an ask waits, the ask itself (`askLine`): a choice's
+ * options, the recommended one starred, "7 days ★ / 14 days"; a to-do's
+ * steps left and the next, as the reader's draft ticks them (`ticked`), "2
+ * steps left · Open Vercel"; a form's fields, "Fill in Name, Domain"; or
+ * "Write an answer". Else the thread's latest message: an answer by its
+ * answerer and its stamp, "You: Chose 7 days · and say it in the docs", a
+ * member's words by their writer, and the agent's words alone, its tile
+ * saying who. An item drawn before version 5 says what it did then
+ * (`legacyPreview`).
  */
 export function inboxPreview(
   item: InboxItem,
@@ -1316,16 +1277,133 @@ export function inboxPreview(
 ): string {
   const thread = inboxThreadOf(item);
   if (thread === undefined) return legacyPreview(item, nameOf);
-  const said = lastSaid(thread, nameOf);
   const asking = openAskOf(thread);
-  if (asking === undefined || !knownAsk(asking.ask)) return said;
-  return `${askHeadWords(asking.ask, ticked ?? [])}${PREVIEW_PART}${said}`;
+  if (asking !== undefined && knownAsk(asking.ask)) return askLine(asking.ask, ticked ?? []);
+  return lastSaid(thread, nameOf);
+}
+
+/** What an item's second line leads with, as its glyph says it: the kind of ask that waits, an answer that settled it, or words alone. */
+export const INBOX_LINE = {
+  DECIDE: "decide",
+  DO: "do",
+  ANSWER: "answer",
+  SETTLED: "settled",
+  SAID: "said",
+} as const;
+
+export type InboxLineKind = (typeof INBOX_LINE)[keyof typeof INBOX_LINE];
+
+/** Which glyph leads an item's second line (`inboxPreview`): its open ask's kind, an answer where its latest message carries one, or none. */
+export function inboxLineKind(item: InboxItem): InboxLineKind {
+  const thread = inboxThreadOf(item);
+  if (thread === undefined) return INBOX_LINE.SAID;
+  const asking = openAskOf(thread);
+  if (asking !== undefined && knownAsk(asking.ask)) {
+    switch (asking.ask.type) {
+      case INBOX_ASK.DECIDE:
+        return INBOX_LINE.DECIDE;
+      case INBOX_ASK.DO:
+        return INBOX_LINE.DO;
+      case INBOX_ASK.ANSWER:
+        return INBOX_LINE.ANSWER;
+    }
+  }
+  return thread.at(-1)?.answers === undefined ? INBOX_LINE.SAID : INBOX_LINE.SETTLED;
+}
+
+/** What an item's hover card reads of its thread: the ask that waits, where one does, and the agent's latest words, plain. */
+export interface InboxCardThread {
+  readonly ask: InboxKnownAsk | undefined;
+  readonly words: string;
+}
+
+/** An item's thread as its hover card reads it (`InboxCardThread`); an item drawn before version 5 has no ask to show, and its agent's words are its question. */
+export function inboxCardThread(item: InboxItem): InboxCardThread {
+  const thread = inboxThreadOf(item);
+  if (thread === undefined) return { ask: undefined, words: "" };
+  const asking = openAskOf(thread);
+  const said = thread.findLast((each) => each.author === INBOX_MESSAGE_AUTHOR.AGENT);
+  return {
+    ask: asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined,
+    words: said === undefined ? "" : plainWords(said.text),
+  };
 }
 
 /**
- * A thread's latest message as its row says it, led by who wrote it: the
- * words of an answer's stamp first where it answered an ask, "You: Chose 7
- * days · and say it in the docs", and its files where it said nothing.
+ * The steps of an item's open to-do its row and card show ticked, as its box
+ * shows them (`shownTicks`): every one while Mark done is pressed in its
+ * draft, else those ticked by hand; none where no draft stands.
+ */
+export function inboxShownTicks(
+  item: InboxItem,
+  draft: Pick<InboxDraft, "steps" | "press"> | undefined,
+): readonly number[] {
+  if (draft === undefined) return [];
+  const thread = inboxThreadOf(item);
+  const ask = thread === undefined ? undefined : openAskOf(thread)?.ask;
+  if (ask === undefined || !knownAsk(ask) || ask.type !== INBOX_ASK.DO) return draft.steps ?? [];
+  return shownTicks(ask, draft);
+}
+
+/**
+ * How a settled item ended, as its hover card says it, whatever its row's
+ * glyph: the latest answer on its thread by its answerer, even with words
+ * after it; an ask the agent took back, and why; a member's close; or, for
+ * an item drawn before version 5, what its row said then. None while it is
+ * open, or where its thread says nothing of how it ended.
+ */
+export function inboxSettledWords(
+  item: InboxItem,
+  nameOf: (member: InboxMember | undefined) => string,
+): string | undefined {
+  if (item.status === INBOX_STATUS.OPEN) return undefined;
+  const thread = inboxThreadOf(item);
+  if (thread === undefined) return legacyPreview(item, nameOf);
+  const answering = thread.findLast((each) => each.answers !== undefined);
+  if (answering?.answers !== undefined) {
+    const { answers } = answering;
+    const stamp = sentStamp(answers, thread.find((each) => each.id === answers.ask)?.ask).words;
+    const words = plainWords(answering.text);
+    return `${nameOf(answering.member)}: ${words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`}`;
+  }
+  // Note that an ask the agent took back says so before a close is read as a member's, since a close naming no closer reads as one.
+  const withdrawn = thread.findLast((each) => each.ask?.status === INBOX_ASK_STATUS.WITHDRAWN);
+  if (withdrawn?.ask !== undefined) {
+    const why = plainWords(withdrawn.ask.withdrawnReason ?? "");
+    return why === "" ? "Withdrawn" : `Withdrawn: ${why}`;
+  }
+  if (closedByMember(item)) return `${nameOf(item.closedBy)}: ${CLOSED_WORDS}`;
+  return undefined;
+}
+
+/** What an open ask asks, as its row's second line says it (`inboxPreview`). */
+function askLine(ask: InboxKnownAsk, ticked: readonly number[]): string {
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+      return ask.options
+        .map((option) => (option.label === ask.recommended ? `${option.label} ★` : option.label))
+        .join(" / ");
+    case INBOX_ASK.DO: {
+      const steps = ask.steps.map((step) => plainWords(step));
+      if (steps.length === 0) return "Mark it done";
+      const done = new Set(ticked.filter((at) => at < steps.length));
+      const next = steps.find((_, at) => !done.has(at));
+      if (next === undefined) return "Every step ticked · Mark done";
+      const left = steps.length - done.size;
+      return `${left} ${left === 1 ? "step" : "steps"} left${PREVIEW_PART}${next}`;
+    }
+    case INBOX_ASK.ANSWER:
+      return ask.fields === undefined
+        ? "Write an answer"
+        : `Fill in ${ask.fields.map((field) => field.label).join(", ")}`;
+  }
+}
+
+/**
+ * A thread's latest message as its row says it: an answer by its answerer,
+ * its stamp's words first, "You: Chose 7 days · and say it in the docs", a
+ * member's words by their writer, and the agent's words alone, its tile
+ * saying who; its files where it said nothing.
  */
 function lastSaid(
   thread: readonly InboxMessage[],
@@ -1333,13 +1411,22 @@ function lastSaid(
 ): string {
   const last = thread.at(-1);
   if (last === undefined) return "";
-  const who = last.author === INBOX_MESSAGE_AUTHOR.AGENT ? "Agent" : nameOf(last.member);
+  const agent = last.author === INBOX_MESSAGE_AUTHOR.AGENT;
   const words = plainWords(last.text);
   const answers = last.answers;
-  if (answers === undefined)
-    return `${who}: ${words === "" ? (filesWords(last.files) ?? "") : words}`;
-  const stamp = sentStamp(answers, thread.find((each) => each.id === answers.ask)?.ask).words;
-  return `${who}: ${words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`}`;
+  const said =
+    answers === undefined
+      ? words === ""
+        ? (filesWords(last.files) ?? "")
+        : words
+      : (() => {
+          const stamp = sentStamp(
+            answers,
+            thread.find((each) => each.id === answers.ask)?.ask,
+          ).words;
+          return words === "" ? stamp : `${stamp}${PREVIEW_PART}${words}`;
+        })();
+  return agent ? said : `${nameOf(last.member)}: ${said}`;
 }
 
 /** The preview of an item drawn from the fields a desktop before version 5 reads (`inboxPreview`). */

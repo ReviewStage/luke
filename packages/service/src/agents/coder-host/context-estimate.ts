@@ -3,6 +3,8 @@ import { emitJsonSchema } from "@luke/wire/effect";
 import type { MessageStreamEvent } from "eve/client";
 import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
 import loadSkill from "eve/tools/load_skill";
+import { LOOK_AT_BOARD_TOOL } from "../../tasks/board-look.js";
+import { DRAW_ON_BOARD_TOOL } from "../../tasks/board-tool.js";
 import {
   READ_COMMENTS_TOOL,
   REOPEN_THREAD_TOOL,
@@ -13,6 +15,7 @@ import { END_CALL_TOOL } from "../../tasks/end-call.js";
 import { SHOW_PAGE_TOOL } from "../../tasks/page-tool.js";
 import { LOOK_AT_PICTURE_TOOL } from "../../tasks/picture-look.js";
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../../tasks/queue-question.js";
+import { SHOW_CODE_TOOL } from "../../tasks/show-code.js";
 import {
   CODER_READ_AGENT_TOOL,
   LIST_AGENTS_TOOL,
@@ -236,6 +239,18 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.END_CALL]: {
     description: END_CALL_TOOL.description,
     inputSchema: emitJsonSchema(END_CALL_TOOL.inputSchema),
+  },
+  [CODER_TOOL.SHOW_CODE]: {
+    description: SHOW_CODE_TOOL.description,
+    inputSchema: emitJsonSchema(SHOW_CODE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.DRAW_ON_BOARD]: {
+    description: DRAW_ON_BOARD_TOOL.description,
+    inputSchema: emitJsonSchema(DRAW_ON_BOARD_TOOL.inputSchema),
+  },
+  [CODER_TOOL.LOOK_AT_BOARD]: {
+    description: LOOK_AT_BOARD_TOOL.description,
+    inputSchema: emitJsonSchema(LOOK_AT_BOARD_TOOL.inputSchema),
   },
 } as const satisfies Record<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ShownTool>;
 

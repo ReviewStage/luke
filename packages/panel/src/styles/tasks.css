@@ -1208,7 +1208,7 @@
    the numbers' gutter may be gone. The frame around them is as wide as
    the place, which a note between them measures itself by. */
 .code-lines-frame {
-  container-type: inline-size;
+  container: code-lines / inline-size;
 }
 
 /* Lines in a syntax theme other than the window's own (themed-lines.tsx)
@@ -3658,11 +3658,8 @@
   white-space: nowrap;
 }
 
-/* A review's threads on lines, under its words: each boxed as the checks
-   are, its head a row like a check's that opens and closes it, its chevron
-   at the end as a docked card's is; then the lines it is on, drawn as Files
-   changed draws a diff's rows, and its comments, each under its head. The
-   box clips at its own edge, so its head's ring is drawn inside. */
+/* A review's threads on lines, under its words, each on the annotation
+   card (`.annotation-card`). */
 .pull-request-threads {
   display: flex;
   flex-direction: column;
@@ -3672,12 +3669,10 @@
   list-style: none;
 }
 
-.pull-request-thread {
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+/* A Conversation thread's card answers its own width, as one on a line does. */
+.pull-request-thread-slot {
   min-width: 0;
-  overflow: clip;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
+  container: annotation / inline-size;
 }
 
 /* A review thread on its line in Files changed (agent-pull-request-tab.tsx's
@@ -3685,9 +3680,15 @@
    so the window's own type and card draw it, inset from the code's edges
    as GitHub's are; one the diff draws no row for stands in a list above it. */
 .diff-note {
-  padding: var(--luke-space-8) var(--luke-space-12);
+  /* Note that a percentage padding is read against the row's width, so the
+     note keeps the code's inset and comes in to the pane's narrower one
+     where the row is under 440px (\`annotation-card.tsx\`), with no query
+     on a container the note itself would have to be inside. */
+  padding: var(--luke-space-8)
+    clamp(var(--luke-space-8), (100% - 440px) * 999, var(--luke-space-12));
   font-family: var(--luke-font-sans);
   white-space: normal;
+  container: annotation / inline-size;
 }
 
 /* A line's review threads minimized to one chip (minimized-threads.tsx), as
@@ -3764,15 +3765,6 @@
   gap: var(--luke-space-6);
 }
 
-.diff-inline-thread {
-  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
-  max-width: 720px;
-  overflow: clip;
-  border: 1px solid var(--luke-color-border);
-  border-radius: var(--luke-control-radius);
-  background: var(--luke-color-surface);
-}
-
 /* A comment being written on lines of a file (`line-comment.tsx`), under
    the last of them as a review thread stands: a card of the thread's own
    face, its head naming the lines, the words with their preview, GitHub's
@@ -3818,56 +3810,262 @@
   list-style: none;
 }
 
-/* A review thread's head, its whole row pressing to fold it: the chevron
-   leading, in the slot and at the gap a Files changed file header's fold
-   stands in (`.diff-list-head-row`), so a thread reads as a file does, then
-   who and where, and the ⋯ at the row's end. */
-.pull-request-thread-head {
+/* One card for what is written on lines of code (`annotation-card.tsx`): a
+   review thread in Files changed and the Conversation, and Luke's note in a
+   File tab. The review thread's quiet card, as wide as its words up to a
+   reading measure. Its columns are the custom properties below: the head's
+   chevron in a file header's 24px slot at its inset, the faces' column
+   after it, and the words' column after the faces, which the head's face
+   and name and every comment's face and words read alike. */
+.annotation-card {
+  --annotation-inset: var(--luke-space-4);
+  --annotation-turn: var(--luke-space-24);
+  --annotation-gap: var(--luke-space-8);
+  --annotation-face: var(--luke-space-20);
+  --annotation-face-x: calc(
+    var(--annotation-inset) +
+    var(--annotation-turn) +
+    var(--annotation-gap)
+  );
+  --annotation-text-x: calc(
+    var(--annotation-face-x) +
+    var(--annotation-face) +
+    var(--annotation-gap)
+  );
+  --luke-focus-ring-offset: var(--luke-focus-ring-inset);
+  min-width: 0;
+  max-width: min(48rem, 100%);
+  overflow: clip;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-10);
+  background: var(--luke-color-surface);
+  color: var(--luke-color-text);
+  font-family: var(--luke-font-sans);
+  font-size: var(--luke-type-body-size);
+  line-height: var(--luke-type-body-leading);
+}
+
+/* Where a card's place does not say which lines it is on: its file's path,
+   cut in the middle so the file's name stands, and its lines, the strip's
+   whole width pressing to them in Files changed. */
+.annotation-card-where {
   display: flex;
   min-width: 0;
-  align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-6) var(--boxed-inset) var(--luke-space-6) var(--luke-space-4);
-  color: var(--luke-color-text);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.annotation-card-where > .luke-text-button {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  border-radius: 0;
   transition: background-color var(--duration-hover) ease;
 }
 
-.pull-request-thread-head:hover {
+.annotation-card-where > .luke-text-button:hover {
   background: var(--luke-color-fill-hover);
 }
 
-.pull-request-thread-head > .luke-disclosure-turn {
-  width: var(--luke-space-24);
-  height: var(--luke-space-24);
+.annotation-where {
+  display: flex;
+  min-width: 0;
+  padding: var(--luke-space-4) var(--luke-space-12);
+  white-space: nowrap;
+}
+
+.annotation-where-folder,
+.annotation-where-file {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The folder gives way long before the file's name does. */
+.annotation-where-folder {
+  flex: 0 1000 auto;
+}
+
+.annotation-where-file {
+  flex: 0 1 auto;
+  color: var(--luke-color-text);
+}
+
+.annotation-where-lines {
+  flex: none;
+  margin-inline-start: var(--luke-space-8);
+  color: var(--luke-color-text-subtle);
+}
+
+/* The head: one line that never wraps, the name giving way first, its whole
+   row folding the card under the fill a disclosure row wears. */
+.annotation-card-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--annotation-gap);
+  padding-top: var(--luke-space-6);
+  padding-right: var(--luke-space-8);
+  padding-bottom: var(--luke-space-6);
+  padding-left: var(--annotation-inset);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  white-space: nowrap;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.annotation-card-head:hover {
+  background: var(--luke-color-fill-hover);
+}
+
+.annotation-card-head > .luke-disclosure-turn {
+  width: var(--annotation-turn);
+  height: var(--annotation-turn);
   align-items: center;
   justify-content: center;
 }
 
-/* A long path is cut at its start rather than its end, so its file's name
-   stands; the path itself is isolated, so it still reads left to right. */
-.pull-request-thread-path {
-  min-width: 0;
-  overflow: hidden;
-  direction: rtl;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.annotation-card-face,
+.annotation-comment-face {
+  display: flex;
+  width: var(--annotation-face);
+  height: var(--annotation-face);
+  flex: none;
+  align-items: center;
+  justify-content: center;
 }
 
-.pull-request-thread-head > .pull-request-quiet,
-.pull-request-thread-where > .pull-request-quiet {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-/* A thread's file and lines, which take it to them in Files changed
-   (`ThreadCard`), laid out as the head's own row. */
-.pull-request-thread-where {
+.annotation-card-name {
   display: flex;
   min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-weight: var(--luke-weight-semibold);
+}
+
+.annotation-card-time {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+}
+
+/* A state the card is in, in its tone's tint, as a badge is drawn. */
+.annotation-card-chip {
+  --annotation-chip-ink: var(--luke-color-text-muted);
+  display: inline-flex;
+  flex: none;
   align-items: center;
-  gap: var(--luke-space-8);
+  padding: 0 var(--luke-space-6);
+  border-radius: var(--luke-radius-full);
+  background: color-mix(in srgb, var(--annotation-chip-ink) 12%, transparent);
+  color: color-mix(in srgb, var(--annotation-chip-ink) 80%, var(--luke-color-text));
+  font-weight: var(--luke-weight-medium);
+}
+
+.annotation-card-chip[data-tone="attention"] {
+  --annotation-chip-ink: var(--luke-color-attention);
+}
+
+.annotation-card-chip[data-tone="complete"] {
+  --annotation-chip-ink: var(--luke-color-complete);
+}
+
+.annotation-card-count {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--luke-space-4);
+  color: var(--luke-color-text-subtle);
+}
+
+.annotation-card-count > svg {
+  width: var(--luke-space-12);
+  height: var(--luke-space-12);
+}
+
+/* The ⋯ stands at the head's end. */
+.annotation-card-end {
+  display: flex;
+  flex: none;
+  margin-inline-start: auto;
+}
+
+/* Open, the comments stand in the faces' and the words' columns, under the
+   head's face and name. */
+.annotation-card-content {
+  padding-top: var(--luke-space-2);
+  padding-right: var(--luke-space-12);
+  padding-bottom: var(--luke-space-12);
+  padding-left: var(--annotation-face-x);
+}
+
+.annotation-comments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.annotation-comment {
+  display: grid;
+  min-width: 0;
+  column-gap: var(--annotation-gap);
+  grid-template-columns: var(--annotation-face) minmax(0, 1fr);
+  row-gap: var(--luke-space-4);
+}
+
+.annotation-comment-meta {
+  display: flex;
+  min-width: 0;
+  min-height: var(--annotation-face);
+  align-items: center;
+  gap: var(--luke-space-6);
+  font-size: var(--luke-type-caption-size);
+  font-weight: var(--luke-weight-semibold);
+  white-space: nowrap;
+}
+
+.annotation-comment-words {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+
+/* The replies a read left on GitHub, in the words' column. */
+.annotation-card-more {
+  margin: var(--luke-space-8) 0 0 calc(var(--annotation-face) + var(--annotation-gap));
+}
+
+/* A narrow card: the age steps out, a state is a dot whose word is its hint
+   and stays its name, and the count drops its word, so the head keeps to
+   its one line. */
+@container annotation (max-width: 439px) {
+  .annotation-card-time {
+    display: none;
+  }
+
+  .annotation-card-chip {
+    width: var(--luke-space-8);
+    height: var(--luke-space-8);
+    padding: 0;
+    background: var(--annotation-chip-ink);
+  }
+
+  .annotation-card-chip-word,
+  .annotation-card-count-word {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 /* A thread's ⋯ stands at the end of its head. */
@@ -3876,33 +4074,23 @@
   margin-left: auto;
 }
 
-/* Whether a thread was resolved or outdated, in the quiet badge a bot's
-   name wears (desktop.css's `.actor-bot`). */
 /* The preview (file-diff.tsx) stands in the box rather than filling a tab. */
 .pull-request-thread-lines {
   flex: none;
   overflow-y: visible;
-  border-top: 1px solid var(--luke-color-border);
+  margin-bottom: var(--luke-space-8);
+  border-block: 1px solid var(--luke-color-border);
   background: var(--code-ground);
 }
 
-.pull-request-thread-comments {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.pull-request-thread-comment {
+/* A pending comment the Review panel lists, under its file and lines. */
+.pull-request-pending-list > .pull-request-thread-comment {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-6);
   padding: var(--luke-space-8) var(--boxed-inset);
   border-top: 1px solid var(--luke-color-border);
-}
-
-.pull-request-thread-more {
-  margin: 0 var(--boxed-inset) var(--luke-space-8);
 }
 
 /* Under a thread's comments, what a member does on it
@@ -3913,8 +4101,19 @@
   display: flex;
   flex-direction: column;
   gap: var(--luke-space-8);
-  padding: var(--luke-space-8) var(--boxed-inset);
+  padding: var(--luke-space-8) var(--luke-space-12);
   border-top: 1px solid var(--luke-color-border);
+}
+
+/* A narrow card's presses draw closer, at the pane's inset. */
+@container annotation (max-width: 439px) {
+  .pull-request-thread-actions {
+    padding-inline: var(--luke-space-8);
+  }
+
+  .pull-request-thread-actions-row {
+    gap: var(--luke-space-4);
+  }
 }
 
 /* The member's own pending comment (`pending-comments.tsx`): laid out as
@@ -4070,23 +4269,27 @@
   user-select: none;
 }
 
-/* Luke's note over the lines it is on, in a File tab (file-note.tsx): a
-   card in the window's own type between the lines, as a review comment
-   stands in a diff. Lines unwrapped scroll sideways under it while it
-   keeps to the tab's width in view. */
+/* Luke's note under the lines it is on, in a File tab (file-note.tsx): the
+   annotation card (`.annotation-card`), standing from the code's column past
+   the numbers, or at the pane's inset where the place is narrow. Lines
+   unwrapped scroll sideways under it while it keeps to the place's width in
+   view. */
 .file-note {
-  display: grid;
-  align-items: center;
-  margin: var(--luke-space-6) var(--luke-space-12);
-  overflow: hidden;
-  border: 1px solid var(--luke-color-border-strong);
-  border-radius: var(--luke-radius-8);
-  background: var(--luke-color-fill-hover);
-  color: var(--luke-color-text);
-  font-family: var(--luke-font-sans);
-  font-size: var(--luke-type-body-size);
-  grid-template-columns: minmax(0, 1fr) auto;
-  line-height: var(--luke-type-body-leading);
+  --file-note-start: 48px; /* off-scale: the numbers' gutter, `.code-line-number` */
+  --file-note-end: var(--luke-space-12);
+  margin: var(--luke-space-6) var(--file-note-end) var(--luke-space-6) var(--file-note-start);
+  container: annotation / inline-size;
+}
+
+.code-lines[data-line-numbers="false"] > .file-note {
+  --file-note-start: var(--luke-space-12);
+}
+
+@container code-lines (max-width: 439px) {
+  .code-lines[data-line-numbers] > .file-note {
+    --file-note-start: var(--luke-space-8);
+    --file-note-end: var(--luke-space-8);
+  }
 }
 
 /* Note that the note is stuck within the lines, which are as wide as the
@@ -4094,87 +4297,26 @@
    as the place they scroll in, less its margins. */
 .code-lines[data-wrap="false"] > .file-note {
   position: sticky;
-  left: var(--luke-space-12);
-  width: calc(100cqi - 2 * var(--luke-space-12));
+  left: var(--file-note-start);
+  width: calc(100cqi - var(--file-note-start) - var(--file-note-end));
 }
 
-/* The fold's line, its age and link beside it, then its words the card's
-   whole width under both: the fold's parts stand in the card's own grid. */
-.file-note-fold {
-  display: contents;
-}
-
-.file-note-fold > summary {
-  min-width: 0;
-  margin: var(--luke-space-2);
-  grid-column: 1;
-  grid-row: 1;
-}
-
-.file-note-fold::details-content {
-  grid-column: 1 / -1;
-  grid-row: 2;
-}
-
-/* The note's words select with the lines around it; its line and what
-   stands beside it are the card's controls. */
-.file-note-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--luke-space-6);
-  padding-right: var(--luke-space-8);
-  font-size: var(--luke-type-caption-size);
-  grid-column: 2;
-  grid-row: 1;
-  line-height: var(--luke-type-caption-leading);
-  -webkit-user-select: none;
-  user-select: none;
+/* Luke is told by his wing mark and his name in his own colour, on the card a review thread wears. */
+.file-note .transcript-luke-mark,
+.file-note .transcript-luke-mark .luke-face {
+  width: var(--annotation-face);
+  height: var(--annotation-face);
 }
 
 .file-note-author {
-  flex: 0 0 auto;
   color: var(--voice-luke);
-  font-weight: var(--luke-weight-semibold);
 }
 
-.file-note-lines,
-.file-note-time {
-  flex: 0 0 auto;
-  color: var(--luke-color-text-subtle);
-}
-
-/* The lines give way before the header's parts would stand on one another. */
-.file-note-lines {
-  min-width: 0;
-  flex-shrink: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Folded, the note's words stand in the header cut to one line. */
-.file-note-preview {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--luke-color-text-muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* A narrow panel's note says its age in the link's pill, and the link
-   folds to the Code tab's glyph alone, named still. */
-@container side-panel (max-width: 359px) {
-  .file-note-time {
-    display: none;
-  }
-
-  .file-note-actions {
-    --luke-fold: folded;
-  }
+.file-note-menu {
+  display: flex;
 }
 
 .file-note-words {
-  padding: 0 var(--luke-space-12) var(--luke-space-8) var(--luke-space-40);
   overflow-wrap: anywhere;
 }
 

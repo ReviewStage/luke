@@ -1,11 +1,13 @@
 import {
   PAGE_FIND_ACT,
+  PAGE_FIND_KEY,
   PAGE_FIND_TYPE,
   type PageFindAsk,
   pageFindAnswerSchema,
 } from "@luke/features/page-find";
 import type { PageLine } from "@luke/features/page-wire";
 import type { CodeLines, TasksPageSourceAnswer } from "@luke/features/tasks-view";
+import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { ERROR_STATE_PLACEMENT, ErrorState, IconButton, SCROLL_FADE } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
 import { Option, Schema } from "effect";
@@ -19,7 +21,14 @@ import {
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { appPlatform } from "../app-platform.js";
 import { useCopyToast } from "../copy-feedback.js";
-import { FindScope, type FindSource, type FindTally, useFindSource } from "../find-in-tab.js";
+import {
+  type FindChord,
+  FindScope,
+  type FindSource,
+  type FindTally,
+  useFindPress,
+  useFindSource,
+} from "../find-in-tab.js";
 import { SpinnerRegion } from "../spinner.js";
 import { Tooltip } from "../tooltip.js";
 import { useLinesLook } from "./code-lines.js";
@@ -84,6 +93,13 @@ type SourceRead =
 /** Reads one version's source: the answer, or a rejection where main refused the act. */
 export type ReadPageSource = (version: number) => Promise<TasksPageSourceAnswer>;
 
+/** The find chord each key the frame hands on is. */
+const CHORD_OF_KEY = {
+  [PAGE_FIND_KEY.FIND]: APP_COMMAND.FIND,
+  [PAGE_FIND_KEY.NEXT]: APP_COMMAND.FIND_NEXT,
+  [PAGE_FIND_KEY.PREVIOUS]: APP_COMMAND.FIND_PREVIOUS,
+} as const satisfies Record<(typeof PAGE_FIND_KEY)[keyof typeof PAGE_FIND_KEY], FindChord>;
+
 /** Reads a message the frame posted as the find's answer, nothing for anything else the page posts. */
 const readFindAnswer = Schema.decodeUnknownOption(pageFindAnswerSchema);
 
@@ -100,6 +116,7 @@ function sourceText(lines: CodeLines): string {
  * heard while no query stands is a late answer to one cleared, and is let go.
  */
 function useFrameFind(frame: RefObject<HTMLIFrameElement | null>) {
+  const press = useFindPress();
   const [find] = useState(() => {
     const listeners = new Set<(tally: FindTally) => void>();
     const held = { query: "", selection: "" };
@@ -130,7 +147,9 @@ function useFrameFind(frame: RefObject<HTMLIFrameElement | null>) {
       if (framed === null || framed === undefined || event.source !== framed) return;
       const answer = readFindAnswer(event.data);
       if (Option.isNone(answer)) return;
-      if ("selection" in answer.value) {
+      if ("key" in answer.value) {
+        press(CHORD_OF_KEY[answer.value.key]);
+      } else if ("selection" in answer.value) {
         held.selection = answer.value.selection;
       } else if (held.query.length > 0) {
         const { count, at } = answer.value.tally;
@@ -151,10 +170,31 @@ function useFrameFind(frame: RefObject<HTMLIFrameElement | null>) {
   return find.loaded;
 }
 
+/**
+ * Says the focus went into the frame where this window hears it: a click
+ * in a frame stirs no event of this document's but the window's blur, so
+ * the focus the frame took is told as a `focusin` on the frame, which
+ * hands its column the window's keys as a focus anywhere in it does
+ * (`useColumnFocus`).
+ */
+function useFrameFocus(frame: RefObject<HTMLIFrameElement | null>): void {
+  useEffect(() => {
+    const blurred = () => {
+      const element = frame.current;
+      if (element !== null && document.activeElement === element) {
+        element.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+      }
+    };
+    window.addEventListener("blur", blurred);
+    return () => window.removeEventListener("blur", blurred);
+  }, [frame]);
+}
+
 /** The page drawn in its sandboxed frame, found in through the frame (`useFrameFind`). */
 function PageFrame({ title, src }: { title: string; src: string }): React.JSX.Element {
   const frame = useRef<HTMLIFrameElement>(null);
   const loaded = useFrameFind(frame);
+  useFrameFocus(frame);
   return (
     <iframe
       ref={frame}

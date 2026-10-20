@@ -18,7 +18,7 @@ import { useFindOpen } from "../find-in-tab.js";
 import { BusyLabel, SpinnerRegion } from "../spinner.js";
 import { CodeLinesView, useLinesLook } from "./code-lines.js";
 import { centreWithin } from "./code-pane.js";
-import { type FileNotes, notesBefore } from "./file-note.js";
+import { type FileNotes, type NoteLines, notesAfter } from "./file-note.js";
 import {
   FILE_READ,
   type FileLines,
@@ -54,9 +54,10 @@ import type { OpenFile } from "./use-side-panel.js";
  * before its commit was recorded is read: a file changed since is drawn as
  * it is now, the snippet's lines lit where they fall, and a file gone, or
  * one the service refuses, says so in the file's place, over the lines Luke
- * showed of it where the task holds them. Over the first line of each
+ * showed of it where the task holds them. Under the last line of each
  * range Luke showed with a note stands his note on it (`file-note.tsx`),
- * on the file and on those lines alike. The tab draws no heading of its
+ * on the file and on those lines alike, and the pointer or the keyboard on
+ * a note lights its lines beside those the tab was opened on. The tab draws no heading of its
  * own: the File view's bar over it names the file and offers what is done
  * with it (`file-view.tsx`), told how the read stands as it moves. The lines
  * are drawn numbered or not, wrapped or not, as every File tab is
@@ -167,6 +168,8 @@ function FileLinesView({
   const above = held.firstLine > 1 ? windowAt(held.firstLine - 1) : undefined;
   const below = last < held.lineCount ? windowAt(last + 1) : undefined;
   const pointed = { path: file.path, ...file.range };
+  // The lines of the note the pointer or the keyboard is on, lit beside those pointed at.
+  const [lit, setLit] = useState<NoteLines | undefined>(undefined);
 
   // Note that this waits for the lit lines to be drawn, which may take the
   // window holding them a read after the file opened.
@@ -194,7 +197,8 @@ function FileLinesView({
       firstLine={held.firstLine}
       lines={held.lines}
       pointed={pointed}
-      before={notesBefore(notes)}
+      lit={lit}
+      after={notesAfter({ ...notes, onLight: setLit }, held.lineCount)}
       above={
         above === undefined ? null : (
           <EdgeRow
@@ -297,7 +301,7 @@ export function FileTab({
   file: OpenFile;
   /** The lines Luke showed of the file, drawn where the file cannot be. */
   snippet: TaskCode | undefined;
-  /** Luke's notes on the file's lines, each drawn over the first line of its range. */
+  /** Luke's notes on the file's lines, each drawn under the last line of its range. */
   notes: FileNotes;
   readFile: ReadFileWindow;
   /** Hears how the read of the file stands each time it moves, the bar over the tab offering what it allows. */
@@ -311,6 +315,8 @@ export function FileTab({
   held.current = read;
   const told = useRef(onRead);
   const look = useLinesLook();
+  // The lines of the note the pointer or the keyboard is on, over the lines Luke showed.
+  const [lit, setLit] = useState<NoteLines | undefined>(undefined);
   told.current = onRead;
   useEffect(() => {
     told.current(read);
@@ -446,7 +452,11 @@ export function FileTab({
             firstLine={snippet.firstLine}
             lines={snippet.lines}
             pointed={snippet.ref}
-            before={notesBefore(notes)}
+            lit={lit}
+            after={notesAfter(
+              { ...notes, onLight: setLit },
+              snippet.firstLine + snippet.lines.length - 1,
+            )}
           />
         </>
       )}

@@ -11,7 +11,7 @@ import { MARKDOWN_MARK, type MarkdownMark, MarkdownMessage } from "../markdown-m
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
-import { notesBefore } from "./file-note.js";
+import { notesAfter } from "./file-note.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue, useMentionLink } from "./task-mentions.js";
 import { HISTORY_READ } from "./use-plan-history.js";
@@ -149,13 +149,16 @@ test("a version's diff draws a mention written in as its chip, still marked as w
 });
 
 test("Luke's note on a File tab's lines draws its links as a transcript does", () => {
-  const notes = notesBefore({
-    notes: [{ callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: LINKS }],
-    folded: [],
-    onFold: () => undefined,
-    onShow: () => undefined,
-  });
-  const container = drawn(createElement(TaskMentions, { value: PAGE, children: notes(3) }));
+  const notes = notesAfter(
+    {
+      notes: [{ callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: LINKS }],
+      folded: [],
+      onFold: () => undefined,
+      taskId: undefined,
+    },
+    20,
+  );
+  const container = drawn(createElement(TaskMentions, { value: PAGE, children: notes(5) }));
 
   assert.deepEqual(chips(container), THREE_CHIPS);
   assert.deepEqual(

@@ -1,8 +1,0 @@
-{
-  "type": "string",
-  "enum": [
-    "image/png",
-    "image/jpeg",
-    "image/webp"
-  ]
-}

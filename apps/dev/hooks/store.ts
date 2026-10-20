@@ -10,6 +10,7 @@ import {
 } from "@luke/service/agents/agent-runtime/sandbox";
 import { pinnedState } from "@luke/service/agents/brain-host/pinned-state";
 import { EMPTY_RELAY_STATE, type RelayState } from "@luke/service/agents/brain-host/relay";
+import { deepensSandbox } from "@luke/service/agents/coder-host/deepen";
 import type { CheckoutFailure } from "@luke/service/agents/coder-host/host";
 import { opensSandbox } from "@luke/service/agents/coder-host/tool-set";
 import type { RepositorySandbox } from "@luke/service/agents/repository-shell";
@@ -30,9 +31,10 @@ import { sandboxRecord, sessionPrompt, turnHanded } from "../session-prompt.js";
  * (`packages/service/src/agents/brain-host/relay.ts`). A session the host does not admit
  * writes nothing. Beside the relay, the hook watches the sandbox: a call of
  * a sandbox tool, or a message received with files eve staged there, is
- * when the sandbox opened and its checkout set the repository credential
- * at the firewall, a step that starts past the credential's age renews it
- * there, or, for an agent on its starter's own token, which never ages, the
+ * when the sandbox opened on its shallow checkout, a call that writes is
+ * when that checkout deepened and set the repository credential at the
+ * firewall (`packages/service/src/agents/coder-host/deepen.ts`), a step
+ * that starts past the credential's age renews it there, or, for an agent on its starter's own token, which never ages, the
  * first step of each turn sets it again, and a turn's end takes that token
  * off wherever it stops the sandbox; and a turn's end, however it ended,
  * writes the branch checked out
@@ -132,16 +134,27 @@ async function withdrawCredential(ctx: HookContext): Promise<void> {
   );
 }
 
-/** A fresh credential set at the firewall, in place of the aged or lapsed one; a renewal that fails is logged and the next step tries again, and an agent with no repository mints none and sets nothing. */
+/**
+ * A fresh credential set at the firewall, in place of the aged or lapsed
+ * one; a renewal that fails is logged and the next step tries again, and an
+ * agent with no repository mints none and sets nothing. Note that a
+ * sandbox opened shallow is renewed only once its deepen finished, which
+ * its record says rather than the request the hook saw, since a write
+ * requested may have failed before its deepen did.
+ */
 async function renewCredential(
   ctx: HookContext,
   record: ReturnType<typeof pinnedState<SandboxRecord>>,
   now: number,
 ): Promise<void> {
+  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
+  const sandbox = await ctx.getSandbox(environment);
+  const shallow = record.get().openedShallow === true;
   const minted = await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
       if (Result.isFailure(admitted)) return undefined;
+      if (shallow && !(yield* host.deepened(admitted.success, sandbox))) return undefined;
       return yield* host.repositoryCredential(admitted.success);
     }).pipe(
       Effect.catch((failure) =>
@@ -155,8 +168,6 @@ async function renewCredential(
     ),
   );
   if (minted === undefined) return;
-  // The sandbox under its Vercel environment, which is the handle that carries the firewall.
-  const sandbox = await ctx.getSandbox(environment);
   // The token is revealed only into the firewall rules set for GitHub.
   await sandbox.setNetworkPolicy(credentialPolicy(minted));
   record.update((held) => ({
@@ -181,7 +192,12 @@ export default defineHook({
       if (opensSandbox(event) && sandbox.get().openedAt === undefined) {
         const openedAt = seams.now();
         const memberToken = await onMemberToken(ctx);
-        sandbox.update((held) => ({ ...held, openedAt, memberToken }));
+        sandbox.update((held) => ({ ...held, openedAt, openedShallow: true, memberToken }));
+      }
+      // The first write deepens the shallow checkout and sets the credential, which the policy renews from then on.
+      if (deepensSandbox(event) && sandbox.get().deepenedAt === undefined) {
+        const deepenedAt = seams.now();
+        sandbox.update((held) => ({ ...held, deepenedAt }));
       }
       // The sandbox a tool opened, at the turn's end: its branch is read ahead of the relay, and the policy decides whether it is stopped after.
       const ending =

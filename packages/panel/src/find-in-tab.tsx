@@ -122,8 +122,26 @@ export interface FindSource {
   readonly selection: () => string | undefined;
 }
 
-/** Hands the scope over the tab a source of the tab's own, or takes it back. */
-const FindSourceContext = createContext<(source: FindSource | undefined) => void>(() => undefined);
+/** A find chord pressed where the window's keymap cannot hear it: inside a frame the tab draws. */
+export type FindChord =
+  | typeof APP_COMMAND.FIND
+  | typeof APP_COMMAND.FIND_NEXT
+  | typeof APP_COMMAND.FIND_PREVIOUS;
+
+/**
+ * What the scope over a tab offers what the tab draws: a source of the
+ * tab's own to find in, handed or taken back, and a find chord pressed in
+ * the tab's own words, run on this scope whichever column holds the keys.
+ */
+interface FindScopeDoors {
+  readonly offer: (source: FindSource | undefined) => void;
+  readonly press: (chord: FindChord) => void;
+}
+
+const FindScopeContext = createContext<FindScopeDoors>({
+  offer: () => undefined,
+  press: () => undefined,
+});
 
 /** No matches, and no match the find is at. */
 const NO_TALLY: FindTally = { count: 0, at: -1 };
@@ -301,11 +319,19 @@ export function useFindOpen(): boolean {
  * is given, where the tab draws its words on a canvas (`FindSource`).
  */
 export function useFindSource(source: FindSource | undefined): void {
-  const offer = useContext(FindSourceContext);
+  const { offer } = useContext(FindScopeContext);
   useEffect(() => {
     offer(source);
     return () => offer(undefined);
   }, [offer, source]);
+}
+
+/**
+ * Runs a find chord on the scope over this tab, where the tab heard it
+ * pressed in words the window's keymap cannot hear, as a page's frame does.
+ */
+export function useFindPress(): (chord: FindChord) => void {
+  return useContext(FindScopeContext).press;
 }
 
 /**
@@ -367,6 +393,18 @@ export function FindScope({
     APP_COMMAND.FIND_PREVIOUS,
     active && open ? () => step(FIND_STEP.PREVIOUS) : undefined,
   );
+  // A chord pressed in the tab's own words runs here, as the latest render offers it.
+  const pressed = useRef<(chord: FindChord) => void>(() => undefined);
+  useLayoutEffect(() => {
+    pressed.current = (chord) => {
+      if (chord === APP_COMMAND.FIND) summon();
+      else if (open) step(chord === APP_COMMAND.FIND_NEXT ? FIND_STEP.NEXT : FIND_STEP.PREVIOUS);
+    };
+  });
+  const [doors] = useState<FindScopeDoors>(() => ({
+    offer: setSource,
+    press: (chord) => pressed.current(chord),
+  }));
 
   return (
     <div
@@ -384,9 +422,9 @@ export function FindScope({
           onClose={close}
         />
       ) : null}
-      <FindSourceContext.Provider value={setSource}>
+      <FindScopeContext.Provider value={doors}>
         <DisclosureFind finding={open}>{children}</DisclosureFind>
-      </FindSourceContext.Provider>
+      </FindScopeContext.Provider>
     </div>
   );
 }

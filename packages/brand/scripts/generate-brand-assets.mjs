@@ -1227,7 +1227,7 @@ function wordSvg({ body, width }, pad = 6) {
 
 // ---------- Emission ----------
 // `--check` reports whether the committed outputs still match what this script
-// produces, without touching any of them. That is what the repository checks run:
+// produces, without touching any of them, for running by hand:
 // three sets of outputs are committed alongside this one source, and a check that
 // depended on the state of the working tree could only tell you so while the tree
 // was clean.

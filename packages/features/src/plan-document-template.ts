@@ -95,7 +95,7 @@ export const planTemplateWriteRequestSchema = EffectSchema.Struct({
  * revision is the built-in default rather than words of the account's own: a
  * reset, or the default the account held when its history began.
  */
-export const planTemplateRevisionLineSchema = EffectSchema.Struct({
+const planTemplateRevisionLineSchema = EffectSchema.Struct({
   ...planRevisionLineSchema.fields,
   default: EffectSchema.optionalKey(EffectSchema.Literal(true)),
 });

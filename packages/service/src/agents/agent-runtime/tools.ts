@@ -37,15 +37,18 @@ const { BRAIN, BRAIN_WORKER, CODER, CODER_WORKER } = AGENT_ROLE;
  * `withdraw_question`, and `end_call`, on every turn as the brain is, so its
  * tools are the same whatever kind of turn it runs, and refused off a call
  * (`../coder-host/tool-set.ts`'s `runCallTool`), since they mean something
- * only while someone is listening.
+ * only while someone is listening. `show_code` is every agent's on every
+ * turn, a coding agent's where it has a repository to read
+ * (`repositoryToolsOf`), and the board's two every agent's on a task
+ * (`taskToolsOf`).
  */
 const TOOL_ROLES = {
   [AGENT_TOOL.QUEUE_QUESTION]: [BRAIN, CODER],
   [AGENT_TOOL.WITHDRAW_QUESTION]: [BRAIN, CODER],
-  [AGENT_TOOL.SHOW_CODE]: [BRAIN],
+  [AGENT_TOOL.SHOW_CODE]: [BRAIN, CODER],
   [AGENT_TOOL.RUN_IN_REPOSITORY]: [BRAIN, BRAIN_WORKER],
-  [AGENT_TOOL.DRAW_ON_BOARD]: [BRAIN],
-  [AGENT_TOOL.LOOK_AT_BOARD]: [BRAIN],
+  [AGENT_TOOL.DRAW_ON_BOARD]: [BRAIN, CODER],
+  [AGENT_TOOL.LOOK_AT_BOARD]: [BRAIN, CODER],
   [AGENT_TOOL.LOOK_AT_PICTURE]: [BRAIN, CODER],
   [AGENT_TOOL.LIST_AGENTS]: [BRAIN, CODER],
   [AGENT_TOOL.READ_AGENT]: [BRAIN, CODER],

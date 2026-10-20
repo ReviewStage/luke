@@ -2,6 +2,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
 } from "@luke/features/coding-agent-view";
+import { CODING_AGENT_CURSOR_START } from "@luke/features/coding-agent-wire";
 import {
   type AgentTranscriptLiveAnswer,
   agentTranscriptLiveRowsSchema,
@@ -40,9 +41,16 @@ import { LiveBroken, type LiveClient, liveRows } from "./live-follow.js";
  * `RESEAL`; one the account does not reach is not found, as the held read
  * said.
  *
- * Note that the hold ends with one more read of the page, as the service's
- * own hold does, so where an agent stands only by the clock, such as one
- * past the grace its first turn had to land in, it is heard by then.
+ * Where the service says the clock alone may end the hold in so long, as
+ * an agent passing the grace its first turn had to land in or the window of
+ * a title it waits on closing, which no row says, the page is read again
+ * then too; the delay is the service's own, so the two clocks never meet.
+ * The hold ends with one more read of the page, as the service's own does.
+ *
+ * A transcript main follows for the windows that draw it (`followTranscript`)
+ * is read on the same subscription with no hold at all: every page is told
+ * as it is read, from the start, and the next is read whenever the
+ * statements move or the clock reaches the edge the service named.
  */
 
 /** How long a read is held while nothing stands past its cursor, as the service held it. */
@@ -181,9 +189,10 @@ function movedFrom(was: LiveState): (state: LiveState) => boolean {
 }
 
 /**
- * The page read at once, again each time the statements move, or their
- * subscription stops or opens again, while the service says its held read
- * would hold on it. Never ends of itself while the page holds.
+ * The page read at once, again each time the statements move, their
+ * subscription stops or opens again, or the clock reaches the edge the
+ * service named, while the service says its held read would hold on it.
+ * Never ends of itself while the page holds.
  */
 function readUntilSaid(
   state: SubscriptionRef.SubscriptionRef<LiveState>,
@@ -194,7 +203,14 @@ function readUntilSaid(
       const was = yield* SubscriptionRef.get(state);
       const answer = yield* reads.now;
       if (!("holds" in answer) || !answer.holds) return windowsPage(answer);
-      yield* SubscriptionRef.changes(state).pipe(Stream.filter(movedFrom(was)), Stream.runHead);
+      const moved = SubscriptionRef.changes(state).pipe(
+        Stream.filter(movedFrom(was)),
+        Stream.runHead,
+      );
+      // Note that an edge only the clock reaches is waited for beside the rows, since no row says it.
+      yield* answer.wakeIn === undefined
+        ? moved
+        : Effect.race(moved, Effect.sleep(Duration.millis(answer.wakeIn)));
     }
   });
 }
@@ -220,6 +236,58 @@ export function transcriptPast(
         return yield* readUntilSaid(standing.state, reads);
       }).pipe(Effect.timeoutOption(HOLD));
       return Option.isSome(said) ? said.value : windowsPage(yield* reads.now);
+    }),
+  );
+}
+
+/** How one followed transcript's next page is read: the page past the cursor at once, with whether the service's held read would have held on it. */
+export type TranscriptPageAfter = (
+  after: string,
+) => Effect.Effect<TranscriptNowAnswer | CodingAgentMessagesAnswerView>;
+
+/**
+ * The transcript followed until interrupted, each page told as it is read:
+ * the first from the start, then the next past it at once while the last
+ * said something, and otherwise once the statements move, their
+ * subscription stops or opens again, or the clock reaches the edge the
+ * service named. One the account does not reach is told not found, which
+ * ends the follow; a page the service did not answer is told as such and
+ * read again after `RESEAL`.
+ */
+export function followTranscript(
+  follows: TranscriptFollows,
+  key: TranscriptKey,
+  pageAfter: TranscriptPageAfter,
+  tell: (page: CodingAgentMessagesAnswerView) => Effect.Effect<void>,
+): Effect.Effect<void> {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const standing = yield* RcMap.get(follows, key);
+      if (standing.kind === "refused") {
+        return yield* tell({ failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+      }
+      let after = CODING_AGENT_CURSOR_START;
+      while (true) {
+        const was = yield* SubscriptionRef.get(standing.state);
+        const answer = yield* pageAfter(after);
+        yield* tell(windowsPage(answer));
+        if ("failure" in answer) {
+          if (answer.failure === CODING_AGENT_CALL_FAILURE.NOT_FOUND) return;
+          yield* Effect.sleep(RESEAL);
+          continue;
+        }
+        after = answer.cursor;
+        // Note that a page that said something is followed by the next at once, since a page has a most it carries.
+        if (answer.messages.length > 0) continue;
+        const moved = SubscriptionRef.changes(standing.state).pipe(
+          Stream.filter(movedFrom(was)),
+          Stream.runHead,
+        );
+        const wakeIn = "holds" in answer && answer.holds ? answer.wakeIn : undefined;
+        yield* wakeIn === undefined
+          ? moved
+          : Effect.race(moved, Effect.sleep(Duration.millis(wakeIn)));
+      }
     }),
   );
 }

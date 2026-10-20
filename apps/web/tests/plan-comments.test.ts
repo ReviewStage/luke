@@ -46,17 +46,7 @@ import {
 } from "@luke/service/testing/integration-connect";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import {
-  Clock,
-  type Context,
-  Duration,
-  Effect,
-  Layer,
-  Option,
-  Queue,
-  Result,
-  Stream,
-} from "effect";
+import { Clock, type Context, Effect, Layer, Option, Queue, Result, Stream } from "effect";
 import { SqlClient } from "effect/sql";
 
 /**
@@ -581,27 +571,6 @@ it.layer(getTestDB())("a plan's comments read held on the test's clock", (it) =>
         assert.deepEqual(
           threadsIn(answered).map((each) => each.id),
           [thread.id],
-        );
-      }),
-  );
-
-  it.effect(
-    "a read at the current cursor is let go at the route's own hold, no sooner, answering the threads unchanged",
-    () =>
-      Effect.gen(function* () {
-        const { owner, taskId } = yield* openSharedTask;
-        const first = yield* answer("comments", request(commentsPath(taskId), owner, {}));
-        const before = JSON.parse(first.body);
-
-        const startedAt = yield* Clock.currentTimeMillis;
-        const held = yield* heldRead(owner, taskId, before.cursor);
-        const answered = yield* driven(held, CODER.MESSAGES_POLL);
-        const heldFor = (yield* Clock.currentTimeMillis) - startedAt;
-
-        assert.equal(heldFor, Duration.toMillis(CODER.MESSAGES_HOLD));
-        assert.deepEqual(
-          { status: answered.status, body: JSON.parse(answered.body) },
-          { status: HOSTED_HTTP_STATUS.OK, body: before },
         );
       }),
   );

@@ -1,7 +1,6 @@
 import { AGENT_ROLE } from "@luke/service/agents/agent-runtime/role";
 import { environment, openSandbox } from "@luke/service/agents/agent-runtime/sandbox";
 import { CheckoutRefused } from "@luke/service/agents/coder-host/checkout";
-import { credentialPolicy } from "@luke/service/agents/terminal/agent-sandbox";
 import { Effect, Result } from "effect";
 import { defineSandbox } from "eve/sandbox";
 import { host } from "./host.js";
@@ -21,23 +20,25 @@ import { runAgent } from "./runtime.js";
  * policy over the one environment both roots share
  * (`packages/service/src/agents/agent-runtime/sandbox.ts`). The network is eve's default,
  * open internet. As the sandbox opens, the agent's repository is checked out
- * whole at its default branch with a write token at the firewall for the
- * clone (`coder-host/checkout.ts`), and the same token is then set at the
- * firewall for the session's own `gh` and `git`, in the shape
- * `credentialPolicy` gives an installation's token or a member's own
- * (`terminal/agent-sandbox.ts`): it never enters the sandbox's filesystem or
- * environment, so no command, and no output of one, can carry it. A checkout
- * that fails fails the call that opened the sandbox, in the host's own
- * words, and the next call tries again. An agent with no repository has no
- * checkout and no token: its sandbox opens on the same first need with an
- * empty working folder where the checkout would stand, and nothing is set
- * at the firewall.
+ * shallow, one commit deep, at the branch it starts from, with a read token
+ * at the firewall for the clone alone (`coder-host/checkout.ts`), so a
+ * sandbox opened to read the code opens fast and holds no credential. The
+ * first call that writes deepens it (`host.ts`'s `deepenCheckout`), and
+ * only then is a write token set at the firewall for the session's own
+ * `gh` and `git`, in the shape `credentialPolicy` gives an installation's
+ * token or a member's own (`terminal/agent-sandbox.ts`): it never enters the
+ * sandbox's filesystem or environment, so no command, and no output of one,
+ * can carry it. A checkout that fails fails the call that opened the
+ * sandbox, in the host's own words, and the next call tries again. An
+ * agent with no repository has no checkout and no token: its sandbox opens
+ * on the same first need with an empty working folder where the checkout
+ * would stand, and nothing is set at the firewall.
  */
 export { environment };
 
 export default defineSandbox(async ({ session }) => {
   const sandbox = await openSandbox(AGENT_ROLE.CODER);
-  const credential = await runAgent(
+  await runAgent(
     Effect.gen(function* () {
       const admitted = yield* host.admitSandbox(session.auth, session.id);
       if (Result.isFailure(admitted)) {
@@ -52,9 +53,5 @@ export default defineSandbox(async ({ session }) => {
       ),
     ),
   );
-  // An agent with no repository checked nothing out and has no credential to set.
-  if (credential === undefined) return sandbox;
-  // The token is revealed only into the firewall rules set for GitHub.
-  await sandbox.setNetworkPolicy(credentialPolicy(credential));
   return sandbox;
 });

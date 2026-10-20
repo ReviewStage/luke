@@ -221,8 +221,8 @@ export function PendingComment({
   draft: PendingReviewComment;
   /** Whether it wears its own Pending mark; not where the card it starts already wears one in its head. */
   marked?: boolean;
-  /** Who wrote it and when, as every comment's head names them. */
-  head: ReactNode;
+  /** Who wrote it and when, as every comment's head names them; none where the card it stands in names them beside it. */
+  head?: ReactNode;
   /** Its words as every comment's are drawn. */
   words: ReactNode;
 }): React.JSX.Element {
@@ -243,10 +243,12 @@ export function PendingComment({
   const out = writes.pending;
   return (
     <div className="pull-request-pending-comment">
-      <span className="changes-comment-head">
-        {head}
-        {marked ? <PendingBadge /> : null}
-      </span>
+      {head === undefined ? null : (
+        <span className="changes-comment-head">
+          {head}
+          {marked ? <PendingBadge /> : null}
+        </span>
+      )}
       {editing ? (
         <EditForm
           draft={draft}
