@@ -55,9 +55,10 @@ const CONFIG: CodexConfig = {
   mcpUrl: "https://luke.test/runner/mcp",
 };
 
-/** A message line of text alone. */
-function message(text: string): InputLine {
-  return { type: INPUT_LINE.MESSAGE, content: [{ type: "text", text }] };
+/** A message line of text alone, under Luke's id for the line where one is given. */
+function message(text: string, uuid?: string): InputLine {
+  const line = { type: INPUT_LINE.MESSAGE, content: [{ type: "text" as const, text }] };
+  return uuid === undefined ? line : { ...line, uuid };
 }
 
 /** P16's first phase: initialize, initialized, thread/start, turn/start, turn/steer, turn/start, turn/interrupt. */
@@ -86,6 +87,19 @@ const RESUMED_TURN_END = RESUMED_TURN.reply.slice(-2);
 function notified(exchanges: readonly Exchange[]): string[] {
   return exchanges.flatMap(({ reply }) =>
     reply.flatMap((line) => (line.method === undefined ? [] : [line.method])),
+  );
+}
+
+/** Luke's ids for the lines a test writes, as the service sends them. */
+const LINE = {
+  FIRST: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e01",
+  STEERED: "6b1f5d0c-3a51-4c56-9d0e-2f1c4b7a8e02",
+} as const;
+
+/** The lines a launch said app-server took, in order. */
+function acceptedLines(events: readonly RunnerEvent[]): string[] {
+  return events.flatMap(({ message: posted }) =>
+    "type" in posted && posted.type === RUNNER_EVENT.ACCEPTED ? [posted.uuid] : [],
   );
 }
 
@@ -137,6 +151,7 @@ it.effect(
       yield* write(CONFIG);
       yield* write({
         type: INPUT_LINE.MESSAGE,
+        uuid: LINE.FIRST,
         content: [
           { type: "text", text: "The probe's first turn." },
           {
@@ -146,10 +161,15 @@ it.effect(
         ],
       });
       yield* luke.seen;
-      yield* write(message("Also, before your final reply, append the line."));
+      yield* write(message("Also, before your final reply, append the line.", LINE.STEERED));
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
-      assert.deepEqual(kinds(luke.applied), [...notified(WORKFLOW.exchanges), RUNNER_EVENT.END]);
+      assert.deepEqual(
+        kinds(luke.applied).filter((kind) => kind !== RUNNER_EVENT.ACCEPTED),
+        [...notified(WORKFLOW.exchanges), RUNNER_EVENT.END],
+      );
+      // Each line is said taken once, under Luke's own id, which Codex is handed to echo.
+      assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST, LINE.STEERED]);
       assert.deepEqual(
         luke.applied.map(({ sequence }) => sequence),
         luke.applied.map((_, index) => FIRST_SEQUENCE + index),
@@ -207,6 +227,7 @@ it.effect(
       ]);
       const [start] = received(process, "turn/start");
       assert.equal(start?.threadId, THREAD);
+      assert.equal(start?.clientUserMessageId, LINE.FIRST);
       assert.equal(start?.model, CONFIG.model);
       assert.equal(start?.effort, CODEX_EFFORT.HIGH);
       assert.deepEqual(start?.input, [
@@ -214,6 +235,7 @@ it.effect(
         { type: "image", url: "data:image/png;base64,iVBORw0K" },
       ]);
       const [steer] = received(process, "turn/steer");
+      assert.equal(steer?.clientUserMessageId, LINE.STEERED);
       assert.equal(steer?.expectedTurnId, "00000000-0000-4000-8000-000000000003");
       assert.deepEqual(steer?.input, [
         {
@@ -274,9 +296,9 @@ it.effect(
       };
       const { spawned, write, run } = yield* launch([script], luke);
       yield* write({ ...CONFIG, threadId: THREAD });
-      yield* write(message("What exact line did you first write to PROBE.md?"));
+      yield* write(message("What exact line did you first write to PROBE.md?", LINE.FIRST));
       yield* luke.seen;
-      yield* write(message("And the second line?"));
+      yield* write(message("And the second line?", LINE.STEERED));
 
       assert.equal(yield* Fiber.join(run), RUNNER_END.TURN_ENDED);
       const [process] = spawned;
@@ -303,6 +325,14 @@ it.effect(
         received(process, "turn/steer")[0]?.clientUserMessageId,
       );
       assert.deepEqual(kinds(luke.applied).filter((kind) => kind === "turn/completed").length, 2);
+      // The refused steer's line is said taken when the next turn takes it, not before.
+      assert.deepEqual(acceptedLines(luke.applied), [LINE.FIRST, LINE.STEERED]);
+      const steeredAt = luke.applied.findIndex(
+        ({ message: posted }) =>
+          "type" in posted && posted.type === RUNNER_EVENT.ACCEPTED && posted.uuid === LINE.STEERED,
+      );
+      const firstCompletedAt = kinds(luke.applied).indexOf("turn/completed");
+      assert.ok(steeredAt > firstCompletedAt);
     }),
 );
 

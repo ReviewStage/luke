@@ -93,6 +93,8 @@ const NativeProjectionSchema = Schema.Struct({
   session: Schema.optionalKey(Schema.String),
   /** The plan's limit as it last refused the harness, kept until it lifts. */
   rateLimit: Schema.optionalKey(Schema.String),
+  /** The running total a harness that reports one (Codex) last reported, which the next report is metered against. */
+  metered: Schema.optionalKey(UsageSchema),
 });
 export type NativeProjection = typeof NativeProjectionSchema.Type;
 
@@ -335,6 +337,15 @@ class Fold {
     this.#setTurn({ ...turn, usage: addModelUsage(turn.usage, usage) });
   }
 
+  /** A running total metered: the turn under way takes what it grew by; with no turn under way it is only noted, so it is not metered again. */
+  #usageTotal(total: BrainRunUsage): void {
+    const grown = usageGrowth(this.state.metered, total);
+    this.state = { ...this.state, metered: total };
+    const turn = this.state.turn;
+    if (turn === undefined || grown === undefined) return;
+    this.#setTurn({ ...turn, usage: addModelUsage(turn.usage, grown) });
+  }
+
   #result(failure: string | undefined): void {
     const { failure: _held, ...turn } = this.#closed(this.turn());
     this.#setTurn(failure === undefined ? turn : { ...turn, failure });
@@ -389,6 +400,9 @@ class Fold {
       case NATIVE_MOMENT.USAGE:
         this.#usage(moment.usage);
         return;
+      case NATIVE_MOMENT.USAGE_TOTAL:
+        this.#usageTotal(moment.total);
+        return;
       case NATIVE_MOMENT.RESULT:
         this.#result(moment.failure);
         return;
@@ -411,6 +425,26 @@ class Fold {
         return;
     }
   }
+}
+
+type Usage = typeof UsageSchema.Type;
+
+/**
+ * What a running total grew by since the one before: all of it where none
+ * was metered or where it is smaller (a new thread counts from nothing), and
+ * nothing where it did not grow.
+ */
+function usageGrowth(before: Usage | undefined, total: Usage): BrainRunUsage | undefined {
+  const grown = {
+    inputTokens: total.inputTokens - (before?.inputTokens ?? 0),
+    outputTokens: total.outputTokens - (before?.outputTokens ?? 0),
+    cachedInputTokens: total.cachedInputTokens - (before?.cachedInputTokens ?? 0),
+    reasoningTokens: total.reasoningTokens - (before?.reasoningTokens ?? 0),
+    cacheWriteTokens: (total.cacheWriteTokens ?? 0) - (before?.cacheWriteTokens ?? 0),
+  };
+  const counts = Object.values(grown);
+  if (counts.some((count) => count < 0)) return total;
+  return counts.some((count) => count > 0) ? grown : undefined;
 }
 
 /** The turn's status by how its launch ended: done, unless its last model turn failed; stopped is cancelled. */
