@@ -8508,7 +8508,7 @@ button.tasks-board-card-press:focus-visible::after {
   flex: 1 1 auto;
 }
 
-/* The Tasks page (`tasks-page.tsx`), while the inbox-first sidebar is on: its
+/* The Tasks page (`tasks-page.tsx`): its
    List | Board switch stands beside its title, and the List runs its groups
    down the page, each headed as a Board's column is, its rows the page's
    own `ListRow`s led by the task's priority, key, and status. */
