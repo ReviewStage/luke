@@ -426,20 +426,28 @@ export function useTaskInbox(input: {
 
   // A send that settled its item at once, refused, brings the item back open, where a message
   // written on it meanwhile would read as no draft of it and be let go; so its words and files are
-  // carried into the open box, over the ones that went, beside the picks the open box holds.
+  // carried into the open box beside the picks it holds. Note that they take the place of the words
+  // that went, and are joined after any the open box holds besides, as another window may have
+  // written there meanwhile, so neither is lost.
   const reopen = useCallback(
-    (item: InboxItem) => {
+    (item: InboxItem, went: Pick<Draft, "text" | "attachments">) => {
       if (item.status !== INBOX_STATUS.OPEN) return;
       const open = draftPlace(item, draftsOn);
       const settled: InboxPlace = { ...open, thread: true };
       const written = draftsNow.current.find((kept) => Equal.equals(kept.place, settled));
       if (written === undefined) return;
       if (written.text !== "" || written.attachments.length > 0) {
-        writer.update(open, (was) => ({
-          ...was,
-          text: written.text,
-          attachments: written.attachments,
-        }));
+        writer.update(open, (was) => {
+          const text = was.text === went.text ? "" : was.text;
+          const attachments = Equal.equals(was.attachments, went.attachments)
+            ? []
+            : was.attachments;
+          return {
+            ...was,
+            text: [text, written.text].filter((words) => words !== "").join("\n"),
+            attachments: [...attachments, ...written.attachments],
+          };
+        });
       }
       writer.drop((place) => Equal.equals(place, settled));
     },
@@ -479,7 +487,7 @@ export function useTaskInbox(input: {
           });
           if ("failure" in answer) {
             settler.refuse(sent);
-            reopen(item);
+            reopen(item, { text: draft.note, attachments });
             refused(item.id, answer.failure);
             return;
           }
@@ -551,7 +559,7 @@ export function useTaskInbox(input: {
           if ("failure" in answer) {
             if (sent !== undefined) settler.refuse(sent);
             writer.update(place, (now) => (holdsNothing(now) ? unsent : now));
-            if (sent !== undefined) reopen(item);
+            if (sent !== undefined) reopen(item, unsent);
             refused(item.id, answer.failure);
             return;
           }

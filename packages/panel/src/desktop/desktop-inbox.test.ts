@@ -5854,6 +5854,57 @@ test("words written on a reply's settled box while the reply carrying the ask's 
   assert.equal(attachedOf(pane), 'Choose "7 days"Sending answers the ask');
 });
 
+test("words another window writes in the open ask's box while this window's reply carrying the answer is out are kept beside this window's own once the reply is refused", async () => {
+  const shown = threadItem([askingMessage(EXPIRY_ASK)]);
+  const pane = await mountThread(shown);
+  const refuse: (() => void)[] = [];
+  const bridge = appBridge();
+  const previous = fakeActsAnswer();
+  fakeActs({
+    ...bridge,
+    act: (request: AnyAct): Promise<FakeActAnswer> => {
+      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX_MESSAGE) return previous(request);
+      return new Promise((resolve) =>
+        refuse.push(() =>
+          resolve({
+            status: FAKE_ANSWER.DONE,
+            value: { failure: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED },
+          }),
+        ),
+      );
+    },
+  });
+
+  act(() => openOptions(pane)[1]?.click());
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+  typeInComposer(pane, "One more detail");
+  await settle();
+  // The other window, where the item still waits, writes in its open box, as storage hands it on.
+  const kept: { place: { thread?: true } }[] = JSON.parse(
+    window.localStorage.getItem("luke.composerDrafts") ?? "[]",
+  );
+  const written = kept.find((entry) => entry.place.thread === true) ?? assert.fail("the draft");
+  const { thread: _, ...open } = written.place;
+  window.localStorage.setItem(
+    "luke.composerDrafts",
+    JSON.stringify([...kept, { ...written, place: open, text: "Please wait" }]),
+  );
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: "luke.composerDrafts" }));
+  });
+  await settle();
+  await act(async () => refuse[0]?.());
+  await settle();
+
+  assert.deepEqual(
+    [...composerEditor(pane).querySelectorAll("p")].map((line) => line.textContent),
+    ["Please wait", "One more detail"],
+  );
+});
+
 test("picking an option attaches it over the box as a stamp, renaming the send, and × takes it off; sent, the reply carries the answer, leads with its stamp, and the ask says who chose what", async () => {
   const shown = threadItem([askingMessage(EXPIRY_ASK)]);
   const pane = await mountThread(shown);
