@@ -1227,7 +1227,11 @@ function PullRequestHead({
   return (
     <div className="changes-people pull-request-people">
       <span className="pull-request-branch-row">
-        <PullRequestBranches base={pullRequest.base} head={pullRequest.head} />
+        <PullRequestBranches
+          base={pullRequest.base}
+          head={pullRequest.head}
+          headOwner={pullRequest.headOwner}
+        />
         <PullRequestStack stack={pullRequest.stack ?? []} number={pullRequest.number} />
       </span>
       <OpenedLine

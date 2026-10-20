@@ -1295,7 +1295,9 @@ export type PullRequestStackEntry = typeof stackEntrySchema.Type;
  * the first of the overview's three reads, each of which lands on its own:
  * where it stands, its title, number, and page; its description as GitHub
  * renders it (`body_html`), empty where it has none; the branch it merges
- * into and the one it merges from; when it was opened, and merged where it
+ * into and the one it merges from, with the account whose fork that one
+ * stands on where it is not the repository's own (absent from a service
+ * before it); when it was opened, and merged where it
  * was; whether it would merge as it stands; who opened it, who the agent
  * writes as on GitHub, and who it still asks for a review, people and
  * teams; its labels; and,
@@ -1314,6 +1316,7 @@ export const codingAgentOverviewPullRequestAnswerSchema = EffectSchema.Struct({
       html: EffectSchema.String,
       base: overviewName,
       head: overviewName,
+      headOwner: EffectSchema.optionalKey(overviewName),
       createdAt: countedNumber,
       mergedAt: EffectSchema.NullOr(countedNumber),
       merge: EffectSchema.Literals(Object.values(MERGE_STATE)),

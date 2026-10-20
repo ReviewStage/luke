@@ -893,7 +893,14 @@ const OverviewPullSchema = Schema.Struct({
   head: Schema.Struct({
     ref: Schema.String,
     sha: Schema.String,
-    repo: Schema.optionalKey(Schema.NullOr(Schema.Struct({ id: Schema.Number }))),
+    repo: Schema.optionalKey(
+      Schema.NullOr(
+        Schema.Struct({
+          id: Schema.Number,
+          owner: Schema.optionalKey(Schema.Struct({ login: Schema.String })),
+        }),
+      ),
+    ),
   }),
   base: Schema.Struct({
     ref: Schema.String,
@@ -1009,6 +1016,8 @@ export interface GitHubOverviewPullRequest {
   readonly html: string;
   readonly base: string;
   readonly head: string;
+  /** The account whose fork its head stands on; absent where it is the repository's own. */
+  readonly headOwner?: string;
   readonly createdAt: number;
   readonly mergedAt: number | null;
   readonly merge: MergeState;
@@ -1922,11 +1931,13 @@ export const pullRequestOverview = /* @__PURE__ */ Effect.fn("web/pullRequestOve
   };
   const stands =
     pullRequest.state === PULL_REQUEST_STATE.OPEN || pullRequest.state === PULL_REQUEST_STATE.DRAFT;
+  const forkOwner = current.crossRepository ? pull.head.repo?.owner?.login : undefined;
   return Option.some({
     pullRequest,
     html: pull.body_html?.trim() ?? "",
     base: nameOf(pull.base.ref),
     head: nameOf(pull.head.ref),
+    ...(forkOwner === undefined ? undefined : { headOwner: nameOf(forkOwner) }),
     createdAt: timeOf(pull.created_at) ?? 0,
     mergedAt: timeOf(pull.merged_at),
     merge: GITHUB_MERGE_STATE.get(pull.mergeable_state ?? "") ?? MERGE_STATE.UNKNOWN,
