@@ -506,32 +506,10 @@ body,
   pointer-events: none;
 }
 
-/* The Tasks head's status filter stands out of the way until the head is
-   hovered or reached, or its menu stands (`sidebar-task-view.tsx`). */
+/* The Tasks head's status filter always stands, whether or not the sidebar
+   is hovered or holds focus (`sidebar-task-view.tsx`). */
 .sidebar-status-filter {
   display: inline-flex;
-  opacity: 0;
-  transition: opacity var(--duration-hover) ease;
-}
-
-.sidebar-section-head:focus-within .sidebar-status-filter,
-.sidebar-status-filter[data-menu-open="true"] {
-  opacity: 1;
-}
-
-/* Note that the pointer's own reveals stand only where there is a hover,
-   because iOS plays a first tap as a hover, and a reveal spends the tap:
-   a row would open on the second tap alone. */
-@media (hover: hover) {
-  .sidebar-section-head:hover .sidebar-status-filter {
-    opacity: 1;
-  }
-}
-
-@media (hover: none) {
-  .sidebar-status-filter {
-    opacity: 1;
-  }
 }
 
 /* The quiet line under the list saying what the status filter leaves out,
