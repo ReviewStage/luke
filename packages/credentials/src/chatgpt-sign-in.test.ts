@@ -50,7 +50,7 @@ const consentWith = (
   Effect.gen(function* () {
     const running = yield* Effect.forkChild(setup.signIn.signIn(HOST_ID));
     const page = yield* Deferred.await(setup.opened);
-    yield* Effect.promise(() => returnToLoopback(page, callback(page)));
+    yield* Effect.orDie(returnToLoopback(page, callback(page)));
     return { outcome: yield* Fiber.join(running), page };
   });
 

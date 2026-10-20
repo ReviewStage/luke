@@ -65,7 +65,7 @@ function harness(options: { gateOpen?: boolean; saved?: ProviderKeysAnswer } = {
       openExternalThroughNode: async (url) => {
         const page = server.authorize(url);
         opened.push(page);
-        await returnToLoopback(page, grantedCallback(page));
+        await Effect.runPromise(returnToLoopback(page, grantedCallback(page)));
       },
     },
     account: { capabilitiesActive: () => options.gateOpen ?? true },

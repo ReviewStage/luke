@@ -859,7 +859,7 @@ it.layer(getTestDB())("the provider keys route", (it) => {
 
         const running = yield* Effect.forkChild(signIn.signIn(extAgentHostId));
         const page = yield* Deferred.await(opened);
-        yield* Effect.promise(() => returnToLoopback(page, grantedCallback(page)));
+        yield* Effect.orDie(returnToLoopback(page, grantedCallback(page)));
         const kept = yield* Fiber.join(running);
 
         assert.equal(page.searchParams.get("ext_agent_host_id"), extAgentHostId);

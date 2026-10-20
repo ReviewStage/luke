@@ -12,6 +12,7 @@ import {
   type RecordingHttpClient,
   recordingHttpClient,
 } from "@luke/wire/testing";
+import { Effect } from "effect";
 import { CHATGPT_SIGN_IN } from "../chatgpt-sign-in.js";
 
 /** What the fake issues and where it answers, synthetic throughout. */
@@ -139,7 +140,7 @@ export function fakeChatGptAuthorizationServer(
 }
 
 /** What the browser's return carries once the developer consents: the code, the state, and the issued client. */
-export function grantedCallback(page: URL): Record<string, string> {
+export function grantedCallback(page: URL) {
   return {
     code: "auth-code",
     state: page.searchParams.get("state") ?? "",
@@ -149,10 +150,13 @@ export function grantedCallback(page: URL): Record<string, string> {
 }
 
 /** The browser's return to the loopback the page named, on a connection of its own; answers its status. */
-export function returnToLoopback(page: URL, parameters: Record<string, string>): Promise<number> {
+export function returnToLoopback(
+  page: URL,
+  parameters: Readonly<Record<string, string>>,
+): Effect.Effect<number, Error> {
   const callback = new URL(page.searchParams.get("redirect_uri") ?? "");
   for (const [name, value] of Object.entries(parameters)) callback.searchParams.set(name, value);
-  return new Promise((resolve, reject) => {
+  return Effect.callback<number, Error>((resume) => {
     const request = http.get(
       {
         host: callback.hostname,
@@ -162,9 +166,9 @@ export function returnToLoopback(page: URL, parameters: Record<string, string>):
       },
       (response) => {
         response.resume();
-        response.on("end", () => resolve(response.statusCode ?? 0));
+        response.on("end", () => resume(Effect.succeed(response.statusCode ?? 0)));
       },
     );
-    request.on("error", reject);
+    request.on("error", (error) => resume(Effect.fail(error)));
   });
 }

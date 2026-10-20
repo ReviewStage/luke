@@ -80,7 +80,7 @@ function answer(request: AnyAct): Promise<FakeActAnswer> {
     case ACT_KIND.CHATGPT_SIGN_IN_CANCEL:
       return Promise.resolve(done(undefined));
     case ACT_KIND.PROVIDER_KEYS_REMOVE:
-      held = { keys: [], ...(unconfirmed ? { revocationUnconfirmed: true as const } : {}) };
+      held = unconfirmed ? { keys: [], revocationUnconfirmed: true } : { keys: [] };
       return Promise.resolve(done(held));
     default:
       return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
@@ -210,8 +210,9 @@ test("Disconnect asks first, removes the ChatGPT sign-in by its kind, and says p
   unconfirmed = true;
   const page = await mount();
   await press(codexGroup(page) ?? page, "Disconnect");
-  assert.ok(
-    sent.every((request) => request.kind !== ACT_KIND.PROVIDER_KEYS_REMOVE),
+  assert.equal(
+    sent.some((request) => request.kind === ACT_KIND.PROVIDER_KEYS_REMOVE),
+    false,
     "nothing is removed before the question is answered",
   );
   await press(question(), "Disconnect");
