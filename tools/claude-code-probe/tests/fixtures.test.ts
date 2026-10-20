@@ -1,5 +1,5 @@
 /**
- * fixtures.test.ts -- the committed fixtures are already sanitized: sanitizing them again changes nothing, so no token, account, email, or real id is in them, whoever edited them last.
+ * fixtures.test.ts -- the committed fixtures are already sanitized: the probe's own leak guard names nothing in them, and sanitizing them again changes nothing, whoever edited them last.
  *
  * Until the developer's live run records them, each holds a placeholder,
  * which this holds to the same rule.
@@ -8,12 +8,17 @@
 import { readFileSync } from "node:fs";
 import { recordFromJsonLine, valueFromJsonText } from "@luke/wire";
 import { describe, expect, it } from "vitest";
-import { sanitizer } from "../src/sanitize.js";
+import { fixtureLeaks, sanitizer } from "../src/sanitize.js";
 
 const STREAM = new URL("../fixtures/claude-code-stream.jsonl", import.meta.url);
 const REPORT = new URL("../fixtures/claude-code-probe-report.json", import.meta.url);
 
 describe("the committed fixtures", () => {
+  it("hold nothing the probe's leak guard would refuse to write", () => {
+    expect(fixtureLeaks(readFileSync(STREAM, "utf8"), [])).toEqual([]);
+    expect(fixtureLeaks(readFileSync(REPORT, "utf8"), [])).toEqual([]);
+  });
+
   it("hold a stream whose every line is a sanitized record", () => {
     const lines = readFileSync(STREAM, "utf8")
       .split("\n")

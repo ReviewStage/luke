@@ -23,6 +23,7 @@
 
 import { randomBytes } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { homedir, userInfo } from "node:os";
 import { NodeRuntime } from "@effect/platform-node";
 import { PREPARE_SCRIPT } from "@luke/service/agents/agent-runtime/sandbox";
 import { isRecord, valueFromJsonText, type WireRecord, type WireValue } from "@luke/wire";
@@ -62,7 +63,7 @@ import {
   PROBE_SANDBOX,
   QUERY_OPTIONS,
 } from "./pins.js";
-import { type Sanitizer, sanitizer } from "./sanitize.js";
+import { fixtureLeaks, type Sanitizer, sanitizer } from "./sanitize.js";
 import { assistantText, leakReportIn, sessionInit, toolCalls, turnResults } from "./stream.js";
 import { firstTurn, resumedTurn, STOPPED_COMMAND, stoppedTurn } from "./turns.js";
 import {
@@ -164,10 +165,13 @@ const settingsConfig = Config.all({
   model: Config.String(PROBE_ENV.MODEL).pipe(Config.withDefault(DEFAULT_MODEL)),
 });
 
+/** The shortest login the sanitizer replaces wherever it appears. */
+const MIN_LOGIN_CHARS = 5;
+
 /** Where a command runs that names no directory of its own. */
 const DEFAULT_DIRECTORY = "/tmp";
 
-/** A sanitizer for everything the run keeps or prints: the run's secrets by value, and the repository's owner by name. */
+/** A sanitizer for everything the run keeps or prints: the run's secrets by value, and the repository's owner and the developer's home and login by name, which a stack trace carries. */
 function scrubberOf(settings: Settings): Sanitizer {
   const owner = settings.repository.split("/")[0] ?? "";
   return sanitizer({
@@ -175,6 +179,9 @@ function scrubberOf(settings: Settings): Sanitizer {
     replacements: [
       [settings.repository, "luke-probe-owner/throwaway"],
       [owner, "luke-probe-owner"],
+      [homedir(), "~"],
+      // Note that a login too short to be told from a word is left alone, since replacing it would garble the stream.
+      [userInfo().username.length >= MIN_LOGIN_CHARS ? userInfo().username : "", "developer"],
     ],
   });
 }
@@ -657,13 +664,21 @@ function writeFixtures(
     findings: recording.findings,
   };
   const report = scrub(valueFromJsonText(JSON.stringify(raw)));
+  const streamText = `${stream.join("\n")}\n`;
+  const reportText = `${JSON.stringify(report, null, 2)}\n`;
+  const secrets = [Redacted.value(settings.claudeToken), Redacted.value(settings.githubToken)];
+  const leaks = [...fixtureLeaks(streamText, secrets), ...fixtureLeaks(reportText, secrets)];
+  if (leaks.length > 0) {
+    return Effect.fail(
+      new ProbeStepFailed({
+        step: "write the fixtures",
+        detail: `refused, the sanitized output still holds ${[...new Set(leaks)].join(", ")}`,
+      }),
+    );
+  }
   return Effect.all([
-    attempt(scrub, "write the stream fixture", () =>
-      writeFile(FIXTURES.STREAM, `${stream.join("\n")}\n`),
-    ),
-    attempt(scrub, "write the report fixture", () =>
-      writeFile(FIXTURES.REPORT, `${JSON.stringify(report, null, 2)}\n`),
-    ),
+    attempt(scrub, "write the stream fixture", () => writeFile(FIXTURES.STREAM, streamText)),
+    attempt(scrub, "write the report fixture", () => writeFile(FIXTURES.REPORT, reportText)),
   ]);
 }
 

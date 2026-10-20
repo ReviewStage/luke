@@ -115,3 +115,33 @@ export function sanitizer(options: SanitizeOptions): Sanitizer {
 
   return walk;
 }
+
+/** A placeholder `sanitizer` numbered; every other UUID is a real id. */
+const PLACEHOLDER_SHAPE = /^00000000-0000-4000-8000-\d{12}$/;
+
+/**
+ * What survived in text about to be written as a fixture, by kind and
+ * never by value: a secret the run held, a credential or email shape, a
+ * real id, or an account field holding anything but its redaction. The
+ * probe writes nothing while this names anything, and the committed
+ * fixtures are held to it too, so the developer can commit the output as
+ * written.
+ */
+export function fixtureLeaks(text: string, secrets: readonly string[]): readonly string[] {
+  const leaks: string[] = [];
+  if (secrets.some((secret) => secret.length > 0 && text.includes(secret))) {
+    leaks.push("a secret the run held");
+  }
+  if (CREDENTIAL_SHAPES.some((shape) => new RegExp(shape.source).test(text))) {
+    leaks.push("a credential shape");
+  }
+  if (new RegExp(EMAIL_SHAPE.source).test(text)) leaks.push("an email");
+  if ((text.match(UUID_SHAPE) ?? []).some((uuid) => !PLACEHOLDER_SHAPE.test(uuid))) {
+    leaks.push("a real id");
+  }
+  for (const field of ACCOUNT_FIELDS) {
+    const unredacted = new RegExp(`"${field}":\\s*"(?!\\[redacted)`);
+    if (unredacted.test(text)) leaks.push(`an account field (${field})`);
+  }
+  return leaks;
+}

@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { REDACTED, sanitizer } from "../src/sanitize.js";
+import { fixtureLeaks, REDACTED, sanitizer } from "../src/sanitize.js";
 
 const fakeClaudeToken = ["sk", "ant", "oat01", "x".repeat(40)].join("-");
 const fakeGithubToken = `gh${"p"}_${"a".repeat(36)}`;
@@ -20,7 +20,7 @@ describe("sanitizer", () => {
     const out = scrub({
       type: "user",
       message: { content: [{ type: "tool_result", content: `env: TOKEN=plain-secret-value;` }] },
-      [`plain-secret-value`]: true,
+      "plain-secret-value": true,
     });
 
     expect(JSON.stringify(out)).not.toContain("plain-secret-value");
@@ -110,5 +110,40 @@ describe("sanitizer", () => {
     const once = sanitizer({ secrets: [], replacements: [] })(value);
 
     expect(sanitizer({ secrets: [], replacements: [] })(once)).toEqual(once);
+  });
+});
+
+describe("fixtureLeaks", () => {
+  it("names nothing in a sanitized stream", () => {
+    const scrub = sanitizer({ secrets: ["plain-secret-value"], replacements: [] });
+    const text = JSON.stringify(
+      scrub({
+        session_id: SESSION,
+        email: "someone@example.org",
+        text: `with plain-secret-value and ${fakeClaudeToken} as someone@example.org`,
+      }),
+    );
+
+    expect(fixtureLeaks(text, ["plain-secret-value"])).toEqual([]);
+  });
+
+  it("names each kind of leak that survived, never its value", () => {
+    const text = JSON.stringify({
+      session_id: SESSION,
+      email: "[redacted-account]",
+      organization: "Someone's Individual Org",
+      text: `plain-secret-value ${fakeGithubToken} someone@example.org`,
+    });
+
+    const leaks = fixtureLeaks(text, ["plain-secret-value"]);
+
+    expect(leaks).toEqual([
+      "a secret the run held",
+      "a credential shape",
+      "an email",
+      "a real id",
+      "an account field (organization)",
+    ]);
+    expect(leaks.join(" ")).not.toContain("plain-secret-value");
   });
 });
