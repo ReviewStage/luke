@@ -165,7 +165,7 @@ type Place =
       /** The workspace listed as Chat stood, whose chat it read. */
       readonly workspaceId: string | undefined;
       readonly listed?: boolean | undefined;
-      /** The place standing alone, while one does. */
+      /** The place shown: beside the rail in a wide room, which takes no step of its own, so a reload reopens it; alone in a narrow one, while one stands so. */
       readonly shown?: ChatPlace | undefined;
     }
   | {
@@ -320,8 +320,8 @@ function samePlace(one: Place, other: Place): boolean {
 }
 
 /**
- * The address of a place with no link: the home page, Chat, the Board, a
- * new automation's page.
+ * The address of a place with no link: the home page, the Board, a new
+ * automation's page.
  * `app` is a step no workspace's slug may take (`RESERVED_WORKSPACE_SLUGS`),
  * so it names no workspace's place.
  */
@@ -745,7 +745,8 @@ export function useWindowHistory(input: {
   const inboxListed = narrow ? inboxAlone === undefined : undefined;
   const historyListed = narrow ? tasks.history.listed : undefined;
   const chatListed = narrow ? tasks.chatView.listed : undefined;
-  const chatAlone = chatListed === false ? tasks.chatView.place : undefined;
+  // The place Chat shows, alone in a narrow room or beside its rail in a wide one; none while a narrow room's rail stands.
+  const chatShownPlace = chatListed === true ? undefined : tasks.chatView.place;
   const panelOpen = tasks.sidePanel.open;
   const panelTab = panelOpen ? tasks.sidePanel.tab : undefined;
   const pageAgent = tasks.agentView.agentId;
@@ -808,7 +809,7 @@ export function useWindowHistory(input: {
         kind: PLACE_KIND.CHAT,
         workspaceId: listedWorkspace,
         listed: chatListed,
-        shown: chatAlone,
+        shown: chatShownPlace,
       };
     }
     if (boardOpen) return { kind: PLACE_KIND.BOARD, workspaceId: listedWorkspace };
@@ -845,7 +846,7 @@ export function useWindowHistory(input: {
     automationRuns,
     chatOpen,
     chatListed,
-    chatAlone,
+    chatShownPlace,
     boardOpen,
   ]);
   const reachable = (to: Place) => {
@@ -920,6 +921,10 @@ export function useWindowHistory(input: {
     if (to.kind === PLACE_KIND.CHAT) {
       if (to.shown !== undefined) {
         tasks.chatView.onShow(to.shown);
+        // A wide room's For you step stands the rail too, as Chat's link does, for a narrow room to show alone.
+        if (to.listed === undefined && to.shown.kind === CHAT_PLACE.FOR_YOU) {
+          tasks.chatView.onList();
+        }
         return;
       }
       tasks.chatView.onOpen();

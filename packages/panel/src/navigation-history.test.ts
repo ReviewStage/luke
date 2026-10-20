@@ -6,6 +6,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
+import { CHAT_PLACE } from "@luke/ui/chat-model";
 import { type HistoryAdapter, type HistorySnapshot, memoryHistory } from "@luke/ui/history-adapter";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -42,6 +43,9 @@ type HeldPlace = ReturnType<
 
 const TASK_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 const AUTOMATION_ID = "5d1e7a9c-3b2f-4c6d-8e0a-9f1b2c3d4e5a";
+
+/** A channel of Acme's chat. */
+const CHANNEL_ID = "6e2f8b0d-4c3a-4d7e-9f1b-0a2c3d4e5f6b";
 
 const roots: Root[] = [];
 
@@ -492,12 +496,13 @@ test("a deleted automation's page is passed over by Back, which returns to the p
   assert.deepEqual(opened, [kept]);
 });
 
-/** The window with Chat standing or not, in the workspace given, each time Chat is asked to open counted in `opened`. */
+/** The window with Chat standing or not, in the workspace given, each time Chat is asked to open, or to open on a place, counted in `opened`. */
 function onChat(open: boolean, opened: string[], workspaceId = "workspace-acme"): TasksControl {
   const base = tasksControl();
+  const ask = () => opened.push(workspaceId);
   return tasksControl({
     workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
-    chatView: { ...base.chatView, open, onOpen: () => opened.push(workspaceId) },
+    chatView: { ...base.chatView, open, onOpen: ask, onShow: ask },
   });
 }
 
@@ -580,6 +585,16 @@ test("each step's address is the path of the link ⌥⌘C copies there", async (
       ...listed,
       personView: { ...tasksControl().personView, userId: "user-charles", workspaceId: ACME.id },
     }),
+    tasksControl({ ...listed, chatView: { ...tasksControl().chatView, open: true } }),
+    tasksControl({
+      ...listed,
+      chatView: {
+        ...tasksControl().chatView,
+        open: true,
+        place: { kind: CHAT_PLACE.CHANNEL, channelId: CHANNEL_ID },
+        listed: false,
+      },
+    }),
   ];
   const addresses: string[] = [];
   for (const tasks of places) {
@@ -604,12 +619,32 @@ test("a new automation's page has no link, so it stands at /app beside the list 
   assert.deepEqual(window.addresses(), ["/workspace-acme/automations", "/app"]);
 });
 
-test("a place with no link stands at /app: the home page, and Chat though a task stands under it", () => {
+test("a place with no link stands at /app: the home page, and the Board though a task stands under it", () => {
   const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
   const task = onTask([ACME]);
-  window.stand({ ...task, chatView: { ...task.chatView, open: true } });
+  window.stand({ ...task, boardView: { ...task.boardView, open: true } });
 
   assert.deepEqual(window.addresses(), ["/app", "/app"]);
+});
+
+test("Chat stands at its workspace's /chat though a task stands under it, and a channel shown in it at /chat/<channelId>, taking Chat's step in place", () => {
+  const window = mount(onTask([ACME]));
+  const task = onTask([ACME]);
+  window.stand({ ...task, chatView: { ...task.chatView, open: true } });
+  window.stand({
+    ...task,
+    chatView: {
+      ...task.chatView,
+      open: true,
+      place: { kind: CHAT_PLACE.CHANNEL, channelId: CHANNEL_ID },
+      listed: false,
+    },
+  });
+
+  assert.deepEqual(window.addresses(), [
+    `/acme/plan/${DOCUMENT_TASK.id}`,
+    `/acme/chat/${CHANNEL_ID}`,
+  ]);
 });
 
 test("with no workspace listed, a place in a workspace has no link, so it stands at /app as Copy link offers nothing", async () => {

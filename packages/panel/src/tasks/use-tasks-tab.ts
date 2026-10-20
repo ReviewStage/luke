@@ -56,6 +56,7 @@ import {
   type ChatPlace,
   type ChatPost,
   FOR_YOU,
+  placeChannel,
 } from "@luke/ui/chat-model";
 import type { PictureAnswer } from "@luke/ui/picture-cache";
 import {
@@ -1385,6 +1386,41 @@ export function useTasksTab(input: {
       ? undefined
       : { answer: liveChat.chat, agents: [] }
     : chat;
+  // A channel shown that a read answered since does not hold, as a stale link's, puts Chat back on For you, its root, and is read no more.
+  const shownChannel =
+    standIn?.kind === STAND_IN.CHAT && standIn.place.kind === CHAT_PLACE.CHANNEL
+      ? standIn.place.channelId
+      : undefined;
+  const heldAnswer = shownChat?.answer;
+  const channelSince = useRef<{ channelId: string; answer: FixtureChat["answer"] | undefined }>(
+    undefined,
+  );
+  useEffect(() => {
+    if (shownChannel === undefined) {
+      channelSince.current = undefined;
+      return;
+    }
+    const since = channelSince.current;
+    const asOf = since?.channelId === shownChannel ? since.answer : undefined;
+    if (since?.channelId !== shownChannel) {
+      channelSince.current = { channelId: shownChannel, answer: heldAnswer };
+    }
+    // Only an answer since the channel was shown settles a live chat, which may predate it; a staged chat is whole.
+    if (liveRun && (since?.channelId !== shownChannel || asOf === heldAnswer)) return;
+    if (
+      heldAnswer === undefined ||
+      placeChannel(heldAnswer, { kind: CHAT_PLACE.CHANNEL, channelId: shownChannel }) !== undefined
+    ) {
+      return;
+    }
+    setStandIn((held) =>
+      held?.kind === STAND_IN.CHAT &&
+      held.place.kind === CHAT_PLACE.CHANNEL &&
+      held.place.channelId === shownChannel
+        ? { ...held, place: FOR_YOU }
+        : held,
+    );
+  }, [shownChannel, heldAnswer, liveRun]);
   const page = tasksPage(tasks);
   const region = documentRegion(tasks);
   // A started agent's tab opens selected; the column's tabs are built after
@@ -2769,6 +2805,20 @@ export function useTasksTab(input: {
         return;
       case LINK_PLACE.FACTORY:
         standInFor({ kind: STAND_IN.FACTORY });
+        return;
+      // Note that a link to Chat opens it as its sidebar row does, and one to a channel on that channel, in the workspace
+      // the link names, which is the chat's own at once, so listing it first does not put Chat back on For you.
+      case LINK_PLACE.CHAT:
+        setChatWorkspace(listLinked(workspace));
+        standInFor(
+          place.channelId === undefined
+            ? { kind: STAND_IN.CHAT, place: FOR_YOU, listed: true }
+            : {
+                kind: STAND_IN.CHAT,
+                place: { kind: CHAT_PLACE.CHANNEL, channelId: place.channelId },
+                listed: false,
+              },
+        );
         return;
       // Settings is the window's, not the Plans tab's, so its link is opened there.
       case LINK_PLACE.SETTINGS:

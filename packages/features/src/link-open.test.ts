@@ -18,6 +18,21 @@ test("an account that chose the app, on a Mac, hands the link over in the deskto
   );
 });
 
+test("a link to Chat, or one of its channels, is handed over too, since the desktop opens it through the same panel", () => {
+  assert.equal(
+    linkOpenTarget(
+      LINK_OPEN.MAC_APP,
+      LINK_PLATFORM.MAC,
+      `https://tryluke.dev/acme/chat/${TASK_ID}`,
+    ),
+    `tryluke://tryluke.dev/acme/chat/${TASK_ID}`,
+  );
+  assert.equal(
+    linkOpenTarget(LINK_OPEN.MAC_APP, LINK_PLATFORM.MAC, "https://tryluke.dev/acme/chat/"),
+    "tryluke://tryluke.dev/acme/chat",
+  );
+});
+
 test("a preview's address hands over the link it stands for on Luke's home", () => {
   assert.equal(
     linkOpenTarget(

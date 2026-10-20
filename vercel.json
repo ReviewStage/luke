@@ -129,7 +129,7 @@
           }
         },
         {
-          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person)(?:/[^/]+)*/?",
+          "src": "/(?!api/)[^/]+/(?:plan|task|agent|inbox|automations?|factory|settings|person|chat)(?:/[^/]+)*/?",
           "dest": "/app.html",
           "headers": {
             "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com https://github.com https://avatars.githubusercontent.com https://storage-public.keyframelabs.com; font-src 'self' data:; media-src 'self' blob:; manifest-src 'self'; connect-src 'self' https://us.i.posthog.com https://us-assets.i.posthog.com https://*.ingest.us.sentry.io wss://*.compute.c-10.us-east-1.aws.neon.tech; worker-src 'self' blob:; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'",
