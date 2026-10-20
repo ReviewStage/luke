@@ -2285,8 +2285,15 @@ test("a workspace left lists the account's own workspace, whichever was listed, 
   );
 });
 
-test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", () => {
+test("a fixture run lists its first workspace's plans under the switcher, and a choice there is kept nowhere", async () => {
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
+  // The synthetic tasks are imported by a fixture run alone, so they land a moment after the mount.
+  await vi.waitFor(async () => {
+    await settle();
+    assert.equal(fixture.control().workspaces.length, 2);
+  });
+  // The tab's own defaults are written as it mounts, before the run is known to be a fixture's.
+  window.localStorage.clear();
   const staged = fixture.control().listed.tasks.map((task) => task.name);
   act(() => fixture.control().onChooseWorkspace("workspace-acme"));
 
