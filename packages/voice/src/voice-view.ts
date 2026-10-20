@@ -28,7 +28,7 @@ export interface VoiceSpeakers {
 }
 
 /** One line said on the standing call, as the voice window's captions group it, with its span in milliseconds into the call. */
-export interface VoiceCallLine {
+interface VoiceCallLine {
   readonly rowId: string;
   readonly speaker: TranscriptSpeaker;
   readonly words: string;
