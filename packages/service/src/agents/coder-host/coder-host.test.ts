@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { writeAccountPreferences } from "@luke/database/models/account-store";
+import { askRecord } from "@luke/database/models/asks";
 import {
   agentWorkspace,
   ensureGeneral,
@@ -17,6 +18,7 @@ import {
   hasRepository,
   latestTurnsOf,
   readCodingAgent,
+  recordCodingAgentStep,
 } from "@luke/database/models/coding-agent-store";
 import { readConversationPicture } from "@luke/database/models/conversation-pictures";
 import { childConversationId, hostTurnId } from "@luke/database/models/ids";
@@ -43,6 +45,7 @@ import { MODEL_PROVIDER } from "@luke/features/models-wire";
 import { PICTURE_TYPE } from "@luke/features/picture-wire";
 import { planAttachmentAddress } from "@luke/features/plan-attachment-link";
 import { planSections } from "@luke/features/plan-document";
+import { PLAN_HEADING } from "@luke/features/plan-template";
 import { FAST_ACCESS } from "@luke/features/provider-key-wire";
 import { EXPERIMENT } from "@luke/settings";
 import { noNetwork } from "@luke/wire/testing";
@@ -51,10 +54,12 @@ import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
+import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import {
   ACTION_RESULT_STATUS,
+  ASK_ORIGIN,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -66,9 +71,17 @@ import {
 } from "../../core.js";
 import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog.js";
 import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
+import { saveNotes } from "../../tasks/plan-notes.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { added } from "../../testing/task-contents.js";
+import {
+  BRAIN_HOST_ATTRIBUTE,
+  BRAIN_HOST_AUTHENTICATOR,
+  BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+  BRAIN_HOST_PRINCIPAL_TYPE,
+  BRAIN_HOST_TURN,
+} from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
@@ -80,7 +93,7 @@ import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
-import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET, turnToolsOf } from "./tool-set.js";
 import { CURSOR_START, transcriptPast } from "./transcript.js";
 
 /**
@@ -165,6 +178,30 @@ function ownSeat(userId: string, conversationId: string): SessionAuth {
   });
   return { current: seat, initiator: seat };
 }
+
+/** The voice's seat in the agent's conversation: the deployment acting for the agent's starter, on a spoken turn, as the coder door admits a call's ask. */
+function spokenSeat(target: ConversationTarget): SessionAuth {
+  const seat: SessionAuthContext = {
+    principalId: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+    principalType: BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT,
+    authenticator: BRAIN_HOST_AUTHENTICATOR.DEPLOYMENT,
+    attributes: {
+      [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: target.conversationId,
+      [BRAIN_HOST_ATTRIBUTE.TURN]: BRAIN_HOST_TURN.SPOKEN,
+      [BRAIN_HOST_ATTRIBUTE.ACCOUNT]: target.userId,
+    },
+  };
+  return { current: seat, initiator: seat };
+}
+
+/** What a model step's end counts, as the agent's row keeps it, but for when it ended. */
+const STEP_COUNTS = {
+  inputTokens: 1_000,
+  outputTokens: 100,
+  systemPromptTokens: 100,
+  toolDefinitionTokens: 100,
+  briefTokens: 10,
+} as const;
 
 let minted = 0;
 function mintSession(): string {
@@ -319,6 +356,73 @@ function codingTurn(
       data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
     }),
     ended,
+  ];
+}
+
+/** One spoken ask's turn as eve emits it on an agent's session: the ask received, a question queued for the voice, and a sentence of answer. */
+function spokenCodingTurn(turnId: string, deliveryIds: readonly string[]): MessageStreamEvent[] {
+  const sequence = 0;
+  return [
+    stampedEveEvent({ type: "turn.started", data: { turnId, sequence } }, NOW, deliveryIds),
+    stamped({
+      type: "message.received",
+      data: { turnId, sequence, message: "The developer asked how far along the invites are." },
+    }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "actions.requested",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        actions: [
+          {
+            kind: "tool-call",
+            callId: "call-1",
+            toolName: CODER_TOOL.QUEUE_QUESTION,
+            input: {
+              question: "Should a withdrawn invite say who withdrew it?",
+              recommendation: "No: just say it is no longer valid.",
+            },
+          },
+        ],
+      },
+    }),
+    stamped({
+      type: "action.result",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          callId: "call-1",
+          toolName: CODER_TOOL.QUEUE_QUESTION,
+          output: { status: ACTION_RESULT_STATUS.ACCEPTED },
+        },
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
+    }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
+    stamped({
+      type: "message.completed",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 1,
+        finishReason: "stop",
+        message: "The invite table is built; expiry is next.",
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
   ];
 }
 
@@ -1401,11 +1505,159 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
           blocks: [{ type: CHAT_BLOCK.MARKDOWN, text: "The invite table is mine." }],
           clientKey: "post-1",
         });
-        assert.equal(yield* host.chatDigest(admitted), undefined);
+        assert.equal(yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED), undefined);
         yield* chatOn(userId);
-        const digest = (yield* host.chatDigest(admitted)) ?? "";
+        const digest = (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED)) ?? "";
         assert.ok(digest.startsWith(CHAT_DIGEST_HEADING), digest);
         assert.ok(digest.endsWith("The invite table is mine."), digest);
+      }),
+  );
+
+  it.effect(
+    "a spoken turn opens with the call's words, how to talk the plan through, and the task as it stands, and is offered the call's own tools; a typed turn of a fresh agent opens with none of it and is offered none",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { admitted } = yield* openAgent(host);
+
+        const spoken = (yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.SPOKEN)) ?? "";
+        for (const told of [
+          "## This turn is spoken",
+          `\`${CODER_TOOL.QUEUE_QUESTION}\``,
+          "## Talking the plan through",
+          "[the developer's time]",
+          "[saved document]",
+          "Name: Teammate invitations",
+        ]) {
+          assert.ok(spoken.includes(told), told);
+        }
+        assert.deepEqual(
+          [...turnToolsOf(host.turnKind(spokenSeat(admitted.target)))],
+          [CODER_TOOL.QUEUE_QUESTION, CODER_TOOL.WITHDRAW_QUESTION, CODER_TOOL.END_CALL],
+        );
+
+        assert.equal(yield* host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED), undefined);
+        assert.deepEqual(
+          [
+            ...turnToolsOf(
+              host.turnKind(ownSeat(admitted.target.userId, admitted.target.conversationId)),
+            ),
+          ],
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "a typed turn is handed the task as it stands only once someone other than the agent saved the plan since the agent's last step, and never for the agent's own notes",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        assert.ok(agent.taskId !== null);
+        const binding = { userId, taskId: agent.taskId };
+        const typed = host.turnInstructions(admitted, BRAIN_HOST_TURN.TYPED);
+        const stepEndsNow = Effect.flatMap(Clock.currentTimeMillis, (at) =>
+          recordCodingAgentStep(userId, agent.id, { ...STEP_COUNTS, at }),
+        );
+
+        // Luke's notes taken before the agent's last step: the agent read the plan as it stood after them.
+        yield* TestClock.adjust("1 minute");
+        yield* saveNotes(binding, [added(PLAN_HEADING.CONTEXT, "Invites go by email.")]);
+        yield* TestClock.adjust("1 minute");
+        yield* stepEndsNow;
+        assert.equal(yield* typed, undefined);
+
+        // The agent's own notes after its last step: it wrote them, so there is nothing new to read.
+        yield* TestClock.adjust("1 minute");
+        const own = yield* host.editPlan(
+          admitted,
+          unparsedWire({ notes: [added(PLAN_HEADING.APPROACH, "- Invites expire after 7 days.")] }),
+          0,
+          noSandbox,
+        );
+        assert.equal(own.status, ACTION_RESULT_STATUS.ACCEPTED);
+        assert.equal(yield* typed, undefined);
+
+        // Luke's notes after the agent's last step: the next typed turn opens with the plan as it stands.
+        yield* TestClock.adjust("1 minute");
+        yield* saveNotes(binding, [
+          added(PLAN_HEADING.HARD_PARTS, "- A withdrawn invite never grants access."),
+        ]);
+        const handed = (yield* typed) ?? "";
+        assert.ok(handed.includes("saved since your last turn by someone other than you"), handed);
+        assert.ok(handed.includes("A withdrawn invite never grants access."), handed);
+        assert.ok(!handed.includes("## This turn is spoken"), handed);
+
+        // Once the agent's next step has read it, the plan is nothing new again.
+        yield* TestClock.adjust("1 minute");
+        yield* stepEndsNow;
+        assert.equal(yield* typed, undefined);
+      }),
+  );
+
+  it.effect(
+    "a spoken ask the voice dispatched into an agent's session runs as a spoken turn: the ask learns the turn it ran in, the transcript's line is the turn's own rather than a second line written from eve's message, and the question the agent queued is journaled",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, target, auth, sessionId } = yield* openAgent(host);
+        const spokenAuth: SessionAuth = {
+          current: spokenSeat(target).current,
+          initiator: auth.initiator,
+        };
+        const admitted = Result.getOrThrow(yield* host.admit(spokenAuth, sessionId));
+        // The voice's ask under its delegation's id, dispatched into the agent's session, and the
+        // transcript row the voice writer cut for it, written before eve's turn started.
+        const asks = askRecord();
+        const delegationId = `dl_${randomUUID()}`;
+        const ask = yield* asks.record({
+          userId: target.userId,
+          conversationId: target.conversationId,
+          clientId: delegationId,
+          origin: ASK_ORIGIN.SPOKEN,
+          createdAt: new Date(NOW),
+        });
+        yield* asks.dispatchOnce(target, ask.id, () =>
+          Effect.succeed({ sessionId, deliveryId: "delivery-1" }),
+        );
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const lineId = `line-${delegationId}`;
+        const line = yield* writer.upsertSpokenRow(target, {
+          role: MESSAGE_ROLE.USER,
+          clientId: lineId,
+          text: "How far along are the invites?",
+          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
+        });
+        assert.ok(Result.isSuccess(line));
+        yield* writer.attachSpokenAsk(target, { delegationId, rowIds: [lineId] });
+
+        const session = { id: sessionId, auth: spokenAuth, turn: { id: "turn_0" } };
+        const state = memoryRelayState();
+        for (const event of spokenCodingTurn("turn_0", ["delivery-1"])) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+
+        const turnId = hostTurnId(sessionId, "turn_0");
+        assert.equal((yield* turnRow(turnId))?.origin, TURN_ORIGIN.SPOKEN);
+        assert.equal((yield* asks.named(target.userId, ask.id))?.turnId, turnId);
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        assert.deepEqual(
+          page.messages.map((message) => [message.role, message.id]),
+          [
+            [MESSAGE_ROLE.USER, line.success.id],
+            [MESSAGE_ROLE.ASSISTANT, page.messages[1]?.id],
+          ],
+        );
+        const answer = page.messages[1];
+        assert.ok(
+          answer?.parts.some(
+            (part) => isToolUIPart(part) && part.type === `tool-${CODER_TOOL.QUEUE_QUESTION}`,
+          ),
+        );
       }),
   );
 });

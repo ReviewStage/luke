@@ -11,6 +11,7 @@ import { wireValidatedTool } from "../../core.js";
 import { connectionToolEntries } from "../../integrations/connection-tools.js";
 import { AGENT_ROLE } from "../agent-runtime/role.js";
 import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
+import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
@@ -27,8 +28,9 @@ import { AGENT_TOOL, toolsOf } from "../agent-runtime/tools.js";
  * reads (`chat.ts`), its reach to the other coding agents of
  * its workspace (`../coding-agent-tools.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
- * (`../page-tool.ts`), and eve's own durable `sleep`, which it waits on its
- * checks or a deploy with. The worker's own rows name
+ * (`../page-tool.ts`), eve's own durable `sleep`, which it waits on its
+ * checks or a deploy with, and, on a spoken turn alone, the call's own
+ * question queue and hang-up (`turnToolsOf`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -88,6 +90,9 @@ export const CODER_TOOL = {
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
   SHOW_IMAGE: AGENT_TOOL.SHOW_IMAGE,
   SLEEP: AGENT_TOOL.SLEEP,
+  QUEUE_QUESTION: AGENT_TOOL.QUEUE_QUESTION,
+  WITHDRAW_QUESTION: AGENT_TOOL.WITHDRAW_QUESTION,
+  END_CALL: AGENT_TOOL.END_CALL,
 } as const;
 
 /** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, `show_page`, which shows a page on it, and the four that read and answer its comments. */
@@ -116,6 +121,29 @@ const COMMENT_TASK_TOOLS = [
 export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<TaskTool> {
   if (agent.taskId === null) return new Set();
   return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...COMMENT_TASK_TOOLS]);
+}
+
+/** The call's own tools, which mean something only while someone is listening (`../../tasks/queue-question.ts`, `../../tasks/end-call.ts`). */
+const SPOKEN_TURN_TOOLS = [
+  CODER_TOOL.QUEUE_QUESTION,
+  CODER_TOOL.WITHDRAW_QUESTION,
+  CODER_TOOL.END_CALL,
+] as const;
+
+/** A tool a coding agent is offered on a spoken turn alone. */
+export type SpokenTurnTool = (typeof SPOKEN_TURN_TOOLS)[number];
+
+/**
+ * The tools a turn is offered by its kind: the call's own on a spoken turn,
+ * and none of them on a typed one or one that names no kind, where a
+ * question for the developer goes to the inbox instead. Note that `sleep`
+ * and eve's `task_wait` are offered on every turn, spoken or not, because
+ * eve offers a workflow tool on every turn (a resolver returns plain tools
+ * alone) and adds `task_wait` beside any task tool, with no way to withhold
+ * it; a spoken turn's words tell the model never to wait (`spoken.ts`).
+ */
+export function turnToolsOf(turn: BrainHostTurn | undefined): ReadonlySet<SpokenTurnTool> {
+  return turn === BRAIN_HOST_TURN.SPOKEN ? new Set(SPOKEN_TURN_TOOLS) : new Set();
 }
 
 /**

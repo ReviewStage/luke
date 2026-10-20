@@ -28,8 +28,10 @@ import {
 import { showImageRejected } from "@luke/service/agents/coder-host/show-image";
 import {
   type CODER_TOOL,
+  type SpokenTurnTool,
   type TaskTool,
   taskToolsOf,
+  turnToolsOf,
 } from "@luke/service/agents/coder-host/tool-set";
 import { agentToolRejected } from "@luke/service/agents/coding-agent-tools";
 import {
@@ -181,6 +183,18 @@ export function offeredPlanTools(
       return taskToolsOf(agent.success);
     }),
   );
+}
+
+/**
+ * The call's own tools the session is offered for the kind of turn it opens,
+ * for those tools' own files (`turnToolsOf`): all three on a spoken turn,
+ * none on a typed one. Note that it is read off the request alone, with no
+ * admission, because the tools reach nothing when they run: the journal
+ * carries their calls to the voice, and a session the host does not admit
+ * runs no model step to call them from.
+ */
+export function offeredTurnTools(auth: SessionAuth): ReadonlySet<SpokenTurnTool> {
+  return turnToolsOf(host.turnKind(auth));
 }
 
 /**

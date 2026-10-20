@@ -89,7 +89,6 @@ import {
 } from "../../testing/github-app-fake.js";
 import { integrationConnectOver, NO_WORKSPACE_LINEAR } from "../../testing/integration-connect.js";
 import { sandboxDouble } from "../../testing/repository-sandbox.js";
-import { DEPLOYMENT_PRESENCE } from "../brain-host/auth.js";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { claimRuntimeSession } from "../brain-host/conversation.js";
 import {
@@ -106,7 +105,7 @@ import { TASK_SECTION_TOOL_REFUSAL } from "../task-section-tools.js";
 import { CREATE_TASK_REFUSAL, READ_TASK_REFUSAL } from "../task-tools.js";
 import { AGENT_LIST_FILTER_REFUSAL } from "../workspace-agents.js";
 import { CODER_REFUSAL } from "./bounds.js";
-import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
+import { CODER_DEPLOYMENT_PRESENCE, CODER_DEPLOYMENT_TURNS, coderChannelInput } from "./channel.js";
 import { type AgentToolCall, type CoderHost, coderHost } from "./host.js";
 import type { CoderHostSeams } from "./production.js";
 import type { SummaryModelOf } from "./replay-summary.js";
@@ -2323,7 +2322,7 @@ function sessionEndsOf(host: CoderHost) {
   const { events } = coderChannelInput(
     async () => undefined,
     { reachesSession: async () => false, reachesConversation: async () => false },
-    { secret: undefined, admits: CODER_DEPLOYMENT_TURNS, presents: DEPLOYMENT_PRESENCE.ACCOUNT },
+    { secret: undefined, admits: CODER_DEPLOYMENT_TURNS, presents: CODER_DEPLOYMENT_PRESENCE },
     (sessionId) => database.run(host.sessionEnded(sessionId)),
   );
   const failed = events?.["session.failed"];
