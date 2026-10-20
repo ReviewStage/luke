@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { createAutomation } from "@luke/database/models/automation-store";
 import { createCodingAgent } from "@luke/database/models/coding-agent-store";
+import { createTask, readTask } from "@luke/database/models/task-store";
 import {
   type MemberSeams,
   OrganizationRefused,
@@ -1319,6 +1320,42 @@ it.effect("an owner cannot leave, and a member leaves", () =>
       assert.deepEqual(yield* membersOf(acme), [{ userId: ada, role: WORKSPACE_ROLE.OWNER }]);
     }).pipe(Effect.provide(database));
   }),
+);
+
+it.effect(
+  "a member removed, or one who leaves, lets go of the workspace's tasks assigned to them, and keeps those of every other workspace",
+  () =>
+    Effect.gen(function* () {
+      const plugin = yield* openWorkspacePlugin;
+      const { api, database } = plugin;
+      yield* Effect.gen(function* () {
+        const ada = yield* openGithubAccount("Ada Lovelace");
+        const grace = yield* openGithubAccount("Grace Hopper");
+        const alan = yield* openGithubAccount("Alan Turing");
+        const acme = yield* openTeam(api, ada, [
+          { userId: grace, role: "member" },
+          { userId: alan, role: "member" },
+        ]);
+        const initech = yield* openTeam(api, grace, [{ userId: ada, role: "member" }]);
+        const assigned = (organizationId: string, assigneeId: string) =>
+          createTask(ada, { organizationId, name: "Invites", assigneeId });
+        const gracesHere = yield* assigned(acme, grace);
+        const gracesThere = yield* assigned(initech, grace);
+        const alansHere = yield* assigned(acme, alan);
+        const assigneeOf = (taskId: string) =>
+          Effect.map(
+            readTask(ada, taskId),
+            (read) => Option.getOrUndefined(read)?.task.assignee?.userId,
+          );
+
+        yield* removing(plugin, ada, acme, grace);
+        yield* leaving(plugin, alan, acme);
+
+        assert.equal(yield* assigneeOf(gracesHere.id), undefined);
+        assert.equal(yield* assigneeOf(alansHere.id), undefined);
+        assert.equal(yield* assigneeOf(gracesThere.id), grace);
+      }).pipe(Effect.provide(database));
+    }),
 );
 
 /** The account giving a teammate a role, under its session. */

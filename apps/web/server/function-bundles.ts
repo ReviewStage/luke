@@ -294,3 +294,17 @@ export function externalsDrift(
   }
   return drift;
 }
+
+/** The bundles, by their output path, whose inputs include the module given, by its absolute path. */
+export function bundlesReaching(
+  metafile: Metafile,
+  web: string,
+  module: string,
+): ReadonlySet<string> {
+  const input = relative(web, module);
+  return new Set(
+    Object.entries(metafile.outputs)
+      .filter(([, output]) => input in output.inputs)
+      .map(([path]) => path),
+  );
+}

@@ -17,7 +17,10 @@
  * account's own first workspace, which is named for its creator; each
  * answers the members as they then stand. Nobody removes or changes
  * themselves, whose way out is leaving, or the owner.
- * `POST /api/workspaces/leave` lets anyone but an owner leave.
+ * `POST /api/workspaces/leave` lets anyone but an owner leave. A member
+ * removed, or one who leaves, lets go of every task of the workspace assigned
+ * to them, in the plugin's own delete (the `task_assignee_leaves_with_member`
+ * trigger).
  * `POST /api/workspaces/rename` lets an owner or admin rename a workspace,
  * answering it under its new name and its old slug; an account's first
  * workspace is refused, since it is named by its owner's account name.

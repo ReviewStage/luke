@@ -1,7 +1,6 @@
 import { inPinOrder } from "@luke/features/pin-order";
 import { TASK_STATUS, type TaskStatus, type TaskSummary } from "@luke/features/task-wire";
 import { taskKey } from "@luke/features/workspace-key";
-import { EXPERIMENT } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
   BADGE_TONE,
@@ -57,20 +56,19 @@ import { RelativeTime } from "../tasks/relative-time.js";
 import { TASK_STATUS_WORDS } from "../tasks/task-standing.js";
 import { useMinute } from "../tasks/task-time.js";
 import type { TasksControl } from "../tasks/use-tasks-tab.js";
-import { useExperiment } from "../use-app-state.js";
 import { readKept, writeKept } from "./folded-groups.js";
 import { sectionGlyph } from "./section-icon-picker.js";
 import { TaskStatusMark as TaskWorkMark } from "./task-card.js";
 import { TasksBoard } from "./tasks-board.js";
 
 /**
- * tasks-page.tsx -- the window's Tasks page, while the account has the inbox-first sidebar on: the listed workspace's tasks as a List or as the Board, chosen by a switch beside its title.
+ * tasks-page.tsx -- the window's Tasks page: the listed workspace's tasks as a List or as the Board, chosen by a switch beside its title.
  *
- * With the experiment on, the sidebar is the Inbox, and the task list it
- * held stands here instead, in the plan's place, where the Board stood: the
- * Board's own sidebar row opens it, named Tasks, and its way out is the
- * Board's (`EXIT_BOARD`), so Back, Escape, and the window's history go on
- * treating it as the Board's place. Which view it shows is kept on this Mac.
+ * It stands in the plan's place, opened by the sidebar's Tasks row, and its
+ * way out is `EXIT_BOARD`, so Back, Escape, and the window's history treat it
+ * as the place the Board alone once was. With the inbox-first sidebar on,
+ * the sidebar lists the Inbox and this page is where the task list stands.
+ * Which view it shows is kept on this Mac.
  *
  * The List runs the pinned tasks first, then each of the account's sections
  * while it keeps them, then the rest under their status, the work under way
@@ -167,9 +165,9 @@ export function TasksPage({
 }
 
 /** The account's sections in the listed workspace, each with its tasks' ids in its own order; none while it keeps no sections. */
-function listSections(tasks: TasksControl, shown: boolean): readonly TasksListSection[] {
+function listSections(tasks: TasksControl): readonly TasksListSection[] {
   const workspaceId = tasks.workspace?.id;
-  if (!shown || workspaceId === undefined) return [];
+  if (workspaceId === undefined) return [];
   return workspaceSections(tasks.taskSections, workspaceId).map((section) => ({
     sectionId: section.id,
     taskIds: sectionOrder(tasks.taskSections, section.id).map((entry) => entry.taskId),
@@ -274,7 +272,6 @@ function TasksList({
   const [statuses, setStatuses] = useState<readonly TaskStatus[]>(() =>
     readKept(STATUSES_KEY, storedStatuses, TASKS_LIST_SHOWN_STATUSES),
   );
-  const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
   const now = useMinute();
   const { waiting } = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   const waitingOn = new Map(waiting.map((each) => [each.taskId, each.items.length]));
@@ -285,7 +282,7 @@ function TasksList({
   ).map((task) => task.id);
   const groups = tasksListGroups(listed, {
     pinned,
-    sections: listSections(tasks, sectionsOn),
+    sections: listSections(tasks),
     statuses,
   });
   const workspaceName = tasks.workspace?.name ?? "";

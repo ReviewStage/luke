@@ -3714,8 +3714,7 @@ ul.actor-stack {
 /* The ask closing the message that asks it, once it no longer waits: a
    bordered card, its head the ask's kind and where it stands. Answered,
    the card heads the reply that answered it with no head of its own, its
-   controls as the answer left them. A replaced or withdrawn ask is its
-   head alone, a replaced one struck through. */
+   controls as the answer left them. A withdrawn ask is its head alone. */
 .inbox-ask {
   display: flex;
   min-width: 0;
@@ -3744,12 +3743,6 @@ ul.actor-stack {
   font-weight: var(--luke-weight-medium);
 }
 
-.inbox-ask[data-inbox-ask="replaced"] .inbox-ask-kind {
-  color: var(--luke-color-text-muted);
-  text-decoration: line-through;
-  text-decoration-color: var(--luke-color-text-subtle);
-}
-
 .inbox-ask-standing {
   display: inline-flex;
   min-width: 0;
@@ -3771,7 +3764,8 @@ ul.actor-stack {
 
 /* An answered ask of words alone, which draws no card, ends the agent's
    message with a small pill saying it was answered, its check in the
-   complete ink. */
+   complete ink; a replaced ask with the same pill saying so, in the muted
+   ink alone. */
 .inbox-ask-settled {
   display: inline-flex;
   max-width: 100%;
@@ -3894,8 +3888,9 @@ ul.actor-stack {
 
 /* A settled item's foot, over its box: the next item that needs the
    developer as a card of one row (`inbox-pager.tsx`), led by its agent's
-   tile, then Next in the meta voice and its title in the unread weight, cut
-   short at the row's end, and J where J reaches it. */
+   tile, then Next in the meta voice, an arrow up where it lies above, and
+   its title in the unread weight, cut short at the row's end, and K or J
+   where that key reaches it. */
 .inbox-next-dock {
   padding-bottom: var(--luke-space-12);
 }
@@ -8511,7 +8506,7 @@ button.tasks-board-card-press:focus-visible::after {
   flex: 1 1 auto;
 }
 
-/* The Tasks page (`tasks-page.tsx`), while the inbox-first sidebar is on: its
+/* The Tasks page (`tasks-page.tsx`): its
    List | Board switch stands beside its title, and the List runs its groups
    down the page, each headed as a Board's column is, its rows the page's
    own `ListRow`s led by the task's priority, key, and status. */

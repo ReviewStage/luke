@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "conversations_runner_token_hash" ON "conversations" ("runner_token_hash") WHERE "runner_token_hash" is not null;

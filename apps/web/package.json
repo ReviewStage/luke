@@ -9,7 +9,7 @@
   },
   "scripts": {
     "auth:seed": "tsx server/seed-clients.ts",
-    "build": "vite build && vite build --ssr src/entry-server.tsx --outDir dist-server && tsx scripts/prerender.ts && tsx scripts/bundle-functions.ts",
+    "build": "vite build && vite build --ssr src/entry-server.tsx --outDir dist-server && tsx scripts/prerender.ts && pnpm --filter @luke/agent-runner build && tsx scripts/bundle-functions.ts",
     "db:migrate": "tsx server/db/migrate.ts",
     "dev": "vite",
     "functions:rewrites": "tsx scripts/function-rewrites.ts --write",
