@@ -2,7 +2,11 @@
 
 import assert from "node:assert/strict";
 import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
-import { ISSUE_CALL_FAILURE, type IssueListView } from "@luke/features/issue-view";
+import {
+  ISSUE_CALL_FAILURE,
+  type IssueListView,
+  type IssuesFollowed,
+} from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
 import { LINK_PLACE, type ReadLink } from "@luke/features/luke-link";
 import type { TaskPullRequestLine, TaskSummary } from "@luke/features/task-wire";
@@ -171,6 +175,10 @@ beforeAll(async () => {
 
 /** The service's issues, as a read of the list answers them and a filing adds to them. */
 let standing: Issue[] = [];
+/** Whoever this window's follows are pushed to, as the bridge hands them on; none before a page follows anything. */
+let pushed: ((changed: IssuesFollowed) => void) | undefined;
+/** Every follow and let-go the window asked for, in order. */
+let follows: [string, unknown][] = [];
 /** How the next reads of the list answer before the service's own, in order. */
 let lists: IssueListView[] = [];
 /** Every workspace whose list was read, in order. */
@@ -213,6 +221,8 @@ beforeEach(() => {
   installScrollIntoView();
   window.localStorage.clear();
   standing = [];
+  pushed = undefined;
+  follows = [];
   lists = [];
   listed = [];
   creates = [];
@@ -236,7 +246,17 @@ beforeEach(() => {
   bundles = landed;
   fakeAppPlatform({ ...QUIET_PANEL, ...copyingInto(copied) });
   fakeAppBridge({
-    act: (_request: Act) => {
+    onIssues: (listener: (changed: IssuesFollowed) => void) => {
+      pushed = listener;
+      return () => {
+        if (pushed === listener) pushed = undefined;
+      };
+    },
+    act: (request: Act) => {
+      if (request.kind === ACT_KIND.ISSUES_FOLLOW || request.kind === ACT_KIND.ISSUES_UNFOLLOW) {
+        follows.push([request.kind, request.payload]);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      }
       return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not in this test." });
     },
   });
@@ -903,6 +923,52 @@ test("a read that did not land is said with a retry, which asks again and draws 
 
   assert.deepEqual(listed, [WORKSPACE.id, WORKSPACE.id]);
   assert.deepEqual(groups(page), [["Backlog1", ["ACME-1 Issue 1"]]]);
+});
+
+test("the list is followed while the page stands and drawn as the host pushes it, with nothing read again, and let go as the page closes", async () => {
+  standing = [issue(1)];
+  const page = mount();
+  await settle();
+  showList();
+
+  act(() =>
+    pushed?.({
+      workspaceId: WORKSPACE.id,
+      view: { issues: [issue(2, { title: "Filed by a teammate" }), issue(1)] },
+    }),
+  );
+  await settle();
+  act(() =>
+    pushed?.({ workspaceId: WORKSPACE.id, view: { failure: ISSUE_CALL_FAILURE.UNANSWERED } }),
+  );
+  await settle();
+  const drawn = groups(page);
+  act(() => root?.unmount());
+  root = undefined;
+
+  assert.deepEqual(listed, [WORKSPACE.id]);
+  assert.deepEqual(drawn, [["Backlog2", ["ACME-2 Filed by a teammate", "ACME-1 Issue 1"]]]);
+  assert.deepEqual(follows, [
+    [ACT_KIND.ISSUES_FOLLOW, { workspaceId: WORKSPACE.id }],
+    [ACT_KIND.ISSUES_UNFOLLOW, { workspaceId: WORKSPACE.id }],
+  ]);
+});
+
+test("an issue's page draws a teammate's change the followed list carries", async () => {
+  standing = [issue(1, { title: "Fix login" })];
+  const page = await openIssue(issue(1).id);
+
+  act(() =>
+    pushed?.({
+      workspaceId: WORKSPACE.id,
+      view: {
+        issues: [issue(1, { title: "Fix login on Safari", updatedAt: issue(1).updatedAt + 1 })],
+      },
+    }),
+  );
+  await settle();
+
+  assert.equal(titleOf(page), "Fix login on Safari");
 });
 
 test("a title typed and not yet filed is dropped once another workspace is listed, so it is never filed there", async () => {

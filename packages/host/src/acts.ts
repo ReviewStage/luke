@@ -43,6 +43,7 @@ import {
   feedbackSubmission,
 } from "@luke/features/feedback";
 import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
+import { issueFollowSchema } from "@luke/features/issue-view";
 import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
@@ -179,6 +180,13 @@ export const ACT_KIND = {
   TASKS_COMMENTS: "tasks.comments",
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
+  /**
+   * A workspace's standing issues, followed by the window that asks and let
+   * go by it: what they hold is pushed to that window alone on `app:issues`,
+   * each time they move, until the window lets them go or its page is gone.
+   */
+  ISSUES_FOLLOW: "issues.follow",
+  ISSUES_UNFOLLOW: "issues.unfollow",
   /**
    * The task's inbox of what its coding agents need of the developer: read
    * past a cursor (held open by the service while nothing changed), and one
@@ -578,6 +586,16 @@ export const ACT = {
       isReadable(codingAgentMessagesAnswerViewSchema),
     ),
     refusal: "Could not read that task's conversation on this system.",
+  },
+  [ACT_KIND.ISSUES_FOLLOW]: {
+    payload: actSchema(issueFollowSchema),
+    result: answersNothing,
+    refusal: "Could not follow the issues on this system.",
+  },
+  [ACT_KIND.ISSUES_UNFOLLOW]: {
+    payload: actSchema(issueFollowSchema),
+    result: answersNothing,
+    refusal: "Could not let the issues go on this system.",
   },
   [ACT_KIND.CODING_AGENTS_INBOX]: {
     payload: actSchema(codingAgentInboxParamsSchema),

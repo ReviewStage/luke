@@ -1,13 +1,26 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fixedBearer, HostedIssueClient } from "@luke/features";
-import { ISSUE_CALL_FAILURE } from "@luke/features/issue-view";
+import type { IssuesLiveAnswer } from "@luke/features/issue-live";
+import {
+  ISSUE_CALL_FAILURE,
+  type IssuesFollowed,
+  issuesFollowedSchema,
+} from "@luke/features/issue-view";
 import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
-import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@luke/gateway";
+import {
+  GATEWAY_CLIENT_ROLE,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethod,
+} from "@luke/gateway";
 import type { WireRecord } from "@luke/wire";
+import { readEither } from "@luke/wire/effect";
 import { jsonResponse, noNetwork, recordedRequest, recordingHttpClient } from "@luke/wire/testing";
-import { Effect } from "effect";
-import { composeIssues, type IssuesClient } from "./compose-issues.js";
+import { Duration, Effect, Result } from "effect";
+import { TestClock } from "effect/testing";
+import { composeIssues, type IssuesClient, type IssuesDependencies } from "./compose-issues.js";
+import type { LiveClient } from "./live-follow.js";
 
 /**
  * The issues concern: behind a closed gate nothing is asked of the service,
@@ -37,7 +50,7 @@ const ISSUE = {
 } as const;
 
 /** The service as a script that writes down every ask it hears, as the ask runs. */
-function fakeService() {
+function fakeService(options: { listLive?: IssuesLiveAnswer } = {}) {
   const asked: unknown[] = [];
   const answer =
     <A>(name: string, value: A) =>
@@ -51,24 +64,51 @@ function fakeService() {
     read: answer("read", { failure: ISSUE_CALL_FAILURE.NOT_FOUND }),
     create: answer("create", { issue: ISSUE }),
     change: answer("change", { issue: ISSUE }),
+    listLive: answer("listLive", options.listLive ?? { failure: ISSUE_CALL_FAILURE.UNANSWERED }),
   };
   return { client, asked };
 }
 
-function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
+/** The host's clock, which renewals are timed by. */
+const LIVE_NOW = 1_800_000_000_000;
+
+/** A kernel whose events of the followed issues are written down. */
+function kernelOf(sendsNetwork: boolean, followed: IssuesFollowed[]): IssuesDependencies["kernel"] {
+  return {
+    runMode: { sendsNetwork },
+    now: () => LIVE_NOW,
+    emit: (kind, payload) => {
+      if (kind !== GATEWAY_EVENT.ISSUES_CHANGED) return;
+      const read = readEither(issuesFollowedSchema)(payload);
+      assert.ok(Result.isSuccess(read), "the event carries what was followed");
+      followed.push(read.success);
+    },
+  };
+}
+
+function subject(
+  options: {
+    signedIn?: boolean;
+    sendsNetwork?: boolean;
+    listLive?: IssuesLiveAnswer;
+    openLive?: (url: string) => LiveClient;
+  } = {},
+) {
   return Effect.gen(function* () {
-    const service = fakeService();
+    const service = fakeService(options);
+    const followed: IssuesFollowed[] = [];
     const composer = yield* composeIssues({
-      kernel: { runMode: { sendsNetwork: options.sendsNetwork ?? true } },
+      kernel: kernelOf(options.sendsNetwork ?? true, followed),
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
+      ...(options.openLive === undefined ? undefined : { openLive: options.openLive }),
     }).pipe(Effect.provide(noNetwork));
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
       return handler(params, context);
     };
-    return { call, asked: service.asked };
+    return { call, asked: service.asked, followed };
   });
 }
 
@@ -137,7 +177,7 @@ it.effect("the service is asked over the HTTP client the host was handed", () =>
   Effect.gen(function* () {
     const http = recordingHttpClient(() => jsonResponse({ issues: [ISSUE] }));
     const composer = yield* composeIssues({
-      kernel: { runMode: { sendsNetwork: true } },
+      kernel: kernelOf(true, []),
       account: { capabilitiesActive: () => true },
       client: new HostedIssueClient({
         serviceBaseUrl: "https://tryluke.test",
@@ -153,5 +193,131 @@ it.effect("the service is asked over the HTTP client the host was handed", () =>
     const sent = recordedRequest(http.requests);
     assert.equal(sent.authorization, "Bearer bearer-1");
     assert.ok(sent.url.startsWith("https://tryluke.test/"));
+  }),
+);
+
+/** Lets what was delivered or read reach the events, through the fibers that carry it. */
+const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
+
+/** Realtime as a script: each subscription by its capability, and a way to deliver its rows. */
+function fakeRealtime() {
+  const listeners = new Map<
+    string,
+    (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
+  >();
+  const open = (): LiveClient => ({
+    subscribe: (query) => ({
+      onChange: (listener) => {
+        listeners.set(query.capability, listener);
+        return () => listeners.delete(query.capability);
+      },
+      renew: () => Promise.resolve(),
+      unsubscribe: () => void listeners.delete(query.capability),
+    }),
+    close: () => undefined,
+  });
+  const deliver = (capability: string, data: readonly unknown[]) => {
+    const listener = listeners.get(capability);
+    assert.ok(listener, `no subscription to ${capability}`);
+    listener({ status: "live", data });
+  };
+  return { open, deliver, subscribed: () => [...listeners.keys()] };
+}
+
+/** A standing issue as its live row delivers it. */
+const rowOf = (number: number, updatedAt: number) => ({
+  id: `3f0e6f5c-7d1a-4f6e-9a55-1b2c3d4e5f6${number}`,
+  workspaceId: WORKSPACE_ID,
+  number,
+  title: `Issue ${number}`,
+  description: "",
+  status: ISSUE_STATUS.TODO,
+  priority: ISSUE_PRIORITY.HIGH,
+  creatorId: number === 1 ? "user-1" : null,
+  creatorName: number === 1 ? "Dana" : null,
+  createdAt: 1,
+  updatedAt,
+});
+
+it.effect(
+  "a followed workspace's issues are pushed from their live rows, the most recently changed first, with no read on a clock, and nothing once let go",
+  () =>
+    Effect.gen(function* () {
+      const realtime = fakeRealtime();
+      const listLive: IssuesLiveAnswer = {
+        url: "wss://realtime.example/v1",
+        queries: {
+          issues: {
+            capability: "issues",
+            queryFingerprint: "issues",
+            expiresAt: LIVE_NOW + 60_000,
+          },
+        },
+      };
+      const { call, asked, followed } = yield* subject({ listLive, openLive: realtime.open });
+      const scope = { workspaceId: WORKSPACE_ID };
+
+      yield* call(GATEWAY_METHOD.ISSUES_FOLLOW, scope);
+      yield* call(GATEWAY_METHOD.ISSUES_FOLLOW, scope);
+      yield* settled;
+      realtime.deliver("issues", [rowOf(1, 10), rowOf(2, 20)]);
+      yield* settled;
+
+      assert.deepEqual(
+        followed.map(({ workspaceId, view }) => [
+          workspaceId,
+          "issues" in view ? view.issues.map((each) => [each.number, each.creator]) : view,
+        ]),
+        [
+          [
+            WORKSPACE_ID,
+            [
+              [2, null],
+              [1, { userId: "user-1", name: "Dana" }],
+            ],
+          ],
+        ],
+      );
+      assert.deepEqual(asked, [["listLive", WORKSPACE_ID]]);
+
+      yield* call(GATEWAY_METHOD.ISSUES_UNFOLLOW, scope);
+      yield* settled;
+      assert.deepEqual(realtime.subscribed(), []);
+    }),
+);
+
+it.effect(
+  "a workspace the service seals nothing for is told its failure and asked for again after a pause, and nothing once let go",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked, followed } = yield* subject();
+      const scope = { workspaceId: WORKSPACE_ID };
+      const sealsAsked = () =>
+        asked.filter((each) => Array.isArray(each) && each[0] === "listLive");
+
+      yield* call(GATEWAY_METHOD.ISSUES_FOLLOW, scope);
+      yield* settled;
+      assert.deepEqual(followed, [
+        { workspaceId: WORKSPACE_ID, view: { failure: ISSUE_CALL_FAILURE.UNANSWERED } },
+      ]);
+      yield* TestClock.adjust(Duration.seconds(5));
+      yield* settled;
+      assert.equal(sealsAsked().length, 2);
+
+      yield* call(GATEWAY_METHOD.ISSUES_UNFOLLOW, scope);
+      yield* TestClock.adjust(Duration.minutes(3));
+      assert.equal(sealsAsked().length, 2);
+    }),
+);
+
+it.effect("behind a closed account gate nothing is followed", () =>
+  Effect.gen(function* () {
+    const { call, asked, followed } = yield* subject({ signedIn: false });
+
+    yield* call(GATEWAY_METHOD.ISSUES_FOLLOW, { workspaceId: WORKSPACE_ID });
+    yield* settled;
+
+    assert.deepEqual(asked, []);
+    assert.deepEqual(followed, []);
   }),
 );

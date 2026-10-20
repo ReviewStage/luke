@@ -323,6 +323,8 @@ const EFFECT_MODULE_SCHEMAS = {
     issueChangeParamsSchema: issueView.issueChangeParamsSchema,
     issueListViewSchema: issueView.issueListViewSchema,
     issueViewSchema: issueView.issueViewSchema,
+    issueFollowSchema: issueView.issueFollowSchema,
+    issuesFollowedSchema: issueView.issuesFollowedSchema,
   } satisfies RecordedEffectJsonSchemas<typeof issueView>,
   "issue-wire": {
     issueStatusSchema: issueWire.issueStatusSchema,

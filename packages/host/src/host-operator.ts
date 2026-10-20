@@ -141,11 +141,14 @@ import {
   ISSUE_CALL_FAILURE,
   type IssueChangeParams,
   type IssueCreateParams,
+  type IssueFollow,
   type IssueIdParams,
   type IssueListParams,
   type IssueListView,
+  type IssuesFollowed,
   type IssueView,
   issueListViewSchema,
+  issuesFollowedSchema,
   issueViewSchema,
 } from "@luke/features/issue-view";
 import {
@@ -576,6 +579,12 @@ export interface HostOperator {
   issueCreate(params: IssueCreateParams): Effect.Effect<IssueView>;
   /** One issue changed; the issue as it then stands, or why it is unchanged. */
   issueChange(params: IssueChangeParams): Effect.Effect<IssueView>;
+  /** A workspace's standing issues followed from now until let go, heard through `onIssuesChanged`. */
+  issuesFollow(scope: IssueFollow): Effect.Effect<void>;
+  /** A followed workspace's issues let go: nothing more is heard of them until they are followed again. */
+  issuesUnfollow(scope: IssueFollow): Effect.Effect<void>;
+  /** A followed workspace's standing issues as they now stand, each time they move while followed, for as long as the subscription stands. */
+  onIssuesChanged(listener: (followed: IssuesFollowed) => void): () => void;
   /** One workspace's Factory world as it stands now, null where it has no repository to draw; or why there is none. */
   factoryWorld(params: FactoryWorldParams): Effect.Effect<FactoryWorldView>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
@@ -1694,6 +1703,17 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(client.call(GATEWAY_METHOD.ISSUES_CREATE, params), issueAnswer(issueViewSchema)),
     issueChange: (params) =>
       Effect.map(client.call(GATEWAY_METHOD.ISSUES_CHANGE, params), issueAnswer(issueViewSchema)),
+    issuesFollow: (scope) => fire(client.call(GATEWAY_METHOD.ISSUES_FOLLOW, scope)),
+    issuesUnfollow: (scope) => fire(client.call(GATEWAY_METHOD.ISSUES_UNFOLLOW, scope)),
+    onIssuesChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.ISSUES_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(issuesFollowedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
     factoryWorld: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.FACTORY_WORLD, { workspaceId: params.workspaceId }),

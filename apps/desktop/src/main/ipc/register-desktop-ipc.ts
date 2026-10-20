@@ -30,6 +30,7 @@ import { createBrowserViews } from "../window/browser-views";
 import { HOTKEY_RANK } from "../window/hotkey-registrar";
 import { avatarProcedures, avatarReports } from "./avatar-acts";
 import { browserActRows } from "./browser-acts";
+import { issueFollowActRows } from "./issue-follow-acts";
 import { macTerminalProcedures } from "./mac-terminal-acts";
 import { clientSettingSideEffects } from "./settings-side-effects";
 import { terminalProcedures, whenPageGone } from "./terminal-acts";
@@ -116,6 +117,14 @@ export function registerDesktopIpc(services: DesktopServices): void {
       views: browserViews,
       experimentOn: () =>
         experimentOn(state.snapshot().settings?.experiments ?? NO_EXPERIMENTS, EXPERIMENT.BROWSER),
+    }),
+    ...issueFollowActRows({
+      host: operator.host,
+      deliver: (sender, changed) => {
+        if (!sender.isDestroyed()) sender.send(channels.onIssues, changed);
+      },
+      whenGone: whenPageGone,
+      run,
     }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),

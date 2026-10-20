@@ -3,25 +3,27 @@ import {
   type IssueCallFailure,
   type IssueChangeParams,
   type IssueCreateParams,
+  type IssueFollow,
   type IssueView,
 } from "@luke/features/issue-view";
 import type { Issue } from "@luke/features/issue-wire";
 import { ACT_KIND } from "@luke/host/acts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAct } from "../act.js";
-import { useMinute } from "../tasks/task-time.js";
+import { appBridge } from "../app-bridge.js";
 
 /**
- * use-issues.ts -- the Issues pages' list and one issue: one workspace's issues, read when the pages open and each minute after, one issue read as its page opens, and the writes that file and change them.
+ * use-issues.ts -- the Issues pages' list and one issue: one workspace's issues, read when the pages open and followed while they stand, one issue read as its page opens, and the writes that file and change them.
  *
- * Nothing is held past the page. The list is read again each minute it
- * stands, so what a teammate filed or moved shows without a press. A write
- * answers the issue as the service then holds it, which takes its place in
- * the list at once, or leaves it where it was archived, and the list is read again once the write settles, so
- * what changed elsewhere while it was out is not lost to it. A refresh that
- * fails keeps the list it would have replaced; only a first read that fails
- * is said as one. A failure is kept to be said rather than thrown, since
- * every caller does the same with one: says it, and offers to try again.
+ * Nothing is held past the page. The list is followed while it stands: the
+ * host pushes it each time it moves (over Neon Realtime), so what a teammate
+ * filed or moved shows without a press, and nothing is read on a clock here.
+ * A write answers the issue as the service then holds it, which takes its
+ * place in the list at once, or leaves it where it was archived; the
+ * followed list carries whatever else moved. A push or a read that fails
+ * keeps the list it would have replaced; only a first read that fails is
+ * said as one. A failure is kept to be said rather than thrown, since every
+ * caller does the same with one: says it, and offers to try again.
  */
 
 /** What a change names: any of an issue's fields, and whether it is archived. */
@@ -58,10 +60,51 @@ interface HeldRead {
   readonly read: IssuesRead;
 }
 
+/** The list taken over the one held: a failure keeps a list of the same workspace already drawn. */
+function taken(
+  was: HeldRead | undefined,
+  workspaceId: string,
+  read: IssuesRead,
+): HeldRead | undefined {
+  return read !== undefined &&
+    "failure" in read &&
+    was?.workspaceId === workspaceId &&
+    was.read !== undefined &&
+    "issues" in was.read
+    ? was
+    : { workspaceId, read };
+}
+
+/**
+ * The workspace's issues followed for as long as the page stands: the host
+ * is asked to follow them and to let them go when it stops, and each push
+ * of them is handed to `take`.
+ */
+function useFollowedIssues(
+  workspaceId: string | undefined,
+  take: (read: IssuesRead, workspaceId: string) => void,
+): void {
+  const { act } = useAct();
+  // Note that the newest `take` is called, so a page need not hold it still for the follow to stand.
+  const taker = useRef(take);
+  taker.current = take;
+  useEffect(() => {
+    if (workspaceId === undefined) return;
+    const followed: IssueFollow = { workspaceId };
+    const unsubscribe = appBridge().onIssues((changed) => {
+      if (changed.workspaceId === workspaceId) taker.current(changed.view, workspaceId);
+    });
+    act(ACT_KIND.ISSUES_FOLLOW, followed).catch(() => undefined);
+    return () => {
+      unsubscribe();
+      act(ACT_KIND.ISSUES_UNFOLLOW, followed).catch(() => undefined);
+    };
+  }, [act, workspaceId]);
+}
+
 /** One workspace's issues, none asked for while no workspace is listed, with the write that files one. */
 export function useIssues(workspaceId: string | undefined) {
   const { act } = useAct();
-  const now = useMinute();
   const [held, setHeld] = useState<HeldRead | undefined>(undefined);
   // Note that every read and every write moves the generation on, so only
   // the newest read is taken: one asked before a write, or for another
@@ -71,28 +114,17 @@ export function useIssues(workspaceId: string | undefined) {
     generation.current += 1;
     if (workspaceId === undefined) return;
     const asked = generation.current;
-    const taken = (read: IssuesRead) => {
-      if (asked !== generation.current) return;
-      setHeld((was) =>
-        read !== undefined &&
-        "failure" in read &&
-        was?.workspaceId === workspaceId &&
-        was.read !== undefined &&
-        "issues" in was.read
-          ? was
-          : { workspaceId, read },
-      );
+    const answered = (read: IssuesRead) => {
+      if (asked === generation.current) setHeld((was) => taken(was, workspaceId, read));
     };
-    act(ACT_KIND.ISSUES_LIST, { workspaceId }).then(taken, () => taken(UNANSWERED));
+    act(ACT_KIND.ISSUES_LIST, { workspaceId }).then(answered, () => answered(UNANSWERED));
   }, [act, workspaceId]);
-  // Note that a write settles by reading the workspace listed then, through the newest reload.
-  const reloadNow = useRef(reload);
-  reloadNow.current = reload;
-  // Note that the minute is read so the list is read again each minute the page stands.
-  useEffect(() => {
-    void now;
-    reload();
-  }, [reload, now]);
+  useEffect(reload, [reload]);
+  // Note that a list the host pushed is the newest word of it, so it is taken whatever read is out.
+  useFollowedIssues(workspaceId, (read, listed) => {
+    generation.current += 1;
+    setHeld((was) => taken(was, listed, read));
+  });
   /** A write's answer taken into the list of the workspace it is of, in its place, and into no other's. */
   const landIssue = useCallback((answer: IssueView) => {
     if (!("issue" in answer)) return;
@@ -103,13 +135,12 @@ export function useIssues(workspaceId: string | undefined) {
         : was,
     );
   }, []);
-  /** One write out: its answer landed in the list, and the list read again once it settles. */
+  /** One write out: its answer landed in the list, which the followed list then carries on from. */
   const written = useCallback(
     (asked: Promise<IssueView>): Promise<IssueView> => {
       generation.current += 1;
       const settled = (answer: IssueView): IssueView => {
         landIssue(answer);
-        reloadNow.current();
         return answer;
       };
       return asked.then(settled, () => settled(UNANSWERED));
@@ -131,7 +162,8 @@ export function useIssues(workspaceId: string | undefined) {
 /**
  * One issue, read once as its page opens, and its change: sent through the
  * list's own, so the list takes the answer too, and the answer drawn here
- * in its place where the service kept it.
+ * in its place where the service kept it. Its page draws the followed
+ * list's copy where that is newer, which is what keeps it live.
  */
 export function useIssue(
   issueId: string,

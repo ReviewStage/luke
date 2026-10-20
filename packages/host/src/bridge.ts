@@ -15,6 +15,7 @@ import {
   isBrowserKey,
   isBrowserPage,
 } from "@luke/features/browser-acts";
+import { type IssuesFollowed, issuesFollowedSchema } from "@luke/features/issue-view";
 import { isLinkPlace, type ReadLink } from "@luke/features/luke-link";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@luke/gateway";
 import { type AgentWireTrace, isAgentWireTrace } from "@luke/gateway/devtrace";
@@ -219,6 +220,21 @@ export const BRIDGE = {
     channel: "app:lifecycle",
     args: noArgs,
     result: result<string>(isWireString),
+  }),
+  /**
+   * A workspace's standing issues that this window follows, as they now
+   * stand: sent to the windows that follow them alone, each time they move
+   * and once as a window starts following ones already standing, rather
+   * than as a slice of the document, which reaches every window on every
+   * change.
+   */
+  onIssues: entry({
+    kind: "subscribe",
+    channel: "app:issues",
+    args: noArgs,
+    result: result<IssuesFollowed>((value) =>
+      Result.isSuccess(readEither(issuesFollowedSchema, { excess: EXCESS_KEYS.DROP })(value)),
+    ),
   }),
   /** A command chosen from the menu bar, for the focused window to run as its shortcut would. */
   onMenuCommand: entry({

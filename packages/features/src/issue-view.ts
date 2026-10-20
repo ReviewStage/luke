@@ -68,3 +68,19 @@ export type IssueListView = typeof issueListViewSchema.Type;
 export const issueViewSchema = EffectSchema.Union([issueAnswerSchema, failed]);
 
 export type IssueView = typeof issueViewSchema.Type;
+
+/** A workspace's standing issues, followed by a window while it draws them. */
+export const issueFollowSchema = EffectSchema.Struct({ workspaceId: workspaceIdSchema });
+
+export type IssueFollow = typeof issueFollowSchema.Type;
+
+/**
+ * A followed workspace's standing issues as they now stand, pushed to the
+ * windows that follow it each time they move, or why there are none.
+ */
+export const issuesFollowedSchema = EffectSchema.Struct({
+  workspaceId: workspaceIdSchema,
+  view: issueListViewSchema,
+});
+
+export type IssuesFollowed = typeof issuesFollowedSchema.Type;

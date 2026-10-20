@@ -581,7 +581,10 @@ function IssuePage({
     issues.read !== undefined && "issues" in issues.read
       ? issues.read.issues.find((each) => each.id === issueId)
       : undefined;
-  const issue = read !== undefined && "issue" in read ? read.issue : listed;
+  const own = read !== undefined && "issue" in read ? read.issue : undefined;
+  // Note that the followed list carries a teammate's change live, so the issue drawn is the newer of the two.
+  const issue =
+    listed !== undefined && (own === undefined || listed.updatedAt >= own.updatedAt) ? listed : own;
   const onChange = (asked: IssueChange) => said(asked, change(asked));
   // Note that an issue of a workspace other than the one listed is no issue of this page, as a link to one is not.
   const listedElsewhere =

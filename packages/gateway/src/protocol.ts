@@ -165,6 +165,14 @@ export const GATEWAY_METHOD = {
   ISSUES_READ: "issues.read",
   ISSUES_CREATE: "issues.create",
   ISSUES_CHANGE: "issues.change",
+  /**
+   * A workspace's standing issues, followed from now until let go, over Neon
+   * Realtime. What they hold is heard as `ISSUES_CHANGED` events, never
+   * answered; following what is already followed does nothing.
+   */
+  ISSUES_FOLLOW: "issues.follow",
+  /** A followed workspace's issues let go: no more `ISSUES_CHANGED` events of it until it is followed again. */
+  ISSUES_UNFOLLOW: "issues.unfollow",
   /** A workspace's Factory world, read whole as it stands now. */
   FACTORY_WORLD: "factory.world",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
@@ -573,6 +581,8 @@ export const GATEWAY_EVENT = {
   TERMINAL_STATE: "terminal.state",
   /** What waits on the developer across the account, whole, each time it changes while it is followed. */
   ACCOUNT_INBOX_CHANGED: "accountInbox.changed",
+  /** A followed workspace's standing issues as they now stand, each time they move while followed. */
+  ISSUES_CHANGED: "issues.changed",
 } as const;
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];

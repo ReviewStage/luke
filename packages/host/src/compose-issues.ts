@@ -5,34 +5,52 @@ import {
   type IssueView,
   issueChangeParamsSchema,
   issueCreateParamsSchema,
+  issueFollowSchema,
   issueIdParamsSchema,
   issueListParamsSchema,
 } from "@luke/features/issue-view";
-import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@luke/gateway";
+import {
+  carried,
+  GATEWAY_EVENT,
+  GATEWAY_METHOD,
+  type GatewayMethodTable,
+  invalid,
+} from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Result, type Schema, type Scope } from "effect";
+import { Effect, FiberMap, Result, type Schema, type Scope } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import type { HostKernel } from "./host-kernel.js";
+import { followIssues } from "./issue-follow.js";
+import { type LiveClient, openRealtimeClient } from "./live-follow.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
  * compose-issues.ts -- a workspace's issues, asked of the service on the window's behalf: listed, read, filed, and changed.
  *
- * Nothing is held here. The window holds the issues it draws and asks when
- * its page opens and after each write, and every ask is one call of the
- * service answered whole. Behind a closed account gate, or on a run that
- * sends nothing, every ask answers unanswered.
+ * Nothing is held here but the follows. The window holds the issues it
+ * draws and asks when its page opens, and every ask is one call of the
+ * service answered whole. The list it draws it follows while drawn
+ * (`issue-follow.ts`): over Neon Realtime, each change emitted as
+ * `ISSUES_CHANGED`; following what is already followed does nothing, and
+ * letting it go ends it. Behind a closed account gate, or on a run that
+ * sends nothing, every ask answers unanswered and nothing is followed.
  */
 
 /** The service's side of the issues, as this concern asks it. */
-export type IssuesClient = Pick<HostedIssueClient, "list" | "read" | "create" | "change">;
+export type IssuesClient = Pick<
+  HostedIssueClient,
+  "list" | "read" | "create" | "change" | "listLive"
+>;
 
 export interface IssuesDependencies {
-  kernel: { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: IssuesClient;
+  /** Realtime's client for the follows' subscriptions; Realtime's own where none is handed in. */
+  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
 }
 
 export type IssuesComposer = Composer;
@@ -43,12 +61,17 @@ export function composeIssues(
   dependencies: IssuesDependencies,
 ): Effect.Effect<IssuesComposer, never, Scope.Scope | HttpClient.HttpClient> {
   return Effect.gen(function* () {
-    return composed(dependencies, yield* HttpClient.HttpClient);
+    const http = yield* HttpClient.HttpClient;
+    return composed(dependencies, http, yield* FiberMap.make<string>());
   });
 }
 
-/** The composer's one table, built from its seams; nothing here starts anything. */
-function composed(dependencies: IssuesDependencies, http: HttpClient.HttpClient): IssuesComposer {
+/** The composer's one table, built from its seams; nothing here starts anything but what a window follows. */
+function composed(
+  dependencies: IssuesDependencies,
+  http: HttpClient.HttpClient,
+  follows: FiberMap.FiberMap<string>,
+): IssuesComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
@@ -96,6 +119,34 @@ function composed(dependencies: IssuesDependencies, http: HttpClient.HttpClient)
           "a change names an issue and what changes",
         );
         return carried<IssueView>(yield* asked(client.change(change)));
+      }),
+    [GATEWAY_METHOD.ISSUES_FOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* read(
+          issueFollowSchema,
+          params,
+          "a follow names a workspace",
+        );
+        if (!gate()) return {};
+        const follow = followIssues({
+          live: () => asked(client.listLive(workspaceId)),
+          openLive: dependencies.openLive ?? openRealtimeClient,
+          now: kernel.now,
+          publish: (view) =>
+            kernel.emit(GATEWAY_EVENT.ISSUES_CHANGED, carried({ workspaceId, view })),
+        });
+        yield* FiberMap.run(follows, workspaceId, follow, { onlyIfMissing: true });
+        return {};
+      }),
+    [GATEWAY_METHOD.ISSUES_UNFOLLOW]: (params) =>
+      Effect.gen(function* () {
+        const { workspaceId } = yield* read(
+          issueFollowSchema,
+          params,
+          "a follow names a workspace",
+        );
+        yield* FiberMap.remove(follows, workspaceId);
+        return {};
       }),
   };
 
