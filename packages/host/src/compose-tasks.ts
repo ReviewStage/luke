@@ -505,9 +505,21 @@ export interface TasksComposer extends Composer {
   callEnded: (taskId: string) => void;
 }
 
-/** How long after a board seal the service did not answer, or a board follow that stopped, it is sealed again the first time, each wait after doubling up to `BOARD_RESEAL_MAX`. */
-const BOARD_RESEAL = Duration.seconds(2);
-const BOARD_RESEAL_MAX = Duration.minutes(1);
+/**
+ * How long the board's follow waits before sealing again after a seal the
+ * service did not answer, or a follow that stopped: the first wait, doubling
+ * on each that fails again, up to the longest.
+ */
+const BOARD_RESEAL = { FIRST: Duration.seconds(2), LONGEST: Duration.minutes(1) } as const;
+
+const BOARD_BACKOFF = Schedule.exponential(BOARD_RESEAL.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, BOARD_RESEAL.LONGEST)),
+  ),
+);
+
+/** Why a board follow is not sealed again: the task is no longer the open one, or the gate closed. */
+const BOARD_FOLLOW_ENDED = "ended";
 
 /**
  * The panel's tasks as one concern. The view is told to every client whole
@@ -1094,10 +1106,10 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
   /**
    * Follows `taskId`'s board live while it is the open task: the board read
    * again once its mark moves, and on each seal's first delivery. A seal
-   * the service did not answer, or a follow that stops, is sealed again
-   * after a wait that doubles from `BOARD_RESEAL` up to `BOARD_RESEAL_MAX`,
-   * and starts over once a follow delivers; a task the service no longer
-   * holds, or a gate that closed, ends it.
+   * the service did not answer, or a follow that stops before it delivered,
+   * is sealed again on `BOARD_BACKOFF`; a follow that delivered and then
+   * stopped is sealed again after `BOARD_RESEAL.FIRST`, its backoff started
+   * over. A task the service no longer holds, or a gate that closed, ends it.
    */
   function followBoard(taskId: string) {
     const following = () => gate() && view.activeTaskId === taskId;
@@ -1105,33 +1117,44 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       Effect.map(served(client.boardLive(taskId)), (sealed) =>
         sealed.ok ? sealed.answer : { failure: sealed.failure },
       );
-    return Effect.gen(function* () {
-      let wait = BOARD_RESEAL;
-      while (following()) {
-        const sealed = yield* seal();
-        if ("failure" in sealed) {
-          if (sealed.failure === TASK_CALL_FAILURE.NOT_FOUND) return;
-        } else {
-          const moves = boardMoves(
-            {
-              seal: () =>
-                following() ? seal() : Effect.succeed({ failure: TASK_CALL_FAILURE.UNANSWERED }),
-              openLive: dependencies.openLive ?? openRealtimeClient,
-              now: kernel.now,
-            },
-            sealed,
-          );
-          yield* Stream.runForEach(moves, () =>
-            Effect.sync(() => {
-              wait = BOARD_RESEAL;
-              if (view.activeTaskId === taskId) Queue.offerUnsafe(boardReads, taskId);
-            }),
-          ).pipe(Effect.ignore);
-        }
-        yield* Effect.sleep(wait);
-        wait = Duration.min(Duration.times(wait, 2), BOARD_RESEAL_MAX);
-      }
+    /** One seal followed until it stops: whether it delivered, or why it never did. */
+    const attempt = Effect.gen(function* () {
+      if (!following()) return yield* Effect.fail(BOARD_FOLLOW_ENDED);
+      const sealed = yield* seal();
+      if ("failure" in sealed) return yield* Effect.fail(sealed.failure);
+      let delivered = false;
+      const moves = boardMoves(
+        {
+          seal: () =>
+            following() ? seal() : Effect.succeed({ failure: TASK_CALL_FAILURE.UNANSWERED }),
+          openLive: dependencies.openLive ?? openRealtimeClient,
+          now: kernel.now,
+        },
+        sealed,
+      );
+      yield* Stream.runForEach(moves, () =>
+        Effect.sync(() => {
+          delivered = true;
+          if (view.activeTaskId === taskId) Queue.offerUnsafe(boardReads, taskId);
+        }),
+      ).pipe(Effect.ignore);
+      if (!delivered) return yield* Effect.fail(TASK_CALL_FAILURE.UNANSWERED);
+      return true;
     });
+    const followed = attempt.pipe(
+      Effect.retry({
+        schedule: BOARD_BACKOFF,
+        while: (why) =>
+          why !== TASK_CALL_FAILURE.NOT_FOUND && why !== BOARD_FOLLOW_ENDED && following(),
+      }),
+      Effect.option,
+    );
+    return Effect.asVoid(
+      Effect.repeat(followed, {
+        schedule: Schedule.spaced(BOARD_RESEAL.FIRST),
+        while: (delivered) => Option.isSome(delivered) && following(),
+      }),
+    );
   }
 
   /** Follows `taskId`'s board live, in place of any follow standing; with `standing`, only where none stands. */
