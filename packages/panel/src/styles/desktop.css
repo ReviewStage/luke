@@ -8228,19 +8228,20 @@ button.tasks-board-card-press:focus-visible::after {
 .tasks-board-card-more {
   display: flex;
   margin-left: auto;
-  opacity: 0;
-  transition: opacity var(--duration-hover) ease;
 }
 
-.tasks-board-card:hover .tasks-board-card-more,
-.tasks-board-card:has(:focus-visible) .tasks-board-card-more,
-.tasks-board-card[data-menu-open="true"] .tasks-board-card-more {
-  opacity: 1;
-}
-
-/* A finger has no hover, so on a touch screen the ⋯ always stands. */
-@media (hover: none) {
+/* With a pointer, the ⋯ comes in while the card is hovered, holds the
+   keyboard, or has its menu open. A touch screen has no hover to spend a
+   tap on, so there it always stands (`touch-hover.test.ts`). */
+@media (hover: hover) {
   .tasks-board-card-more {
+    opacity: 0;
+    transition: opacity var(--duration-hover) ease;
+  }
+
+  .tasks-board-card:hover .tasks-board-card-more,
+  .tasks-board-card:has(:focus-visible) .tasks-board-card-more,
+  .tasks-board-card[data-menu-open="true"] .tasks-board-card-more {
     opacity: 1;
   }
 }
