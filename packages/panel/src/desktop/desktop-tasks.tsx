@@ -1010,7 +1010,11 @@ function PlanDocument({
                         onOpenTarget={openTarget}
                         banner={stranded.banner}
                         plan={documentBody}
-                        inbox={{ body: inboxBody, waiting: inbox.board.open.length }}
+                        inbox={{
+                          body: inboxBody,
+                          waiting: inbox.board.open.length,
+                          drafted: inbox.drafted,
+                        }}
                       />
                     ) : null}
                     {stranded.dialog}
