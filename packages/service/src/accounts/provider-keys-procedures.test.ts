@@ -145,7 +145,7 @@ const openAccounts = (
     ]);
     const answers = options.provider ?? ACCEPTING;
     const provider = recordingHttpClient((request) =>
-      request.url.startsWith(AUTH_ORIGIN)
+      new URL(request.url).origin === AUTH_ORIGIN
         ? (options.auth?.(request) ?? jsonResponse({}, HTTP_STATUS.SERVER_ERROR))
         : request.url === FAST_CHECK_URL
           ? (options.fast?.get(keyOf(request.headers))?.clone() ?? jsonResponse({}))

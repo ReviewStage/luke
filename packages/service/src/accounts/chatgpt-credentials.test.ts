@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { Database } from "@luke/database/core/query";
 import { type KeyRing, parseKeyRing } from "@luke/database/models/provider-key-seal";
 import { listProviderKeyRows, saveProviderKey } from "@luke/database/models/provider-key-store";
+import { accountProviderKey } from "@luke/database/schemas/account-provider-key";
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import {
@@ -18,7 +19,8 @@ import {
   type RecordedRequest,
   recordingHttpClient,
 } from "@luke/wire/testing";
-import { DateTime, Duration, Effect, Redacted, Result } from "effect";
+import { eq } from "drizzle-orm";
+import { Clock, DateTime, Duration, Effect, Fiber, Redacted, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { driven, forkClockDriven } from "../testing/clock-driven.js";
 import {
@@ -64,6 +66,16 @@ async function formOf(request: RecordedRequest): Promise<URLSearchParams> {
 interface FakeServerState {
   revocationStatus: number;
   tokenStatus: number | undefined;
+  /** The scopes a renewal is answered as granting. */
+  granted: readonly string[];
+  /** Where the discovery document says to revoke. */
+  revocationEndpoint: string;
+}
+
+/** A gate renewals wait at until it is opened, which a second renewal arriving opens too. */
+interface RenewalGate {
+  readonly arrived: Promise<void>;
+  open(): void;
 }
 
 /**
@@ -75,20 +87,38 @@ interface FakeServerState {
 function fakeAuthorizationServer(initialRefresh: string) {
   let current = initialRefresh;
   let issued = 0;
-  const state: FakeServerState = { revocationStatus: HTTP_STATUS.OK, tokenStatus: undefined };
+  let renewals = 0;
+  let gate: { opened: Promise<void>; open: () => void; reached: () => void } | undefined;
+  const state: FakeServerState = {
+    revocationStatus: HTTP_STATUS.OK,
+    tokenStatus: undefined,
+    granted: GRANTED,
+    revocationEndpoint: REVOCATION_URL,
+  };
+  /** Holds every renewal at a gate from here on, until the test opens it or a second renewal arrives. */
+  const holdRenewals = (): RenewalGate => {
+    const opening = Promise.withResolvers<void>();
+    const arriving = Promise.withResolvers<void>();
+    gate = { opened: opening.promise, open: opening.resolve, reached: arriving.resolve };
+    return { arrived: arriving.promise, open: opening.resolve };
+  };
   const http = recordingHttpClient(async (request) => {
     if (request.url === CHATGPT_OAUTH.DISCOVERY_URL) {
       return jsonResponse({
         issuer: "https://auth.openai.com",
-        revocation_endpoint: REVOCATION_URL,
+        revocation_endpoint: state.revocationEndpoint,
       });
     }
-    if (request.url === REVOCATION_URL) {
+    if (request.url !== CHATGPT_OAUTH.TOKEN_URL) {
       return new Response(null, { status: state.revocationStatus });
     }
-    assert.equal(request.url, CHATGPT_OAUTH.TOKEN_URL);
-    // A beat between reading the request and answering, so a second renewal not held behind the first reads the refresh token it is about to rotate.
-    await new Promise((settle) => setTimeout(settle, 20));
+    renewals += 1;
+    if (gate !== undefined) {
+      // A second renewal let through while the first is held is the race the lock exists to prevent: both are let go at once.
+      if (renewals === 1) gate.reached();
+      else gate.open();
+      await gate.opened;
+    }
     if (state.tokenStatus !== undefined) return jsonResponse({}, state.tokenStatus);
     const form = await formOf(request);
     assert.equal(form.get("grant_type"), "refresh_token");
@@ -104,11 +134,11 @@ function fakeAuthorizationServer(initialRefresh: string) {
       access_token: `access-${issued}`,
       refresh_token: current,
       expires_in: 3600,
-      scope: GRANTED.join(" "),
+      scope: state.granted.join(" "),
       token_type: "Bearer",
     });
   });
-  return { http, state, current: () => current };
+  return { http, state, holdRenewals, current: () => current };
 }
 
 const openAccounts = Effect.gen(function* () {
@@ -147,6 +177,10 @@ const signIn = (userId: string, overrides: Partial<ChatGptCredentialsSaveRequest
     assert.ok(kept);
   });
 
+/** An access token as OpenAI shapes one, a JWT whose only claim read is `exp`, in Unix seconds; unsigned, as nothing verifies it. */
+const accessTokenExpiringAt = (exp: number) =>
+  ["header", Buffer.from(JSON.stringify({ exp })).toString("base64url"), "signature"].join(".");
+
 const tokenOf = (access: ChatGptAccess) =>
   access.outcome === CHATGPT_ACCESS.READY ? Redacted.value(access.accessToken) : access.outcome;
 
@@ -160,18 +194,23 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
       const server = fakeAuthorizationServer("refresh-0");
       return Effect.gen(function* () {
         const { owner } = yield* openAccounts;
+        const signedInAt = yield* Clock.currentTimeMillis;
         yield* signIn(owner);
 
         const fresh = yield* refreshChatGptAccess(owner, ring());
         assert.equal(tokenOf(fresh), "access-0");
-        assert.equal(server.http.requests.length, 0, "OpenAI is not asked while the token is good");
+        assert.equal(
+          server.current(),
+          "refresh-0",
+          "the refresh token is not rotated while the token is good",
+        );
 
         yield* TestClock.adjust("55 minutes");
         const renewed = yield* refreshChatGptAccess(owner, ring());
         assert.equal(tokenOf(renewed), "access-1");
         assert.equal(
           renewed.outcome === CHATGPT_ACCESS.READY ? renewed.expiresAt.getTime() : 0,
-          (55 + 60) * 60 * 1000,
+          signedInAt + (55 + 60) * 60 * 1000,
         );
         assert.equal(server.current(), "refresh-1");
 
@@ -180,7 +219,7 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
         assert.equal(tokenOf(yield* refreshChatGptAccess(owner, ring())), "access-2");
         const row = yield* rowOf(owner);
         assert.equal(row?.status, PROVIDER_KEY_STATUS.UNVERIFIED);
-        assert.equal(row?.accessExpiresAt?.getTime(), (115 + 60) * 60 * 1000);
+        assert.equal(row?.accessExpiresAt?.getTime(), signedInAt + (115 + 60) * 60 * 1000);
       }).pipe(Effect.provide(server.http.layer));
     },
   );
@@ -194,19 +233,19 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
         yield* signIn(owner);
         yield* TestClock.adjust("2 hours");
 
-        const both = yield* Effect.all(
-          [refreshChatGptAccess(owner, ring()), refreshChatGptAccess(owner, ring())],
-          { concurrency: "unbounded" },
-        );
+        const gate = server.holdRenewals();
+        const first = yield* Effect.forkChild(refreshChatGptAccess(owner, ring()));
+        const second = yield* Effect.forkChild(refreshChatGptAccess(owner, ring()));
+        // The first renewal is held at OpenAI; the second is given every turn of the event loop it needs to read the row too, were it not held behind the lock.
+        yield* Effect.promise(() => gate.arrived);
+        for (let turn = 0; turn < 50; turn += 1) {
+          yield* Effect.promise(() => new Promise<void>((settle) => setImmediate(settle)));
+        }
+        gate.open();
+        const both = [yield* Fiber.join(first), yield* Fiber.join(second)];
 
         assert.deepEqual(both.map(tokenOf), ["access-1", "access-1"]);
-        const presented = yield* Effect.promise(() =>
-          Promise.all(server.http.requests.map(formOf)),
-        );
-        assert.deepEqual(
-          presented.map((form) => form.get("refresh_token")),
-          ["refresh-0"],
-        );
+        assert.equal(server.current(), "refresh-1", "the refresh token was rotated once");
       }).pipe(Effect.provide(server.http.layer));
     },
   );
@@ -236,13 +275,19 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
         );
         assert.equal((yield* rowOf(owner))?.status, PROVIDER_KEY_STATUS.INVALID);
 
-        // An invalid sign-in is never presented to OpenAI again.
-        const asked = server.http.requests.length;
+        // An invalid sign-in stays signed out, even where OpenAI would now take its refresh token.
+        yield* signIn(owner, { refreshToken: "refresh-stale" });
+        yield* Database.use((db) =>
+          db
+            .update(accountProviderKey)
+            .set({ status: PROVIDER_KEY_STATUS.INVALID, accessExpiresAt: new Date(0) })
+            .where(eq(accountProviderKey.userId, owner)),
+        );
         assert.equal(
           tokenOf(yield* refreshChatGptAccess(owner, ring())),
           CHATGPT_ACCESS.SIGNED_OUT,
         );
-        assert.equal(server.http.requests.length, asked);
+        assert.equal(server.current(), "refresh-0");
       }).pipe(Effect.provide(server.http.layer));
     },
   );
@@ -255,7 +300,7 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
       yield* TestClock.adjust("2 hours");
 
       assert.equal(tokenOf(yield* refreshChatGptAccess(other, ring())), CHATGPT_ACCESS.NONE);
-      assert.equal(server.http.requests.length, 0);
+      assert.equal(server.current(), "refresh-0");
       assert.equal(tokenOf(yield* refreshChatGptAccess(owner, ring())), "access-1");
       assert.equal(yield* rowOf(other), undefined);
     }).pipe(Effect.provide(server.http.layer));
@@ -300,9 +345,70 @@ it.layer(getTestDB())("a ChatGPT sign-in's renewal and revocation", (it) => {
         const removing = yield* forkClockDriven(removeChatGptCredentials(owner, ring()));
         assert.equal(yield* driven(removing, Duration.seconds(1)), false);
 
+        assert.equal(yield* rowOf(owner), undefined);
+      }).pipe(Effect.provide(server.http.layer));
+    },
+  );
+
+  it.effect(
+    "a sign-in handed over late is renewed by its access token's own expiry, not by when it was saved",
+    () => {
+      const server = fakeAuthorizationServer("refresh-0");
+      return Effect.gen(function* () {
+        const { owner } = yield* openAccounts;
+        // OpenAI issued the token to expire an hour on; the desktop saves it 50 minutes later.
+        const issuedAt = yield* Clock.currentTimeMillis;
+        yield* TestClock.adjust("50 minutes");
+        yield* signIn(owner, { accessToken: accessTokenExpiringAt((issuedAt + 3_600_000) / 1000) });
+
+        assert.equal(tokenOf(yield* refreshChatGptAccess(owner, ring())), "access-1");
         assert.equal(
-          server.http.requests.filter((request) => request.url === REVOCATION_URL).length,
-          3,
+          (yield* rowOf(owner))?.accessExpiresAt?.getTime(),
+          issuedAt + (50 + 60) * 60 * 1000,
+        );
+      }).pipe(Effect.provide(server.http.layer));
+    },
+  );
+
+  it.effect(
+    "a renewal whose grant lost the plan's scope is kept, since it rotated the refresh token, and marks the sign-in invalid",
+    () => {
+      const server = fakeAuthorizationServer("refresh-0");
+      return Effect.gen(function* () {
+        const { owner } = yield* openAccounts;
+        yield* signIn(owner);
+        yield* TestClock.adjust("2 hours");
+        server.state.granted = ["openid", "offline_access"];
+
+        assert.equal(
+          tokenOf(yield* refreshChatGptAccess(owner, ring())),
+          CHATGPT_ACCESS.SIGNED_OUT,
+        );
+        assert.equal((yield* rowOf(owner))?.status, PROVIDER_KEY_STATUS.INVALID);
+
+        // The rotated refresh token is the one kept, so its revocation names it.
+        assert.equal(yield* removeChatGptCredentials(owner, ring()), true);
+        const revocation = server.http.requests.find((request) => request.url === REVOCATION_URL);
+        assert.ok(revocation);
+        assert.equal((yield* Effect.promise(() => formOf(revocation))).get("token"), "refresh-1");
+      }).pipe(Effect.provide(server.http.layer));
+    },
+  );
+
+  it.effect(
+    "a revocation endpoint off OpenAI's own server is sent no refresh token, and the removal is answered unconfirmed",
+    () => {
+      const server = fakeAuthorizationServer("refresh-0");
+      return Effect.gen(function* () {
+        const { owner } = yield* openAccounts;
+        yield* signIn(owner);
+        server.state.revocationEndpoint = "https://attacker.test/revoke";
+
+        assert.equal(yield* removeChatGptCredentials(owner, ring()), false);
+        assert.ok(
+          server.http.requests.every(
+            (request) => new URL(request.url).origin !== "https://attacker.test",
+          ),
         );
         assert.equal(yield* rowOf(owner), undefined);
       }).pipe(Effect.provide(server.http.layer));

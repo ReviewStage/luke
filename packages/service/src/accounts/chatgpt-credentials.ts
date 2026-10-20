@@ -20,8 +20,12 @@
  * invalid and keeps it, so the account is asked to sign in again; any other
  * failure changes nothing and may be tried again.
  *
+ * A renewal whose grant no longer carries the plan's scope is kept, since
+ * it rotated the refresh token, and marks the row invalid as well. An access
+ * token's expiry is the earlier of its lifetime and its own `exp` claim.
+ *
  * Removing the sign-in revokes its renewable session at OpenAI's revocation
- * endpoint first, under the same lock, retrying a failure to connect or a
+ * endpoint, which must be on OpenAI's own authorization server, first, under the same lock, retrying a failure to connect or a
  * server error a few times, and removes the row whether or not OpenAI
  * confirmed it, answering which, so the account can be told to disconnect
  * Luke in ChatGPT's settings.
@@ -56,6 +60,8 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 /** OpenAI's endpoints and the fixed values of the open-source flow, as its guides publish them. */
 export const CHATGPT_OAUTH = {
+  /** OpenAI's authorization server: no call that carries a credential goes anywhere else. */
+  ISSUER: "https://auth.openai.com",
   TOKEN_URL: "https://auth.openai.com/api/accounts/oauth/token",
   /** Where the revocation endpoint is read from, as the sessions guide asks. */
   DISCOVERY_URL: "https://auth.openai.com/.well-known/openid-configuration",
@@ -122,6 +128,38 @@ const RefreshAnswerSchema = Schema.Struct({
 const OAuthErrorSchema = Schema.Struct({ error: Schema.String });
 
 const DiscoverySchema = Schema.Struct({ revocation_endpoint: Schema.String });
+
+/** The one claim of an access token read: when it expires, in Unix seconds. */
+const AccessClaimsJson = Schema.fromJsonString(Schema.Struct({ exp: Schema.Number }));
+
+/**
+ * When an access token expires: the earlier of the lifetime the token
+ * endpoint answered, counted from `now`, and the token's own `exp` claim
+ * where it carries one. The claim is read for scheduling alone, never
+ * trusted for anything else, so a sign-in handed over late is never served
+ * past the instant OpenAI set.
+ */
+function accessExpiryOf(accessToken: string, now: Date, expiresInSeconds: number): Date {
+  const answered = now.getTime() + Duration.toMillis(Duration.seconds(expiresInSeconds));
+  const payload = accessToken.split(".")[1];
+  const claimed =
+    payload === undefined
+      ? Option.none()
+      : Schema.decodeUnknownOption(AccessClaimsJson)(
+          Buffer.from(payload, "base64url").toString("utf8"),
+        );
+  return new Date(
+    Option.match(claimed, {
+      onNone: () => answered,
+      onSome: ({ exp }) => Math.min(answered, Duration.toMillis(Duration.seconds(exp))),
+    }),
+  );
+}
+
+/** Whether a URL is on OpenAI's authorization server, over HTTPS. */
+function onIssuer(url: string): boolean {
+  return URL.canParse(url) && new URL(url).origin === CHATGPT_OAUTH.ISSUER;
+}
 
 /** What a renewal answers. */
 export const CHATGPT_ACCESS = {
@@ -197,9 +235,7 @@ export function sealChatGptCredentials(
     idToken: request.idToken,
     scopes: request.scopes,
   });
-  const accessExpiresAt = new Date(
-    now.getTime() + Duration.toMillis(Duration.seconds(request.expiresInSeconds)),
-  );
+  const accessExpiresAt = accessExpiryOf(request.accessToken, now, request.expiresInSeconds);
   return { sealed, accessExpiresAt, hint: CHATGPT_HINT };
 }
 
@@ -300,9 +336,7 @@ export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* 
         tokens.scope === undefined
           ? credentials.scopes
           : tokens.scope.split(" ").filter((scope) => scope.length > 0);
-      const expiresAt = new Date(
-        now.getTime() + Duration.toMillis(Duration.seconds(tokens.expires_in)),
-      );
+      const expiresAt = accessExpiryOf(tokens.access_token, now, tokens.expires_in);
       const sealed = sealCredentials(ring, userId, {
         ...credentials,
         accessToken: tokens.access_token,
@@ -318,6 +352,17 @@ export const refreshChatGptAccess = /* @__PURE__ */ Effect.fnUntraced(function* 
         sealed,
         expiresAt,
       );
+      // The renewal is kept even so, since it rotated the refresh token; a grant without the plan's scope may not use the plan.
+      if (!scopes.includes(CHATGPT_OAUTH.USAGE_SCOPE)) {
+        yield* setProviderKeyStatus(
+          userId,
+          OWNER_KIND.provider,
+          sealed.sealedKey,
+          PROVIDER_KEY_STATUS.INVALID,
+          now,
+        );
+        return { outcome: CHATGPT_ACCESS.SIGNED_OUT };
+      }
       return {
         outcome: CHATGPT_ACCESS.READY,
         accessToken: Redacted.make(tokens.access_token),
@@ -339,6 +384,8 @@ const revokeOnce = /* @__PURE__ */ Effect.fnUntraced(function* (credentials: Sea
     Effect.option,
   );
   if (Option.isNone(discovered)) return "retry" as const;
+  // A revocation endpoint off OpenAI's own server is sent no refresh token.
+  if (!onIssuer(discovered.value.revocation_endpoint)) return "refused" as const;
   // The issued client and the refresh token are revealed here alone, into the one form OpenAI reads them from.
   const answered = yield* postForm(discovered.value.revocation_endpoint, {
     token: credentials.refreshToken,
