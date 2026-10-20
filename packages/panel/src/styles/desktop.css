@@ -6238,6 +6238,7 @@ polygon.factory-campus-edge[data-edge="selected"] {
 .side-panel-content .conversation-log,
 .side-panel-content .agent-todos-dock,
 .side-panel-content .agent-published-dock,
+.side-panel-content .draft-fork-dock,
 .side-panel-content .agent-composer {
   padding-inline: max(var(--luke-space-16), var(--reading-room));
 }
@@ -7583,9 +7584,9 @@ polygon.factory-campus-edge[data-edge="selected"] {
   }
 }
 
-/* The issue picked, over the words inside the card: drawn as a
-   forked draft's chip is (`.draft-fork-chip`), its mark, its key, its title
-   cut short, a Linear issue's state, and the × at its end. */
+/* The issue picked, over the words inside the card: one outlined line,
+   its mark, its key, its title cut short, a Linear issue's state, and the
+   × at its end. */
 .new-task-issue {
   display: flex;
   min-width: 0;

@@ -4789,41 +4789,61 @@ ol.transcript-list {
 
 /* A forked draft's chip over its box: what it forks, the message's opening
    words, and the × that lets the fork go, docked on the composer's own
-   inset as the to-do list is. The × is the shared quiet IconButton, held to
-   the chip's end by its seat (fork-action.tsx). */
+   inset as the to-do list is and drawn as its card is (`.todos-dock`): one
+   line on the raised fill, the glyph in the muted ink, the source's chip
+   and the quote cut short rather than wrapped, and the × held to the line's
+   end by its seat (fork-action.tsx). */
 .draft-fork-dock {
   padding: 0 var(--luke-space-16) var(--luke-space-8);
 }
 
 .draft-fork-chip {
   display: flex;
-  flex-wrap: wrap;
+  height: 32px;
+  min-width: 0;
   align-items: center;
   gap: var(--luke-space-4);
-  padding: 0 0 0 var(--luke-space-8);
+  padding-inline: var(--luke-space-12) var(--luke-space-4);
   border: 1px solid var(--luke-color-border);
   border-radius: var(--luke-radius-8);
+  background: var(--luke-color-fill-hover);
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
+  white-space: nowrap;
 }
 
 .draft-fork-glyph {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-inline-end: calc(var(--luke-icon-gap) - var(--luke-space-4));
+}
+
+/* The words around the chips, Fork of and at, keep whole. The source's
+   chip stands whole where the line has room for it and a few words of the
+   quote, which takes what is left; on a narrower line the chip gives way,
+   each cut short on its own ellipsis. */
+.draft-fork-chip > span:not([data-actor-ref], .draft-fork-quote, .draft-fork-drop) {
   flex-shrink: 0;
 }
 
-.draft-fork-quote {
+.draft-fork-chip > [data-actor-ref] {
   min-width: 0;
-  background: none;
+  flex-shrink: 1;
+}
+
+.draft-fork-quote {
+  display: block;
+  min-width: 8em;
+  flex: 1 1 0;
   overflow: hidden;
   color: var(--luke-color-text);
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .draft-fork-drop {
   display: flex;
+  flex-shrink: 0;
   margin-left: auto;
 }
 
