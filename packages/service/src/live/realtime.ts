@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { LiveStatement } from "@luke/database/core/live-statement";
 import { LIVE_POLL_URL, type SealedLiveQueryWire } from "@luke/features/live-wire";
 import { createRealtime, rawSql } from "@neon/realtime/server";
@@ -58,6 +59,9 @@ export const LiveSealing = Context.Reference<Option.Option<LiveSealer>>(
  * Realtime could not seal it. No secret stands here, so the capability and
  * fingerprint say only where to poll.
  */
+/** How many characters of a polled statement's digest it carries: far more than two readings of its rows could share by chance. */
+const DIGEST_CHARS = 32;
+
 export function pollSealer(sql: SqlClient.SqlClient): LiveSealer {
   return {
     url: LIVE_POLL_URL,
@@ -71,6 +75,11 @@ export function pollSealer(sql: SqlClient.SqlClient): LiveSealer {
           queryFingerprint: LIVE_POLL_URL,
           expiresAt: now,
           rows,
+          // Each row's text in sorted order, so the same rows in another order, which Postgres may answer, digest alike.
+          digest: createHash("sha256")
+            .update(JSON.stringify(rows.map((row) => JSON.stringify(row)).toSorted()))
+            .digest("hex")
+            .slice(0, DIGEST_CHARS),
         })),
         Effect.mapError(() => new SealRefused({ reason: "the statement could not be read" })),
       ),

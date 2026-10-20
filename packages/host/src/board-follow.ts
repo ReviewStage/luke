@@ -24,10 +24,10 @@ export interface BoardFollowDependencies {
   readonly seal: () => Effect.Effect<
     TaskBoardLiveAnswer | { readonly failure: string; readonly gone?: boolean }
   >;
-  /** The board's rows inline, polled while Realtime fails it; failures as `seal`'s. */
-  readonly poll: () => Effect.Effect<
-    TaskBoardLiveAnswer | { readonly failure: string; readonly gone?: boolean }
-  >;
+  /** The board's rows inline, polled while Realtime fails or is off, held past `after`; failures as `seal`'s. */
+  readonly poll: (
+    after: string | undefined,
+  ) => Effect.Effect<TaskBoardLiveAnswer | { readonly failure: string; readonly gone?: boolean }>;
   /** Realtime's client at the address the service named, loaded where it must be. */
   readonly openLive: (url: string) => LiveClient | PromiseLike<LiveClient>;
   readonly now: () => number;

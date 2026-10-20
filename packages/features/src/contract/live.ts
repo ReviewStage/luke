@@ -7,7 +7,8 @@
  * marks where it stands; and one coding agent's transcript, or one of its
  * workers' under `&call=`, as the statements its pages are read from. Each
  * asked with `?poll=true` answers each statement's rows inline instead, for
- * a reader polling while Realtime fails it. Each output is the wire schema flipped
+ * a reader polling while Realtime fails or is off; with `&after=` too, the
+ * poll is held until the rows move past it, or answered unchanged. Each output is the wire schema flipped
  * (`packages/service/src/orpc/base.ts`).
  */
 
@@ -26,13 +27,20 @@ import { hostedProcedure } from "./base.js";
 /** Whether the reader asks for the rows inline, polling while Realtime fails it (`LIVE_POLL`). */
 const pollField = EffectSchema.optionalKey(EffectSchema.Literal(LIVE_POLL.ON));
 
+/** Where the rows stood when the reader last polled (`liveDigestOf`); the poll is held until they move past it. */
+const afterField = EffectSchema.optionalKey(EffectSchema.String);
+
 /** A live read's own query: whether it polls. */
-const liveReadSchema = EffectSchema.Struct({ [LIVE_POLL.QUERY]: pollField });
+const liveReadSchema = EffectSchema.Struct({
+  [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
+});
 
 /** The task a live read is followed for; one that is no UUID is answered as not found, so it is read as text here. */
 const liveTaskSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
 });
 
 /** The agent a transcript is followed for, and the delegation call of the worker where it is a worker's; each read as text, an id or call of no shape answered as not found. */
@@ -40,6 +48,7 @@ const liveTranscriptSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   call: EffectSchema.optionalKey(EffectSchema.String),
   [LIVE_POLL.QUERY]: pollField,
+  [LIVE_POLL.AFTER]: afterField,
 });
 
 export const liveContract = {
