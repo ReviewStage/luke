@@ -6178,6 +6178,20 @@ test("opening the reader's own notice acknowledges it at its revision, once whil
   assert.deepEqual(answersOf(answered), [acknowledged, acknowledged]);
 });
 
+test("a notice shown while its plan's held read has failed reads Got it, since opening it acknowledges nothing then, and Got it answers it", async () => {
+  heldRead = () => answered(UNANSWERED_READ);
+  const notice = noticeItem();
+  const { answered: sent } = noticeWrites();
+  const pane = await mountThread(notice);
+  assert.deepEqual(sent, [], "opening it answers nothing");
+  assert.equal(sendWords(pane), "Got it");
+  act(() => answerSend(pane).click());
+  await settle();
+  assert.deepEqual(answersOf(sent), [
+    { itemId: notice.id, revision: 4, reply: INBOX_REPLY.ACKNOWLEDGED },
+  ]);
+});
+
 test("a notice whose box holds a draft is left open as it is opened, and its words go as a reply naming the notice's revision, no answer beside it", async () => {
   const notice = noticeItem();
   // The first acknowledgement is refused, so the box stands open to take the draft.

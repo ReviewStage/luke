@@ -133,7 +133,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * stands open, a notice, waits on the reader's nod. Opening the reader's own
  * notice gives it (`use-inbox-read-marks.ts`'s `useNodOnOpen`), so its
  * button reads Reply alone, held while the box holds nothing; a notice
- * opening leaves alone, a teammate's or one whose agent asked to hear back,
+ * opening leaves alone, one shown while its holder's held read has failed, a teammate's or one whose agent asked to hear back,
  * reads Got it while the box holds nothing, which settles it without
  * messaging the agent. Either reads Reply once it holds words or files,
  * which settles it as the reply reaches the agent.
@@ -365,8 +365,8 @@ function AnswerCard({
   const asking = thread === undefined ? undefined : openAskOf(thread);
   const attached = asking === undefined ? undefined : attachedAnswers(asking, draft);
   const notice = thread !== undefined && awaitsNod(item, thread);
-  // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`).
-  const nodded = acknowledgedOnOpen(item, readerId);
+  // Note that a notice opening acknowledges offers no Got it, since opening it was the nod (`useNodOnOpen`), save while its holder's held read has failed, when opening acknowledges nothing.
+  const nodded = acknowledgedOnOpen(item, readerId) && !control.failed;
   const nod = notice && emptyBox(draft) && !nodded;
   // Note that a note's Send is its words, which the narrow card keeps in the foot rather than at the field's end, as a thread's Reply is.
   const namedSend =
