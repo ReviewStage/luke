@@ -292,19 +292,11 @@ export function LinkBlock({
 
 /** One block this build knows, drawn as its type is. */
 function KnownBlock({
-  itemId,
   block,
-  images,
-  onImage,
-  onRetryImage,
   openLink,
   code,
 }: {
-  itemId: string;
   block: InboxBlock;
-  images: TaskInboxControl["images"];
-  onImage: TaskInboxControl["onImage"];
-  onRetryImage: TaskInboxControl["onRetryImage"];
   openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element {
@@ -327,12 +319,7 @@ function KnownBlock({
     case INBOX_BLOCK.IMAGE:
       return (
         <div data-inbox-image="">
-          <InboxPicture
-            door={{ itemId, images, onImage, onRetryImage }}
-            attachmentId={block.attachmentId}
-            alt={block.alt}
-            caption={undefined}
-          />
+          <InboxPicture attachmentId={block.attachmentId} alt={block.alt} caption={undefined} />
         </div>
       );
   }
@@ -341,16 +328,10 @@ function KnownBlock({
 /** The item's context: each block in turn, drawn as its type is, and a line for one this build does not know. */
 function Blocks({
   item,
-  images,
-  onImage,
-  onRetryImage,
   openLink,
   code,
 }: {
   item: InboxItem;
-  images: TaskInboxControl["images"];
-  onImage: TaskInboxControl["onImage"];
-  onRetryImage: TaskInboxControl["onRetryImage"];
   openLink: (url: string) => void;
   code: InboxCodeDoors;
 }): React.JSX.Element | null {
@@ -360,16 +341,7 @@ function Blocks({
       {item.blocks.map((block, index) =>
         // Blocks have no key of their own, and are never reordered: a change to an item draws them whole again.
         knownBlock(block) ? (
-          <KnownBlock
-            key={index}
-            itemId={item.id}
-            block={block}
-            images={images}
-            onImage={onImage}
-            onRetryImage={onRetryImage}
-            openLink={openLink}
-            code={code}
-          />
+          <KnownBlock key={index} block={block} openLink={openLink} code={code} />
         ) : (
           <Text key={index} tone={TEXT_TONE.MUTED}>
             {NEWER_LUKE.BLOCK}
@@ -2287,14 +2259,7 @@ export function InboxPane({
                             </>
                           }
                         >
-                          <Blocks
-                            item={item}
-                            images={control.images}
-                            onImage={control.onImage}
-                            onRetryImage={control.onRetryImage}
-                            openLink={doors.openLink}
-                            code={doors.code}
-                          />
+                          <Blocks item={item} openLink={doors.openLink} code={doors.code} />
                           {open ? (
                             // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
                             <div

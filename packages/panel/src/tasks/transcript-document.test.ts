@@ -29,7 +29,8 @@ import type { InboxImage } from "./use-task-inbox.js";
  * item's are: a link alone in its paragraph stands as the card of what it
  * names, the same link in a sentence stays its chip, pictures written next
  * to each other stand side by side, and an item's own pictures are read
- * through the Inbox and drawn with their captions. Words drawn as a
+ * through the Inbox and drawn with their captions, a press opening one
+ * viewer the arrow keys walk across them all. Words drawn as a
  * transcript keep none of it. Synthetic ids, repository, and pictures.
  */
 
@@ -220,6 +221,76 @@ test("drawn as a document, pictures written next to each other stand side by sid
     document.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
     "After.png",
   );
+});
+
+test("a picture of an item opens a viewer the arrow keys walk across the item's pictures in the order they are drawn, one still read joining once held and one whose read failed left out, and none of another item's", () => {
+  const third = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d03";
+  const broken = "7d1e2f30-4a5b-4c6d-8e7f-901a2b3c4d04";
+  const text = [
+    PAIR,
+    `![Third](${pictureOf(ITEM_ID, third)})`,
+    `![Broken](${pictureOf(ITEM_ID, broken)})`,
+  ].join("\n\n");
+  const otherText = `![Another's](${pictureOf(OTHER_ITEM_ID, BEFORE)})`;
+  const draw = (images: ReadonlyMap<string, InboxImage>) =>
+    createElement(
+      "div",
+      null,
+      inPane(createElement(TranscriptWords, { text, asDocument: true }), images),
+      // Another item's pane in the same window, its own picture held.
+      createElement(InboxPictures, {
+        itemId: OTHER_ITEM_ID,
+        control: { images, onImage: () => undefined, onRetryImage: () => undefined },
+        children: createElement(TranscriptWords, { text: otherText, asDocument: true }),
+      }),
+    );
+  const reading = new Map<string, InboxImage>([
+    [BEFORE, HELD],
+    [AFTER, HELD],
+    [broken, { failed: true }],
+  ]);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(draw(reading)));
+  assert.equal(container.querySelectorAll('button[aria-label="Enlarge Another\'s"]').length, 1);
+
+  const press = container.querySelector<HTMLButtonElement>('button[aria-label="Enlarge After"]');
+  assert.ok(press, "a picture is pressed to enlarge it");
+  act(() => press.click());
+  const viewer = () => {
+    const card = document.querySelector<HTMLElement>('[role="dialog"]');
+    assert.ok(card, "the viewer is open");
+    return [
+      card.querySelector<HTMLImageElement>(".attachment-viewer-image")?.alt,
+      card.querySelector(".attachment-viewer-place")?.textContent ?? "alone",
+    ];
+  };
+  const key = (name: string) =>
+    act(() =>
+      document
+        .querySelector('[role="dialog"]')
+        ?.dispatchEvent(
+          new KeyboardEvent("keydown", { key: name, bubbles: true, cancelable: true }),
+        ),
+    );
+  // The third is still read, and the broken one failed, so the walk holds the pair alone.
+  assert.deepEqual(viewer(), ["After.png", "2 of 2"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["Before.png", "1 of 2"]);
+
+  // The third's bytes land, and it joins the walk where it is drawn.
+  act(() => root.render(draw(new Map([...reading, [third, HELD]]))));
+  assert.deepEqual(viewer(), ["Before.png", "1 of 3"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["After.png", "2 of 3"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["Third.png", "3 of 3"]);
+  key("ArrowRight");
+  assert.deepEqual(viewer(), ["Before.png", "1 of 3"]);
+  key("ArrowLeft");
+  assert.deepEqual(viewer(), ["Third.png", "3 of 3"]);
 });
 
 test("a picture of another item stands as its link and is never asked for", () => {
