@@ -9,7 +9,9 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
+import { LinkWorkspaceProvider } from "../copy-link-item.js";
 import { FindScope } from "../find-in-tab.js";
+import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handSettings } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
@@ -21,6 +23,7 @@ import {
 } from "../testing/whole-file.js";
 import type { FileNotes } from "./file-note.js";
 import { FileTab, type ReadFileWindow } from "./file-tab.js";
+import { OpenLinkProvider } from "./use-open-link.js";
 import type { OpenFile } from "./use-side-panel.js";
 
 /**
@@ -64,6 +67,7 @@ beforeEach(() => {
   installScrollIntoView();
   installScrollTo();
   handSettings();
+  fakeAppPlatform({ ...DESKTOP_LINKS });
 });
 
 afterEach(() => {
@@ -99,7 +103,7 @@ function notes(): FileNotes {
     notes: [{ callId: "call-1", shownAt: 1_760_000_000_000, startLine: 3, endLine: 4, note: NOTE }],
     folded: [],
     onFold: () => undefined,
-    taskId: undefined,
+    taskId: "task-1",
   };
 }
 
@@ -113,15 +117,23 @@ async function tab(file: OpenFile, read: ReadFileWindow): Promise<HTMLElement> {
       onRegistry(
         AtomRegistry.make(),
         createElement(
-          FindScope,
-          { active: true, subject: { task: "task-1", tab: { file: PATH } } },
-          createElement(FileTab, {
-            file,
-            snippet: undefined,
-            notes: notes(),
-            readFile: read,
-            onRead: () => undefined,
-          }),
+          OpenLinkProvider,
+          { value: () => undefined },
+          createElement(
+            LinkWorkspaceProvider,
+            { value: "acme" },
+            createElement(
+              FindScope,
+              { active: true, subject: { task: "task-1", tab: { file: PATH } } },
+              createElement(FileTab, {
+                file,
+                snippet: undefined,
+                notes: notes(),
+                readFile: read,
+                onRead: () => undefined,
+              }),
+            ),
+          ),
         ),
       ),
     ),
@@ -180,6 +192,10 @@ test("the lines a File tab was opened on are lit, and Luke's note stands under t
   assert.deepEqual(litLines(container), ["1"]);
   assert.equal(noteSlot(container).parentElement?.getAttribute("slot"), "annotation-4");
   assert.match(noteSlot(container).textContent ?? "", /Seats are counted/);
+  assert.ok(
+    noteSlot(container).querySelector('button[aria-label="Note actions"]'),
+    "its ⋯ stands at rest, the page's links reaching it under its line",
+  );
 
   const note = noteSlot(container).querySelector(".file-note") ?? assert.fail("the card is drawn");
   act(() => note.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })));
