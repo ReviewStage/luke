@@ -32,12 +32,30 @@ import { countedNumber } from "./service-wire.js";
  * reader orders them as the held read does.
  */
 
+/**
+ * The address a live read is answered at where it was read rather than
+ * sealed: the reader asked to poll, or Realtime could not seal it. Each
+ * statement then carries its rows, and nothing subscribes.
+ */
+export const LIVE_POLL_URL = "luke-poll:";
+
+/** How a reader asks for a live read's rows inline rather than sealed, while Realtime fails it. */
+export const LIVE_POLL = { QUERY: "poll", ON: "true" } as const;
+
 /** One sealed statement as the service answers it, which Realtime's client subscribes to and renews with. */
 export const sealedLiveQuerySchema = EffectSchema.Struct({
   capability: EffectSchema.String,
   queryFingerprint: EffectSchema.String,
   /** When the seal expires, in epoch milliseconds; the reader renews it before. */
   expiresAt: countedNumber,
+  /**
+   * The statement's rows as they stand, answered only at `LIVE_POLL_URL`.
+   * They travel as JSON text, since a row has no wire form until its
+   * reader decodes it.
+   */
+  rows: EffectSchema.optionalKey(
+    EffectSchema.fromJsonString(EffectSchema.Array(EffectSchema.Unknown)),
+  ),
 });
 
 export type SealedLiveQueryWire = typeof sealedLiveQuerySchema.Type;
