@@ -8,11 +8,13 @@ import { PREPARE_SCRIPT } from "./sandbox.js";
 
 /**
  * The image's preparation as a sandbox's shell runs it: it installs
- * bubblewrap and socat, the pinned Claude Agent SDK as root under its own
- * directory, and the `agent` user with a home only it reads, and drops the
+ * bubblewrap and socat, the pinned Claude Agent SDK and the pinned Codex as
+ * root under their own directories, the `agent` user with a home only it
+ * reads, and Codex's `CODEX_HOME` there, owned by `agent`, and drops the
  * default user's sudo after all of them, asking sudo for nothing past that
  * but the check that it is gone. A preparation where sudo still stands, or
- * where a command under the capability drop would still hold one, fails.
+ * where a command under the capability drop would still hold one, or
+ * where the Codex installed does not print the pin, fails.
  *
  * The script runs in a real bash. Every program it would change the
  * machine with, or that a test machine may lack, is a stand-in on the
@@ -41,6 +43,7 @@ const STOOD_IN = [
   "gh",
   "bwrap",
   "claude",
+  "codex",
   "id",
   "useradd",
   "usermod",
@@ -54,7 +57,7 @@ const STOOD_IN = [
 
 /**
  * One stand-in for every program, by the name it was called as: each call
- * is written down as one line, and `id`, `claude`, `sudo`, and `setpriv`
+ * is written down as one line, and `id`, `claude`, `codex`, `sudo`, and `setpriv`
  * answer as the scenario has them.
  */
 const STAND_IN = [
@@ -67,6 +70,7 @@ const STAND_IN = [
   '  "id -un"|"id -gn") echo vercel-sandbox ;;',
   '  "id -u agent") exit 1 ;;',
   '  "claude --version") echo "2.1.304 (Claude Code)" ;;',
+  '  "codex --version") echo "codex-cli $CODEX_PRINTS" ;;',
   '  "sudo -n true") [ -e "$PREPARE_STATE/sudo-dropped" ] && exit 1; exit 0 ;;',
   '  "sudo -n sh -c "*) [ "$SUDO_DROPS" = 1 ] && touch "$PREPARE_STATE/sudo-dropped"; exit 0 ;;',
   '  setpriv*) exit "$SETPRIV_EXIT" ;;',
@@ -79,6 +83,8 @@ interface Scenario {
   readonly sudoDrops: boolean;
   /** How a command started under the capability drop exits: 0 where it holds none. */
   readonly setprivExit: number;
+  /** The version the installed `codex` prints. */
+  readonly codexPrints?: string;
 }
 
 /** The script run once in a bash over the stand-ins: its exit, what it printed on stderr, and every call, in order. */
@@ -102,6 +108,7 @@ async function prepare(t: TestContext, scenario: Scenario) {
       PREPARE_STATE: state,
       SUDO_DROPS: scenario.sudoDrops ? "1" : "0",
       SETPRIV_EXIT: String(scenario.setprivExit),
+      CODEX_PRINTS: scenario.codexPrints ?? "0.163.0",
     },
   });
   const calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
@@ -115,7 +122,7 @@ function indexOfCall(calls: readonly string[], start: string): number {
   return index;
 }
 
-test("the image gets Claude Code, bubblewrap and the agent user, then drops sudo last", async (t) => {
+test("the image gets Claude Code, Codex, bubblewrap and the agent user, then drops sudo last", async (t) => {
   const { exitCode, stderr, calls } = await prepare(t, { sudoDrops: true, setprivExit: 0 });
   assert.equal(exitCode, 0, stderr);
 
@@ -126,6 +133,9 @@ test("the image gets Claude Code, bubblewrap and the agent user, then drops sudo
     "sudo -n useradd --create-home --shell /bin/bash agent",
     "sudo -n chmod 700 /home/agent",
     "sudo -n usermod -aG vercel-sandbox agent",
+    "sudo -n env HOME=/root npm install --global --prefix /opt/luke/codex --no-audit --no-fund @openai/codex@0.163.0",
+    "sudo -n ln -sfn /opt/luke/codex/bin/codex /usr/local/bin/codex",
+    "sudo -n install -d -o agent -g agent -m 0700 /home/agent/.codex",
   ].map((start) => indexOfCall(calls, start));
   const dropped = indexOfCall(calls, "sudo -n sh -c ");
   for (const install of installs)
@@ -154,4 +164,14 @@ test("the image fails where a command under the capability drop still holds a ca
   const { exitCode, stderr } = await prepare(t, { sudoDrops: true, setprivExit: 1 });
   assert.notEqual(exitCode, 0);
   assert.match(stderr, /still holds one/);
+});
+
+test("the image fails where the Codex installed does not print the pin", async (t) => {
+  const { exitCode, stderr } = await prepare(t, {
+    sudoDrops: true,
+    setprivExit: 0,
+    codexPrints: "0.162.0",
+  });
+  assert.notEqual(exitCode, 0);
+  assert.match(stderr, /codex does not print 0\.163\.0/);
 });

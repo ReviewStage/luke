@@ -18,11 +18,12 @@
  * The image also carries what a coding agent on Claude Code runs on: the
  * pinned Claude Agent SDK with the `claude` binary it carries, bubblewrap
  * and socat for Claude Code's own command sandbox, and `agent`, the
- * unprivileged user it runs as, with a home no other user reads. And the
- * image holds no sudo at runtime: everything that needs root is installed
- * here, and the default user's sudoers entry is dropped as the last step,
- * so neither a Terminal's shell nor an agent's command reaches root through
- * it. A package an agent needs is added here, never installed at runtime.
+ * unprivileged user it runs as, with a home no other user reads; and the
+ * pinned Codex a coding agent on Codex runs on, as the same user, with its
+ * `CODEX_HOME` in that home. And the image holds no sudo at runtime:
+ * everything that needs root is installed here, and the default user's
+ * sudoers entry is dropped as the last step, so neither a Terminal's shell
+ * nor an agent's command reaches root through it. A package an agent needs is added here, never installed at runtime.
  * Those shells and commands also run with every capability dropped
  * (`sandbox-capabilities.ts`), since the sandbox hands its default user the
  * whole set without sudo; the preparation checks that the drop holds.
@@ -166,6 +167,36 @@ const CREATE_AGENT_USER = [
 ];
 
 /**
+ * Codex, pinned exactly, the release the Codex probe proved in a sandbox
+ * and the runner's Codex mode drives; a bump moves them together. Installed
+ * as root under a prefix only root writes, beside the Claude Agent SDK, so
+ * no shell of the sandbox's user changes the binary Codex runs as `agent`.
+ * Its `CODEX_HOME` is in `agent`'s home, on the sandbox's persisted disk, so
+ * the threads it keeps there outlive a stop and `thread/resume` finds them;
+ * Codex refuses to start where it is missing, so the image makes it.
+ */
+const CODEX = {
+  VERSION: "0.163.0",
+  DIRECTORY: "/opt/luke/codex",
+  HOME: `/home/${AGENT_USER}/.codex`,
+} as const;
+
+/**
+ * Installs Codex where it does not already print the pin, links it as
+ * `codex`, and checks that it prints the pin, `$SUDO` as `PREPARE_TMUX` set
+ * it; then makes `agent`'s `CODEX_HOME`, which only `agent` reads.
+ */
+const INSTALL_CODEX = [
+  `if ! ${CODEX.DIRECTORY}/bin/codex --version 2>/dev/null | grep -qx 'codex-cli ${CODEX.VERSION}'; then`,
+  `  $SUDO env HOME=/root npm install --global --prefix ${CODEX.DIRECTORY} --no-audit --no-fund @openai/codex@${CODEX.VERSION}`,
+  "fi",
+  `$SUDO ln -sfn ${CODEX.DIRECTORY}/bin/codex /usr/local/bin/codex`,
+  "codex --version",
+  `codex --version | grep -qx 'codex-cli ${CODEX.VERSION}' || { echo 'codex does not print ${CODEX.VERSION}' >&2; exit 1; }`,
+  `$SUDO install -d -o ${AGENT_USER} -g ${AGENT_USER} -m 0700 ${CODEX.HOME}`,
+];
+
+/**
  * Removes every sudoers line and file that grants the user named as `$1`,
  * and takes it out of the groups a sudoers file commonly grants. Run as root
  * in one shell, so the user's sudo is not lost halfway through.
@@ -219,6 +250,7 @@ export const PREPARE_SCRIPT = [
   ...INSTALL_BUBBLEWRAP,
   ...INSTALL_CLAUDE_CODE,
   ...CREATE_AGENT_USER,
+  ...INSTALL_CODEX,
   // Last, once everything that needs root is in place.
   ...DROP_SUDO,
 ].join("\n");
