@@ -4,7 +4,9 @@ import { setImmediate as nextTurn } from "node:timers/promises";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS, type AccountSnapshot } from "@luke/credentials/snapshot";
-import { accountCall, HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
+import { accountCall, CALL_FAULT, HOSTED_SERVICE_PATH, NO_CREDENTIAL } from "@luke/features";
+import { PRODUCT_EVENT } from "@luke/features/analytics";
+import { ProductEventSender } from "@luke/features/analytics/sender";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD } from "@luke/gateway";
 import { LIVE_VOICE } from "@luke/live";
 import { temporaryDirectoryScoped } from "@luke/runtime/testing";
@@ -24,7 +26,7 @@ import * as Path from "effect/Path";
 import { TestClock } from "effect/testing";
 import type { AccountSourceHost } from "./account-source.js";
 import { composeAccount } from "./compose-account.js";
-import { composeSettings } from "./compose-settings.js";
+import { composeSettings, type SettingsComposer } from "./compose-settings.js";
 import {
   type CookieSessionDoor,
   CookieSessionFailed,
@@ -115,6 +117,8 @@ function respond(
         experiments: state.experiments,
         ...(state.updatedAt === undefined ? undefined : { updatedAt: state.updatedAt }),
       });
+    case HOSTED_SERVICE_PATH.EVENTS:
+      return jsonResponse({}, state.user ? HTTP_STATUS.OK : HTTP_STATUS.UNAUTHORIZED);
     case HOSTED_ROUTE:
       return state.user
         ? jsonResponse({ template: null })
@@ -342,6 +346,61 @@ describe("the cookie account source", () => {
     }).pipe(Effect.scoped),
   );
 
+  it.effect("sends no hosted call while no one is signed in, answering it as no credential", () =>
+    Effect.gen(function* () {
+      const { open, service, sent } = scene({ user: undefined });
+      const session = yield* open;
+      yield* session.initialize;
+      const call = accountCall({ baseUrl: ORIGIN, credential: session.credential });
+
+      const answer = yield* Effect.provide(
+        call.send({ method: HTTP_METHOD.GET, path: HOSTED_ROUTE }),
+        service.layer,
+      );
+
+      assert.deepEqual(answer, { fault: CALL_FAULT.NO_CREDENTIAL });
+      assert.equal(sent(HOSTED_ROUTE).length, 0);
+      // Only the launch's own read; nothing refused, so nothing read again.
+      assert.equal(sent("/api/auth/get-session").length, 1);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("keeps the counts made before a sign-in, and sends them once signed in", () =>
+    Effect.gen(function* () {
+      const { open, state, service, sent } = scene({ user: undefined });
+      const session = yield* open;
+      yield* session.initialize;
+      const sender = yield* ProductEventSender.make({
+        serviceBaseUrl: ORIGIN,
+        appVersion: "0.2.0",
+        packaged: false,
+        sends: true,
+        credential: session.credential,
+        confirmAccount: session.confirmAccount,
+        httpClient: service.layer,
+        now: () => 0,
+      });
+      sender.arm();
+      sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: "0.2.0" });
+      sender.record(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+
+      yield* sender.flush;
+      assert.equal(sent(HOSTED_SERVICE_PATH.EVENTS).length, 0);
+
+      // The sign-in lands, and the tab reads it.
+      state.user = { ...USER };
+      yield* session.refreshOnce();
+      yield* sender.flush;
+
+      const batches = sent(HOSTED_SERVICE_PATH.EVENTS);
+      assert.equal(batches.length, 1);
+      assert.deepEqual(
+        JSON.parse(batches[0]?.body ?? "{}").events.map((event: { name: string }) => event.name),
+        [PRODUCT_EVENT.APP_LAUNCH, PRODUCT_EVENT.ACCOUNT_SIGN_IN],
+      );
+    }).pipe(Effect.scoped),
+  );
+
   it.effect("recovers a signed-in launch whose first reads met an outage", () =>
     Effect.gen(function* () {
       const { open, gate } = scene({ outages: 2 });
@@ -453,6 +512,68 @@ const until = (holds: () => Effect.Effect<boolean>) =>
     while (!(yield* holds())) yield* Effect.promise(() => nextTurn());
   });
 
+/** The tab's own address, which nobody leaves or comes back to. */
+const STILL_DOOR: CookieSessionDoor = {
+  currentAddress: () => "/",
+  navigate: () => Effect.void,
+  revisits: Stream.never,
+};
+
+/** The machine a host in a tab is composed on, its account source the one given. */
+const machineOver = (stateRoot: string, accountSource: Layer.Layer<AccountSource>) =>
+  Layer.mergeAll(
+    Layer.succeed(
+      HostKernelTag,
+      hostKernelOver({
+        stateRoot,
+        runMode: runModeFor({ capture: false, fixture: false }),
+        accountBaseUrl: ACCOUNT_BASE_URL,
+        now: () => 0,
+        createId: () => "id",
+        report: () => undefined,
+        emit: () => undefined,
+      }),
+    ),
+    Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
+    Layer.succeed(AppIdentity, { appVersion: "0.2.0", packaged: false }),
+    accountSource,
+    NodeFileSystem.layer,
+    NodePath.layer,
+  );
+
+/**
+ * The settings and account of a tab on the cookie session over the platform
+ * fetch, linked as the host links them and started; `prepare` runs on the
+ * settings before the account is composed.
+ */
+const composedTab = (
+  stateRoot: string,
+  prepare: (settings: SettingsComposer) => Effect.Effect<void> = () => Effect.void,
+) =>
+  Effect.gen(function* () {
+    const machine = machineOver(
+      stateRoot,
+      Layer.provide(cookieAccountSourceLayer(STILL_DOOR), FetchHttpClient.layer),
+    );
+    const settings = yield* Effect.provide(composeSettings(), machine);
+    yield* prepare(settings);
+    const account = yield* Effect.provide(
+      composeAccount({ settings, openSocket: scriptedOpenSocket([]).openSocket }),
+      machine,
+    );
+    yield* settings.link({
+      credential: account.credential,
+      readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
+      confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
+      setVoice: () => Effect.void,
+      endLiveSession: Effect.void,
+    });
+    yield* account.link({ startCapabilities: Effect.void, stopCapabilities: Effect.void });
+    yield* account.lifetime;
+    yield* settings.lifetime;
+    return { settings, account };
+  });
+
 it.effect("keys the account's preferences sync and experiments on the cookie session", () => {
   const state: ServiceState = {
     user: { ...USER },
@@ -473,47 +594,9 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
   };
   return Effect.gen(function* () {
     const stateRoot = yield* temporaryDirectoryScoped("luke-cookie-settings-");
-    const door: CookieSessionDoor = {
-      currentAddress: () => "/",
-      navigate: () => Effect.void,
-      revisits: Stream.never,
-    };
-    const machine = Layer.mergeAll(
-      Layer.succeed(
-        HostKernelTag,
-        hostKernelOver({
-          stateRoot,
-          runMode: runModeFor({ capture: false, fixture: false }),
-          accountBaseUrl: ACCOUNT_BASE_URL,
-          now: () => 0,
-          createId: () => "id",
-          report: () => undefined,
-          emit: () => undefined,
-        }),
-      ),
-      Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-      Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
-      Layer.provide(cookieAccountSourceLayer(door), FetchHttpClient.layer),
-      NodeFileSystem.layer,
-      NodePath.layer,
+    const { settings, account } = yield* composedTab(stateRoot, (settings) =>
+      Effect.orDie(settings.store.set("voice", LIVE_VOICE.ALLOY)),
     );
-    const settings = yield* Effect.provide(composeSettings(), machine);
-    yield* Effect.orDie(settings.store.set("voice", LIVE_VOICE.ALLOY));
-    const account = yield* Effect.provide(
-      composeAccount({ settings, openSocket: scriptedOpenSocket([]).openSocket }),
-      machine,
-    );
-    // Linked as the host links them.
-    yield* settings.link({
-      credential: account.credential,
-      readAccountKey: () => account.token.readAccountKey?.() ?? Effect.succeed(undefined),
-      confirmAccount: () => account.session.confirmAccount?.() ?? Effect.void,
-      setVoice: () => Effect.void,
-      endLiveSession: Effect.void,
-    });
-    yield* account.link({ startCapabilities: Effect.void, stopCapabilities: Effect.void });
-    yield* account.lifetime;
-    yield* settings.lifetime;
     assert.equal(account.signedIn(), true);
 
     // The preferences reconcile reads the service under the session's account.
@@ -549,6 +632,40 @@ it.effect("keys the account's preferences sync and experiments on the cookie ses
     // The first account's choices are no longer drawn for the one now signed in.
     assert.equal((yield* experiments)[EXPERIMENT.FACTORY], undefined);
     assert.equal(yield* voice, undefined);
+  }).pipe(
+    Effect.provideService(FetchHttpClient.Fetch, service),
+    Effect.provide([NodeFileSystem.layer, NodePath.layer]),
+  );
+});
+
+it.effect("sends no day one person marked under the cookie another tab signed in", () => {
+  const state: ServiceState = { user: { ...USER }, outages: 0, experiments: {}, preferences: {} };
+  /** Every batch of counts, by who the cookie named when it arrived and the events it carried. */
+  const batches: { readonly user: string | undefined; readonly names: readonly string[] }[] = [];
+  const service: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    const pathname = new URL(request.url).pathname;
+    const body = await request.text();
+    if (pathname === HOSTED_SERVICE_PATH.EVENTS) {
+      const events: { name: string }[] = JSON.parse(body).events;
+      batches.push({ user: state.user?.id, names: events.map((event) => event.name) });
+    }
+    return respond(state, { method: request.method, pathname, body });
+  };
+  return Effect.gen(function* () {
+    const stateRoot = yield* temporaryDirectoryScoped("luke-cookie-events-");
+    // The launch counts itself and marks the day for the person signed in.
+    yield* composedTab(stateRoot);
+
+    // Another tab signs in as someone else before the minute's flush.
+    state.user = { ...USER, id: "user-2", email: "other@example.com" };
+    yield* TestClock.adjust("1 minute");
+    yield* until(() => Effect.sync(() => batches.length > 0));
+
+    const [batch] = batches;
+    assert.equal(batch?.user, "user-2");
+    assert.ok(batch?.names.includes(PRODUCT_EVENT.APP_LAUNCH));
+    assert.ok(!batch?.names.includes(PRODUCT_EVENT.APP_DAY_ACTIVE));
   }).pipe(
     Effect.provideService(FetchHttpClient.Fetch, service),
     Effect.provide([NodeFileSystem.layer, NodePath.layer]),
@@ -643,26 +760,8 @@ it.effect(
           accountPreferencesSync: { accountEmail: ADA, preferences: { voice: LIVE_VOICE.CEDAR } },
         }),
       );
-      const machine = Layer.mergeAll(
-        Layer.succeed(
-          HostKernelTag,
-          hostKernelOver({
-            stateRoot,
-            runMode: runModeFor({ capture: false, fixture: false }),
-            accountBaseUrl: ACCOUNT_BASE_URL,
-            now: () => 0,
-            createId: () => "id",
-            report: () => undefined,
-            emit: () => undefined,
-          }),
-        ),
-        Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
-        Layer.succeed(AppIdentity, { appVersion: "0.0.0-test", packaged: false }),
-        // A source keeping no account here, whose arrival settled nothing.
-        fixedAccountSource(),
-        NodeFileSystem.layer,
-        NodePath.layer,
-      );
+      // A source keeping no account here, whose arrival settled nothing.
+      const machine = machineOver(stateRoot, fixedAccountSource());
       const settings = yield* Effect.provide(composeSettings(), machine);
       yield* settings.link({
         credential: NO_CREDENTIAL,
