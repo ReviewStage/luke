@@ -450,26 +450,6 @@ export async function deepenCheckout(ctx: ToolContext): Promise<void> {
   );
 }
 
-/**
- * The repository's tools the session is offered for the turn it opens, for
- * those tools' own files (`repositoryToolsOf`): none for a session the host
- * does not admit or whose conversation is no agent's with a repository.
- */
-export function offeredRepositoryTools(
-  auth: SessionAuth,
-  sessionId: string,
-): Promise<ReadonlySet<RepositoryTool>> {
-  return runAgent(
-    Effect.gen(function* () {
-      const admitted = yield* host.admit(auth, sessionId);
-      if (Result.isFailure(admitted)) return new Set<RepositoryTool>();
-      const agent = yield* host.agent(admitted.success);
-      if (Result.isFailure(agent)) return new Set<RepositoryTool>();
-      return repositoryToolsOf(agent.success);
-    }),
-  );
-}
-
 /** One `show_image` call run under the agent's session, its pictures read through the session's sandbox door, for the tool, which runs here rather than at an edge of its own. */
 export function runShowImageTool(
   auth: SessionAuth,

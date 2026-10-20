@@ -135,21 +135,6 @@ export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<Tas
   ]);
 }
 
-/** The tools that read the agent's repository on the developer's behalf, beside its own file tools: `show_code`. */
-export type RepositoryTool = typeof CODER_TOOL.SHOW_CODE;
-
-/**
- * The repository's tools an agent is offered, on every turn, typed or
- * spoken: `show_code` where the agent has a repository checked out to read
- * the lines from, and none for one with no repository, whose call would
- * only be refused.
- */
-export function repositoryToolsOf(
-  agent: Pick<CodingAgent, "repository">,
-): ReadonlySet<RepositoryTool> {
-  return agent.repository === null ? new Set() : new Set([CODER_TOOL.SHOW_CODE]);
-}
-
 /** The call's own tools, which mean something only while someone is listening (`../../tasks/queue-question.ts`, `../../tasks/end-call.ts`). */
 const SPOKEN_TURN_TOOLS = [
   CODER_TOOL.QUEUE_QUESTION,
@@ -173,17 +158,18 @@ export function turnToolsOf(turn: BrainHostTurn | undefined): ReadonlySet<Spoken
   return turn === BRAIN_HOST_TURN.SPOKEN ? new Set(SPOKEN_TURN_TOOLS) : new Set();
 }
 
-/** The tools only an agent working in a repository is offered: the pull request the service opens for it, and the two that write into its checkout. */
+/** The tools only an agent working in a repository is offered: the pull request the service opens for it, the two that write into its checkout, and `show_code`, which puts lines of it on the developer's screen. */
 export type RepositoryTool =
   | typeof CODER_TOOL.OPEN_PULL_REQUEST
   | typeof CODER_TOOL.WRITE_FILE
-  | typeof CODER_TOOL.APPLY_PATCH;
+  | typeof CODER_TOOL.APPLY_PATCH
+  | typeof CODER_TOOL.SHOW_CODE;
 
 /**
- * The repository's tools an agent is offered: all of them for one working
- * in a repository, and none for one with no repository, whose sandbox holds
- * no checkout to write into and which has no branch to open a pull request
- * from. Note that its shell and its reads stay, in the empty working folder
+ * The repository's tools an agent is offered, on every turn, typed or
+ * spoken: all of them for one working in a repository, and none for one
+ * with no repository, whose sandbox holds no checkout to write into or
+ * show lines of and which has no branch to open a pull request from. Note that its shell and its reads stay, in the empty working folder
  * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), and that the
  * instructions leave out the same words (`instructions.ts`).
  */
@@ -191,7 +177,12 @@ export function repositoryToolsOf(
   agent: Pick<CodingAgent, "repository">,
 ): ReadonlySet<RepositoryTool> {
   if (agent.repository === null) return new Set();
-  return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.WRITE_FILE, CODER_TOOL.APPLY_PATCH]);
+  return new Set([
+    CODER_TOOL.OPEN_PULL_REQUEST,
+    CODER_TOOL.WRITE_FILE,
+    CODER_TOOL.APPLY_PATCH,
+    CODER_TOOL.SHOW_CODE,
+  ]);
 }
 
 /**

@@ -15,18 +15,6 @@
  * snapshot `prepare` made, so the larger image costs a brain session
  * nothing at open.
  *
- * The image also carries what a coding agent on Claude Code runs on: the
- * pinned Claude Agent SDK with the `claude` binary it carries, bubblewrap
- * and socat for Claude Code's own command sandbox, and `agent`, the
- * unprivileged user it runs as, with a home no other user reads. And the
- * image holds no sudo at runtime: everything that needs root is installed
- * here, and the default user's sudoers entry is dropped as the last step,
- * so neither a Terminal's shell nor an agent's command reaches root through
- * it. A package an agent needs is added here, never installed at runtime.
- * Those shells and commands also run with every capability dropped
- * (`sandbox-capabilities.ts`), since the sandbox hands its default user the
- * whole set without sudo; the preparation checks that the drop holds.
- *
  * Each root's `sandbox.ts` exports this one environment object, which is
  * safe because each eve project bundles its own copy of this module and
  * builds its own snapshot from it, and eve matches a sandbox's environment
@@ -52,7 +40,6 @@ import type { SandboxSession } from "eve/sandbox";
 import { VercelSandbox, type VercelSandboxRuntimeOptions } from "eve/sandbox/vercel";
 import { BRAIN_HOST } from "../brain-host/bounds.js";
 import { CODER } from "../coder-host/bounds.js";
-import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import { PREPARE_TMUX } from "../terminal/tmux.js";
 import { type AgentRole, ROLE_PROFILE, SANDBOX_POLICY, type SandboxPolicy } from "./role.js";
 
@@ -109,91 +96,6 @@ const INSTALL_GTK =
  */
 const WAIT_FOR_DPKG_LOCK = `if [ -d /etc/apt/apt.conf.d ]; then echo 'DPkg::Lock::Timeout "600";' | if [ "$(id -u)" = 0 ]; then tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; else sudo -n tee /etc/apt/apt.conf.d/90luke-dpkg-lock-timeout; fi >/dev/null; fi`;
 
-/**
- * Installs bubblewrap and socat, which Claude Code's command sandbox runs
- * each command under on Linux, `$SUDO` as `PREPARE_TMUX` set it.
- */
-const INSTALL_BUBBLEWRAP = [
-  "if command -v dnf >/dev/null 2>&1; then $SUDO dnf install -y bubblewrap socat; else $SUDO apt-get install -y --no-install-recommends bubblewrap socat; fi",
-  "bwrap --version",
-];
-
-/**
- * The Claude Agent SDK, pinned exactly, and the `claude` binary its
- * platform package carries (the SDK's own `claudeCodeVersion`), so
- * installing the one installs the other. The pair is the one the Claude
- * Code probe proved in a sandbox, and the runner that drives the binary
- * pins the same SDK; a bump moves both on purpose. Installed as root in a
- * directory only root writes, so no shell of the sandbox's user changes the
- * binary Claude Code runs as `agent`. The binary is the Linux x86-64 build,
- * the Vercel sandbox's architecture.
- */
-const CLAUDE_CODE = {
-  SDK_VERSION: "0.3.304",
-  VERSION: "2.1.304",
-  DIRECTORY: "/opt/luke/claude-agent-sdk",
-  BINARY: "node_modules/@anthropic-ai/claude-agent-sdk-linux-x64/claude",
-} as const;
-
-/**
- * Installs the SDK where its binary does not already print the pin, links
- * the binary as `claude`, and checks that it prints the pin, `$SUDO` as
- * `PREPARE_TMUX` set it. Note that root's npm reads root's home, never the
- * default user's configuration.
- */
-const INSTALL_CLAUDE_CODE = [
-  `if ! ${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.BINARY} --version 2>/dev/null | grep -q '^${CLAUDE_CODE.VERSION} '; then`,
-  `  $SUDO env HOME=/root npm install --prefix ${CLAUDE_CODE.DIRECTORY} --no-audit --no-fund --save-exact @anthropic-ai/claude-agent-sdk@${CLAUDE_CODE.SDK_VERSION}`,
-  "fi",
-  `$SUDO ln -sfn ${CLAUDE_CODE.DIRECTORY}/${CLAUDE_CODE.BINARY} /usr/local/bin/claude`,
-  "claude --version",
-  `claude --version | grep -q '^${CLAUDE_CODE.VERSION} ' || { echo 'claude does not print ${CLAUDE_CODE.VERSION}' >&2; exit 1; }`,
-];
-
-/** The unprivileged user Claude Code runs as, apart from the sandbox's default user. */
-const AGENT_USER = "agent";
-
-/**
- * Creates `agent` where it is missing, with a home only it reads, and in
- * the default user's group, so the checkout can be shared with it, `$SUDO`
- * as `PREPARE_TMUX` set it. Note that the Sandbox SDK's own user creation is
- * not used, because the homes it makes are readable by the default user's
- * group, so a Terminal could read what Claude Code keeps there.
- */
-const CREATE_AGENT_USER = [
-  `id -u ${AGENT_USER} >/dev/null 2>&1 || $SUDO useradd --create-home --shell /bin/bash ${AGENT_USER}`,
-  `$SUDO chmod 700 /home/${AGENT_USER}`,
-  `$SUDO usermod -aG "$(id -gn)" ${AGENT_USER}`,
-];
-
-/**
- * Removes every sudoers line and file that grants the user named as `$1`,
- * and takes it out of the groups a sudoers file commonly grants. Run as root
- * in one shell, so the user's sudo is not lost halfway through.
- */
-const DROP_SUDOERS = [
-  'user="$1"',
-  "for file in /etc/sudoers.d/*; do",
-  '  if [ -f "$file" ] && grep -qE "^[[:space:]]*$user[[:space:]]" "$file"; then rm -f "$file"; fi',
-  "done",
-  'sed -i "/^[[:space:]]*$user[[:space:]]/d" /etc/sudoers',
-  'for group in wheel sudo admin; do gpasswd -d "$user" "$group" >/dev/null 2>&1 || true; done',
-].join("\n");
-
-/**
- * The image's last step: the default user's sudo dropped, then a check that
- * it is gone and that a command started under the capability drop holds no
- * capability, which fails the preparation rather than leave either standing.
- * A sandbox prepared as root has no default user's sudo to drop.
- */
-const DROP_SUDO = [
-  'if [ "$(id -u)" != 0 ]; then',
-  `  sudo -n sh -c '${DROP_SUDOERS.replaceAll("'", `'\\''`)}' drop-sudo "$(id -un)"`,
-  "  if sudo -n true 2>/dev/null; then echo 'sudo still stands for the default user' >&2; exit 1; fi",
-  "fi",
-  `${WITHOUT_CAPABILITIES.COMMAND} ${WITHOUT_CAPABILITIES.ARGS.join(" ")} grep -q '^CapEff:[[:space:]]*0*$' /proc/self/status || { echo 'a command without capabilities still holds one' >&2; exit 1; }`,
-];
-
 /** The commands `prepare` runs on the snapshot, after the code extension's tooling; the Claude Code probe (`tools/claude-code-probe`) prepares its sandbox from the same script. */
 export const PREPARE_SCRIPT = [
   "set -e",
@@ -217,11 +119,6 @@ export const PREPARE_SCRIPT = [
   // After Playwright, whose `--with-deps` has just refreshed the package lists and installed Xvfb.
   INSTALL_GTK,
   ...INSTALL_GH_STACK,
-  ...INSTALL_BUBBLEWRAP,
-  ...INSTALL_CLAUDE_CODE,
-  ...CREATE_AGENT_USER,
-  // Last, once everything that needs root is in place.
-  ...DROP_SUDO,
 ].join("\n");
 
 /**

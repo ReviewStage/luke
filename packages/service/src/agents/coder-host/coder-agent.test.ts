@@ -27,7 +27,7 @@ import { CHAT_TOOLS } from "./chat.js";
 import { INBOX_TOOLS } from "./inbox.js";
 import { coderInstructions } from "./instructions.js";
 import { SLEEP_TOOL } from "./sleep.js";
-import { CODER_TOOL, repositoryToolsOf, taskToolsOf } from "./tool-set.js";
+import { CODER_TOOL, taskToolsOf } from "./tool-set.js";
 
 /** The link of the task an agent on one works on, as its instructions are handed it. */
 const TASK_ADDRESS = "https://tryluke.dev/acme/plan/pl_1";
@@ -261,12 +261,6 @@ test("an agent on a task is offered edit_plan, show_page, the comment tools, and
   assert.deepEqual(offered(handedItsTask), all);
   assert.deepEqual(offered(handedPrompt), all);
   assert.deepEqual(offered(automation), []);
-});
-
-test("an agent with a repository is offered show_code, on a task or not, and one with no repository is not", () => {
-  const offered = (agent: Parameters<typeof repositoryToolsOf>[0]) => [...repositoryToolsOf(agent)];
-  assert.deepEqual(offered({ repository: "Acme/Relay" }), [CODER_TOOL.SHOW_CODE]);
-  assert.deepEqual(offered({ repository: null }), []);
 });
 
 test("every agent on a task is told how to update its plan, one handed a prompt told to read it first, and one on no task told of no plan", () => {
