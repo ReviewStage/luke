@@ -331,6 +331,28 @@ it.effect("takes the launch's secrets out of every event it posts", () =>
   }),
 );
 
+it.effect("leaves an escape that only looks like a secret's spelling as it was", () =>
+  Effect.gen(function* () {
+    const luke = fakeLuke();
+    const said: Step = {
+      emit: {
+        type: "assistant",
+        message: { content: [{ type: "text", text: "a literal \\n stays" }] },
+        parent_tool_use_id: null,
+      },
+    };
+    const { write, run } = yield* launch([said, ...SHORT_TURN], luke, {
+      ...ENV,
+      [RUNNER_ENV.CLAUDE_TOKEN]: "\n",
+    });
+    yield* write(CONFIG);
+    yield* write(FIRST_MESSAGE);
+    yield* Fiber.join(run);
+
+    assert.deepEqual(luke.applied[0]?.message, said.emit);
+  }),
+);
+
 it.effect("ends a waiting launch at once on a stop, with no turn to interrupt", () =>
   Effect.gen(function* () {
     const luke = fakeLuke();
