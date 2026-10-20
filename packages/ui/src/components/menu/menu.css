@@ -9,13 +9,19 @@
 
 @layer components {
   /* Held, an element a long press opens a menu on shows the menu rather
-     than iOS's own callout over a link or a picture in it, or a selection
-     of its words, which iOS starts on a hold of its own that races the
-     menu's. */
+     than iOS's own callout over a link or a picture in it. */
   [data-long-press] {
     -webkit-touch-callout: none;
-    -webkit-user-select: none;
-    user-select: none;
+  }
+
+  /* Under a finger, nor a selection of its words, which iOS starts on a
+     hold of its own that races the menu's; a mouse still drags across a
+     row's words to copy them. */
+  @media (pointer: coarse) {
+    [data-long-press] {
+      -webkit-user-select: none;
+      user-select: none;
+    }
   }
 
   .luke-menu {

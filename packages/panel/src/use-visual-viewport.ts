@@ -14,10 +14,13 @@
  * the tokens' own `100vh` and no inset stand.
  *
  * A pinch-zoom shrinks the visual viewport too, and pans it as the finger
- * moves, but covers nothing: the page is only drawn larger. So the values are
- * written only while the page is drawn at its own scale; zoomed in, the last
- * ones stand, and the panel keeps its layout under the zoom rather than
- * re-laying itself into the zoomed box and chasing every pan.
+ * moves, but covers nothing: the page is only drawn larger. So the stage is
+ * measured by the zoomed box only while the page is drawn at its own scale.
+ * Zoomed in, its top stands where it was, and only the keyboard is read, from
+ * the box as it would stand unzoomed (its height times the scale): a phone
+ * that opens its keyboard on a field while zoomed, or zooms in on one as it
+ * focuses it, still lifts the composer, while the pinch and the pan alone
+ * leave the layout as it was rather than re-laying it into the zoomed box.
  */
 
 import { visibleViewport } from "@luke/ui/visible-viewport";
@@ -49,15 +52,24 @@ export function useVisualViewport(): void {
     const viewport = window.visualViewport;
     if (viewport === null || viewport === undefined) return undefined;
     const root = document.documentElement.style;
+    /** Where the stage begins, as last measured at the page's own scale. */
+    let top = 0;
     const write = () => {
-      if (!unzoomed(viewport)) return;
-      // A panned viewport (`offsetTop`) is seen, not covered: what stands
-      // above it is the top's, and only what stands below its foot is the
-      // keyboard's.
-      const seen = visibleViewport();
-      const inset = Math.max(0, window.innerHeight - seen.bottom);
-      root.setProperty(VIEWPORT_TOP, `${seen.top}px`);
-      root.setProperty(STAGE_HEIGHT, `${seen.bottom - seen.top}px`);
+      let bottom: number;
+      if (unzoomed(viewport)) {
+        // A panned viewport (`offsetTop`) is seen, not covered: what stands
+        // above it is the top's, and only what stands below its foot is the
+        // keyboard's.
+        const seen = visibleViewport();
+        top = seen.top;
+        bottom = seen.bottom;
+      } else {
+        // Note that rounding keeps a pinch's fractions from moving the stage by a pixel.
+        bottom = Math.min(window.innerHeight, top + Math.round(viewport.height * viewport.scale));
+      }
+      const inset = Math.max(0, window.innerHeight - bottom);
+      root.setProperty(VIEWPORT_TOP, `${top}px`);
+      root.setProperty(STAGE_HEIGHT, `${bottom - top}px`);
       root.setProperty(KEYBOARD_INSET, `${inset}px`);
     };
     write();

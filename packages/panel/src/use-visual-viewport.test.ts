@@ -103,6 +103,23 @@ test("a pinch-zoom is not the keyboard: zoomed in and panned, the stage keeps wh
   assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
 });
 
+test("a keyboard opened while zoomed in still lifts the stage above it, and closed while zoomed lets it down again", () => {
+  const viewport = new FakeVisualViewport();
+  standViewport(viewport);
+  mount();
+  act(() => viewport.change({ height: 400, scale: 2 }, "resize"));
+
+  // Twice over, a keyboard 320px tall at the page's own scale leaves 240px of the zoomed box seen.
+  act(() => viewport.change({ height: 240, offsetTop: 300 }, "resize"));
+  assert.equal(readOverBody("--luke-viewport-top"), "0px");
+  assert.equal(readOverBody("--luke-stage-height"), "480px");
+  assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
+
+  act(() => viewport.change({ height: 400, offsetTop: 100 }, "resize"));
+  assert.equal(readOverBody("--luke-stage-height"), "800px");
+  assert.equal(readOverBody("--luke-keyboard-inset"), "0px");
+});
+
 test("without a visual viewport nothing is written, so the tokens' own window height stands", () => {
   standViewport(undefined);
   mount();
