@@ -59,8 +59,8 @@ const ITEM = {
   COMPACTION: "contextCompaction",
 } as const;
 
-/** The statuses that say a call did not do its work, across the items' own status words. */
-const FAILED_STATUSES: ReadonlySet<string> = new Set(["failed", "declined"]);
+/** The statuses that say a call did not do its work, across the items' own status words: a subagent's call may be interrupted. */
+const FAILED_STATUSES: ReadonlySet<string> = new Set(["failed", "declined", "interrupted"]);
 
 /** A turn's status that says it failed, as `TurnStatus` spells it. */
 const TURN_FAILED = "failed";

@@ -787,7 +787,7 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
   );
 
   it.effect(
-    "a Luke tool keeps its own name without its pictures, a subagent's thread folds under its call, and a plan's usage limit fails the turn saying so",
+    "a Luke tool keeps its own name without its pictures, a subagent's thread folds under its interrupted call, and a plan's usage limit fails the turn saying so",
     () =>
       Effect.gen(function* () {
         const post = yield* standing;
@@ -869,8 +869,8 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           notification("item/completed", {
             item: {
               ...spawn,
-              status: "completed",
-              agentsStates: { "thread-sub": { status: "completed" } },
+              status: "interrupted",
+              agentsStates: { "thread-sub": { status: "interrupted" } },
             },
           }),
           notification("item/completed", { item: { type: "contextCompaction", id: "cc_1" } }),
@@ -909,8 +909,8 @@ it.layer(getTestDB())("the runner events route, on Codex", (it) => {
           ["step-start"],
           [
             "tool-collabAgentToolCall",
-            "output-available",
-            { status: "completed", agentsStates: { "thread-sub": { status: "completed" } } },
+            // An interrupted subagent did not do its work: its call settles as an error.
+            "output-error",
           ],
         ]);
         assert.ok(!JSON.stringify(rows).includes("iVBORw0K"));
