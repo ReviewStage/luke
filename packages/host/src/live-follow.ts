@@ -56,7 +56,11 @@ export interface LiveClient {
  * so the host holds one socket however many reads it follows, rather than
  * one per read. The client is opened once per address, however many reads
  * wait on it while it loads; one that failed to open is forgotten, so the
- * next read opens it afresh.
+ * next read opens it afresh. So is one any of whose subscriptions moved to
+ * `error`: Neon's guide says a client whose connection failed cannot
+ * reconnect ("Create a new client with `createRealtimeClient()` before you
+ * subscribe again"), so the next read opens a new one, and the old one
+ * closes once its last holder lets go.
  */
 export function shareLiveClients(
   open: (url: string) => LiveClient | PromiseLike<LiveClient>,
@@ -84,7 +88,14 @@ export function shareLiveClients(
     }
     let holding = true;
     return {
-      subscribe: (query) => client.subscribe(query),
+      subscribe: (query) => {
+        const subscription = client.subscribe(query);
+        // A subscription in error may be its connection's, which Neon's guide says never recovers: the client is replaced for the next read rather than shared on.
+        subscription.onChange((snapshot) => {
+          if (snapshot.status === "error") forget(url, held);
+        });
+        return subscription;
+      },
       close: () => {
         if (!holding) return;
         holding = false;

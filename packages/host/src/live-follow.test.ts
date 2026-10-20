@@ -27,13 +27,18 @@ function scriptedClients() {
   const opened: string[] = [];
   const closed: string[] = [];
   const subscribed: string[] = [];
+  const listeners: ((snapshot: { readonly status: string; readonly data: undefined }) => void)[] =
+    [];
   const open = (url: string): LiveClient => {
     opened.push(url);
     return {
       subscribe: (query) => {
         subscribed.push(query.capability);
         return {
-          onChange: () => () => undefined,
+          onChange: (listener) => {
+            listeners.push(listener);
+            return () => undefined;
+          },
           renew: () => Promise.resolve(),
           unsubscribe: () => undefined,
         };
@@ -41,7 +46,11 @@ function scriptedClients() {
       close: () => void closed.push(url),
     };
   };
-  return { open, opened, closed, subscribed };
+  /** Every subscription so far moves to `error`, as a failed connection moves them. */
+  const fail = () => {
+    for (const listener of listeners) listener({ status: "error", data: undefined });
+  };
+  return { open, opened, closed, subscribed, fail };
 }
 
 /** Every step the read has to take, taken. */
@@ -76,6 +85,21 @@ test("reads at one address share one client, closed once the last lets go", asyn
 
   await open("wss://realtime.example/v1");
   assert.equal(clients.opened.length, 2, "the next read opens a fresh client");
+});
+
+test("a client a subscription saw fail is replaced for the next read, and closed once its holders let go", async () => {
+  const clients = scriptedClients();
+  const open = shareLiveClients(clients.open);
+  const inbox = await open("wss://realtime.example/v1");
+  inbox.subscribe(sealed("inbox"));
+  clients.fail();
+
+  const plan = await open("wss://realtime.example/v1");
+  assert.equal(clients.opened.length, 2, "the next read opens a new client");
+  inbox.close();
+  assert.deepEqual(clients.closed, ["wss://realtime.example/v1"], "the failed one closes");
+  plan.close();
+  assert.equal(clients.closed.length, 2);
 });
 
 test("reads at two addresses each have their own client", async () => {
