@@ -204,8 +204,7 @@ function InboxShown({
     !paneOnly,
     { asked: listed, onAsk: onListed, onSingle: paneOnly ? undefined : onSingle },
   );
-  // Note that an item standing alone is told as one column is, so the window's history and its link step to the item shown rather than the Inbox, whatever the room's width;
-  // before one stands there is no list step to tell, the list being the sidebar's, so the Inbox is no column of its own until then.
+  // Note that the Inbox reports one column only once an item stands, since its list lives in the sidebar and a list step would show nothing new.
   const itemStands = chosen !== undefined;
   useLayoutEffect(() => {
     if (paneOnly) onSingle?.(itemStands);

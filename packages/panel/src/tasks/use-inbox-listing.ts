@@ -298,8 +298,7 @@ export function useInboxListing(tasks: TasksControl, enabled = true) {
     !chosenWaits &&
     holderRead &&
     (chosenAgentId !== undefined || !listUnread);
-  // Note that an item a link or a notification asked for is never given way to, found or not, because the reader asked for that one.
-  // Only the Inbox standing has an item to stand in, so a sidebar listing it while it does not chooses nothing.
+  // Note that an item a link or a notification asked for is never given way to, found or not, and that only an Inbox standing has an item to stand in.
   const standIn =
     view.open && chosen === undefined && !chosenWaits && !missing && asked?.opened !== true
       ? firstChoice(list)
