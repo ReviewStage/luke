@@ -4790,16 +4790,18 @@ ol.transcript-list {
 /* A forked draft's chip over its box: what it forks, the message's opening
    words, and the × that lets the fork go, docked on the composer's own
    inset as the to-do list is and drawn as its card is (`.todos-dock`): one
-   line on the raised fill, the glyph in the muted ink, the source's chip
-   and the quote cut short rather than wrapped, and the × held to the line's
-   end by its seat (fork-action.tsx). */
+   line on the raised fill, at least the card's 32px and as tall as the
+   profile's × where that stands taller, the glyph in the muted ink, the
+   source's chip and the quote cut short rather than wrapped, and the × held
+   to the line's end by its seat (fork-action.tsx). */
 .draft-fork-dock {
+  container: fork-dock / inline-size;
   padding: 0 var(--luke-space-16) var(--luke-space-8);
 }
 
 .draft-fork-chip {
   display: flex;
-  height: 32px;
+  min-height: 32px;
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-4);
@@ -4821,8 +4823,8 @@ ol.transcript-list {
 
 /* The words around the chips, Fork of and at, keep whole. The source's
    chip stands whole where the line has room for it and a few words of the
-   quote, which takes what is left; on a narrower line the chip gives way,
-   each cut short on its own ellipsis. */
+   quote, which takes what is left; on a narrower line both give way, each
+   cut short on its own ellipsis. */
 .draft-fork-chip > span:not([data-actor-ref], .draft-fork-quote, .draft-fork-drop) {
   flex-shrink: 0;
 }
@@ -4834,7 +4836,7 @@ ol.transcript-list {
 
 .draft-fork-quote {
   display: block;
-  min-width: 8em;
+  min-width: 4em;
   flex: 1 1 0;
   overflow: hidden;
   color: var(--luke-color-text);
@@ -4845,6 +4847,22 @@ ol.transcript-list {
   display: flex;
   flex-shrink: 0;
   margin-left: auto;
+}
+
+/* A narrow dock, a side panel at its narrowest, says Fork of or Continue
+   of by its glyph alone, the words still read to assistive tech, so the
+   source's name keeps the room they took. */
+@container fork-dock (max-width: 359px) {
+  .draft-fork-lead {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    clip-path: inset(50%);
+  }
 }
 
 /* The room under the transcript for the composer, with no rule between
