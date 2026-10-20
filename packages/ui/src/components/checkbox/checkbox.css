@@ -29,4 +29,10 @@
   .luke-checkbox[data-disabled="true"] {
     color: var(--luke-color-text-subtle);
   }
+
+  /* A read-only box takes no press, so nothing about it says it does. */
+  .luke-checkbox[data-read-only="true"],
+  .luke-checkbox[data-read-only="true"] .luke-checkbox-box {
+    cursor: default;
+  }
 }

@@ -47,6 +47,7 @@ import {
   DisclosureSummary,
   EllipsisIcon,
   ErrorState,
+  type FieldControl,
   FoldingButton,
   type FoldingButtonHint,
   FormField,
@@ -89,7 +90,8 @@ import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
 import { type FormTextDoors, type FormTextProps, InboxFormText } from "./inbox-form-text.js";
 import {
   ANSWER_TONE,
-  answeredWords,
+  type AnswerTone,
+  answeredDraft,
   answerOf,
   archivedHolder,
   askNumberedPick,
@@ -115,6 +117,7 @@ import {
   openAskOf,
   proposedOptions,
   readersItem,
+  repliedDraft,
   SETTLED_BY,
   sentenceCased,
   sentStamp,
@@ -182,14 +185,18 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * docked under the thread for the note, and every item is sent by its one
  * Send, a note's reading "Got it" until a word is written. A card whose
  * agent need not hear back says whether its answer will message the agent:
- * a bare answer does not, and a typed note does. Once the item is settled,
- * what it offered folds to one line saying who picked which, which opens
- * to the options, or the decisions it was answered by, with the developer's
- * pick marked and the rest stepped back; the developer's answer follows as
- * their comment, when and whether it reached the agent as a message or was
- * kept for it to read, then what they picked as a chip and what they
+ * a bare answer does not, and a typed note does. Once the item is
+ * answered, the developer's answer follows as their comment, when and
+ * whether it reached the agent as a message or was kept for it to read,
+ * then the question's own controls as the answer left them, read-only and
+ * at full strength (a choice's options with the pick checked, an
+ * approval's or a to-do's cards with the decision checked, a form's fields
+ * filled in, empty where left empty), or what they did as a chip where
+ * the question has none, then what they
  * wrote, their note drawn as the agent's tab draws a sent message, its
- * mentions chips; or the agent's comment says it took the item back, and
+ * mentions chips; or, the item taken back or its answer not read, what it
+ * offered folds to one line, which opens to the options; or the agent's
+ * comment says it took the item back, and
  * why. The thread's messages, a member's or the agent's, written at any
  * point, stand among these comments in the order they were written, each
  * by its writer's face and name, its files and its words drawn as an
@@ -218,13 +225,17 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * `inboxThreadOf`): under its title alone, every message, oldest first,
  * each a Markdown document by its writer's face and name, drawn with the
  * item's own pictures, pairs, and lone-link cards, and its files. A member's answer
- * leads with its stamp (`inbox-stamp.tsx`). An agent's message that asks
+ * leads with the ask's card it answered, its kind and how it was answered
+ * at its head and its controls under it as the answer left them,
+ * read-only; where the thread read no longer carries the ask, it leads
+ * with its stamp (`inbox-stamp.tsx`) and its values listed. An agent's message that asks
  * ends with the ask's box: its kind and where it stands at its head, and
  * while it waits its controls, a `decide`'s numbered options or two small
  * buttons, a `do`'s steps with Mark done and Couldn't do it, an `answer`'s
  * fields with Submit or its Answer; each attaches its answer to the box's
- * reply rather than sending it. Settled, it is one line saying who answered
- * and how; replaced, it is struck through; withdrawn, it says why, or who
+ * reply rather than sending it. Answered, it leaves the agent's message
+ * for the reply that answered it, or says "Answered" alone where that
+ * reply is no longer read; replaced, it is struck through; withdrawn, it says why, or who
  * closed the item.
  *
  * Words selected in what the agent wrote, its question's Markdown, its
@@ -386,19 +397,23 @@ function optionRows(pane: HTMLElement): HTMLButtonElement[] {
  * A choice's options, a radio list where it takes one and a checkbox list
  * where it takes several, each pressed to pick it and pressed again to let
  * it go. Where `numbered`, each of the first nine wears the number that
- * picks it, which the Inbox's pane answers (`useOptionNumbers`).
+ * picks it, which the Inbox's pane answers (`useOptionNumbers`). Read-only,
+ * it is the choice as it was answered, the picks checked, which no press,
+ * key, or number reaches, and which Enter's way to an option passes by.
  */
 export function ChoiceOptions({
   choice,
   draft,
   disabled,
   numbered = false,
+  readOnly = false,
   onDraft,
 }: {
   choice: Pick<InboxChoice, "options" | "multiple" | "recommended">;
   draft: InboxDraft;
   disabled: boolean;
   numbered?: boolean;
+  readOnly?: boolean;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   const options = choiceOptions(
@@ -408,16 +423,17 @@ export function ChoiceOptions({
     })),
   );
   return (
-    <div {...{ [OPTIONS_ATTRIBUTE]: "" }}>
+    <div {...(readOnly ? {} : { [OPTIONS_ATTRIBUTE]: "" })}>
       <ChoiceList
         legend={CHOICE_LEGEND}
         options={options}
         value={draft.choices}
         select={choice.multiple === true ? CHOICE_SELECT.MANY : CHOICE_SELECT.ONE}
         look={CHOICE_LOOK.MARKED}
-        numbered={numbered}
+        numbered={numbered && !readOnly}
         clearable
         disabled={disabled}
+        readOnly={readOnly}
         onChange={(choices) => onDraft({ ...draft, choices: [...choices] })}
       />
     </div>
@@ -438,24 +454,27 @@ const DECISION_TONE = [CHOICE_TONE.COMPLETE, CHOICE_TONE.DANGER] as const;
  * them, the pick's mark green for going ahead and red for holding back, and
  * the pick waiting for Send: an approval's Approve and Decline side by side,
  * and a to-do's step, the item's own title, over its "Couldn't do it".
+ * Read-only, they are the decision as it was given, unnumbered.
  */
 function DecisionCards({
   response,
   draft,
   disabled,
+  readOnly = false,
   todo,
   onDraft,
 }: {
   response: InboxDecided;
   draft: InboxDraft;
   disabled: boolean;
+  readOnly?: boolean;
   /** The to-do's title, which names its step, where the response is a to-do. */
   todo?: string | undefined;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
   const decided = decidedOf(response, draft);
   return (
-    <div {...{ [OPTIONS_ATTRIBUTE]: "" }}>
+    <div {...(readOnly ? {} : { [OPTIONS_ATTRIBUTE]: "" })}>
       <ChoiceList
         legend={todo === undefined ? DECISION_LEGEND : TODO_LEGEND}
         options={decisionsOf(response).map((decision, index) => ({
@@ -466,9 +485,10 @@ function DecisionCards({
         value={decided === undefined ? [] : [decided]}
         look={CHOICE_LOOK.MARKED}
         flow={todo === undefined ? CHOICE_FLOW.ACROSS : CHOICE_FLOW.DOWN}
-        numbered
+        numbered={!readOnly}
         clearable
         disabled={disabled}
+        readOnly={readOnly}
         onChange={(picked) => {
           const [reply] = picked;
           onDraft(reply === undefined ? { ...draft, choices: [] } : withDecision(draft, reply));
@@ -494,13 +514,50 @@ function FieldLabel({ field }: { field: InboxField }): React.JSX.Element {
 /** How a form's text fields are drawn where the caller draws its own: the Inbox's composer field. */
 export type FormText = (props: FormTextProps) => React.ReactNode;
 
-/** The parts of a field a frame's attributes name, which Enter's way to an empty field finds it by. */
-function fieldFrame(field: InboxField) {
-  return {
-    className: "inbox-field",
-    "data-inbox-field": field.type,
-    "data-inbox-field-label": field.label,
-  } as const;
+/**
+ * The parts of a field a frame's attributes name, which Enter's way to an
+ * empty field finds it by; a field filled in as answered is named apart,
+ * so that way never lands on one.
+ */
+function fieldFrame(field: InboxField, readOnly: boolean) {
+  return readOnly
+    ? ({ className: "inbox-field", "data-inbox-answered-field": field.type } as const)
+    : ({
+        className: "inbox-field",
+        "data-inbox-field": field.type,
+        "data-inbox-field-label": field.label,
+      } as const);
+}
+
+/**
+ * A text field's words as an answer gave them, in the field's own frame:
+ * drawn as the agent's tab draws a sent message, so a mention they hold is
+ * its chip, and empty where the field was left empty. Note that the
+ * composer's editor is not loaded for it, since nothing is written here.
+ */
+function AnsweredText({
+  control,
+  words,
+}: {
+  control: FieldControl;
+  words: string;
+}): React.JSX.Element {
+  return (
+    <div className="inbox-field-composer" data-read-only="">
+      {/* biome-ignore lint/a11y/useSemanticElements: the words hold mention chips, which no native field can, and speak as the read-only field they stand for. */}
+      <div
+        className="inbox-words inbox-field-words"
+        role="textbox"
+        aria-readonly="true"
+        aria-multiline="true"
+        aria-labelledby={control.labelId}
+        aria-describedby={control["aria-describedby"]}
+        tabIndex={-1}
+      >
+        {words === "" ? null : <SentWords text={words} />}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -509,18 +566,21 @@ function fieldFrame(field: InboxField) {
  * text field the caller's own or `@luke/ui`'s, a number a short field, a
  * select its options as pills that wrap, the one the agent recommends
  * wearing its badge, an optional one's pick taken back by pressing it
- * again, and a yes or no a checkbox beside its name.
+ * again, and a yes or no a checkbox beside its name. Read-only, each
+ * control stands as the answer filled it, which nothing changes.
  */
 function InboxFormField({
   field,
   draft,
   disabled,
+  readOnly,
   text,
   onDraft,
 }: {
   field: InboxField;
   draft: InboxDraft;
   disabled: boolean;
+  readOnly: boolean;
   text: FormText | undefined;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
@@ -530,12 +590,13 @@ function InboxFormField({
   switch (field.type) {
     case INBOX_FIELD.TEXT:
       return (
-        <div {...fieldFrame(field)}>
+        <div {...fieldFrame(field, readOnly)}>
           <FormField label={<FieldLabel field={field} />}>
             {(control) => {
               const words = value === undefined ? "" : String(value);
               const onChange = (typed: string | undefined) =>
                 set(typed === undefined || typed === "" ? undefined : typed);
+              if (readOnly) return <AnsweredText control={control} words={words} />;
               return text === undefined ? (
                 <TextField
                   field={control}
@@ -553,7 +614,7 @@ function InboxFormField({
       );
     case INBOX_FIELD.NUMBER:
       return (
-        <div {...fieldFrame(field)}>
+        <div {...fieldFrame(field, readOnly)}>
           <FormField label={<FieldLabel field={field} />}>
             {(control) => (
               <div className="inbox-field-short">
@@ -563,6 +624,7 @@ function InboxFormField({
                   maxLength={INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS}
                   value={value === undefined ? undefined : Number(value)}
                   disabled={disabled}
+                  readOnly={readOnly}
                   onChange={set}
                 />
               </div>
@@ -572,7 +634,7 @@ function InboxFormField({
       );
     case INBOX_FIELD.SELECT:
       return (
-        <div {...fieldFrame(field)}>
+        <div {...fieldFrame(field, readOnly)}>
           <span className="inbox-field-name" aria-hidden="true">
             <FieldLabel field={field} />
           </span>
@@ -587,14 +649,15 @@ function InboxFormField({
             look={CHOICE_LOOK.PILL}
             clearable={field.required !== true}
             disabled={disabled}
+            readOnly={readOnly}
             onChange={(picked) => set(picked[0])}
           />
         </div>
       );
     case INBOX_FIELD.BOOLEAN:
       return (
-        <div {...fieldFrame(field)}>
-          <Checkbox checked={value === true} disabled={disabled} onChange={set}>
+        <div {...fieldFrame(field, readOnly)}>
+          <Checkbox checked={value === true} disabled={disabled} readOnly={readOnly} onChange={set}>
             <FieldLabel field={field} />
           </Checkbox>
         </div>
@@ -602,17 +665,19 @@ function InboxFormField({
   }
 }
 
-/** A form's fields, stacked in the agent's order; its text fields drawn by `text` where it is given. */
+/** A form's fields, stacked in the agent's order; its text fields drawn by `text` where it is given; read-only, as an answer filled them. */
 export function FormFields({
   form,
   draft,
   disabled,
+  readOnly = false,
   text,
   onDraft,
 }: {
   form: Pick<InboxForm, "fields">;
   draft: InboxDraft;
   disabled: boolean;
+  readOnly?: boolean;
   text?: FormText | undefined;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element {
@@ -624,6 +689,7 @@ export function FormFields({
           field={field}
           draft={draft}
           disabled={disabled}
+          readOnly={readOnly}
           text={text}
           onDraft={onDraft}
         />
@@ -632,19 +698,25 @@ export function FormFields({
   );
 }
 
-/** The controls an item's response puts between its blocks and its box: a choice's options, a form's fields, nothing for the rest. */
+/**
+ * The controls an item's response puts between its blocks and its box: a
+ * choice's options, an approval's or a to-do's cards, a form's fields,
+ * nothing for the rest; read-only, as the answer the draft holds left them.
+ */
 function ResponseControls({
   item,
   draft,
   disabled,
+  readOnly = false,
   text,
   onDraft,
 }: {
   item: InboxItem;
   draft: InboxDraft;
   disabled: boolean;
+  readOnly?: boolean;
   /** What a form's text fields are written with. */
-  text: FormTextDoors;
+  text: FormTextDoors | undefined;
   onDraft: (draft: InboxDraft) => void;
 }): React.JSX.Element | null {
   const response = item.response;
@@ -657,12 +729,19 @@ function ResponseControls({
           draft={draft}
           disabled={disabled}
           numbered
+          readOnly={readOnly}
           onDraft={onDraft}
         />
       );
     case INBOX_RESPONSE.APPROVAL:
       return (
-        <DecisionCards response={response} draft={draft} disabled={disabled} onDraft={onDraft} />
+        <DecisionCards
+          response={response}
+          draft={draft}
+          disabled={disabled}
+          readOnly={readOnly}
+          onDraft={onDraft}
+        />
       );
     case INBOX_RESPONSE.TODO:
       return (
@@ -670,6 +749,7 @@ function ResponseControls({
           response={response}
           draft={draft}
           disabled={disabled}
+          readOnly={readOnly}
           todo={cardTitle(item.title)}
           onDraft={onDraft}
         />
@@ -680,13 +760,69 @@ function ResponseControls({
           form={response}
           draft={draft}
           disabled={disabled}
-          text={(props) => <InboxFormText {...props} doors={text} />}
+          readOnly={readOnly}
+          text={
+            text === undefined ? undefined : (props) => <InboxFormText {...props} doors={text} />
+          }
           onDraft={onDraft}
         />
       );
     default:
       return null;
   }
+}
+
+/** The responses whose controls a settled item from before version 5 draws filled in with its answer. */
+const FILLED_RESPONSES: ReadonlySet<string> = new Set([
+  INBOX_RESPONSE.CHOICE,
+  INBOX_RESPONSE.APPROVAL,
+  INBOX_RESPONSE.TODO,
+  INBOX_RESPONSE.FORM,
+]);
+
+/** Whether a settled item's question draws its controls filled in with its answer: one answered, whose answer its read carries, of a response with controls. */
+function drawsAnswered(item: InboxItem): boolean {
+  return (
+    item.status === INBOX_STATUS.ANSWERED &&
+    item.answer !== undefined &&
+    FILLED_RESPONSES.has(item.response.type)
+  );
+}
+
+/** Answers no change, for the controls of an answer already given. */
+function heldStill(): void {}
+
+/**
+ * What a settled item's question ends with: nothing where it was answered
+ * and its read carries the answer, which the answer's comment draws in the
+ * question's controls (`AnsweredResponse`); otherwise what it offered,
+ * folded (`Offered`), as one taken back or one whose answer the read lacks.
+ */
+function SettledResponse({ item }: { item: InboxItem }): React.JSX.Element | null {
+  // Keyed by its item, so the fold opened on one item stands closed on the next.
+  return drawsAnswered(item) ? null : <Offered key={item.id} item={item} />;
+}
+
+/**
+ * A settled item's answer as the question's own controls, read-only, as
+ * they stood when it was sent (`ResponseControls`), which leads the
+ * answerer's comment; nothing where its read lacks the answer.
+ */
+function AnsweredResponse({ item }: { item: InboxItem }): React.JSX.Element | null {
+  if (!drawsAnswered(item) || item.answer === undefined) return null;
+  return (
+    // Note that it is no `inbox-response`, which the pane stands over the box as the question an open item waits on.
+    <div data-inbox-answered="">
+      <ResponseControls
+        item={item}
+        draft={repliedDraft(item.answer)}
+        disabled={false}
+        readOnly
+        text={undefined}
+        onDraft={heldStill}
+      />
+    </div>
+  );
 }
 
 /** What an editor's own element matches, its words written in place, and a field of several lines. */
@@ -991,12 +1127,18 @@ function CommentName({ children }: { children: React.ReactNode }): React.JSX.Ele
 
 /**
  * What the developer's answer leads with: what they picked, the options'
- * labels, or, where they picked none and wrote nothing, what they did,
- * "Acknowledged it"; nothing where their words say it.
+ * labels, unless the question draws them picked (`drawn`), or, where they
+ * picked none and wrote nothing, what they did, "Acknowledged it"; nothing
+ * where their words say it.
  */
-function pickOf(item: InboxItem, did: string, words: string | undefined): string | undefined {
+function pickOf(
+  item: InboxItem,
+  did: string,
+  words: string | undefined,
+  drawn: boolean,
+): string | undefined {
   const picked = proposedOptions(item).filter((option) => option.picked);
-  if (picked.length > 0) return picked.map((option) => option.label).join(", ");
+  if (picked.length > 0) return drawn ? undefined : picked.map((option) => option.label).join(", ");
   return words === undefined ? sentenceCased(did) : undefined;
 }
 
@@ -1087,20 +1229,13 @@ function AnswerValues({
   );
 }
 
-/** A settled item's form values as the developer filled them (`AnswerValues`). */
-function FormValues({ item }: { item: InboxItem }): React.JSX.Element | null {
-  const response = item.response;
-  const texts = new Set(
-    knownResponse(response) && response.type === INBOX_RESPONSE.FORM
-      ? response.fields
-          .filter((field) => field.type === INBOX_FIELD.TEXT)
-          .map((field) => field.label)
-      : [],
-  );
-  return <AnswerValues values={item.answer?.values ?? []} texts={texts} />;
-}
-
-/** The developer's answer as their comment: who answered, by their face and name, when, and where it went, then what they picked as a chip, the files they attached, and what they wrote. */
+/**
+ * The developer's answer as their comment: who answered, by their face and
+ * name, when, and where it went, then what they picked as a chip, where
+ * the question does not draw it picked already, a form's values where it
+ * does not draw them in its fields (one of a response this build does not
+ * know), the files they attached, and what they wrote.
+ */
 function Answered({
   item,
   by,
@@ -1125,7 +1260,8 @@ function Answered({
     (item.answerFiles ?? []).length > 0 && item.answer?.reply === INBOX_REPLY.ANSWERED
       ? ""
       : undefined;
-  const pick = pickOf(item, settled.did, settled.values ?? settled.note ?? filesSay);
+  const drawn = drawsAnswered(item);
+  const pick = pickOf(item, settled.did, settled.values ?? settled.note ?? filesSay, drawn);
   return (
     <Comment
       kind={COMMENT.ANSWERED}
@@ -1146,13 +1282,17 @@ function Answered({
         </>
       }
     >
+      <AnsweredResponse item={item} />
       {pick === undefined ? null : (
         <span className="inbox-pick" data-inbox-pick="">
           <CheckIcon aria-hidden="true" />
           <span>{pick}</span>
         </span>
       )}
-      {settled.values === undefined ? null : <FormValues item={item} />}
+      {/* The values stand in the question's own fields where it draws them; a response this build does not know lists them here. */}
+      {settled.values === undefined || drawn ? null : (
+        <AnswerValues values={item.answer?.values ?? []} texts={NO_TEXT_LABELS} />
+      )}
       <CommentFiles
         itemId={item.id}
         files={item.answerFiles ?? NO_FILES}
@@ -1684,30 +1824,169 @@ function AskControls({
   }
 }
 
-/** How a settled ask's one line reads: who answered and how, with the answer's glyph; or that it was answered where the thread no longer carries the answer. */
-function AnsweredLine({
-  ask,
-  answer,
-}: {
-  ask: InboxReadAsk;
-  answer: InboxMessage | undefined;
-}): React.JSX.Element {
-  const answerer = usePerson(answer?.member);
-  const answers = answer?.answers;
-  if (answers === undefined) return <span className="inbox-ask-standing">{ANSWERED}</span>;
-  const tone = sentStamp(answers, ask).tone;
+/** The glyph a press given wears: a check in green going ahead, a turn back in red holding back. */
+function ToneGlyph({ tone }: { tone: AnswerTone }): React.JSX.Element {
   return (
-    <span className="inbox-ask-standing" data-tone={tone}>
+    <span className="inbox-ask-pressed" data-tone={tone}>
       {tone === ANSWER_TONE.AHEAD ? (
         <CheckIcon aria-hidden="true" />
       ) : (
         <Undo2Icon aria-hidden="true" />
       )}
-      <ActorLine>
-        <ActorRef actor={answerer} nameOnly />
-        {` ${answeredWords(answers, ask)}`}
-      </ActorLine>
     </span>
+  );
+}
+
+/**
+ * A press of an answered ask as it was left: its look and words as it was
+ * offered, the one given pressed and wearing its glyph, none of them
+ * taking a press.
+ */
+function AnsweredPress({
+  label,
+  variant = BUTTON_VARIANT.OUTLINE,
+  tone,
+  pressed,
+}: {
+  label: string;
+  variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
+  tone: AnswerTone;
+  pressed: boolean;
+}): React.JSX.Element {
+  return (
+    <Button
+      variant={variant}
+      size={BUTTON_SIZE.COMPACT}
+      pressed={pressed}
+      readOnly
+      icon={pressed ? <ToneGlyph tone={tone} /> : undefined}
+    >
+      {label}
+    </Button>
+  );
+}
+
+/**
+ * An answered ask's controls as the answer left them, in the look they had
+ * while it waited and taking nothing: a `decide`'s options with the picks
+ * checked, or its two small buttons with the one pressed marked; a `do`'s
+ * steps ticked as they were sent, over Mark done and Couldn't do it with
+ * the one pressed marked; an `answer`'s fields, each holding what it was
+ * given, empty where it was left empty. An `answer` of no fields draws
+ * nothing here, its reply's words being the answer.
+ */
+function AskAnswered({
+  ask,
+  title,
+  answers,
+}: {
+  ask: InboxKnownAsk;
+  /** The item's title, which stands as the one step of a to-do that names none. */
+  title: string;
+  answers: InboxAnswers;
+}): React.JSX.Element | null {
+  const draft = answeredDraft(ask, answers);
+  const body = (controls: React.ReactNode) => (
+    <div className="inbox-ask-answered" data-inbox-answered="">
+      {controls}
+    </div>
+  );
+  switch (ask.type) {
+    case INBOX_ASK.DECIDE:
+      return body(
+        decideButtons(ask) ? (
+          <div className="inbox-ask-presses">
+            {ask.options.map((option, at) => (
+              <AnsweredPress
+                key={option.label}
+                label={option.label}
+                tone={at === 0 ? ANSWER_TONE.AHEAD : ANSWER_TONE.BACK}
+                pressed={draft.choices.includes(option.label)}
+              />
+            ))}
+          </div>
+        ) : (
+          <ChoiceOptions choice={ask} draft={draft} disabled={false} readOnly onDraft={heldStill} />
+        ),
+      );
+    case INBOX_ASK.DO: {
+      const steps = ask.steps.length === 0 ? [title] : ask.steps;
+      const ticked = new Set(draft.steps ?? []);
+      return body(
+        <>
+          <ul className="inbox-ask-steps" aria-label="Steps">
+            {steps.map((step, at) => (
+              // Steps have no key of their own, and are never reordered.
+              <li key={at} data-inbox-step="">
+                <Checkbox checked={ticked.has(at)} readOnly onChange={heldStill}>
+                  {step}
+                </Checkbox>
+              </li>
+            ))}
+          </ul>
+          <div className="inbox-ask-presses">
+            <AnsweredPress
+              label={ASK_PRESS.DONE}
+              tone={ANSWER_TONE.AHEAD}
+              pressed={answers.reply === INBOX_REPLY.DONE}
+            />
+            <AnsweredPress
+              label={ASK_PRESS.NOT_DONE}
+              variant={BUTTON_VARIANT.QUIET}
+              tone={ANSWER_TONE.BACK}
+              pressed={answers.reply === INBOX_REPLY.NOT_DONE}
+            />
+          </div>
+        </>,
+      );
+    }
+    case INBOX_ASK.ANSWER:
+      return ask.fields === undefined
+        ? null
+        : body(
+            <FormFields
+              form={{ fields: ask.fields }}
+              draft={draft}
+              disabled={false}
+              readOnly
+              onDraft={heldStill}
+            />,
+          );
+  }
+}
+
+/**
+ * The ask a member's reply answered, at the head of that reply under their
+ * face and name: the ask's card, its kind and how it was answered at its
+ * head, "Chose 7 days" or "Couldn't do it 1/3" with the answer's glyph,
+ * and its controls under it as the answer left them (`AskAnswered`). It
+ * stands in the reply's stamp's place, marking the message as the answer.
+ */
+function AnsweredCard({
+  ask,
+  title,
+  answers,
+}: {
+  ask: InboxKnownAsk;
+  title: string;
+  answers: InboxAnswers;
+}): React.JSX.Element {
+  const stamp = sentStamp(answers, ask);
+  return (
+    <div className="inbox-ask" data-inbox-ask={INBOX_ASK_STATUS.ANSWERED}>
+      <div className="inbox-ask-head">
+        <span className="inbox-ask-kind">{askHeadWords(ask, undefined)}</span>
+        <span className="inbox-ask-standing" data-tone={stamp.tone}>
+          {stamp.tone === ANSWER_TONE.AHEAD ? (
+            <CheckIcon aria-hidden="true" />
+          ) : (
+            <Undo2Icon aria-hidden="true" />
+          )}
+          {stamp.words}
+        </span>
+      </div>
+      <AskAnswered ask={ask} title={title} answers={answers} />
+    </div>
   );
 }
 
@@ -1745,7 +2024,9 @@ function WithdrawnLine({
 /**
  * The box closing a message that asks: a card whose head says what it asks
  * and where it stands, "Waiting on you" while it waits, its controls under
- * it; once settled, one line saying who answered and how; a replaced ask
+ * it; once answered, nothing, the card standing at the head of the reply
+ * that answered it (`AnsweredCard`), or "Answered" alone where the thread
+ * read no longer carries that reply; a replaced ask
  * struck through and marked so; a withdrawn one with why, or who closed the
  * item; and an ask this build does not know a line naming a newer Luke.
  */
@@ -1767,7 +2048,7 @@ function AskBox({
   /** What the open ask's controls press, where it is open; none for a settled one. */
   doors: AskDoors | undefined;
   pane: React.RefObject<HTMLElement | null>;
-}): React.JSX.Element {
+}): React.JSX.Element | null {
   if (!knownAsk(ask)) {
     return (
       <div className="inbox-ask" data-inbox-ask="newer">
@@ -1779,6 +2060,9 @@ function AskBox({
     );
   }
   const open = ask.status === INBOX_ASK_STATUS.OPEN;
+  // The card goes with the reply that answered it, wherever the thread read still carries that reply.
+  const answered = ask.status === INBOX_ASK_STATUS.ANSWERED;
+  if (answered && answerOf(thread, message.id)?.answers !== undefined) return null;
   const drafted = open ? doors?.draft : undefined;
   const head = askHeadWords(
     ask,
@@ -1793,7 +2077,7 @@ function AskBox({
       case INBOX_ASK_STATUS.OPEN:
         return <Waiting on={waitingOn} />;
       case INBOX_ASK_STATUS.ANSWERED:
-        return <AnsweredLine ask={ask} answer={answerOf(thread, message.id)} />;
+        return <span className="inbox-ask-standing">{ANSWERED}</span>;
       case INBOX_ASK_STATUS.REPLACED:
         return <span className="inbox-ask-standing">{REPLACED}</span>;
       case INBOX_ASK_STATUS.WITHDRAWN:
@@ -1824,23 +2108,18 @@ function answeredAsk(
   return thread.find((message) => message.id === answers.ask)?.ask;
 }
 
-/** The text fields' labels of the ask an answer filled, whose values are drawn as words a member typed. */
-function textLabels(ask: InboxReadAsk | undefined): ReadonlySet<string> {
-  if (ask === undefined || !knownAsk(ask) || ask.type !== INBOX_ASK.ANSWER) return new Set();
-  return new Set(
-    (ask.fields ?? [])
-      .filter((field) => field.type === INBOX_FIELD.TEXT)
-      .map((field) => field.label),
-  );
-}
+/** No text fields' labels, for values whose ask or response this build cannot read, so none is known to be a text field. */
+const NO_TEXT_LABELS: ReadonlySet<string> = new Set();
 
 /**
  * One message of a thread from version 5, a Markdown document, as its
  * writer's comment: a member by their face and name, the agent by its tile
- * and name and a quiet "agent" after it, then when. An answer leads with its
- * stamp, a form's values under it, then the files it carried and its words,
+ * and name and a quiet "agent" after it, then when. An answer leads with
+ * the card of the ask it answered, filled in as it was answered
+ * (`AnsweredCard`), or, where the thread read no longer carries that ask,
+ * its stamp and its values listed; then the files it carried and its words,
  * the agent's drawn as its question's are and a member's as a sent message's;
- * an agent's message that asks ends with its ask's box.
+ * an agent's message that asks ends with its ask's box, until it is answered.
  */
 function ThreadMessage({
   item,
@@ -1883,10 +2162,13 @@ function ThreadMessage({
         </>
       }
     >
-      {answers === undefined ? null : (
+      {answers === undefined ? null : answered !== undefined && knownAsk(answered) ? (
+        <AnsweredCard ask={answered} title={cardTitle(item.title)} answers={answers} />
+      ) : (
         <>
+          {/* Where the thread read no longer carries the ask, or this build does not know it, the answer is its stamp and its values listed. */}
           <InboxStamp stamp={sentStamp(answers, answered)} />
-          <AnswerValues values={answers.values ?? []} texts={textLabels(answered)} />
+          <AnswerValues values={answers.values ?? []} texts={NO_TEXT_LABELS} />
         </>
       )}
       <CommentFiles
@@ -2285,8 +2567,7 @@ export function InboxPane({
                               </AnswerMentions>
                             </div>
                           ) : (
-                            // Keyed by its item, so the fold opened on one item stands closed on the next.
-                            <Offered key={item.id} item={item} />
+                            <SettledResponse item={item} />
                           )}
                         </Comment>
                         <ThreadAfter item={item} by={by} now={now} control={control} />
