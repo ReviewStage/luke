@@ -41,7 +41,11 @@ function client(options: Partial<ConstructorParameters<typeof AccountPreferences
 it.effect("writes account preferences as a full snapshot", () =>
   Effect.gen(function* () {
     const { requests, fetchLike } = service([
-      () => new Response(JSON.stringify(PREFERENCES_ANSWER), { status: 200 }),
+      () =>
+        new Response(JSON.stringify(PREFERENCES_ANSWER), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     ]);
 
     const answer = yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences({
@@ -73,7 +77,7 @@ it.effect("reads the experiments part past a key it does not know, beside the vo
             ...PREFERENCES_ANSWER,
             experiments: { [EXPERIMENT.FACTORY]: true, newer: true },
           }),
-          { status: 200 },
+          { status: 200, headers: { "content-type": "application/json" } },
         ),
     ]);
 
@@ -92,7 +96,7 @@ it.effect("writes an experiment's switch as a patch of that experiment alone", (
       () =>
         new Response(
           JSON.stringify({ ...PREFERENCES_ANSWER, experiments: { [EXPERIMENT.FACTORY]: true } }),
-          { status: 200 },
+          { status: 200, headers: { "content-type": "application/json" } },
         ),
     ]);
 
@@ -117,6 +121,7 @@ it.effect(
         () =>
           new Response(JSON.stringify({ ...PREFERENCES_ANSWER, linkOpen: LINK_OPEN.MAC_APP }), {
             status: 200,
+            headers: { "content-type": "application/json" },
           }),
       ]);
 
@@ -140,7 +145,11 @@ it.effect(
 it.effect("sends no link part from a device that never chose, so it clears no other's choice", () =>
   Effect.gen(function* () {
     const { requests, fetchLike } = service([
-      () => new Response(JSON.stringify(PREFERENCES_ANSWER), { status: 200 }),
+      () =>
+        new Response(JSON.stringify(PREFERENCES_ANSWER), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
     ]);
 
     yield* client({ httpClient: fakeHttpClientLayer(fetchLike) }).writePreferences({
@@ -164,7 +173,7 @@ it.effect(
               linkOpen: "a-newer-place",
               updatedAt: PREFERENCES_ANSWER.updatedAt,
             }),
-            { status: 200 },
+            { status: 200, headers: { "content-type": "application/json" } },
           ),
       ]);
 

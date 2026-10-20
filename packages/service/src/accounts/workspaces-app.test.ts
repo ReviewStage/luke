@@ -60,7 +60,8 @@ import {
 import { openWorkspacePlugin } from "../testing/workspace-plugin.js";
 import { workspaceGithubProcedures } from "./workspace-github-procedures.js";
 import { workspaceInvitationsProcedures } from "./workspace-invitations-procedures.js";
-import { type WorkspacesAppSeams, workspacesApp } from "./workspaces-app.js";
+import { workspacesApp } from "./workspaces-app.js";
+import { type WorkspacesProcedureSeams, workspacesProcedures } from "./workspaces-procedures.js";
 
 /**
  * The account's workspaces, answered by their group the way a function
@@ -105,7 +106,7 @@ const openGithubAccount = (name: string) =>
 /** The plugin's member writes and the session they are made under, for the paths that write through the plugin. */
 interface SessionSeams {
   readonly members: MemberSeams;
-  readonly resolveSessionUserId: WorkspacesAppSeams["resolveSessionUserId"];
+  readonly resolveSessionUserId: WorkspacesProcedureSeams["resolveSessionUserId"];
 }
 
 /** No session at all: a path that takes one finds none, and nothing writes through the plugin. */
@@ -135,6 +136,14 @@ const HOSTED_PATHS: ReadonlySet<string> = new Set([
   HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS,
   HOSTED_SERVICE_PATH.WORKSPACES_INVITATIONS_CANCEL,
   HOSTED_SERVICE_PATH.WORKSPACES_INVITATION_OFFER,
+  HOSTED_SERVICE_PATH.WORKSPACES,
+  HOSTED_SERVICE_PATH.WORKSPACES_RENAME,
+  HOSTED_SERVICE_PATH.WORKSPACES_PHOTO_SET,
+  HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS,
+  HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_REMOVE,
+  HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS_ROLE,
+  HOSTED_SERVICE_PATH.WORKSPACES_TRANSFER,
+  HOSTED_SERVICE_PATH.WORKSPACES_LEAVE,
 ]);
 
 /**
@@ -163,6 +172,12 @@ const answered = <A>(
       const procedures = hostedFetch({
         workspaceGithub: workspaceGithubProcedures({ resolveUserId: bearerUserId }),
         workspaceInvitations: workspaceInvitationsProcedures(session),
+        workspaces: workspacesProcedures({
+          resolveUserId: bearerUserId,
+          resolveSessionUserId: session.resolveSessionUserId,
+          workspaces: seams,
+          members: session.members,
+        }),
       });
       // SAFETY: the procedures yield the database, the clock and GitHub alone, which is all a test provides of the web runtime's services.
       const response = yield* Effect.promise(() =>
@@ -171,12 +186,7 @@ const answered = <A>(
       return yield* Effect.promise(() => read(response));
     }
     const routes = Layer.mergeAll(
-      workspacesApp({
-        resolveUserId: bearerUserId,
-        resolveSessionUserId: session.resolveSessionUserId,
-        workspaces: seams,
-        members: session.members,
-      }),
+      workspacesApp({ resolveUserId: bearerUserId }),
       githubInstallApp(),
     );
     const { handler, dispose } = HttpRouter.toWebHandler(

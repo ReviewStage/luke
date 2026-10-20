@@ -117,11 +117,11 @@
   },
   {
     "src": "/api/account/plan-template/revisions/([^/]+)/restore",
-    "dest": "/api/default.js?route=account/plan-template/restore&seq=$1"
+    "dest": "/api/default.js?route=account/plan-template/restore&route-path=account/plan-template/revisions/$1/restore&seq=$1"
   },
   {
     "src": "/api/account/plan-template/revisions/([^/]+)",
-    "dest": "/api/default.js?route=account/plan-template/revision&seq=$1"
+    "dest": "/api/default.js?route=account/plan-template/revision&route-path=account/plan-template/revisions/$1&seq=$1"
   },
   {
     "src": "/api/agents/([^/]+)/subagents/([^/]+)/messages",

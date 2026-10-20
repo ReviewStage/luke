@@ -1,5 +1,6 @@
 import type { InboxBlock, InboxReply, InboxResponse, InboxStatus } from "@luke/features/inbox-wire";
 import {
+  type AnyPgColumn,
   boolean,
   index,
   integer,
@@ -12,6 +13,7 @@ import {
 import { timestamptz } from "./_helpers.js";
 import { organization, user } from "./auth.js";
 import { codingAgent } from "./coding-agent.js";
+import { inboxMessage } from "./inbox-message.js";
 import { task } from "./task.js";
 
 /**
@@ -32,11 +34,15 @@ import { task } from "./task.js";
  * the agent's, kept on the row so a task's inbox is read by one index, and
  * the account's open items are read by another. A message on the item's
  * thread (`inbox-message.ts`) moves when it last changed and never when it
- * was settled. The row goes with its
+ * was settled. From version 5 an agent's message on the thread may carry
+ * an ask, and the one that waits on an answer is named here; the title,
+ * blocks, response, and `needs_reply` stay written beside it for a reader
+ * from before version 5. The row goes with its
  * account, its task, and its agent alike. The columns
  * the fixed kinds stood in, `kind`, `details`, `options`, and
- * `recommended`, are declared no longer and wait on their drop
- * (`tests/drizzle-schema.test.ts`'s `PENDING_DROP`).
+ * `recommended`, are declared no longer: the database still holds them,
+ * kept in step by the trigger `20261007104640_inbox_item_blocks` installed,
+ * until a contract migration drops them both.
  */
 export const inboxItem = pgTable(
   "inbox_item",
@@ -106,6 +112,14 @@ export const inboxItem = pgTable(
      * default.
      */
     readThrough: timestamptz("read_through"),
+    /**
+     * The message on the item's thread whose ask waits on an answer, the one
+     * that may at a time; null where none waits, on every item from before
+     * version 5, and once that message is gone.
+     */
+    openAskMessageId: uuid("open_ask_message_id").references((): AnyPgColumn => inboxMessage.id, {
+      onDelete: "set null",
+    }),
   },
   (table) => [
     // One item per key per agent: a post under a key it used is that item's write.

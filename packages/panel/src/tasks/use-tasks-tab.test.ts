@@ -97,7 +97,6 @@ const OPEN: TasksView = {
   activeTaskId: TASK.id,
   document: { status: TASKS_READ.READY, task: TASK },
 };
-
 /** The shown act's payload, read back as the act's own schema admits it. */
 const readShown = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -148,7 +147,7 @@ function mount(
 ) {
   const told: (ActKind | PortActKind)[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
-  const agentActs: ActKind[] = [];
+  const agentActs: (ActKind | PortActKind)[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
   /** Which task's Inbox main was told is shown, each time it was told. */
@@ -2423,7 +2422,7 @@ test("Home from an open plan leaves it, and from the home page only puts the Inb
 });
 
 test("one agent's pins are asked one after another, so the service hears an Unpin pressed before a Pin landed after it", async () => {
-  const answers: ((answer: ActResultFor<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const answers: ((answer: PortActResult<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {
@@ -2452,7 +2451,7 @@ test("one agent's pins are asked one after another, so the service hears an Unpi
 });
 
 test("an agent's pin still waiting its turn when the account changes is never asked, so it lands on no one else's pins", async () => {
-  const answers: ((answer: ActResultFor<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
+  const answers: ((answer: PortActResult<typeof ACT_KIND.CODING_AGENTS_PIN>) => void)[] = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     {

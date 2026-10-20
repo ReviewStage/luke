@@ -45,12 +45,13 @@ function openActPort(actor: ActSender): void {
   const unanswered = () => Effect.succeed({ failure: ISSUE_CALL_FAILURE.UNANSWERED });
   const noKeys = () => Effect.succeed({ keys: [] });
   const notTemplated = () => Effect.succeed({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-  // SAFETY: no automation, factory, or integration act is called here, so their hosts are never reached.
+  // SAFETY: no agent, automation, factory, or integration act is called here, so their hosts are never reached.
   const elsewhere = {
+    agents: { host: {}, notices: {} },
     automations: { host: {} },
     factory: { host: {} },
     integrations: { host: {} },
-  } as Pick<ActPortDependencies, "automations" | "factory" | "integrations">;
+  } as Pick<ActPortDependencies, "agents" | "automations" | "factory" | "integrations">;
   const handler = createActPortHandler(
     {
       ...UNREACHED,

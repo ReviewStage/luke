@@ -404,16 +404,6 @@ export function planPageVersionPath(taskId: string, pageId: string, version: num
   return `${taskPagesPath(taskId)}/${encodeURIComponent(pageId)}/versions/${version}`;
 }
 
-/** One revision of the account's plan template: its text beside the text before it (GET). */
-export function planTemplateRevisionPath(seq: number): string {
-  return `${HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE_REVISIONS}/${seq}`;
-}
-
-/** One revision of the account's plan template put back as the template (POST). */
-export function planTemplateRestorePath(seq: number): string {
-  return `${planTemplateRevisionPath(seq)}/restore`;
-}
-
 /** One task's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
 export function taskAgentsPath(taskId: string): string {
   return `${taskPath(taskId)}/agents`;

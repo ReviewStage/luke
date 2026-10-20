@@ -977,9 +977,18 @@ importers:
       lucide-react:
         specifier: 1.53.0
         version: 1.53.0(@types/react@19.2.18)(react@19.2.8)
+      mdast-util-from-markdown:
+        specifier: 2.0.3
+        version: 2.0.3
+      mdast-util-gfm:
+        specifier: 3.1.0
+        version: 3.1.0
       mermaid:
         specifier: 11.17.2
         version: 11.17.2
+      micromark-extension-gfm:
+        specifier: 3.0.0
+        version: 3.0.0
       react:
         specifier: 'catalog:'
         version: 19.2.8
@@ -1014,6 +1023,9 @@ importers:
       '@types/hast':
         specifier: 3.0.5
         version: 3.0.5
+      '@types/mdast':
+        specifier: 4.0.4
+        version: 4.0.4
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0

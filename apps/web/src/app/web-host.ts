@@ -25,6 +25,7 @@ import { feedbackDelivery } from "@luke/features/feedback";
 import { highlightSnippet, runModeFor } from "@luke/host";
 import {
   type ActPortDependencies,
+  type AgentProceduresDependencies,
   createActPortHandler,
   refusedPlatformProcedures,
 } from "@luke/host/act-port";
@@ -285,6 +286,7 @@ function hostRowDependencies(
 function portDependencies(
   operator: OperatorClient,
   state: AppStateStore,
+  notices: AgentProceduresDependencies["notices"],
   reporter: string,
   tabs: ConnectTabs,
 ): ActPortDependencies {
@@ -297,6 +299,7 @@ function portDependencies(
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    agents: { host, notices },
     automations: { host },
     factory: { host },
     integrations: { host },
@@ -441,7 +444,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       });
       events = made.events;
       const actPort = yield* servedActPort(
-        portDependencies(operator, state, crypto.randomUUID(), tabs),
+        portDependencies(operator, state, notices, crypto.randomUUID(), tabs),
         services,
       );
       return {

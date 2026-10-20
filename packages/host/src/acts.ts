@@ -7,11 +7,9 @@ import {
   browserViewParamsSchema,
 } from "@luke/features/browser-acts";
 import {
-  type CodingAgentAgentAnswer,
   type CodingAgentChangesAnswerView,
   type CodingAgentChatAnswerView,
   type CodingAgentChatWriteAnswerView,
-  type CodingAgentDefaultAnswer,
   type CodingAgentGitHubImageView,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
@@ -19,29 +17,21 @@ import {
   type CodingAgentInboxMessagedView,
   type CodingAgentInboxReadAllView,
   type CodingAgentInboxReadStateView,
-  type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
-  type CodingAgentModelsAnswer,
   type CodingAgentOverviewChecksAnswerView,
   type CodingAgentOverviewConversationAnswerView,
   type CodingAgentOverviewPullRequestAnswerView,
-  type CodingAgentPageAnswerView,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestViewedAnswerView,
   type CodingAgentPullRequestWriteAnswerView,
   type CodingAgentReviewOptionsAnswerView,
-  codingAgentAgentAnswerSchema,
   codingAgentAgentInboxParamsSchema,
-  codingAgentArchiveParamsSchema,
   codingAgentChangesAnswerViewSchema,
   codingAgentChatAnswerViewSchema,
   codingAgentChatAttachmentParamsSchema,
   codingAgentChatParamsSchema,
   codingAgentChatPostParamsSchema,
   codingAgentChatWriteAnswerViewSchema,
-  codingAgentChooseParamsSchema,
-  codingAgentDefaultAnswerViewSchema,
-  codingAgentDefaultWriteParamsSchema,
   codingAgentGitHubImageParamsSchema,
   codingAgentGitHubImageViewSchema,
   codingAgentInboxAnsweredViewSchema,
@@ -56,31 +46,18 @@ import {
   codingAgentInboxReadAllViewSchema,
   codingAgentInboxReadStateParamsSchema,
   codingAgentInboxReadStateViewSchema,
-  codingAgentListAnswerViewSchema,
-  codingAgentListParamsSchema,
-  codingAgentMessageParamsSchema,
   codingAgentMessagesAnswerViewSchema,
-  codingAgentMessagesParamsSchema,
-  codingAgentModelsAnswerSchema,
   codingAgentOverviewChecksAnswerViewSchema,
   codingAgentOverviewConversationAnswerViewSchema,
   codingAgentOverviewPullRequestAnswerViewSchema,
-  codingAgentPageAnswerViewSchema,
-  codingAgentPageParamsSchema,
   codingAgentPictureParamsSchema,
-  codingAgentPinParamsSchema,
   codingAgentPullRequestActionParamsSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentPullRequestReadParamsSchema,
   codingAgentPullRequestViewedAnswerViewSchema,
   codingAgentPullRequestWriteAnswerViewSchema,
-  codingAgentRenameParamsSchema,
   codingAgentReviewOptionsAnswerViewSchema,
-  codingAgentServersParamsSchema,
-  codingAgentStartParamsSchema,
-  codingAgentStopParamsSchema,
-  codingAgentWorkspaceListParamsSchema,
 } from "@luke/features/coding-agent-view";
 import {
   type FeedbackResult,
@@ -217,39 +194,7 @@ export const ACT_KIND = {
   TASKS_COMMENTS: "tasks.comments",
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
-  /**
-   * A task's coding agents, asked of the service: the models one may run
-   * on, the account's default among them read and written, the task's
-   * agents with their status, one started under the press's own key, one's
-   * transcript past a cursor (held open by the service while the agent
-   * runs), one sent a message naming how it reaches a turn under way, one
-   * given another model and effort for its next step, one renamed, one stopped, one
-   * archived (a turn it still runs stopped first) or brought back, and
-   * what one published: its branch and pull request as GitHub
-   * holds them. The window holds what it draws; nothing here does.
-   */
-  CODING_AGENTS_MODELS: "codingAgents.models",
-  CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
-  CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
-  CODING_AGENTS_LIST: "codingAgents.list",
-  /** One workspace's agents, newest started first: what an automation's Same agent is chosen from. */
-  CODING_AGENTS_WORKSPACE_LIST: "codingAgents.workspaceList",
-  CODING_AGENTS_START: "codingAgents.start",
-  CODING_AGENTS_MESSAGES: "codingAgents.messages",
-  CODING_AGENTS_MESSAGE: "codingAgents.message",
-  CODING_AGENTS_CHOOSE: "codingAgents.choose",
-  CODING_AGENTS_RENAME: "codingAgents.rename",
-  CODING_AGENTS_SERVERS: "codingAgents.servers",
-  CODING_AGENTS_STOP: "codingAgents.stop",
-  CODING_AGENTS_ARCHIVE: "codingAgents.archive",
-  CODING_AGENTS_PIN: "codingAgents.pin",
-  /**
-   * Which agent's tab the panel shows, or none, and which task's Inbox tab,
-   * or none: what main's notification of an agent's end or of an inbox item
-   * is held back by, and what clears an agent's tab's unseen dot.
-   */
-  CODING_AGENTS_SHOWN: "codingAgents.shown",
-  CODING_AGENTS_PAGE: "codingAgents.page",
+  /** What one agent published: its branch and pull request as GitHub holds them. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** One agent's changes, its pull request's files with their patches, which its Changes tab draws. */
   CODING_AGENTS_CHANGES: "codingAgents.changes",
@@ -478,17 +423,6 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
 export const exactId = exactText(512);
 
 /**
- * The Chat the panel has on screen: a workspace's whole Chat, where the
- * plan is none, or one task's Chat tab, which shows only its plan's channel.
- */
-const chatShownSchema = EffectSchema.Struct({
-  workspaceId: exactId,
-  taskId: EffectSchema.NullOr(exactId),
-});
-
-export type ChatShown = typeof chatShownSchema.Type;
-
-/**
  * The longest fenced block a transcript asks main to colour. Note that a
  * longer one is drawn plain rather than cut, because colouring costs main
  * a pass over every character and a block that long is a log, not a snippet.
@@ -671,93 +605,6 @@ export const ACT = {
       isReadable(codingAgentMessagesAnswerViewSchema),
     ),
     refusal: "Could not read that task's conversation on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_MODELS]: {
-    payload: noPayload,
-    result: wireResult<CodingAgentModelsAnswer>(isReadable(codingAgentModelsAnswerSchema)),
-    refusal: "Could not read the models on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_DEFAULT_READ]: {
-    payload: noPayload,
-    result: wireResult<CodingAgentDefaultAnswer>(isReadable(codingAgentDefaultAnswerViewSchema)),
-    refusal: "Could not read the default model on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_DEFAULT_WRITE]: {
-    payload: actSchema(codingAgentDefaultWriteParamsSchema),
-    result: wireResult<CodingAgentDefaultAnswer>(isReadable(codingAgentDefaultAnswerViewSchema)),
-    refusal: "Could not change the default model on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_LIST]: {
-    payload: actSchema(codingAgentListParamsSchema),
-    result: wireResult<CodingAgentListAnswer>(isReadable(codingAgentListAnswerViewSchema)),
-    refusal: "Could not read the task's agents on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_WORKSPACE_LIST]: {
-    payload: actSchema(codingAgentWorkspaceListParamsSchema),
-    result: wireResult<CodingAgentListAnswer>(isReadable(codingAgentListAnswerViewSchema)),
-    refusal: "Could not read the workspace's agents on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_START]: {
-    payload: actSchema(codingAgentStartParamsSchema),
-    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
-    refusal: "Could not start an agent on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_MESSAGES]: {
-    payload: actSchema(codingAgentMessagesParamsSchema),
-    result: wireResult<CodingAgentMessagesAnswerView>(
-      isReadable(codingAgentMessagesAnswerViewSchema),
-    ),
-    refusal: "Could not read the agent's transcript on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_MESSAGE]: {
-    payload: actSchema(codingAgentMessageParamsSchema),
-    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
-    refusal: "Could not message the agent on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_CHOOSE]: {
-    payload: actSchema(codingAgentChooseParamsSchema),
-    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
-    refusal: "Could not change the agent's model on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_RENAME]: {
-    payload: actSchema(codingAgentRenameParamsSchema),
-    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
-    refusal: "Could not rename the agent on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_SERVERS]: {
-    payload: actSchema(codingAgentServersParamsSchema),
-    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
-    refusal: "Could not switch the agent's MCP servers on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_STOP]: {
-    payload: actSchema(codingAgentStopParamsSchema),
-    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
-    refusal: "Could not stop the agent on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_ARCHIVE]: {
-    payload: actSchema(codingAgentArchiveParamsSchema),
-    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
-    refusal: "Could not archive the agent on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_PIN]: {
-    payload: actSchema(codingAgentPinParamsSchema),
-    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
-    refusal: "Could not pin the agent on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_SHOWN]: {
-    payload: record({
-      agentId: EffectSchema.NullOr(exactId),
-      inboxTaskId: EffectSchema.NullOr(exactId),
-      /** The Chat on screen: a workspace's whole Chat, the plan none, or a task's Chat tab on its plan's channel; none where no Chat is. */
-      chatShown: EffectSchema.optionalKey(EffectSchema.NullOr(chatShownSchema)),
-    }),
-    result: answersNothing,
-    refusal: "Could not note which agent is shown on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_PAGE]: {
-    payload: actSchema(codingAgentPageParamsSchema),
-    result: wireResult<CodingAgentPageAnswerView>(isReadable(codingAgentPageAnswerViewSchema)),
-    refusal: "Could not read the agent on this system.",
   },
   [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: {
     payload: actSchema(codingAgentPullRequestReadParamsSchema),

@@ -5,7 +5,7 @@ import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
-import { TASKS_ACT_KIND } from "@luke/host/contract";
+import { AGENT_ACT_KIND, TASKS_ACT_KIND } from "@luke/host/contract";
 import { HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -39,6 +39,12 @@ import { SIDEBAR_OVERLAY } from "./sidebar-collapse.js";
 
 /** The task kinds on the act port, which the call-card test's fake refuses. */
 const TASK_KINDS: ReadonlySet<string> = new Set(Object.values(TASKS_ACT_KIND));
+
+/** Whether a port kind is one of the agents' reads, which a window with no agents is refused as `app:act` refused it. */
+const isAgentRead = (kind: string): boolean =>
+  Object.values<string>(AGENT_ACT_KIND).includes(kind) &&
+  kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN;
+
 /**
  * Settings as the desktop draws it: the sidebar is the one list of pages,
  * grouped under the workspace the tasks' sidebar lists, Account, and This
@@ -662,6 +668,7 @@ test("the plan template's version history keeps a call's card at the foot of its
     sent.push(request.kind);
     // A task kind is refused here as `app:act` refused it, since a task read answered nothing is no view.
     if (TASK_KINDS.has(request.kind)) return Promise.reject(refusedOnPort("Not here."));
+    if (isAgentRead(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(
       request.kind === ACT_KIND.PLAN_TEMPLATE_READ
         ? { template: "# Context\n", custom: false }

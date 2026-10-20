@@ -27,7 +27,7 @@ import {
   type IntegrationStatus,
 } from "@luke/features/integration-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import { EXPERIMENT, type Experiment } from "@luke/settings";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
@@ -39,7 +39,13 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { OpenFeedbackProvider } from "../open-feedback.js";
 import { AUTOMATIONS_PAGE, type AutomationsPlace, useLeaveGuard } from "../tasks/use-tasks-tab.js";
-import { fakeActPort, fakeAppBridge, fakeAppBridgeCalls } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActs,
+  fakeAppBridge,
+  fakeAppBridgeCalls,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { handState, stateWith } from "../testing/app-state.js";
 import { layContainersAt } from "../testing/container-width.js";
@@ -214,106 +220,116 @@ beforeEach(() => {
   noRecent = false;
   integrationsHeld = false;
   integrationsRefusals = 0;
-  fakeActPort({
-    [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
-      listed.push(payload.workspaceId);
-      if (listHeld) return new Promise(() => undefined);
-      const theirs = standing.filter((each) => each.workspaceId === payload.workspaceId);
-      return Promise.resolve(lists.shift() ?? { automations: theirs });
-    },
-    [ACT_KIND.AUTOMATIONS_CHANGE]: (payload) => {
-      changes.push(payload);
-      const { automationId, change } = payload;
-      const was = standing.find((each) => each.id === automationId);
-      if (changeRefusal !== undefined || was === undefined) {
-        return Promise.resolve({ failure: changeRefusal ?? AUTOMATION_CALL_FAILURE.NOT_FOUND });
+  fakeActs({
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
+      if (request.kind === ACT_KIND.AUTOMATIONS_LIST) {
+        listed.push(request.payload.workspaceId);
+        if (listHeld) return new Promise(() => undefined);
+        const theirs = standing.filter((each) => each.workspaceId === request.payload.workspaceId);
+        const value = lists.shift() ?? { automations: theirs };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
       }
-      const automation = { ...was, ...change };
-      standing = standing.map((each) => (each.id === automationId ? automation : each));
-      if (heldChanges === undefined) return Promise.resolve({ automation });
-      // A held write answers in words of its own, so which answer drew is told by the row's name.
-      const held = heldChanges;
-      const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
-      return new Promise((resolve) => held.push(() => resolve({ automation: told })));
-    },
-    [ACT_KIND.AUTOMATIONS_CREATE]: (payload) => {
-      creates.push(payload);
-      const { workspaceId, name, trigger, action, scope, repositories } = payload;
-      const hooked = trigger.kind === AUTOMATION_TRIGGER.WEBHOOK;
-      const made = automation(42, {
-        workspaceId: workspaceId ?? WORKSPACE.id,
-        name,
-        trigger,
-        action,
-        scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
-        repositories: repositories ?? [],
-        ...(hooked
-          ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
-          : undefined),
-      });
-      standing = [made, ...standing];
-      // A webhook's secret is answered once, by the write that minted it.
-      return Promise.resolve(
-        hooked ? { automation: made, webhookSecret: MADE_SECRET } : { automation: made },
-      );
-    },
-    [ACT_KIND.INTEGRATIONS_STATUS]: () => {
-      if (integrationsHeld) return new Promise(() => undefined);
-      if (integrationsRefusals > 0) {
-        integrationsRefusals -= 1;
-        return Promise.reject(new Error("Unreachable."));
+      if (request.kind === ACT_KIND.AUTOMATIONS_CHANGE) {
+        changes.push(request.payload);
+        const { automationId, change } = request.payload;
+        const was = standing.find((each) => each.id === automationId);
+        if (changeRefusal !== undefined || was === undefined) {
+          const failure = changeRefusal ?? AUTOMATION_CALL_FAILURE.NOT_FOUND;
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { failure } });
+        }
+        const automation = { ...was, ...change };
+        standing = standing.map((each) => (each.id === automationId ? automation : each));
+        if (heldChanges === undefined) {
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { automation } });
+        }
+        // A held write answers in words of its own, so which answer drew is told by the row's name.
+        const held = heldChanges;
+        const told = { ...automation, name: `${was.name}, write ${held.length + 1}` };
+        const done = { status: ACT_OUTCOME_STATUS.DONE, value: { automation: told } };
+        return new Promise((resolve) => held.push(() => resolve(done)));
       }
-      // Linear and Sentry are connected; the rest are not.
-      const integrations = Object.fromEntries(
-        INTEGRATION_PROVIDER_LIST.map((provider) => [
-          provider,
-          provider === INTEGRATION_PROVIDER.LINEAR || provider === INTEGRATION_PROVIDER.SENTRY
-            ? INTEGRATION_STATUS.CONNECTED
-            : INTEGRATION_STATUS.DISCONNECTED,
-        ]),
-      );
-      // SAFETY: every provider on the list is given a status above, which is the whole of the record.
-      return Promise.resolve({
-        integrations: integrations as Record<IntegrationProvider, IntegrationStatus>,
-      });
-    },
-    [ACT_KIND.AUTOMATIONS_RUNS]: () => {
-      if (runsHeld) return new Promise<never>(() => undefined);
-      return Promise.resolve({ runs });
-    },
-    [ACT_KIND.AUTOMATIONS_RUN]: (payload) => {
-      runsAsked.push(payload.automationId);
-      if (runHeld) return new Promise<never>(() => undefined);
-      if (runRefusal !== undefined) return Promise.resolve({ failure: runRefusal });
-      const made = {
-        id: "6e7f8091-a2b3-4c4d-8e5f-60718293a4b5",
-        firing: { kind: "manual" },
-        status: AUTOMATION_RUN_STATUS.STARTED,
-        reason: null,
-        agent: { id: CI_DIGEST.id, title: null, status: "starting" },
-        firedAt: 5,
-        settledAt: 5,
-      } as const;
-      runs = [made, ...runs];
-      return Promise.resolve({ run: made });
-    },
-    [ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET]: (payload) => {
-      secretsAsked.push(payload.automationId);
-      const automation = standing.find((each) => each.id === payload.automationId);
-      return Promise.resolve(
-        automation === undefined
-          ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }
-          : { automation, webhookSecret: ROTATED_SECRET },
-      );
-    },
-    [ACT_KIND.AUTOMATIONS_DELETE]: (payload) => {
-      deletes.push(payload.automationId);
-      standing = standing.filter((each) => each.id !== payload.automationId);
-      return Promise.resolve({ deleted: true });
-    },
-  });
-  fakeAppBridge({
-    act: (request: Act) => {
+      if (request.kind === ACT_KIND.AUTOMATIONS_CREATE) {
+        creates.push(request.payload);
+        const { workspaceId, name, trigger, action, scope, repositories } = request.payload;
+        const hooked = trigger.kind === AUTOMATION_TRIGGER.WEBHOOK;
+        const made = automation(42, {
+          workspaceId: workspaceId ?? WORKSPACE.id,
+          name,
+          trigger,
+          action,
+          scope: scope ?? AUTOMATION_SCOPE.PERSONAL,
+          repositories: repositories ?? [],
+          ...(hooked
+            ? { webhookUrl: "https://tryluke.dev/api/automations/made/webhook" }
+            : undefined),
+        });
+        standing = [made, ...standing];
+        // A webhook's secret is answered once, by the write that minted it.
+        const value = hooked
+          ? { automation: made, webhookSecret: MADE_SECRET }
+          : { automation: made };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.INTEGRATIONS_STATUS) {
+        if (integrationsHeld) return new Promise(() => undefined);
+        if (integrationsRefusals > 0) {
+          integrationsRefusals -= 1;
+          return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Unreachable." });
+        }
+        // Linear and Sentry are connected; the rest are not.
+        const integrations = Object.fromEntries(
+          INTEGRATION_PROVIDER_LIST.map((provider) => [
+            provider,
+            provider === INTEGRATION_PROVIDER.LINEAR || provider === INTEGRATION_PROVIDER.SENTRY
+              ? INTEGRATION_STATUS.CONNECTED
+              : INTEGRATION_STATUS.DISCONNECTED,
+          ]),
+        );
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          // SAFETY: every provider on the list is given a status above, which is the whole of the record.
+          value: { integrations: integrations as Record<IntegrationProvider, IntegrationStatus> },
+        });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_RUNS) {
+        if (runsHeld) return new Promise(() => undefined);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { runs } });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_RUN) {
+        runsAsked.push(request.payload.automationId);
+        if (runHeld) return new Promise(() => undefined);
+        if (runRefusal !== undefined) {
+          return Promise.resolve({
+            status: ACT_OUTCOME_STATUS.DONE,
+            value: { failure: runRefusal },
+          });
+        }
+        const made = {
+          id: "6e7f8091-a2b3-4c4d-8e5f-60718293a4b5",
+          firing: { kind: "manual" },
+          status: AUTOMATION_RUN_STATUS.STARTED,
+          reason: null,
+          agent: { id: CI_DIGEST.id, title: null, status: "starting" },
+          firedAt: 5,
+          settledAt: 5,
+        } as const;
+        runs = [made, ...runs];
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { run: made } });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_NEW_WEBHOOK_SECRET) {
+        secretsAsked.push(request.payload.automationId);
+        const automation = standing.find((each) => each.id === request.payload.automationId);
+        const value =
+          automation === undefined
+            ? { failure: AUTOMATION_CALL_FAILURE.NOT_FOUND }
+            : { automation, webhookSecret: ROTATED_SECRET };
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      }
+      if (request.kind === ACT_KIND.AUTOMATIONS_DELETE) {
+        deletes.push(request.payload.automationId);
+        standing = standing.filter((each) => each.id !== request.payload.automationId);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { deleted: true } });
+      }
       if (request.kind === ACT_KIND.CODING_AGENTS_MODELS) {
         catalogReads += 1;
         return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: { models: CATALOG } });

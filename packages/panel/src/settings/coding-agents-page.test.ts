@@ -9,18 +9,12 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
-import {
-  ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  type Act,
-  type ActKind,
-  type ActOutcome,
-  type ActResultFor,
-} from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type ActKind, type ActResultFor } from "@luke/host/acts";
+import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, type AnyActOutcome, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   focusedSegment,
@@ -70,25 +64,33 @@ let keys: readonly ProviderKeySummary[] = [];
 /** The default the test's service holds. */
 let stored: ModelChoice = { model: OPUS.id, effort: "high" };
 /** Every act the page sent, in order. */
-let sent: Act[] = [];
-/** Every web page the page opened, in order. */
-let browsed: string[] = [];
+let sent: AnyAct[] = [];
 /** Whether the service refuses the next write. */
 let refuseWrite = false;
 
-const done = (value: ActResultFor<ActKind>): ActOutcome => ({
+const done = (value: ActResultFor<ActKind> | PortActResult<PortActKind>): AnyActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
   value,
 });
 
 /** The bridge, answering the page's acts the way the host would. */
-function answer(request: Act): Promise<ActOutcome> {
+function answer(request: AnyAct): Promise<AnyActOutcome> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_MODELS:
       return Promise.resolve(done({ models }));
+    case ACT_KIND.WEB_OPEN:
+      return Promise.resolve(done(undefined));
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
       return Promise.resolve(done({ choice: stored }));
+    case ACT_KIND.PROVIDER_KEYS_READ:
+      return Promise.resolve(done({ keys }));
+    case ACT_KIND.PROVIDER_KEYS_SAVE:
+      // The replacement key's organization runs fast mode, so the service offers Opus's fast version again.
+      // Note that the replacement keeps the same instant, as two saves inside one millisecond would.
+      keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1" }];
+      models = [OPUS, OPUS_FAST];
+      return Promise.resolve(done({ keys }));
     case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
       if (refuseWrite) {
         return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
@@ -100,24 +102,6 @@ function answer(request: Act): Promise<ActOutcome> {
   }
 }
 
-/** The act port, answering the page's asks of the account's keys the way the host would, and opening each web page it is asked to. */
-function answerKeys(): void {
-  fakeActPort({
-    [ACT_KIND.WEB_OPEN]: ({ url }) => {
-      browsed.push(url);
-      return Promise.resolve();
-    },
-    [ACT_KIND.PROVIDER_KEYS_READ]: () => Promise.resolve({ keys }),
-    [ACT_KIND.PROVIDER_KEYS_SAVE]: () => {
-      // The replacement key's organization runs fast mode, so the service offers Opus's fast version again.
-      // Note that the replacement keeps the same instant, as two saves inside one millisecond would.
-      keys = [{ ...OWN_ANTHROPIC, hint: "sk-ant-…new1" }];
-      models = [OPUS, OPUS_FAST];
-      return Promise.resolve({ keys });
-    },
-  });
-}
-
 const roots: Root[] = [];
 
 beforeEach(() => {
@@ -125,11 +109,9 @@ beforeEach(() => {
   models = [OPUS, OPUS_FAST];
   keys = [];
   sent = [];
-  browsed = [];
   refuseWrite = false;
   fakeAppPlatform({ ...QUIET_PANEL, ...DESKTOP_LINKS });
-  fakeAppBridge({ act: answer });
-  answerKeys();
+  fakeActs({ act: answer });
 });
 
 afterEach(() => {
@@ -299,7 +281,10 @@ test("a model whose fast version the key's organization was never granted rests 
 
   act(() => link.click());
   await settle();
-  assert.deepEqual(browsed, ["https://claude.com/fast-mode"]);
+  assert.deepEqual(
+    sent.filter((request) => request.kind === ACT_KIND.WEB_OPEN).map((request) => request.payload),
+    [{ url: "https://claude.com/fast-mode" }],
+  );
 });
 
 test("on Luke's key the resting Fast row says the same and links nowhere, since only the key's own organization can ask", async () => {
