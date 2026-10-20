@@ -29,7 +29,7 @@ import {
   Text,
 } from "@luke/ui";
 import type { SkillOption } from "@luke/ui/skill-mention";
-import { agentPromptOf, taskNameOfIssue, workspaceReaches } from "@luke/ui/tasks-model";
+import { agentPromptOf, taskNameOfIssue } from "@luke/ui/tasks-model";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAct } from "../act.js";
 import { appPlatform } from "../app-platform.js";
@@ -338,13 +338,9 @@ export function NewTaskComposer({
     }
     setScope(repositories.scope);
   }
-  // Note that a press's repository the workspace's GitHub does not reach is
-  // not started on, because the service would refuse it.
-  const pick =
-    chosen != null && workspace !== undefined && !workspaceReaches(workspace, chosen)
-      ? null
-      : chosen;
-  const repository = pick === undefined ? (repositories.recent[0] ?? null) : pick;
+  // Note that the chip's read decides what may stand chosen, an App's or a
+  // member's token's alike, and hands back a pick it does not list.
+  const repository = chosen === undefined ? (repositories.recent[0] ?? null) : chosen;
   // A change of repository lets go the GitHub issues of the one before, in the render that brings it.
   const [linkedFor, setLinkedFor] = useState(repository);
   if (linkedFor !== repository) {
