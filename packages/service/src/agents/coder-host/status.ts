@@ -1,7 +1,9 @@
-import type {
-  CodingAgent,
-  CodingAgentLatestTurn,
-  CodingAgentStartedFromIt,
+import {
+  type CodingAgent,
+  type CodingAgentLatestTurn,
+  type CodingAgentLine,
+  type CodingAgentStartedFromIt,
+  codingAgentLineOf,
 } from "@luke/database/models/coding-agent-store";
 import type { StoredArchive, StoredAutomationOrigin } from "@luke/database/schemas/coding-agent";
 import { AUTOMATION_FIRING } from "@luke/features/automation-wire";
@@ -275,7 +277,7 @@ function archivedByOf(
 
 /** What every read of one agent says of it but its task, its status read at `now`, and the agents started from it where any was. */
 function summaryFields(
-  agent: CodingAgent,
+  agent: CodingAgentLine,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
@@ -296,7 +298,7 @@ function summaryFields(
       awaitingLineAt: standing.awaitingLineAt,
     }),
     turnId: standing.turn?.id ?? null,
-    brief: agent.prompt === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.PROMPT,
+    brief: agent.handedPrompt ? CODING_AGENT_BRIEF.PROMPT : CODING_AGENT_BRIEF.PLAN,
     ...(agent.archivedAt === null ? undefined : { archivedAt: agent.archivedAt.getTime() }),
     ...(agent.archivedAt === null || agent.archivedBy === null
       ? undefined
@@ -306,9 +308,7 @@ function summaryFields(
       : { disabledServers: agent.disabledServers }),
     ...(starter === undefined ? undefined : { startedBy: { userId: agent.userId, name: starter } }),
     ...(agent.automationId === null ? undefined : { automationId: agent.automationId }),
-    ...(agent.automationOrigin === null
-      ? undefined
-      : { automationName: agent.automationOrigin.name }),
+    ...(agent.automationName === null ? undefined : { automationName: agent.automationName }),
     ...(agent.startedFrom === null ? undefined : { from: agent.startedFrom }),
     ...(continuedBy.length === 0
       ? undefined
@@ -330,22 +330,23 @@ function summaryFields(
 }
 
 /**
- * One agent as the tabs draw it, on a task or with none, its status read at
- * `now`, the member who started it named by `names`, the accounts' names
- * by id, where theirs stands, and the agents started from it, none where
- * the read names none.
+ * One agent as the tabs draw it, on a task or with none, read whole or as a
+ * list's line, its status read at `now`, the member who started it named by
+ * `names`, the accounts' names by id, where theirs stands, and the agents
+ * started from it, none where the read names none.
  */
 export function codingAgentSummary(
-  agent: CodingAgent,
+  agent: CodingAgent | CodingAgentLine,
   standing: AgentTurnStanding,
   now: number,
   names: ReadonlyMap<string, string>,
   continuedBy: readonly CodingAgentStartedFromIt[] = [],
 ): CodingAgentSummary {
+  const line = "handedPrompt" in agent ? agent : codingAgentLineOf(agent);
   return {
-    id: agent.id,
-    planId: agent.taskId,
-    ...summaryFields(agent, standing, now, names, continuedBy),
+    id: line.id,
+    planId: line.taskId,
+    ...summaryFields(line, standing, now, names, continuedBy),
   };
 }
 
@@ -384,7 +385,9 @@ function originOf(
 }
 
 /** The accounts an agent's summary names: its starter, and the member it was archived by or for. */
-export function summaryAccounts(agent: CodingAgent): readonly string[] {
+export function summaryAccounts(
+  agent: Pick<CodingAgentLine, "userId" | "archivedBy">,
+): readonly string[] {
   return agent.archivedBy === null ? [agent.userId] : [agent.userId, agent.archivedBy.userId];
 }
 
@@ -407,7 +410,7 @@ export function codingAgentPage(
   return {
     id: agent.id,
     planId: agent.taskId,
-    ...summaryFields(agent, standing, now, names, continuedBy),
+    ...summaryFields(codingAgentLineOf(agent), standing, now, names, continuedBy),
     automationId: agent.automationId,
     ...(agent.automationOrigin === null
       ? undefined
