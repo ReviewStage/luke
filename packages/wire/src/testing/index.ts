@@ -25,15 +25,5 @@ export {
   type JsonValue,
   type ParsedJsonObject,
 } from "./json.js";
-export {
-  type JsonSchemaGolden,
-  type JsonSchemaSource,
-  jsonSchemaGoldenRoot,
-  jsonSchemaOf,
-  matchJsonSchemaGolden,
-  type RecordedEffectJsonSchemas,
-  type RecordedJsonSchemaSource,
-  settleJsonSchemaGolden,
-  settleJsonSchemaGoldenSet,
-} from "./json-schema-golden.js";
+export { jsonSchemaGoldenRoot, settleJsonSchemaGolden } from "./json-schema-golden.js";
 export { temporaryDirectory } from "./temporary-directory.js";

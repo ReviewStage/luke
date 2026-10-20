@@ -118,8 +118,9 @@
       "project": ["**/*.ts"]
     },
     "packages/agent-runner": {
-      "entry": ["src/main.ts"],
-      "project": ["src/**"]
+      "entry": ["src/main.ts", "scripts/generate-codex-protocol.mjs"],
+      "project": ["src/**", "scripts/**"],
+      "ignore": ["src/codex-protocol/**"]
     },
     "tools/claude-code-probe": {
       "entry": ["src/cli.ts", "src/sandbox/driver.mjs"],

@@ -592,7 +592,7 @@ export type CodingAgentArchiver =
  * a member archived by archiving its task, which brings it back with the
  * task; a build from before it reads the archive as the member's own.
  */
-export const codingAgentArchivedBySchema = EffectSchema.Struct({
+const codingAgentArchivedBySchema = EffectSchema.Struct({
   by: EffectSchema.Literals(Object.values(CODING_AGENT_ARCHIVER)),
   member: EffectSchema.optionalKey(memberRefSchema),
   agent: EffectSchema.optionalKey(
@@ -722,7 +722,7 @@ export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentS
  * it, cut as the agent was handed it, and the member who asked for a run
  * now, absent once their account is gone.
  */
-export const codingAgentOriginSchema = EffectSchema.Struct({
+const codingAgentOriginSchema = EffectSchema.Struct({
   prompt: EffectSchema.String,
   subject: EffectSchema.optionalKey(
     EffectSchema.Struct({
@@ -745,7 +745,7 @@ export type CodingAgentOrigin = typeof codingAgentOriginSchema.Type;
  * repository it works in, null for one with none. An agent on a plan reads
  * so too, by the same id.
  */
-export const codingAgentPageSchema = EffectSchema.Struct({
+const codingAgentPageSchema = EffectSchema.Struct({
   ...codingAgentSummarySchema.fields,
   automationId: EffectSchema.NullOr(wireUuidSchema),
   /** The run that started the agent; absent for one started by hand, and from a service before it. */
@@ -1674,7 +1674,7 @@ export type CodingAgentSender = typeof codingAgentSenderSchema.Type;
  * ended, so a tab says how long a finished turn worked, and once it has,
  * what it ran on and spent (`turnRecordFields`).
  */
-export const codingAgentMessageSchema = EffectSchema.Struct({
+const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   /**
    * The turn the message is the journal of, on a task conversation's
@@ -1774,7 +1774,7 @@ export const CODING_AGENT_CURSOR_START = "0:0";
  * service knows one for every model they ran on; tokens alone where it
  * does not.
  */
-export const codingAgentUsageSchema = EffectSchema.Struct({
+const codingAgentUsageSchema = EffectSchema.Struct({
   inputTokens: countedNumber,
   outputTokens: countedNumber,
   cachedInputTokens: EffectSchema.optionalKey(countedNumber),
@@ -1797,7 +1797,7 @@ export type CodingAgentUsage = typeof codingAgentUsageSchema.Type;
  * a compaction's summary may have folded it in. When that step ended, and
  * when eve last compacted the conversation, where it has.
  */
-export const codingAgentContextSchema = EffectSchema.Struct({
+const codingAgentContextSchema = EffectSchema.Struct({
   windowTokens: countedNumber,
   compactionThresholdTokens: countedNumber,
   inputTokens: countedNumber,

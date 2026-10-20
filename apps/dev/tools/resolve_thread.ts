@@ -3,7 +3,7 @@ import { RESOLVE_THREAD_TOOL } from "@luke/service/tasks/comment-tools";
 import { unparsedWire, type WireBoundaryInput } from "@luke/wire";
 import { emitJsonSchema } from "@luke/wire/effect";
 import { defineDynamic, defineTool } from "eve/tools";
-import { offeredPlanTools, runCommentTool } from "../host.js";
+import { offeredTaskTools, runCommentTool } from "../host.js";
 
 /**
  * resolve_thread.ts -- `resolve_thread`, the agent resolves one of the plan's comment threads once what it asked is settled (`packages/service/src/tasks/comment-tools.ts`).
@@ -16,7 +16,7 @@ import { offeredPlanTools, runCommentTool } from "../host.js";
 export default defineDynamic({
   events: {
     "turn.started": async (_event, ctx) =>
-      (await offeredPlanTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.RESOLVE_THREAD)
+      (await offeredTaskTools(ctx.session.auth, ctx.session.id)).has(CODER_TOOL.RESOLVE_THREAD)
         ? defineTool({
             description: RESOLVE_THREAD_TOOL.description,
             inputSchema: emitJsonSchema(RESOLVE_THREAD_TOOL.inputSchema),

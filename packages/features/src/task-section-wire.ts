@@ -132,7 +132,7 @@ export const taskSectionTitleSchema = EffectSchema.Trim.check(
 );
 
 /** One of the account's sections, in the workspace it was made in. */
-export const taskSectionSchema = EffectSchema.Struct({
+const taskSectionSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   workspaceId: workspaceIdSchema,
   title: taskSectionTitleSchema,
@@ -146,7 +146,7 @@ export const taskSectionSchema = EffectSchema.Struct({
 export type TaskSection = typeof taskSectionSchema.Type;
 
 /** A task the account keeps in one of its sections. */
-export const taskSectionEntrySchema = EffectSchema.Struct({
+const taskSectionEntrySchema = EffectSchema.Struct({
   taskId: wireUuidSchema,
   sectionId: wireUuidSchema,
   /** Where it stands among the section's tasks once dragged there; absent while it stands by `addedAt`. */

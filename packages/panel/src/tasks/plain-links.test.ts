@@ -22,7 +22,7 @@ import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { editorBundleLanded, installEditorLayout } from "../testing/composer.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
 import { markdownHtmlParserLanded } from "../testing/markdown.js";
-import { notesBefore } from "./file-note.js";
+import { notesAfter } from "./file-note.js";
 import { PlanBody } from "./plan-body.js";
 import { TaskMentions, type TaskMentionsValue } from "./task-mentions.js";
 import { TranscriptWords } from "./transcript-blocks.js";
@@ -146,13 +146,16 @@ function Version(): ReactNode {
 
 /** Luke's note on a File tab's lines. */
 function Note(): ReactNode {
-  const notes = notesBefore({
-    notes: [{ callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: WORDS }],
-    folded: [],
-    onFold: () => undefined,
-    onShow: () => undefined,
-  });
-  return notes(3);
+  const notes = notesAfter(
+    {
+      notes: [{ callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: WORDS }],
+      folded: [],
+      onFold: () => undefined,
+      taskId: undefined,
+    },
+    20,
+  );
+  return notes(5);
 }
 
 test("a transcript, the plan, a version, and a note draw a link they have no chip for as one plain link, a bare address cut short", () => {

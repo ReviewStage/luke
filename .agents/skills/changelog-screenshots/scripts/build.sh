@@ -35,6 +35,7 @@ find . -name node_modules -type d -prune -exec rm -rf {} +
 pnpm install --frozen-lockfile >/tmp/luke-shots-install.log 2>&1 || { tail -20 /tmp/luke-shots-install.log; exit 1; }
 cd apps/desktop
 # Note that we let the bundle budget move, because the staging embeds pictures a release build never carries.
+# The variable only matters for releases cut before the budget was removed; a later checkout has no gate and ignores it.
 (LUKE_UPDATE_BUNDLE_BUDGET=1 pnpm build:native && LUKE_UPDATE_BUNDLE_BUDGET=1 pnpm build) >/tmp/luke-shots-build.log 2>&1 ||
     { tail -30 /tmp/luke-shots-build.log; exit 1; }
 # Note that a notch-era build (before 0.7.0) skips the window patches, because it is captured with its own --capture-evidence and its staging isolates its own state.

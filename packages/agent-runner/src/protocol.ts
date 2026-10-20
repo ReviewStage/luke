@@ -4,9 +4,16 @@
  * This is the runner's whole contract, held apart from the Agent SDK so the
  * service that launches the runner (P08) and the route that takes its events
  * (P09) import it without the SDK behind it. Every line on stdin is one JSON
- * object: the first is the config, each later one a message, a stop, or a
- * model change. No secret travels in any of them, nor in argv: the runner's
- * bearer and the plan's token are in its environment alone.
+ * object: the first is the config, each later one a message, a stop, a model
+ * change, or, for Codex, a refreshed access token.
+ *
+ * The config says which harness the launch runs: Claude Code (P05), or Codex
+ * through `codex app-server` (P20). Secrets never travel in argv. The runner's
+ * bearer and the plan's first token are in its environment; the one secret a
+ * stdin line carries is the token line's, because a ChatGPT access token
+ * lives an hour and a running launch has no other way to take its
+ * replacement. The runner never logs, echoes or posts that line, and takes
+ * the token out of every event it posts.
  */
 
 import type {
@@ -15,6 +22,7 @@ import type {
   SessionCronSummary,
 } from "@anthropic-ai/claude-agent-sdk";
 import { Schema } from "effect";
+import type { ServerNotification } from "./codex-protocol/index.js";
 
 /**
  * The environment the runner reads. The bearer authenticates it to Luke, its
@@ -25,7 +33,20 @@ import { Schema } from "effect";
 export const RUNNER_ENV = {
   BEARER: "LUKE_RUNNER_TOKEN",
   CLAUDE_TOKEN: "CLAUDE_CODE_OAUTH_TOKEN",
+  /**
+   * The ChatGPT plan's OAuth access token, which `codex app-server` reads under
+   * this name (OpenAI's documented provider's `env_key`), and which no
+   * command Codex runs inherits.
+   */
+  CODEX_TOKEN: "ACCESS_TOKEN",
 } as const;
+
+/** The harness a launch runs, spelled as `conversations.runtime` spells it. */
+export const RUNNER_HARNESS = {
+  CLAUDE_CODE: "claude_code",
+  CODEX: "codex",
+} as const;
+export type RunnerHarness = (typeof RUNNER_HARNESS)[keyof typeof RUNNER_HARNESS];
 
 /** The reasoning efforts the pinned SDK takes, as its `EffortLevel` spells them. */
 export const EFFORT = {
@@ -38,11 +59,27 @@ export const EFFORT = {
 export type Effort = (typeof EFFORT)[keyof typeof EFFORT];
 const EffortSchema = Schema.Literals(Object.values(EFFORT));
 
+/**
+ * The reasoning efforts Codex takes (its `model_reasoning_effort`); the pinned
+ * protocol types them as any string, so the runner holds Luke to these.
+ */
+export const CODEX_EFFORT = {
+  NONE: "none",
+  MINIMAL: "minimal",
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+  XHIGH: "xhigh",
+} as const;
+export type CodexEffort = (typeof CODEX_EFFORT)[keyof typeof CODEX_EFFORT];
+const CodexEffortSchema = Schema.Literals(Object.values(CODEX_EFFORT));
+
 /** The line types a stdin line after the config may carry. */
 export const INPUT_LINE = {
   MESSAGE: "message",
   STOP: "stop",
   MODEL: "model",
+  TOKEN: "token",
 } as const;
 
 /** The image types the Messages API takes in a base64 image block. */
@@ -66,13 +103,15 @@ const SequenceSchema = Schema.Number.check(
 );
 
 /**
- * The first stdin line: everything one launch of the CLI is started with.
+ * The first stdin line of a Claude Code launch: everything one launch of the CLI is started with.
  * `executable` is the `claude` binary the image carries, because the bundled
  * SDK cannot find its own platform package. `firstSequence` is where this
  * launch's events are numbered from, one past the last event Luke applied, so
  * a relaunch with `resume` goes on numbering where the last launch stopped.
  */
-export const RunnerConfigSchema = Schema.Struct({
+export const ClaudeCodeConfigSchema = Schema.Struct({
+  /** Absent in a config written before Codex mode, which is Claude Code's. */
+  harness: Schema.optionalKey(Schema.Literal(RUNNER_HARNESS.CLAUDE_CODE)),
   cwd: Schema.String,
   executable: Schema.String,
   model: Schema.String,
@@ -89,6 +128,34 @@ export const RunnerConfigSchema = Schema.Struct({
   /** The hosts a command the agent runs may reach, besides nothing else. */
   allowedDomains: Schema.Array(Schema.String),
 });
+export type ClaudeCodeConfig = typeof ClaudeCodeConfigSchema.Type;
+
+/**
+ * The first stdin line of a Codex launch. `executable` is the `codex` binary
+ * the image carries (P17); `CODEX_HOME`, where Codex keeps its threads, comes
+ * from the launch's environment and must exist before the runner starts.
+ * `threadId` is the thread to resume, where this launch continues one; a new
+ * thread's id reaches Luke in its `thread/started` notification. Commands
+ * Codex runs reach the network (`workspace-write` with network on), so there
+ * are no allowed domains to name.
+ */
+export const CodexConfigSchema = Schema.Struct({
+  harness: Schema.Literal(RUNNER_HARNESS.CODEX),
+  cwd: Schema.String,
+  executable: Schema.String,
+  model: Schema.String,
+  effort: Schema.optionalKey(CodexEffortSchema),
+  /** Luke's coder instructions, as the thread's `developer_instructions`. */
+  developerInstructions: Schema.String,
+  threadId: Schema.optionalKey(Schema.String),
+  firstSequence: SequenceSchema,
+  eventsUrl: Schema.String,
+  mcpUrl: Schema.String,
+});
+export type CodexConfig = typeof CodexConfigSchema.Type;
+
+/** The first stdin line, for either harness. */
+export const RunnerConfigSchema = Schema.Union([CodexConfigSchema, ClaudeCodeConfigSchema]);
 export type RunnerConfig = typeof RunnerConfigSchema.Type;
 
 const TextBlockSchema = Schema.Struct({ type: Schema.Literal("text"), text: Schema.String });
@@ -110,14 +177,33 @@ const MessageLineSchema = Schema.Struct({
 });
 /** Stop the running turn. */
 const StopLineSchema = Schema.Struct({ type: Schema.Literal(INPUT_LINE.STOP) });
-/** A model or effort change, applied from the next model call. */
+/**
+ * A model or effort change, applied from the next model call on Claude Code
+ * and from the next turn on Codex. An effort the launch's harness does not
+ * take is skipped.
+ */
 const ModelLineSchema = Schema.Struct({
   type: Schema.Literal(INPUT_LINE.MODEL),
   model: Schema.optionalKey(Schema.String),
-  effort: Schema.optionalKey(EffortSchema),
+  effort: Schema.optionalKey(Schema.Union([EffortSchema, CodexEffortSchema])),
+});
+/**
+ * A refreshed ChatGPT access token, for a Codex launch: the runner restarts
+ * app-server with it and resumes the thread before the next turn it starts,
+ * never during one. The one line that carries a secret: never logged, echoed
+ * or posted, and taken out of every event. A Claude Code launch skips it.
+ */
+const TokenLineSchema = Schema.Struct({
+  type: Schema.Literal(INPUT_LINE.TOKEN),
+  accessToken: Schema.String,
 });
 
-export const InputLineSchema = Schema.Union([MessageLineSchema, StopLineSchema, ModelLineSchema]);
+export const InputLineSchema = Schema.Union([
+  MessageLineSchema,
+  StopLineSchema,
+  ModelLineSchema,
+  TokenLineSchema,
+]);
 export type InputLine = typeof InputLineSchema.Type;
 
 /**
@@ -136,13 +222,13 @@ export const RUNNER_EVENT = {
 
 /** Why a launch ended. */
 export const RUNNER_END = {
-  /** A `result` with nothing left in flight: the agent's turn is over. */
+  /** A `result`, or Codex's `turn/completed`, with nothing left in flight or unanswered: the agent's turn is over. */
   TURN_ENDED: "turn_ended",
-  /** A `result` after a stop: the turn was stopped. */
+  /** A `result`, or an interrupted turn, after a stop: the turn was stopped. */
   STOPPED: "stopped",
   /** Luke closed stdin, or the CLI ended its stream, before a turn ended. */
   INPUT_CLOSED: "input_closed",
-  /** The CLI failed; the turn shows as interrupted, and Continue relaunches with `resume`. */
+  /** The CLI or app-server failed, or Codex's turn did; the turn shows as interrupted, and Continue relaunches with `resume`. */
   FAILED: "failed",
 } as const;
 export type RunnerEnd = (typeof RUNNER_END)[keyof typeof RUNNER_END];
@@ -161,8 +247,16 @@ export interface RunnerEndEvent {
   readonly detail?: string;
 }
 
-/** What the runner posts: the SDK's message as it emitted it, or one of the runner's own. */
-export type RunnerMessage = SDKMessage | RunnerWaiting | RunnerEndEvent;
+/**
+ * One notification `codex app-server` sent, as it wrote it (the pinned
+ * protocol's `ServerNotification`, generated into `codex-protocol/`). Every
+ * notification is posted, the thread's subagents' included; the projection
+ * (P22) picks what it shows.
+ */
+export type CodexNotification = ServerNotification;
+
+/** What the runner posts: the SDK's message or Codex's notification as it was emitted, or one of the runner's own. */
+export type RunnerMessage = SDKMessage | CodexNotification | RunnerWaiting | RunnerEndEvent;
 
 /** One event as posted: its number and its message. */
 export interface RunnerEvent {

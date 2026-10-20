@@ -1,8 +1,7 @@
 # Changelog
 
 <!-- Every release adds its entry here before its tag is pushed:
-     .github/RELEASE.md describes the step, and scripts/repository-checks.sh
-     refuses a desktop version this file does not name. The landing page
+     .github/RELEASE.md describes the step. The landing page
      renders this document at tryluke.dev/changelog, ten releases a page, and
      each release on a page of its own at tryluke.dev/changelog/<version>.
      Each release heading is a contract with those pages: exactly

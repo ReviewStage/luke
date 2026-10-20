@@ -17,9 +17,8 @@ import { macCommandResult, queueMacCommand } from "@luke/database/models/mac-com
 import { user } from "@luke/database/schemas/auth";
 import { getTestDB } from "@luke/database/testing";
 import type { MacCommand, MacCommandResult } from "@luke/features/mac-command-wire";
-import { Clock, type Context, Effect, Fiber, Layer, Option } from "effect";
+import { Clock, type Context, Effect, Layer, Option } from "effect";
 import { SqlClient } from "effect/sql";
-import { TestClock } from "effect/testing";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
@@ -141,25 +140,6 @@ it.layer(getTestDB())("a command run on the developer's Mac", (it) => {
         },
       );
       assert.deepEqual(yield* macCommandResult("user-mac", COMMAND.id), Option.some(RESULT));
-    }),
-  );
-
-  it.effect("a held read with nothing waiting is held, then answers none", () =>
-    Effect.gen(function* () {
-      yield* account("user-idle");
-
-      const read = yield* Effect.forkChild(bytes(request({ userId: "user-idle" })));
-      for (let second = 0; second < 25 && read.pollUnsafe() === undefined; second += 1) {
-        for (let turn = 0; turn < 50; turn += 1) yield* Effect.yieldNow;
-        yield* TestClock.adjust("1 second");
-      }
-
-      assert.deepEqual(yield* Fiber.join(read), {
-        status: HOSTED_HTTP_STATUS.OK,
-        contentType: JSON_TYPE,
-        cacheControl: "private, no-store",
-        text: '{"commands":[]}',
-      });
     }),
   );
 

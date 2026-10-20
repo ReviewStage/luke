@@ -1952,7 +1952,8 @@ ul.actor-stack {
    docked to-do list, and its composer, each keeping to the document's
    measure in the middle of the column, as they keep to it in a wide side
    panel, so the list's card and the composer's share both edges. The
-   Inbox's pane is laid out the same way, its thread and box at that measure. */
+   Inbox's pane is laid out the same way, its thread at that measure, the
+   box flowing at the thread's end, and what stands docked under it too. */
 .desktop-agent,
 .desktop-inbox {
   --reading-room: calc((100% - var(--luke-page-measure)) / 2);
@@ -1969,7 +1970,7 @@ ul.actor-stack {
 .desktop-agent .draft-fork-dock,
 .desktop-agent .agent-composer,
 .desktop-inbox .inbox-board,
-.desktop-inbox .agent-composer,
+.desktop-inbox > .agent-composer,
 .desktop-inbox .inbox-next-dock {
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
@@ -3565,27 +3566,27 @@ ul.actor-stack {
 }
 
 .inbox-stamp > svg,
-.inbox-ask-standing > svg {
+.inbox-ask-standing > svg,
+.inbox-ask-settled > svg {
   width: 12px;
   height: 12px;
   flex: none;
 }
 
 .inbox-stamp[data-tone="ahead"] > svg,
-.inbox-ask-standing[data-tone="ahead"] > svg {
+.inbox-ask-settled > svg {
   color: var(--luke-color-complete);
 }
 
-.inbox-stamp[data-tone="back"] > svg,
-.inbox-ask-standing[data-tone="back"] > svg {
+.inbox-stamp[data-tone="back"] > svg {
   color: var(--luke-color-danger-text);
 }
 
-/* The ask closing the message that asks it: a bordered card, its head the
-   ask's kind and where it stands, its controls under a hairline while it
-   waits. Once answered, the card heads the reply that answered it, its
-   controls under the same hairline as the answer left them. A replaced or
-   withdrawn ask is its head alone, a replaced one struck through. */
+/* The ask closing the message that asks it, once it no longer waits: a
+   bordered card, its head the ask's kind and where it stands. Answered,
+   the card heads the reply that answered it with no head of its own, its
+   controls as the answer left them. A replaced or withdrawn ask is its
+   head alone, a replaced one struck through. */
 .inbox-ask {
   display: flex;
   min-width: 0;
@@ -3627,14 +3628,34 @@ ul.actor-stack {
   gap: var(--luke-space-4);
 }
 
-.inbox-ask-body,
 .inbox-ask-answered {
   display: flex;
   min-width: 0;
   flex-direction: column;
   gap: var(--luke-space-12);
   padding: var(--luke-space-12);
+}
+
+.inbox-ask-body {
   border-top: 1px solid var(--luke-color-border);
+}
+
+/* An answered ask of words alone, which draws no card, ends the agent's
+   message with a small pill saying it was answered, its check in the
+   complete ink. */
+.inbox-ask-settled {
+  display: inline-flex;
+  max-width: 100%;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--luke-space-6);
+  min-height: var(--luke-space-24);
+  padding-inline: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-full);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The press an answer gave wears its glyph in the tone of what it did,
@@ -3663,20 +3684,67 @@ ul.actor-stack {
   list-style: none;
 }
 
-/* The answer attached to the box stands over its words, a muted line
-   beside it saying the send answers the ask. */
-.inbox-reply-stamp {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
+/* An open ask's marker ending the agent's message (`inbox-pane.tsx`'s
+   AskMarker): a small pill saying whom it waits on, after a
+   dot in the attention ink where it waits on the reader, and the muted ink
+   where it waits on a teammate. */
+.inbox-ask-marker {
+  display: inline-flex;
+  max-width: 100%;
+  align-self: flex-start;
   align-items: center;
-  gap: var(--luke-space-8);
-  padding: var(--luke-space-8) var(--luke-space-12) 0;
+  gap: var(--luke-space-6);
+  min-height: var(--luke-space-24);
+  padding-inline: var(--luke-space-8);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-full);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
-.inbox-reply-stamp-line {
-  color: var(--luke-color-text-subtle);
-  font-size: var(--luke-type-caption-size);
+.inbox-ask-marker::before {
+  width: 6px; /* off-scale: the attention dot */
+  height: 6px; /* off-scale: the attention dot */
+  flex: none;
+  border-radius: var(--luke-radius-full);
+  background: var(--luke-color-attention);
+  content: "";
+}
+
+.inbox-ask-marker[data-inbox-waiting="teammate"]::before {
+  background: var(--luke-color-text-subtle);
+}
+
+/* The reader's draft reply, the thread's last comment: the box stands in
+   its body edge to edge, and what stands over the box's field, its @ and
+   / lists, runs past the comment rather than being clipped by it. */
+.inbox-comment[data-inbox-comment="draft"] .inbox-comment-body {
+  overflow: visible;
+}
+
+.inbox-comment[data-inbox-comment="draft"] .agent-composer {
+  padding: 0;
+}
+
+/* The open question's controls at the top of the draft's card, over its
+   note, with no head of their own, since the agent's message says what it
+   asks; a hairline between them and the note. */
+.inbox-draft-ask {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-12);
+  padding: var(--luke-space-12);
+  border-bottom: 1px solid var(--luke-color-border);
+}
+
+/* Put away with its task, the question stands in the agent's message as a
+   card of its own, as a settled ask's does. */
+.inbox-draft-ask[data-held] {
+  border: 1px solid var(--luke-color-border-strong);
+  border-radius: var(--luke-radius-8);
+  background: var(--luke-color-overlay);
 }
 
 /* A thread's Reply names its chord after its words, in its own ink a step

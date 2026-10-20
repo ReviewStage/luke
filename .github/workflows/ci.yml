@@ -41,12 +41,15 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  # The four jobs keep the names the ruleset requires. @luke/service's suite
-  # is the largest, so it is cut into three vitest shards, one per job, and
-  # the fourth job runs every other workspace's tests, one
-  # workspace at a time (`scripts/check.mjs` says why). Every workspace with
-  # tests runs under one of these names or `scripts/repository-checks.sh`
-  # fails, so no test file can fall outside all four jobs.
+  # The four jobs keep the names the ruleset requires. @luke/service's and
+  # @luke/panel's suites are the largest, so each is cut into three vitest
+  # shards, one per job, and the fourth job runs every other workspace's
+  # tests, one workspace at a time (`scripts/check.mjs` says why), bar the
+  # ones it leaves out with `--filter=!`, which `database-tests` below runs on
+  # a runner of its own so the fourth job is not the run's longest. Every
+  # workspace with tests runs under exactly one of these jobs or
+  # `scripts/repository-checks.sh` fails, so no test file can fall outside
+  # every job.
   tests:
     name: Tests (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
@@ -62,7 +65,7 @@ jobs:
           - shard: 3
             task: test:vitest:3
           - shard: 4
-            task: test:vitest
+            task: test:vitest --filter=!@luke/database
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
@@ -71,19 +74,31 @@ jobs:
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  # The generated migrations meet a real Postgres here, the major production
-  # runs (Neon, 18.x), so a statement PGlite accepts and Postgres refuses is
-  # caught before a deployment's `db:migrate` finds it, and the store tests
-  # run against what it migrated: each file clones the `luke` database as a
-  # template into one of its own (`@luke/database/testing`), so
-  # `db:migrate` goes first. The job keeps its old name because the ruleset
-  # requires it. The store tests run through turbo, and turbo is asked first
-  # whether it would replay them: their hash covers the migrations and every
-  # workspace web imports, so a change that touches none of it replays the
-  # last pass and the job stands no Postgres at all. Note that the image is
-  # not in the hash, so moving it to a new major is a change to re-run by
-  # hand. The image comes from whichever of three registries answers first,
-  # because each one rate-limits anonymous pulls.
+  # @luke/database's suite, the longest after @luke/web's, on a runner of its
+  # own beside the fourth job rather than after it in that job.
+  database-tests:
+    name: Tests (database)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: ./.github/actions/setup
+      - run: node scripts/turbo.mjs run test:vitest --filter=@luke/database
+        env:
+          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
+  # What only a real Postgres can prove, and nothing more: the generated
+  # migrations apply on the major production runs (Neon, 18.x), so a statement
+  # PGlite accepts and Postgres refuses is caught before a deployment's
+  # `db:migrate` finds it, and they end at the declared schema, its tables
+  # (`apps/web/tests/storage-schema.test.ts`) and its columns
+  # (`drizzle-schema.test.ts`), read back through the real `pg` driver from
+  # what `db:migrate` built (`@luke/database/testing` clones it as a template). The store tests
+  # themselves run on PGlite, the same Postgres 18, in the test jobs above.
+  # The job keeps its old name because the ruleset requires it. The image
+  # comes from whichever of three registries answers first, because each one
+  # rate-limits anonymous pulls.
   postgres:
     name: Postgres migrations and store
     runs-on: ubuntu-24.04
@@ -94,17 +109,7 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
       - uses: ./.github/actions/setup
-      - name: Ask turbo whether the store tests replay
-        id: store
-        run: |
-          status=$(node scripts/turbo.mjs run test:store --filter=@luke/web --dry=json | jq -r '.tasks[] | select(.taskId == "@luke/web#test:store") | .cache.status')
-          echo "Store tests: cache $status"
-          echo "replay=$([ "$status" = HIT ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-        env:
-          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       - name: Start Postgres
-        if: ${{ steps.store.outputs.replay != 'true' }}
         run: |
           for round in 1 2 3 4; do
             for image in \
@@ -131,7 +136,6 @@ jobs:
           echo "::error::Every registry refused postgres:18"
           exit 1
       - name: Wait for Postgres
-        if: ${{ steps.store.outputs.replay != 'true' }}
         run: |
           for _ in $(seq 90); do
             status=$(docker inspect --format '{{.State.Health.Status}}' postgres)
@@ -142,9 +146,6 @@ jobs:
           docker logs postgres
           echo "::error::Postgres did not become healthy"
           exit 1
-      - if: ${{ steps.store.outputs.replay != 'true' }}
-        run: pnpm --filter @luke/web db:migrate
-      - run: node scripts/turbo.mjs run test:store --filter=@luke/web
-        env:
-          TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-          TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      - run: pnpm --filter @luke/web db:migrate
+      - name: The migrations end at the declared schema
+        run: pnpm exec vitest run apps/web/tests/storage-schema.test.ts apps/web/tests/drizzle-schema.test.ts

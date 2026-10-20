@@ -47,7 +47,6 @@ import { useComposerPickers } from "./composer-pickers.js";
 import { DictateButton, DictationStrip } from "./dictation-strip.js";
 import {
   attachedAnswers,
-  attachedStamp,
   awaitsNod,
   type InboxDraft,
   type InboxMissing,
@@ -58,15 +57,13 @@ import {
   inboxThreadSend,
   openAskOf,
   pickedWords,
-  withoutAnswer,
 } from "./inbox-model.js";
-import { InboxStamp } from "./inbox-stamp.js";
 import { ComposerQuoteView, ReplyToSelection } from "./reply-to-selection.js";
 import type { SkillSource } from "./skill-picker.js";
 import type { TaskInboxControl } from "./use-task-inbox.js";
 
 /**
- * inbox-answer-box.tsx -- the box docked under every Inbox item's thread: the agent's message box's card and field, answering an open item with its one Send at its foot, and writing a message on a settled one's thread.
+ * inbox-answer-box.tsx -- the box at the end of every Inbox item's thread, the reader's draft reply: the agent's message box's card and field, answering an open item with its one Send at its foot, and writing a message on a settled one's thread.
  *
  * The box is the agent composer's card (`ai-elements/prompt-input.tsx`)
  * around the agent composer's field (`composer-field.tsx`), and takes what
@@ -89,7 +86,7 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * the words with its way off; a file that cannot come says why under the
  * card. Files stand for the developer's own words where they wrote none,
  * and while they are read the answer waits for them. Every item is sent
- * by the one Send at the foot's right, its pick made in the question above;
+ * by the one Send at the foot's right, its pick made in the controls over the note;
  * a note's reads "Got it" while the box holds nothing, and "Send" once it
  * does. Unlike the agent's box, the field never takes the
  * caret as an item opens, because K and J step the list while the caret
@@ -117,18 +114,23 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * where it stands. While the item waits, its words are its answer, never a
  * message beside it, so an open item is answered as it always was.
  *
+ * The box stands at the end of the item's thread as the reader's draft
+ * reply (`inbox-pane.tsx`), and the open question's own controls stand at
+ * the top of its card, over the note: an ask's options, steps, presses, or
+ * fields, or an older item's choice, cards, or fields, each numbered and
+ * pressed as before, Enter on one sending the card.
+ *
  * An item drawn as a thread from version 5 (`inbox-model.ts`'s
  * `inboxThreadOf`) is only ever replied to: the box's one button is Reply,
- * filled in the text's own colour, and while an ask waits its foot says
- * replying keeps it open. Pressing one of the ask's answers in the thread
- * attaches it over the words as a stamp, its glyph and its words with a ×
- * that takes it off, a muted line beside it saying the send answers the
- * ask, and the button takes the answer's name, "Approve" or "Mark done"; the
- * reply then carries the answer with the reader's words and files. A
- * thread that asks nothing while it stands open, a notice, waits on the
- * reader's nod: its button reads Got it while the box holds nothing,
- * which settles it without messaging the agent, and Reply once it holds
- * words or files, which settles it as the reply reaches the agent.
+ * filled in the text's own colour. While an ask waits its foot says
+ * replying keeps the ask open, until one of the ask's answers is pressed
+ * over the note, which then stands picked and needs no words beside it;
+ * pressing the answer again takes it off. The reply carries the answer
+ * with the reader's words and files. A thread that asks nothing while it
+ * stands open, a notice, waits on the reader's nod: its button reads Got
+ * it while the box holds nothing, which settles it without messaging the
+ * agent, and Reply once it holds words or files, which settles it as the
+ * reply reaches the agent.
  */
 
 /** What a card's box asks for, by what the item asks; a text's own placeholder stands where the agent wrote one. */
@@ -167,14 +169,14 @@ const SEND_MESSAGE = "Send";
 /** What a thread's box asks for. */
 const REPLY_PLACEHOLDER = "Reply…";
 
+/** What a thread's box asks for under the open ask's controls, which are the reply's answer. */
+const NOTE_PLACEHOLDER_UNDER_ASK = "Add a note…";
+
 /** What a thread's box's one button reads with no answer attached. */
 const REPLY = "Reply";
 
-/** What a thread's box says over its words and at its foot of the open ask. */
-const ASK_LINE = {
-  KEPT: "Replying keeps the ask open",
-  ANSWERS: "Sending answers the ask",
-} as const;
+/** What a thread's box says at its foot while the open ask has no answer attached. */
+const ASK_KEPT = "Replying keeps the ask open";
 
 /** What a settled item's box asks for: a message to its agent, by name. */
 function messagePlaceholder(agentName: string): string {
@@ -295,6 +297,8 @@ interface AnswerBoxProps {
   agentName: string;
   /** The thread the item is drawn as from version 5, which the box only replies to; none for an item drawn as before. */
   thread: readonly InboxMessage[] | undefined;
+  /** The open question's controls, drawn at the top of the card over the note: the open ask's, or an older item's response's; nothing where none waits. */
+  controls: React.ReactNode;
   /** Where the item's repository's skills are read from; nothing where none can be. */
   skills: SkillSource | undefined;
   /** The words a dictation into the box is likely to say (`dictation-keywords.ts`). */
@@ -314,6 +318,7 @@ function AnswerCard({
   agent,
   agentName,
   thread,
+  controls,
   skills,
   keywords,
   replyScope,
@@ -341,7 +346,6 @@ function AnswerCard({
   const answering = thread === undefined && item.status === INBOX_STATUS.OPEN;
   const asking = thread === undefined ? undefined : openAskOf(thread);
   const attached = asking === undefined ? undefined : attachedAnswers(asking, draft);
-  const stamp = attached === undefined ? undefined : attachedStamp(attached, asking?.ask);
   const notice = thread !== undefined && awaitsNod(item, thread);
   const nod = notice && draft.note.trim() === "" && draft.attachments.length === 0;
   // Note that a note's Send is its words, which the narrow card keeps in the foot rather than at the field's end, as a thread's Reply is.
@@ -351,7 +355,9 @@ function AnswerCard({
     ? placeholderOf(item.response)
     : thread === undefined
       ? messagePlaceholder(agentName)
-      : REPLY_PLACEHOLDER;
+      : controls === undefined
+        ? REPLY_PLACEHOLDER
+        : NOTE_PLACEHOLDER_UNDER_ASK;
   const bundle = useAtomValue(useSideBundles().planEditor);
   const module = AsyncResult.isSuccess(bundle) ? bundle.value : undefined;
   const pickers = useComposerPickers({
@@ -433,12 +439,13 @@ function AnswerCard({
       })
       .finally(() => setReading((count) => count - 1));
   };
+  // Note that a thread's foot says replying keeps the ask open until an answer is picked over the note, which says what is sent itself.
   const quiet = answering
     ? openQuietLine(item, draft, wanting)
     : notice
       ? { line: quietLine(draft), wanting: false }
-      : asking !== undefined && stamp === undefined
-        ? { line: ASK_LINE.KEPT, wanting: false }
+      : asking !== undefined && attached === undefined
+        ? { line: ASK_KEPT, wanting: false }
         : undefined;
   const sendable =
     thread === undefined
@@ -481,15 +488,7 @@ function AnswerCard({
             else message();
           }}
         >
-          {stamp === undefined ? null : (
-            <div className="inbox-reply-stamp" data-inbox-attached="">
-              <InboxStamp
-                stamp={stamp}
-                onRemove={() => control.onDraft(item, withoutAnswer(draft))}
-              />
-              <span className="inbox-reply-stamp-line">{ASK_LINE.ANSWERS}</span>
-            </div>
-          )}
+          {controls}
           <AttachedFileChips
             files={attachmentChips(draft.attachments)}
             onRemove={(index) => {
@@ -573,7 +572,7 @@ function AnswerCard({
                       busyLabel="Sending"
                       disabled={reading > 0 || !(sendable || nod)}
                     >
-                      {nod ? NOTE_SEND.NOD : (stamp?.words ?? REPLY)}
+                      {nod ? NOTE_SEND.NOD : REPLY}
                       <Shortcut chord={{ key: SHORTCUT_KEY.ENTER, bare: true }} />
                     </Button>
                   ) : (

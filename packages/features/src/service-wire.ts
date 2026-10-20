@@ -106,16 +106,6 @@ export interface HostedQuota {
 const HOSTED_API_ERROR_NAMES = Object.values(HOSTED_API_ERROR);
 
 /**
- * A text admitted exactly as it arrived — no ends settled, nothing collapsed
- * — and refused only when there is nothing there at all. What an author or a
- * provider wrote, where trimming would be a display decision a wire reader
- * has no business making.
- */
-export const writtenText = EffectSchema.String.check(
-  EffectSchema.makeFilter((value) => value.length > 0),
-);
-
-/**
  * A count an answer reports: any finite number at or above zero, whole or
  * not, because what these carry are the service's own counters and instants
  * and a fractional one is the service miscounting rather than the wire

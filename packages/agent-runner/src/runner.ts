@@ -1,5 +1,5 @@
 /**
- * runner.ts -- one launch of Claude Code for a Luke agent: the config line in, `query()` started in streaming input mode, Luke's lines fed to it, its messages posted out, and the launch ended when the agent's turn is.
+ * runner.ts -- one launch of a Luke agent: the bearer and the config line read, the harness the config names run (Claude Code here, Codex in `codex.ts`), and the launch's last event posted; for Claude Code, `query()` started in streaming input mode, Luke's lines fed to it, its messages posted out, and the launch ended when the agent's turn is.
  *
  * Two loops run side by side. The input loop reads Luke's stdin lines and
  * acts on each at once: a message joins the prompt stream, a stop calls
@@ -32,7 +32,6 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   Cause,
-  Data,
   Deferred,
   Effect,
   Fiber,
@@ -45,15 +44,20 @@ import {
   Stream,
 } from "effect";
 import { ClaudeCode, type ClaudeCodeSession } from "./claude-code.js";
+import { runCodex } from "./codex.js";
 import { type EventSink, makeEventSink } from "./events.js";
+import { type LaunchContext, type LaunchOutcome, RunnerFailed } from "./launch.js";
 import {
+  type ClaudeCodeConfig,
+  EFFORT,
+  type Effort,
   INPUT_LINE,
   type InputLine,
   InputLineSchema,
   RUNNER_END,
   RUNNER_ENV,
   RUNNER_EVENT,
-  type RunnerConfig,
+  RUNNER_HARNESS,
   RunnerConfigSchema,
   type RunnerEnd,
   type RunnerEndEvent,
@@ -77,8 +81,12 @@ const DENIED_VARIABLES = [
   "CLAUDE_CODE_OAUTH_REFRESH_TOKEN",
 ] as const;
 
-/** Why a launch could not run at all, before or after its CLI. */
-export class RunnerFailed extends Data.TaggedError("RunnerFailed")<{ readonly detail: string }> {}
+const CLAUDE_EFFORTS: ReadonlySet<string> = new Set(Object.values(EFFORT));
+
+/** Whether a model line's effort is one the CLI takes. */
+function isClaudeEffort(effort: string): effort is Effort {
+  return CLAUDE_EFFORTS.has(effort);
+}
 
 /** What the last Stop hook reported still in flight. */
 type InFlight = Omit<RunnerWaiting, "type">;
@@ -94,7 +102,7 @@ const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(InputLineSch
 
 /** The documented options a launch runs `query()` with (the plan's P05). */
 function queryOptions(
-  config: RunnerConfig,
+  config: ClaudeCodeConfig,
   env: RunnerInput["env"],
   bearer: Redacted.Redacted,
   onStop: HookCallback,
@@ -206,13 +214,19 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
     case INPUT_LINE.MODEL: {
       const { model, effort } = value;
       if (model !== undefined) yield* control("setModel", () => launch.session.setModel(model));
-      if (effort !== undefined) {
+      if (effort !== undefined && !isClaudeEffort(effort)) {
+        yield* Effect.logWarning("agent-runner: skipped an effort Claude Code does not take");
+      } else if (effort !== undefined) {
         yield* control("applyFlagSettings", () =>
           launch.session.applyFlagSettings({ effortLevel: effort }),
         );
       }
       return;
     }
+    case INPUT_LINE.TOKEN:
+      // Note that the CLI's setup-token outlives any launch, so a token line
+      // is Codex's alone; never echoed, since it carries one.
+      return yield* Effect.logWarning("agent-runner: a Claude Code launch skipped a token line");
   }
 });
 
@@ -276,36 +290,14 @@ const takeMessage = Effect.fn("agent-runner/takeMessage")(function* (
 });
 
 /**
- * One launch, from its config line to its last event. Answers why it ended;
- * fails where it never started, or where Luke would not take its events.
+ * One Claude Code launch, from its config to the moment its CLI is closed.
+ * Answers why it ended, and the CLI's failure where it failed.
  */
-export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: RunnerInput) {
+const runClaudeCode = Effect.fn("agent-runner/runClaudeCode")(function* (
+  context: LaunchContext<ClaudeCodeConfig>,
+) {
   const claudeCode = yield* ClaudeCode;
-  const bearerValue = input.env[RUNNER_ENV.BEARER];
-  if (bearerValue === undefined || bearerValue === "") {
-    return yield* new RunnerFailed({ detail: `${RUNNER_ENV.BEARER} is not set` });
-  }
-  const bearer = Redacted.make(bearerValue);
-  const claudeToken = input.env[RUNNER_ENV.CLAUDE_TOKEN];
-  const secrets = claudeToken === undefined ? [bearer] : [bearer, Redacted.make(claudeToken)];
-
-  // Stdin is read in a loop of its own from the first line on, so nothing
-  // the session does can hold up a line Luke wrote.
-  const lines = yield* Queue.unbounded<string, Cause.Done>();
-  yield* input.lines.pipe(Stream.runIntoQueue(lines), Effect.forkScoped);
-  const first = yield* Queue.take(lines).pipe(
-    Effect.mapError(() => new RunnerFailed({ detail: "stdin closed before the config line" })),
-  );
-  const config = yield* decodeConfig(first).pipe(
-    Effect.mapError(() => new RunnerFailed({ detail: "the config line is not a runner config" })),
-  );
-
-  const sink = yield* makeEventSink({
-    url: config.eventsUrl,
-    bearer,
-    firstSequence: config.firstSequence,
-    secrets,
-  });
+  const { config, lines, sink, bearer } = context;
   const inFlight = MutableRef.make<InFlight | undefined>(undefined);
   const onStop: HookCallback = async (hook) => {
     if (hook.hook_event_name === "Stop") {
@@ -319,7 +311,7 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
   const prompts = yield* Queue.unbounded<SDKUserMessage, Cause.Done>();
   const session = claudeCode.query({
     prompt: Stream.toAsyncIterable(Stream.fromQueue(prompts)),
-    options: queryOptions(config, input.env, bearer, onStop),
+    options: queryOptions(config, context.env, bearer, onStop),
   });
   const launch: Launch = {
     session,
@@ -365,6 +357,47 @@ export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: Run
   const end = yield* Deferred.await(launch.ended);
   yield* Fiber.interruptAll(loops);
   session.close();
+  return { end, failure } satisfies LaunchOutcome;
+});
+
+/**
+ * One launch, from its config line to its last event. Answers why it ended;
+ * fails where it never started, or where Luke would not take its events.
+ */
+export const runAgent = Effect.fn("agent-runner/runAgent")(function* (input: RunnerInput) {
+  const bearerValue = input.env[RUNNER_ENV.BEARER];
+  if (bearerValue === undefined || bearerValue === "") {
+    return yield* new RunnerFailed({ detail: `${RUNNER_ENV.BEARER} is not set` });
+  }
+  const bearer = Redacted.make(bearerValue);
+  const tokens = [RUNNER_ENV.CLAUDE_TOKEN, RUNNER_ENV.CODEX_TOKEN].flatMap((name) => {
+    const value = input.env[name];
+    return value === undefined || value === "" ? [] : [Redacted.make(value)];
+  });
+  const secrets = [bearer, ...tokens];
+
+  // Stdin is read in a loop of its own from the first line on, so nothing
+  // the session does can hold up a line Luke wrote.
+  const lines = yield* Queue.unbounded<string, Cause.Done>();
+  yield* input.lines.pipe(Stream.runIntoQueue(lines), Effect.forkScoped);
+  const first = yield* Queue.take(lines).pipe(
+    Effect.mapError(() => new RunnerFailed({ detail: "stdin closed before the config line" })),
+  );
+  const config = yield* decodeConfig(first).pipe(
+    Effect.mapError(() => new RunnerFailed({ detail: "the config line is not a runner config" })),
+  );
+
+  const sink = yield* makeEventSink({
+    url: config.eventsUrl,
+    bearer,
+    firstSequence: config.firstSequence,
+    secrets,
+  });
+  const context = { lines, env: input.env, bearer, sink };
+  const { end, failure } =
+    config.harness === RUNNER_HARNESS.CODEX
+      ? yield* runCodex({ ...context, config })
+      : yield* runClaudeCode({ ...context, config });
   const last: RunnerEndEvent =
     failure === ""
       ? { type: RUNNER_EVENT.END, reason: end }

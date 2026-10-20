@@ -93,13 +93,17 @@ export const CODER_TOOL = {
   QUEUE_QUESTION: AGENT_TOOL.QUEUE_QUESTION,
   WITHDRAW_QUESTION: AGENT_TOOL.WITHDRAW_QUESTION,
   END_CALL: AGENT_TOOL.END_CALL,
+  SHOW_CODE: AGENT_TOOL.SHOW_CODE,
+  DRAW_ON_BOARD: AGENT_TOOL.DRAW_ON_BOARD,
+  LOOK_AT_BOARD: AGENT_TOOL.LOOK_AT_BOARD,
 } as const;
 
-/** The tools that act on the agent's plan: `edit_plan`, which takes notes in it, `show_page`, which shows a page on it, and the four that read and answer its comments. */
+/** The tools that act on the agent's task: `edit_plan`, which takes notes in its plan, `show_page`, which shows a page on it, the four that read and answer its comments, and the two that draw on and look at its whiteboard. */
 export type TaskTool =
   | typeof CODER_TOOL.EDIT_PLAN
   | typeof CODER_TOOL.SHOW_PAGE
-  | (typeof COMMENT_TASK_TOOLS)[number];
+  | (typeof COMMENT_TASK_TOOLS)[number]
+  | (typeof BOARD_TASK_TOOLS)[number];
 
 /** The comment tools every agent on a task is offered, since a member may send any of them a thread. */
 const COMMENT_TASK_TOOLS = [
@@ -109,18 +113,26 @@ const COMMENT_TASK_TOOLS = [
   CODER_TOOL.REOPEN_THREAD,
 ] as const;
 
+/** The whiteboard's tools, which draw on the task's board and look at it as the developer's Mac drew it (`../../tasks/board-tool.ts`, `../../tasks/board-look.ts`). */
+const BOARD_TASK_TOOLS = [CODER_TOOL.DRAW_ON_BOARD, CODER_TOOL.LOOK_AT_BOARD] as const;
+
 /**
- * The plan's tools an agent is offered: none for one on no plan, as an
+ * The task's tools an agent is offered: none for one on no task, as an
  * automation's run starts one, and all of them for one on a task, whether
  * it was handed the plan or a prompt, since New task starts every agent on
  * the developer's own words while Luke writes the plan beside it. Note that
  * each tool withheld is one its call would only be refused by (`host.ts`'s
- * `editPlan` and `showPage`), and that the instructions leave out the same
- * words (`instructions.ts`).
+ * `editPlan`, `showPage`, and `board`), and that the instructions leave out
+ * the same words (`instructions.ts`).
  */
 export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<TaskTool> {
   if (agent.taskId === null) return new Set();
-  return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...COMMENT_TASK_TOOLS]);
+  return new Set([
+    CODER_TOOL.EDIT_PLAN,
+    CODER_TOOL.SHOW_PAGE,
+    ...COMMENT_TASK_TOOLS,
+    ...BOARD_TASK_TOOLS,
+  ]);
 }
 
 /** The call's own tools, which mean something only while someone is listening (`../../tasks/queue-question.ts`, `../../tasks/end-call.ts`). */
@@ -146,17 +158,18 @@ export function turnToolsOf(turn: BrainHostTurn | undefined): ReadonlySet<Spoken
   return turn === BRAIN_HOST_TURN.SPOKEN ? new Set(SPOKEN_TURN_TOOLS) : new Set();
 }
 
-/** The tools only an agent working in a repository is offered: the pull request the service opens for it, and the two that write into its checkout. */
+/** The tools only an agent working in a repository is offered: the pull request the service opens for it, the two that write into its checkout, and `show_code`, which puts lines of it on the developer's screen. */
 export type RepositoryTool =
   | typeof CODER_TOOL.OPEN_PULL_REQUEST
   | typeof CODER_TOOL.WRITE_FILE
-  | typeof CODER_TOOL.APPLY_PATCH;
+  | typeof CODER_TOOL.APPLY_PATCH
+  | typeof CODER_TOOL.SHOW_CODE;
 
 /**
- * The repository's tools an agent is offered: all of them for one working
- * in a repository, and none for one with no repository, whose sandbox holds
- * no checkout to write into and which has no branch to open a pull request
- * from. Note that its shell and its reads stay, in the empty working folder
+ * The repository's tools an agent is offered, on every turn, typed or
+ * spoken: all of them for one working in a repository, and none for one
+ * with no repository, whose sandbox holds no checkout to write into or
+ * show lines of and which has no branch to open a pull request from. Note that its shell and its reads stay, in the empty working folder
  * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), and that the
  * instructions leave out the same words (`instructions.ts`).
  */
@@ -164,7 +177,12 @@ export function repositoryToolsOf(
   agent: Pick<CodingAgent, "repository">,
 ): ReadonlySet<RepositoryTool> {
   if (agent.repository === null) return new Set();
-  return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.WRITE_FILE, CODER_TOOL.APPLY_PATCH]);
+  return new Set([
+    CODER_TOOL.OPEN_PULL_REQUEST,
+    CODER_TOOL.WRITE_FILE,
+    CODER_TOOL.APPLY_PATCH,
+    CODER_TOOL.SHOW_CODE,
+  ]);
 }
 
 /**
@@ -203,6 +221,7 @@ const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.GREP,
   CODER_TOOL.APPLY_PATCH,
   CODER_TOOL.SHOW_IMAGE,
+  CODER_TOOL.SHOW_CODE,
 ]);
 
 /** What a chat post's input is read for here: the types of its blocks, an image's among them. */
