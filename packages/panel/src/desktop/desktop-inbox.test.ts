@@ -62,6 +62,8 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { appBridge } from "../app-bridge.js";
 import { runAppCommand, useAppKeymap } from "../app-commands.js";
 import { DRAFT_WORD } from "../draft-mark.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
+import { type SidePanelControl, useSidePanel } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type InboxChoice } from "../tasks/use-tasks-tab.js";
 import {
   type AnyAct,
@@ -413,17 +415,19 @@ interface Asked {
   readonly marks: [string, TaskMark][];
 }
 
-/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks and archived tasks given. */
+/** The Inbox over the two tasks, and the items of agents with no task given, its own view real, as the tasks tab holds it, and every press that leaves it recorded; or, `listUnread`, opened before the account's task list is first read; or over the tasks and archived tasks given; or, `room`, under the side panel itself in that room, as the tasks tab holds it while the Inbox has chosen nothing. */
 function mount(
   firstTaskless: readonly AppInboxTasklessItem[] = [],
   {
     listUnread = false,
     standing = [BILLING, INVITES],
     archived = [],
+    room,
   }: {
     listUnread?: boolean;
     standing?: readonly TaskSummary[];
     archived?: readonly TaskSummary[];
+    room?: ShellRoom;
   } = {},
 ) {
   const asked: Asked = {
@@ -433,7 +437,7 @@ function mount(
     closed: 0,
     marks: [],
   };
-  function Page() {
+  function Page({ sidePanel }: { sidePanel?: SidePanelControl | undefined }) {
     const [chosen, setChosen] = useState<InboxChoice | undefined>(undefined);
     // Whether the list was asked for, which the window keeps as the Tasks tab does.
     const [listAsked, setListAsked] = useState(false);
@@ -453,6 +457,7 @@ function mount(
         tasks: listed,
         archived,
         listRead,
+        sidePanel: sidePanel ?? tasksControl().sidePanel,
         inbox: [
           { taskId: BILLING.id, items: [waitingOf(THRESHOLD)] },
           { taskId: INVITES.id, items: [waitingOf(EXPIRY)] },
@@ -487,10 +492,24 @@ function mount(
       }),
     });
   }
+  function Panelled({ at }: { at: ShellRoom }) {
+    const sidePanel = useSidePanel(
+      undefined,
+      { id: undefined, holds: {}, bare: true },
+      [],
+      [],
+      [],
+      [],
+      [],
+      at,
+    );
+    return createElement(Page, { sidePanel });
+  }
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
-  act(() => root?.render(onRegistry(AtomRegistry.make(), createElement(Page))));
+  const page = room === undefined ? createElement(Page) : createElement(Panelled, { at: room });
+  act(() => root?.render(onRegistry(AtomRegistry.make(), page)));
   return { page: container, asked };
 }
 
@@ -2220,6 +2239,18 @@ test("an Inbox with nothing in it stands its empty state in the pane beside the 
   );
 
   layOut(page, 800);
+  assert.deepEqual(columnsShown(page), ["list"]);
+  assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
+});
+
+test("on a phone, an Inbox with nothing chosen shows its list and says nothing needs you, under no panel, though the panel stands open as a first launch leaves it", async () => {
+  inboxes = new Map();
+  listedAgents = [];
+  const { page } = mount([], { room: SHELL_ROOM.NARROW });
+  assert.equal(page.querySelector(".side-panel"), null, "no panel is drawn over the Inbox");
+  assert.equal(page.querySelector(".page-find[hidden]"), null, "the Inbox page is not hidden");
+  await settle();
+  layOut(page, 390);
   assert.deepEqual(columnsShown(page), ["list"]);
   assert.equal(emptyStateIn(page, ".inbox-tasks"), "Nothing needs you");
 });

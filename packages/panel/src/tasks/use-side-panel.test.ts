@@ -544,3 +544,29 @@ test("a narrow room holds the open panel full screen alone, so the window's ways
   render();
   assert.deepEqual([now().open, now().fullScreen, now().fullScreenOnly], [true, false, false]);
 });
+
+test("the Inbox with nothing chosen has no task, so the panel left open shows over it in no room, neither full screen on a phone nor empty beside it", () => {
+  let control: SidePanelControl | undefined;
+  function Probe({ at, task }: { at: ShellRoom; task: OpenTask }) {
+    control = useSidePanel(undefined, task, [], [], [], [], [], at);
+    return null;
+  }
+  const root = createRoot(document.body.appendChild(document.createElement("div")));
+  roots.push(root);
+  const now = () => control ?? assert.fail("the panel is held");
+  const render = (at: ShellRoom, task: OpenTask) =>
+    act(() => root.render(createElement(Probe, { at, task })));
+  // The panel stands open on a plan, and is kept open for the next launch.
+  render(SHELL_ROOM.NARROW, usedTask(TASK));
+  assert.equal(now().open, true);
+  assert.equal(JSON.parse(window.localStorage.getItem("luke.sidePanel") ?? "{}").open, true);
+
+  for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
+    render(room, { id: undefined, holds: {}, bare: true });
+    assert.deepEqual(
+      [now().open, now().fullScreen, now().fullScreenOnly],
+      [false, false, false],
+      `the ${room} room shows the Inbox with no panel over it`,
+    );
+  }
+});

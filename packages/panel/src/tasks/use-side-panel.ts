@@ -1725,7 +1725,9 @@ export function useSidePanel(
   const strip = useMemo(() => stripOf(state, drawn), [state, drawn]);
   // Open is the window's, so a plan whose strip is empty hides the panel
   // without forgetting it was open, and the next plan with a tab shows it.
-  const shown = state.open && (strip.length > 0 || emptyShownOn === taskId);
+  // The Inbox with nothing chosen has no task, so it is never shown empty there.
+  const shown =
+    state.open && (strip.length > 0 || (taskId !== undefined && emptyShownOn === taskId));
   // A panel shut, by its toggle or by its last tab closing, or hidden by a
   // plan with no tab, shows again beside the document and with no ask of
   // its "+" standing; one shut, or whose plan was left, is shown empty only
