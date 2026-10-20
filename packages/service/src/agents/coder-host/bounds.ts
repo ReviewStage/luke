@@ -113,6 +113,7 @@ export const CODER_MODEL_FIXTURE = {
 /** Why the host refused a session's standing or a step, in words a log or a failed turn can carry. */
 export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no coding agent's.",
+  NO_REPOSITORY: "Not run: the agent works in no repository.",
   UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
   NO_PROVIDER_KEY: "Not run: this deployment holds no key for the agent's model provider.",
   NO_FAST_VERSION:

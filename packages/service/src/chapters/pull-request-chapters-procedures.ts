@@ -33,7 +33,11 @@
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { readAccountPreferences } from "@luke/database/models/account-store";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  hasRepository,
+  type WithRepository,
+} from "@luke/database/models/coding-agent-store";
 import {
   CHAPTER_CLAIM_OUTCOME,
   CHAPTER_GENERATION_STALE_MS,
@@ -144,7 +148,7 @@ function refusedAsRead<A, E extends { readonly _tag: string }, R>(
 
 /** What both procedures stand on: the pull request as GitHub holds it now, the token it was read on, and the workspace its chapters are kept under; none where there is no pull request. */
 interface ChaptersSubject {
-  readonly agent: CodingAgent;
+  readonly agent: WithRepository<CodingAgent>;
   readonly organizationId: string;
   readonly token: Redacted.Redacted;
   readonly pullRequest: GitHubPullRequest;
@@ -160,7 +164,7 @@ const subjectOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   // The number as the query spelled it, read by the rule every read of the tab reads it by.
   const number = yield* pullRequestNumberOf(named === undefined ? [] : [named]);
   const asked = yield* askedPullRequest(yield* published, userId, agent, number);
-  if (asked === null) return Option.none();
+  if (asked === null || !hasRepository(agent)) return Option.none();
   const { token, workspace, found } = yield* refusedAsRead(
     Effect.gen(function* () {
       const { token } = yield* agentPullRequestReach(userId, agent);
@@ -392,7 +396,7 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       if (model === undefined) return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
       const subject = yield* subjectOf(published, context.userId, agent, input.query?.number);
       if (Option.isNone(subject)) return { pullRequest: null };
-      const { organizationId, pullRequest } = subject.value;
+      const { organizationId, pullRequest, agent: held } = subject.value;
       // Note that GitHub names the base on every read of one pull request; one that does not is a GitHub off its shape.
       if (pullRequest.baseSha === undefined) {
         return yield* Effect.fail(HOSTED_REFUSAL.GITHUB_UNANSWERED);
@@ -402,7 +406,7 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       const read = yield* generationInput(subject.value);
       // The files are read by the pull request's number, so a push between the two reads would tell another head's diff under this one: the head is read again, and a moved one is answered as it now stands, to be generated on its own.
       const after = yield* refusedAsRead(
-        pullRequestByNumber(subject.value.token, agent.repository, pullRequest.number),
+        pullRequestByNumber(subject.value.token, held.repository, pullRequest.number),
       );
       if (Option.isNone(after)) return { pullRequest: null };
       if (after.value.headSha !== pullRequest.headSha) {
@@ -412,7 +416,7 @@ export function pullRequestChaptersProcedures(seams: PullRequestChaptersProcedur
       const claimed = yield* hostedStoreOrUnavailable(
         claimChapterGeneration({
           organizationId,
-          repository: agent.repository,
+          repository: held.repository,
           pullRequestNumber: pullRequest.number,
           baseSha: pullRequest.baseSha,
           headSha: pullRequest.headSha,

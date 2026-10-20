@@ -3,9 +3,11 @@ import { it } from "@effect/vitest";
 import {
   type CodingAgent,
   createCodingAgent,
+  hasRepository,
   readCodingAgent,
   settleCodingAgentAuthor,
   updateCodingAgentBranch,
+  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
@@ -99,6 +101,7 @@ const openAgent = (
     const { agent } = Option.getOrThrow(started);
     if (author !== null) yield* settleCodingAgentAuthor(userId, agent.id, author);
     const settled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+    assert.ok(hasRepository(settled));
     return {
       installation,
       agent: settled,
@@ -108,7 +111,10 @@ const openAgent = (
 
 /** Opens the agent's pull request against the GitHub given. */
 const open = (
-  opened: { readonly installation: InstallationFixture; readonly agent: CodingAgent },
+  opened: {
+    readonly installation: InstallationFixture;
+    readonly agent: WithRepository<CodingAgent>;
+  },
   target: { readonly userId: string; readonly conversationId: string },
   answer: Opening,
   input: WireBoundaryInput = INPUT,

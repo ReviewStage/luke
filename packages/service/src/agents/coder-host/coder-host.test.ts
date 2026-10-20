@@ -14,6 +14,7 @@ import {
   archiveCodingAgent,
   type CodingAgentBriefText,
   createCodingAgent,
+  hasRepository,
   latestTurnsOf,
   readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
@@ -193,6 +194,7 @@ const unclaimedAgent = (
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
+    assert.ok(hasRepository(agent));
     const target: ConversationTarget = { userId, conversationId: agent.conversationId };
     return { userId, agent, target, auth: ownSeat(userId, agent.conversationId) };
   });
@@ -435,6 +437,39 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
             .model(other.success, undefined, "turn-fixture")
             .pipe(Effect.provide(modelCatalogOf(CATALOG))),
           Result.fail(CODER_REFUSAL.NO_AGENT),
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent with no repository is refused as one, since a coding session here is repository work",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const userId = yield* openGithubUser();
+        const task = yield* startTask(userId, { name: "Talk it over" });
+        const { agent } = Option.getOrThrow(
+          yield* createCodingAgent(userId, {
+            taskId: task.id,
+            idempotencyKey: "start-blank",
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            planSnapshot: null,
+            prompt: null,
+            repository: null,
+          }),
+        );
+        const sessionId = mintSession();
+        const auth = ownSeat(userId, agent.conversationId);
+        const starting = yield* host.admitStarting(auth, sessionId);
+        assert.ok(Result.isSuccess(starting));
+        yield* host.sessionStarted(starting.success, sessionId);
+        const admitted = yield* host.admit(auth, sessionId);
+        assert.ok(Result.isSuccess(admitted));
+
+        assert.deepEqual(
+          yield* host.agent(admitted.success),
+          Result.fail(CODER_REFUSAL.NO_REPOSITORY),
         );
       }),
   );

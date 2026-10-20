@@ -3,6 +3,7 @@ import {
   type CodingAgent,
   recordCodingAgentAuthor,
   updateCodingAgentBranch,
+  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
@@ -352,7 +353,7 @@ function answerOf(ended: Settled, openedAs: OpenedAs, note?: string): PullReques
  */
 const attemptOpening = /* @__PURE__ */ Effect.fn("web/attemptPullRequestOpening")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   input: UnparsedWireValue,
 ): Effect.fn.Return<PullRequestToolResult, never, CheckoutServices | DatabaseServices> {
   const read = readInput(input);
@@ -415,7 +416,7 @@ const recordOpened = (target: ConversationTarget, agent: CodingAgent, head: stri
  */
 export const openPullRequest = /* @__PURE__ */ Effect.fn("web/openPullRequest")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   input: UnparsedWireValue,
 ): Effect.fn.Return<PullRequestToolResult, never, CheckoutServices | DatabaseServices> {
   const result = yield* attemptOpening(target, agent, input);

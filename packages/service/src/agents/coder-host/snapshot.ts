@@ -33,7 +33,11 @@
 
 import { createHash } from "node:crypto";
 import type { DatabaseServices } from "@luke/database/core/query";
-import { type CodingAgent, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
+import {
+  type CodingAgent,
+  hasRepository,
+  readCodingAgentByKey,
+} from "@luke/database/models/coding-agent-store";
 import { latestTurnsOfReached } from "@luke/database/models/message-reads";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
@@ -366,7 +370,8 @@ export const copySourceWork = /* @__PURE__ */ Effect.fn("web/copySourceWork")(fu
     // one the source cloned before the task moved would be none of its checkout's.
     const task = yield* readTaskHeader(userId, source.taskId ?? "");
     const repository = Option.isSome(task) ? task.value.repository : null;
-    if (repository?.toLowerCase() !== source.repository.toLowerCase()) {
+    // A source with no repository has no branch any checkout would hold.
+    if (!hasRepository(source) || repository?.toLowerCase() !== source.repository.toLowerCase()) {
       return missed(SNAPSHOT_MISS.MOVED);
     }
     const [session] = yield* standingSessionsOf(source.userId, [source.conversationId]);

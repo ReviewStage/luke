@@ -302,7 +302,7 @@ const firingRepositoryHeld = Effect.fnUntraced(function* (
   const agent = yield* readCodingAgent(automation.userId, automation.targetAgentId);
   return Option.match(agent, {
     onNone: () => true,
-    onSome: (held) => held.repository.toLowerCase() === repository.toLowerCase(),
+    onSome: (held) => held.repository?.toLowerCase() === repository.toLowerCase(),
   });
 });
 

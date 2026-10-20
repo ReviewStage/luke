@@ -231,12 +231,15 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   if (agent.archivedAt !== null) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const workspace = yield* hostedStoreOrUnavailable(agentWorkspace(userId, agent));
   if (Option.isNone(workspace)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  yield* workspaceRepository(
-    workspace.value,
-    agent.repository,
-    agentMember(agent),
-    task?.ownerId === userId ? userId : undefined,
-  );
+  // An agent with no repository has none for GitHub to reach.
+  if (agent.repository !== null) {
+    yield* workspaceRepository(
+      workspace.value,
+      agent.repository,
+      agentMember(agent),
+      task?.ownerId === userId ? userId : undefined,
+    );
+  }
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // What the words mention goes with them: of the task this send read as its sender, and of the agent's workspace.

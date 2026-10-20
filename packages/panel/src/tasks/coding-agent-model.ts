@@ -1774,7 +1774,7 @@ export function githubPath(name: string): string {
 /** Where the chip opens on GitHub: the pull request, or the branch compared against the repository's default where there is no pull request yet. */
 export function publishedUrl(published: CodingAgentPullRequestAnswer): string | undefined {
   if (published.pullRequest !== null) return published.pullRequest.url;
-  if (published.branch === null) return undefined;
+  if (published.branch === null || published.repository === null) return undefined;
   return `https://github.com/${published.repository}/compare/${githubPath(published.branch)}?expand=1`;
 }
 

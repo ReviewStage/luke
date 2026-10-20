@@ -428,13 +428,19 @@ export const acceptedAgentChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
+/** Where a Start through this path puts its agent: handed the plan or a prompt, never started blank. */
+type HandedPlace = Exclude<
+  CodingAgentPlace,
+  { readonly planSnapshot: null; readonly prompt: null }
+>;
+
 /** Where a Start lands, read as the account: the workspace whose installation reads the repository, the repository, the task where there is one, the account that may move it where that is the account asking, and the store's place for the agent with what it is handed. */
 interface StartLanding {
   readonly workspaceId: string;
   readonly repository: string;
   readonly task: Task | undefined;
   readonly mover: string | undefined;
-  readonly place: CodingAgentPlace;
+  readonly place: HandedPlace;
   /** What the new agent keeps of the agent it was started from; none for one started afresh. */
   readonly startedFrom: StoredStartedFrom | undefined;
 }
