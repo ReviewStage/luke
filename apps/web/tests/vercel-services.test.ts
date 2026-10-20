@@ -455,6 +455,29 @@ test("every path the web app is served at sends its own Content Security Policy 
   }
 });
 
+test("a content-hashed build asset is cached for a year, and nothing unhashed under /assets is", () => {
+  // Vite's default `build.assetsDir` is `assets`, which `public/assets` shares with unhashed files.
+  for (const path of [
+    "/assets/app-DyIpMmfT.js",
+    "/assets/app-a1_B-2cD.css",
+    "/assets/chunk-Zx9_QwEr.js",
+  ]) {
+    assert.equal(
+      answeredHeaders(path).headers.get("cache-control"),
+      "public, max-age=31536000, immutable",
+      path,
+    );
+  }
+  for (const path of [
+    "/assets/charles-pan.jpeg",
+    "/assets/dean-stratakos.jpeg",
+    "/app",
+    "/about",
+  ]) {
+    assert.equal(answeredHeaders(path).headers.get("cache-control"), undefined, path);
+  }
+});
+
 /** The pages the web app frames itself, which this site alone may frame (`src/app/web-platform.ts`). */
 const FRAMED_BY_THE_APP: ReadonlySet<string> = new Set(["page-in-mac-app.html"]);
 
