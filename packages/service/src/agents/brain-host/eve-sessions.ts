@@ -262,6 +262,12 @@ export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly message: string | UserContent;
   /** The sender's time zone, which the turn the message opens reads the day in; none reads UTC. */
   readonly timeZone?: string;
+  /**
+   * Luke's own id for the message, the client id of the line it wrote for
+   * it: a native harness's runner names it back as it takes the message
+   * (`claude-code-sessions.ts`). eve is never handed it.
+   */
+  readonly lineId?: string;
 }
 
 /**
