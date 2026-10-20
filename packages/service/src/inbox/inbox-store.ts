@@ -2942,7 +2942,10 @@ function sameList<T>(
   const right = sent ?? [];
   return (
     left.length === right.length &&
-    left.every((each, at) => at in right && same(each, right[at] as T))
+    left.every((each, at) => {
+      const other = right[at];
+      return other !== undefined && same(each, other);
+    })
   );
 }
 
