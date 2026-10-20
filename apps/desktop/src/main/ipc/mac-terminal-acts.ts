@@ -188,7 +188,9 @@ export function macTerminalProcedures(
             worktree: worktreeFolder(worktreesRoot, params.repository, params.branch),
             earlier: {
               worktrees: path.dirname(worktreeFolder(stateRoot, params.repository, params.branch)),
+              clone: cloneFolder(stateRoot, params.repository),
             },
+            trash: path.join(worktreesRoot, "trash"),
             branch: params.branch,
             pullRequest: params.pullRequest,
             command,
