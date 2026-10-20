@@ -231,7 +231,8 @@ export function TasksPage({
     workspaceId === undefined ? NO_TASKS_FILTER : (filters[workspaceId] ?? NO_TASKS_FILTER);
   const onFilter = (next: TasksFilter) => {
     if (workspaceId === undefined) return;
-    const kept = { ...filters, [workspaceId]: next };
+    // Note that the record is read again before it is written, so another tab's filter for another workspace is kept.
+    const kept = { ...readKept(FILTER_KEY, storedFilters, {}), [workspaceId]: next };
     setFilters(kept);
     writeKept(FILTER_KEY, storedFilters, kept);
   };

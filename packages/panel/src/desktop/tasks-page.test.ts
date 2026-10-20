@@ -271,6 +271,20 @@ test("the Filter narrows the List to the values chosen, several in one visit, a 
   assert.equal(again.querySelector("[data-filtered='true']"), null);
 });
 
+test("a filter chosen here keeps another workspace's filter that another tab kept meanwhile", async () => {
+  const page = await mountPage();
+  const elsewhere = { "workspace-beta": { priority: [TASK_PRIORITY.LOW] } };
+  window.localStorage.setItem("luke.tasksFilter", JSON.stringify(elsewhere));
+  openOptions(page, "Filter");
+  choose("Priority", "High");
+  closeMenus();
+
+  assert.deepEqual(JSON.parse(window.localStorage.getItem("luke.tasksFilter") ?? "{}"), {
+    ...elsewhere,
+    [ACME.id]: { priority: [TASK_PRIORITY.HIGH] },
+  });
+});
+
 test("grouped by priority, the pins not leading, the List runs from the most pressing, and a property turned off leaves every row", async () => {
   const page = await mountPage();
   openOptions(page, "View options");
