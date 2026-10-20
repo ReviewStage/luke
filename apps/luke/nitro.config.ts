@@ -10,6 +10,8 @@
  * and the function is not told to look for maps it will never ship with.
  */
 
+import { sourceMapUploadToken } from "@luke/service/observability/source-maps";
+
 const SENTRY_SOURCE_MAPS = {
   sourcemap: "hidden",
   experimental: { sourcemapMinify: false },
@@ -17,9 +19,5 @@ const SENTRY_SOURCE_MAPS = {
 };
 
 export default {
-  // Only a production deployment uploads maps (`scripts/eve-source-maps.sh`).
-  $production:
-    process.env.SENTRY_AUTH_TOKEN && process.env.VERCEL_ENV === "production"
-      ? SENTRY_SOURCE_MAPS
-      : {},
+  $production: sourceMapUploadToken(process.env) ? SENTRY_SOURCE_MAPS : {},
 };

@@ -1,5 +1,6 @@
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
+import { sourceMapUploadToken } from "@luke/service/observability/source-maps";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { type BuildOptions, build } from "esbuild";
 import {
@@ -55,8 +56,8 @@ const SITE_DIRECTORY = "dist";
  * which is the release the SDK then reports under.
  */
 function withSentrySourceMaps(options: BuildOptions): BuildOptions {
-  const authToken = process.env.SENTRY_AUTH_TOKEN;
-  if (!authToken || process.env.VERCEL_ENV !== "production") return options;
+  const authToken = sourceMapUploadToken(process.env);
+  if (!authToken) return options;
   return {
     ...options,
     // Sentry's guide asks for "hidden" maps; esbuild spells that `external`,
