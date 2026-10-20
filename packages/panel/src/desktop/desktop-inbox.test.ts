@@ -1941,6 +1941,16 @@ test("an archived task's items stand on the Archived tab alone, counted there an
   assert.equal(window.localStorage.getItem(SHOW_KEY), JSON.stringify("all"));
 });
 
+test("Everything holding only an archived task's items, Whose naming nobody, says nothing is here and offers Show archived, blaming no one", async () => {
+  const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
+  const { page } = mount([], { standing: [], archived: [archivedInvites] });
+  await settle();
+  act(() => showTab(page, "Everything").click());
+  await settle();
+  assert.deepEqual(listed(page), []);
+  assert.deepEqual(needsYouEmpty(page), [undefined, "Nothing here", "Show archived"]);
+});
+
 test("a link to an archived task's item opens it on the Archived tab, which lists it, rather than saying it is not found", async () => {
   const archivedInvites: TaskSummary = { ...INVITES, archivedAt: 9_000 };
   const { page } = mount([], { standing: [BILLING], archived: [archivedInvites] });
@@ -2417,11 +2427,7 @@ test("with only settled items, the Needs you tab lists no row, the item read sti
   act(() => button().click());
   assert.equal(button().getAttribute("aria-selected"), "true");
   assert.deepEqual(listed(page), [], "the item read is not listed under a filter leaving it out");
-  assert.deepEqual(needsYouEmpty(page), [
-    "Nothing needs you",
-    "You've answered everything",
-    "Show everything",
-  ]);
+  assert.deepEqual(needsYouEmpty(page), [undefined, "Nothing needs you", "Show everything"]);
   assert.equal(emptyStateIn(page, ".inbox-view-items"), null, "the pane says nothing twice");
   assert.equal(readTitle(page), "How is a failed email retried?");
 
@@ -2431,7 +2437,7 @@ test("with only settled items, the Needs you tab lists no row, the item read sti
   assert.equal(pagerOf(page), null);
   act(() => backToList(page).click());
   assert.deepEqual(columnsShown(page), ["list"]);
-  assert.equal(needsYouEmpty(page)?.[0], "Nothing needs you");
+  assert.equal(needsYouEmpty(page)?.[1], "Nothing needs you");
 
   const showAll = page.querySelector<HTMLButtonElement>(".inbox-tasks .luke-empty-state button");
   assert.ok(showAll, "the empty state offers Show everything");
@@ -5023,7 +5029,7 @@ test("a teammate chosen in Whose with nothing in the tab shown says so, and offe
   chooseView(page, "Whose", "Charles Pan");
   assert.deepEqual(listed(page), []);
   assert.deepEqual(needsYouEmpty(page), [
-    "Nothing here",
+    undefined,
     "Nothing in the Inbox is theirs",
     "Show everyone's",
   ]);

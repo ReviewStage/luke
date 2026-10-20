@@ -33,7 +33,7 @@ const ARCHIVE_REFUSED = "Couldn't archive it. Try again.";
 export function archiveQuestion(identifier: string): DialogQuestion {
   return {
     title: `Archive ${identifier}?`,
-    body: "It leaves the list. Nothing else about it changes.",
+    body: "It leaves the list.",
     verb: "Archive",
     running: "Archiving",
   };
