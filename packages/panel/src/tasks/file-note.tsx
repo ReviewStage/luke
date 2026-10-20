@@ -174,12 +174,14 @@ function FileNoteCard({
 
 /**
  * What a run of a File tab's lines draws after each line: the cards of the
- * notes whose ranges end there, nothing where none does.
+ * notes whose ranges end there, nothing where none does. A note on a file
+ * since shortened inside its range stands after the file's last line, as
+ * long as its range still begins in the file.
  */
-export function notesAfter(notes: FileNotes): (line: number) => ReactNode {
+export function notesAfter(notes: FileNotes, lastLine: number): (line: number) => ReactNode {
   return (line) =>
     notes.notes
-      .filter((note) => note.endLine === line)
+      .filter((note) => note.startLine <= lastLine && Math.min(note.endLine, lastLine) === line)
       .map((note) => (
         <FileNoteCard
           key={note.callId}

@@ -146,12 +146,15 @@ function Version(): ReactNode {
 
 /** Luke's note on a File tab's lines. */
 function Note(): ReactNode {
-  const notes = notesAfter({
-    notes: [{ callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: WORDS }],
-    folded: [],
-    onFold: () => undefined,
-    taskId: undefined,
-  });
+  const notes = notesAfter(
+    {
+      notes: [{ callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: WORDS }],
+      folded: [],
+      onFold: () => undefined,
+      taskId: undefined,
+    },
+    20,
+  );
   return notes(5);
 }
 

@@ -73,7 +73,7 @@ test("a note stands under the last line of its range, between it and the next", 
       firstLine: 1,
       lines,
       pointed: { path: "src/invite.ts" },
-      after: notesAfter(notes([], [])),
+      after: notesAfter(notes([], []), 8),
     }),
   );
   const note = container.querySelector(".file-note") ?? assert.fail("the note is drawn");
@@ -82,15 +82,38 @@ test("a note stands under the last line of its range, between it and the next", 
   assert.equal(container.querySelectorAll(".file-note").length, 1, "one card a range");
 });
 
+test("a note on a file since shortened inside its range stands after the file's last line, and one wholly past its end stands nowhere", () => {
+  const lines = Array.from({ length: 4 }, (_, at) => [{ text: `line ${at + 1}` }]);
+  const shortened = draw(
+    createElement(CodeLineRows, {
+      firstLine: 1,
+      lines,
+      pointed: { path: "src/invite.ts" },
+      after: notesAfter(notes([], []), 4),
+    }),
+  );
+  const note = shortened.querySelector(".file-note") ?? assert.fail("the note still stands");
+  assert.equal(note.previousElementSibling?.textContent, "4line 4");
+  const gone = draw(
+    createElement(CodeLineRows, {
+      firstLine: 1,
+      lines: lines.slice(0, 2),
+      pointed: { path: "src/invite.ts" },
+      after: notesAfter(notes([], []), 2),
+    }),
+  );
+  assert.equal(gone.querySelector(".file-note"), null);
+});
+
 test("folded, a note is its head alone, and a find through the tab still finds its words once", () => {
   const heard: [string, boolean][] = [];
-  const folded = draw(notesAfter(notes(["call-1"], heard))(5));
+  const folded = draw(notesAfter(notes(["call-1"], heard), 20)(5));
   assert.equal(said(folded), 0, "no preview of its words");
   assert.match(folded.querySelector(".annotation-card-head")?.textContent ?? "", /^Luke/u);
   const finding = draw(
     createElement(DisclosureFind, {
       finding: true,
-      children: notesAfter(notes(["call-1"], heard))(5),
+      children: notesAfter(notes(["call-1"], heard), 20)(5),
     }),
   );
   assert.equal(said(finding), 1);
@@ -98,7 +121,7 @@ test("folded, a note is its head alone, and a find through the tab still finds i
 
 test("a press on a note's head tells the tab to unfold it", () => {
   const heard: [string, boolean][] = [];
-  const container = draw(notesAfter(notes(["call-1"], heard))(5));
+  const container = draw(notesAfter(notes(["call-1"], heard), 20)(5));
   act(() => container.querySelector("summary")?.click());
   assert.deepEqual(heard, [["call-1", false]]);
 });
@@ -113,7 +136,7 @@ test("a note's ⋯ opens the turn of Luke's work that showed its lines, and copi
       createElement(
         OpenLinkProvider,
         { value: (link: ReadLink) => opened.push(link) },
-        createElement(LinkWorkspaceProvider, { value: "acme" }, notesAfter(notes([], []))(5)),
+        createElement(LinkWorkspaceProvider, { value: "acme" }, notesAfter(notes([], []), 20)(5)),
       ),
     ),
   );
@@ -150,7 +173,7 @@ test("a note's ⋯ opens the turn of Luke's work that showed its lines, and copi
 
 test("the pointer, or the keyboard, on a note lights its lines, and leaving lets them go", () => {
   const lit: (NoteLines | undefined)[] = [];
-  const container = draw(notesAfter(notes([], [], lit))(5));
+  const container = draw(notesAfter(notes([], [], lit), 20)(5));
   const note = container.querySelector<HTMLElement>(".file-note") ?? assert.fail("the note");
   act(() => {
     note.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));

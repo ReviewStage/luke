@@ -198,7 +198,7 @@ function FileLinesView({
       lines={held.lines}
       pointed={pointed}
       lit={lit}
-      after={notesAfter({ ...notes, onLight: setLit })}
+      after={notesAfter({ ...notes, onLight: setLit }, held.lineCount)}
       above={
         above === undefined ? null : (
           <EdgeRow
@@ -453,7 +453,10 @@ export function FileTab({
             lines={snippet.lines}
             pointed={snippet.ref}
             lit={lit}
-            after={notesAfter({ ...notes, onLight: setLit })}
+            after={notesAfter(
+              { ...notes, onLight: setLit },
+              snippet.firstLine + snippet.lines.length - 1,
+            )}
           />
         </>
       )}

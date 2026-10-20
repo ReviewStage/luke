@@ -149,12 +149,15 @@ test("a version's diff draws a mention written in as its chip, still marked as w
 });
 
 test("Luke's note on a File tab's lines draws its links as a transcript does", () => {
-  const notes = notesAfter({
-    notes: [{ callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: LINKS }],
-    folded: [],
-    onFold: () => undefined,
-    taskId: undefined,
-  });
+  const notes = notesAfter(
+    {
+      notes: [{ callId: "call-1", shownAt: 0, startLine: 3, endLine: 5, note: LINKS }],
+      folded: [],
+      onFold: () => undefined,
+      taskId: undefined,
+    },
+    20,
+  );
   const container = drawn(createElement(TaskMentions, { value: PAGE, children: notes(5) }));
 
   assert.deepEqual(chips(container), THREE_CHIPS);
