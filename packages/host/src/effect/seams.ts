@@ -6,7 +6,7 @@
  * taking a kernel that holds all of them.
  */
 import type { OpenConsent } from "@luke/credentials";
-import type { OpenSocket } from "@luke/voice";
+import type { OpenSocket } from "@luke/voice/live-socket";
 import { type ConfigProvider, Context, Layer, Logger, type Stream } from "effect";
 import type { AccountSourceSeam } from "../account-source.js";
 import type { OpenTerminalSocket } from "../compose-terminals.js";
@@ -80,6 +80,19 @@ export class SettingsChangedElsewhere extends Context.Service<
   SettingsChangedElsewhere,
   Stream.Stream<void>
 >()("@luke/host/SettingsChangedElsewhere") {}
+
+/**
+ * Each time the page the host runs in came back: shown again after it was
+ * hidden, restored from the browser's back-forward cache, or back online,
+ * for a shell whose sockets may drop while it is away, as a phone drops a
+ * page's in the background. On each, the account inbox's live follow, where
+ * it is not answering, starts again at once rather than waiting out
+ * Realtime's backoff. It is optional: the desktop keeps its sockets and
+ * provides none.
+ */
+export class PageReturns extends Context.Service<PageReturns, Stream.Stream<void>>()(
+  "@luke/host/PageReturns",
+) {}
 
 /**
  * The voice sideband's WebSocket to the service. It arrives rather than being

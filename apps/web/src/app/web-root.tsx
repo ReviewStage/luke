@@ -6,7 +6,11 @@
  * (`tools/anti-slop/effect-edges.json`), as the desktop's `window-root.tsx`
  * is: it builds the tab's one runtime over the host's layer, which every act
  * runs on, and runs the panel's first read. The tab is drawn in the
- * account's Theme setting beside the panel (`web-appearance.tsx`).
+ * account's Theme setting beside the panel (`web-appearance.tsx`). It starts
+ * the tab's Sentry first (`web-sentry.ts`), where the build carries a DSN,
+ * stands the runtime on its reporter, as the desktop's main stands its own,
+ * and reports through it a tab that could draw nothing, as the desktop's
+ * window root does.
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
@@ -19,30 +23,46 @@ import { installWindowHistory } from "@luke/panel/navigation-history";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { installShellBundles } from "@luke/panel/shell-bundles";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
-import { Effect, type Layer, ManagedRuntime } from "effect";
+import type { HistoryAdapter } from "@luke/ui/history-adapter";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import { createRoot } from "react-dom/client";
-import { browserHistory } from "./browser-history";
+import { type BrowserHistory, browserHistory } from "./browser-history";
 import { withLoadLink } from "./load-link";
-import { browserLinkPlatform, handOffToMacApp } from "./mac-app-handoff";
+import { browserLinkPlatform, browserLoadedFresh, handOffToMacApp } from "./mac-app-handoff";
 import { WebAppearance } from "./web-appearance";
 import { composeWeb, WebHostTag } from "./web-host";
 import { WEB_BUNDLES } from "./web-platform";
+import { startWebSentry, type WebSentryBuild, webSentryBuild } from "./web-sentry";
 
 /** What a caller other than the page's entry hands the tab: a test's client in place of the network. */
 export interface WebAppOptions {
   /** The client every service call goes out on; the tab's same-origin fetch where none is given. */
   readonly httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  /** The platform the tab says it runs on; the browser's own word where none is given. */
+  /** The platform the tab says it runs on, which decides whether the Mac app is offered and handed links; the browser's own word where none is given. */
   readonly linkPlatform?: LinkPlatform;
   /** How the loaded link is handed to the Mac app; a navigation to the desktop's scheme where none is given. */
   readonly openMacApp?: (appLink: string) => void;
+  /** Where the tab reports to Sentry; what the build carries where none is given. */
+  readonly sentry?: WebSentryBuild;
 }
 
 /** The app as drawn: closing it takes the panel down and drains the host. */
 export interface WebApp {
   readonly close: () => Promise<void>;
+}
+
+/** Installs the tab's own history as the panel's, answering how to take it down and stop it following the browser. */
+function installTabHistory<State>(
+  install: (history: HistoryAdapter<State>) => () => void,
+  history: BrowserHistory<State>,
+): () => void {
+  const uninstall = install(history);
+  return () => {
+    uninstall();
+    history.dispose();
+  };
 }
 
 /**
@@ -55,25 +75,48 @@ export async function mountWebApp(
   rootElement: HTMLElement,
   options: WebAppOptions = {},
 ): Promise<WebApp | undefined> {
-  // The address the tab loaded at, read before the panel's history writes its own steps into it.
+  // The address the tab loaded at, and whether it came there fresh, read before the panel's history writes its own steps into it.
   const loadedAt = location.href;
+  const loadedFresh = browserLoadedFresh();
+  const linkPlatform = options.linkPlatform ?? browserLinkPlatform();
+  const build = options.sentry ?? webSentryBuild();
+  // Never awaited: the SDK is a chunk of its own, and what is reported before it lands waits for it.
+  const sentry = startWebSentry(build);
   const httpClient = options.httpClient ?? FetchHttpClient.layer;
-  // Note that an act runs only once the host stands, by which time the runtime is set.
+  // Note that a count is forked only once the host stands, by which time the runtime is set.
   let runtime: ManagedRuntime.ManagedRuntime<WebHostTag | HostTag, DuplicateGatewayMethod>;
-  const run = <A,>(effect: Effect.Effect<A>): Promise<A> => runtime.runPromise(effect);
-  runtime = ManagedRuntime.make(composeWeb({ httpClient, run }));
+  // A defect in a count is reported, as the desktop's acts are.
+  const fork = (effect: Effect.Effect<void>): void => {
+    runtime.runFork(Effect.withErrorReporting(effect, { defectsOnly: true }));
+  };
+  // Sentry's reporter stands beneath the host, so every fiber it forks and every act reports through it.
+  runtime = ManagedRuntime.make(
+    Layer.provideMerge(
+      // The release Sentry files reports under is the build's commit, which a tab left open across a release is reloaded off.
+      composeWeb({ httpClient, fork, linkPlatform, release: build.release }),
+      sentry.errorReporting,
+    ),
+  );
+  // What the tab installed, taken down again in the reverse order as it closes.
+  const installed: (() => void)[] = [];
+  const uninstall = () => {
+    for (const undo of installed.splice(0).reverse()) undo();
+  };
   try {
     const web = await runtime.runPromise(WebHostTag);
     // The address the tab was opened at is said once, as the link it is.
-    installAppBridge(withLoadLink(web.bridge));
-    installActPort(web.actPort, web.actPortClient);
-    installAppPlatform(web.platform);
-    installShellBundles(WEB_BUNDLES);
+    installed.push(installAppBridge(withLoadLink(web.bridge)));
+    installed.push(installActPort(web.actPort, web.actPortClient));
+    installed.push(installAppPlatform(web.platform));
+    installed.push(installShellBundles(WEB_BUNDLES));
     // The panel's back and forward are the browser's own, each step in the tab's address.
-    installWindowHistory(browserHistory());
-    await Effect.runPromise(appStateFirstRead);
+    installed.push(installTabHistory(installWindowHistory, browserHistory()));
+    await runtime.runPromise(appStateFirstRead);
   } catch (error) {
     console.error("The tab's host could not stand or its state be read; nothing is drawn.", error);
+    // A blank tab is a failure, so it is sent as an event, not only kept as the console's breadcrumb.
+    sentry.reportBlankTab(error instanceof Error ? error : new Error(String(error)));
+    uninstall();
     await runtime.dispose();
     return undefined;
   }
@@ -84,13 +127,14 @@ export async function mountWebApp(
       <App />
     </RegistryContext.Provider>,
   );
-  // The account's choice of the Mac app is read after the first paint, once per load, and never awaited.
+  // The account's choice of the Mac app is read after the first paint, once per fresh load, and never awaited.
   runtime.runFork(
     Effect.provide(
       handOffToMacApp(
         {
           address: loadedAt,
-          platform: options.linkPlatform ?? browserLinkPlatform(),
+          fresh: loadedFresh,
+          platform: linkPlatform,
           open: options.openMacApp ?? ((appLink) => location.assign(appLink)),
         },
         location.origin,
@@ -101,6 +145,7 @@ export async function mountWebApp(
   return {
     close: async () => {
       root.unmount();
+      uninstall();
       await runtime.dispose();
     },
   };

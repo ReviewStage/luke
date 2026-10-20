@@ -201,9 +201,12 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * that.
  *
  * The header stays put while the tab under it scrolls, and spends as few
- * rows as it can. Its first row is the title's: the pill wearing the pull
+ * rows as it can; on a phone, where it would take half the screen, it folds
+ * to its title's one line once the tab under it is scrolled, and unfolds at
+ * the top again (`useHeaderFold`). Its first row is the title's: the pill wearing the pull
  * request's mark and the word for where it stands, its title and number
- * (⌘-click opens it on GitHub), and at the row's end, while it is open or a
+ * (⌘-click opens it on GitHub), the title first in the markup so a screen
+ * reader names it before the pill drawn ahead of it, and at the row's end, while it is open or a
  * draft, the merge control saying what can happen now, its panel holding
  * GitHub's own sentence and the presses (`merge-box.tsx`), then the ⋯,
  * which opens it on GitHub first. Under it one line, wrapping where it must:
@@ -1989,6 +1992,81 @@ interface AgentPullRequestTabProps {
   onView: (view: PullRequestView) => void;
 }
 
+/**
+ * How far the view shown is scrolled before the header folds, in CSS
+ * pixels, and how near its top it unfolds again: apart, so a scroll resting
+ * on the line does not fold and unfold it in turn.
+ */
+const HEADER_FOLD = { AT: 48, BACK: 8 } as const;
+
+/**
+ * The views' own scrollers, whose scroll alone folds the header: the
+ * Conversation's and the Checks' page column, and the diff list's.
+ */
+const VIEW_SCROLLER = ".luke-detail-page-main, .diff-list > .luke-scroll-area";
+
+/**
+ * Whether `box` is the shown view's own scroller, drawn in the tab at
+ * `root`: never a box nested in it, such as a comment's field or its
+ * preview, nor one a popover portals out of the tab, nor a hidden view's.
+ */
+function viewScroller(box: Element, root: Element): boolean {
+  const view = box.closest(".pull-request-view");
+  return (
+    box.matches(VIEW_SCROLLER) &&
+    box.parentElement?.closest(VIEW_SCROLLER) === null &&
+    root.contains(box) &&
+    view instanceof HTMLElement &&
+    !view.hidden
+  );
+}
+
+/** Whether the header is folded, the box it stands in, and what the tab's root hears its scrolls by. */
+interface HeaderFold {
+  readonly folded: boolean;
+  readonly header: React.RefObject<HTMLElement | null>;
+  readonly onScrollCapture: (event: React.UIEvent<HTMLElement>) => void;
+}
+
+/**
+ * Whether the header is folded to its title's one line, as the shown view's
+ * own scroller is scrolled down, and what the tab's root hears every scroll
+ * in it by. A scroll that leaves its box's top where it was is a sideways
+ * one, an unwrapped diff's, and is no scroll down. It folds only where the
+ * view runs on past its box by more than the header's height, which is more
+ * than folding gives back, so the box grown by the fold still stands
+ * scrolled rather than back at its top, which would unfold it at once. The
+ * view switched to starts unfolded. It is held on every width, and only a
+ * narrow room's stylesheet folds it (tasks.css), so the desktop's header
+ * stays put.
+ */
+function useHeaderFold(view: PullRequestView): HeaderFold {
+  const [fold, setFold] = useState<{ readonly view: PullRequestView; readonly folded: boolean }>({
+    view,
+    folded: false,
+  });
+  const header = useRef<HTMLElement>(null);
+  const tops = useRef(new WeakMap<Element, number>());
+  return {
+    folded: fold.view === view && fold.folded,
+    header,
+    onScrollCapture: (event) => {
+      const box = event.target;
+      if (!(box instanceof Element) || !viewScroller(box, event.currentTarget)) return;
+      const top = box.scrollTop;
+      const was = tops.current.get(box) ?? 0;
+      tops.current.set(box, top);
+      if (top === was) return;
+      const room = box.scrollHeight - box.clientHeight > (header.current?.offsetHeight ?? 0);
+      setFold((held) => {
+        const folded =
+          held.view === view && held.folded ? top > HEADER_FOLD.BACK : top > HEADER_FOLD.AT && room;
+        return held.view === view && held.folded === folded ? held : { view, folded };
+      });
+    },
+  };
+}
+
 /** The Pull request tab under the number it names (`AgentPullRequestTab`). */
 function PullRequestTabBody({
   agentId,
@@ -2120,134 +2198,142 @@ function PullRequestTabBody({
   const kept = new Set(
     [threadJumps.kept, anchors.kept].filter((each): each is string => each !== undefined),
   );
+  const fold = useHeaderFold(view);
   // Every review thread the tab draws, in the Conversation or on its line, replies and resolves on this agent's pull request.
-  return (
+  const page = (
     <ThreadWritesProvider value={{ agentId, onWritten: written }}>
-      <PendingCommentsProvider value={pendingComments}>
-        <ThreadJumpContext.Provider value={threadJumps.jumps}>
-          <AnchorsContext.Provider value={anchors.open}>
-            <div className="file-view pull-request-tab ph-no-capture">
-              <PullRequestWriteNote writes={writes} />
-              {none ? (
-                <EmptyState icon={<GitPullRequestIcon />}>
-                  {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
-                </EmptyState>
-              ) : (
-                <>
-                  <header className="pull-request-header">
-                    <div className="pull-request-title-row">
-                      {held === undefined ? null : (
-                        <PullRequestStateMenu pullRequest={held} writes={writes} />
+      <ThreadJumpContext.Provider value={threadJumps.jumps}>
+        <AnchorsContext.Provider value={anchors.open}>
+          <div
+            className="file-view pull-request-tab ph-no-capture"
+            onScrollCapture={fold.onScrollCapture}
+          >
+            <PullRequestWriteNote writes={writes} />
+            {none ? (
+              <EmptyState icon={<GitPullRequestIcon />}>
+                {PULL_REQUEST_WORDS.NO_PULL_REQUEST}
+              </EmptyState>
+            ) : (
+              <>
+                <header
+                  ref={fold.header}
+                  className="pull-request-header"
+                  data-folded={fold.folded ? "" : undefined}
+                >
+                  <div className="pull-request-title-row">
+                    <HeaderTitle title={title} writes={writes} />
+                    {held === undefined ? null : (
+                      <PullRequestStateMenu pullRequest={held} writes={writes} />
+                    )}
+                    <div className="pull-request-title-actions">
+                      {overview === undefined ? null : (
+                        <MergeControl
+                          pullRequest={overview}
+                          repository={repository}
+                          shown={shown}
+                          writes={writes}
+                        />
                       )}
-                      <HeaderTitle title={title} writes={writes} />
-                      <div className="pull-request-title-actions">
-                        {overview === undefined ? null : (
-                          <MergeControl
-                            pullRequest={overview}
-                            repository={repository}
-                            shown={shown}
-                            writes={writes}
-                          />
-                        )}
-                        {held === undefined ? null : (
-                          <PullRequestMenu url={held.url} reading={reading} onRefresh={refresh} />
-                        )}
-                      </div>
+                      {held === undefined ? null : (
+                        <PullRequestMenu url={held.url} reading={reading} onRefresh={refresh} />
+                      )}
                     </div>
-                    <PullRequestHead
-                      parts={parts}
-                      now={now}
-                      writes={writes}
-                      editing={{ options, refreshing: pullRequestRead.out }}
-                    />
-                  </header>
-                  <div className="pull-request-tabs">
-                    <ChoiceBar<PullRequestView>
-                      label="Pull request"
-                      items={tabsOf(parts, published, held, changes)}
-                      hint={Tooltip}
-                      value={view}
-                      onChange={onView}
-                      look={CHOICE_BAR_LOOK.FILL}
-                      fold={CHOICE_BAR_FOLD.TOGETHER}
-                      panels={ids}
-                    />
-                    {reviewable ? (
-                      <PullRequestReview
-                        writes={review}
-                        pending={pendingReview}
-                        pendingList={
-                          drafts === undefined || drafts.length === 0 ? null : (
-                            <PendingList drafts={drafts} now={now} picture={picture} />
-                          )
-                        }
-                      />
-                    ) : null}
                   </div>
-                  <div
-                    className="pull-request-view"
-                    role="tabpanel"
-                    id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
-                    aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
-                    hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
+                  <PullRequestHead
+                    parts={parts}
+                    now={now}
+                    writes={writes}
+                    editing={{ options, refreshing: pullRequestRead.out }}
+                  />
+                </header>
+                <div className="pull-request-tabs">
+                  <ChoiceBar<PullRequestView>
+                    label="Pull request"
+                    items={tabsOf(parts, published, held, changes)}
+                    hint={Tooltip}
+                    value={view}
+                    onChange={onView}
+                    look={CHOICE_BAR_LOOK.FILL}
+                    fold={CHOICE_BAR_FOLD.TOGETHER}
+                    panels={ids}
+                  />
+                  {reviewable ? (
+                    <PullRequestReview
+                      writes={review}
+                      pending={pendingReview}
+                      pendingList={
+                        drafts === undefined || drafts.length === 0 ? null : (
+                          <PendingList drafts={drafts} now={now} picture={picture} />
+                        )
+                      }
+                    />
+                  ) : null}
+                </div>
+                <div
+                  className="pull-request-view"
+                  role="tabpanel"
+                  id={ids(PULL_REQUEST_VIEW.CONVERSATION).panel}
+                  aria-labelledby={ids(PULL_REQUEST_VIEW.CONVERSATION).tab}
+                  hidden={view !== PULL_REQUEST_VIEW.CONVERSATION}
+                >
+                  <ConversationView
+                    agentId={agentId}
+                    parts={parts}
+                    url={title?.url}
+                    comment={comment}
+                    kept={kept}
+                    landing={threadJumps.conversationLanding ?? anchors.landing}
+                  />
+                </div>
+                <div
+                  className="pull-request-view"
+                  role="tabpanel"
+                  id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
+                  aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
+                  hidden={view !== PULL_REQUEST_VIEW.CHECKS}
+                >
+                  <DetailPage
+                    frame={PAGE_FRAME.TOOLBAR}
+                    label="Pull request checks"
+                    inset={DETAIL_PAGE_INSET.READING}
                   >
-                    <ConversationView
+                    <ChecksPart
                       agentId={agentId}
                       parts={parts}
-                      url={title?.url}
-                      comment={comment}
-                      kept={kept}
-                      landing={threadJumps.conversationLanding ?? anchors.landing}
+                      live={shown && view === PULL_REQUEST_VIEW.CHECKS}
                     />
-                  </div>
-                  <div
-                    className="pull-request-view"
-                    role="tabpanel"
-                    id={ids(PULL_REQUEST_VIEW.CHECKS).panel}
-                    aria-labelledby={ids(PULL_REQUEST_VIEW.CHECKS).tab}
-                    hidden={view !== PULL_REQUEST_VIEW.CHECKS}
-                  >
-                    <DetailPage
-                      frame={PAGE_FRAME.TOOLBAR}
-                      label="Pull request checks"
-                      inset={DETAIL_PAGE_INSET.READING}
-                    >
-                      <ChecksPart
-                        agentId={agentId}
-                        parts={parts}
-                        live={shown && view === PULL_REQUEST_VIEW.CHECKS}
-                      />
-                    </DetailPage>
-                  </div>
-                </>
-              )}
-              <div
-                className="pull-request-view"
-                role="tabpanel"
-                id={ids(PULL_REQUEST_VIEW.FILES).panel}
-                aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
-                hidden={none || view !== PULL_REQUEST_VIEW.FILES}
-              >
-                <PendingSurfaceProvider value={shown && !none && view === PULL_REQUEST_VIEW.FILES}>
-                  <AgentChangesTab
-                    agentId={agentId}
-                    control={control}
-                    shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
-                    repository={repository}
-                    tree={tree}
-                    threads={changesThreads}
-                    lineComments={{ pending: pendingReview, onWritten: written }}
-                    reads={changes}
-                    reveal={threadJumps.filesReveal}
-                  />
-                </PendingSurfaceProvider>
-              </div>
+                  </DetailPage>
+                </div>
+              </>
+            )}
+            <div
+              className="pull-request-view"
+              role="tabpanel"
+              id={ids(PULL_REQUEST_VIEW.FILES).panel}
+              aria-labelledby={ids(PULL_REQUEST_VIEW.FILES).tab}
+              hidden={none || view !== PULL_REQUEST_VIEW.FILES}
+            >
+              <PendingSurfaceProvider value={shown && !none && view === PULL_REQUEST_VIEW.FILES}>
+                <AgentChangesTab
+                  agentId={agentId}
+                  control={control}
+                  shown={shown && !none && view === PULL_REQUEST_VIEW.FILES}
+                  repository={repository}
+                  tree={tree}
+                  threads={changesThreads}
+                  lineComments={{ pending: pendingReview, onWritten: written }}
+                  reads={changes}
+                  reveal={threadJumps.filesReveal}
+                />
+              </PendingSurfaceProvider>
             </div>
-          </AnchorsContext.Provider>
-        </ThreadJumpContext.Provider>
-      </PendingCommentsProvider>
+          </div>
+        </AnchorsContext.Provider>
+      </ThreadJumpContext.Provider>
     </ThreadWritesProvider>
   );
+  // The member's own pending comments, told apart wherever a comment is drawn (`pending-comments.tsx`).
+  return <PendingCommentsProvider value={pendingComments}>{page}</PendingCommentsProvider>;
 }
 
 /**

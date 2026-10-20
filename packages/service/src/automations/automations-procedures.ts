@@ -20,7 +20,6 @@ import { isWorkspaceMember, personalWorkspaceOf } from "@luke/database/models/wo
 import { wireUuidSchema } from "@luke/features";
 import { nextScheduledRun, readSchedule } from "@luke/features/automation-schedule";
 import {
-  AUTOMATION_BOUNDS,
   AUTOMATION_DEFAULT_GUARDS,
   AUTOMATION_FIRING,
   AUTOMATION_SCOPE,
@@ -40,6 +39,7 @@ import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import type { EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
 import { acceptedAgentChoice } from "../agents/coder-host/start.js";
 import {
   type AgentTurnStanding,
@@ -57,7 +57,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import type { ModelCatalog } from "../providers/model-catalog.js";
 import { executeAutomationRun } from "./automation-runs.js";
 
@@ -84,16 +84,6 @@ import { executeAutomationRun } from "./automation-runs.js";
  * the request's own bearer; the same key again answers the run it made. A
  * run's agent is summarized with its status as the agent's tab reads it.
  */
-
-/**
- * A body past this is no automation: the prompt's bound at six bytes a
- * character, which is the most JSON spends on one (`\u0000`), and the rest of
- * the frame with room, so every prompt the schema takes fits.
- */
-const MAXIMUM_BODY_BYTES = AUTOMATION_BOUNDS.MAX_PROMPT_CHARS * 6 + 16_384;
-
-/** A "Run now" body past this carries more than its key. */
-const MAXIMUM_RUN_BODY_BYTES = AUTOMATION_BOUNDS.MAX_KEY_CHARS * 4 + 64;
 
 /** How many runs a history read answers. */
 const RUNS_READ = 50;
@@ -303,10 +293,11 @@ const reachedRepositories = /* @__PURE__ */ Effect.fnUntraced(function* (
   HostedRefusal,
   GitHubApp | HttpClient.HttpClient | DatabaseServices
 > {
+  // Note that an automation reaches through the workspace's installation alone, so it asks as no member.
   const reached = yield* Effect.forEach(repositories, (repository) =>
-    workspaceRepository(organizationId, repository),
+    workspaceRepository(organizationId, repository, undefined),
   );
-  return reached.map((repository) => repository.fullName);
+  return reached.map((one) => one.repository.fullName);
 });
 
 /** Where a new automation stands: its task, as the task names its workspace and repository, or a workspace and the repositories named, each reached through it. */
@@ -444,9 +435,7 @@ const changesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
  * alone, bounded tighter once its key reads.
  */
 export function automationsProcedures(seams: AutomationsProcedureSeams) {
-  const automations = hosted.automations
-    .use(accountMiddleware(seams.resolveUserId))
-    .use(bodyLimit(MAXIMUM_BODY_BYTES));
+  const automations = hosted.automations.use(accountMiddleware(seams.resolveUserId));
   return {
     /** The account's automations, or one task's, or one workspace's. */
     list: automations.list.effect(function* ({ input, context }) {
@@ -546,10 +535,7 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
     }),
 
     /** The automation run now, under the client's key: 201 with the run this call made, 200 with the one the key already made. */
-    run: automations.run.use(bodyLimit(MAXIMUM_RUN_BODY_BYTES)).effect(function* ({
-      input,
-      context,
-    }) {
+    run: automations.run.effect(function* ({ input, context }) {
       const { userId } = context;
       const id = yield* idOf(input.params.id);
       const key = input.body.idempotencyKey;
@@ -572,7 +558,10 @@ export function automationsProcedures(seams: AutomationsProcedureSeams) {
       );
       if (Option.isSome(recorded)) {
         // Note that the run reaches eve as this request's caller, whoever made the automation, as a Start does.
-        yield* executeAutomationRun(() => eveFor(seams, context.request, userId), recorded.value);
+        yield* executeAutomationRun(
+          () => eveFor<EveTypedTurn>(seams, context.request, userId),
+          recorded.value,
+        );
       }
       const run = yield* hostedStoreOrUnavailable(automationRunByKey(userId, id, key));
       if (Option.isNone(run)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

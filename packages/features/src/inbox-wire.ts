@@ -74,7 +74,7 @@ import {
  * under the item's key, which changes what the item asks and not what was
  * said about it.
  *
- * The agent posts, closes, and reads its items through the tools named
+ * The agent posts, withdraws, and reads its items through the tools named
  * below, whose inputs are declared here so the model is shown, eve holds,
  * and the desktop draws one shape. A task's inbox is read past a cursor the
  * service hands back, held open while nothing changed, as a transcript is.
@@ -94,9 +94,14 @@ import {
  * with how they answered; the words under it are the message's own. The
  * item still carries its title, blocks, response, and status, as a view of
  * its open ask for a desktop before version 5, which reads the messages'
- * new keys as nothing; the functions at the end of this file map an ask to
- * the version 4 response nearest it, a stored response to the ask it
- * stands for, and an older desktop's answer to the answer of the open ask.
+ * new keys as nothing, and its `messages` leave out every message that
+ * asks or answers, which those fields stand for, so such a desktop draws
+ * neither twice; its `thread` carries every message, for a desktop from
+ * version 5. A thread whose agent asks nothing waits on nobody, and stands
+ * to an older desktop as a note already settled. The functions at the end
+ * of this file map an ask to the version 4 response nearest it, a stored
+ * response to the ask it stands for, and an older desktop's answer to the
+ * answer of the open ask.
  */
 
 /**
@@ -162,24 +167,28 @@ export const INBOX_BOUNDS = {
   MAX_MESSAGE_CHARS: 8_000,
   /** The most messages an item read carries, the latest ones, oldest first among them: a thread read at a glance, never a log. */
   MAX_MESSAGES_READ: 50,
-  /** The most pictures the agent's message on a thread may carry, each held to the image bound. */
-  MAX_REPLY_IMAGES: 4,
+  /** The most pictures the agent's message on a thread may carry, each held to the image bound: as many as a post's image blocks once could be. */
+  MAX_MESSAGE_PICTURES: 8,
   /** The most steps a `do` ask may list: a to-do a person works through at a glance. */
   MAX_STEPS: 8,
   /** The most characters one step of a `do` ask may spell, in Markdown. */
   MAX_STEP_CHARS: 600,
 } as const;
 
-/** The tools an agent keeps its items with, by the names their tool parts carry in its transcript. */
+/**
+ * The tools an agent keeps its threads with, by the names their tool parts
+ * carry in its transcript. Note that `close_inbox_item` and `reply_inbox`,
+ * which a transcript before version 5 names, are retired
+ * (`agent-tools.ts`'s `RETIRED_TOOL`): a post that asks nothing is a reply,
+ * and a withdrawn ask is a close.
+ */
 export const INBOX_TOOL = {
-  /** Posts an item, or replaces the one under the same key. */
+  /** Adds the agent's message to the thread under its key, opening one under a new key, its ask replacing the open one. */
   POST: "post_to_inbox",
-  /** Takes an item back, with why. */
-  CLOSE: "close_inbox_item",
-  /** Reads the agent's items as they stand, answers and all. */
+  /** Withdraws the thread's open ask, with why. */
+  WITHDRAW: "withdraw_ask",
+  /** Reads the agent's threads as they stand, answers and all. */
   READ: "read_inbox",
-  /** Writes the agent's message on one of its items' threads, by key. */
-  REPLY: "reply_inbox",
 } as const;
 
 /** The blocks an item's context is made of. */
@@ -497,30 +506,6 @@ export const inboxPostInputSchema = EffectSchema.Struct({
 
 export type InboxPost = typeof inboxPostInputSchema.Type;
 
-/** What a close's tool part carries as its input: the item's key, and why the agent takes it back. */
-export const inboxCloseInputSchema = EffectSchema.Struct({
-  key: inboxKeySchema,
-  reason: filledText(INBOX_BOUNDS.MAX_REASON_CHARS),
-});
-
-/**
- * What a reply's tool part carries as its input: the key of one of the
- * agent's own items, its words in Markdown, and the pictures it shows, each
- * by the path of its file in the agent's sandbox, as an image block names
- * one; words or pictures or both, which the tool holds it to.
- */
-export const inboxReplyInputSchema = EffectSchema.Struct({
-  key: inboxKeySchema,
-  text: boundedText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
-  images: EffectSchema.optionalKey(
-    EffectSchema.Array(
-      EffectSchema.Struct({ path: filledText(INBOX_BOUNDS.MAX_PATH_CHARS) }),
-    ).check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_REPLY_IMAGES)),
-  ),
-});
-
-export type InboxReplyInput = typeof inboxReplyInputSchema.Type;
-
 /** What a read's tool part carries as its input: nothing, since an agent reads its own items alone. */
 export const inboxReadInputSchema = EffectSchema.Struct({});
 
@@ -645,7 +630,49 @@ export const inboxAskSchema = EffectSchema.Union([
   EffectSchema.Struct(ANSWER_FIELDS),
 ]);
 
-type InboxAsk = typeof inboxAskSchema.Type;
+export type InboxAsk = typeof inboxAskSchema.Type;
+
+/** A form's field as an agent asks one: a field without a recommended value, which an ask's fields do not carry. */
+const { recommended: _recommended, ...AGENT_FIELD_FIELDS } = inboxFieldSchema.fields;
+
+/** What an agent's post may end with: an ask of the three, its fields recommending nothing. */
+const inboxAgentAskSchema = EffectSchema.Union([
+  EffectSchema.Struct(DECIDE_FIELDS),
+  EffectSchema.Struct(DO_FIELDS),
+  EffectSchema.Struct({
+    ...ANSWER_FIELDS,
+    fields: EffectSchema.optionalKey(
+      EffectSchema.Array(EffectSchema.Struct(AGENT_FIELD_FIELDS)).check(
+        EffectSchema.isMinLength(1),
+        EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_FIELDS),
+      ),
+    ),
+  }),
+]);
+
+/**
+ * What a post's tool part carries as its input from version 5: the
+ * thread's key, its title, which a first post under the key names, the
+ * agent's message as one Markdown body, its pictures by their paths in the
+ * agent's sandbox, the ask it may end with, and whether the agent waits to
+ * hear the answer. The model is shown this schema and eve holds the call
+ * to it.
+ */
+export const inboxThreadPostInputSchema = EffectSchema.Struct({
+  key: inboxKeySchema,
+  title: EffectSchema.optionalKey(filledText(INBOX_BOUNDS.MAX_TITLE_CHARS)),
+  body: filledText(INBOX_BOUNDS.MAX_MESSAGE_CHARS),
+  ask: EffectSchema.optionalKey(inboxAgentAskSchema),
+  waits: EffectSchema.optionalKey(EffectSchema.Boolean),
+});
+
+export type InboxThreadPostInput = typeof inboxThreadPostInputSchema.Type;
+
+/** What a withdrawal's tool part carries as its input: the thread's key, and why the agent takes its open ask back. */
+export const inboxWithdrawInputSchema = EffectSchema.Struct({
+  key: inboxKeySchema,
+  reason: filledText(INBOX_BOUNDS.MAX_REASON_CHARS),
+});
 
 /** Where an ask stands as a read carries it, and why its agent withdrew it, on a withdrawn one. */
 const ASK_STANDING_FIELDS = {
@@ -781,8 +808,21 @@ export const inboxItemSchema = EffectSchema.Struct({
    * account is gone. Absent from a service before members closed items.
    */
   closedBy: EffectSchema.optionalKey(memberRefSchema),
-  /** The item's thread, oldest first, the latest `MAX_MESSAGES_READ` of it; absent where nobody wrote one. */
+  /**
+   * The item's thread as a desktop before version 5 draws it under the
+   * item's blocks and answer, oldest first, the latest `MAX_MESSAGES_READ`
+   * of its messages that carry neither an ask nor answers, since the item's
+   * blocks, response, and answer stand for those; absent where it has none.
+   */
   messages: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
+  /**
+   * The item's whole thread, from version 5, oldest first: the latest
+   * `MAX_MESSAGES_READ` of every message, asks and answers included, and
+   * the first message and the one whose ask is open however long ago they
+   * were written; absent where nobody wrote one, and from a service before
+   * version 5.
+   */
+  thread: EffectSchema.optionalKey(EffectSchema.Array(inboxMessageSchema)),
   /** When the agent first posted the item under its key. */
   postedAt: countedNumber,
   /**
@@ -873,14 +913,24 @@ export function inboxClosedMessage(item: Pick<InboxItem, "key" | "title">): stri
 /**
  * A member's message on an item's thread: the words in Markdown, trimmed and
  * bounded, the files they attached, bounded as a message's to an agent are,
- * words or files or both and never neither, and a key the client made, so
- * a message sent again after a lost reply is written once.
+ * and a key the client made, so a message sent again after a lost reply is
+ * written once. From version 5 it may carry the answer to the thread's open
+ * ask, which the reader pressed and attached to their reply: such a message
+ * is the one that answers the ask, and may be the answer alone, with no
+ * words or files; one without it is a plain reply, words or files or both
+ * and never neither, which never answers.
  */
 export const inboxMessageRequestSchema = EffectSchema.Struct({
   text: EffectSchema.Trim.check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_MESSAGE_CHARS)),
   attachments: codingAgentMessageRequestSchema.fields.attachments,
   clientKey: filledText(INBOX_BOUNDS.MAX_CLIENT_KEY_CHARS),
-}).check(EffectSchema.makeFilter(({ text, attachments }) => hasWordsOrFiles(text, attachments)));
+  /** The answer to the thread's open ask, which names it; absent on a plain reply. */
+  answers: EffectSchema.optionalKey(inboxAnswersSchema),
+}).check(
+  EffectSchema.makeFilter(
+    ({ text, attachments, answers }) => answers !== undefined || hasWordsOrFiles(text, attachments),
+  ),
+);
 
 export type InboxMessageRequest = typeof inboxMessageRequestSchema.Type;
 
@@ -1248,4 +1298,22 @@ export function inboxReplyAnswers(
     case INBOX_REPLY.ACKNOWLEDGED:
       return undefined;
   }
+}
+
+/**
+ * A member's answer to an ask, with the words of the message that carries
+ * it, as the agent hears an answer (`inboxAnswerMessage`) and as whether it
+ * hears it is read (`inboxAnswerHeard`): how they answered, the options
+ * picked, the values filled, and the words as the note, whole. Note that the
+ * steps ticked are left out, because a reply names no step; the thread the
+ * agent reads carries them.
+ */
+export function inboxAnswersReply(answers: InboxAnswers, words: string): InboxReply {
+  const note = words.trim();
+  return {
+    reply: answers.reply,
+    ...(answers.choices === undefined ? undefined : { choices: answers.choices }),
+    ...(answers.values === undefined ? undefined : { values: answers.values }),
+    ...(note === "" ? undefined : { note }),
+  };
 }

@@ -195,3 +195,37 @@ test("a control as wide as the row stands under its words, named by the label an
   expect(words.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(group.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
+
+/** A switch's row whose words label its switch, holding the switch's state as a settings write would. */
+function LabelledSwitchRow({ adornment }: { adornment?: string | undefined }): React.JSX.Element {
+  const [checked, setChecked] = useState(false);
+  return createElement(SettingsRow, {
+    label: "Show captions",
+    description: "Words the call hears stand under its video.",
+    adornment,
+    labelsControl: true,
+    children: (control) =>
+      createElement(Switch, {
+        id: control.controlId,
+        checked,
+        label: "Show captions",
+        describedBy: control["aria-describedby"],
+        onChange: setChecked,
+      }),
+  });
+}
+
+test("a press on a switch row's words sets its switch, as a press on the switch does, with or without an adornment", () => {
+  for (const adornment of [undefined, "Modified"]) {
+    const container = mount(createElement(LabelledSwitchRow, { adornment }));
+    const control = container.querySelector<HTMLButtonElement>('button[role="switch"]');
+    const words = [...container.querySelectorAll("*")].find(
+      (element) => element.children.length === 0 && element.textContent === "Show captions",
+    );
+    if (control === null || !(words instanceof HTMLElement)) throw new Error("no row");
+    act(() => words.click());
+    expect(control.getAttribute("aria-checked")).toBe("true");
+    act(() => words.click());
+    expect(control.getAttribute("aria-checked")).toBe("false");
+  }
+});

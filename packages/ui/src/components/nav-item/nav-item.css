@@ -132,6 +132,19 @@
     opacity: 1;
   }
 
+  /* A screen with no hover draws a fold's chevron at rest in its glyph's
+     place, since no pointer rests on the head to bring it, and a fold
+     should say it folds. */
+  @media (hover: none) {
+    .luke-nav-item-glyph:has(.luke-nav-item-chevron) > .luke-nav-item-icon {
+      opacity: 0;
+    }
+
+    .luke-nav-item-chevron {
+      opacity: 1;
+    }
+  }
+
   .luke-nav-item-name {
     min-width: 0;
     flex: 0 1 auto;
@@ -222,5 +235,23 @@
     > .luke-nav-item-rest
     + .luke-nav-item-shortcut {
     display: inline-flex;
+  }
+
+  /* Under a finger there is no keyboard to press the chord on, and a tap
+     leaves the row hovered, so the chord never stands and the count or
+     mark it would take the place of stays. Note that the hovered selectors
+     are written again, because they outweigh a bare one. */
+  @media (hover: none) and (pointer: coarse) {
+    .luke-nav-item-shortcut,
+    .luke-nav-item:is(:hover, :focus-visible):not(:disabled)
+      > .luke-nav-item-rest
+      + .luke-nav-item-shortcut {
+      display: none;
+    }
+
+    .luke-nav-item:is(:hover, :focus-visible):not(:disabled)
+      > .luke-nav-item-rest:has(+ .luke-nav-item-shortcut) {
+      display: inline-flex;
+    }
   }
 }

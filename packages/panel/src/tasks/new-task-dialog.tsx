@@ -12,7 +12,7 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * for its head row: "New task", the repository chip after it, and the
  * Issue chip at the row's right end. The task starts in the workspace the
  * window lists, and the dialog offers no other; the composer lists that
- * workspace's repositories and its issues, its own and Linear's.
+ * workspace's repositories and its Linear issues.
  *
  * What the composer starts is its own to say: in Agent mode a task with an
  * empty plan and a coding agent on the words, opened on the agent's tab; in
@@ -24,21 +24,10 @@ import type { TasksControl } from "./use-tasks-tab.js";
  * holds the card. A refusal keeps the card with the reason under the
  * composer, and Start can be pressed again; a task started closes the card
  * and opens as the host's open task.
- *
- * Opened from one of the workspace's own issues (its Start task…), the card
- * says so in its title, starts in the issue's workspace and no other, names
- * the task by the issue, and offers no Issue chip; the task it starts is
- * linked to that issue, which the issue's page lists it under. Opened from
- * the issue's Start agent…, the card is a new agent's: its composer stands
- * in Agent mode with no Plan toggle, and starts the task and an agent on it
- * at once.
  */
 
-/** The card's title, before the repository's chip: an agent's where one alone is asked for, and the issue it starts from where there is one. */
-function newTaskHeading(issue: string | undefined, agent: boolean): string {
-  const what = agent ? "New agent" : "New task";
-  return issue === undefined ? what : `${what} from ${issue}`;
-}
+/** The card's title, before the repository's chip. */
+const NEW_TASK_HEADING = "New task";
 
 /** The composer's words field, the editor's own textbox, which the card hands focus to. */
 const FIELD_SELECTOR = '[role="textbox"]';
@@ -52,10 +41,6 @@ const CARD_SELECTOR = '[aria-modal="true"]';
  * words are the draft's, which the opening brings back.
  */
 function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.JSX.Element {
-  // The workspace's own issue the task starts from, where the card was opened on one: it names the task, and its workspace is the one the task starts in.
-  const from = newTask.preset?.issue;
-  // The workspace the task starts in: the issue's, else the one listed.
-  const startsIn = from?.workspaceId ?? newTask.workspaceId;
   const [starting, setStarting] = useState(false);
   const titleId = useId();
   const body = useRef<HTMLDivElement>(null);
@@ -87,14 +72,13 @@ function NewTaskCard({ newTask }: { newTask: TasksControl["newTask"] }): React.J
       <div className="new-task ph-no-capture" ref={body}>
         <NewTaskComposer
           newTask={newTask}
-          workspaceId={startsIn}
-          from={from}
+          workspaceId={newTask.workspaceId}
           onStarting={setStarting}
           onLeave={close}
           focusedByOwner
           heading={
             <Text variant={TEXT_VARIANT.DIALOG} as={TEXT_ELEMENT.H2} id={titleId}>
-              {newTaskHeading(from?.identifier, newTask.preset?.agent === true)}
+              {NEW_TASK_HEADING}
             </Text>
           }
         />

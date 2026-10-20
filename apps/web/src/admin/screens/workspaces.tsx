@@ -1,5 +1,6 @@
 import { GITHUB_INSTALLATION_STATUS } from "@luke/database/github-installation-vocabulary";
 import { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabulary";
+import { browserClient } from "@luke/features/contract/browser-client";
 import { INTEGRATION_NAME } from "@luke/features/integration-wire";
 import type {
   AdminWorkspaceInstallation,
@@ -7,7 +8,7 @@ import type {
   AdminWorkspaceList,
   AdminWorkspaceRow,
 } from "@luke/service/admin/admin-workspaces";
-import { ADMIN_USERS_SEARCH_MAX_LENGTH } from "@luke/service/admin/http";
+import { ADMIN_USERS_SEARCH_MAX_LENGTH, type AdminWorkspacesQuery } from "@luke/service/admin/http";
 import {
   BADGE_TONE,
   Badge,
@@ -42,9 +43,9 @@ import {
   searchFromLocation,
   searchHref,
   searchTerm,
-  workspacesReadPath,
+  workspacesReadQuery,
 } from "../routing";
-import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 /**
  * workspaces.tsx -- the Workspaces tab: how many teams share a workspace,
@@ -60,9 +61,12 @@ const WORKSPACES_ERROR = "The workspaces endpoint did not answer.";
 
 const WORKSPACES_EMPTY = "No workspace matches.";
 
-// SAFETY: a 200 from the admin workspaces endpoint is an AdminWorkspaceList body by its contract.
-const readWorkspaceList: AdminReader<AdminWorkspaceList> = async (response) =>
-  (await response.json()) as AdminWorkspaceList;
+/** The workspaces table, as the admin workspaces procedure answers it. */
+const readWorkspaceList =
+  (query: AdminWorkspacesQuery): AdminReader<AdminWorkspaceList> =>
+  async (signal) =>
+    // SAFETY: the admin workspaces procedure answers an AdminWorkspaceList (`@luke/service/admin/admin-workspaces`), which the contract cannot name.
+    (await browserClient.admin.workspaces(query, { signal })) as AdminWorkspaceList;
 
 /** The table's columns by key; a fixed set, so a heading never carries a free string. */
 const WORKSPACE_COLUMN = {
@@ -241,7 +245,7 @@ function WorkspaceTiles({ list }: { list: AdminWorkspaceList }): React.JSX.Eleme
             label="Invites accepted"
             value={formatShare(summary.invitations.acceptanceRate)}
             hint={`${formatNumber(summary.invitations.pending)} pending · ${formatNumber(summary.invitations.expired)} expired`}
-            title={`${formatNumber(summary.invitations.accepted)} accepted of ${formatNumber(summary.invitations.settled)} no longer open, across every workspace: an invitation is how a workspace becomes shared`}
+            title={`${formatNumber(summary.invitations.accepted)} accepted of ${formatNumber(summary.invitations.settled)} no longer open, across every workspace`}
           />
         </div>
         <div className={STAT_CELL}>
@@ -311,9 +315,10 @@ export function WorkspacesScreen({
     setSharedOnly(next);
   };
 
+  const asked = workspacesReadQuery(hideAdmins, sharedOnly, searchTerm(query));
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    workspacesReadPath(hideAdmins, sharedOnly, searchTerm(query)),
-    readWorkspaceList,
+    { procedure: ADMIN_READ.WORKSPACES, query: asked },
+    readWorkspaceList(asked),
     WORKSPACES_ERROR,
     { debounceMs: SEARCH_DEBOUNCE_MS },
   );

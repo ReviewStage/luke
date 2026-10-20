@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
-import { Effect } from "effect";
 import { test } from "vitest";
 import type { OfferedModel } from "../providers/model-catalog.js";
 import {
   type AdminCostTokenRow,
   type AdminCostUsage,
   buildAdminCost,
-  handleAdminCost,
   priceCostUsage,
 } from "./admin-cost.js";
 import {
@@ -15,7 +12,7 @@ import {
   type AdminCostAccountInfo,
   COST_SOURCE,
 } from "./admin-cost-wire.js";
-import { ADMIN_ERROR, ADMIN_METRICS_WINDOW } from "./http.js";
+import { ADMIN_METRICS_WINDOW } from "./http.js";
 
 /**
  * admin-cost.test.ts -- the Cost screen's pricing and shaping: tokens are
@@ -270,30 +267,3 @@ test("the most expensive accounts come most first, cut at the bound, each with i
   assert.equal(cost.topAccounts[0]?.spendPerMergedPullRequestUsd, 3);
   assert.equal(cost.topAccounts[1]?.spendPerMergedPullRequestUsd, null);
 });
-
-it.effect("a window outside the set is refused before the read, and a failed read is a 503", () =>
-  Effect.gen(function* () {
-    const reads: string[] = [];
-    const answer = (url: string, fail: boolean) =>
-      handleAdminCost({
-        request: new Request(url),
-        readCost: (_now, scope, windowDays) => {
-          reads.push(`${scope}:${windowDays}`);
-          return fail ? Effect.fail(new Error("the database is down")) : Effect.succeed(built({}));
-        },
-      });
-
-    const invalid = yield* answer("https://luke.test/api/admin/cost?window=12", false);
-    assert.equal(invalid.status, 400);
-    assert.equal((yield* Effect.promise(() => invalid.json())).error, ADMIN_ERROR.INVALID_WINDOW);
-    assert.deepEqual(reads, []);
-
-    const read = yield* answer("https://luke.test/api/admin/cost?window=7&scope=all", false);
-    assert.equal(read.status, 200);
-    assert.deepEqual(reads, ["all:7"]);
-
-    const outage = yield* answer("https://luke.test/api/admin/cost", true);
-    assert.equal(outage.status, 503);
-    assert.equal((yield* Effect.promise(() => outage.json())).error, ADMIN_ERROR.UNAVAILABLE);
-  }),
-);

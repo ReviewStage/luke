@@ -17,17 +17,15 @@ import type { INTEGRATION_ROW_STATUS } from "@luke/database/integration-vocabula
 import type { IntegrationProvider } from "@luke/features/integration-wire";
 import { Clock, Effect } from "effect";
 import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
   ADMIN_METRICS_WINDOW,
   type AdminMetricsScope,
   type AdminWorkspacesKind,
+  type AdminWorkspacesQuery,
   adminMetricsScope,
   adminUsersSearch,
   adminWorkspacesKind,
-  errorResponse,
-  jsonResponse,
 } from "./http.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
@@ -233,7 +231,7 @@ export function buildAdminWorkspaceList(
 }
 
 export interface AdminWorkspacesOptions {
-  request: Request;
+  query: AdminWorkspacesQuery;
   readWorkspaces: (
     now: number,
     scope: AdminMetricsScope,
@@ -249,25 +247,20 @@ export interface AdminWorkspacesOptions {
  */
 export function handleAdminWorkspaces(
   options: AdminWorkspacesOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<AdminWorkspaceList, AdminRefusal, DatabaseServices> {
+  const { query } = options;
 
-  const search = adminUsersSearch(request.url);
-  if (search === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_SEARCH));
-  }
+  const search = adminUsersSearch(query.search);
+  if (search === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_SEARCH);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
     options
       .readWorkspaces(
         now,
-        adminMetricsScope(request.url),
-        adminWorkspacesKind(request.url),
+        adminMetricsScope(query.scope),
+        adminWorkspacesKind(query.kind),
         search.term,
       )
-      .pipe(
-        Effect.map((list) => jsonResponse(ADMIN_HTTP_STATUS.OK, list)),
-        Effect.catchCause((cause) => unavailableSeam("admin workspaces read failed", cause)),
-      ),
+      .pipe(Effect.catchCause((cause) => unavailableSeam("admin workspaces read failed", cause))),
   );
 }

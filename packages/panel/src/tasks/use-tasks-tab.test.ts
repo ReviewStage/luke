@@ -11,15 +11,15 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { ISSUE_PRIORITY, ISSUE_STATUS } from "@luke/features/issue-wire";
 import {
   LINK_PLACE,
   PULL_REQUEST_THREAD_VIEW,
   type PullRequestThreadView,
 } from "@luke/features/luke-link";
 import { MENTION_KIND } from "@luke/features/mention-link";
+import { TASK_ISSUE_PROVIDER } from "@luke/features/task-issue-wire";
 import { TASK_SECTION_WRITE } from "@luke/features/task-section-wire";
-import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
+import { PLAN_ACTOR, TASK_STATUS, type Task } from "@luke/features/task-wire";
 import {
   IDLE_TASKS_VIEW,
   TASK_CALL_FAILURE,
@@ -31,14 +31,15 @@ import {
   type TaskWorkTurn,
 } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT, ACT_KIND, type ActKind, type ActResultFor } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { type AppInboxTask, type AppInboxTaskHolding, RUN_PROFILE } from "@luke/host/app-state";
-import { isPortActKind, type PortActKind, type PortActResult } from "@luke/host/contract";
+import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { LIVE_STATUS } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import { experimentsOn } from "@luke/settings/testing";
 import { CHAT_PLACE, FOR_YOU } from "@luke/ui/chat-model";
+import { memoryHistory } from "@luke/ui/history-adapter";
 import { SECTION_WRITE_FAILED_NOTE } from "@luke/ui/task-sections-model";
 import { DOCUMENT_REGION, PIN_MOVE_FAILED_NOTE, TASKS_PAGE } from "@luke/ui/tasks-model";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
@@ -61,6 +62,12 @@ import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import type { ActHandle } from "../act.js";
+import {
+  installWindowHistory,
+  useWindowHistory,
+  type WindowHistoryLists,
+} from "../navigation-history.js";
+import { PANEL_TAB } from "../panel-tabs.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -73,7 +80,6 @@ import { MAIN_TAB } from "./use-main-tabs.js";
 import { PULL_REQUEST_VIEW, SIDE_PANEL_TAB } from "./use-side-panel.js";
 import {
   AUTOMATIONS_PAGE,
-  ISSUES_PAGE,
   type LeaveAsk,
   type TasksControl,
   useLeaveGuard,
@@ -135,19 +141,19 @@ interface Standing {
   account: string;
   /** The room the panel's stage gives. */
   room: ShellRoom;
+  /** Whether the window's history stands over the tab, as the panel's root keeps it. */
+  history: boolean;
 }
 
 /** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names, an act-port kind among them. */
 function mount(
   initial: Partial<Standing> = {},
-  answers: { [Kind in ActKind]?: (...args: unknown[]) => Promise<ActResultFor<Kind>> } & {
-    [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>>;
-  } = {},
+  answers: { [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>> } = {},
   registry?: AtomRegistry,
 ) {
-  const told: (ActKind | PortActKind)[] = [];
+  const told: PortActKind[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no task press tells them. */
-  const agentActs: (ActKind | PortActKind)[] = [];
+  const agentActs: PortActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
   /** Which task's Inbox main was told is shown, each time it was told. */
@@ -157,11 +163,11 @@ function mount(
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
   /** Each asked act's payload, unread until a test reads it as the act's schema would. */
-  const payloads: { readonly kind: ActKind | PortActKind; readonly payload: unknown }[] = [];
+  const payloads: { readonly kind: PortActKind; readonly payload: unknown }[] = [];
   const links: SettingsLink[] = [];
-  const record = (kind: ActKind | PortActKind) => {
+  const record = (kind: PortActKind) => {
     if (!kind.startsWith("codingAgents.")) told.push(kind);
-    else if (!isPortActKind(kind)) agentActs.push(kind);
+    else agentActs.push(kind);
   };
   let control: TasksControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
@@ -177,13 +183,27 @@ function mount(
     signedIn: true,
     account: "dev@example.com",
     room: SHELL_ROOM.WIDE,
+    history: false,
     ...initial,
   };
-  const appAnswers: { [Kind in ActKind]?: (...args: unknown[]) => Promise<ActResultFor<Kind>> } =
-    answers;
-  const portAnswers: {
-    [Kind in PortActKind]?: (...args: unknown[]) => Promise<PortActResult<Kind>>;
-  } = answers;
+  let windowHistory: WindowHistoryLists | undefined;
+  if (standing.history) installWindowHistory(memoryHistory());
+  /** The window's history over the tab, as the panel's root keeps it, on the room the tab stands in. */
+  function WindowHistoryProbe({ tasks, room }: { tasks: TasksControl; room: ShellRoom }) {
+    windowHistory = useWindowHistory({
+      known: true,
+      link: undefined,
+      tab: PANEL_TAB.TASKS,
+      onTabChange: () => undefined,
+      settingsView: SETTINGS_VIEW.ACCOUNT,
+      onSettingsViewChange: () => undefined,
+      settingsListed: true,
+      onSettingsList: () => undefined,
+      room,
+      tasks,
+    });
+    return null;
+  }
   /** An act-port kind's answer as the test gives it, recorded, or a rejection where it gives none. */
   function portAnswer<Kind extends PortActKind>(
     kind: Kind,
@@ -191,18 +211,7 @@ function mount(
   ): Promise<PortActResult<Kind>> {
     record(kind);
     payloads.push({ kind, payload: args[0] });
-    const answer = portAnswers[kind];
-    if (answer !== undefined) return answer(...args);
-    return Promise.reject(new Error("Not answered in this test."));
-  }
-  /** An `app:act` kind's answer as the test gives it, recorded, or a rejection where it gives none. */
-  function appAnswer<Kind extends ActKind>(
-    kind: Kind,
-    ...args: unknown[]
-  ): Promise<ActResultFor<Kind>> {
-    record(kind);
-    payloads.push({ kind, payload: args[0] });
-    const answer = appAnswers[kind];
+    const answer = answers[kind];
     if (answer !== undefined) return answer(...args);
     return Promise.reject(new Error("Not answered in this test."));
   }
@@ -211,16 +220,14 @@ function mount(
     restand = setHeld;
     control = useTasksTab({
       acts: {
-        // A kind the test does not answer is recorded and refused, whichever
-        // side carries it, so a test reads what was asked the same way for both.
-        // SAFETY: each kind is answered by its own act or procedure's answer, the dispatch on the kind the one erasure.
-        act: (<Kind extends ActKind | PortActKind>(kind: Kind, ...args: unknown[]) =>
-          isPortActKind(kind)
-            ? portAnswer(kind, ...args)
-            : appAnswer(kind, ...args)) as ActHandle["act"],
-        // SAFETY: a told kind is recorded alike whichever side carries it, the dispatch on the kind the one erasure.
-        tell: ((kind: ActKind | PortActKind, ...args: unknown[]) => {
-          record(kind);
+        // A kind the test does not answer is recorded and refused.
+        // SAFETY: each kind is answered by its own procedure's answer, the dispatch on the kind the one erasure.
+        act: (<Kind extends PortActKind>(kind: Kind, ...args: unknown[]) =>
+          portAnswer(kind, ...args)) as ActHandle["act"],
+        // A told port kind is answered as an asked one is, recorded there, its answer or refusal read by no one, as `tell` reads none.
+        // SAFETY: a told kind is recorded as an asked one is, the dispatch on the kind the one erasure.
+        tell: ((kind: PortActKind, ...args: unknown[]) => {
+          void portAnswer(kind, ...args).catch(() => undefined);
           // The one told payload the tests read, parsed as the boundary would.
           const shown = Option.getOrUndefined(readShown(args[0]));
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
@@ -253,7 +260,9 @@ function mount(
       leaveGuard: useLeaveGuard(),
       room: held.room,
     });
-    return null;
+    return held.history
+      ? createElement(WindowHistoryProbe, { tasks: control, room: held.room })
+      : null;
   }
   const container = document.createElement("div");
   document.body.append(container);
@@ -276,6 +285,8 @@ function mount(
       assert.ok(control);
       return control;
     },
+    /** The window's history, where the tab was mounted with one. */
+    history: () => windowHistory ?? assert.fail("the window's history stands"),
     stand: (patch: Partial<Standing>) => {
       standing = { ...standing, ...patch };
       act(() => restand?.(standing));
@@ -410,8 +421,8 @@ const readCreate = Schema.decodeUnknownOption(Schema.Struct({ name: Schema.Strin
 
 /** The workspace each act of `kind` the tab asked named, none where it named none. */
 function namedIn(
-  payloads: readonly { readonly kind: ActKind | PortActKind; readonly payload: unknown }[],
-  kind: ActKind,
+  payloads: readonly { readonly kind: PortActKind; readonly payload: unknown }[],
+  kind: PortActKind,
 ): (string | undefined)[] {
   return payloads
     .filter((asked) => asked.kind === kind)
@@ -499,7 +510,7 @@ test("New plan opens its dialog over the open plan, which stays open; a second p
 });
 
 test("a task started opens with the side panel shown on its plan, a refused start hides it again where it stood hidden, and a panel hidden before the start answers stays hidden", async () => {
-  const answers: Array<(answer: ActResultFor<typeof ACT_KIND.TASKS_START>) => void> = [];
+  const answers: Array<(answer: PortActResult<typeof ACT_KIND.TASKS_START>) => void> = [];
   const tab = mount(
     { shown: true, tasks: OPEN },
     { [ACT_KIND.TASKS_START]: () => new Promise((resolve) => answers.push(resolve)) },
@@ -861,6 +872,69 @@ test("a tab closed on another plan opens that plan again, and the tab on it once
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.PLAN, SIDE_PANEL_TAB.BOARD]);
 });
 
+test("in a narrow room a task opened from a list lands on its plan, the side panel standing on the plan's tab whichever tab it last showed or shut, and on the desktop's width it opens as it was left", () => {
+  for (const room of [SHELL_ROOM.NARROW, SHELL_ROOM.WIDE]) {
+    window.localStorage.clear();
+    const tab = mount(
+      { shown: true, tasks: OPEN, room },
+      { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+    );
+    act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
+    tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+    act(() => tab.control().sidePanel.onSetOpen(false));
+
+    act(() => tab.control().onSelect(TASK.id));
+    tab.stand({ tasks: OPEN });
+    if (room === SHELL_ROOM.NARROW) {
+      assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.PLAN }, "narrow");
+    } else {
+      assert.equal(tab.control().sidePanel.open, false, "wide leaves the panel shut");
+    }
+  }
+});
+
+test("in a narrow room Back to a task opens it as it stood, its plan's tab closed there staying closed, where a task opened from a list lands on its plan", async () => {
+  const tab = mount(
+    { shown: true, tasks: OPEN, room: SHELL_ROOM.NARROW, history: true },
+    { [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true) },
+  );
+  const panel = () => tab.control().sidePanel;
+  act(() => panel().onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => panel().onClose(SIDE_PANEL_TAB.PLAN));
+  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.BOARD]);
+
+  act(() => tab.control().onSelect(OTHER_TASK_ID));
+  tab.stand({ tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID } });
+  await settle();
+  assert.equal(panel().tab, SIDE_PANEL_TAB.PLAN, "the task opened from a list lands on its plan");
+
+  act(() => tab.history().onBack());
+  assert.equal(tab.control().boundFor, TASK.id);
+  tab.stand({ tasks: OPEN });
+  await settle();
+  assert.deepEqual(panel().tabs, [SIDE_PANEL_TAB.BOARD], "the plan's tab stays closed");
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+});
+
+test("in a narrow room a Luke link to another task's panel item opens that item, not the plan a task opened from a list lands on", async () => {
+  const tab = mount(
+    { shown: true, tasks: { ...OPEN, activeTaskId: OTHER_TASK_ID }, room: SHELL_ROOM.NARROW },
+    {
+      [ACT_KIND.TASKS_SELECT]: () => Promise.resolve(true),
+      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }),
+    },
+  );
+  act(() =>
+    tab.control().onOpenLink({
+      workspace: "acme",
+      place: { kind: LINK_PLACE.CHANGES, planId: TASK.id, agentId: AGENT_ID },
+    }),
+  );
+  tab.stand({ tasks: OPEN });
+  await settle();
+  assert.deepEqual(panelOf(tab), { open: true, tab: { changes: AGENT_ID } });
+});
+
 test("Show panel on a plan whose strip holds no tab opens the tab last closed there, else the kind last closed on it, and a plan's own tab stands from a first launch, the panel shown on it", () => {
   const tab = mount({ shown: true, tasks: OPEN });
   const panel = () => tab.control().sidePanel;
@@ -897,18 +971,6 @@ test("Show panel beside the Inbox, its item's plan's strip holding no tab, shows
 
   act(() => tab.control().sidePanel.onToggle());
   assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
-});
-
-test("a peek opened beside the Issues list shows the panel, though the plan open behind it holds no tab", () => {
-  window.localStorage.clear();
-  const tab = mount({ shown: true, tasks: { ...TWO_WORKSPACES, activeTaskId: "billing" } });
-  act(() => tab.control().issuesView.onOpen());
-  act(() => tab.control().issuesView.onPeek("issue-1"));
-  act(() => tab.control().sidePanel.onSetOpen(true));
-
-  assert.deepEqual(tab.control().sidePanel.strip, [], "no tab of the plan's");
-  assert.equal(tab.control().sidePanel.open, true);
-  assert.equal(tab.control().issuesView.peeked, "issue-1");
 });
 
 test("a Luke link to another plan's section opens that plan and asks its page to show the section, each ask its own", () => {
@@ -1171,22 +1233,30 @@ test("a Luke link to a person opens their page in the workspace its slug names, 
   assert.equal(tab.control().personView.workspaceId, PERSONAL.id);
 });
 
-test("a Luke link to an issue opens its page in the workspace its slug names, in the place of the Inbox", () => {
+test("a Luke link to a channel opens Chat on it in the workspace its slug names, and one to Chat opens it on For you, as its sidebar row does", () => {
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES });
-  const issueId = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
-  act(() => tab.control().inboxView.onOpen());
+  const channelId = "7f3a4b5c-6d7e-4f8a-9b02-a3b4c5d6e7f8";
+  assert.equal(tab.control().workspace?.id, PERSONAL.id);
 
   act(() =>
-    tab.control().onOpenLink({
-      workspace: "personal",
-      place: { kind: LINK_PLACE.ISSUE, issueId },
-    }),
+    tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.CHAT, channelId } }),
   );
+  const onChannel = {
+    workspace: tab.control().workspace?.id,
+    open: tab.control().chatView.open,
+    place: tab.control().chatView.place,
+    listed: tab.control().chatView.listed,
+  };
+  act(() => tab.control().onOpenLink({ workspace: "acme", place: { kind: LINK_PLACE.CHAT } }));
 
-  assert.equal(tab.control().workspace?.id, PERSONAL.id);
-  assert.equal(tab.control().inboxView.open, false);
-  assert.equal(tab.control().issuesView.open, true);
-  assert.deepEqual(tab.control().issuesView.place, { kind: ISSUES_PAGE.ISSUE, issueId });
+  assert.deepEqual(onChannel, {
+    workspace: ACME.id,
+    open: true,
+    place: { kind: CHAT_PLACE.CHANNEL, channelId },
+    listed: false,
+  });
+  assert.deepEqual(tab.control().chatView.place, FOR_YOU);
+  assert.equal(tab.control().chatView.listed, true);
 });
 
 test("a Luke link whose slug names no workspace of the account's leaves the listed one, and opens its place all the same, whose read decides", () => {
@@ -1579,7 +1649,7 @@ test("a person's page opened in another workspace lists it without reopening its
 
 /** The tasks each open the tab asked of main named, in order. */
 function opensAsked(
-  payloads: readonly { readonly kind: ActKind | PortActKind; readonly payload: unknown }[],
+  payloads: readonly { readonly kind: PortActKind; readonly payload: unknown }[],
 ) {
   return payloads
     .filter((asked) => asked.kind === ACT_KIND.TASKS_SELECT)
@@ -1904,7 +1974,7 @@ test("New plan hands Luke the brief it was given beside its issue, and a blank b
   const tab = mount({ shown: true, tasks: TWO_WORKSPACES }, UNSTARTED);
 
   await tab.control().newTask.start("", null, "workspace-acme", true, {
-    linearIssueId: "issue-1",
+    issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
     brief: "Keep the queue order stable.",
   });
   await tab.control().newTask.start("", null, "workspace-acme", true, { brief: " \n " });
@@ -1916,7 +1986,7 @@ test("New plan hands Luke the brief it was given beside its issue, and a blank b
     [
       {
         workspaceId: "workspace-acme",
-        linearIssueId: "issue-1",
+        issues: [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: "issue-1" }],
         brief: "Keep the queue order stable.",
       },
       { workspaceId: "workspace-acme" },
@@ -1955,7 +2025,7 @@ test("the repository chooser says the account manages the workspace it owns, and
 });
 
 test("a Disconnect whose page did not open says why in a toast", async () => {
-  const refusal = ACT[ACT_KIND.GITHUB_DISCONNECT].refusal;
+  const refusal = "Could not disconnect GitHub on this system.";
   const tab = mount(
     { shown: true, tasks: { ...TWO_WORKSPACES, github: { connected: true, login: null } } },
     { [ACT_KIND.GITHUB_DISCONNECT]: () => Promise.reject(new Error(refusal)) },
@@ -2584,36 +2654,6 @@ test("opening Chat on a place, as a chat notice's Open in Chat does, asks first 
   assert.equal(tab.control().chatView.open, true);
 });
 
-test("New task reads a workspace's own issues, each by its key, only while the account has Issues on", async () => {
-  const listed = {
-    id: "3f0e6f5c-7d1a-4f6e-9a55-000000000007",
-    workspaceId: ACME.id,
-    number: 7,
-    title: "Invites expire",
-    description: "",
-    status: ISSUE_STATUS.TODO,
-    priority: ISSUE_PRIORITY.NONE,
-    creator: null,
-    archivedAt: null,
-    createdAt: 1,
-    updatedAt: 1,
-  };
-  const answers = { [ACT_KIND.ISSUES_LIST]: () => Promise.resolve({ issues: [listed] }) };
-  handState({});
-  const off = mount({ shown: true, tasks: TWO_WORKSPACES }, answers, AtomRegistryModule.make());
-  const offRead = off.control().newTask.issuesIn(ACME.id);
-
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const on = mount({ shown: true, tasks: TWO_WORKSPACES }, answers, AtomRegistryModule.make());
-  await settle();
-  const read = on.control().newTask.issuesIn(ACME.id);
-
-  assert.equal(offRead, undefined, "Issues off reads none");
-  assert.deepEqual(await read?.(), [
-    { id: listed.id, workspaceId: ACME.id, identifier: "ACME-7", title: "Invites expire" },
-  ]);
-});
-
 test("a live run reads the listed workspace's chat only while the account has Chat on", async () => {
   handState({});
   const off = mount({ shown: true, tasks: TWO_WORKSPACES }, {}, AtomRegistryModule.make());
@@ -2811,134 +2851,89 @@ test("a channel hidden behind a narrow room's Chat rail is not marked read until
   assert.deepEqual(readTo(), [mark(4), mark(5)]);
 });
 
-test("a task started from an issue's Start agent… presses its Start once it stands open, with no planning, linked to the issue, and the agent's tab opens; an agent that did not start says why beside the Start", async () => {
-  let agents = 0;
-  let listed: CodingAgentSummary[] = [];
-  const started: Task = { ...TASK, id: OTHER_TASK_ID, name: "Invites", repository: "acme/web" };
+test("a channel link the chat held before it was opened does not hold stands until a later read: kept where that read holds it, back on For you where it does not", async () => {
+  handState(experimentsOn(EXPERIMENT.CHAT));
+  const me = "b1c2d3e4-0000-4000-8000-000000000001";
+  const [held, fresh, gone] = [
+    "c0ffee00-0000-4000-8000-000000000001",
+    "c0ffee00-0000-4000-8000-000000000002",
+    "c0ffee00-0000-4000-8000-000000000003",
+  ];
+  /** The chat as one read answers it, holding `ids` as its channels. */
+  const answerOf = (cursor: number, ids: readonly string[]) => ({
+    self: me,
+    readSeq: 0,
+    members: [{ id: me, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false }],
+    channels: ids.map((id) => ({ id, kind: CHANNEL_KIND.TOPIC, name: id, archived: false })),
+    messages: [],
+    cursor: String(cursor),
+  });
+  // Each later read waits for the test, as the service's long read waits for a change.
+  const second = Promise.withResolvers<ReturnType<typeof answerOf>>();
+  const third = Promise.withResolvers<ReturnType<typeof answerOf>>();
+  let reads = 0;
   const tab = mount(
-    { shown: true, tasks: OPEN },
+    { shown: true, tasks: { ...OPEN, workspaces: [PERSONAL] } },
     {
-      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
-      // The service lists the agent once it started, as it does.
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: listed }),
-      [ACT_KIND.CODING_AGENTS_START]: () => {
-        if (agents++ > 0) return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-        listed = [{ ...RUNNING_AGENT, id: AGENT_ID }];
-        return Promise.resolve({ agent: { ...RUNNING_AGENT, id: AGENT_ID } });
+      [ACT_KIND.CODING_AGENTS_CHAT]: () => {
+        reads += 1;
+        if (reads === 1) return Promise.resolve(answerOf(1, [held]));
+        if (reads === 2) return second.promise;
+        return reads === 3 ? third.promise : new Promise(() => undefined);
       },
     },
+    AtomRegistryModule.make(),
   );
-  await settle();
-  const issue = {
-    id: "issue-1",
-    workspaceId: "workspace-acme",
-    identifier: "ACME-7",
-    title: "Invites",
-  };
-  const agentStarts = () =>
-    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START);
-  /** Start agent… pressed and its card's Start answered, then the task standing open as the host opens it. */
-  const startFrom = async () => {
-    act(() => tab.control().onNewTaskFrom(issue, true));
-    await act(async () => {
-      await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
-        issueId: issue.id,
-        agent: true,
-      });
-    });
+  await vi.waitFor(async () => {
     await settle();
-    tab.stand({
-      tasks: {
-        ...OPEN,
-        activeTaskId: OTHER_TASK_ID,
-        document: { status: TASKS_READ.READY, task: started },
-      },
-    });
+    assert.ok(tab.control().chatView.chat, "the chat landed");
+  });
+  const linkTo = (channelId: string) =>
+    act(() =>
+      tab
+        .control()
+        .onOpenLink({ workspace: "personal", place: { kind: LINK_PLACE.CHAT, channelId } }),
+    );
+  const place = () => tab.control().chatView.place;
+
+  linkTo(fresh);
+  await settle();
+  assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: fresh }, "made since the read");
+  second.resolve(answerOf(2, [held, fresh]));
+  await settle();
+  assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: fresh }, "and held by the next");
+
+  linkTo(gone);
+  await settle();
+  assert.deepEqual(place(), { kind: CHAT_PLACE.CHANNEL, channelId: gone });
+  third.resolve(answerOf(3, [held, fresh]));
+  await vi.waitFor(async () => {
     await settle();
-  };
-
-  act(() => tab.control().onNewTaskFrom(issue, true));
-  assert.deepEqual(tab.control().newTask.preset, { issue, agent: true });
-  act(() => tab.control().newTask.onClose());
-  act(() => tab.control().onNewTaskFrom(issue, true));
-  await act(async () => {
-    await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
-      issueId: issue.id,
-      agent: true,
-    });
+    assert.deepEqual(place(), FOR_YOU, "a read since that holds it not puts Chat on For you");
   });
-  await settle();
-  assert.deepEqual(agentStarts(), [], "no agent starts before its task stands open");
-  assert.deepEqual(tab.payloads.find(({ kind }) => kind === ACT_KIND.TASKS_START)?.payload, {
-    name: "Invites",
-    repository: "acme/web",
-    workspaceId: "workspace-acme",
-    issueId: issue.id,
-    planning: false,
-  });
-  tab.stand({
-    tasks: {
-      ...OPEN,
-      activeTaskId: OTHER_TASK_ID,
-      document: { status: TASKS_READ.READY, task: started },
-    },
-  });
-  await settle();
-
-  assert.equal(agentStarts().length, 1);
-  assert.equal(JSON.parse(JSON.stringify(agentStarts()[0]?.payload)).taskId, OTHER_TASK_ID);
-  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
-
-  tab.stand({ tasks: OPEN });
-  await settle();
-  await startFrom();
-  assert.equal(agentStarts().length, 2);
-  assert.ok(tab.control().agents.start.note, "why the agent did not start stands beside the Start");
 });
 
-test("an agent asked of Start agent… whose task was left before it could start starts nothing when the task is opened again", async () => {
-  const started: Task = { ...TASK, id: OTHER_TASK_ID, name: "Invites", repository: "acme/web" };
+test("a task New task files for later asks the host to start it in the backlog, with no planning and its brief", async () => {
   const tab = mount(
     { shown: true, tasks: OPEN },
-    {
-      [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }),
-      [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }),
-      [ACT_KIND.CODING_AGENTS_START]: () =>
-        Promise.resolve({ agent: { ...RUNNING_AGENT, id: AGENT_ID } }),
-    },
+    { [ACT_KIND.TASKS_START]: () => Promise.resolve({ planId: OTHER_TASK_ID }) },
   );
   await settle();
-  const standOn = (task: Task) =>
-    tab.stand({
-      tasks: { ...OPEN, activeTaskId: task.id, document: { status: TASKS_READ.READY, task } },
-    });
-
-  act(() =>
-    tab
-      .control()
-      .onNewTaskFrom(
-        { id: "issue-1", workspaceId: "workspace-acme", identifier: "ACME-7", title: "Invites" },
-        true,
-      ),
-  );
   await act(async () => {
-    await tab.control().newTask.start("Invites", "acme/web", "workspace-acme", false, {
-      issueId: "issue-1",
-      agent: true,
+    await tab.control().newTask.start("Rate limit search", "acme/web", "workspace-acme", false, {
+      status: TASK_STATUS.BACKLOG,
+      brief: "Thirty a minute.",
     });
   });
-  // The new task opens while its repository is still unread, and the developer leaves it for another.
-  standOn({ ...started, repository: null });
-  await settle();
-  standOn(TASK);
-  await settle();
-  standOn(started);
-  await settle();
 
-  assert.deepEqual(
-    tab.payloads.filter(({ kind }) => kind === ACT_KIND.CODING_AGENTS_START),
-    [],
-  );
+  assert.deepEqual(tab.payloads.find(({ kind }) => kind === ACT_KIND.TASKS_START)?.payload, {
+    name: "Rate limit search",
+    repository: "acme/web",
+    workspaceId: "workspace-acme",
+    brief: "Thirty a minute.",
+    status: TASK_STATUS.BACKLOG,
+    planning: false,
+  });
 });
 
 /** A start's agent, read back where it names one. */

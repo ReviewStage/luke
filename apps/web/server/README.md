@@ -223,8 +223,11 @@ answering `{ workspace }` with its new `photoVersion` or none; any other
 photo is `invalid-request`. They are the plugin's own
 `removeMember`, `updateMemberRole`, `leaveOrganization`, and `updateOrganization` (`memberSeams`
 in `workspace-seams.ts`, the last handed the name alone or the logo alone), called with the
-request's headers, which carry the Mac's own Better Auth session as a signed
-bearer token that the bearer plugin reads as the session cookie. So these six
+request's one credential (`packages/service/src/auth/session-credential.ts`):
+its `Authorization` alone wherever it carries one, which carries the Mac's own
+Better Auth session as a signed bearer token that the bearer plugin reads as
+the session cookie, and the browser's cookie only where it carries none, so a
+bearer the plugin did not sign is never read past to a cookie beside it. So these six
 paths take the session, not the OAuth token, and the plugin checks the
 caller's role and membership again behind Luke's own rules. A workspace the
 account is not in is `not-found`; a role that does not allow it,
@@ -285,16 +288,18 @@ same script reads the other side of the table through `scripts/api-callers.ts`
 (`server/api-callers.ts`): every `/api/` literal and path builder a client in
 the repository spells — the desktop's, the packages', the
 scripts' — and the exports of `@luke/features`'s paths module, evaluated, must
-resolve to a rewrite of the table or to an extensionless alias the Build Output
-emits, and a builder the check cannot read is refused by name rather than
+resolve to an extensionless alias the Build Output emits, a rewrite of the
+table ahead of its fallback, or a procedure of the hosted oRPC contract, and a
+builder the check cannot read is refused by name rather than
 skipped, because a path constant that outlives its route otherwise fails
 nothing until production answers 404 (LUKE-186). The same derived list is
 what `scripts/preview-probe.ts` (`server/preview-probe.ts`) sends to a
 deployment: every caller path, the cron's, the page, and eve's health, failing
 on any answer that is Vercel's own rather than a handler's — the
 `x-vercel-error` header the platform puts on its `NOT_FOUND`, which a
-function's own 404 never carries — with seven of those requests held to
-their exact codes besides, because on 2026-09-11 five production deploys
+function's own 404 never carries — with the requests `EXPECTED_STATUS` names
+held to their exact codes besides, an unknown `/api/` path to the router's
+JSON 404 body among them, because on 2026-09-11 five production deploys
 failed in a row while nothing in CI could see the deployed shape (LUKE-164).
 Behind Deployment Protection it needs one of two doors, the bypass secret
 sent as a header or the OPTIONS allowlist, and names which it relies on.
@@ -577,16 +582,15 @@ warm invocation reaches the services the cold one built. A group's routes are
 a layer rather than a value because that is what an `HttpRouter` registration
 is: the router is a service the layer writes each path into, and the
 requirements a route's own handler has travel as request markers the handler
-provides per request from the context `runWeb` read. The auth group, the
-events and maintenance groups below, the account group's
-`server/routes/account/delete.ts`, `preferences.ts`, and `plan-template.ts`,
-the tasks group's four, and the dashboard's five behind the admin group are
-converted this way; the voice route alone exports something else, the
+provides per request from the context `runWeb` read. The routes the hosted
+oRPC route does not answer are converted this way: auth, the two webhooks,
+the maintenance sweep and key rewrap, the GitHub and integration redirects,
+and the byte routes; the voice route alone exports something else, the
 `http.Server` described under "Hosted voice service".
 
 `packages/service/src/http/http-effect.ts` is the response vocabulary that conversion
 speaks: one schema per refusal, each annotated with the status it answers, and
-`readJsonBodyEffect` reading a bounded body off the request stream. A refusal is declared as its body
+`readBodyBytesEffect` reading a bounded body off the request stream. A refusal is declared as its body
 rather than as a `Schema.TaggedError`, because `error` is already the
 discriminant the desktop's hosted clients read and a `_tag` beside it would be
 a byte they never asked for.
@@ -637,9 +641,12 @@ naming an account, and take no cookie. Every route
 that answers bytes rather than JSON (a task's picture, an inbox attachment,
 a picture a tool answered, a workspace's photo, and an image an agent's pull
 request names, an SVG among them) answers them under `HOSTED_BYTES_HEADERS`:
-`nosniff`, `private, no-store`, and `default-src 'none'; style-src
+`nosniff`, `private, no-store`, `default-src 'none'; style-src
 'unsafe-inline'; sandbox`, so a tab opened on one runs no script as this
-origin.
+origin, and `Cross-Origin-Resource-Policy: same-origin`, so no other site's
+page embeds one under the cookie of whoever is looking. Every reader of them
+is same-origin: the web app's tab, and the Mac's host, which fetches them
+with its bearer and hands its renderer the bytes.
 
 ## The hosted oRPC route
 
@@ -650,9 +657,38 @@ the cookie origin guard, reads the web runtime's services through `runWeb`
 once per instance as `routeFromHttpRouter` does, and hands each request to
 `OpenAPIHandler` with them as its `effect/context`, so it is a runtime edge
 of its own (`tools/anti-slop/effect-edges.json`). The router matches the
-public path, so a migrated path with segments is a `SEGMENT_REWRITES` row
-marked `orpc` in `server/function-rewrites.ts`, whose rewrite carries the
-whole path in `route-path` for the dispatcher to restore.
+public path itself: every `/api/` path no rule ahead of it takes reaches the
+route through the one fallback rewrite of `server/function-rewrites.ts`,
+which carries the whole path in `route-path` for the dispatcher to restore,
+and a path no procedure matches is the router's own JSON 404. Vercel runs the
+web service's routes before the filesystem, so the functions that answer by
+their own name (the two WebSocket functions and the feedback courier) each
+stand on a pass-through rule ahead of the fallback.
+Every answer the route gives, a refusal and an unmatched path's 404 among
+them, carries `nosniff` and `Cross-Origin-Resource-Policy: same-origin`
+(`handler.ts`), since each reader is a same-origin `fetch` or the Mac's host.
+
+## The pages' security headers
+
+Every page the site serves answers with a Content Security Policy, a refusal
+to be framed, `nosniff`, a referrer policy, an opener policy, and a
+permissions policy, from the web service's routes in `vercel.json`. A route
+whose headers differ from the site's comes first with its whole set and ends
+routing: the app's two (its own policy, and an opener policy that keeps the
+connect tab it opens), the page the app frames (framed by this origin alone,
+its one inline style admitted by digest), the pages a connect lands on (no
+opener policy, so their tab can close itself), and the admin pages (their
+charts' inline styles and accounts' pictures). Then one route lays the site's
+headers on every other path and lets routing go on to the page rewrites and
+the built files, so no page is ever sent two policies to be enforced
+together. It stands after the generated `/api/` table, so an API answer's
+headers are only its handler's, and it leaves `/assets/` alone, since a
+worker started from a script's address runs under the policy that script is
+sent with, and the app's chunks must never carry the site's. The site's policy
+admits PostHog's assets as a script source, because the analytics client
+(`src/analytics.ts`) loads its configuration and its recorder from there.
+`tests/vercel-services.test.ts` holds every page the build emits to these
+headers at every address it answers at.
 
 ## Signing in on a Preview deployment
 
@@ -789,11 +825,11 @@ this Vercel project to the `luke-web` Sentry project, owns `SENTRY_DSN`,
 `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, and `SENTRY_PROJECT`; a variable of those
 names set by hand stops it from syncing. Without `SENTRY_DSN` the SDK starts
 disabled. `VERCEL_ENV` names the environment. `scripts/bundle-functions.ts`
-uploads the function bundles' source maps when the build holds
-`SENTRY_AUTH_TOKEN`, under the release the plugin writes into each bundle from
+uploads the function bundles' source maps when a production build
+(`VERCEL_ENV=production`) holds `SENTRY_AUTH_TOKEN`; a Preview uploads none, under the release the plugin writes into each bundle from
 the deployment's commit. The eve roots' builds do the same after `eve build`:
-each root's `nitro.config.ts` has Nitro write hidden maps when the build holds
-the token, and `scripts/eve-source-maps.sh` gives the bundles debug IDs,
+each root's `nitro.config.ts` has Nitro write hidden maps when a production
+build holds the token, and `scripts/eve-source-maps.sh` gives the bundles debug IDs,
 uploads the maps to `luke-web` under `VERCEL_GIT_COMMIT_SHA`, and deletes them
 from the output. Alert rules are set in Sentry, not here: a Slack
 `#alerts` message on more than ten events in five minutes, and an email to

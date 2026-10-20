@@ -48,10 +48,11 @@ fi
 # actual relative-import graph, so a later re-export cannot quietly reintroduce
 # `@effect/platform-node` or `effect/sql` a few files deep.
 #
-# `@luke/host`, `@luke/host/effect`, `@luke/host/act-router`, and
-# `@luke/host/client` are walked the same way, because the host, its act
-# table, and the client core that keeps the app-state document are meant to
-# load in a browser tab: their graphs name no `node:` module, no `ws`, no
+# `@luke/host` and every door of it a browser loads are walked the same way:
+# `/effect`, `/client`, `/act-port`, `/service-layer` and
+# `/agent-notices`, which the web app runs the host in a tab through, and
+# `/acts`, `/app-state`, `/bridge` and `/contract`, which the panel reads
+# (`packages/host/AGENTS.md`). Their graphs name no `node:` module, no `ws`, no
 # `electron`, no `@luke/host/node`, and no `Buffer` or `process` global, and
 # what needs one sits behind
 # `@luke/host/node`. The walk crosses into `@luke/credentials` through the
@@ -70,9 +71,20 @@ node --input-type=module -e '
       forbidden: /^(node:|@effect\/platform-node|effect\/sql)/,
     },
     {
-      name: "@luke/host, @luke/host/effect, @luke/host/act-router, and @luke/host/client",
+      name: "@luke/host and the doors of it a browser loads",
       root: "packages/host/src",
-      entries: ["index.ts", "effect/index.ts", "act-router/index.ts", "client/index.ts"],
+      entries: [
+        "index.ts",
+        "effect/index.ts",
+        "client/index.ts",
+        "act-port/index.ts",
+        "service-layer.ts",
+        "agent-notices.ts",
+        "acts.ts",
+        "app-state.ts",
+        "bridge.ts",
+        "contract/index.ts",
+      ],
       forbidden: /^(node:|ws$|electron$|@effect\/platform-node|@luke\/host\/node)/,
       globals: /\b(Buffer|process)\.\w+/,
       follows: ["@luke/credentials"],
@@ -130,14 +142,17 @@ node --input-type=module -e '
 pnpm --dir "$LUKE_REPO_ROOT" --filter @luke/brand --silent check
 
 # The vercel.json rewrites are what land a route on its grouped function, and
-# they are generated from server/routes/; --check fails if a rewrite went stale.
+# they are generated from server/routes/ and the functions, ending in the one
+# fallback onto the hosted oRPC route; --check fails if a rewrite went stale.
 pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/function-rewrites.ts --check
 
 # The constants clients build /api/ URLs from are the other half of that
 # table: a path constant can outlive its route and nothing fails until
 # production answers 404 (LUKE-186). Every /api/ literal and path builder under
-# apps/desktop/src, packages/*/src, scripts, and tools must resolve
-# to a rewrite of the table or an extensionless alias the Build Output emits.
+# apps/desktop/src, packages/*/src, scripts, and tools must resolve to an
+# extensionless alias the Build Output emits, a rewrite of the table ahead of
+# its fallback, or a procedure of the hosted oRPC contract; the fallback alone
+# resolves nothing, since a path no procedure matches is the router's 404.
 pnpm --dir "$LUKE_REPO_ROOT/apps/web" exec tsx scripts/api-callers.ts
 
 # Every relative import the Vercel builder compiles must carry its .js
@@ -165,7 +180,8 @@ if [[ -n "$extensionless_imports" ]]; then
     exit 1
 fi
 
-# The web functions are bundled from server/routes/ into dist-functions/ and
+# The web functions are bundled from server/routes/ and server/orpc-route.ts
+# into dist-functions/ and
 # the Build Output tree with every workspace package inlined, so a bare
 # `@luke/…` specifier is resolved by
 # esbuild at build time from apps/web's own node_modules. pnpm links there only
@@ -329,7 +345,7 @@ fi
 # the one place that may attach it to Electron, the act port included. A
 # handler registered beside its domain logic would bypass the manifest's
 # sender and wire guards, an act registered on a channel of its own would
-# bypass the router, and a renderer port upgraded anywhere else would bypass
+# bypass the act port, and a renderer port upgraded anywhere else would bypass
 # the act port's trust check and context. A port main opens to stream a
 # terminal's bytes to a window is not a door into main, and stays where its
 # act opens it.
@@ -512,10 +528,6 @@ node --input-type=module -e '
     "apps/web/server/build-output.ts",
     "apps/web/server/api-callers.ts",
     "apps/web/server/preview-*.ts",
-    // What the desktop answers the platform door of the panel with, which
-    // the window root installs: each capability as the act or the preload
-    // event main serves, so it names nothing but the panel and the act table.
-    "apps/desktop/src/renderer/desktop-platform.ts",
   ];
   const shell = new Set(edges.runtimeEdges);
   for await (const found of glob(shellGlobs, { cwd: root })) shell.add(found.split(path.sep).join("/"));
@@ -555,7 +567,7 @@ node --input-type=module -e '
   }
   if (offenders.length > 0) {
     process.stderr.write(
-      `error: these modules under apps/ import nothing of their app and no platform library, so they are logic and belong in a package (@luke/ui, @luke/service, @luke/features, @luke/host, @luke/wire); a module is shell only as an app entry in knip.json, a runtimeEdges row in tools/anti-slop/effect-edges.json, or a deployment or test-support file named in scripts/repository-checks.sh:\n${offenders.sort().map((one) => `  ${one}`).join("\n")}\n`,
+      `error: these modules under apps/ import nothing of their app and no platform library, so they are logic and belong in a package (@luke/ui, @luke/panel, @luke/service, @luke/features, @luke/host, @luke/wire); a module is shell only as an app entry in knip.json, a runtimeEdges row in tools/anti-slop/effect-edges.json, or a deployment or test-support file named in scripts/repository-checks.sh:\n${offenders.sort().map((one) => `  ${one}`).join("\n")}\n`,
     );
     process.exit(1);
   }

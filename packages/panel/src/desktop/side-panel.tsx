@@ -223,7 +223,7 @@ function documentReserve(area: HTMLElement): number {
 }
 
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
-export const PANEL_LEAVING = {
+const PANEL_LEAVING = {
   NONE: "none",
   CLOSE: "close",
   FULL_SCREEN: "full-screen",
@@ -1633,7 +1633,7 @@ function TabContent({
  * traffic lights: one button in one place whether the panel is hidden,
  * beside the document, full screen, or still sliding, so a press lands on
  * it however fast the presses come. Where the room holds the panel only full
- * screen, a narrow one's, it reads Close while the panel is open, since the
+ * screen, a narrow one's, it reads Close panel while the panel is open, since the
  * panel covers everything else. It stands on every task's page, so it
  * is also what offers the panel's shortcut. ⌘T is the task's page's, which hands it to the column
  * holding the window's focus (desktop-tasks.tsx). While the task is not
@@ -1648,7 +1648,7 @@ export function SidePanelToggle({
 }): React.JSX.Element {
   // A panel standing only full screen covers the whole window, so its toggle is the way out of it.
   const closes = panel.open && panel.fullScreenOnly;
-  const label = closes ? "Close" : panel.open ? "Hide panel" : "Show panel";
+  const label = closes ? "Close panel" : panel.open ? "Hide panel" : "Show panel";
   const offer = (run: () => void) => (disabled ? undefined : run);
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, offer(panel.onToggle));
   return (
@@ -2144,8 +2144,8 @@ export function SidePanel({
 }
 
 /**
- * The frame every side panel stands in, the task's, an agent's page's, the
- * Inbox's, and the Issues page's peek: the panel's pane at the window's
+ * The frame every side panel stands in, the task's, an agent's page's, and
+ * the Inbox's: the panel's pane at the window's
  * right, its width the window's, over its top row of `tabs`, the chosen
  * tab's `actions`, and its full-screen button, with what it shows under the
  * row and its resize edge at its left. Full screen, it covers what it stood
@@ -2155,7 +2155,7 @@ export function SidePanel({
  * screen it has neither the button nor the edge, and keeps no room. It plays its own exits (`playExit`);
  * its arrival is played by the pane motion around it (`pane-motion.tsx`).
  */
-export function PanelFrame({
+function PanelFrame({
   panel,
   leaving,
   onLeft,

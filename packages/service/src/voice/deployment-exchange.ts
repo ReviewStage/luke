@@ -5,6 +5,7 @@ import { FetchHttpClient } from "effect/http";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { BRAIN_HOST_TURN } from "../agents/brain-host/bounds.js";
 import {
+  EVE_MOUNT,
   type EveSessions,
   type EveSessionsComposer,
   eveSessionsComposer,
@@ -95,6 +96,7 @@ function deploymentEve(
     compose<SpokenTurn>({
       origin,
       caller: { secret: deploymentSecret, account: accountId },
+      mount: EVE_MOUNT.TASKS,
     });
 }
 

@@ -7,8 +7,8 @@ import type { PlanEditor } from "@luke/features/task-wire";
 import { IDLE_TASKS_VIEW, TASK_WORK_STATE } from "@luke/features/tasks-view";
 import { TRANSCRIPT_PART_TYPE } from "@luke/features/transcript-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
-import { AGENT_ACT_KIND } from "@luke/host/contract";
+import { ACT_KIND } from "@luke/host/acts";
+import { AGENT_ACT_KIND, AGENT_INBOX_ACT_KIND } from "@luke/host/contract";
 import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@luke/live";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
@@ -25,10 +25,10 @@ import { afterEach, beforeAll, test } from "vitest";
 import { taskCards } from "../desktop/side-panel.js";
 import { MemberDirectory } from "../member-directory.js";
 import {
+  type AnyAct,
   fakeActPort,
   fakeActPortAnswering,
   fakeAppBridge,
-  fakeAppBridgeCalls,
   refusedOnPort,
   type SentPortAct,
 } from "../testing/app-bridge.js";
@@ -50,9 +50,9 @@ import { TaskCall } from "./task-call.js";
 import { TOOL_TARGET, type ToolTarget } from "./tool-call-model.js";
 import { workRowsOf } from "./work-model.js";
 
-/** Whether a port kind is one of the agents' reads, which a window with no agents is refused as `app:act` refused it. */
+/** Whether a port kind is one of the agents' reads, their Inbox's, or the chat's, which a window with no agents is refused. */
 const isAgentRead = (kind: string): boolean =>
-  Object.values<string>(AGENT_ACT_KIND).includes(kind) &&
+  Object.values<string>({ ...AGENT_ACT_KIND, ...AGENT_INBOX_ACT_KIND }).includes(kind) &&
   kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN;
 
 /** The Call tab as a test draws it: what it is given over a task with no brain turn, which reads no older page and opens nothing. */
@@ -433,10 +433,7 @@ function seen(ref: Element | null): readonly (string | undefined)[] | undefined 
 }
 
 test("a teammate's call is headed with their face and name, their lines carry it and Luke's carry his, and the reader's own call names nobody", async () => {
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS) });
   const drawn = async (caller: PlanEditor | undefined) => {
     const page = mounted(
@@ -536,14 +533,7 @@ test("on the Call tab, a chat call's row opens the task's Chat while the account
 
 test("Luke's working line ends on a Stop that takes the stop key's action on the open task, and a finished turn draws none", async () => {
   handState({}, { tasks: { ...IDLE_TASKS_VIEW, activeTaskId: "task-open" } });
-  const sent: (Act | SentPortAct)[] = [];
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  const sent: (AnyAct | SentPortAct)[] = [];
   fakeActPortAnswering((request) => {
     sent.push(request);
     if (isAgentRead(request.kind)) return Promise.reject(refusedOnPort("Not here."));

@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, type Act } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { experimentsOn } from "@luke/settings/testing";
 import { factoryWorldOf } from "@luke/ui/testing";
@@ -54,11 +54,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: (request: Act) => {
-      throw new Error(`unexpected ${request.kind}`);
-    },
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.FACTORY_WORLD]: (payload) => {
       asked.push(payload.workspaceId);

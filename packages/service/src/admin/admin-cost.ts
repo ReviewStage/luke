@@ -36,15 +36,13 @@ import {
 } from "./admin-cost-wire.js";
 import { lastNDayKeys, sum } from "./admin-metrics.js";
 import {
-  ADMIN_ERROR,
-  ADMIN_HTTP_STATUS,
   type AdminMetricsScope,
   type AdminMetricsWindow,
+  type AdminWindowedQuery,
   adminMetricsScope,
   adminMetricsWindow,
-  errorResponse,
-  jsonResponse,
 } from "./http.js";
+import { ADMIN_REFUSAL, type AdminRefusal } from "./http-effect.js";
 import { unavailableSeam } from "./seam.js";
 
 /** One group of turns' summed counts: one UTC day, one account, one source, one model. */
@@ -380,7 +378,7 @@ export function buildAdminCost(input: {
 }
 
 export interface AdminCostOptions<R> {
-  request: Request;
+  query: AdminWindowedQuery;
   readCost: (
     now: number,
     scope: AdminMetricsScope,
@@ -395,18 +393,15 @@ export interface AdminCostOptions<R> {
  */
 export function handleAdminCost<R>(
   options: AdminCostOptions<R>,
-): Effect.Effect<Response, never, R> {
-  const { request } = options;
+): Effect.Effect<AdminCost, AdminRefusal, R> {
+  const { query } = options;
 
-  const windowDays = adminMetricsWindow(request.url);
-  if (windowDays === undefined) {
-    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
-  }
+  const windowDays = adminMetricsWindow(query.window);
+  if (windowDays === undefined) return Effect.fail(ADMIN_REFUSAL.INVALID_WINDOW);
 
   return Effect.flatMap(Clock.currentTimeMillis, (now) =>
-    options.readCost(now, adminMetricsScope(request.url), windowDays).pipe(
-      Effect.map((cost) => jsonResponse(ADMIN_HTTP_STATUS.OK, cost)),
-      Effect.catchCause((cause) => unavailableSeam("admin cost read failed", cause)),
-    ),
+    options
+      .readCost(now, adminMetricsScope(query.scope), windowDays)
+      .pipe(Effect.catchCause((cause) => unavailableSeam("admin cost read failed", cause))),
   );
 }

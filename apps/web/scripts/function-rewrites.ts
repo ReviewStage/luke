@@ -13,7 +13,8 @@ import {
 
 /**
  * `--write` regenerates the committed table of `/api/` rewrites from the
- * routes under `server/routes/`, then assembles `vercel.json` from the table;
+ * routes under `server/routes/` and the functions, ending in the fallback onto
+ * the hosted oRPC route, then assembles `vercel.json` from the table;
  * `--check` writes nothing and exits non-zero when the table is not what the
  * routes generate or `vercel.json`'s `/api/` entries are not the table, in
  * its order.

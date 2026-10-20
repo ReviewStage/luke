@@ -23,7 +23,7 @@ export function actProcedure(sentence: string) {
 
 /**
  * A payload's schema as an act reads it: whole, a key the schema does not
- * name refused rather than dropped, as `app:act` read every payload. The
+ * name refused rather than dropped. The
  * extension above reads an Effect Schema with Effect's default parse
  * options, which drop such a key; a schema that already carries its
  * Standard Schema validation keeps it, so this one is converted first, on a

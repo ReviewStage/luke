@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NodeChildProcessSpawner, NodeFileSystem, NodePath } from "@effect/platform-node";
 import { loopbackConsent } from "@luke/credentials/node";
-import type { HostSeams } from "@luke/host";
+import type { SecretCipher as SecretCipherSeam } from "@luke/host";
 import {
   ALL_HOST_PLATFORM_CONCERNS,
   AppIdentity,
@@ -29,7 +29,7 @@ import type { DesktopConfig } from "./desktop-config";
 interface HostSeamDependencies {
   config: DesktopConfig;
   /** The client's own credential protection; the host encrypts nothing without it. */
-  cipher: HostSeams["cipher"];
+  cipher: SecretCipherSeam;
 }
 
 /** Every seam tag this process answers for, each stood up from what the launch already established. */

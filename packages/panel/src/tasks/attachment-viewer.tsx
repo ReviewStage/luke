@@ -20,13 +20,19 @@ import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback.js";
 import { Tooltip } from "../tooltip.js";
 import { CodeLinesView, type LinesLook } from "./code-lines.js";
 import { FileTypeIcon } from "./file-type-icon.js";
-import { type ImageZoom, useImageZoom } from "./use-image-zoom.js";
+import {
+  IMAGE_OPENING,
+  type ImageOpening,
+  type ImageZoom,
+  useImageZoom,
+} from "./use-image-zoom.js";
 
 /**
  * attachment-viewer.tsx -- a file on a message opened over the window, as Quick Look opens one: an image fitted to the window, a text file's numbered lines, or any other file by its icon with a way to save it.
  *
- * A picture opens fitted to the window and zooms as Preview's does: a pinch
- * or a Control-scroll about the pointer, a press to its own pixels there
+ * A picture opens fitted to the window, or at its own pixels where the place
+ * opening it asks, and zooms as Preview's does: a pinch, a trackpad's or two
+ * fingers', or a Control-scroll about the pointer, a press to its own pixels there
  * and back, the header's buttons or a bare `=`, `-`, and `0`; zoomed, it is
  * moved by a drag or a two-finger scroll (`./use-image-zoom.ts`).
  *
@@ -183,6 +189,7 @@ export function AttachmentViewer({
   onClose,
   action,
   note,
+  opening = IMAGE_OPENING.FITTED,
 }: {
   files: readonly FileChip[];
   at: number;
@@ -193,10 +200,12 @@ export function AttachmentViewer({
   action?: ViewerAction | undefined;
   /** A quiet line the place says of the file shown, after its size, such as who last edited a plan's picture; none where it says nothing. */
   note?: React.ReactNode;
+  /** How a picture is first drawn: fitted to the window, or at its own pixels, as a diagram too fine to read fitted opens. */
+  opening?: ImageOpening;
 }): React.JSX.Element | null {
   const titleId = useId();
   const file = files[at];
-  const zoom = useImageZoom(file?.name ?? "", file?.url ?? "");
+  const zoom = useImageZoom(file?.name ?? "", file?.url ?? "", opening);
 
   if (file === undefined) return null;
   const base64 = chipBase64(file);
@@ -223,7 +232,11 @@ export function AttachmentViewer({
   // buttons from there.
   return (
     <Dialog size={DIALOG_SIZE.MEDIA} labelledBy={titleId} onDismiss={onClose} onKeyDown={walkKey}>
-      <div className="attachment-viewer ph-no-capture" data-view={attachmentView(file)}>
+      <div
+        className="attachment-viewer ph-no-capture"
+        data-view={attachmentView(file)}
+        data-opening={opening}
+      >
         <header className="attachment-viewer-header">
           <FileTypeIcon name={file.name} />
           <h2 id={titleId} className="attachment-viewer-title">

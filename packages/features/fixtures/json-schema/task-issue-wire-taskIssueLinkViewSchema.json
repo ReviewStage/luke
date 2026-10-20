@@ -1,0 +1,99 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
+    },
+    "provider": {
+      "type": "string",
+      "enum": [
+        "linear",
+        "github"
+      ]
+    },
+    "externalId": {
+      "type": "string"
+    },
+    "key": {
+      "type": "string"
+    },
+    "url": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "repository": {
+      "type": "string"
+    },
+    "number": {
+      "type": "number"
+    },
+    "relation": {
+      "type": "string",
+      "enum": [
+        "closes",
+        "part_of"
+      ]
+    },
+    "standing": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": [
+                "github"
+              ]
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "open",
+                "closed",
+                "not-planned"
+              ]
+            }
+          },
+          "required": [
+            "provider",
+            "state"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string",
+              "enum": [
+                "linear"
+              ]
+            },
+            "state": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "provider",
+            "state"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "provider",
+    "externalId",
+    "key",
+    "url",
+    "title",
+    "relation"
+  ],
+  "additionalProperties": false
+}

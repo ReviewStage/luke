@@ -759,6 +759,7 @@ const CALL_ICON = {
   [CALL_KIND.INBOX_CLOSE]: InboxIcon,
   [CALL_KIND.INBOX_READ]: InboxIcon,
   [CALL_KIND.INBOX_REPLY]: InboxIcon,
+  [CALL_KIND.INBOX_WITHDRAW]: InboxIcon,
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,

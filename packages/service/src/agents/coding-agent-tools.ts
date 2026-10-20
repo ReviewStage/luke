@@ -24,6 +24,7 @@ import {
   turnStoppedUnderReached,
 } from "@luke/database/models/message-reads";
 import { readPageById } from "@luke/database/models/plan-pages";
+import { listTaskIssues, type TaskIssueLink } from "@luke/database/models/task-issue-store";
 import { listTaskSections, writeTaskSections } from "@luke/database/models/task-section-store";
 import {
   listTasks,
@@ -47,7 +48,11 @@ import {
   contextWindowSchema,
   disabledServersSchema,
 } from "@luke/features/coding-agent-wire";
-import { githubRepositoryFullNameSchema } from "@luke/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  type GitHubAccess,
+  githubRepositoryFullNameSchema,
+} from "@luke/features/github-repositories-wire";
 import { MENTION_KIND } from "@luke/features/mention-link";
 import { modelLabel } from "@luke/features/model-label";
 import { type ModelChoice, modelChoiceSchema } from "@luke/features/models-wire";
@@ -88,6 +93,7 @@ import {
   hostedStoreOrUnavailable,
 } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
+import type { WorkspaceLinearConnect } from "../integrations/integration-connect.js";
 import {
   ModelCatalog,
   ModelChoiceRefused,
@@ -105,6 +111,16 @@ import { codingAgentFailureOf, codingAgentStatusOf, lineAwaitsTurn } from "./cod
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { cancelledTurn, standsStopped, standingsOf as turnStandingsOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
+import {
+  issueChangesOf,
+  issueChangesStand,
+  issuesAnswered,
+  TASK_ISSUE_REFUSAL,
+  TASK_ISSUES_TO_LINK,
+  TASK_ISSUES_TO_RELATE,
+  TASK_ISSUES_TO_UNLINK,
+  writeIssueChanges,
+} from "./task-issue-tools.js";
 import {
   AGENT_LIST_INPUT,
   type AgentTask,
@@ -295,8 +311,8 @@ export const UPDATE_TASK_REFUSAL = {
     `Not run: name the task by the id ${AGENT_TOOL.LIST_TASKS} or ${AGENT_TOOL.LIST_AGENTS} answered, ` +
     `and at least one change: a name of at most ${TASK_BOUNDS.MAX_NAME_CHARS} characters, a ` +
     "repository as owner/name or null, archived, pinned, a sectionId or null, a status " +
-    `(${Object.values(TASK_STATUS).join(", ")}), or a priority ` +
-    `(${Object.values(TASK_PRIORITY).join(", ")}).`,
+    `(${Object.values(TASK_STATUS).join(", ")}), a priority ` +
+    `(${Object.values(TASK_PRIORITY).join(", ")}), or issues to link, unlink, or relate.`,
   OWN_TASK:
     "Not archived: that is the task you work on, and you do not archive it yourself; say you are " +
     "done, and the developer archives it. Its other changes are yours to make without archived.",
@@ -305,8 +321,7 @@ export const UPDATE_TASK_REFUSAL = {
     `${AGENT_TOOL.LIST_TASKS} names them, the archived ones too with includeArchived.`,
   ARCHIVED:
     "Not changed: that task is archived, so it takes no new name, repository, status, priority, " +
-    "or section; bring " +
-    "it back in the same call with archived false, or leave it as it is.",
+    "section, or issue; bring it back in the same call with archived false, or leave it as it is.",
   AGENTS_WORKING:
     "Not archived: an agent on that task is still starting or working, and archiving the task " +
     "archives its agents with it, which would stop a turn no one gets back. Wait until they are " +
@@ -450,12 +465,13 @@ export interface CodingAgentCall {
   readonly summaryModel?: SummaryModelOf | undefined;
 }
 
-/** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, and the catalog a start's choice is checked against. */
+/** What a message or a start reaches: the store, GitHub through the App on the member's standing, the network to eve, the catalog a start's choice is checked against, and the workspace's Linear a task's issue is read through. */
 export type CodingAgentToolServices =
   | DatabaseServices
   | HttpClient.HttpClient
   | GitHubApp
-  | ModelCatalog;
+  | ModelCatalog
+  | WorkspaceLinearConnect;
 
 const AGENT_ID = describeWire(
   wireUuidSchema,
@@ -650,6 +666,9 @@ const UPDATE_TASK_INPUT = Schema.Struct({
         "under Tasks.",
     ),
   ),
+  linkIssues: Schema.optionalKey(TASK_ISSUES_TO_LINK),
+  unlinkIssues: Schema.optionalKey(TASK_ISSUES_TO_UNLINK),
+  relateIssues: Schema.optionalKey(TASK_ISSUES_TO_RELATE),
 });
 
 const readTaskUpdate = Schema.decodeUnknownResult(UPDATE_TASK_INPUT);
@@ -775,18 +794,19 @@ export const UPDATE_TASK_TOOL = {
   description:
     "Change a task of your workspace by its id, as the developer's own task menu would, on behalf " +
     "of the developer you work for: rename it, set or clear its repository, set where it stands " +
-    "(its status) or how much it matters (its priority), pin or unpin it in " +
-    "their sidebar, or archive it or bring it back; name at least one change, and several go in " +
-    "one call. An archived task leaves the sidebar and every list but the archived ones, its plan " +
-    "takes no edit, and its agents take no message and start no new turn, while everything on it " +
-    "is kept and any member can bring it back. Like the menu, an archive asks no one and stops no " +
+    "(its status) or how much it matters (its priority), pin or unpin it in their sidebar, " +
+    "archive it or bring it back, or link, unlink, or relate its GitHub or Linear issues, each " +
+    "issue to link read from its provider first; name at least one change, and several go in " +
+    "one call. An archived task leaves the sidebar and every list but the archived ones, its " +
+    "plan takes no edit, and its agents take no message and start no new turn, while " +
+    "everything on it is kept and any member can bring it back. Like the menu, an archive asks no one and stops no " +
     "agent: one still working on the task finishes the turn it is on. Archive a task whose work is " +
     "done, such as one whose pull requests merged, or one the developer asked you to clean up; " +
     "never a teammate's task still in use unless the developer asked for it. The task you work on " +
     "yourself is never archived, though its other changes are yours to make. Find an archived " +
     `task with ${AGENT_TOOL.LIST_TASKS} and includeArchived. Answers \`accepted\` with the task as ` +
-    "it now stands, `already` true where every change named already stood, or `rejected` and " +
-    "why. Then say which tasks you changed and how.",
+    "it now stands, the issues it links where the call changed them, `already` true where every " +
+    "change named already stood, or `rejected` and why. Then say which tasks you changed and how.",
   inputSchema: UPDATE_TASK_INPUT,
 } as const;
 
@@ -1787,6 +1807,7 @@ const taskUpdateAnswer = (
   task: StoredTask["task"],
   already: boolean,
   section: TaskSectionReading | null | undefined,
+  issues?: readonly TaskIssueLink[],
 ) =>
   Effect.map(
     workspaceNamingOf(userId, task.workspaceId),
@@ -1803,6 +1824,7 @@ const taskUpdateAnswer = (
         ...(section === undefined
           ? undefined
           : { section: section === null ? null : { ...section } }),
+        ...(issues === undefined ? undefined : { issues: issuesAnswered(issues) }),
       },
       already,
     }),
@@ -1861,15 +1883,34 @@ function repositoryRefusalWords(refusal: HostedRefusal): string {
     : CODING_AGENT_TOOL_REFUSAL.STORE;
 }
 
-/** A repository confirmed as the menu's PATCH confirms one, through the workspace's installation, or the refusal's words; none clears it. */
-export const reachedRepository = (workspaceId: string, repository: string | null) =>
+/** A repository as a task records it: its name as GitHub spells it, none where it is cleared, and how it was reached. */
+interface RecordedRepository {
+  readonly repository: string | null;
+  readonly githubAccess: GitHubAccess;
+}
+
+/**
+ * A repository confirmed as the menu's PATCH confirms one, through the
+ * workspace's installation or else the member's own token, or the refusal's
+ * words; none clears it.
+ */
+export const reachedRepository = (
+  workspaceId: string,
+  repository: string | null,
+  member: string,
+) =>
   repository === null
-    ? Effect.succeed<Result.Result<string | null, string>>(Result.succeed(null))
+    ? Effect.succeed<Result.Result<RecordedRepository, string>>(
+        Result.succeed({ repository: null, githubAccess: GITHUB_ACCESS.APP }),
+      )
     : Effect.map(
-        Effect.result(workspaceRepository(workspaceId, repository)),
-        (reached): Result.Result<string | null, string> =>
+        Effect.result(workspaceRepository(workspaceId, repository, member)),
+        (reached): Result.Result<RecordedRepository, string> =>
           Result.isSuccess(reached)
-            ? Result.succeed(reached.success.fullName)
+            ? Result.succeed({
+                repository: reached.success.repository.fullName,
+                githubAccess: reached.success.access,
+              })
             : Result.fail(repositoryRefusalWords(reached.failure)),
       );
 
@@ -1890,8 +1931,10 @@ export function runUpdateTask(
   if (Result.isFailure(asked)) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
-  const { taskId, sectionId, ...changes } = asked.success;
-  if (Object.keys(changes).length === 0 && sectionId === undefined) {
+  const { taskId, sectionId, linkIssues, unlinkIssues, relateIssues, ...changes } = asked.success;
+  const issuesAsked = { linkIssues, unlinkIssues, relateIssues };
+  const relinking = [linkIssues, unlinkIssues, relateIssues].some((each) => each !== undefined);
+  if (Object.keys(changes).length === 0 && sectionId === undefined && !relinking) {
     return Effect.succeed(agentToolRejected(UPDATE_TASK_REFUSAL.UNREADABLE));
   }
   const { caller } = call;
@@ -1921,16 +1964,44 @@ export function runUpdateTask(
       const repository =
         changes.repository === undefined
           ? undefined
-          : yield* reachedRepository(workspace.value, changes.repository);
+          : yield* reachedRepository(workspace.value, changes.repository, userId);
       if (repository !== undefined && Result.isFailure(repository)) {
         return agentToolRejected(repository.failure);
       }
       // A repository is compared as GitHub spells it, which is how the task holds it.
       const asWritten = {
         ...changes,
-        ...(repository === undefined ? undefined : { repository: repository.success }),
+        ...(repository === undefined
+          ? undefined
+          : {
+              repository: repository.success.repository,
+              githubAccess: repository.success.githubAccess,
+            }),
       };
-      const already = changesStand(read.value.task, asWritten) && (placing?.success.stands ?? true);
+      // Every issue to link is read from its provider before anything is written; `#N` names a link
+      // of the repository the task stands on now, and an issue to link of the one the call leaves it on.
+      const relinked = relinking
+        ? yield* issueChangesOf(
+            userId,
+            workspace.value,
+            read.value.issueLinks,
+            {
+              standing: read.value.task.repository,
+              changed:
+                repository === undefined
+                  ? read.value.task.repository
+                  : repository.success.repository,
+            },
+            issuesAsked,
+          )
+        : undefined;
+      if (relinked !== undefined && Result.isFailure(relinked)) {
+        return agentToolRejected(relinked.failure);
+      }
+      const already =
+        changesStand(read.value.task, asWritten) &&
+        (placing?.success.stands ?? true) &&
+        (relinked === undefined || issueChangesStand(relinked.success));
       // Note that the task's agents are archived with it, so one still at work, read under its
       // conversation's lock, refuses the archive rather than being stopped from here.
       const guard = changes.archived === true ? standsStopped : undefined;
@@ -1955,6 +2026,10 @@ export function runUpdateTask(
           });
           if (Option.isNone(placed)) return yield* Effect.fail(new TaskPlaceRefused());
         }
+        // The task's links change after it does, so a call that brings it back relinks it too.
+        if (Option.isSome(task) && relinked !== undefined) {
+          yield* writeIssueChanges(userId, taskId, relinked.success);
+        }
         return task;
       });
       const changed = yield* Effect.flatMap(SqlClient.SqlClient, (client) =>
@@ -1972,6 +2047,9 @@ export function runUpdateTask(
         Effect.catchTag("TaskPlaceRefused", () =>
           Effect.succeed(Result.fail(UPDATE_TASK_REFUSAL.NO_SECTION)),
         ),
+        Effect.catchTag("TaskIssuesFull", () =>
+          Effect.succeed(Result.fail(TASK_ISSUE_REFUSAL.FULL)),
+        ),
       );
       if (Result.isFailure(changed)) return agentToolRejected(changed.failure);
       if (Option.isNone(changed.success)) return agentToolRejected(UPDATE_TASK_REFUSAL.NO_TASK);
@@ -1980,6 +2058,7 @@ export function runUpdateTask(
         changed.success.value,
         already,
         placing?.success.section,
+        relinking ? yield* listTaskIssues(userId, taskId) : undefined,
       );
     }),
   );

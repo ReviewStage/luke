@@ -11,9 +11,15 @@
  */
 
 import { RegistryContext } from "@effect/atom-react/RegistryContext";
+import {
+  eventWithoutAccessTokens,
+  SPANS_NAMING_ACCESS_TOKENS,
+  spanWithoutAccessTokens,
+  withoutAccessTokens,
+} from "@luke/features/sentry-breadcrumbs";
 import { SENTRY_TRACES_SAMPLE_RATE, sentryTracesRequest } from "@luke/features/sentry-tracing";
-import { ACT_PORT, type AppBridge } from "@luke/host/bridge";
-import { installActPort, installAppBridge } from "@luke/panel/app-bridge";
+import { ACT_PORT, type PreloadBridge } from "@luke/host/bridge";
+import { actPort, installActPort, installAppBridge, openPushStream } from "@luke/panel/app-bridge";
 import { installAppPlatform } from "@luke/panel/app-platform";
 import { rendererRegistry } from "@luke/panel/renderer-runtime";
 import { appStateFirstRead } from "@luke/panel/use-app-state";
@@ -21,11 +27,6 @@ import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import type { ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import {
-  eventWithoutAccessTokens,
-  transactionWithoutAccessTokens,
-  withoutAccessTokens,
-} from "#shared/sentry-breadcrumbs";
 import { DESKTOP_PLATFORM } from "./desktop-platform";
 
 /**
@@ -40,15 +41,18 @@ export function mountWindow(surface: ReactNode): void {
   // through `appBridge()`, which reads what is installed here before anything
   // below subscribes or draws. What only the shell can do is answered beside
   // it, through `appPlatform()`, by the desktop's own acts and events.
-  const preloadWindow: Window & { readonly luke?: AppBridge } = window;
+  const preloadWindow: Window & { readonly luke?: PreloadBridge } = window;
   if (preloadWindow.luke === undefined) throw new Error("The preload's bridge is missing");
-  installAppBridge(preloadWindow.luke);
   // The window's act port, as oRPC's Electron adapter opens one: this page
   // keeps one end and posts the other to itself, where the preload takes it
   // to main (`apps/desktop/src/main/bridge-host.ts`).
   const actPortChannel = new MessageChannel();
   window.postMessage(ACT_PORT.REQUEST, "*", [actPortChannel.port2]);
   installActPort(actPortChannel.port1);
+  // What main pushes this window arrives on one stream of that port, opened
+  // now and heard through the bridge's own listeners beside the preload's calls.
+  const pushes = openPushStream(actPort());
+  installAppBridge({ ...preloadWindow.luke, ...pushes.listeners });
   installAppPlatform(DESKTOP_PLATFORM);
 
   // Every window's tracing, as Sentry's Electron guide sets up a renderer;
@@ -62,7 +66,8 @@ export function mountWindow(surface: ReactNode): void {
     tracesSampleRate: SENTRY_TRACES_SAMPLE_RATE,
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
-    beforeSendTransaction: transactionWithoutAccessTokens,
+    ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
+    beforeSendSpan: Sentry.withStreamedSpan(spanWithoutAccessTokens),
   });
 
   const rootElement = document.getElementById("root");
@@ -71,6 +76,9 @@ export function mountWindow(surface: ReactNode): void {
 
   void (async () => {
     try {
+      // Main listens on the push stream before the document is read, so a
+      // document pushed while the read is in flight is heard, not lost.
+      await pushes.opened;
       await Effect.runPromise(appStateFirstRead);
     } catch (error) {
       console.error("The window's state could not be read; nothing is drawn.", error);

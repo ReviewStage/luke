@@ -51,7 +51,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, type HostedContext, hosted } from "../orpc/base.js";
+import { accountMiddleware, type HostedContext, hosted } from "../orpc/base.js";
 import { HOSTED_TOOL_SET } from "../tasks/brain-tool-set.js";
 import {
   BRAIN_POLL,
@@ -62,7 +62,7 @@ import {
   brainTurnsPage,
   brainWorkerSession,
 } from "../tasks/brain-transcript.js";
-import { MAXIMUM_ATTACHMENTS_BODY_BYTES } from "./coder-host/start.js";
+import type { EveTypedTurn } from "./brain-host/eve-sessions.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { type EveReach, eveFor, summaryOf } from "./coder-host/stop.js";
 import { CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -77,16 +77,7 @@ import {
   titleMayLand,
   transcriptPast,
 } from "./coder-host/transcript.js";
-import {
-  MAXIMUM_CHAT_WRITE_BODY_BYTES,
-  readWorkspaceChat,
-  workspaceOf,
-  writeWorkspaceChat,
-} from "./workspace-chat.js";
-
-/** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
-const MAXIMUM_MESSAGE_BODY_BYTES =
-  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 1_024;
+import { readWorkspaceChat, workspaceOf, writeWorkspaceChat } from "./workspace-chat.js";
 
 /** oRPC's own code for an input its schema refused. */
 const ORPC_BAD_REQUEST = "BAD_REQUEST";
@@ -256,11 +247,10 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
 
     send: hosted.messages
       .use(accountMiddleware(seams.resolveUserId))
-      .use(bodyLimit(MAXIMUM_MESSAGE_BODY_BYTES))
       .use(tooLongMiddleware)
       .send.effect(function* ({ input, context }) {
         const { agent } = yield* reachedAgent(context.userId, input.params.id);
-        const eve = yield* eveFor(seams, context.request, context.userId);
+        const eve = yield* eveFor<EveTypedTurn>(seams, context.request, context.userId);
         yield* steerCodingAgent(eve, writer, context.userId, agent, {
           ...input.body,
           sender: { kind: MESSAGE_SENDER.MEMBER, userId: context.userId },
@@ -365,7 +355,6 @@ export function messagesProcedures(seams: MessagesProcedureSeams) {
 
     chatWrite: hosted.messages
       .use(accountMiddleware(seams.resolveUserId))
-      .use(bodyLimit(MAXIMUM_CHAT_WRITE_BODY_BYTES))
       .chatWrite.effect(function* ({ input, context }) {
         const workspaceId = yield* workspaceOf(input.query.workspaceId);
         return yield* writeWorkspaceChat(seams, context.userId, workspaceId, input.body);

@@ -66,13 +66,33 @@ export interface AppPlatform {
    * Mac app, leaves this out.
    */
   notificationsGrantor?(): NotificationsGrantor;
+  /**
+   * Asks the shell's grantor for permission where it was never answered,
+   * called in the press's own handler before Settings' test leaves for the
+   * host, because a browser such as Safari prompts only for an ask made
+   * inside the press. A shell whose grant is macOS's, the Mac app, leaves
+   * this out.
+   */
+  askNotificationsPermission?(): void;
+  /**
+   * Hears the ask standing each time a page comes to hold unsaved work, and
+   * nothing once none does, so a shell that can leave the page by ways of its
+   * own, a browser tab closed, reloaded, or sent elsewhere, asks first while
+   * there is work to lose and only then. `ask` takes the way out once the
+   * developer says to leave. The Mac app, whose window's close is main's,
+   * leaves this out.
+   */
+  unsavedWork?(ask: ((leave: () => void) => void) | undefined): void;
 }
 
 let installed: AppPlatform | undefined;
 
-/** Installs what this window's shell can do; its root does this once, before anything is drawn. */
-export function installAppPlatform(platform: AppPlatform): void {
+/** Installs what this window's shell can do; its root does this once, before anything is drawn, and calls what it answers as it closes. */
+export function installAppPlatform(platform: AppPlatform): () => void {
   installed = platform;
+  return () => {
+    if (installed === platform) installed = undefined;
+  };
 }
 
 /** What this window's root installed. */

@@ -37,8 +37,13 @@ import {
   type TasksEditAnswer,
   type TasksFileAnswer,
   type TasksGitHubDisconnectAnswer,
+  type TasksGitHubIssuesAnswer,
   type TasksGitHubPageAnswer,
   type TasksIssueAnswer,
+  type TasksIssueLinkAnswer,
+  type TasksIssueLinksAnswer,
+  type TasksIssueRelateAnswer,
+  type TasksIssueUnlinkAnswer,
   type TasksLinearIssuesAnswer,
   type TasksMoveAnswer,
   type TasksPageAnswer,
@@ -69,7 +74,12 @@ import {
   tasksCommentsParamsSchema,
   tasksEditParamsSchema,
   tasksFileParamsSchema,
+  tasksGitHubIssuesParamsSchema,
+  tasksIssueLinkParamsSchema,
+  tasksIssueLinksParamsSchema,
   tasksIssueParamsSchema,
+  tasksIssueRelateParamsSchema,
+  tasksIssueUnlinkParamsSchema,
   tasksLinearIssuesParamsSchema,
   tasksMessagesParamsSchema,
   tasksMoveParamsSchema,
@@ -112,9 +122,11 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@luke/gateway";
+import { catchAllButInterrupt } from "@luke/runtime/effect";
 import { isRecord, unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
 import {
+  Cause,
   Clock,
   Data,
   Duration,
@@ -308,6 +320,9 @@ const WORKSPACES_READ_EVERY = Duration.minutes(1);
 /** A GitHub page asked behind a closed gate, or of a service that did not answer, which opens nothing. */
 const GITHUB_PAGE_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
 
+/** A call on a task's linked issues behind a closed gate, or of a service that did not answer. */
+const TASK_ISSUES_UNANSWERED = { failure: TASK_CALL_FAILURE.UNANSWERED } as const;
+
 /** A workspace call behind a closed gate, which never reaches the service. */
 const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
 
@@ -338,6 +353,11 @@ export type TasksClient = Pick<
   | "readRepositorySkills"
   | "readRepositoryPullRequest"
   | "readRepositoryIssue"
+  | "readRepositoryIssues"
+  | "readIssueLinks"
+  | "linkIssue"
+  | "relateIssue"
+  | "unlinkIssue"
   | "readRevisions"
   | "readRevision"
   | "readPages"
@@ -385,7 +405,7 @@ export type TasksClient = Pick<
 export type TasksConversationClient = Pick<HostedCodingAgentClient, "taskMessages">;
 
 export interface TasksDependencies {
-  kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "report"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: TasksClient;
   conversations: TasksConversationClient;
@@ -1388,6 +1408,69 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const answer = yield* served(client.readRepositoryIssue(place, number));
         return carried<TasksIssueAnswer>(answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED });
       }),
+    // A repository's issues are answered as an issue is: to the picker that asked, and held nowhere.
+    [GATEWAY_METHOD.TASKS_GITHUB_ISSUES]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksGitHubIssuesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid(
+            "reading a repository's issues names a workspace, its repository, and words or a number where it asks for some",
+          );
+        }
+        if (!gate()) {
+          return carried<TasksGitHubIssuesAnswer>({ failure: TASK_CALL_FAILURE.UNANSWERED });
+        }
+        const { workspaceId, repository, query, number } = read.success;
+        const ask = number !== undefined ? { number } : query !== undefined ? { query } : {};
+        const answer = yield* served(client.readRepositoryIssues({ workspaceId, repository }, ask));
+        return carried<TasksGitHubIssuesAnswer>(
+          answer ?? { failure: TASK_CALL_FAILURE.UNANSWERED },
+        );
+      }),
+    // A task's linked issues, and each change of them, are answered to the
+    // page that asked and held nowhere: the page draws what it was answered,
+    // and reads again after each change.
+    [GATEWAY_METHOD.TASKS_ISSUE_LINKS]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksIssueLinksParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("reading a task's issues names the task");
+        if (!gate()) return carried<TasksIssueLinksAnswer>(TASK_ISSUES_UNANSWERED);
+        return carried<TasksIssueLinksAnswer>(
+          yield* served(client.readIssueLinks(read.success.taskId)),
+        );
+      }),
+    [GATEWAY_METHOD.TASKS_ISSUE_LINK]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksIssueLinkParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("linking an issue names the task and the issue");
+        }
+        if (!gate()) return carried<TasksIssueLinkAnswer>(TASK_ISSUES_UNANSWERED);
+        const { taskId, issue } = read.success;
+        return carried<TasksIssueLinkAnswer>(yield* served(client.linkIssue(taskId, issue)));
+      }),
+    [GATEWAY_METHOD.TASKS_ISSUE_RELATE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksIssueRelateParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("relating an issue names the task, the link, and its keyword");
+        }
+        if (!gate()) return carried<TasksIssueRelateAnswer>(TASK_ISSUES_UNANSWERED);
+        const { taskId, linkId, relation } = read.success;
+        return carried<TasksIssueRelateAnswer>(
+          yield* served(client.relateIssue(taskId, linkId, relation)),
+        );
+      }),
+    [GATEWAY_METHOD.TASKS_ISSUE_UNLINK]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksIssueUnlinkParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("unlinking an issue names the task and the link");
+        }
+        if (!gate()) return carried<TasksIssueUnlinkAnswer>(TASK_ISSUES_UNANSWERED);
+        const { taskId, linkId } = read.success;
+        return carried<TasksIssueUnlinkAnswer>(yield* served(client.unlinkIssue(taskId, linkId)));
+      }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps
     // what it read, and reads again as the task moves on.
@@ -2149,7 +2232,16 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
     // the tasks is an ask's.
     lifetime: Effect.gen(function* () {
       yield* Effect.forkScoped(
-        Effect.forever(Effect.flatMap(Queue.take(codeShows), drawShownCode)),
+        // A showing that dies is reported and dropped, and the next is still drawn.
+        Effect.forever(
+          Effect.flatMap(Queue.take(codeShows), (show) =>
+            catchAllButInterrupt(drawShownCode(show), (cause) =>
+              Effect.sync(() => {
+                kernel.report(`Drawing code a call showed failed: ${Cause.pretty(cause)}`);
+              }),
+            ),
+          ),
+        ),
       );
       yield* Effect.forkScoped(
         Effect.forever(

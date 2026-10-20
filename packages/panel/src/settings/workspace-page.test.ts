@@ -18,11 +18,6 @@ import {
 } from "@luke/features/workspace-wire";
 import {
   ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  type Act,
-  type ActKind,
-  type ActOutcome,
-  type ActResultFor,
   ALREADY_INVITED_REFUSAL,
   WORKSPACE_NOT_PERMITTED_REFUSAL,
 } from "@luke/host/acts";
@@ -30,6 +25,7 @@ import {
   type PortActKind,
   type PortActPayload,
   type PortActResult,
+  TASKS_ACT_KIND,
   WORKSPACE_ACT_KIND,
 } from "@luke/host/contract";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -43,7 +39,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { OpenPersonProvider } from "../person-door.js";
 import { dayAndTimeText } from "../tasks/task-time.js";
-import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  FAKE_ANSWER,
+  type FakeActAnswer,
+  fakeActPort,
+  fakeAppBridge,
+  refusedOnPort,
+} from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import { DESKTOP_CAPABILITIES, handCapabilities } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
@@ -167,23 +170,16 @@ function automationOf(
   return mine === undefined ? summary : { ...summary, mine };
 }
 
-/** One ask of the window, on `app:act` or on its act port. */
-type Asked =
-  | Act
-  | {
-      [Kind in PortActKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
-    }[PortActKind];
+/** One ask of the window on its act port. */
+type Asked = AnyAct;
 
-/** Any answer a kind gives, on either side. */
-type AnswerValue = ActResultFor<ActKind> | PortActResult<PortActKind>;
+/** Any answer a kind gives. */
+type AnswerValue = PortActResult<PortActKind>;
 
-/** What the fake host answers an ask with, on either side. */
-type Answered =
-  | { readonly status: typeof ACT_OUTCOME_STATUS.DONE; readonly value: AnswerValue }
-  | { readonly status: typeof ACT_OUTCOME_STATUS.REFUSED; readonly reason: string }
-  | { readonly status: typeof ACT_OUTCOME_STATUS.UNKNOWN_ACT };
+/** What the fake host answers an ask with. */
+type Answered = FakeActAnswer;
 
-const done = (value: AnswerValue): Answered => ({ status: ACT_OUTCOME_STATUS.DONE, value });
+const done = (value: AnswerValue): Answered => ({ status: FAKE_ANSWER.DONE, value });
 
 /** What the Repositories group reads as the page opens, which a test of another group's acts leaves aside. */
 const MAC_GROUP_READS: ReadonlySet<string> = new Set([
@@ -197,7 +193,7 @@ function answer(request: Asked): Promise<Answered> {
   switch (request.kind) {
     case ACT_KIND.WORKSPACE_MEMBERS_READ:
       if (refuseMembersRead) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." });
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
       }
       if (membersHeld !== undefined) {
         const held = membersHeld;
@@ -209,7 +205,7 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_MEMBER_REMOVE:
       if (refuseRemoval) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
         });
       }
@@ -217,14 +213,14 @@ function answer(request: Asked): Promise<Answered> {
       return Promise.resolve(done(stored));
     case ACT_KIND.WORKSPACE_INVITATIONS_READ: {
       if (refuseInvitationsRead) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." });
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
       }
       const read = invitations;
       const held = firstRead;
       firstRead = undefined;
       const reads = sent.filter((one) => one.kind === ACT_KIND.WORKSPACE_INVITATIONS_READ).length;
       if (refuseLaterReads && reads > 1) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not read." });
+        return Promise.resolve({ status: FAKE_ANSWER.REFUSED, reason: "Could not read." });
       }
       return (held ?? Promise.resolve()).then(() => done(read));
     }
@@ -236,7 +232,7 @@ function answer(request: Asked): Promise<Answered> {
       }
       if (refuseInvitation) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: ALREADY_INVITED_REFUSAL,
         });
       }
@@ -259,11 +255,11 @@ function answer(request: Asked): Promise<Answered> {
         linearConnectHeld = undefined;
         return held.then(() => done(undefined));
       }
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+      return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
     case ACT_KIND.WORKSPACE_GITHUB_CONNECT:
       if (refuseGitHubOpen) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: "Luke could not open your browser.",
         });
       }
@@ -273,7 +269,7 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_RENAME:
       if (refuseRename) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
         });
       }
@@ -281,7 +277,7 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_PHOTO_SET:
       if (refusePhoto) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
         });
       }
@@ -291,7 +287,7 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_MEMBER_ROLE: {
       if (refuseRole) {
         return Promise.resolve({
-          status: ACT_OUTCOME_STATUS.REFUSED,
+          status: FAKE_ANSWER.REFUSED,
           reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
         });
       }
@@ -348,25 +344,26 @@ function answer(request: Asked): Promise<Answered> {
     case ACT_KIND.WORKSPACE_LEAVE:
       return Promise.resolve(done(undefined));
     default:
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+      return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
   }
 }
 
-/** One workspace kind on the act port, answered by `answer`, a refusal as the port's declared error. */
+/** One kind on the act port, answered by `answer`, a refusal as the port's declared error. */
 function onPort(kind: PortActKind) {
   return async (payload: PortActPayload<PortActKind>) => {
     // SAFETY: the port hands each procedure the payload its own kind takes.
     const outcome = await answer({ kind, payload } as Asked);
-    if (outcome.status === ACT_OUTCOME_STATUS.DONE) return outcome.value;
+    if (outcome.status === FAKE_ANSWER.DONE) return outcome.value;
     throw refusedOnPort(
-      outcome.status === ACT_OUTCOME_STATUS.REFUSED ? outcome.reason : "Not in this test.",
+      outcome.status === FAKE_ANSWER.REFUSED ? outcome.reason : "Not in this test.",
     );
   };
 }
 
-/** The act port answering every workspace kind, and the run commands', as `answer` does. */
+/** The act port answering every workspace and task kind, and the run commands', as `answer` does. */
 function workspacePort(): Parameters<typeof fakeActPort>[0] {
   const kinds: readonly PortActKind[] = [
+    ...Object.values(TASKS_ACT_KIND),
     ...Object.values(WORKSPACE_ACT_KIND),
     ACT_KIND.MAC_REPOSITORIES,
     ACT_KIND.MAC_REPOSITORY_SET,
@@ -403,7 +400,7 @@ beforeEach(() => {
   githubRepositories = [];
   repositoriesHeld = undefined;
   // SAFETY: the fake answers each kind with its own result, the dispatch on the kind the one erasure.
-  fakeAppBridge({ act: (request) => answer(request) as Promise<ActOutcome> });
+  fakeAppBridge({});
   fakeActPort({
     ...workspacePort(),
     [ACT_KIND.AUTOMATIONS_LIST]: () =>

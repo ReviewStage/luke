@@ -36,11 +36,11 @@ import { latestTurnsOfReached } from "@luke/database/models/message-reads";
 import { standingSessionsOf } from "@luke/database/models/recorded-session";
 import { holdSandbox, sandboxHeld } from "@luke/database/models/sandbox-terminal-lease";
 import { readTask } from "@luke/database/models/task-store";
+import { redactCredentials } from "@luke/features/credential-redaction";
 import { TURN_STATUS } from "@luke/wire";
 import { Clock, Duration, Effect, Option, type Redacted, Schedule } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { GitHubApp } from "../../github/github-app.js";
-import { redactCredentials } from "../../observability/credentials.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
 import { githubTokenPolicy } from "../terminal/agent-sandbox.js";
 import {

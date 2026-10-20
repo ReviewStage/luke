@@ -5,6 +5,7 @@ import {
   CHANNEL_KIND,
   CHAT_BLOCK,
   CHAT_BOUNDS,
+  CHAT_MEMBER_LABEL,
   type ChatAsk,
   type ChatBlock,
   type ChatImageType,
@@ -211,26 +212,25 @@ export type ChatMessageRow = typeof ChatMessageRowSchema.Type;
 /**
  * A post as its poster makes it: the member posting, where it goes, a
  * channel or the message it replies to by its place, which posts in that
- * message's channel and threads under its root, the body, the handles its
- * words mention, and the poster's key for the post.
+ * message's channel and threads under its root, the body, the members its
+ * words name as mention links, and the poster's key for the post.
  */
 export interface ChatPost {
   readonly authorMemberId: string;
   readonly to: { readonly channelId: string } | { readonly replyTo: number };
   readonly blocks: readonly ChatBlock[];
-  readonly mentions: readonly string[];
-  /** The members the words name as mention links, each with the label it was written with, which stands for it where it names no member. */
+  /** The members the words name as mention links, each with the label it was written with, which stands for it where it names no member; none where they name none. */
   readonly subjects?: readonly ChatNamedSubject[];
   readonly clientKey: string;
 }
 
-/** A member a post's words name by what it is, a person, an agent, or a task's Luke, rather than by its handle. */
+/** A member a post's words name by what it is, a person, an agent, or a task's Luke, as its mention link writes it. */
 export interface ChatNamedSubject {
   readonly subject: ChatMemberSubject;
   readonly label: string;
 }
 
-/** What a post came to: the message, whether it already stood under the key, and the handles mentioned that name no member. */
+/** What a post came to: the message, whether it already stood under the key, and the labels of the mention links that name no member. */
 export interface ChatPosted {
   readonly message: ChatMessageRow;
   readonly repeated: boolean;
@@ -721,24 +721,6 @@ const findHead = SqlSchema.findOneOption({
     ),
 });
 
-const findMemberByHandle = SqlSchema.findOneOption({
-  Request: Schema.Struct({ organizationId: Schema.String, handle: Schema.String }),
-  Result: ChatMemberRowSchema,
-  execute: (key) =>
-    Database.use((db) =>
-      db
-        .select(MEMBER_COLUMNS)
-        .from(chatMember)
-        .where(
-          and(
-            eq(chatMember.organizationId, key.organizationId),
-            eq(chatMember.handle, key.handle),
-            ne(chatMember.kind, MEMBER_KIND.LUKE),
-          ),
-        ),
-    ),
-});
-
 const findChannelInWorkspace = SqlSchema.findOneOption({
   Request: Schema.Struct({ organizationId: Schema.String, channelId: Schema.String }),
   Result: ChatChannelRowSchema,
@@ -753,18 +735,6 @@ const findChannelInWorkspace = SqlSchema.findOneOption({
             eq(chatChannel.id, key.channelId),
           ),
         ),
-    ),
-});
-
-const findAgentTask = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: Schema.Struct({ taskId: Schema.NullOr(Schema.String) }),
-  execute: (agentId) =>
-    Database.use((db) =>
-      db
-        .select({ taskId: codingAgent.taskId })
-        .from(codingAgent)
-        .where(eq(codingAgent.id, agentId)),
     ),
 });
 
@@ -1224,38 +1194,12 @@ function headOf(organizationId: string): ChatStoreEffect<number> {
   );
 }
 
-/** The plan a message's `@luke` names: its channel's plan, else its author's; none for an agent that works no plan outside a plan's channel. */
-function taskOfContext(
-  channel: ChatChannelRow,
-  author: ChatMemberRow,
-): ChatStoreEffect<Option.Option<string>> {
-  if (channel.taskId !== null) return Effect.succeed(Option.some(channel.taskId));
-  if (author.taskId !== null) return Effect.succeed(Option.some(author.taskId));
-  if (author.agentId === null) return Effect.succeed(Option.none());
-  // An agent that works no plan names no planner, so its `@luke` answers to no one.
-  return Effect.map(
-    findAgentTask(author.agentId),
-    Option.flatMap((row) => Option.fromNullishOr(row.taskId)),
-  );
-}
-
-/** The member a handle names in the workspace: `luke` the task's Luke, minted where it is not yet, any other a person or agent standing under it. */
-function namedMember(
-  userId: string,
-  organizationId: string,
-  handle: string,
-  taskId: Option.Option<string>,
-): ChatStoreEffect<Option.Option<ChatMemberRow>> {
-  if (handle !== LUKE_HANDLE) return findMemberByHandle({ organizationId, handle });
-  if (Option.isNone(taskId)) return Effect.succeed(Option.none());
-  return ensureMember(userId, organizationId, { kind: MEMBER_KIND.LUKE, taskId: taskId.value });
-}
-
 /**
  * The member a post names by what it is: a person or a task's Luke, minted
- * as `@luke` mints him where none is yet, and an agent only where it is a
- * member already, because an agent whose starter has Chat off joins no
- * chat; nothing for a subject of another workspace.
+ * where none is yet, so a Luke is a member from the first link that names
+ * him, and an agent only where it is a member already, because an agent
+ * whose starter has Chat off joins no chat; nothing for a subject of
+ * another workspace.
  */
 function subjectMember(
   userId: string,
@@ -1345,39 +1289,61 @@ export function roster(
   });
 }
 
-const findAgentMemberTasks = SqlSchema.findAll({
+const findAgentMembers = SqlSchema.findAll({
   Request: OrganizationKeySchema,
-  Result: Schema.Struct({ agentId: Schema.String, taskId: Schema.String }),
+  Result: Schema.Struct({
+    agentId: Schema.String,
+    taskId: Schema.NullOr(Schema.String),
+    title: Schema.NullOr(Schema.String),
+    model: Schema.String,
+  }),
   execute: ({ organizationId }) =>
     Database.use((db) =>
       db
-        .select({ agentId: codingAgent.id, taskId: codingAgent.taskId })
+        .select({
+          agentId: codingAgent.id,
+          taskId: codingAgent.taskId,
+          title: codingAgent.title,
+          model: codingAgent.model,
+        })
         .from(chatMember)
         .innerJoin(codingAgent, eq(codingAgent.id, chatMember.agentId))
         .where(
           and(
             eq(chatMember.organizationId, organizationId),
             eq(chatMember.kind, MEMBER_KIND.AGENT),
-            isNotNull(codingAgent.taskId),
           ),
         ),
     ),
 });
 
+/** An agent member as its coding agent names it: the task it works on, none for an agent on no task, and the name its tab shows. */
+export interface ChatAgentMember {
+  readonly taskId: string | undefined;
+  readonly name: string;
+}
+
 /**
- * The task each agent member of the workspace works on, by the agent's id,
- * every agent's rather than the few a task's summary names, so a window
- * draws an agent's line under its task and opens its tab there; none for
- * an agent on no task, and none where the account is not in the workspace.
+ * Each agent member of the workspace as its coding agent names it, by the
+ * agent's id, every agent's rather than the few a task's summary names, so
+ * a window names an agent and draws its line under its task wherever it
+ * stands: its task, and the name its tab shows, its title or else its
+ * model's id. None for an agent whose coding agent is gone, and none where
+ * the account is not in the workspace.
  */
-export function agentMemberTasks(
+export function agentMembersOf(
   userId: string,
   organizationId: string,
-): ChatStoreEffect<ReadonlyMap<string, string>> {
+): ChatStoreEffect<ReadonlyMap<string, ChatAgentMember>> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return new Map();
-    const rows = yield* findAgentMemberTasks({ organizationId });
-    return new Map(rows.map((row) => [row.agentId, row.taskId]));
+    const rows = yield* findAgentMembers({ organizationId });
+    return new Map(
+      rows.map((row) => [
+        row.agentId,
+        { taskId: row.taskId ?? undefined, name: row.title ?? row.model },
+      ]),
+    );
   });
 }
 
@@ -1685,16 +1651,20 @@ export function leave(
   });
 }
 
-/** The member a handle names in the workspace, `luke` the Luke of the task given; nothing where the account is not in it or no member answers to it. */
-export function memberNamed(
+/**
+ * The member a mention link names in the workspace, as a post names one
+ * (`subjectMember`): a person or a task's Luke minted where none is yet, an
+ * agent only where it is a member already; nothing where the account is not
+ * in the workspace or the subject is not of it.
+ */
+export function memberOfSubject(
   userId: string,
   organizationId: string,
-  handle: string,
-  taskId?: string,
+  subject: ChatMemberSubject,
 ): ChatStoreEffect<Option.Option<ChatMemberRow>> {
   return Effect.gen(function* () {
     if (!(yield* isWorkspaceMember(userId, organizationId))) return Option.none();
-    return yield* namedMember(userId, organizationId, handle, Option.fromNullishOr(taskId));
+    return yield* subjectMember(userId, organizationId, subject);
   });
 }
 
@@ -1750,21 +1720,9 @@ function placePost(
     if (!postsIn(author.value, channel.value)) return Result.fail(CHAT_REFUSAL.NOT_FOUND);
     if (channel.value.archivedAt !== null) return Result.fail(CHAT_REFUSAL.CHANNEL_ARCHIVED);
     // Mentions are resolved before the sequence is locked, because minting a planner takes the workspace's lock.
-    const taskId = yield* taskOfContext(channel.value, author.value);
-    const named = [
-      ...(yield* Effect.forEach(post.mentions, (handle) =>
-        Effect.map(namedMember(userId, organizationId, handle, taskId), (found) => ({
-          handle,
-          found,
-        })),
-      )),
-      ...(yield* Effect.forEach(post.subjects ?? [], ({ subject, label }) =>
-        Effect.map(subjectMember(userId, organizationId, subject), (found) => ({
-          handle: label,
-          found,
-        })),
-      )),
-    ];
+    const named = yield* Effect.forEach(post.subjects ?? [], ({ subject, label }) =>
+      Effect.map(subjectMember(userId, organizationId, subject), (found) => ({ label, found })),
+    );
     return Result.succeed({
       author: author.value,
       channelId,
@@ -1775,7 +1733,7 @@ function placePost(
       mentions: [
         ...new Set(named.flatMap(({ found }) => Option.toArray(found).map((row) => row.id))),
       ],
-      unresolved: named.filter(({ found }) => Option.isNone(found)).map(({ handle }) => handle),
+      unresolved: named.filter(({ found }) => Option.isNone(found)).map(({ label }) => label),
     });
   });
 }
@@ -1885,9 +1843,9 @@ function answerBlocks(reply: ChatReply): readonly ChatBlock[] {
 /**
  * Posts a message as a member of the workspace: in the channel named, or
  * as a reply in the thread of the message named by its place, under that
- * thread's root and in its channel. The mentions are resolved to members as
- * it lands, `luke` to the planner of the channel's plan or the author's,
- * and the handles that name no one are answered. A post repeated under its
+ * thread's root and in its channel. The mention links are resolved to
+ * members as it lands, a task's Luke minted where he is not yet, and the
+ * labels of those that name no one are answered. A post repeated under its
  * key in its channel answers the message it made. Refused where the author
  * or the channel is not of the workspace, the author is another person
  * than the account, the channel is a DM the author is not one of, where
@@ -2018,7 +1976,6 @@ export function answerAsk(
         authorMemberId: answer.answererMemberId,
         to: { replyTo: ask.seq },
         blocks: answerBlocks(answer.reply),
-        mentions: [],
         clientKey: answer.clientKey,
       };
       const placed = yield* placePost(userId, organizationId, post);
@@ -2707,8 +2664,8 @@ function chatOnFor(userId: string): SQL {
  * notices are the message at the place each of the account's people's
  * members was told of and has not read past, in a workspace the account is
  * in, a direct message where its channel is one and a mention otherwise.
- * Each names its author by handle, or by nothing where none stands, and none
- * of its words. Both read nothing while Chat is off for the account. Note
+ * Each names its author by what they are called (`authorName`), and none of
+ * its words. Both read nothing while Chat is off for the account. Note
  * that a notice of an ask is left to the reader to say once, since the two
  * statements are followed apart. None where a statement names a value
  * Realtime cannot carry.
@@ -2718,11 +2675,17 @@ export function chatWaitingLiveStatements(
 ): Option.Option<ChatWaitingLiveStatements> {
   const author = alias(chatMember, "chat_author");
   const own = alias(chatMember, "chat_own");
+  const authorAccount = alias(user, "chat_author_account");
+  const authorAgent = alias(codingAgent, "chat_author_agent");
   const entryColumns = {
     messageId: chatMessage.id,
     seq: chatMessage.seq,
     workspaceId: chatMessage.organizationId,
-    from: sql<string>`coalesce(${author.handle}, '')`,
+    from: sql<string>`case
+      when ${author.kind} = ${MEMBER_KIND.LUKE}::text then ${CHAT_MEMBER_LABEL.LUKE}::text
+      when ${author.kind} = ${MEMBER_KIND.AGENT}::text then coalesce(${authorAgent.title}, ${authorAgent.model}, ${CHAT_MEMBER_LABEL.FORMER_AGENT}::text)
+      else coalesce(${authorAccount.name}, ${CHAT_MEMBER_LABEL.FORMER_PERSON}::text)
+    end`,
     planId: chatChannel.taskId,
     touchedSeq: chatMessage.touchedSeq,
   };
@@ -2737,6 +2700,8 @@ export function chatWaitingLiveStatements(
     .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
     .leftJoin(task, eq(task.id, chatChannel.taskId))
     .leftJoin(author, eq(author.id, chatMessage.authorMemberId))
+    .leftJoin(authorAccount, eq(authorAccount.id, author.userId))
+    .leftJoin(authorAgent, eq(authorAgent.id, author.agentId))
     .where(and(waitingOnAccount(userId), chatOnFor(userId)));
   const notices = queryBuilder
     .select(
@@ -2755,6 +2720,8 @@ export function chatWaitingLiveStatements(
     )
     .innerJoin(chatChannel, eq(chatChannel.id, chatMessage.channelId))
     .leftJoin(author, eq(author.id, chatMessage.authorMemberId))
+    .leftJoin(authorAccount, eq(authorAccount.id, author.userId))
+    .leftJoin(authorAgent, eq(authorAgent.id, author.agentId))
     .where(
       and(
         eq(own.kind, MEMBER_KIND.HUMAN),

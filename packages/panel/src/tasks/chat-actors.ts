@@ -14,8 +14,8 @@ import { providerOf } from "./coding-agent-model.js";
  * the reader, grayed where they left (`personActor`); an agent by its title,
  * its task where a plan's summary names it, and its harness at rest, as a
  * transcript's sender is (`lineSender`); and Luke as himself. A person the
- * members read does not reach yet stands by their handle, the reader by
- * the account's own name.
+ * members read does not reach yet stands by the name the chat read carries,
+ * the reader by the account's own.
  */
 
 /** The actor a member is drawn as, by the member's id, read against the workspace's members around the caller. */

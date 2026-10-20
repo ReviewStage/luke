@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { UPDATE_STATUS } from "@luke/settings/update";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
@@ -15,8 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SettingsPanelProps } from "../settings/settings-panel.js";
-import { useShellRoom } from "../shell-room.js";
-import { useStageWidth } from "../stage-width.js";
+import { useStageRoom } from "../stage-room.js";
 import { SIDE_PANEL_TAB, useSidePanel } from "../tasks/use-side-panel.js";
 import { fakeAppBridge } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
@@ -115,9 +113,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -135,9 +131,9 @@ function resizeStage(width: number): void {
 
 /** The window as the panel's root draws it: the stage measured, its room, and the real sidebar and side panel over the task open on its page. */
 function Window(): React.JSX.Element {
-  const stage = useStageWidth();
-  const room = useShellRoom(stage.width);
-  const sidebar = useSidebarCollapse(false, stage.width);
+  const stage = useStageRoom();
+  const room = stage.room;
+  const sidebar = useSidebarCollapse(false, stage.compact);
   const sidePanel = useSidePanel(undefined, OPEN_TASK, undefined, [], [], [], undefined, room);
   const [tab, setTab] = useState<PanelTab>(PANEL_TAB.TASKS);
   const shell = createElement(DesktopShell, {
@@ -250,12 +246,12 @@ test("a stage narrowed below 640 stands the window as one pane, and only at 672 
   assert.equal(roomOf(page), "wide", "a stage narrowed within the band stays wide");
 });
 
-test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, and its toggle reads Close", () => {
+test("an open side panel on a narrow stage fills the window, with no edge to drag and no full-screen button, and its toggle reads Close panel", () => {
   const page = mount(PHONE);
   assert.equal(roomOf(page), "narrow");
   // A first launch opens the panel, which the narrow stage holds full screen.
   assert.deepEqual(panelOf(page), { fullScreen: true, resizable: false, fullScreenButton: false });
-  assert.equal(panelToggle(page).getAttribute("aria-label"), "Close");
+  assert.equal(panelToggle(page).getAttribute("aria-label"), "Close panel");
 
   resizeStage(WIDE);
   assert.deepEqual(
@@ -306,4 +302,99 @@ test("the sidebar on a narrow stage is a drawer: no edge peeks it out, its toggl
     "pinned, it takes its column beside the work again",
   );
   sheets.remove();
+});
+
+test("a phone's drawer is modal: while it stands over the work, the work and the panel's toggle are inert, and put away they answer again", () => {
+  const page = mount(PHONE);
+  const main = page.querySelector<HTMLElement>("main.desktop-main") ?? assert.fail("the work");
+  assert.equal(main.hasAttribute("inert"), false, "with the drawer away the work answers");
+
+  act(() => sidebarToggle(page).click());
+  assert.equal(sidebarStanding(page), "drawer");
+  assert.equal(main.hasAttribute("inert"), true, "the work behind the drawer is inert");
+  assert.equal(panelToggle(page).closest<HTMLElement>("[inert]") !== null, true);
+  assert.equal(
+    sidebarToggle(page).closest("[inert]"),
+    null,
+    "the drawer's own toggle still closes it",
+  );
+
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(sidebarStanding(page), "away", "Escape puts it away");
+  assert.equal(main.hasAttribute("inert"), false);
+});
+
+test("beside the work an open floating sidebar leaves the work answering, as it did", () => {
+  const page = mount(WIDE);
+  resizeStage(900);
+  act(() => sidebarToggle(page).click());
+  assert.equal(sidebarStanding(page), "drawer");
+  const main = page.querySelector<HTMLElement>("main.desktop-main") ?? assert.fail("the work");
+  assert.equal(main.hasAttribute("inert"), false);
+});
+
+/** Answers the page as a browser tab's, whose own Back and Forward walk the history. */
+function inBrowserTab(): void {
+  Object.defineProperty(window, "matchMedia", {
+    configurable: true,
+    value: (query: string) => ({
+      matches: query === "(display-mode: browser)",
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }),
+  });
+}
+
+/** Whether the column's Back and Forward stand. */
+function historyArrows(page: HTMLElement): boolean {
+  return page.querySelector('.title-bar-controls[data-edge="column"]') !== null;
+}
+
+test("a phone's browser tab draws no Back and Forward in the drawer's head, its browser's own walking the history; a wide one keeps them", () => {
+  inBrowserTab();
+  const page = mount(PHONE);
+  act(() => sidebarToggle(page).click());
+  assert.equal(historyArrows(page), false);
+
+  resizeStage(WIDE);
+  assert.equal(historyArrows(page), true);
+});
+
+test("a phone's installed app, with no browser around it, keeps Back and Forward in the drawer's head", () => {
+  const page = mount(PHONE);
+  act(() => sidebarToggle(page).click());
+  assert.equal(historyArrows(page), true);
+});
+
+test("Escape puts a phone's drawer away and gives the keyboard back to the work it was opened from", () => {
+  const focus = HTMLElement.prototype.focus;
+  vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (
+    this: HTMLElement,
+    options?: FocusOptions,
+  ) {
+    // As a browser does, which jsdom does not: an inert element takes no focus.
+    if (this.closest("[inert]") !== null) return;
+    focus.call(this, options);
+  });
+  const page = mount(PHONE);
+  const work =
+    page.querySelector<HTMLElement>("main.desktop-main button:not([disabled])") ??
+    assert.fail("the work holds a button");
+  work.focus();
+
+  act(() => sidebarToggle(page).click());
+  assert.equal(sidebarStanding(page), "drawer");
+  const held = document.activeElement;
+  assert.ok(
+    held instanceof HTMLElement && sidebarOf(page).contains(held),
+    "the drawer takes the keyboard",
+  );
+
+  act(() => {
+    held.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(sidebarStanding(page), "away");
+  assert.ok(document.activeElement === work, "the keyboard is back where it was");
 });

@@ -94,7 +94,12 @@ export function readTaskFile(
     const repository = stored.value.task.repository;
     if (repository === null) return Option.some(refused(TASK_FILE_REFUSAL.NO_REPOSITORY));
     if (isSecretFile(request.path)) return Option.some(refused(TASK_FILE_REFUSAL.SECRET));
-    const answer = yield* readWindow(stored.value.task.workspaceId, repository, request).pipe(
+    const answer = yield* readWindow(
+      stored.value.task.workspaceId,
+      repository,
+      userId,
+      request,
+    ).pipe(
       Effect.catchTag("GitHubUnavailable", (failure) =>
         Effect.as(logGitHubReadFailure(failure), refused(TASK_FILE_REFUSAL.UNAVAILABLE)),
       ),
@@ -112,15 +117,17 @@ type TaskRepositoryReach =
  * The Luke GitHub App's reach of the task's repository through the
  * installation of the task's workspace: a token for that one repository
  * with contents read, and the repository as GitHub confirmed it, or the
- * refusal a failed reach answers. The File tab's file and its tree's
- * folders are both read through it.
+ * refusal a failed reach answers; or, where no installation reaches it,
+ * the member's own token. The File tab's file and its tree's folders are
+ * both read through it.
  */
 export const reachTaskRepository = /* @__PURE__ */ Effect.fn("web/reachTaskRepository")(function* (
   organizationId: string,
   repository: string,
+  member: string,
 ) {
   const app = yield* GitHubApp;
-  return yield* app.repositoryReadToken(organizationId, repository).pipe(
+  return yield* app.repositoryReadToken(organizationId, repository, member).pipe(
     Effect.map((token) =>
       Option.isSome(token)
         ? ({ reached: token.value } satisfies TaskRepositoryReach)
@@ -152,9 +159,10 @@ function rawText(content: Uint8Array): string | undefined {
 const readWindow = /* @__PURE__ */ Effect.fn("web/taskFileWindow")(function* (
   organizationId: string,
   repository: string,
+  member: string,
   request: TaskFileRequest,
 ) {
-  const reach = yield* reachTaskRepository(organizationId, repository);
+  const reach = yield* reachTaskRepository(organizationId, repository, member);
   if ("refused" in reach) return reach.refused;
   const { token, repository: confirmed } = reach.reached;
   const branch = request.ref ?? confirmed.defaultBranch;

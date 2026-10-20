@@ -20,7 +20,11 @@ import {
   HostedTaskClient,
 } from "@luke/features";
 import { PULL_REQUEST_STATE } from "@luke/features/coding-agent-wire";
-import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
+import {
+  GITHUB_ACCESS,
+  githubRepositoryIssuesAnswerSchema,
+  ISSUE_STATE,
+} from "@luke/features/github-repositories-wire";
 import {
   TASK_FILE_REFUSAL,
   TASK_TREE_ENTRY,
@@ -38,9 +42,13 @@ import { hostedFetch } from "../orpc/handler.js";
 import type { WebServices } from "../runtime.js";
 import {
   type FakeGitHub,
+  GITHUB_APP_WITH_TOKENS,
   GITHUB_FIXTURE,
+  GITHUB_FIXTURE_MEMBER,
   githubReaching,
+  memberRepositoryJson,
   openGithubUser,
+  openTokenMember,
 } from "../testing/github-app-fake.js";
 import type { GitHubApp } from "./github-app.js";
 import { githubProcedures } from "./github-procedures.js";
@@ -126,8 +134,30 @@ function issueRecord(number: number, title: string, state: string, reason: strin
     body: "Seen on the staging invitations page.",
     user: { login: "octo-dev" },
     comments: 3,
+    node_id: `I_kwDOrelay${number}`,
+    author_association: number === 9 ? "NONE" : "MEMBER",
+    updated_at: "2026-10-01T00:00:00Z",
   };
 }
+
+/** The picker's read of one issue of `acme/relay` as the answer carries it. */
+function relayPick(number: number, title: string, state: string, association: string) {
+  return {
+    nodeId: `I_kwDOrelay${number}`,
+    repository: "acme/relay",
+    number,
+    title,
+    url: `https://github.com/acme/relay/issues/${number}`,
+    state,
+    author: "octo-dev",
+    authorAssociation: association,
+    updatedAt: Date.parse("2026-10-01T00:00:00Z"),
+  };
+}
+
+/** `acme/relay`'s issues listing and the search of its issues. */
+const RELAY_ISSUES_PATH = "/repos/acme/relay/issues";
+const SEARCH_PATH = "/search/issues";
 
 /** The issues `acme/relay` answers on its issues path: one open, one done, one not planned, one a duplicate, and pull request 42, which GitHub answers there too. */
 const RELAY_ISSUES = new Map<number, object>([
@@ -284,6 +314,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               defaultBranch: "main",
               private: true,
               updatedAt: Date.parse("2026-10-08T00:00:00Z"),
+              access: GITHUB_ACCESS.APP,
             },
             {
               owner: "octocat",
@@ -292,6 +323,7 @@ it.layer(getTestDB())("the repositories route", (it) => {
               defaultBranch: "main",
               private: false,
               updatedAt: Date.parse("2026-09-01T00:00:00Z"),
+              access: GITHUB_ACCESS.APP,
             },
           ],
           installationUrl: `https://github.com/apps/${GITHUB_FIXTURE.SLUG}/installations/new`,
@@ -299,6 +331,62 @@ it.layer(getTestDB())("the repositories route", (it) => {
         // Note that neither the account's own token nor the App's are in the answer.
         assert.equal(JSON.stringify(reached).includes("ghu_"), false);
         assert.equal(JSON.stringify(reached).includes("ghs_"), false);
+      }),
+  );
+
+  it.effect(
+    "a member's own token adds the repositories it may push to, each entry marked by what reaches it, and one the installation lists is listed once, as the App's",
+    () =>
+      Effect.gen(function* () {
+        const own = [
+          memberRepositoryJson(
+            { owner: "acme", name: "relay", updatedAt: "2026-10-02T00:00:00Z" },
+            true,
+          ),
+          memberRepositoryJson(
+            { owner: "octo-member", name: "side", updatedAt: "2026-10-05T00:00:00Z" },
+            true,
+          ),
+          memberRepositoryJson(
+            { owner: "octo-member", name: "fork", updatedAt: "2026-10-06T00:00:00Z" },
+            false,
+          ),
+        ];
+        const github = githubReaching(
+          [
+            {
+              id: 7151,
+              login: "acme",
+              repositories: [{ owner: "acme", name: "relay", updatedAt: "2026-10-02T00:00:00Z" }],
+            },
+          ],
+          GITHUB_APP_WITH_TOKENS,
+          {},
+          (sent) =>
+            new URL(sent.url).pathname === "/user/repos" &&
+            sent.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`
+              ? Response.json(own)
+              : undefined,
+        );
+        const { bearers, ask } = yield* openAccounts(github);
+        const member = yield* openTokenMember();
+        bearers.set(`Bearer ${member}`, member);
+        const workspace = yield* openInstallationWorkspace(member, {
+          installationId: 7151,
+          accountId: 9151,
+          accountLogin: "acme",
+        });
+
+        const reached = listed(yield* ask(member, "GET", [workspace]));
+
+        assert.deepEqual(
+          reached.repositories.map((one) => [one.fullName, one.access]),
+          [
+            ["octo-member/side", GITHUB_ACCESS.TOKEN],
+            ["acme/relay", GITHUB_ACCESS.APP],
+          ],
+        );
+        assert.equal(JSON.stringify(reached).includes(GITHUB_FIXTURE_MEMBER.TOKEN), false);
       }),
   );
 
@@ -787,6 +875,208 @@ it.layer(getTestDB())("the repositories route", (it) => {
         assert.deepEqual(notGranted, none);
         assert.deepEqual(off, none);
         assert.deepEqual(forTheIssue, []);
+      }),
+  );
+
+  it.effect(
+    "a member reads a repository's open issues newest changed first, those a search finds, and one by its number, each with who opened it and how they stand to the repository, never a pull request, read past a page of them, and never another repository's, on a token cut to issues read on the one repository",
+    () =>
+      Effect.gen(function* () {
+        const searched: URLSearchParams[] = [];
+        const listedWith: URLSearchParams[] = [];
+        const github = githubReaching(
+          [
+            {
+              id: 7821,
+              login: "acme",
+              repositories: [{ owner: "acme", name: "relay" }],
+              permissions: GRANTING_ISSUES,
+            },
+          ],
+          undefined,
+          {},
+          (sent) => {
+            const url = new URL(sent.url);
+            // The first page is all pull requests, which share the listing, and issue 7 stands on the second.
+            if (url.pathname === RELAY_ISSUES_PATH) {
+              listedWith.push(url.searchParams);
+              return Response.json(
+                url.searchParams.get("page") === "1"
+                  ? Array.from({ length: 100 }, (_, at) => ({
+                      ...issueRecord(100 + at, "A pull request", "open", null),
+                      pull_request: {},
+                    }))
+                  : [RELAY_ISSUES.get(7)],
+              );
+            }
+            if (url.pathname === SEARCH_PATH) {
+              searched.push(url.searchParams);
+              return Response.json({
+                items: [
+                  RELAY_ISSUES.get(7),
+                  {
+                    ...issueRecord(3, "Invitations on the ledger", "open", null),
+                    html_url: "https://github.com/acme/ledger/issues/3",
+                  },
+                ],
+              });
+            }
+            const named = ISSUE_PATH.exec(url.pathname);
+            const record = named === null ? undefined : RELAY_ISSUES.get(Number(named[1]));
+            return record === undefined ? undefined : Response.json(record);
+          },
+        );
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7821,
+          accountId: 9821,
+          accountLogin: "acme",
+        });
+        const issues = (...more: readonly (readonly [string, string])[]) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "acme/relay"],
+            ...more,
+          ]);
+
+        const open = yield* issues();
+        const found = yield* issues([GITHUB_REPOSITORIES_QUERY.QUERY, " invite "]);
+        const one = yield* issues([GITHUB_REPOSITORIES_QUERY.NUMBER, "9"]);
+        const pull = yield* issues([GITHUB_REPOSITORIES_QUERY.NUMBER, "42"]);
+
+        const seven = relayPick(7, "Invitations expire too soon", ISSUE_STATE.OPEN, "MEMBER");
+        assert.deepEqual(open, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [seven] } });
+        assert.deepEqual(found, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [seven] } });
+        assert.deepEqual(one, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            issues: [relayPick(9, "Invite by phone number", ISSUE_STATE.NOT_PLANNED, "NONE")],
+          },
+        });
+        assert.deepEqual(pull, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [] } });
+        assert.deepEqual(
+          listedWith.map((params) => [params.get("state"), params.get("sort"), params.get("page")]),
+          [
+            ["open", "updated", "1"],
+            ["open", "updated", "2"],
+          ],
+        );
+        assert.deepEqual(
+          searched.map((params) => params.get("q")),
+          ["invite repo:acme/relay is:issue is:open"],
+        );
+        const mints = github.sent
+          .filter((sent) => sent.url.endsWith("/access_tokens"))
+          .map((sent) => JSON.parse(sent.body))
+          .filter((mint) => "repositories" in mint);
+        for (const mint of mints) {
+          assert.deepEqual(mint, { repositories: ["relay"], permissions: { issues: "read" } });
+        }
+      }),
+  );
+
+  it.effect(
+    "a repository reached on a member's own token reads its open issues on that token, never the App's",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(
+          [{ id: 7823, login: "acme", repositories: [{ owner: "acme", name: "relay" }] }],
+          GITHUB_APP_WITH_TOKENS,
+          {},
+          (sent) => {
+            const { pathname } = new URL(sent.url);
+            const onToken =
+              sent.headers.get("authorization") === `Bearer ${GITHUB_FIXTURE_MEMBER.TOKEN}`;
+            if (!onToken) return undefined;
+            if (pathname === "/repos/octo-member/side") {
+              return Response.json(
+                memberRepositoryJson({ owner: "octo-member", name: "side" }, true),
+              );
+            }
+            return pathname === "/repos/octo-member/side/issues"
+              ? Response.json([
+                  {
+                    ...issueRecord(3, "Side project bug", "open", null),
+                    html_url: "https://github.com/octo-member/side/issues/3",
+                  },
+                ])
+              : undefined;
+          },
+        );
+        const { bearers, read } = yield* openAccounts(github);
+        const member = yield* openTokenMember();
+        bearers.set(`Bearer ${member}`, member);
+        const workspace = yield* openInstallationWorkspace(member, {
+          installationId: 7823,
+          accountId: 9823,
+          accountLogin: "acme",
+        });
+
+        const answered = yield* read(member, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES, [
+          [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+          [GITHUB_REPOSITORIES_QUERY.REPOSITORY, "octo-member/side"],
+        ]);
+
+        const issuesRead = readOf(githubRepositoryIssuesAnswerSchema, answered);
+        assert.deepEqual(
+          ("issues" in issuesRead ? issuesRead.issues : []).map((issue) => [
+            issue.repository,
+            issue.number,
+            issue.title,
+          ]),
+          [["octo-member/side", 3, "Side project bug"]],
+        );
+        assert.equal(JSON.stringify(answered).includes(GITHUB_FIXTURE_MEMBER.TOKEN), false);
+      }),
+  );
+
+  it.effect(
+    "a repository whose installation has not granted the App issues answers ungranted with the installation's settings page, never an empty list, and asks GitHub for no issue; an unreached repository has none, and a read naming a number off the wire's shape is invalid",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          {
+            id: 7822,
+            login: "acme",
+            accountType: "Organization",
+            repositories: [{ owner: "acme", name: "relay" }],
+          },
+        ]);
+        const { owner, read } = yield* openAccounts(github);
+        const workspace = yield* openInstallationWorkspace(owner, {
+          installationId: 7822,
+          accountId: 9822,
+          accountLogin: "acme",
+        });
+        const issues = (repository: string, ...more: readonly (readonly [string, string])[]) =>
+          read(owner, HOSTED_SERVICE_PATH.GITHUB_REPOSITORY_ISSUES, [
+            [GITHUB_REPOSITORIES_QUERY.WORKSPACE_ID, workspace],
+            [GITHUB_REPOSITORIES_QUERY.REPOSITORY, repository],
+            ...more,
+          ]);
+
+        const ungranted = yield* issues("acme/relay");
+        const unreached = yield* issues("globex/ledger");
+        const unnumbered = yield* issues("acme/relay", [GITHUB_REPOSITORIES_QUERY.NUMBER, "0"]);
+
+        assert.deepEqual(ungranted, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: {
+            ungranted: {
+              settingsUrl: "https://github.com/organizations/acme/settings/installations/7822",
+            },
+          },
+        });
+        assert.deepEqual(unreached, { status: HOSTED_HTTP_STATUS.OK, body: { issues: [] } });
+        assert.deepEqual(
+          unnumbered,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const askedIssues = github.sent.filter((sent) => {
+          const { pathname } = new URL(sent.url);
+          return pathname.includes("/issues") || pathname === SEARCH_PATH;
+        });
+        assert.deepEqual(askedIssues, []);
       }),
   );
 

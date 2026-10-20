@@ -70,8 +70,9 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <!-- Installable: added to a phone's Home Screen, the app opens at /app
-         full screen, and on iOS 16.4 and later only such a web app may show
-         notifications. The status bar stays default (dark text on a light
+         full screen. It posts no notifications on a phone, installed or not:
+         Android's Chrome and iOS show one only through a service worker,
+         which the app has none of (`src/app/web-notices.ts`). The status bar stays default (dark text on a light
          bar), because a translucent one would draw white text over the
          light ground. -->
     <link rel="manifest" href="/manifest.webmanifest" />

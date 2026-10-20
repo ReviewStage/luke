@@ -11,15 +11,10 @@ import {
 } from "@luke/features/terminal-acts";
 import { shellsAsked } from "@luke/features/terminal-store";
 import { SANDBOX_STATE, type TerminalsAnswer } from "@luke/features/terminal-wire";
-import {
-  ACT_KIND,
-  ACT_OUTCOME_STATUS,
-  type Act,
-  type ActKind,
-  type ActOutcome,
-} from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import {
   ACT_ERROR,
+  type PortActKind,
   type PortActPayload,
   type PortActResult,
   type TERMINAL_ACT_KIND,
@@ -36,7 +31,7 @@ import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { runAppCommand } from "../app-commands.js";
 import { SIDE_BUNDLES, type SideBundles, sideBundles } from "../bundle-loader.js";
 import { FindScope } from "../find-in-tab.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import { type AnyAct, fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
@@ -95,8 +90,8 @@ type TerminalAct = {
   [Kind in TerminalKind]: { readonly kind: Kind; readonly payload: PortActPayload<Kind> };
 }[TerminalKind];
 
-/** Any act the tab sends, on `app:act` or on its act port. */
-type SentAct = Act | TerminalAct;
+/** Any act the tab sends on its act port. */
+type SentAct = AnyAct | TerminalAct;
 
 /** What main answers and posts, as the test stages it. */
 interface Main {
@@ -105,7 +100,7 @@ interface Main {
   /** The sandbox's list as `terminal.list` answers it, which a test may change. */
   listed: TerminalsAnswer;
   /** The kinds main refuses outright, as it does when the service cannot be reached. */
-  readonly down: Set<ActKind | TerminalKind>;
+  readonly down: Set<PortActKind | TerminalKind>;
   /** What `terminal.create` answers in place of a shell, where the sandbox refuses one. */
   createRefused: TerminalRefusal | undefined;
   /** What `terminal.list` answers in place of the list, where the service refuses it. */
@@ -113,7 +108,7 @@ interface Main {
   /** The answers held back, in the order asked, each landing when the test lets it go. */
   readonly held: (() => void)[];
   /** The kinds whose answers are held back until the test lets them go. */
-  readonly holding: Set<ActKind | TerminalKind>;
+  readonly holding: Set<PortActKind | TerminalKind>;
   /** Posts a shell's port to the tab, as main does after an attach, answering the host's half. */
   readonly post: (terminalId: string) => HostPort;
 }
@@ -205,12 +200,7 @@ beforeEach(() => {
     }
     return Promise.resolve(answer(request));
   };
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppBridge({});
   // SAFETY: each procedure answers its own kind, whose answer `answer` gives by the same kind; the casts are the one dispatch on it.
   fakeActPort({
     [ACT_KIND.TERMINAL_LIST]: (payload) =>
@@ -560,7 +550,7 @@ test("a service it cannot reach shows a bar that says so, whose action asks agai
   main.down.add(ACT_KIND.TERMINAL_LIST);
   const tab = await mount();
   assert.equal(tab.standing(), "· sandbox · unreachable");
-  assert.equal(tab.bar(), "Couldn’t reach Luke’s service.");
+  assert.equal(tab.bar(), "Luke's service did not answer.");
   main.down.clear();
   await act(async () => tab.action()?.click());
   await settle();
@@ -769,7 +759,7 @@ test("a tab taken down with attaches out for two shells closes both ports, which
 });
 
 /** The payload of the last act of the kind the tab sent, as main received it. */
-function lastPayload(kind: ActKind | TerminalKind) {
+function lastPayload(kind: PortActKind | TerminalKind) {
   const request = main.sent.findLast((each) => each.kind === kind);
   assert.ok(request, `the tab sent ${kind}`);
   return "payload" in request ? request.payload : undefined;

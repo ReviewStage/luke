@@ -1,5 +1,5 @@
 /**
- * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, Notion's sign-in and a workspace's GitHub installation addresses, an empty issue list, the account's link choice, and nothing else, answered over a fake `HttpClient`.
+ * fake-service.ts -- the hosted service as a web client's test meets it: a cookie session the test signs in and out, a task list, a Slack sign-in under way, Notion's sign-in and a workspace's GitHub installation addresses, the workspace's members, the repositories the Luke GitHub App reaches, the account's link choice, and nothing else, answered over a fake `HttpClient`.
  *
  * The Slack sign-in is settled only by the settling POST, as the service
  * answers a cookie caller. The web client's host calls the origin that
@@ -71,6 +71,13 @@ export const WORKSPACE_MEMBER = {
   role: "owner",
 } as const;
 
+/** The repositories the account reaches through the Luke GitHub App: the App installed, reaching none yet. */
+export const GITHUB_REPOSITORIES = {
+  installed: true,
+  repositories: [],
+  installationUrl: "https://github.com/apps/luke/installations/new",
+} as const;
+
 /** How the fake starts: signed in or not, and where the account chose its Luke links open, if it chose. */
 interface FakeServiceOptions {
   readonly signedIn: boolean;
@@ -105,11 +112,11 @@ export function fakeService(options: FakeServiceOptions): FakeService {
     if (pathname === "/api/workspaces/github/connect" && method === "POST" && signedIn) {
       return json({ url: GITHUB_INSTALL });
     }
-    if (pathname === "/api/issues" && method === "GET" && signedIn) {
-      return json({ issues: [] });
-    }
     if (pathname === "/api/workspaces/members" && method === "GET" && signedIn) {
       return json({ members: [WORKSPACE_MEMBER] });
+    }
+    if (pathname === "/api/github/repositories" && method === "GET" && signedIn) {
+      return json(GITHUB_REPOSITORIES);
     }
     // The account's preferences snapshot, as a cookie caller reads it: no stored settings, and the link choice where one was made.
     if (pathname === "/api/account/preferences" && method === "GET") {

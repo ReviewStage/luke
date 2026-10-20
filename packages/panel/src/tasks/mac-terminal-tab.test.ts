@@ -6,14 +6,19 @@ import {
   MAC_TERMINAL_PORT_MESSAGE,
   type MacTerminalPortOutbound,
 } from "@luke/features/mac-terminal-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { SIDE_BUNDLES } from "../bundle-loader.js";
-import { fakeActPortAnswering, fakeAppBridge, type SentPortAct } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  fakeActPortAnswering,
+  fakeAppBridge,
+  type SentPortAct,
+} from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { bundleLanded, onSideBundles } from "../testing/side-bundles.js";
 import { MacTerminalTab } from "./mac-terminal-tab.js";
@@ -33,7 +38,7 @@ import { MacTerminalTab } from "./mac-terminal-tab.js";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 /** Every act the tab sent, on the act channel or the act port, by kind and payload, in order. */
-let sent: (Act | SentPortAct)[];
+let sent: (AnyAct | SentPortAct)[];
 const roots: Root[] = [];
 
 beforeAll(() => Effect.runPromise(bundleLanded(SIDE_BUNDLES.terminal)));
@@ -54,12 +59,7 @@ beforeEach(() => {
       changedFiles: 1,
     },
   };
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
-    },
-  });
+  fakeAppBridge({});
   // Note that the acts main answers itself, a run's among them, and what the agent published, ride the act port.
   fakeActPortAnswering((request) => {
     sent.push(request);

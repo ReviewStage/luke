@@ -48,6 +48,45 @@
   justify-content: center;
 }
 
+/* A finger works the board's controls, so each takes a finger's press:
+   Excalidraw sizes its buttons by its own `--default-button-size` and
+   `--lg-button-size`, and shrinks its toolbar's tools on a narrow screen and
+   the column of tools it stands at its right to fixed sizes of its own,
+   which here take the finger's size too. That column is drawn as a tab run
+   off the canvas's right edge, which on a phone's screen reads as cut off,
+   so there it stands whole inside the board, at the canvas's own inset, and
+   the toolbar's rows keep clear of it. A mouse keeps Excalidraw's sizes and
+   its tab. */
+@media (pointer: coarse) {
+  .task-board .excalidraw {
+    --default-button-size: 44px;
+    --lg-button-size: 44px;
+  }
+
+  .task-board .excalidraw .App-toolbar-container .ToolIcon__icon {
+    width: var(--lg-button-size);
+    height: var(--lg-button-size);
+  }
+
+  .task-board .excalidraw--mobile .mobile-misc-tools-container {
+    right: 0;
+    border-right-width: 1px;
+    border-right-style: solid;
+    border-right-color: var(--sidebar-border-color, var(--luke-color-border));
+    border-radius: var(--border-radius-lg, var(--luke-radius-8));
+  }
+
+  .task-board .excalidraw--mobile .mobile-misc-tools-container .ToolIcon__icon,
+  .task-board .excalidraw--mobile .mobile-misc-tools-container .sidebar-trigger {
+    width: var(--default-button-size);
+    height: var(--default-button-size);
+  }
+
+  .task-board .excalidraw--mobile .App-top-bar > section {
+    padding-right: calc(var(--default-button-size) + 2px + var(--luke-space-8));
+  }
+}
+
 /* The document is the record: it reads as text and is selectable, so Cmd-C
    on a selection copies it. Note that it sets its own accent, because
    `--accent` is only ever set by a `data-state` ancestor and nothing above
@@ -190,6 +229,35 @@
   color: var(--luke-color-text-muted);
   font-size: var(--luke-type-caption-size);
   line-height: var(--luke-type-caption-leading);
+}
+
+/* The byline's presses, its people and the time that opens the version
+   history, each take a press a finger's height on a coarse pointer, and at
+   least as wide, centred on what they draw; the lines between them part a
+   little further, so one line's press does not cover the next's words. Note
+   that the time's own clip is lifted there, since it would clip its press,
+   and the time is too short to want cutting. */
+@media (pointer: coarse) {
+  .plan-byline {
+    row-gap: var(--luke-space-12);
+  }
+
+  .plan-byline [data-actor-ref],
+  .plan-byline .luke-text-button {
+    position: relative;
+    overflow: visible;
+  }
+
+  .plan-byline [data-actor-ref]::before,
+  .plan-byline .luke-text-button::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--luke-touch-target));
+    height: var(--luke-touch-target);
+    transform: translate(-50%, -50%);
+    content: "";
+  }
 }
 
 /* Who last edited the plan template, under its title in the muted meta weight. */
@@ -339,6 +407,26 @@
   z-index: 3;
   width: 360px;
   max-width: 100%;
+}
+
+/* The date picker (`date-picker.tsx`), hung from a chip or an @ word in
+   the room the @ list stands in, over the editor. Its anchor stands over
+   the chip and takes no press, so the chip under it still does. */
+.date-picker-anchor {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.date-picker-anchor > * {
+  pointer-events: auto;
+}
+
+/* Its foot, ruled off from the switches, holds Clear as a quiet word that
+   lines up with the fields and the rows' names above it. */
+.date-picker-foot {
+  padding-top: var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
 }
 
 /* A narrowed list stands under its kind's crumb, as an MCP server's page
@@ -582,6 +670,20 @@
   margin-top: 0;
 }
 
+/* The editor's box takes a finger's press around it on a coarse pointer, as
+   the read view's does (`markdown.css`), its label holding the press. */
+@media (pointer: coarse) {
+  .plan-document-text li[data-checked] > label::before {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--luke-touch-target);
+    height: var(--luke-touch-target);
+    transform: translate(-50%, -50%);
+    content: "";
+  }
+}
+
 /* What the editor keeps byte for byte but does not draw as its own: inline
    HTML, a footnote, a link's definition, a block of HTML. */
 .plan-raw-block {
@@ -618,6 +720,34 @@
   max-width: 100%;
   height: auto;
   margin: 0 auto;
+}
+
+.plan-diagram-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-4);
+}
+
+/* A diagram opens over the window where its column is too narrow to read it
+   (`plan-diagram.tsx`): its head offers Full screen and a tap on the picture
+   does the same, in a narrow room or on a coarse pointer. A wide room with a
+   mouse offers neither, as before. */
+.plan-diagram-full-screen {
+  display: none;
+}
+
+.desktop-shell[data-room="narrow"] .plan-diagram-full-screen {
+  display: flex;
+}
+
+.desktop-shell[data-room="narrow"] .plan-diagram-picture {
+  cursor: zoom-in;
+}
+
+@media (pointer: coarse) {
+  .plan-diagram-full-screen {
+    display: flex;
+  }
 }
 
 /* A fence Mermaid refused says so over its code, in the failure's red. */
@@ -798,11 +928,12 @@
     }
   }
 
-  /* A screen with no hover shows a sent message's actions at rest, in the
-     line they keep under its bubble; a floating bar stays hidden, so a
-     transcript is not a column of buttons. */
+  /* A screen with no hover shows a message's actions once the message is
+     tapped (`message.tsx`), in the line under its bubble or on their
+     floating card, and hides them at rest, so a transcript is not a column
+     of buttons. */
   @media (hover: none) {
-    .message-actions[data-placement="inline"] {
+    .transcript-message[data-actions-shown="true"] .message-actions {
       opacity: 1;
       pointer-events: auto;
     }
@@ -1421,6 +1552,53 @@
   }
 }
 
+/* A narrow room, a phone's, floats the tree the same way whatever it held
+   for the desktop, so a file or a diff has the whole screen and a tree
+   opened there no longer leaves either a few words a line: the toggle opens
+   it as a sheet over the tab, as wide as the room less a strip of the tab
+   to press it away by, so a path reads whole, and a file chosen in it puts
+   it away to show that file (`usePaneRoom`). A finger opens it with the
+   toggle; a pointer, where the phone has one, still peeks it a beat later. */
+.desktop-shell[data-room="narrow"] .file-view .file-tree-pane {
+  position: absolute;
+  z-index: 1;
+  inset-block: 0;
+  right: 0;
+  width: calc(100% - var(--luke-space-48));
+  background: var(--luke-color-well);
+  box-shadow: var(--luke-menu-shadow);
+}
+
+.desktop-shell[data-room="narrow"] .file-view .file-tree-pane > .side-panel-resize,
+.desktop-shell[data-room="narrow"]
+  .file-view[data-pane-beside="false"]
+  > .file-view-body
+  > .file-tree-strip,
+.desktop-shell[data-room="narrow"] .file-view[data-pane-over="closed"] .file-tree-pane,
+.desktop-shell[data-room="narrow"] .file-tree-pane > .file-tree-foot,
+.desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="beside"] {
+  display: none;
+}
+
+.desktop-shell[data-room="narrow"]
+  .file-view:is([data-pane-over="peek"], [data-pane-over="open"])
+  .file-tree-pane {
+  display: flex;
+  animation: pane-over-in var(--duration-pane) var(--motion-pane) backwards;
+}
+
+.desktop-shell[data-room="narrow"] .file-view[data-pane-over="peek"] .file-tree-pane {
+  animation-delay: var(--duration-quick);
+}
+
+.desktop-shell[data-room="narrow"] .file-view .file-tree-toggle[data-place="over"] {
+  display: flex;
+}
+
+.desktop-shell[data-room="narrow"] .file-view[data-pane-beside] > .file-tree-foot {
+  display: block;
+}
+
 /* A panel with no room for the tree's least width beside the tab's own
    keeps the tree at its share of the panel, with no edge to drag, since
    any width a drag asked for would be drawn no wider (`useTreeEdge`). */
@@ -1581,6 +1759,14 @@
   font-size: var(--luke-type-caption-size);
   text-overflow: ellipsis;
   transition: border-color var(--duration-hover) ease;
+}
+
+/* A finger's field takes 16px words, or iOS zooms the page into it the
+   moment it is focused. */
+@media (pointer: coarse) {
+  .browser-view-address input {
+    font-size: 16px;
+  }
 }
 
 .browser-view-address input::placeholder {
@@ -2244,11 +2430,18 @@
   min-width: 0;
   align-items: center;
   gap: var(--luke-space-8);
+  /* Note that Tab walks a roomy row as it is drawn, the pill before the
+     title's pencil, where the browser reads `reading-flow`, as the
+     desktop's does; a narrow row is drawn in the markup's order (below). */
+  reading-flow: flex-visual;
 }
 
 .pull-request-title-row > .luke-chip,
 .pull-request-title-row > .luke-badge {
   flex: none;
+  /* Note that the pill is drawn ahead of the title it follows in the
+     markup, where a screen reader names the title first. */
+  order: -1;
 }
 
 .pull-request-title-row > .pull-request-title,
@@ -2269,20 +2462,64 @@
 /* A narrow header, a phone's or the side panel's at its least, gives the
    title a line of its own over the pill and the controls, which stand
    under it at the row's two ends; beside them it would wrap a word to a
-   line. Note that Tab follows the row as it is drawn (`reading-flow`)
-   rather than the markup's pill-first order, where the browser reads it. */
+   line. The row is then drawn in the markup's order, the title first. */
 @container pull-request-header (max-width: 520px) {
   .pull-request-title-row {
     flex-wrap: wrap;
-    reading-flow: flex-visual;
+    reading-flow: normal;
+  }
+
+  .pull-request-title-row > .luke-chip,
+  .pull-request-title-row > .luke-badge {
+    order: 0;
   }
 
   .pull-request-title-row > .pull-request-title,
   .pull-request-title-row > .luke-skeleton-region {
-    order: -1;
     flex-basis: 100%;
     padding-block: 0;
   }
+}
+
+/* On a phone the header would hold half the screen over the view under it,
+   so once that view is scrolled it folds to its title's one line, the rest
+   back as the view returns to its top (`useHeaderFold`). */
+.desktop-shell[data-room="narrow"] .pull-request-header[data-folded] {
+  padding-block: var(--luke-space-6);
+}
+
+.desktop-shell[data-room="narrow"]
+  .pull-request-header[data-folded]
+  > :not(.pull-request-title-row),
+.desktop-shell[data-room="narrow"]
+  .pull-request-header[data-folded]
+  .pull-request-title-row
+  > :not(.pull-request-title) {
+  display: none;
+}
+
+.desktop-shell[data-room="narrow"] .pull-request-header[data-folded] .pull-request-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A phone names each of the tabs in words, never their glyphs alone, which
+   a finger cannot hover for a name: the glyphs give way instead, and a row
+   still too long scrolls sideways, as a fill bar does. */
+.desktop-shell[data-room="narrow"] .pull-request-tabs .luke-choice-bar-icon {
+  display: none;
+}
+
+.desktop-shell[data-room="narrow"]
+  .pull-request-tabs
+  .luke-choice-bar[data-folded="true"]
+  .luke-choice-bar-label {
+  position: static;
+  overflow: visible;
+  width: auto;
+  height: auto;
+  clip-path: none;
 }
 
 /* The Conversation's filters, Hide resolved and Hide bots, at the end of a
@@ -2302,6 +2539,12 @@
 
 .side-panel-content .pull-request-filters {
   padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+/* On a phone the switches stand in as far as the words under them, clear of
+   the screen's edge, where a thumb gripping the phone rests. */
+.desktop-shell[data-room="narrow"] .pull-request-filters {
+  padding-inline: var(--content-inset);
 }
 
 .pull-request-filter {
@@ -2595,6 +2838,14 @@
 .pull-request-title-editable:hover .pull-request-title-edit,
 .pull-request-title-edit:has(:focus-visible) {
   opacity: 1;
+}
+
+/* A finger has no hover to bring the pencil, and an unseen one still takes
+   a tap at the title's end, so a touch screen shows it at rest. */
+@media (hover: none) {
+  .pull-request-title-edit {
+    opacity: 1;
+  }
 }
 
 .pull-request-title-field {
@@ -4283,6 +4534,22 @@ ol.transcript-list {
   background: var(--luke-color-fill-strong);
 }
 
+/* A finger's press is 44px tall, so on a coarse pointer a transcript's rows
+   that open something, a call's line, the docked to-do list's head, and the
+   agent's pull request's row, stand that tall, their words still centred;
+   a mouse keeps their compact heights. */
+@media (pointer: coarse) {
+  .tool-line,
+  .todos-dock-head {
+    height: auto;
+    min-height: 44px;
+  }
+
+  .agent-published-dock .luke-list-row-main {
+    min-height: 44px;
+  }
+}
+
 .todos-dock[open] > .todos-dock-head {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
@@ -4504,13 +4771,18 @@ ol.transcript-list {
 .agent-composer-field {
   position: relative;
   --agent-composer-field-block: calc(var(--luke-space-16) + var(--luke-space-8));
+  --agent-composer-field-lines: calc(
+    8 *
+    var(--luke-type-body-leading) +
+    var(--agent-composer-field-block)
+  );
 }
 
 .agent-composer-input {
   box-sizing: border-box;
   width: 100%;
   min-height: calc(var(--luke-type-body-leading) + var(--agent-composer-field-block));
-  max-height: calc(8 * var(--luke-type-body-leading) + var(--agent-composer-field-block));
+  max-height: var(--agent-composer-field-lines);
   overflow-x: hidden;
   overflow-y: auto;
   padding: var(--luke-space-16) var(--luke-space-16) var(--luke-space-8);
@@ -4978,6 +5250,13 @@ ol.transcript-list {
   height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
 }
 
+/* A picture opened at its own pixels, a diagram on a phone, is shown in
+   the whole of the dimmed window, so as much of it as fits is in sight. */
+.attachment-viewer[data-view="image"][data-opening="own-pixels"] {
+  width: calc(100vw - 2 * var(--luke-space-24));
+  height: calc(var(--luke-stage-height) - 2 * var(--luke-space-24));
+}
+
 .attachment-viewer[data-view="other"] {
   width: min(400px, 100vw - 2 * var(--luke-space-24));
 }
@@ -5060,6 +5339,8 @@ ol.transcript-list {
   overflow: hidden;
   place-items: center;
   background: var(--luke-color-surface);
+  /* Two fingers anywhere on the frame pinch the picture (use-image-zoom.ts), never the page. */
+  touch-action: none;
 }
 
 /* The picture is zoomed by a transform over its fitted size
@@ -5735,6 +6016,152 @@ ol.transcript-list {
 
 .issue-mark[data-issue-state="not-planned"] {
   color: var(--luke-color-text-subtle);
+}
+
+/* A task's Linked issues box under its name (`task-issue-links.tsx`): a
+   hairline box whose head, on the well's ground, says what it holds and ends
+   in Link issue, over one row per issue: its mark, its key in the code face,
+   its title taking the room left, its state in words, its Closes / Part of
+   switch, and its ×. */
+.task-issue-links {
+  margin: var(--luke-space-8) 0 var(--luke-space-20);
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-radius-10);
+  overflow: hidden;
+}
+
+.task-issue-links-head {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-4) var(--luke-space-8) var(--luke-space-4) var(--luke-space-12);
+  background: var(--luke-color-well);
+  color: var(--luke-color-text-muted);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  font-weight: var(--luke-weight-medium);
+}
+
+.task-issue-links-none {
+  color: var(--luke-color-text-subtle);
+  font-weight: var(--luke-weight-regular);
+}
+
+.task-issue-links-head > .issue-picker-chip,
+.task-issue-links-retry {
+  margin-left: auto;
+}
+
+.task-issue-links-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-issue-link {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--luke-space-8);
+  padding: var(--luke-space-6) var(--luke-space-8) var(--luke-space-6) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+}
+
+.task-issue-link-mark {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.task-issue-link-unread {
+  width: 13px;
+  height: 13px;
+  color: var(--luke-color-text-subtle);
+}
+
+.task-issue-link-key {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+}
+
+.task-issue-link-title {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.task-issue-link-state {
+  flex: none;
+  color: var(--luke-color-text-subtle);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
+  white-space: nowrap;
+}
+
+.task-issue-link-relation,
+.task-issue-link-unlink {
+  display: flex;
+  flex: none;
+}
+
+/* A row's state and controls stand in its line as its other parts do. */
+.task-issue-link-controls {
+  display: contents;
+}
+
+/* On a phone a row's controls, its state, its Closes / Part of switch, and
+   its ×, are wider together than the box beside its key, so the row takes
+   two lines: its mark, key, and title, cut short, over its state and its
+   controls at the row's end, under the key and the title. The state gives
+   way before a control does, so nothing is pushed past the box's edge. */
+.desktop-shell[data-room="narrow"] .task-issue-link {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "mark key title"
+    ". controls controls";
+  gap: var(--luke-space-4) var(--luke-space-8);
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-mark {
+  grid-area: mark;
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-key {
+  grid-area: key;
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-title {
+  grid-area: title;
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-controls {
+  display: flex;
+  min-width: 0;
+  grid-area: controls;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--luke-space-8);
+}
+
+.desktop-shell[data-room="narrow"] .task-issue-link-state {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.task-issue-links-note {
+  margin: 0;
+  padding: var(--luke-space-6) var(--luke-space-12);
+  border-top: 1px solid var(--luke-color-border);
+  color: var(--luke-color-danger-text);
+  font-size: var(--luke-type-caption-size);
+  line-height: var(--luke-type-caption-leading);
 }
 
 /* The pull request's row pinned over the composer, a card of one row
@@ -6582,6 +7009,15 @@ button.picture-frame {
   font-weight: 560;
 }
 
+/* Under a finger, on a phone held at arm's length, a comment's time and the
+   line saying its words are gone are no smaller than 12px. */
+@media (pointer: coarse) {
+  .comment-time,
+  .comment-gone {
+    font-size: 12px;
+  }
+}
+
 .comment-gone svg {
   width: 13px;
   height: 13px;
@@ -6628,6 +7064,14 @@ button.picture-frame {
   resize: none;
 }
 
+/* A finger's comment field takes 16px words, or iOS zooms the page into it
+   the moment it is focused, as it does a Browser tab's address. */
+@media (pointer: coarse) {
+  .comment-text {
+    font-size: 16px;
+  }
+}
+
 .comment-text::placeholder {
   color: var(--luke-color-text-muted);
 }
@@ -6638,9 +7082,16 @@ button.picture-frame {
   padding: var(--luke-space-8) var(--comment-field-inline) 0;
 }
 
+.comment-field .agent-composer-field {
+  --agent-composer-field-lines: calc(
+    8 *
+    1.45em +
+    10px
+  ); /* off-scale: eight lines and the padding */
+}
+
 .comment-field .agent-composer-input {
   min-height: 36px; /* off-scale: one line and its padding, as the plain field stands */
-  max-height: calc(8 * 1.45em + 10px); /* off-scale: eight lines and the padding */
   padding: var(--luke-space-8) var(--comment-field-inline) var(--luke-space-2);
   line-height: 1.45;
 }

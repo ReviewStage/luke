@@ -4,7 +4,6 @@ import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { bearer, jwt, lastLoginMethod, oAuthProxy, organization } from "better-auth/plugins";
 import { Redacted } from "effect";
-import { USER_ROLE } from "../admin/admin-access.js";
 import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
 import {
   type AuthSecrets,
@@ -21,6 +20,7 @@ import {
   JWT_KEY_STORAGE,
   ORGANIZATION_OPTIONS,
   SESSION_BEARER,
+  USER_FIELDS,
 } from "./auth-policy.js";
 import { DESKTOP_OAUTH_CLIENT } from "./oauth-clients.js";
 
@@ -80,16 +80,7 @@ export const auth = betterAuth({
   hooks: { before: refuseWithoutSessionSecret },
   database: authDatabaseAdapter(authDatabase),
   account: ACCOUNT_TOKEN_STORAGE,
-  // Admin access is a plain-text `role` on the user, managed by Better Auth:
-  // the migrations declared it on the `user` table, and returned on
-  // the session so the dashboard reads it without a query of its own. `input:
-  // false` keeps a sign-up from asserting its own role — the role is set only by
-  // a maintainer's own write to the database, never by anything Luke runs.
-  user: {
-    additionalFields: {
-      role: { type: "string", required: false, defaultValue: USER_ROLE.USER, input: false },
-    },
-  },
+  user: USER_FIELDS,
   disabledPaths: [...DISABLED_AUTH_PATHS],
   socialProviders: socialProviders(secrets),
   plugins: [

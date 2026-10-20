@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
   ACCOUNT_CHAT_REASON,
@@ -55,10 +56,16 @@ import {
 } from "@luke/gateway";
 import type { WireRecord, WireValue } from "@luke/wire";
 import { noNetwork } from "@luke/wire/testing";
-import { Duration, Effect, Schema } from "effect";
+import { Duration, Effect, ErrorReporter, Layer, Option, Queue, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import type { LiveClient } from "./account-inbox-follow.js";
+import { afterEach, vi } from "vitest";
+import { type LiveClient, openRealtimeClient } from "./account-inbox-follow.js";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
+import { PageReturns, reporterLayer } from "./effect/seams.js";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 /** One revision of the template as the service lists it. */
 const TEMPLATE_REVISION: PlanTemplateRevisionLine = {
@@ -451,7 +458,13 @@ function fakeService() {
     messageInbox: (itemId, request) =>
       Effect.sync(() => {
         const files = (request.attachments ?? []).map((file) => file.name).join(",");
-        asked.push(`inbox-message:${itemId}:${request.text}:${files}:${request.clientKey}`);
+        const answer =
+          request.answers === undefined
+            ? ""
+            : `:answers ${request.answers.ask} ${request.answers.reply} ${(request.answers.choices ?? []).join(",")}`;
+        asked.push(
+          `inbox-message:${itemId}:${request.text}:${files}:${request.clientKey}${answer}`,
+        );
         return {
           item: {
             ...ITEM,
@@ -520,7 +533,16 @@ function fakeService() {
   };
 }
 
-function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
+function subject(
+  options: {
+    signedIn?: boolean;
+    sendsNetwork?: boolean;
+    /** Whether the account inbox is followed over Realtime's own client, through the socket the test stubs, in place of the scripted one. */
+    ownRealtime?: boolean;
+    /** Each time the page came back, as the shell says it. */
+    returns?: Stream.Stream<void>;
+  } = {},
+) {
   return Effect.gen(function* () {
     const service = fakeService();
     const realtime = fakeRealtime();
@@ -535,8 +557,11 @@ function subject(options: { signedIn?: boolean; sendsNetwork?: boolean } = {}) {
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service.client,
-      openLive: realtime.open,
-    }).pipe(Effect.provide(noNetwork));
+      openLive: options.ownRealtime === true ? openRealtimeClient : realtime.open,
+    }).pipe(
+      Effect.provide(noNetwork),
+      Effect.provideService(PageReturns, options.returns ?? Stream.never),
+    );
     const call = (method: GatewayMethod, params: WireRecord = {}) => {
       const handler = composer.methods[method];
       assert.ok(handler, `no handler for ${method}`);
@@ -592,9 +617,44 @@ const SEALED: AccountInboxLiveAnswer = {
 };
 
 /**
+ * A sealed statement as Realtime's own client admits one before sending it:
+ * a compact JWE under the header Realtime seals with, opaque past it, and a
+ * fingerprint of 64 hex digits. The scripted statements above are refused by
+ * that client as it is handed them.
+ */
+function realtimeSealed(part: string) {
+  const segment = (text: string) => Buffer.from(text).toString("base64url");
+  return {
+    capability: [
+      segment(JSON.stringify({ alg: "dir", enc: "A256GCM", v: 1 })),
+      "",
+      segment(`iv-${part}`),
+      segment(`sealed-${part}`),
+      segment(`tag-${part}`),
+    ].join("."),
+    queryFingerprint: createHash("sha256").update(part).digest("hex"),
+    expiresAt: NOW + 60_000,
+  };
+}
+
+const REALTIME_SEALED: AccountInboxLiveAnswer = {
+  url: SEALED.url,
+  queries: {
+    items: realtimeSealed("items"),
+    planless: realtimeSealed("planless"),
+    plans: realtimeSealed("plans"),
+    automations: realtimeSealed("automations"),
+    failedRuns: realtimeSealed("failedRuns"),
+    chatAsks: realtimeSealed("chatAsks"),
+    chatNotices: realtimeSealed("chatNotices"),
+  },
+};
+
+/**
  * Realtime as a script: the address each client was opened at, each part's
  * subscription by its capability, the seals each was renewed with, and a
- * way to deliver rows to one or stop it for good.
+ * way to deliver rows to one, stop it for good, or have the client last
+ * opened report something going wrong.
  */
 function fakeRealtime() {
   const opened: string[] = [];
@@ -604,8 +664,10 @@ function fakeRealtime() {
     (snapshot: { readonly status: string; readonly data: readonly unknown[] | undefined }) => void
   >();
   const renewed: string[] = [];
-  const open = (url: string): LiveClient => {
+  let reporting: ((trouble: string) => void) | undefined;
+  const open = (url: string, hear: (trouble: string) => void): LiveClient => {
     opened.push(url);
+    reporting = hear;
     return {
       subscribe: (query) => ({
         onChange: (listener) => {
@@ -632,8 +694,137 @@ function fakeRealtime() {
       assert.ok(listener, `no subscription to ${part}`);
       listener({ status: "live", data });
     },
+    /** The part's socket gone, as Realtime says while it reconnects: still holding its rows, no longer live. */
+    drop: (part: string) =>
+      listeners.get(`capability-${part}`)?.({ status: "connecting", data: [] }),
     fail: (part: string) => listeners.get(`capability-${part}`)?.({ status: "error", data: [] }),
+    /** What the client last opened reports going wrong, in the words the follow is told. */
+    say: (trouble: string) => reporting?.(trouble),
     subscribed: () => [...listeners.keys()].toSorted(),
+  };
+}
+
+/** A frame the stubbed socket sends, as Realtime's protocol spells the ones it needs. */
+type RealtimeServerFrame =
+  | { readonly type: "ready" }
+  | {
+      readonly type: "subscribe_rejected";
+      readonly request_id: string;
+      readonly code: string;
+      readonly message: string;
+      readonly retry_after_ms: number;
+    }
+  | {
+      readonly type: "subscribed";
+      readonly request_id: string;
+      readonly live_id: string;
+      readonly epoch: string;
+      readonly first_sequence: string;
+      readonly columns: readonly {
+        readonly name: string;
+        readonly type_oid: number;
+        readonly typmod: number;
+        readonly codec: string;
+      }[];
+    }
+  | {
+      readonly type: "baseline_sync_start";
+      readonly live_id: string;
+      readonly epoch: string;
+      readonly baseline_sync_attempt: string;
+      readonly mvcc: {
+        readonly xmin: string;
+        readonly xmax: string;
+        readonly xip: readonly string[];
+      };
+    }
+  | {
+      readonly type: "baseline_sync_end";
+      readonly live_id: string;
+      readonly epoch: string;
+      readonly baseline_sync_attempt: string;
+      readonly batch_count: number;
+    };
+
+/** How the stubbed socket answers each subscription: refused with a code, to be asked for again after a hint, or admitted with no rows. */
+type StubbedAdmission = { readonly refused: string } | "empty";
+
+/** A subscription Realtime's client sent, read off its frame; none for any other frame. */
+const readSubscribe = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({ type: Schema.Literal("subscribe"), request_id: Schema.String }),
+  ),
+);
+
+/**
+ * Realtime's socket, stubbed where Realtime's own client opens one, the
+ * client's one process boundary: ready at once, and every subscription
+ * answered as `admission` says: refused, to be asked for again after a hint,
+ * as production's proxy refused each one while its backend's logical slot
+ * would not start, or admitted with a result of no rows.
+ */
+function stubbedRealtimeSocket(admission: StubbedAdmission) {
+  return class StubbedRealtimeSocket {
+    readyState = 0;
+    readonly #listeners: ((event: { readonly data: string }) => void)[] = [];
+    #lives = 0;
+
+    constructor() {
+      queueMicrotask(() => {
+        this.readyState = 1;
+        this.#receive({ type: "ready" });
+      });
+    }
+
+    addEventListener(type: string, listener: (event: { readonly data: string }) => void) {
+      if (type === "message") this.#listeners.push(listener);
+    }
+
+    send(frame: string) {
+      const subscribe = readSubscribe(frame);
+      if (Option.isNone(subscribe)) return;
+      const { request_id } = subscribe.value;
+      if (admission !== "empty") {
+        const { refused } = admission;
+        queueMicrotask(() =>
+          this.#receive({
+            type: "subscribe_rejected",
+            request_id,
+            code: refused,
+            message: "Realtime is unavailable",
+            retry_after_ms: 30_000,
+          }),
+        );
+        return;
+      }
+      this.#lives += 1;
+      const live_id = String(this.#lives);
+      const version = { live_id, epoch: "1", baseline_sync_attempt: "1" };
+      queueMicrotask(() => {
+        this.#receive({
+          type: "subscribed",
+          request_id,
+          live_id,
+          epoch: "1",
+          first_sequence: "1",
+          columns: [{ name: "id", type_oid: 25, typmod: -1, codec: "pg_text" }],
+        });
+        this.#receive({
+          type: "baseline_sync_start",
+          ...version,
+          mvcc: { xmin: "1", xmax: "1", xip: [] },
+        });
+        this.#receive({ type: "baseline_sync_end", ...version, batch_count: 0 });
+      });
+    }
+
+    close() {
+      this.readyState = 3;
+    }
+
+    #receive(frame: RealtimeServerFrame) {
+      for (const listener of this.#listeners) listener({ data: JSON.stringify(frame) });
+    }
   };
 }
 
@@ -868,6 +1059,12 @@ it.effect("each method asks the service once and answers what it said, whole", (
         },
       },
     );
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+      itemId: ITEM.id,
+      text: "Ship it.",
+      clientKey: "message-2",
+      answers: { ask: MESSAGE_ID, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] },
+    });
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
       { id: ITEM.id, unread: true },
@@ -942,6 +1139,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `close:${ITEM.id}:2:close-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
+      `inbox-message:${ITEM.id}:Ship it.::message-2:answers ${MESSAGE_ID} chose Ship it`,
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
       `inbox-read-all:${WORKSPACE_ID}`,
@@ -1189,6 +1387,215 @@ it.effect(
     }),
 );
 
+/**
+ * The host's line and the runtime's error reporters, as a follow started
+ * under them hears them: every line said, and every error reported.
+ */
+function heard() {
+  const lines: string[] = [];
+  const reported: Error[] = [];
+  const layer = Layer.merge(
+    reporterLayer((line) => void lines.push(line)),
+    ErrorReporter.layer([ErrorReporter.make(({ error }) => void reported.push(error))]),
+  );
+  return { lines, reported, layer };
+}
+
+it.effect(
+  "a follow whose socket never delivers is reported once, as a warning naming no address or seal, after thirty seconds, and goes on asking",
+  () =>
+    Effect.gen(function* () {
+      const { call, seal, realtime } = yield* subject();
+      const { lines, reported, layer } = heard();
+      seal(SEALED);
+      yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url]);
+
+      yield* TestClock.adjust("29 seconds");
+      yield* settled;
+      assert.deepEqual(reported, []);
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      const [warning, ...more] = reported;
+      assert.ok(warning !== undefined && more.length === 0);
+      assert.equal(ErrorReporter.getSeverity(warning), "Warn");
+      const said = lines.filter((line) => line.includes("account inbox"));
+      assert.deepEqual(said, [
+        "the account inbox's live read has not answered in 30 seconds: Realtime has not delivered every part",
+      ]);
+      assert.ok(!said[0]?.includes(SEALED.url) && !said[0]?.includes("capability"));
+
+      // It keeps following, and says so no more however long it waits.
+      yield* TestClock.adjust("5 minutes");
+      yield* settled;
+      assert.equal(reported.length, 1);
+      assert.ok(realtime.subscribed().length > 0);
+    }),
+);
+
+it.effect(
+  "a follow Realtime will not admit is reported with what Realtime's own client last reported, its code among it, and no address or seal",
+  () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("WebSocket", stubbedRealtimeSocket({ refused: "backend_unavailable" }));
+      // Realtime's client loaded already, as a host that has followed before holds it.
+      yield* Effect.promise(() => import("@neon/realtime/client"));
+      const { call, seal } = yield* subject({ ownRealtime: true });
+      const { lines, reported, layer } = heard();
+      seal(REALTIME_SEALED);
+      yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+      yield* settled;
+
+      yield* TestClock.adjust("30 seconds");
+      yield* settled;
+      assert.equal(reported.length, 1);
+      const said = lines.filter((line) => line.includes("account inbox"));
+      assert.deepEqual(said, [
+        "the account inbox's live read has not answered in 30 seconds: Realtime has not delivered every part; Realtime's client last reported subscription_retry_scheduled (backend_unavailable)",
+      ]);
+      for (const sealedPart of Object.values(REALTIME_SEALED.queries)) {
+        assert.ok(!said[0]?.includes(sealedPart.capability));
+      }
+      assert.ok(!said[0]?.includes(REALTIME_SEALED.url));
+    }),
+);
+
+it.effect(
+  "a seal Realtime's own client refuses is let go rather than ending the follow, which answers once the service seals again, every empty part counted as delivered",
+  () =>
+    Effect.gen(function* () {
+      vi.stubGlobal("WebSocket", stubbedRealtimeSocket("empty"));
+      yield* Effect.promise(() => import("@neon/realtime/client"));
+      const { call, seal, inboxes } = yield* subject({ ownRealtime: true });
+      // The scripted statements are no compact JWE, which Realtime's client throws on as it is handed one.
+      seal(SEALED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+      assert.deepEqual(inboxes(), []);
+
+      seal(REALTIME_SEALED);
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
+      const published = inboxes().map((inbox) => {
+        const { cursor: _cursor, ...rest } =
+          Schema.decodeUnknownSync(accountInboxAnswerSchema)(inbox);
+        return rest;
+      });
+      assert.deepEqual(published, [
+        {
+          items: [],
+          plans: [],
+          planless: [],
+          automations: [],
+          failedRuns: [],
+          chat: [],
+          readAt: NOW,
+        },
+      ]);
+    }),
+);
+
+it.effect(
+  "what Realtime's client reported is said beside the attempt it was heard on and no later one: a seal the service then fails to answer is reported alone",
+  () =>
+    Effect.gen(function* () {
+      const { call, seal, realtime } = yield* subject();
+      const { lines, layer } = heard();
+      seal(SEALED);
+      yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+      yield* settled;
+      // The client reports trouble and its subscription stops; the service then seals nothing.
+      realtime.say("connection_lost");
+      realtime.fail("items");
+      seal(undefined);
+      yield* settled;
+
+      yield* TestClock.adjust("30 seconds");
+      yield* settled;
+      assert.deepEqual(
+        lines.filter((line) => line.includes("account inbox")),
+        [
+          "the account inbox's live read has not answered in 30 seconds: the service sealed nothing (unanswered)",
+        ],
+      );
+    }),
+);
+
+it.effect("a follow that answers within thirty seconds reports nothing", () =>
+  Effect.gen(function* () {
+    const { call, seal, realtime, inboxes } = yield* subject();
+    const { lines, reported, layer } = heard();
+    seal(SEALED);
+    yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+    yield* settled;
+    for (const part of [
+      "items",
+      "planless",
+      "plans",
+      "automations",
+      "failedRuns",
+      "chatAsks",
+      "chatNotices",
+    ]) {
+      realtime.deliver(part, []);
+    }
+    yield* settled;
+    assert.equal(inboxes().length, 1);
+    yield* TestClock.adjust("1 minute");
+    yield* settled;
+    assert.deepEqual(reported, []);
+    assert.deepEqual(
+      lines.filter((line) => line.includes("account inbox")),
+      [],
+    );
+  }),
+);
+
+it.effect(
+  "a follow that answered and later stops for good is watched again from its restart: one that never answers again is reported thirty seconds after it, once",
+  () =>
+    Effect.gen(function* () {
+      const { call, seal, realtime, inboxes } = yield* subject();
+      const { reported, layer } = heard();
+      seal(SEALED);
+      yield* Effect.provide(call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW), layer);
+      yield* settled;
+      for (const part of [
+        "items",
+        "planless",
+        "plans",
+        "automations",
+        "failedRuns",
+        "chatAsks",
+        "chatNotices",
+      ]) {
+        realtime.deliver(part, []);
+      }
+      yield* settled;
+      assert.equal(inboxes().length, 1);
+
+      // A minute on, past the first bound, the subscription stops for good and is started again,
+      // and the new one never delivers.
+      yield* TestClock.adjust("1 minute");
+      realtime.fail("items");
+      yield* settled;
+      yield* TestClock.adjust("5 seconds");
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+
+      yield* TestClock.adjust("29 seconds");
+      yield* settled;
+      assert.deepEqual(reported, []);
+      yield* TestClock.adjust("1 second");
+      yield* settled;
+      assert.equal(reported.length, 1);
+      yield* TestClock.adjust("5 minutes");
+      yield* settled;
+      assert.equal(reported.length, 1);
+    }),
+);
+
 it.effect(
   "a seal the service did not answer is asked for again after a pause, and letting go, or a sign-out, ends the follow",
   () =>
@@ -1218,5 +1625,143 @@ it.effect(
       yield* live.reset;
       yield* settled;
       assert.deepEqual(live.realtime.closed, [SEALED.url, SEALED.url]);
+    }),
+);
+
+/** Every part of the account inbox, as the service seals them. */
+const PARTS = [
+  "items",
+  "planless",
+  "plans",
+  "automations",
+  "failedRuns",
+  "chatAsks",
+  "chatNotices",
+] as const;
+
+/** A follow under a page that says when it came back, and the way to say it. */
+function returning() {
+  return Effect.gen(function* () {
+    const returns = yield* Queue.unbounded<void>();
+    const followed = yield* subject({ returns: Stream.fromQueue(returns) });
+    followed.seal(SEALED);
+    yield* followed.call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+    yield* settled;
+    for (const part of PARTS) followed.realtime.deliver(part, []);
+    yield* settled;
+    return { ...followed, returned: Queue.offer(returns, undefined) };
+  });
+}
+
+it.effect(
+  "a page that comes back while a part's socket is reconnecting starts the follow again at once, without waiting out Realtime's backoff",
+  () =>
+    Effect.gen(function* () {
+      const { realtime, returned } = yield* returning();
+      realtime.drop("items");
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url]);
+
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.closed, [SEALED.url]);
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+    }),
+);
+
+it.effect("a page that comes back while every part is live leaves the follow standing", () =>
+  Effect.gen(function* () {
+    const { realtime, returned } = yield* returning();
+    yield* returned;
+    yield* settled;
+    assert.deepEqual(realtime.opened, [SEALED.url]);
+    assert.deepEqual(realtime.closed, []);
+  }),
+);
+
+it.effect(
+  "a page that comes back while a stopped subscription waits to start again starts it at once",
+  () =>
+    Effect.gen(function* () {
+      const { realtime, returned } = yield* returning();
+      realtime.fail("items");
+      yield* settled;
+      assert.deepEqual(realtime.closed, [SEALED.url]);
+
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+    }),
+);
+
+it.effect(
+  "returns back to back, as a restore from the back-forward cache says them, start a dropped follow again only once",
+  () =>
+    Effect.gen(function* () {
+      const { realtime, returned } = yield* returning();
+      realtime.drop("items");
+      yield* settled;
+
+      yield* returned;
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+
+      // The second subscription is still connecting, and a later return leaves it to connect.
+      yield* TestClock.adjust("2 seconds");
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+    }),
+);
+
+it.effect("a return while the follow is still connecting leaves the connect alone", () =>
+  Effect.gen(function* () {
+    const returns = yield* Queue.unbounded<void>();
+    const { call, seal, realtime } = yield* subject({ returns: Stream.fromQueue(returns) });
+    seal(SEALED);
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+    yield* settled;
+
+    yield* Queue.offer(returns, undefined);
+    yield* settled;
+    assert.deepEqual(realtime.opened, [SEALED.url]);
+    assert.deepEqual(realtime.closed, []);
+  }),
+);
+
+it.effect(
+  "a return that found the follow live holds no later return back: one that drops and is returned to under a second later starts again",
+  () =>
+    Effect.gen(function* () {
+      const { realtime, returned } = yield* returning();
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url]);
+
+      yield* TestClock.adjust("200 millis");
+      realtime.drop("items");
+      yield* TestClock.adjust("500 millis");
+      yield* returned;
+      yield* settled;
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
+    }),
+);
+
+it.effect(
+  "a connect that has not gone live five seconds on, as one begun offline, is started again by a return such as coming back online",
+  () =>
+    Effect.gen(function* () {
+      const returns = yield* Queue.unbounded<void>();
+      const { call, seal, realtime } = yield* subject({ returns: Stream.fromQueue(returns) });
+      seal(SEALED);
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX_FOLLOW);
+      yield* settled;
+
+      yield* TestClock.adjust("5 seconds");
+      yield* Queue.offer(returns, undefined);
+      yield* settled;
+      assert.deepEqual(realtime.closed, [SEALED.url]);
+      assert.deepEqual(realtime.opened, [SEALED.url, SEALED.url]);
     }),
 );

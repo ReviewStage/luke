@@ -13,7 +13,6 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import type { Task } from "@luke/features/task-wire";
-import { ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
 import { APP_COMMAND, APP_SHORTCUTS, shortcutAria } from "@luke/settings/shortcuts";
 import { type PlanCommentsControl, PlanCommentsProvider } from "@luke/ui/plan-comments";
 import { Effect } from "effect";
@@ -22,6 +21,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test } from "vitest";
 import { useAppKeymap } from "../app-commands.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer } from "../testing/app-bridge.js";
 import {
   editorBundleLanded,
   installEditorLayout,
@@ -120,8 +120,8 @@ beforeEach(() => {
   Object.defineProperty(window, "luke", {
     configurable: true,
     value: {
-      act: (_request: Act): Promise<ActOutcome> =>
-        Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT }),
+      act: (_request: AnyAct): Promise<FakeActAnswer> =>
+        Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT }),
       recordSurfaceEvent: () => undefined,
     },
   });

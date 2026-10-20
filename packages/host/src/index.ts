@@ -11,12 +11,6 @@
  * barrel says: every name here has a client that reaches it, and a name a
  * client does not reach yet is added when one arrives.
  */
-export type { HostSeams } from "./host-kernel.js";
-export {
-  HOST_NATIVE_NODE_ID,
-  HOST_NODE_CAPABILITY,
-  HOST_NODE_CAPABILITY_LIST,
-  HOST_OPERATOR_CLIENT_ID,
-} from "./node-capabilities.js";
 export { type RunMode, runModeFor, sentryReportingEnabled } from "./run-mode.js";
+export type { SecretCipher } from "./settings-store.js";
 export { highlightSnippet } from "./task-code.js";

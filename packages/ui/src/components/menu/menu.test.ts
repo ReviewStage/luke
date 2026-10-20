@@ -526,6 +526,36 @@ test("a mouse or a pen held down opens nothing, and its click presses as it alwa
   expect(opened).toEqual(["Row", "Row"]);
 });
 
+test("a second finger opens nothing: held alone it starts no hold, and laid down beside a held first finger, as a pinch begins, it lets that hold go", () => {
+  const { row, opened } = heldRow();
+  const second = (type: string) =>
+    new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 2,
+      pointerType: "touch",
+      isPrimary: false,
+      clientX: 80,
+      clientY: 20,
+    });
+  act(() => {
+    row.dispatchEvent(second("pointerdown"));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  act(() => {
+    row.dispatchEvent(second("pointerup"));
+  });
+  down(row, "touch");
+  wait(100);
+  act(() => {
+    row.dispatchEvent(second("pointerdown"));
+  });
+  wait(HELD_MS);
+  expect(openMenu()).toBeNull();
+  expect(opened).toEqual([]);
+});
+
 test("the contextmenu Android sends for a hold opens nothing more, whether it comes after the hold's menu or before it", () => {
   const { row, opened } = heldRow();
   const android = (x: number) =>

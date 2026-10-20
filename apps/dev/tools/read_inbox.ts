@@ -6,7 +6,7 @@ import { defineTool } from "eve/tools";
 import { runInboxTool } from "../host.js";
 
 /**
- * read_inbox.ts -- the agent reads every item it put in the developer's inbox, answers and all.
+ * read_inbox.ts -- the agent reads its threads in the developer's inbox, each message with its ask and the answers.
  *
  * The call reaches the store through the host's door (`../host.ts`), as
  * `edit_plan` does, and answers with the agent's whole inbox as it stands

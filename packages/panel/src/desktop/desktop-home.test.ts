@@ -19,7 +19,7 @@ import {
 import type { ModelChoice } from "@luke/features/models-wire";
 import type { TaskSummary } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { Effect } from "effect";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -38,6 +38,7 @@ import {
   pressInComposer,
   typeInComposer,
 } from "../testing/composer.js";
+import { layContainersAt } from "../testing/container-width.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
 import { tasksControl, waitingOf } from "../testing/tasks-control.js";
@@ -182,26 +183,19 @@ beforeEach(() => {
   automationReads = [];
   installScrollIntoView();
   installEditorLayout();
-  fakeAppBridge({
-    act: (request: Act) => {
-      if (request.kind === ACT_KIND.CODING_AGENTS_AGENT_INBOX) {
-        const value: CodingAgentInboxAnswerView = {
-          items: AGENT_INBOXES.get(request.payload.agentId) ?? [],
-          cursor: "1",
-        };
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
-      }
-      if (request.kind !== ACT_KIND.CODING_AGENTS_INBOX) {
-        return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-      }
+  fakeAppBridge({});
+  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: ({ agentId }) => {
       const value: CodingAgentInboxAnswerView = {
-        items: INBOXES.get(request.payload.taskId) ?? [],
+        items: AGENT_INBOXES.get(agentId) ?? [],
         cursor: "1",
       };
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value });
+      return Promise.resolve(value);
     },
-  });
-  fakeActPort({
+    [ACT_KIND.CODING_AGENTS_INBOX]: ({ taskId }) => {
+      const value: CodingAgentInboxAnswerView = { items: INBOXES.get(taskId) ?? [], cursor: "1" };
+      return Promise.resolve(value);
+    },
     [ACT_KIND.WORKSPACE_MEMBERS_READ]: () => Promise.resolve(MEMBERS),
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       automationReads.push(payload.workspaceId ?? "");
@@ -216,6 +210,7 @@ afterEach(() => {
   window.localStorage.clear();
   document.body.innerHTML = "";
   document.head.innerHTML = "";
+  document.documentElement.removeAttribute("data-luke-profile");
 });
 
 /** A task the composer started: its name, repository, workspace, whether it plans, the agent it asked for, and the brief it handed Luke. */
@@ -440,6 +435,42 @@ test("on a phone, where the sidebar is a drawer, Recent lists the 20 plans saved
   const desktop = mount({ tasks: many, listed }, "Dean", SHELL_ROOM.WIDE);
   await settle();
   assert.deepEqual(rows(desktop.page, "home-recent"), latest.slice(0, 6));
+});
+
+/** How tall a row's press stands at least, in pixels, its token read where the sheets name one; none where nothing holds it up. */
+function leastHeight(press: Element): number | undefined {
+  const drawn = getComputedStyle(press).minHeight;
+  const token = /^var\((--[a-z-]+)\)$/u.exec(drawn)?.[1];
+  const length = token === undefined ? drawn : getComputedStyle(press).getPropertyValue(token);
+  const pixels = Number.parseFloat(length);
+  return Number.isNaN(pixels) || pixels === 0 ? undefined : pixels;
+}
+
+test("on a touch screen each Recent row on Home stands a finger's 44px tall at least, and with a mouse it keeps its own height", async () => {
+  const recentPresses = async (touch: boolean) => {
+    const sheet = layContainersAt({}, { touch });
+    const { page } = mount({}, "Dean", touch ? SHELL_ROOM.NARROW : SHELL_ROOM.WIDE);
+    await settle();
+    const region = page.querySelector('section[aria-labelledby="home-recent"]');
+    assert.ok(region, "Recent stands");
+    const heights = [...region.querySelectorAll(".luke-list-row-main")].map(leastHeight);
+    act(() => root?.unmount());
+    document.body.innerHTML = "";
+    sheet.remove();
+    return heights;
+  };
+  document.documentElement.setAttribute("data-luke-profile", "web");
+
+  const touch = await recentPresses(true);
+  assert.ok(touch.length > 0, "Recent lists rows");
+  assert.ok(
+    touch.every((height) => height !== undefined && height >= 44),
+    "every row is a finger's target tall",
+  );
+  assert.ok(
+    (await recentPresses(false)).every((height) => height === undefined),
+    "with a mouse nothing holds a row up past its own height",
+  );
 });
 
 test("a waiting item's row opens the Inbox on its item, and a recent plan opens the plan", async () => {

@@ -32,7 +32,6 @@ export const SERVER_EVENT = {
   INBOX_ANSWER_SEND: "inbox:answer_send",
   CHAT_MESSAGE_SEND: "chat:message_send",
   AUTOMATION_CREATE: "automation:create",
-  ISSUE_CREATE: "issue:create",
   INTEGRATION_CONNECTION_CREATE: "integration:connection_create",
   INTEGRATION_CONNECTION_DELETE: "integration:connection_delete",
   WORKSPACE_CREATE: "workspace:create",
@@ -86,7 +85,6 @@ interface ServerEventProperties {
   [SERVER_EVENT.INBOX_ANSWER_SEND]: Record<string, never>;
   [SERVER_EVENT.CHAT_MESSAGE_SEND]: { is_reply: boolean };
   [SERVER_EVENT.AUTOMATION_CREATE]: { trigger_kind: AutomationTriggerKind };
-  [SERVER_EVENT.ISSUE_CREATE]: Record<string, never>;
   [SERVER_EVENT.INTEGRATION_CONNECTION_CREATE]: { provider: IntegrationProvider };
   [SERVER_EVENT.INTEGRATION_CONNECTION_DELETE]: { provider: IntegrationProvider };
   [SERVER_EVENT.WORKSPACE_CREATE]: Record<string, never>;

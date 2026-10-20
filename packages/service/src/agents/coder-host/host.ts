@@ -28,6 +28,7 @@ import type { UnparsedWireValue, WireRecord } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { logStoreFailure } from "../../http/store-failure.js";
+import type { WorkspaceLinearConnect } from "../../integrations/integration-connect.js";
 import {
   ModelCatalog,
   type OfferedModel,
@@ -87,7 +88,6 @@ import {
   runUpdateAgent,
   runUpdateTask,
 } from "../coding-agent-tools.js";
-import { runCreateIssue, runListIssues, runReadIssue, runUpdateIssue } from "../issue-tools.js";
 import {
   type ReadWebPageResult,
   ResearchBudget,
@@ -126,13 +126,12 @@ import { contextWindowOf } from "./context.js";
 import { agentStepOf } from "./context-estimate.js";
 import { type DelegationAsk, delegationChoice, recordDelegation } from "./delegation.js";
 import {
-  closeInInbox,
   INBOX_REFUSAL,
   type InboxToolResult,
   inboxRejected,
   postToInbox,
   readOwnInbox,
-  replyInInbox,
+  withdrawAsk,
 } from "./inbox.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { coderInstructions } from "./instructions.js";
@@ -433,7 +432,7 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<
     WireRecord,
     never,
-    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog
+    DatabaseServices | HttpClient.HttpClient | GitHubApp | ModelCatalog | WorkspaceLinearConnect
   >;
   /** Folds an event the store need hear nothing of into the session's relay state and answers whether it did, so the caller admits the session and relays only the rest: the relay's own quiet events (`foldedQuietly`), bar a compaction's end, which the agent's row records. */
   relaysQuietly(event: MessageStreamEvent, state: RelayStateStore): boolean;
@@ -447,15 +446,15 @@ export interface CoderHost extends HostAdmission {
   ): Effect.Effect<void, QueryError | Schema.SchemaError, DatabaseServices | HttpClient.HttpClient>;
 }
 
-/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post and a reply carry the door to the session's sandbox, where their pictures are read. */
+/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post carries the door to the session's sandbox, where its pictures are read. */
 export type InboxCall =
   | {
-      readonly tool: typeof INBOX_TOOL.POST | typeof INBOX_TOOL.REPLY;
+      readonly tool: typeof INBOX_TOOL.POST;
       readonly input: UnparsedWireValue;
       readonly sandbox: InboxSandboxDoor;
     }
   | {
-      readonly tool: typeof INBOX_TOOL.CLOSE | typeof INBOX_TOOL.READ;
+      readonly tool: typeof INBOX_TOOL.WITHDRAW | typeof INBOX_TOOL.READ;
       readonly input: UnparsedWireValue;
     };
 
@@ -475,10 +474,6 @@ export interface AgentToolCall {
     | typeof CODER_TOOL.CREATE_SECTION
     | typeof CODER_TOOL.DELETE_SECTION
     | typeof CODER_TOOL.UPDATE_TASK
-    | typeof CODER_TOOL.LIST_ISSUES
-    | typeof CODER_TOOL.READ_ISSUE
-    | typeof CODER_TOOL.CREATE_ISSUE
-    | typeof CODER_TOOL.UPDATE_ISSUE
     | typeof CODER_TOOL.LIST_MODELS;
   readonly input: UnparsedWireValue;
   readonly callId: string;
@@ -499,10 +494,6 @@ const AGENT_TOOL_RUN = {
   [CODER_TOOL.CREATE_SECTION]: runCreateSection,
   [CODER_TOOL.DELETE_SECTION]: runDeleteSection,
   [CODER_TOOL.UPDATE_TASK]: runUpdateTask,
-  [CODER_TOOL.LIST_ISSUES]: runListIssues,
-  [CODER_TOOL.READ_ISSUE]: runReadIssue,
-  [CODER_TOOL.CREATE_ISSUE]: runCreateIssue,
-  [CODER_TOOL.UPDATE_ISSUE]: runUpdateIssue,
   [CODER_TOOL.LIST_MODELS]: runListModels,
 } as const;
 
@@ -877,17 +868,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
-        const { id: agentId, taskId, repository } = found.success;
+        const { id: agentId, taskId } = found.success;
         const agent = { userId: admitted.target.userId, taskId, agentId };
         switch (call.tool) {
           case INBOX_TOOL.POST:
-            return yield* postToInbox({ ...agent, repository }, call.input, call.sandbox);
-          case INBOX_TOOL.CLOSE:
-            return yield* closeInInbox(agent, call.input);
+            return yield* postToInbox(agent, call.input, call.sandbox);
+          case INBOX_TOOL.WITHDRAW:
+            return yield* withdrawAsk(agent, call.input);
           case INBOX_TOOL.READ:
             return yield* readOwnInbox(agent);
-          case INBOX_TOOL.REPLY:
-            return yield* replyInInbox(agent, call.input, call.sandbox);
         }
       }).pipe(
         Effect.tapError(logStoreFailure),

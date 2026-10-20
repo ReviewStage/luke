@@ -9,9 +9,8 @@ import {
   readCodingAgentByKey,
   readCodingAgentContext,
 } from "@luke/database/models/coding-agent-store";
-import { beginIssueWork } from "@luke/database/models/issue-store";
 import type { TaskIssueLink } from "@luke/database/models/task-issue-store";
-import { beginTaskWork, readTask, type StoredTaskIssue } from "@luke/database/models/task-store";
+import { beginTaskWork, readTask } from "@luke/database/models/task-store";
 import { isWorkspaceMember, readAccountNames } from "@luke/database/models/workspace-store";
 import { storeWriter } from "@luke/database/models/writer";
 import type {
@@ -29,7 +28,6 @@ import {
 } from "@luke/features/agent-replay";
 import { MEMBER_KIND } from "@luke/features/chat-wire";
 import {
-  base64Chars,
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
   CONTEXT_WINDOW,
@@ -38,8 +36,6 @@ import {
   type CodingAgentStartRequest,
   type CodingAgentSummary,
 } from "@luke/features/coding-agent-wire";
-import { issueIdentifier } from "@luke/features/issue-list-model";
-import { LINK_PLACE, linkOf, readLink } from "@luke/features/luke-link";
 import { decodeMention, mentionMarkdown } from "@luke/features/mention-link";
 import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "@luke/features/models-wire";
 import { planMarkdown } from "@luke/features/plan-markdown";
@@ -82,6 +78,7 @@ import {
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveSessions,
+  type EveTypedTurn,
 } from "../brain-host/eve-sessions.js";
 import { fenceable } from "../fenced-text.js";
 import { MENTIONED_BOUNDS, mentionedContext, mentionedServers } from "../mentioned-context.js";
@@ -129,15 +126,10 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * message rather than as a second one on its heels. An agent
  * handed the plan of a task that links issues reads them after the plan
  * and before the note, oldest linked first, its branch named after the
- * first (`issueLinksBrief`), and one handed a plan
- * started from one of the workspace's own issues reads that issue as it
- * stands then, after the linked ones (`workspaceIssueBrief`); once eve has
- * taken such an agent, the issue moves into progress where it stood in the
- * backlog or to do and is not archived, and stands as it was otherwise
- * (`beginIssueWork`), a move that fails logged rather than the Start's
- * failure. The task itself moves into progress the same way, from the
- * backlog or to do and never back (`beginTaskWork`), whatever it was
- * started from. An agent
+ * first (`issueLinksBrief`). Once eve has taken an agent on a task, the
+ * task moves into progress from the backlog or to do and never back
+ * (`beginTaskWork`), a move that fails logged rather than the Start's
+ * failure. An agent
  * started with no task is handed a prompt in a workspace the account is a
  * member of, on a repository named by the ask and read through that
  * workspace's installation as a task's is.
@@ -172,8 +164,8 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * is not the agent's developer.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An agent started is minted as a member
- * of its workspace's chat, `@agent-N` in the order agents were started,
- * so it answers to its handle before it ever posts; a mint that fails is
+ * of its workspace's chat in the order agents were started, so it answers
+ * to its mention link before it ever posts; a mint that fails is
  * logged and left to the agent's first post or read. A choice an ask names
  * runs that one agent and is never kept as the account's default, which only
  * Settings writes. Who reaches eve is the caller's: the route holds the developer's
@@ -186,18 +178,6 @@ import { CODER_TOOL_SET } from "./tool-set.js";
 /** The heading the issues a task links stand under, after the plan and before any note. */
 export const ISSUE_LINKS_HEADING = "## The issues this task works on";
 
-/** The heading the workspace's own issue a plan was started from stands under, after the plan and before any note. */
-export const ISSUE_HEADING = "## The issue this task was started from";
-
-/** The files one message or Start may carry: their base64 together, and each one's name at JSON's widest escape with room for the keys around it. */
-export const MAXIMUM_ATTACHMENTS_BODY_BYTES =
-  base64Chars(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES) +
-  CODING_AGENT_BOUNDS.MAX_ATTACHMENTS * (6 * CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS + 128);
-
-/** A Start names a key, a choice, and a prompt with its files at most: the prompt's bound at JSON's widest escape, the files, and room for the rest. */
-export const MAXIMUM_START_BODY_BYTES =
-  6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
-
 /** A run of whitespace, line breaks among it, which a line of the brief spells as one space. */
 const WHITESPACE_RUN = /\s+/gu;
 
@@ -207,9 +187,9 @@ function oneLine(words: string): string {
 }
 
 /**
- * An issue a task links or was started from, as an agent handed the plan
- * reads it after the plan: what leads it in and what the issue is called;
- * the issue as a mention, written under the workspace its link names; what
+ * An issue a task links, as an agent handed the plan reads it after the
+ * plan: what leads it in and what the issue is called; the issue as a
+ * mention of its own page; what
  * the agent does about it beyond the plan, where anything; and the issue's
  * description as it reads, fenced as data, since whoever wrote it is not
  * the developer. What stands outside the fence is folded onto one line, and
@@ -217,9 +197,9 @@ function oneLine(words: string): string {
  * among it.
  */
 interface BriefedIssue {
-  /** How the brief leads the issue in: "This task works on", or "This task was started from". */
+  /** How the brief leads the issue in: "This task works on". */
   readonly lead: string;
-  /** What the issue is called in the brief's sentences: "the Linear issue", or "the issue". */
+  /** What the issue is called in the brief's sentences, such as "the Linear issue". */
   readonly kind: string;
   /** Its key and its title, as its mention names it. */
   readonly identifier: string;
@@ -227,7 +207,7 @@ interface BriefedIssue {
   readonly url: string;
   readonly instructions: readonly string[];
   readonly description: string;
-  /** When the description was read, as the brief says it: "it was linked to the task", or "you were started". */
+  /** When the description was read, as the brief says it: "it was linked to the task". */
   readonly readWhen: string;
   /** Who wrote the description, as the brief says it. */
   readonly writer: string;
@@ -242,11 +222,8 @@ function issueParagraphs(issue: BriefedIssue): readonly string[] {
   const named =
     mention === undefined
       ? `${name} (${oneLine(issue.url)})`
-      : // Note that the mention is written under the workspace its link names, as the workspace's own issue's link names one.
-        mentionMarkdown(mention, name, {
-          workspace: readLink(issue.url)?.workspace ?? "",
-          repository: null,
-        });
+      : // Note that a linked issue's page is its provider's, so its mention names no workspace of Luke's.
+        mentionMarkdown(mention, name, { workspace: "", repository: null });
   const description = issue.description.trim() === "" ? "" : issue.description.trimEnd();
   return [
     `${issue.lead} ${issue.kind} ${named}.`,
@@ -341,35 +318,9 @@ function issueLinksBrief(links: readonly TaskIssueLink[]): readonly string[] {
   ];
 }
 
-/** The workspace's own issue a plan was started from, as it reads now, by its identifier and its Luke link. */
-function workspaceIssueBrief(issue: StoredTaskIssue): string {
-  return [
-    ISSUE_HEADING,
-    ...issueParagraphs({
-      lead: "This task was started from",
-      kind: "the issue",
-      identifier: issueIdentifier(issue.workspaceName, issue.number),
-      title: issue.title,
-      url: linkOf({ kind: LINK_PLACE.ISSUE, issueId: issue.id }, issue.workspaceSlug),
-      instructions: [],
-      description: issue.description,
-      readWhen: "you were started",
-      writer: "a member of the workspace",
-      fence: "issue-description",
-    }),
-  ].join("\n\n");
-}
-
-/** The plan's document as an agent is handed it, with the issues it links and the issue it was started from after it where there are any. */
-function planBrief(
-  task: Task,
-  issueLinks: readonly TaskIssueLink[],
-  issue: StoredTaskIssue | undefined,
-): string {
-  const issues = [
-    ...issueLinksBrief(issueLinks),
-    ...(issue === undefined ? [] : [workspaceIssueBrief(issue)]),
-  ];
+/** The plan's document as an agent is handed it, with the issues it links after it where there are any. */
+function planBrief(task: Task, issueLinks: readonly TaskIssueLink[]): string {
+  const issues = issueLinksBrief(issueLinks);
   const plan = planMarkdown(task);
   return issues.length === 0 ? plan : `${plan.trimEnd()}\n\n${issues.join("\n\n")}\n`;
 }
@@ -504,10 +455,13 @@ interface ReplayFitter {
 const confirmedBranch = Effect.fnUntraced(function* (
   workspaceId: string,
   repository: string,
+  member: string | undefined,
   branch: string,
 ): Effect.fn.Return<void, HostedRefusal, DatabaseServices | HttpClient.HttpClient | GitHubApp> {
   const app = yield* GitHubApp;
-  const reached = yield* githubReachOrRefusal(app.repositoryReadToken(workspaceId, repository));
+  const reached = yield* githubReachOrRefusal(
+    app.repositoryReadToken(workspaceId, repository, member),
+  );
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
   const { repository: confirmed, token } = reached.value;
   const head = yield* readBranchHead(token, confirmed, branch).pipe(
@@ -529,6 +483,7 @@ const startBranchOf = Effect.fnUntraced(function* (
   ask: StartAsk,
   inherited: string | null,
   landing: StartLanding,
+  member: string | undefined,
 ): Effect.fn.Return<
   string | undefined,
   HostedRefusal,
@@ -538,7 +493,7 @@ const startBranchOf = Effect.fnUntraced(function* (
   if (branch === undefined) return undefined;
   const made = yield* hostedStoreOrUnavailable(readCodingAgentByKey(userId, ask.idempotencyKey));
   if (Option.isSome(made)) return branch;
-  const confirmed = confirmedBranch(landing.workspaceId, landing.repository, branch);
+  const confirmed = confirmedBranch(landing.workspaceId, landing.repository, member, branch);
   if (ask.branch !== undefined) return yield* Effect.as(confirmed, branch);
   return yield* confirmed.pipe(
     Effect.as<string | undefined>(branch),
@@ -576,10 +531,10 @@ const landingOf = Effect.fnUntraced(function* (
   }
   const read = yield* hostedStoreOrUnavailable(readTask(userId, place.taskId));
   if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const { task, ownerId, issueLinks, issue } = read.value;
+  const { task, ownerId, issueLinks } = read.value;
   if (task.repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
   const brief = fitter === undefined ? place.prompt : fitter.prompt;
-  const words = brief ?? planBrief(task, issueLinks, issue);
+  const words = brief ?? planBrief(task, issueLinks);
   const heading = place.noteHeading ?? START_NOTE_HEADING.DEVELOPER;
   const written = (replayed: Replay | undefined) =>
     firstMessageText(words, replayed, place.note, heading, noteFiles);
@@ -745,7 +700,7 @@ function continuedTitle(source: string | null): string | undefined {
  * not be stopped is logged, since the new agent stands either way.
  */
 const stoppedSource = (
-  eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   source: CodingAgent,
 ) =>
   cancelledTurn(eve, storeWriter({ tools: CODER_TOOL_SET }), source).pipe(
@@ -756,7 +711,7 @@ const stoppedSource = (
 
 /** Starts the account's agent on the task or in the workspace, as above; eve is composed only once a new agent needs its session opened, so a retry that found its agent asks for none. */
 export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent")(function* (
-  eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
   ask: StartAsk,
 ): Effect.fn.Return<CodingAgentStart, HostedRefusal | ModelChoiceRefused, StartServices> {
@@ -785,9 +740,22 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
           ...(ask.attachments ?? []),
         ]);
   const landing = yield* landingOf(userId, ask, fitter, noteFiles);
-  yield* workspaceRepository(landing.workspaceId, landing.repository, landing.mover);
+  // An automation's agent reaches through the workspace's installation alone; a Start by hand, on the starter's token too.
+  const member = ask.automationOrigin === undefined ? userId : undefined;
+  const reached = yield* workspaceRepository(
+    landing.workspaceId,
+    landing.repository,
+    member,
+    landing.mover,
+  );
   // An agent started from another goes on from the branch that one was started on.
-  const branch = yield* startBranchOf(userId, ask, from?.source.startBranch ?? null, landing);
+  const branch = yield* startBranchOf(
+    userId,
+    ask,
+    from?.source.startBranch ?? null,
+    landing,
+    member,
+  );
   const brief = landing.place;
   // The words a mention is read from: the prompt with any note after it, or a plan start's note
   // alone; never the replay of another agent, whose words name what it read, not what to hand on.
@@ -833,6 +801,7 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
       effort: choice.effort,
       contextWindow: choice.contextWindow,
       repository: landing.repository,
+      githubAccess: reached.access,
       startBranch: branch,
       disabledServers: ask.disabledServers ?? from?.disabledServers,
       // The servers those words mention are its first turn's, whatever the switches say.
@@ -879,14 +848,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
   }
   // The work goes on in the continue, so its source stops; a fork's source goes on beside it.
   if (continued) yield* stoppedSource(eve, from.source);
-  // Work on the issue the task was started from has begun, so one in the backlog or to do moves
-  // into progress; a move that fails is logged, never the Start's failure.
-  const issueId = landing.task?.issueId;
-  if (issueId !== undefined) {
-    yield* beginIssueWork(userId, issueId).pipe(Effect.asVoid, Effect.catch(logStoreFailure));
-  }
-  // Work on the task itself has begun too, so one in the backlog or to do moves into progress,
-  // and one further along stands; a move that fails is logged, never the Start's failure.
+  // Work on the task has begun, so one in the backlog or to do moves into progress, and one
+  // further along stands; a move that fails is logged, never the Start's failure.
   if (landing.task !== undefined) {
     yield* beginTaskWork(userId, landing.task.id).pipe(
       Effect.asVoid,
@@ -936,7 +899,7 @@ export interface RequestedStart {
  * made, with no turn; one a retry found under its key, as it stands now.
  */
 export const startRequestedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
-  eve: Effect.Effect<EveSessions, HostedRefusal, HttpClient.HttpClient>,
+  eve: Effect.Effect<EveSessions<EveTypedTurn>, HostedRefusal, HttpClient.HttpClient>,
   userId: string,
   taskId: string,
   request: CodingAgentStartRequest,

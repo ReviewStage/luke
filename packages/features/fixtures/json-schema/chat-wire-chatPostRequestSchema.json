@@ -140,7 +140,12 @@
     },
     "to": {
       "type": "string",
-      "maxLength": 81
+      "maxLength": 512
+    },
+    "channelId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 36
     },
     "replyTo": {
       "type": "number",

@@ -16,7 +16,7 @@ import {
   REPOSITORY_UNREACHED,
   type RepositoryUnreached,
 } from "@luke/features/repository-reach-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { SettingsLink } from "@luke/settings/settings-views";
 import { Effect } from "effect";
 import { act, createElement } from "react";
@@ -62,9 +62,6 @@ let github: IntegrationStatus = INTEGRATION_STATUS.UNAVAILABLE;
 const UNAVAILABLE = Object.fromEntries(
   INTEGRATION_PROVIDER_LIST.map((provider) => [provider, INTEGRATION_STATUS.UNAVAILABLE]),
 ) as Record<IntegrationProvider, IntegrationStatus>;
-/** Every act the tab sent, in order. */
-let sent: Act[] = [];
-
 /** Every integration a Connect was asked for on the act port, in order. */
 let connects: IntegrationProviderParams[] = [];
 
@@ -85,7 +82,6 @@ beforeEach(() => {
   fakeAppPlatform(QUIET_PANEL);
   installScrollIntoView();
   installEditorLayout();
-  sent = [];
   connects = [];
   refuseConnect = false;
   slack = INTEGRATION_STATUS.CONNECTED;
@@ -111,12 +107,7 @@ beforeEach(() => {
       return Promise.resolve({ status: INTEGRATION_STATUS.DISCONNECTED });
     },
   });
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => {
-      sent.push(request);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
-    },
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

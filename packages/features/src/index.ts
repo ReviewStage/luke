@@ -64,7 +64,6 @@ export {
   HostedIntegrationsClient,
   type HostedIntegrationsClientOptions,
 } from "./integration-client.js";
-export { HostedIssueClient, type HostedIssueClientOptions } from "./issue-client.js";
 export {
   AVATAR_FRAME_BOUNDS,
   AVATAR_STOP_REASON,
@@ -128,17 +127,10 @@ export {
   type HostedMacCommandClientOptions,
 } from "./mac-command-client.js";
 export {
-  agentPullRequestPath,
-  agentStopPath,
   automationPath,
-  automationRunPath,
-  automationRunsPath,
   automationWebhookPath,
   HOSTED_SERVICE_PATH,
-  taskAgentsPath,
-  taskPath,
   VOICE_SERVICE_PATH,
-  workspacePhotoPath,
 } from "./service-paths.js";
 export {
   HOSTED_API_ERROR,

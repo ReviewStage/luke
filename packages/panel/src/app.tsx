@@ -65,12 +65,13 @@ import { OpenFeedbackProvider } from "./open-feedback.js";
 import { OpenSettingsProvider } from "./open-settings.js";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs.js";
 import { OpenPersonProvider } from "./person-door.js";
+import { testNotifications } from "./settings/notifications-press.js";
 import { shownSettingsView } from "./settings/pages.js";
 import { settingsRowsInput } from "./settings/settings-panel.js";
 import { followSettingsLink, useSettingsPlace, useSettingsWorkspace } from "./settings-link.js";
-import { useShellRoom } from "./shell-room.js";
-import { useStageWidth } from "./stage-width.js";
+import { useStageRoom } from "./stage-room.js";
 import { type AgentPlace, useAgentEndToasts } from "./tasks/agent-end-toast.js";
+import { useChatOn } from "./tasks/chat-gate.js";
 import { useChatToasts } from "./tasks/chat-toast.js";
 import { useInboxSettlingOwner } from "./tasks/inbox-settling.js";
 import { useInboxToasts } from "./tasks/inbox-toast.js";
@@ -78,7 +79,7 @@ import { MessageRevealProvider } from "./tasks/message-links.js";
 import { type RepositoryRemedyDoors, RepositoryRemedyProvider } from "./tasks/repository-remedy.js";
 import { ThreadRevealProvider } from "./tasks/thread-reveal.js";
 import { ListedPullRequestsProvider, OpenLinkProvider } from "./tasks/use-open-link.js";
-import { useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
+import { type LeaveAsk, useLeaveGuard, useTasksTab } from "./tasks/use-tasks-tab.js";
 import { TOAST_HOLD, TOAST_TONE, ToastHost, useToast } from "./toast.js";
 import { useUpdatedToast } from "./update-toast.js";
 import { useAppState, useExperiment } from "./use-app-state.js";
@@ -101,6 +102,11 @@ const NO_TASKS_HOLDING: readonly AppInboxTaskHolding[] = [];
 const NOTHING_TASKLESS: readonly AppInboxTasklessItem[] = [];
 /** No automation's run failed, as one value across renders. */
 const NO_FAILED_RUNS: readonly AccountFailedRun[] = [];
+
+/** Tells the shell the ask standing while a page holds unsaved work, or nothing once none does. */
+const tellShellUnsavedWork = (ask: LeaveAsk | undefined): void => {
+  appPlatform().unsavedWork?.(ask);
+};
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -164,7 +170,8 @@ export function App(): React.JSX.Element {
   // So does the parser a reply's markdown is drawn through, so a transcript opened finds it there.
   useEffect(prefetchMarkdownHtmlParser, []);
   // Note that the tab switch asks first while a page holds unsaved work, because Settings takes the window and the page with it.
-  const leaveGuard = useLeaveGuard();
+  // The shell hears the ask too, so its own ways out of the page ask first.
+  const leaveGuard = useLeaveGuard(tellShellUnsavedWork);
   const { guard: guardLeave } = leaveGuard;
   const changeTab = useCallback(
     (next: PanelTab) =>
@@ -286,10 +293,11 @@ export function App(): React.JSX.Element {
   const volumeHintWanted =
     fixtureMuted ||
     (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
-  // The stage's width, on the desktop the window's, which the sidebar folds
-  // by and which says whether the panel stands as one pane (`shell-room.ts`).
-  const stage = useStageWidth();
-  const room = useShellRoom(stage.width);
+  // The room the stage's width gives, on the desktop the window's: whether
+  // the panel stands as one pane (`shell-room.ts`), and whether the sidebar
+  // folds. Only crossing a line draws the shell again, never a pixel's drag.
+  const stage = useStageRoom();
+  const room = stage.room;
   // The Tasks tab, drawn from the same voice report the strip reads, so a
   // task call's words and levels are the shape's as any call's are.
   const tasks = useTasksTab({
@@ -365,7 +373,7 @@ export function App(): React.JSX.Element {
   useEffect(() => appBridge().onShowAgent(openAgent), [openAgent]);
   // A Luke link, handed by the system or pressed in the window, opens where its place stands (`@luke/ui/link-route`).
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
+  const chatOn = useChatOn();
   const toast = useToast();
   // A pull request a listed task's agent opened opens in that agent's Pull request tab wherever it is pressed (`use-open-link.ts`).
   const listedTasks = useMemo(
@@ -376,7 +384,7 @@ export function App(): React.JSX.Element {
     const route = linkRoute(link, {
       workspaces: tasks.workspaces,
       factoryOn,
-      issuesOn,
+      chatOn,
     });
     if (route.kind === LINK_ROUTE.SETTINGS) {
       openSettings(route.settings);
@@ -517,10 +525,13 @@ export function App(): React.JSX.Element {
   });
   // The narrow screens' ways back to their lists go through the history, so the two never disagree.
   const shellTasks = throughHistory(tasks, history.lists);
+  // Escape reads the latest of them as it lands, so its listener stays the same across renders.
+  const shellDoors = useRef(shellTasks);
+  shellDoors.current = shellTasks;
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all. It folds by the room the
   // stage has, which on the desktop is the window's.
-  const sidebar = useSidebarCollapse(state?.run.fixtureMode === true, stage.width);
+  const sidebar = useSidebarCollapse(state?.run.fixtureMode === true, stage.compact);
 
   const caption = useCaptionPresentation({
     lukeCaptions,
@@ -595,7 +606,7 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings, a plan's version history, an agent's or a person's page, Factory, the Automations page, or the Issues page, back to wherever it was
+      // time: Settings, a plan's version history, an agent's or a person's page, Factory, the Automations page, or the Board, back to wherever it was
       // opened from, then a side panel filling the window back beside its
       // task, then an open task back to the home page. A menu and the
       // settings search answer their own Escapes and keep them — the search
@@ -613,10 +624,12 @@ export function App(): React.JSX.Element {
       if (runAppCommand(APP_COMMAND.EXIT_PERSON_PAGE)) return;
       if (runAppCommand(APP_COMMAND.EXIT_FACTORY)) return;
       if (runAppCommand(APP_COMMAND.EXIT_AUTOMATIONS)) return;
-      if (runAppCommand(APP_COMMAND.EXIT_ISSUES)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_BOARD)) return;
       // An open task unwinds to the home page, which leaves it and ends
-      // its call. That page is home, so a press there does nothing.
-      tasks.back();
+      // its call. That page is home, so a press there does nothing. A side
+      // panel standing only full screen shuts through the history, as its
+      // Close does.
+      shellDoors.current.back();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -624,7 +637,6 @@ export function App(): React.JSX.Element {
     signIn.cancelSignIn,
     signIn.signInWait,
     listening,
-    tasks.back,
     tasks.inboxView.open,
     tasks.chatView.open,
     speaking,
@@ -802,7 +814,7 @@ export function App(): React.JSX.Element {
                                     packaged: state.run.packaged,
                                     onOpenSettings: () =>
                                       tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
-                                    onTest: () => tell(ACT_KIND.NOTIFICATIONS_TEST),
+                                    onTest: testNotifications,
                                   },
                                   updates,
                                   settings,

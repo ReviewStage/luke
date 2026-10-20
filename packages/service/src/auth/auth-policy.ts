@@ -7,6 +7,7 @@
  */
 
 import { DESKTOP_SESSION_CLIENT_ID } from "@luke/features/desktop-session-wire";
+import { USER_ROLE } from "../admin/admin-access.js";
 
 /**
  * What a GitHub sign-in asks for. It is the Luke GitHub App's user
@@ -112,6 +113,20 @@ export const DISABLED_AUTH_PATHS = [
  * worth nothing without this deployment's secret having signed it.
  */
 export const SESSION_BEARER = { requireSignature: true } as const;
+
+/**
+ * The user's fields beyond Better Auth's own. Admin access is a plain-text
+ * `role` on the user, managed by Better Auth: the migrations declared it on
+ * the `user` table, and it is returned on the session so the dashboard reads
+ * it without a query of its own. `input: false` keeps a sign-up from
+ * asserting its own role — the role is set only by a maintainer's own write
+ * to the database, never by anything Luke runs.
+ */
+export const USER_FIELDS = {
+  additionalFields: {
+    role: { type: "string", required: false, defaultValue: USER_ROLE.USER, input: false },
+  },
+} as const;
 
 /**
  * Better Auth's Electron plugin

@@ -11,6 +11,7 @@ export {
   cookieAccountSourceLayer,
 } from "../cookie-account-source.js";
 export {
+  ALL_CLIENT_CAPABILITIES,
   ALL_HOST_PLATFORM_CONCERNS,
   type ClientCapability,
   HOST_CONCERN,
@@ -29,6 +30,7 @@ export {
   AppIdentity,
   Environment,
   IdSource,
+  PageReturns,
   RunMode,
   reporterLayer,
   SecretCipher,

@@ -72,7 +72,7 @@ const FEEDBACK_COPY = {
   [FEEDBACK_KIND.PROMPT]: {
     title: "Suggest a feature",
     field: "Feature suggestion",
-    placeholder: "Describe a feature you'd like Luke to have…",
+    placeholder: "What would you want Luke to do?",
   },
 } as const;
 

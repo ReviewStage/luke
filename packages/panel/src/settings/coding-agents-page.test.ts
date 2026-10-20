@@ -9,12 +9,12 @@ import {
   PROVIDER_KEY_STATUS,
   type ProviderKeySummary,
 } from "@luke/features/provider-key-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActKind, type ActResultFor } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { PortActKind, PortActResult } from "@luke/host/contract";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { type AnyAct, type AnyActOutcome, fakeActs } from "../testing/app-bridge.js";
+import { type AnyAct, FAKE_ANSWER, type FakeActAnswer, fakeActs } from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
 import {
   focusedSegment,
@@ -68,13 +68,13 @@ let sent: AnyAct[] = [];
 /** Whether the service refuses the next write. */
 let refuseWrite = false;
 
-const done = (value: ActResultFor<ActKind> | PortActResult<PortActKind>): AnyActOutcome => ({
-  status: ACT_OUTCOME_STATUS.DONE,
+const done = (value: PortActResult<PortActKind>): FakeActAnswer => ({
+  status: FAKE_ANSWER.DONE,
   value,
 });
 
 /** The bridge, answering the page's acts the way the host would. */
-function answer(request: AnyAct): Promise<AnyActOutcome> {
+function answer(request: AnyAct): Promise<FakeActAnswer> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_MODELS:
@@ -98,7 +98,7 @@ function answer(request: AnyAct): Promise<AnyActOutcome> {
       stored = request.payload;
       return Promise.resolve(done({ choice: stored }));
     default:
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.UNKNOWN_ACT });
+      return Promise.resolve({ status: FAKE_ANSWER.UNKNOWN_ACT });
   }
 }
 

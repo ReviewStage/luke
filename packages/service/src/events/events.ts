@@ -1,6 +1,6 @@
 import type { DatabaseServices, QueryError } from "@luke/database/core/query";
-import { Clock, Effect, type Layer, Option, type Schema } from "effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type { productEventsAnswerSchema } from "@luke/features/analytics";
+import { Clock, Effect, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import {
   PRODUCT_EVENT_MAXIMUM_AGE_MS,
@@ -11,8 +11,7 @@ import {
   text as trimmedText,
   type UnparsedWireValue,
 } from "../core.js";
-import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "../http/http.js";
-import type { UserIdResolver } from "../http/http-effect.js";
+import { HOSTED_REFUSAL, type HostedRefusal, upstreamRefused } from "../http/http-effect.js";
 import { makeRateBrake } from "../http/rate-brake.js";
 import {
   type PosthogBatch,
@@ -35,9 +34,6 @@ import {
  * what arrived, so a `distinct_id`, an `$ip`, or a `$set` on the way in is not
  * copied forward, and no property can hold free text.
  */
-
-/** Bigger than a full batch of allowlisted events can be, and refused before parsing. */
-const MAXIMUM_BODY_BYTES = 16_384;
 
 /** The `$lib` tag every batch is stamped with: the desktop is the one app that posts them. */
 const PRODUCT_EVENT_LIB = "luke-desktop";
@@ -63,12 +59,10 @@ const eventsBrake = makeRateBrake({
 });
 
 export interface EventsOptions {
-  request: Request;
-  /** The analytics project token, from the deployment environment; absent means recording is off. */
-  projectApiKey: string | undefined;
+  /** The analytics project token, from the deployment environment, trimmed and present. */
+  projectApiKey: string;
   /** A deployment-configured ingestion host; the shared default otherwise. */
   host?: string;
-  resolveUserId: UserIdResolver;
   /**
    * The deployment's own `VERCEL_ENV` (`production`, `preview`, or
    * `development`), stamped on every event as `environment` so a preview's
@@ -82,8 +76,6 @@ export interface EventsOptions {
   readPerson?: (
     userId: string,
   ) => Effect.Effect<PosthogPerson | undefined, QueryError | Schema.SchemaError, DatabaseServices>;
-  httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  timeoutMs?: number;
 }
 
 /**
@@ -141,71 +133,41 @@ function batchDocument(
   };
 }
 
-export function handleEvents(
+/**
+ * One batch recorded for the account the caller resolved to: read through
+ * the allowlist, braked, stamped, and forwarded. The caller, the kill
+ * switch, and the body's size are the route's to settle before this runs
+ * (`events-procedures.ts`).
+ */
+export function recordEvents(
+  userId: string,
+  payload: UnparsedWireValue,
   options: EventsOptions,
-): Effect.Effect<Response, never, DatabaseServices> {
-  const { request } = options;
+): Effect.Effect<
+  typeof productEventsAnswerSchema.Type,
+  HostedRefusal,
+  DatabaseServices | HttpClient.HttpClient
+> {
   return Effect.gen(function* () {
-    if (request.method !== "POST") {
-      return errorResponse(
-        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-      );
-    }
-    // Trimmed like every other deployment key read: a whitespace token is the
-    // kill switch, not a key, and an unconfigured deployment is simply not
-    // measured — nothing else depends on this endpoint answering.
-    const projectApiKey = trimmedText(options.projectApiKey);
-    if (!projectApiKey) {
-      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-    }
-
-    const account = yield* options.resolveUserId(request);
-    if (Option.isNone(account)) {
-      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-    }
-    const userId = account.value;
-
-    const raw = yield* Effect.tryPromise(() => request.text()).pipe(
-      Effect.orElseSucceed((): string | undefined => undefined),
-    );
-    // Measured before parsing: an oversized body is refused rather than read.
-    if (raw === undefined || new TextEncoder().encode(raw).byteLength > MAXIMUM_BODY_BYTES) {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-    }
-    let payload: unknown;
-    try {
-      payload = JSON.parse(raw);
-    } catch {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-    }
-    // SAFETY: JSON.parse returns a runtime value; the batch reader is the parser.
-    const wire = payload as UnparsedWireValue;
     // The reader owns the batch limit as well as the vocabulary, and refuses an
     // oversized batch whole rather than trimming it.
-    const events = productEventBatchFromWire(wire);
-    if (!events) {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-    }
+    const events = productEventBatchFromWire(payload);
+    if (!events) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     // Note that a batch of nothing but retired names is accepted with nothing
     // to post, because the older build that sent it is not at fault.
-    if (events.length === 0) {
-      return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, { accepted: 0 });
-    }
+    if (events.length === 0) return { accepted: 0 };
     const stamp = {
-      ...productEventBuildFromWire(wire),
+      ...productEventBuildFromWire(payload),
       [ENVIRONMENT_PROPERTY]: trimmedText(options.deployment) ?? UNNAMED_DEPLOYMENT,
     };
 
     const now = yield* Clock.currentTimeMillis;
     if (!(yield* eventsBrake.check(userId, events.length))) {
-      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+      return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
     }
 
     const upstream: PosthogUpstreamOptions = {};
     if (options.host !== undefined) upstream.host = options.host;
-    if (options.httpClient) upstream.httpClient = options.httpClient;
-    if (options.timeoutMs !== undefined) upstream.timeoutMs = options.timeoutMs;
     // A failed read costs the person's name, never the counts.
     const readPerson = options.readPerson;
     const person = readPerson
@@ -213,21 +175,15 @@ export function handleEvents(
           Effect.orElseSucceed((): PosthogPerson | undefined => undefined),
         )
       : undefined;
-    const response = yield* Effect.provide(
-      postBatchEffect(batchDocument(events, stamp, projectApiKey, userId, now, person), upstream),
-      upstream.httpClient ?? FetchHttpClient.layer,
+    const response = yield* postBatchEffect(
+      batchDocument(events, stamp, options.projectApiKey, userId, now, person),
+      upstream,
     );
-    if (!response) {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
-    }
-    if (!response.ok) {
-      // Status alone diagnoses the upstream without carrying its body onward.
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, {
-        upstreamStatus: response.status,
-      });
-    }
+    if (!response) return yield* Effect.fail(HOSTED_REFUSAL.UPSTREAM_ERROR);
+    // Status alone diagnoses the upstream without carrying its body onward.
+    if (!response.ok) return yield* Effect.fail(upstreamRefused(response.status));
     // The desktop drops the batch whichever way this lands; the distinction is
     // for the tests and alerts that watch this endpoint.
-    return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, { accepted: events.length });
+    return { accepted: events.length };
   });
 }

@@ -1,3 +1,4 @@
+import { browserClient } from "@luke/features/contract/browser-client";
 /**
  * cost.tsx -- the Cost screen: what the hosted service spends, priced at list price from the usage its tables keep.
  */
@@ -7,7 +8,7 @@ import type {
   AdminCostAccount,
   AdminCostModel,
 } from "@luke/service/admin/admin-cost-wire";
-import type { AdminMetricsWindow } from "@luke/service/admin/http";
+import type { AdminMetricsWindow, AdminWindowedQuery } from "@luke/service/admin/http";
 import {
   BADGE_TONE,
   Badge,
@@ -27,14 +28,18 @@ import { AdminErrorCard, ForbiddenCard, SignInCard } from "../chrome/cards";
 import { HideAdminsToggle, Refreshing, WindowSwitcher } from "../chrome/controls";
 import { AdminPage, type ViewerAccount } from "../chrome/page-header";
 import { PageSkeleton } from "../chrome/page-skeleton";
-import { COST_PATH, windowedReadPath } from "../routing";
+import { windowedReadQuery } from "../routing";
 import { SKELETON_PLOT, SKELETON_SHAPE, type SkeletonShape } from "../skeleton";
-import { type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
+import { ADMIN_READ, type AdminReader, adminReadFailure, useAdminRead } from "../use-admin-read";
 
 const COST_ERROR = "The cost endpoint did not answer.";
 
-// SAFETY: a 200 from the admin cost endpoint is an AdminCost body by its contract.
-const readCost: AdminReader<AdminCost> = async (response) => (await response.json()) as AdminCost;
+/** The window's spend, as the admin cost procedure answers it. */
+const readCost =
+  (query: AdminWindowedQuery): AdminReader<AdminCost> =>
+  async (signal) =>
+    // SAFETY: the admin cost procedure answers an AdminCost (`@luke/service/admin/admin-cost-wire`), which the contract cannot name.
+    (await browserClient.admin.cost(query, { signal })) as AdminCost;
 
 /** What every figure on the screen is, said once under the title. */
 const COST_DESCRIPTION =
@@ -75,9 +80,7 @@ function ListPriceNote(): React.JSX.Element {
   return (
     <div className="mt-3">
       <Text tone={TEXT_TONE.MUTED}>
-        Figures are public list prices, used to compare accounts, models, and sources and to show
-        trends. They are not what Luke pays: discounts, credits, plan fees, and which key paid
-        aren't reflected.
+        List prices leave out discounts, credits, plan fees, and which key paid.
       </Text>
     </div>
   );
@@ -227,9 +230,10 @@ export function CostScreen({
   /** Applied around every answer but the gate's own cards, which stand alone. */
   frame: (content: React.JSX.Element) => React.JSX.Element;
 }): React.JSX.Element {
+  const query = windowedReadQuery(hideAdmins, windowDays);
   const { state, refreshing, reload, withdraw } = useAdminRead(
-    windowedReadPath(COST_PATH, hideAdmins, windowDays),
-    readCost,
+    { procedure: ADMIN_READ.COST, query: query },
+    readCost(query),
     COST_ERROR,
   );
   const signOut = () => void withdraw(onSignOut);

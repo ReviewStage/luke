@@ -74,7 +74,8 @@ const PAGE_CAPABILITY = {
   [SETTINGS_VIEW.THIS_MAC]: HOST_CAPABILITY.MAC_COMMANDS,
   [SETTINGS_VIEW.EXPERIMENTAL]: null,
   [SETTINGS_VIEW.ABOUT]: null,
-  [SETTINGS_VIEW.SHORTCUTS]: null,
+  // The menu bar's chords, which a browser keeps many of for its own tabs.
+  [SETTINGS_VIEW.SHORTCUTS]: HOST_CAPABILITY.DESKTOP_APP,
 } as const satisfies Record<SettingsView, HostCapability | null>;
 
 /** What each of the Settings sidebar's groups is headed by where no workspace is listed to name the first. */
@@ -83,6 +84,9 @@ const SETTINGS_GROUP_HEADING = {
   [SETTINGS_PAGE_GROUP.ACCOUNT]: "Account",
   [SETTINGS_PAGE_GROUP.THIS_MAC]: "This Mac",
 } satisfies Record<SettingsPageGroup, string>;
+
+/** The last group's heading in a browser, which runs on whatever the reader holds rather than on a Mac. */
+const THIS_DEVICE_HEADING = "This device";
 
 /** Any page's name and glyph: what the Settings sidebar, a page's title, and the command palette name it by. */
 export function settingsPageOf(view: SettingsView): SettingsPage {
@@ -121,7 +125,16 @@ export function shownSettingsPageGroups(
   })).filter(({ pages }) => pages.length > 0);
 }
 
-/** A group's heading in the Settings sidebar, the first's where no workspace is listed. */
-export function settingsGroupHeadingOf(group: SettingsPageGroup): string {
+/** A group's heading in the Settings sidebar, the first's where no workspace is listed; the machine's own group is named for the Mac only in the app installed there. */
+export function settingsGroupHeadingOf(
+  group: SettingsPageGroup,
+  capabilities: readonly HostCapability[],
+): string {
+  if (
+    group === SETTINGS_PAGE_GROUP.THIS_MAC &&
+    !capabilities.includes(HOST_CAPABILITY.DESKTOP_APP)
+  ) {
+    return THIS_DEVICE_HEADING;
+  }
   return SETTINGS_GROUP_HEADING[group];
 }

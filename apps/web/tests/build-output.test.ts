@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -45,6 +52,13 @@ const FunctionConfigSchema = Schema.Struct({
 const decodeFunctionConfig = Schema.decodeUnknownSync(Schema.fromJsonString(FunctionConfigSchema));
 
 const LOAD_MODULE = "await import(process.argv[1]);";
+
+/** Loads a function and answers one request through its default export, printing the status and the body. */
+const ANSWER_REQUEST =
+  "const fn = await import(process.argv[1]); const answer = await fn.default.fetch(new Request(process.argv[2])); console.log(answer.status, await answer.text()); process.exit(0);";
+
+/** A database URL that connects to nothing, which the web runtime's layer names and no answer here dials. */
+const PLACEHOLDER_DATABASE_URL = "postgresql://isolation:load@127.0.0.1:5432/luke";
 
 /**
  * What a load is given: a PATH to find node, and nothing else. Every bundle
@@ -132,4 +146,49 @@ test("each .func loads with nothing above it available", { timeout: 180_000 }, a
     );
     assert.equal(loaded.status, 0, `${path}: ${loaded.stderr}`);
   }
+});
+
+test("the default .func, loaded alone, lands the fallback's requests on the hosted oRPC router", {
+  timeout: 180_000,
+}, async () => {
+  const { outputDirectory } = await emitFromTask();
+  const grouped = (await webFunctions(WEB)).find((definition) => definition.file === "default");
+  assert.ok(grouped);
+  const path = functionPublicPath(grouped);
+  const answered = (query: string) => {
+    const run = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        ANSWER_REQUEST,
+        functionEntryPath(outputDirectory, path),
+        `https://luke.test/${path}?${query}`,
+      ],
+      {
+        cwd: functionDirectory(outputDirectory, path),
+        encoding: "utf8",
+        env: { ...LOAD_ENVIRONMENT, DATABASE_URL: PLACEHOLDER_DATABASE_URL },
+      },
+    );
+    assert.equal(run.status, 0, run.stderr);
+    return run.stdout.trim().split("\n").at(-1);
+  };
+  assert.equal(answered("route=orpc&route-path=models"), '401 {"error":"invalid-token"}');
+  assert.equal(answered("route=orpc&route-path=nope"), '404 {"error":"not-found"}');
+});
+
+test("the site is copied under static/ whole, but for any source map the client build left in it", async () => {
+  const site = mkdtempSync(join(tmpdir(), "luke-build-site-"));
+  mkdirSync(join(site, "assets"));
+  writeFileSync(join(site, "app.html"), "<!doctype html>");
+  writeFileSync(join(site, "assets", "app-1a2b.js"), "console.log(1);");
+  writeFileSync(join(site, "assets", "app-1a2b.js.map"), '{"version":3}');
+  writeFileSync(join(site, "assets", "app-1a2b.css.map"), '{"version":3}');
+  const outputDirectory = mkdtempSync(join(tmpdir(), "luke-build-output-"));
+
+  await emitBuildOutput({ outputDirectory, functions: [], staticDirectory: site });
+
+  const served = readdirSync(join(outputDirectory, "static"), { recursive: true }).map(String);
+  assert.deepEqual(served.sort(), ["app.html", "assets", join("assets", "app-1a2b.js")]);
 });

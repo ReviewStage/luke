@@ -5,6 +5,12 @@ import {
 } from "@luke/features/analytics";
 import type { FeedbackResult, FeedbackSubmission } from "@luke/features/feedback";
 import { feedbackDeliveryFromEnvironment } from "@luke/features/feedback";
+import {
+  eventWithoutAccessTokens,
+  SPANS_NAMING_ACCESS_TOKENS,
+  spanWithoutAccessTokens,
+  withoutAccessTokens,
+} from "@luke/features/sentry-breadcrumbs";
 import { type SentryCapture, sentryReporterLayer } from "@luke/features/sentry-reporting";
 import { SENTRY_TRACES_SAMPLE_RATE } from "@luke/features/sentry-tracing";
 import { type RunMode, sentryReportingEnabled } from "@luke/host";
@@ -12,11 +18,6 @@ import type { EffectDesktopService } from "@luke/host/desktop-service";
 import type { SentryEnvironment } from "@luke/host/sentry-environment";
 import * as Sentry from "@sentry/electron/main";
 import { Effect, type Layer } from "effect";
-import {
-  eventWithoutAccessTokens,
-  transactionWithoutAccessTokens,
-  withoutAccessTokens,
-} from "#shared/sentry-breadcrumbs";
 import type { DesktopConfig } from "./desktop-config";
 
 /** How long the quit waits for a queued crash report to leave; a flush must not hold a quit. */
@@ -53,7 +54,8 @@ export function initializeCrashReporting(runMode: RunMode, environment: SentryEn
     integrations: [Sentry.startupTracingIntegration()],
     beforeBreadcrumb: withoutAccessTokens,
     beforeSend: eventWithoutAccessTokens,
-    beforeSendTransaction: transactionWithoutAccessTokens,
+    ignoreSpans: SPANS_NAMING_ACCESS_TOKENS,
+    beforeSendSpan: Sentry.withStreamedSpan(spanWithoutAccessTokens),
   });
 }
 

@@ -26,7 +26,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../../core.js";
-import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
+import { BRAIN_HOST_HEADER, type BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
 
 /**
  * The host's own calls into eve's HTTP API, made from a web function on the
@@ -82,6 +82,9 @@ export const EVE_MOUNT = {
 } as const;
 
 export type EveMount = (typeof EVE_MOUNT)[keyof typeof EVE_MOUNT];
+
+/** A typed turn: the account's own words, the one kind a route's client may send. */
+export type EveTypedTurn = typeof BRAIN_HOST_TURN.TYPED;
 
 /** eve's session routes under a mount; a path is composed from these and nothing else. */
 const SESSION_ROUTE = "/v1/session";
@@ -352,8 +355,12 @@ export interface EveSessionsOptions {
   /** The origin eve answers on; the deployment's own, where its rewrites carry the mount's `/v1/*` into the eve service. */
   readonly origin: string;
   readonly caller: EveCaller;
-  /** Which eve service's routes are reached; the brain's when unsaid. */
-  readonly mount?: EveMount;
+  /**
+   * Which eve service's routes are reached. Note that it is always said,
+   * because the brain's is the one that takes a typed turn as the account's
+   * own words, and a client must never reach it by leaving a field out.
+   */
+  readonly mount: EveMount;
 }
 
 /** The constructor over one fiber's client: every seam handed eve's client composes it for a caller through this. */
@@ -501,7 +508,7 @@ function sessionsOver<Turn extends BrainHostTurn>(
   options: EveSessionsOptions,
 ): EveSessions<Turn> {
   const identity = callerHeaders(options.caller);
-  const mount = options.mount ?? EVE_MOUNT.TASKS;
+  const { mount } = options;
   const post = (path: string, headers: Readonly<Record<string, string>>, body: EvePostBody) =>
     postToEve(client, new URL(path, options.origin), { ...identity, ...headers }, body);
   const turnHeaders = (message: EveMessage<Turn>) => ({

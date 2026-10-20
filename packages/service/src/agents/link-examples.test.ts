@@ -12,7 +12,7 @@ import { EDIT_PLAN_TOOL } from "./coder-host/plan-edit.js";
  * file, a pull request, or an issue with is one Luke draws as a chip: the
  * coding agent's instructions, which show every kind it names as a mention,
  * its inbox and plan tools, the planner's, and the notetaker's; the coding
- * agent's last example is one of the workspace's own issues. An example spelled with `<owner>/<name>` and `<path>` is
+ * agent's last example is another agent's. An example spelled with `<owner>/<name>` and `<path>` is
  * read as an author fills it in. Synthetic repository.
  */
 
@@ -62,7 +62,7 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
       const told = words.slice(words.indexOf("## What your messages are"));
       assert.deepEqual(
         drawnAs(told),
-        [...shared, ...(onTask ? own : []), MENTION_KIND.AGENT, MENTION_KIND.ISSUE],
+        [...shared, ...(onTask ? own : []), MENTION_KIND.AGENT],
         `${brief} ${onTask}`,
       );
       assert.deepEqual(
@@ -72,6 +72,25 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
       );
     }
   }
+});
+
+test("a coding agent with Chat on is shown its task's Luke as the link Luke draws as his chip, and an agent on no task is shown no link of a Luke's", () => {
+  const chatOf = (taskLink: string | null) => {
+    const words = coderInstructions(
+      REPOSITORY,
+      CODING_AGENT_BRIEF.PLAN,
+      true,
+      taskLink,
+      undefined,
+      true,
+    );
+    const from = words.indexOf("## Chat with other agents");
+    return words.slice(from, words.indexOf("\n## ", from + 1));
+  };
+  const onTask = chatOf(TASK_ADDRESS);
+  assert.deepEqual(drawnAs(onTask), [MENTION_KIND.LUKE]);
+  assert.ok(onTask.includes(`[@Luke](${TASK_ADDRESS}/luke)`));
+  assert.deepEqual(drawnAs(chatOf(null)), []);
 });
 
 test("the inbox's post tool and the plan's edit tool show a file's link Luke draws as its chip", () => {

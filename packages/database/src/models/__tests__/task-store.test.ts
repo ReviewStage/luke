@@ -2,22 +2,22 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { CODING_AGENT_ARCHIVER } from "@luke/features/coding-agent-wire";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { DEFAULT_PLAN_TEMPLATE } from "@luke/features/plan-document-template";
 import { TASK_PRIORITY, TASK_STATUS, type TaskSummary } from "@luke/features/task-wire";
 import { eq, sql } from "drizzle-orm";
 import { Clock, Effect, Option, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { Database } from "../../core/query.js";
-import { organization, user } from "../../schemas/auth.js";
+import { user } from "../../schemas/auth.js";
 import { codingAgent } from "../../schemas/coding-agent.js";
-import { issue } from "../../schemas/issue.js";
 import { conversations } from "../../schemas/storage.js";
+import { task } from "../../schemas/task.js";
 import { taskPin } from "../../schemas/task-pin.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB, joinWorkspace, openWorkspace } from "../../testing/index.js";
 import { VOICE_CLOSE_REASON } from "../../voice-vocabulary.js";
 import { archiveCodingAgent, readCodingAgent } from "../coding-agent-store.js";
-import { createIssue } from "../issue-store.js";
 import {
   beginTaskWork,
   createTask,
@@ -332,80 +332,6 @@ it.layer(getTestDB())("a plan's brief", (it) => {
         assert.equal(yield* briefOf(blank.id), undefined);
         assert.equal(yield* briefOf(unplanned.id), "Fix the typo in the invite email.");
       }),
-  );
-});
-
-/** An issue Dean files in the workspace, failing the test where it is not filed. */
-const fileIssue = (userId: string, organizationId: string, title: string) =>
-  Effect.map(
-    createIssue(userId, { organizationId, title, description: "Steps to reproduce." }),
-    (made) => Option.getOrElse(made, () => assert.fail("the issue was not filed")),
-  );
-
-it.layer(getTestDB())("a plan started from an issue", (it) => {
-  it.effect("names its issue to every member of the workspace, and to no account outside it", () =>
-    Effect.gen(function* () {
-      const dean = yield* openAccount;
-      const charles = yield* openAccount;
-      const outsider = yield* openAccount;
-      const organizationId = yield* openWorkspace(dean);
-      yield* joinWorkspace(organizationId, charles);
-      const filed = yield* fileIssue(dean, organizationId, "Invites expire too soon");
-      const [workspace] = yield* Database.use((db) =>
-        db.select().from(organization).where(eq(organization.id, organizationId)),
-      );
-
-      const started = yield* createTask(dean, { organizationId, issueId: filed.id });
-
-      assert.equal(started.issueId, filed.id);
-      assert.equal((yield* listedTask(charles, started.id)).issueId, filed.id);
-      assert.deepEqual(Option.getOrUndefined(yield* readTask(charles, started.id))?.issue, {
-        id: filed.id,
-        number: filed.number,
-        title: "Invites expire too soon",
-        description: "Steps to reproduce.",
-        workspaceName: workspace?.name,
-        workspaceSlug: workspace?.slug,
-      });
-      const outside = yield* listTasks(outsider, { includeArchived: true });
-      assert.equal(
-        outside.some(({ id }) => id === started.id),
-        false,
-      );
-      assert.equal(Option.isNone(yield* readTask(outsider, started.id)), true);
-    }),
-  );
-
-  it.effect("lets its issue go once it moves to another workspace", () =>
-    Effect.gen(function* () {
-      const dean = yield* openAccount;
-      const organizationId = yield* openWorkspace(dean);
-      const elsewhere = yield* openWorkspace(dean);
-      const filed = yield* fileIssue(dean, organizationId, "Invites expire too soon");
-      const started = yield* createTask(dean, { organizationId, issueId: filed.id });
-
-      const renamed = yield* updateTask(dean, started.id, { name: "Invites", organizationId });
-      assert.equal(Option.getOrUndefined(renamed)?.issueId, filed.id);
-      const moved = yield* updateTask(dean, started.id, { organizationId: elsewhere });
-
-      assert.equal(Option.getOrUndefined(moved)?.issueId, undefined);
-      assert.equal(Option.getOrUndefined(yield* readTask(dean, started.id))?.issue, undefined);
-    }),
-  );
-
-  it.effect("lets its issue go once the issue is deleted, and stands", () =>
-    Effect.gen(function* () {
-      const dean = yield* openAccount;
-      const organizationId = yield* openWorkspace(dean);
-      const filed = yield* fileIssue(dean, organizationId, "Invites expire too soon");
-      const started = yield* createTask(dean, { organizationId, issueId: filed.id });
-
-      yield* Database.use((db) => db.delete(issue).where(eq(issue.id, filed.id)));
-
-      const listed = yield* listedTask(dean, started.id);
-      assert.equal(listed.issueId, undefined);
-      assert.equal(Option.getOrUndefined(yield* readTask(dean, started.id))?.issue, undefined);
-    }),
   );
 });
 
@@ -767,5 +693,33 @@ it.layer(getTestDB())("a task's work beginning", (it) => {
       assert.equal((yield* standingOf(dean, canceled.id)).status, TASK_STATUS.CANCELED);
       assert.equal((yield* standingOf(dean, todo.id)).status, TASK_STATUS.TODO);
     }),
+  );
+});
+
+it.layer(getTestDB())("a task's GitHub access", (it) => {
+  it.effect(
+    "a task keeps how its repository was reached as it was named, and a repository named again without one, or cleared, is the App's",
+    () =>
+      Effect.gen(function* () {
+        const db = yield* Database;
+        const owner = yield* openAccount;
+        const workspace = yield* openWorkspace(owner);
+        const accessOf = (taskId: string) =>
+          Effect.map(
+            db.select({ access: task.githubAccess }).from(task).where(eq(task.id, taskId)),
+            ([row]) => row?.access,
+          );
+        const { id: taskId } = yield* createTask(owner, {
+          organizationId: workspace,
+          repository: "octo-member/side",
+          githubAccess: GITHUB_ACCESS.TOKEN,
+        });
+        const named = yield* accessOf(taskId);
+        yield* updateTask(owner, taskId, { repository: "acme/relay" });
+        const renamed = yield* accessOf(taskId);
+
+        assert.equal(named, GITHUB_ACCESS.TOKEN);
+        assert.equal(renamed, GITHUB_ACCESS.APP);
+      }),
   );
 });

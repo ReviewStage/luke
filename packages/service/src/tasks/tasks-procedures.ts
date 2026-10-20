@@ -51,9 +51,14 @@ import { askRecord } from "@luke/database/models/asks";
 import { readBoard, writeScene } from "@luke/database/models/board-store";
 import { listCodingAgents, readCodingAgentByKey } from "@luke/database/models/coding-agent-store";
 import { hostedStore } from "@luke/database/models/hosted-store";
-import { readIssue } from "@luke/database/models/issue-store";
 import { listRevisions, readRevision } from "@luke/database/models/plan-revisions";
 import { conversationOwnerOf, standingSessionsNamed } from "@luke/database/models/recorded-session";
+import {
+  linkTaskIssue,
+  listTaskIssues,
+  relateTaskIssue,
+  unlinkTaskIssue,
+} from "@luke/database/models/task-issue-store";
 import {
   createTask,
   deleteTask,
@@ -66,21 +71,23 @@ import { readTranscript } from "@luke/database/models/transcript-store";
 import type { WorkspaceSeams } from "@luke/database/models/workspace-seams";
 import { ensurePersonalWorkspace, isWorkspaceMember } from "@luke/database/models/workspace-store";
 import { type StoreWriter, storeWriter } from "@luke/database/models/writer";
-import { BOARD_BOUNDS } from "@luke/features/board-wire";
 import { TASK_START_STATUS } from "@luke/features/contract";
+import { GITHUB_ACCESS, type GitHubAccess } from "@luke/features/github-repositories-wire";
 import { PLAN_EDIT_REFUSAL } from "@luke/features/plan-edit";
 import {
-  TASK_BOUNDS,
-  type Task,
-  type TaskAgentStart,
-  type TaskStartAnswer,
-} from "@luke/features/task-wire";
+  TASK_ISSUE_LINK_REFUSAL,
+  TASK_ISSUE_PROVIDER,
+  type TaskIssueChoice,
+  type TaskIssueLinkAnswer,
+  type TaskIssueRelation,
+} from "@luke/features/task-issue-wire";
+import type { Task, TaskAgentStart, TaskStartAnswer } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
 import { Data, Effect, Option, Result } from "effect";
 import type { HttpClient } from "effect/http";
 import { STOP_REFUSAL, stopConversation } from "../agents/brain-host/brain-ask.js";
-import { EVE_MOUNT } from "../agents/brain-host/eve-sessions.js";
-import { MAXIMUM_START_BODY_BYTES, startRequestedAgent } from "../agents/coder-host/start.js";
+import { EVE_MOUNT, type EveTypedTurn } from "../agents/brain-host/eve-sessions.js";
+import { startRequestedAgent } from "../agents/coder-host/start.js";
 import {
   type EveReach,
   eveFor,
@@ -104,35 +111,21 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { logStoreFailure } from "../http/store-failure.js";
-import {
-  linearIssue,
-  linearOrRefused,
-  throughWorkspaceLinear,
-} from "../integrations/linear-issues.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
+import { accountMiddleware, hosted } from "../orpc/base.js";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,
   restoreRevision,
   saveDeveloperEdit,
 } from "./plan-notes.js";
+import {
+  linkedGitHubIssue,
+  linkedIssue,
+  linkedLinearIssue,
+  linkViewOf,
+  liveTaskIssues,
+} from "./task-issue-links.js";
 import { readTaskWork } from "./task-work-store.js";
-
-/** A change is a name and a repository's name at most, so a body past this is none. */
-const MAXIMUM_NAME_BODY_BYTES = 8_192;
-
-/** A brief at its bound with every character escaped. */
-const MAXIMUM_BRIEF_BYTES = TASK_BOUNDS.MAX_BRIEF_CHARS * 6;
-
-/** A start is a change's few fields, a brief where it names one, and an agent's Start beside them where it names one. */
-const MAXIMUM_TASK_START_BODY_BYTES =
-  MAXIMUM_NAME_BODY_BYTES + MAXIMUM_BRIEF_BYTES + MAXIMUM_START_BODY_BYTES;
-
-/** An edit is the plan's text twice, its base and its value, each at its bound with every character escaped. */
-const MAXIMUM_EDIT_BODY_BYTES = TASK_BOUNDS.MAX_BODY_CHARS * 2 * 6 + 1_024;
-
-/** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
-const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
 
 export interface TasksProcedureSeams extends EveReach {
   resolveUserId: UserIdResolver;
@@ -150,23 +143,27 @@ const taskIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The repository as the row keeps it: null where none was named, or the
- * full name as GitHub spells it once the App confirms the workspace's
- * installation reaches it (`packages/service/src/github/workspace-repository.ts`). The workspace
+ * The repository as the row keeps it, with how it was reached: null where
+ * none was named, or the full name as GitHub spells it once the workspace's
+ * installation, or else the member's own token, reaches it
+ * (`packages/service/src/github/workspace-repository.ts`). The workspace
  * is read only where a repository is named.
  */
 const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   workspace: Effect.Effect<string, HostedRefusal, DatabaseServices>,
   repository: string | null | undefined,
+  member: string,
 ): Effect.fn.Return<
-  string | null,
+  { readonly repository: string | null; readonly githubAccess: GitHubAccess },
   HostedRefusal,
   GitHubApp | HttpClient.HttpClient | DatabaseServices
 > {
-  if (repository === undefined || repository === null) return null;
+  if (repository === undefined || repository === null) {
+    return { repository: null, githubAccess: GITHUB_ACCESS.APP };
+  }
   const organizationId = yield* workspace;
-  const reached = yield* workspaceRepository(organizationId, repository);
-  return reached.fullName;
+  const reached = yield* workspaceRepository(organizationId, repository, member);
+  return { repository: reached.repository.fullName, githubAccess: reached.access };
 });
 
 /** The account's plan, or not found for a plan it does not reach. */
@@ -203,13 +200,13 @@ const movedToWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** The move's guard: the workspace's GitHub reaches the repository the plan names under its lock, where it names one. */
 const movedRepositoryReached =
-  (workspaceId: string) =>
+  (workspaceId: string, member: string) =>
   (
     repository: string | null,
   ): Effect.Effect<void, MoveRefused, GitHubApp | HttpClient.HttpClient | DatabaseServices> =>
     repository === null
       ? Effect.void
-      : workspaceRepository(workspaceId, repository).pipe(
+      : workspaceRepository(workspaceId, repository, member).pipe(
           Effect.asVoid,
           Effect.mapError((refusal) => new MoveRefused({ refusal })),
         );
@@ -248,33 +245,51 @@ const startingWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * The Linear issue a plan starts from, as the task links it, read through
- * the workspace's own Linear connection whatever team it is in, or the
- * Linear refusal: the workspace has none connected, its grant is refused,
- * or the issue is none it reaches. Nothing is written before it is read, so
- * a refusal starts no plan.
+ * The GitHub issue a plan starts linked to, as the task links it, read
+ * through the workspace's installation on the repository the plan is about,
+ * or refused before anything is written: as invalid where the plan is about
+ * no repository or another one, and as not found where the installation
+ * reaches no such issue of it or has not granted the App issues.
  */
-const startingLinearIssue = (organizationId: string, issueId: string) =>
-  linearOrRefused(
-    throughWorkspaceLinear(organizationId, (token) => linearIssue(token, issueId)),
-    "Linear gave no issue to start a task from",
-  );
-
-/**
- * The workspace's own issue a plan starts from, where the account reads it
- * and it is an issue of the workspace the plan starts in; refused as not
- * found otherwise, before anything is written.
- */
-const startingIssue = Effect.fnUntraced(function* (
+const startingGitHubIssue = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   organizationId: string,
-  issueId: string,
+  repository: string | null,
+  chosen: { readonly repository: string; readonly number: number },
 ) {
-  const read = yield* hostedStoreOrUnavailable(readIssue(userId, issueId));
-  if (Option.isNone(read) || read.value.workspaceId !== organizationId) {
-    return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (repository === null || repository.toLowerCase() !== chosen.repository.toLowerCase()) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  return read.value.id;
+  return yield* linkedGitHubIssue(userId, organizationId, { repository, number: chosen.number });
+});
+
+/**
+ * The issues a plan starts linked to, in the order they were named, each
+ * read by its provider with the relation it was named with: those of
+ * `issues`, or the one Linear issue an older build names by
+ * `linearIssueId`. The first refused refuses the start, before anything is
+ * written.
+ */
+const startingIssueLinks = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  organizationId: string,
+  repository: string | null,
+  input: { readonly linearIssueId?: string; readonly issues?: readonly TaskIssueChoice[] },
+) {
+  const chosen: readonly TaskIssueChoice[] =
+    input.linearIssueId === undefined
+      ? (input.issues ?? [])
+      : [{ provider: TASK_ISSUE_PROVIDER.LINEAR, id: input.linearIssueId }];
+  const links = [];
+  for (const choice of chosen) {
+    const read =
+      choice.provider === TASK_ISSUE_PROVIDER.LINEAR
+        ? yield* linkedLinearIssue(organizationId, choice.id)
+        : yield* startingGitHubIssue(userId, organizationId, repository, choice);
+    const relation: TaskIssueRelation | undefined = choice.relation;
+    links.push(relation === undefined ? read : { ...read, relation });
+  }
+  return links;
 });
 
 /**
@@ -340,7 +355,7 @@ const startedAgentOn = (
   task: Task,
   agent: TaskAgentStart,
 ) =>
-  startRequestedAgent(eveFor(seams, request, userId), userId, task.id, agent).pipe(
+  startRequestedAgent(eveFor<EveTypedTurn>(seams, request, userId), userId, task.id, agent).pipe(
     Effect.flatMap((started) =>
       Effect.map(
         taskAfterStart(userId, task),
@@ -361,6 +376,20 @@ const startedAgentOn = (
       }),
     ),
   );
+
+/** The link a path names: an id that is no UUID names no link, and answers as none. */
+const linkIdOf = taskIdOf;
+
+/**
+ * The account's plan, where it is not archived: refused as archived where
+ * it is, and as not found where the account does not reach it. The store
+ * holds a link's write to the same terms under the plan's lock.
+ */
+const liveTask = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, taskId: string) {
+  const stored = yield* reachedTask(userId, taskId);
+  if (stored.task.archivedAt !== undefined) return yield* Effect.fail(HOSTED_REFUSAL.TASK_ARCHIVED);
+  return stored;
+});
 
 /** What a restore that saved nothing answers, by why; the store out of reach is any other. */
 const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
@@ -397,7 +426,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
 
     /**
      * A plan started with an empty document, its repository confirmed and
-     * its Linear issue and its own issue read first, and, where it names an
+     * the issues it links read first (`startingIssueLinks`), and, where it names an
      * agent, that agent started on it: a start naming an agent and no
      * repository is refused as an agent's Start on such a plan is, before
      * anything is written, and the agent's session is opened as the
@@ -405,10 +434,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * agent's key already started an agent in the workspace answers that
      * agent's plan and the agent (`startedBefore`).
      */
-    create: plans.create.use(bodyLimit(MAXIMUM_TASK_START_BODY_BYTES)).effect(function* ({
-      input,
-      context,
-    }) {
+    create: plans.create.effect(function* ({ input, context }) {
       const { userId, request } = context;
       const { agent } = input;
       if (agent !== undefined && (input.repository === undefined || input.repository === null)) {
@@ -420,27 +446,26 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           ? Option.none()
           : yield* startedBefore(userId, agent.idempotencyKey, organizationId);
       if (Option.isSome(before)) return { status: TASK_START_STATUS.RETRIED, body: before.value };
-      const repository = yield* reachableRepository(
+      const reached = yield* reachableRepository(
         Effect.succeed(organizationId),
         input.repository,
+        userId,
       );
-      const issue =
-        input.linearIssueId === undefined
-          ? undefined
-          : yield* startingLinearIssue(organizationId, input.linearIssueId);
-      const issueId =
-        input.issueId === undefined
-          ? undefined
-          : yield* startingIssue(userId, organizationId, input.issueId);
+      const issueLinks = yield* startingIssueLinks(
+        userId,
+        organizationId,
+        reached.repository,
+        input,
+      );
       // An agent is the start, so its plan opens with no planning phase.
       const planning = agent === undefined ? input.planning : false;
       const task = yield* hostedStoreOrUnavailable(
         createTask(userId, {
           organizationId,
           ...(input.name === undefined ? undefined : { name: input.name }),
-          repository,
-          ...(issue === undefined ? undefined : { issueLinks: [issue] }),
-          ...(issueId === undefined ? undefined : { issueId }),
+          repository: reached.repository,
+          githubAccess: reached.githubAccess,
+          ...(issueLinks.length === 0 ? undefined : { issueLinks }),
           ...(planning === undefined ? undefined : { planning }),
           ...(input.brief === undefined ? undefined : { brief: input.brief }),
           ...(input.status === undefined ? undefined : { status: input.status }),
@@ -449,7 +474,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
       );
       yield* recordServerEvent(SERVER_EVENT.TASK_CREATE, userId, {
         source: SERVER_TASK_SOURCE.SIDEBAR,
-        has_issue: issue !== undefined || issueId !== undefined,
+        has_issue: issueLinks.length > 0,
       });
       const answer: TaskStartAnswer =
         agent === undefined
@@ -483,10 +508,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * agent standing and the archive refused as not ready, so it is asked
      * again a moment later.
      */
-    update: plans.update.use(bodyLimit(MAXIMUM_NAME_BODY_BYTES)).effect(function* ({
-      input,
-      context,
-    }) {
+    update: plans.update.effect(function* ({ input, context }) {
       const { userId, request } = context;
       const taskId = yield* taskIdOf(input.params.id);
       const changes = input.body;
@@ -502,9 +524,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         organizationId === undefined
           ? Effect.map(reachedTask(userId, taskId), (stored) => stored.task.workspaceId)
           : Effect.succeed(organizationId);
-      const repository =
+      const reached =
         "repository" in changes
-          ? yield* reachableRepository(workspace, changes.repository)
+          ? yield* reachableRepository(workspace, changes.repository, userId)
           : undefined;
       const archiving = changes.archived === true;
       if (archiving) {
@@ -524,14 +546,16 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         {
           ...("name" in changes ? { name: changes.name } : undefined),
           ...(organizationId === undefined ? undefined : { organizationId }),
-          ...(repository === undefined ? undefined : { repository }),
+          ...(reached === undefined
+            ? undefined
+            : { repository: reached.repository, githubAccess: reached.githubAccess }),
           ...("pinned" in changes ? { pinned: changes.pinned } : undefined),
           ...("pinPosition" in changes ? { pinPosition: changes.pinPosition } : undefined),
           ...("archived" in changes ? { archived: changes.archived } : undefined),
           ...(changes.status === undefined ? undefined : { status: changes.status }),
           ...(changes.priority === undefined ? undefined : { priority: changes.priority }),
         },
-        organizationId === undefined ? undefined : movedRepositoryReached(organizationId),
+        organizationId === undefined ? undefined : movedRepositoryReached(organizationId, userId),
         archiving ? standsStopped : undefined,
       ).pipe(
         Effect.catch((failure) =>
@@ -581,7 +605,9 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
           stoppedAgentIds: stopped,
           // Note that the sessions are retired under the plan's lock and before its conversations are
           // cleared: eve's door admits no one to a cleared conversation's session, and a delete an
-          // agent started meanwhile refuses retires nothing.
+          // agent started meanwhile refuses retires nothing. They stay inside the transaction, since
+          // outside it a refused delete would leave a standing plan's sessions retired; the retires'
+          // own budget (`retire-sessions.ts`) bounds how long they hold the lock.
           beforeDelete: (conversationIds) =>
             Effect.flatMap(standingSessionsNamed(conversationIds), (sessions) =>
               retireSessions(eveAt, sessions),
@@ -603,10 +629,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
     }),
 
     /** The Mac's scene written whole, the last write winning. */
-    saveBoard: plans.saveBoard.use(bodyLimit(MAXIMUM_BOARD_BODY_BYTES)).effect(function* ({
-      input,
-      context,
-    }) {
+    saveBoard: plans.saveBoard.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.params.id);
       const save = input.body;
       const written = yield* hostedStoreOrArchived(
@@ -623,7 +646,7 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
      * An archived plan is refused outright, as no plan is, since a desktop
      * that knows archiving draws no editor on one.
      */
-    edit: plans.edit.use(bodyLimit(MAXIMUM_EDIT_BODY_BYTES)).effect(function* ({ input, context }) {
+    edit: plans.edit.effect(function* ({ input, context }) {
       const taskId = yield* taskIdOf(input.params.id);
       const saved = yield* saveDeveloperEdit({ userId: context.userId, taskId }, input.body);
       switch (saved.status) {
@@ -691,6 +714,69 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
         );
       }
       return { plan: restored.task };
+    }),
+
+    /**
+     * The issues the plan links, oldest linked first, each with where it
+     * stands now, read live from its provider through the plan's workspace
+     * (`task-issue-links.ts`), which refreshes what each chip draws.
+     */
+    issues: plans.issues.effect(function* ({ input, context }) {
+      const { userId } = context;
+      const taskId = yield* taskIdOf(input.id);
+      const stored = yield* reachedTask(userId, taskId);
+      const links = yield* hostedStoreOrUnavailable(listTaskIssues(userId, taskId));
+      const issues = yield* liveTaskIssues(userId, taskId, stored.task.workspaceId, links);
+      return { issues };
+    }),
+
+    /**
+     * An issue linked to the plan, read from its provider through the plan's
+     * workspace first, so what is kept of it is the provider's: answered
+     * with the link, or in band with why none was made, the plan linking
+     * the issue already or as many as it may. An archived plan takes none,
+     * as it takes no rename.
+     */
+    linkIssue: plans.linkIssue.effect(function* ({ input, context }) {
+      const { userId } = context;
+      const taskId = yield* taskIdOf(input.params.id);
+      const stored = yield* liveTask(userId, taskId);
+      const read = yield* linkedIssue(userId, stored.task.workspaceId, input.body);
+      const made = yield* linkTaskIssue(userId, taskId, read).pipe(
+        Effect.map(
+          (link): Option.Option<TaskIssueLinkAnswer> =>
+            Option.map(link, (issue) => ({ issue: linkViewOf(issue, undefined) })),
+        ),
+        Effect.catchTags({
+          TaskIssuesFull: () => Effect.succeedSome({ refused: TASK_ISSUE_LINK_REFUSAL.FULL }),
+          TaskIssueLinked: () => Effect.succeedSome({ refused: TASK_ISSUE_LINK_REFUSAL.LINKED }),
+        }),
+        hostedStoreOrArchived,
+      );
+      if (Option.isNone(made)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return made.value;
+    }),
+
+    /** Which keyword the plan's pull requests write of one of its links. */
+    relateIssue: plans.relateIssue.effect(function* ({ input, context }) {
+      const taskId = yield* taskIdOf(input.params.id);
+      const linkId = yield* linkIdOf(input.params.link);
+      const related = yield* hostedStoreOrArchived(
+        relateTaskIssue(context.userId, taskId, linkId, input.body.relation),
+      );
+      if (Option.isNone(related)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { issue: linkViewOf(related.value, undefined) };
+    }),
+
+    /** One of the plan's links let go; the issue itself is the provider's and stands as it was. */
+    unlinkIssue: plans.unlinkIssue.effect(function* ({ input, context }) {
+      const taskId = yield* taskIdOf(input.id);
+      const linkId = yield* linkIdOf(input.link);
+      const unlinked = yield* hostedStoreOrArchived(
+        unlinkTaskIssue(context.userId, taskId, linkId),
+      );
+      if (!unlinked) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return { unlinked: true as const };
     }),
 
     /** The turn Luke is running on the plan stopped, call or no call, under its conversation's owner, through eve as the request's own caller (`eveFor`). */

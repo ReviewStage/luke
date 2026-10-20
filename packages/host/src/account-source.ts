@@ -52,7 +52,11 @@ export interface AccountSession {
   }) => Effect.Effect<AccountSnapshot, Error>;
   /** Deletes the account on the service, then signs out. */
   readonly deleteEverywhere: () => Effect.Effect<AccountSnapshot, Error>;
-  /** Checks the account against the service once, however many ask at once. */
+  /**
+   * The launch's check of the account against the service: one check however
+   * many ask at once, which a source may retry a few times where the service
+   * did not answer, before the account stands as it was settled.
+   */
   readonly refreshOnce: () => Effect.Effect<void>;
   /**
    * Settles on the account the service names now, right before a write keyed

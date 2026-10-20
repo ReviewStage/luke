@@ -153,11 +153,7 @@ function opensOnGitHub(task: TaskSummary, pullRequest: TaskPullRequestLine): boo
 }
 
 /** A pull request opens in its agent's Pull request tab, else on GitHub, where it is worked on and merged; one the service sent no page for opens its task. */
-export function openPullRequest(
-  tasks: TasksControl,
-  task: TaskSummary,
-  pullRequest: TaskPullRequestLine,
-) {
+function openPullRequest(tasks: TasksControl, task: TaskSummary, pullRequest: TaskPullRequestLine) {
   const place = pullRequestPlace(task, pullRequest);
   if (place !== undefined) tasks.onOpenLink({ workspace: "", place });
   else if (pullRequest.url === undefined) tasks.onSelect(task.id);

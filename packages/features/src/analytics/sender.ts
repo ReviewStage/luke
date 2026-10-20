@@ -1,17 +1,10 @@
 import { scheduleRepeat } from "@luke/runtime/effect";
-import { HTTP_METHOD, positiveInteger } from "@luke/wire";
+import { positiveInteger } from "@luke/wire";
 import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
-import {
-  type AccountCallEffects,
-  accountCall,
-  CALL_FAULT,
-  type CallCredential,
-  callAnswered,
-  HOSTED_SERVICE_PATH,
-  resolvedCredential,
-} from "../index.js";
+import { CALL_FAULT, type CallCredential, resolvedCredential } from "../account-call.js";
+import { askHosted, type HostedClient, HostedUnanswered, hostedClient } from "../hosted-link.js";
 import {
   PRODUCT_EVENT,
   PRODUCT_EVENT_BATCH_LIMIT,
@@ -95,6 +88,14 @@ export interface ProductEventSenderOptions {
    * account a once-a-day count is kept for.
    */
   credential: CallCredential;
+  /**
+   * Settles the credential on the account the service names now, before a
+   * batch's day marks are read against its holder, for a credential whose
+   * account can change without this sender hearing of it (a cookie another
+   * tab signed in under). One whose account changes only through its own
+   * host omits it.
+   */
+  confirmAccount?: (() => Effect.Effect<void>) | undefined;
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The running build's version, as the packaged app reports it. */
@@ -141,7 +142,7 @@ export interface ProductEventSenderOptions {
  * the fibers the counts ride are the host's own.
  */
 export class ProductEventSender {
-  readonly #call: AccountCallEffects;
+  readonly #hosted: HostedClient;
   readonly #client: Layer.Layer<HttpClient.HttpClient>;
   readonly #appVersion: string;
   /** What every batch says about the build it came from, for the service to stamp on each event. */
@@ -151,6 +152,7 @@ export class ProductEventSender {
   readonly #flushIntervalMs: number;
   readonly #queueLimit: number;
   readonly #readHolder: () => Effect.Effect<string | undefined>;
+  readonly #confirmAccount: () => Effect.Effect<void>;
   readonly #keptDays: RecordedDayStore;
   readonly #queue: QueuedEvent[] = [];
   /**
@@ -197,7 +199,7 @@ export class ProductEventSender {
   });
 
   private constructor(options: ProductEventSenderOptions) {
-    this.#call = accountCall({
+    this.#hosted = hostedClient({
       baseUrl: options.serviceBaseUrl,
       credential: options.credential,
       requestTimeoutMs: options.requestTimeoutMs,
@@ -215,6 +217,7 @@ export class ProductEventSender {
       Effect.flatMap(credential, (current) =>
         current.holder === undefined ? Effect.succeed(UNNAMED_ACCOUNT) : current.holder(),
       );
+    this.#confirmAccount = options.confirmAccount ?? (() => Effect.void);
     this.#keptDays = options.recordedDays ?? UNKEPT_DAYS;
     this.#flushIntervalMs = positiveInteger(
       options.flushIntervalMs,
@@ -351,6 +354,7 @@ export class ProductEventSender {
   #flushEffect(): Effect.Effect<void, never, HttpClient.HttpClient> {
     return Effect.gen({ self: this }, function* () {
       if (this.#queue.length === 0) return;
+      yield* this.#confirmAccount();
       const holder = yield* this.#readHolder();
       // Gone whatever becomes of the request, save for the one end that never
       // authenticated at all.
@@ -380,21 +384,30 @@ export class ProductEventSender {
   #send(queued: QueuedEvent[]): Effect.Effect<void, never, HttpClient.HttpClient> {
     return Effect.suspend(() =>
       Effect.flatMap(
-        this.#call.send({
-          method: HTTP_METHOD.POST,
-          path: HOSTED_SERVICE_PATH.EVENTS,
-          body: JSON.stringify({ events: queued.map(({ event }) => event), build: this.#build }),
-        }),
-        (answer) => {
+        Effect.match(
+          askHosted(this.#hosted.events.record, {
+            events: queued.map(({ event }) => event),
+            build: this.#build,
+          }),
+          {
+            // A call that ended before any status names its fault; anything
+            // else, a refusal or an answer this build cannot read among it,
+            // is the service having answered.
+            onFailure: (failure) =>
+              failure instanceof HostedUnanswered ? failure.fault : undefined,
+            onSuccess: () => undefined,
+          },
+        ),
+        (fault) => {
           // The service answered, so whatever it made of the batch, a day it
           // carried is not to be sent again: kept for the next launch.
-          if (callAnswered(answer)) return this.#keepRecordedDays(queued);
+          if (fault === undefined) return this.#keepRecordedDays(queued);
           // Signed out is temporary and nobody's fault, and nothing was asked
           // of the service, so the batch waits rather than being spent. An
           // account that changed under a refreshed token is not that case:
           // those counts were queued by an account this request can no longer
           // name, and they go.
-          if (answer.fault === CALL_FAULT.NO_CREDENTIAL) {
+          if (fault === CALL_FAULT.NO_CREDENTIAL) {
             this.#queue.unshift(...queued);
             this.#trimQueue();
           }

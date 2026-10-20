@@ -793,35 +793,14 @@ test("a person is mentioned by their page's Luke link under the workspace, read 
   }
 });
 
-test("an issue is mentioned by its page's Luke link under the workspace, read back by either scheme, pasted or written bare as its mention, and a step or a fragment past its id names nothing", () => {
-  const issueId = "3f0e6f5c-7d1a-4f6e-9a55-000000000007";
-  const issue: Mention = { kind: MENTION_KIND.ISSUE, issueId };
-  const page = `https://tryluke.dev/acme/issue/${issueId}`;
+test("an old Luke issue page's link names nothing now that Luke keeps no issues: no mention read back, pasted, or handed", () => {
+  const page = "https://tryluke.dev/acme/issue/3f0e6f5c-7d1a-4f6e-9a55-000000000007";
 
-  assert.equal(encodeMention(issue, PLACE), page);
-  assert.deepEqual(decodeMention(page, null), issue);
-  assert.deepEqual(decodeMention(page.replace("https:", "tryluke:"), null), issue);
-  assert.deepEqual(decodeMention(`${page}/`, null), issue);
-  assert.deepEqual(linkMention("@ACME-7 Token refresh fails", page, null), {
-    mention: issue,
-    name: "ACME-7 Token refresh fails",
-  });
-  assert.deepEqual(pastedLinkMention(page, REPOSITORY), { mention: issue, name: "Issue" });
-  assert.deepEqual(
-    handedMentionsIn(`See ${page} or [@ACME-7](${page}).`, REPOSITORY).map(
-      ({ mention }) => mention,
-    ),
-    [issue, issue],
-  );
-  for (const target of [
-    `${page}/comments`,
-    `${page}//`,
-    `${page}#top`,
-    "https://tryluke.dev/acme/issue/",
-    "https://tryluke.dev/acme/issue/issue%2F7",
-  ]) {
-    assert.equal(decodeMention(target, null), undefined, target);
-  }
+  assert.equal(decodeMention(page, null), undefined);
+  assert.equal(decodeMention(page.replace("https:", "tryluke:"), null), undefined);
+  assert.equal(linkMention("@ACME-7 Token refresh fails", page, null), undefined);
+  assert.equal(pastedLinkMention(page, REPOSITORY), undefined);
+  assert.deepEqual(handedMentionsIn(`See ${page} or [@ACME-7](${page}).`, REPOSITORY), []);
 });
 
 test("words pasted whole that are an address of Luke's own become its mention, named by what the address says, while a file of the plan pastes as words", () => {

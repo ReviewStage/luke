@@ -80,7 +80,7 @@ function answeringEach(
     eveSessions({
       origin: ORIGIN,
       caller: options.caller ?? CALLER,
-      ...(options.mount === undefined ? undefined : { mount: options.mount }),
+      mount: options.mount ?? EVE_MOUNT.TASKS,
     }),
     client,
   );
@@ -181,7 +181,7 @@ function streaming(status: number, lines: readonly string[]) {
     return new Response(lines.join("\n"), { status });
   });
   const sessions: Effect.Effect<EveSessions> = Effect.provide(
-    eveSessions({ origin: ORIGIN, caller: CALLER }),
+    eveSessions({ origin: ORIGIN, caller: CALLER, mount: EVE_MOUNT.TASKS }),
     client,
   );
   return { seen, sessions };

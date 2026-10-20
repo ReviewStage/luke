@@ -377,6 +377,14 @@
     opacity: 1;
   }
 
+  /* A screen with no hover shows every row's chevron at rest, so a row that
+     goes deeper says so before it is tapped. */
+  @media (hover: none) {
+    .luke-list-row-chevron {
+      opacity: 1;
+    }
+  }
+
   /* Acts offered to the row in hand come in at its end while the pointer
      rests on the row, it holds the keyboard, or its menu is open, the
      metadata stepping aside for them; where the metadata stands at the

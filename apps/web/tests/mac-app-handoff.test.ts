@@ -12,26 +12,29 @@ import { type FakeService, fakeService } from "./support/fake-service";
 
 /**
  * A Luke link loaded in a tab, handed to Luke for Mac only where the
- * signed-in account chose the Mac app and the tab is on a Mac: the place
- * the address names goes to the app in its own scheme, and every other
- * load stays on the web. Synthetic ids.
+ * signed-in account chose the Mac app, the tab is on a Mac, and it came to
+ * the link by a fresh navigation: the place the address names goes to the
+ * app in its own scheme, and every other load stays on the web. Synthetic
+ * ids.
  */
 
 const ORIGIN = "http://localhost:3000";
 const TASK_ID = "3f6c1b2a-8d4e-4f10-9a7b-5c2d1e0fa21b";
 const TASK_ADDRESS = `${ORIGIN}/acme/plan/${TASK_ID}`;
 
-/** What the browser was asked to open, after one load at the address given. */
+/** What the browser was asked to open, after one load at the address given, a fresh navigation unless said otherwise. */
 const loaded = (
   service: FakeService,
   address: string,
   platform: LinkPlatform,
+  fresh = true,
 ): Effect.Effect<readonly string[]> =>
   Effect.gen(function* () {
     const opened: string[] = [];
-    yield* handOffToMacApp({ address, platform, open: (link) => opened.push(link) }, ORIGIN).pipe(
-      Effect.provide(service.layer),
-    );
+    yield* handOffToMacApp(
+      { address, fresh, platform, open: (link) => opened.push(link) },
+      ORIGIN,
+    ).pipe(Effect.provide(service.layer));
     return opened;
   });
 
@@ -88,5 +91,15 @@ it.effect(
         assert.deepEqual(yield* loaded(service, address, platform), [], address);
         assert.equal(askedPreferences(service), false, address);
       }
+    }),
+);
+
+it.effect(
+  "a load that is no fresh navigation, a reload or a Back or Forward into the tab, stays on the web and asks the service nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = choosing(LINK_OPEN.MAC_APP);
+      assert.deepEqual(yield* loaded(service, TASK_ADDRESS, LINK_PLATFORM.MAC, false), []);
+      assert.equal(askedPreferences(service), false);
     }),
 );

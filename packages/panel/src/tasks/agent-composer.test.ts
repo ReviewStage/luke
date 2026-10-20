@@ -7,7 +7,7 @@ import {
 } from "@luke/features/coding-agent-view";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { REPOSITORY_UNREACHED } from "@luke/features/repository-reach-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import type { SkillOption } from "@luke/ui/skill-mention";
 import { MICROPHONE_STATUS } from "@luke/voice/audio";
 import { Effect } from "effect";
@@ -381,17 +381,6 @@ function stubMicrophone(): void {
   );
 }
 
-/** What main answers a dictation's `app:act` acts with: the microphone granted, and no route to prefer. */
-function microphoneAnswer(request: Act): ActOutcome {
-  if (request.kind === ACT_KIND.MICROPHONE_REQUEST) {
-    return { status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.GRANTED };
-  }
-  if (request.kind === ACT_KIND.MICROPHONE_ROUTE) {
-    return { status: ACT_OUTCOME_STATUS.DONE, value: undefined };
-  }
-  return { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT };
-}
-
 test("a dictation's words land where the caret stood as it began, spaced from the words around them", async () => {
   stubMicrophone();
   // The strip draws still under reduced motion, which jsdom has no answer to.
@@ -400,10 +389,13 @@ test("a dictation's words land where the caret stood as it began, spaced from th
     addEventListener: ignore,
     removeEventListener: ignore,
   }));
-  fakeAppBridge({
-    act: (request: Act): Promise<ActOutcome> => Promise.resolve(microphoneAnswer(request)),
+  fakeAppBridge({});
+  // Main answers the microphone granted, and no route to prefer.
+  fakeActPort({
+    [ACT_KIND.MICROPHONE_REQUEST]: () => Promise.resolve(MICROPHONE_STATUS.GRANTED),
+    [ACT_KIND.MICROPHONE_ROUTE]: () => Promise.resolve(undefined),
+    [ACT_KIND.DICTATION_TRANSCRIBE]: () => Promise.resolve({ text: "the bug in" }),
   });
-  fakeActPort({ [ACT_KIND.DICTATION_TRANSCRIBE]: () => Promise.resolve({ text: "the bug in" }) });
   const box = await mounted();
   typeInComposer(box.container, "Fix this later");
   const editor = composerEditor(box.container).editor;

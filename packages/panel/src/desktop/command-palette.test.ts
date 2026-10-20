@@ -11,12 +11,10 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
-import { ISSUE_PRIORITY, ISSUE_STATUS, type Issue } from "@luke/features/issue-wire";
 import { TASK_TREE_ENTRY, type Task } from "@luke/features/task-wire";
 import type { TaskCodeShowing, TasksTreeAnswer } from "@luke/features/tasks-view";
 import { WORKSPACE_ROLE, type WorkspaceMember } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type ActOutcome } from "@luke/host/acts";
-import type { AppStateSnapshot } from "@luke/host/app-state";
+import { ACT_KIND } from "@luke/host/acts";
 import type { PortActResult } from "@luke/host/contract";
 import { EXPERIMENT, HOST_CAPABILITY, type HostCapability } from "@luke/settings";
 import { SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
@@ -39,15 +37,10 @@ import { PageWorkspaceProvider, useCopyLink, usePageWorkspace } from "../links-a
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import type { SidePanelControl } from "../tasks/use-side-panel.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
-import { AUTOMATIONS_PAGE, ISSUES_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
-import {
-  fakeActPort,
-  fakeAppBridge,
-  fakeAppBridgeCalls,
-  refusedOnPort,
-} from "../testing/app-bridge.js";
+import { AUTOMATIONS_PAGE, type InboxChoice, type TasksControl } from "../tasks/use-tasks-tab.js";
+import { fakeActPort, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { copyingInto, fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
+import { DESKTOP_CAPABILITIES, handState } from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { sidebarProps } from "../testing/desktop-sidebar.js";
 import { DOCUMENT_TASK } from "../testing/document-task.js";
@@ -616,10 +609,7 @@ test("an agent's card in ⌘K names the automation that started it, the listed w
     createdAt: 1,
   } as const;
   const listed: (string | undefined)[] = [];
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeActPort({
     [ACT_KIND.AUTOMATIONS_LIST]: (payload) => {
       listed.push(payload.workspaceId);
@@ -830,6 +820,107 @@ test("while an agent's page holds the side panel, ⌘K offers none of the open p
   assert.deepEqual([changes, board], [[], []]);
   assert.deepEqual(read, [], "the hidden task's files are not read");
   assert.equal(notice, "Open a task with a repository to search its files.");
+});
+
+/** The palette over the plan with a repository, or over the Inbox in front of it with `chosen` chosen there, each file it opens recorded. */
+async function paletteOverPanel(inbox: { chosen: InboxChoice | undefined } | undefined): Promise<{
+  opened: string[];
+  boards: string[];
+  pulls: string[];
+}> {
+  const agent = {
+    id: "agent-7",
+    planId: DOCUMENT_TASK.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Invoice export",
+    createdAt: 1,
+    status: CODING_AGENT_STATUS.COMPLETED,
+    turnId: null,
+  };
+  const opened: string[] = [];
+  const base = tasksControl();
+  const tasks = tasksControl({
+    activeTaskId: DOCUMENT_TASK.id,
+    tasks: [
+      {
+        id: DOCUMENT_TASK.id,
+        workspaceId: DOCUMENT_TASK.workspaceId,
+        name: DOCUMENT_TASK.name,
+        createdAt: 1,
+        updatedAt: 2,
+        repository: "acme/relay",
+      },
+    ],
+    region: { kind: DOCUMENT_REGION.READY, task: { ...DOCUMENT_TASK, repository: "acme/relay" } },
+    inboxView: { ...base.inboxView, open: inbox !== undefined, chosen: inbox?.chosen },
+    sidePanel: { ...base.sidePanel, onOpenFile: (ref) => opened.push(ref.path) },
+    agents: codingAgentsControl({
+      agents: [agent],
+      agentIds: [agent.id],
+      pullRequests: new Map([
+        [
+          agent.id,
+          {
+            number: 42,
+            title: "Export invoices as CSV",
+            url: "https://github.com/acme/billing/pull/42",
+            state: PULL_REQUEST_STATE.OPEN,
+            checks: CHECK_SUMMARY.PASSING,
+            additions: 120,
+            deletions: 8,
+            changedFiles: 4,
+          },
+        ],
+      ]),
+    }),
+  });
+  openPalette(tasks, () =>
+    Promise.resolve({
+      folder: {
+        path: "",
+        repository: "acme/relay",
+        branch: "main",
+        entries: [{ name: "accept.ts", kind: TASK_TREE_ENTRY.FILE }],
+        truncated: false,
+      },
+    }),
+  );
+  type("#42");
+  const pulls = rows().filter((row) => row.startsWith("#42"));
+  type("Show board");
+  const boards = rows().filter((row) => row.startsWith("Show board"));
+  chooseFilter("Files");
+  type("accept");
+  await act(async () => undefined);
+  if (rows().includes("accept.ts")) press("accept.ts");
+  return { opened, boards, pulls };
+}
+
+/** The Pull request row of the plan's agent, as `paletteOverPanel` finds it by its number. */
+const PULL = `#42 Export invoices as CSV · Invoice export · ${DOCUMENT_TASK.name}`;
+
+test("over the Inbox with nothing chosen, whose side panel has no task, ⌘K offers none of the plan's files or panel tabs behind it; on the plan, or over an item of it, a file or a pull request found opens, and its panel tabs are offered on the plan alone, since the Inbox's panel draws none", async () => {
+  assert.deepEqual(await paletteOverPanel(undefined), {
+    opened: ["accept.ts"],
+    boards: ["Show board"],
+    pulls: [PULL],
+  });
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  assert.deepEqual(
+    await paletteOverPanel({ chosen: { taskId: DOCUMENT_TASK.id, itemId: "item-1" } }),
+    { opened: ["accept.ts"], boards: [], pulls: [PULL] },
+  );
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+  assert.deepEqual(await paletteOverPanel({ chosen: undefined }), {
+    opened: [],
+    boards: [],
+    pulls: [],
+  });
 });
 
 test('a file found wears the look the side panel\'s "+" gives it, hangs its card with Luke\'s note, and opens through the panel\'s one door for a file, as the "+" row of a file whose tab stands does', async () => {
@@ -1162,44 +1253,6 @@ test("on a person's page, over an open Inbox, ⌘K offers Copy link to profile a
   assert.deepEqual(copied, ["https://tryluke.dev/acme/person/user-charles"]);
 });
 
-test("on an issue's page ⌘K offers Copy link to issue and ⌥⌘C copies its link in the listed workspace", async () => {
-  const copied = installClipboard();
-  const issueId = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
-  openPalette(
-    tasksControl({
-      workspaces: ON_AGENT_TAB.workspaces,
-      workspace: ON_AGENT_TAB.workspaces[0],
-      issuesView: {
-        ...tasksControl().issuesView,
-        open: true,
-        place: { kind: ISSUES_PAGE.ISSUE, issueId },
-      },
-    }),
-  );
-  type("copy link");
-  const listed = rows().filter((row) => row.startsWith("Copy link to "));
-  act(() => runAppCommand(APP_COMMAND.COPY_LINK));
-  await act(async () => undefined);
-
-  assert.deepEqual(listed, ["Copy link to issue"]);
-  assert.deepEqual(copied, [`https://tryluke.dev/acme/issue/${issueId}`]);
-});
-
-test("on the Issues list over an open task nothing has a link, so ⌘K lists no Copy link and ⌥⌘C copies nothing", async () => {
-  const copied = installClipboard();
-  openPalette({
-    ...ON_AGENT_TAB,
-    issuesView: { ...ON_AGENT_TAB.issuesView, open: true, place: { kind: ISSUES_PAGE.LIST } },
-  });
-  type("copy link");
-  const listed = rows().filter((row) => row.startsWith("Copy link to "));
-  act(() => runAppCommand(APP_COMMAND.COPY_LINK));
-  await act(async () => undefined);
-
-  assert.deepEqual(listed, []);
-  assert.deepEqual(copied, []);
-});
-
 test("on Chat over an open task nothing has a link, so ⌘K lists no Copy link and ⌥⌘C copies nothing", async () => {
   const copied = installClipboard();
   openPalette({ ...ON_AGENT_TAB, chatView: { ...ON_AGENT_TAB.chatView, open: true } });
@@ -1354,10 +1407,7 @@ async function settle(): Promise<void> {
 function membersAnswer(
   members: () => Promise<PortActResult<typeof ACT_KIND.WORKSPACE_MEMBERS_READ>>,
 ): void {
-  fakeAppBridge({
-    act: (): Promise<ActOutcome> =>
-      Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
   fakeActPort({ [ACT_KIND.WORKSPACE_MEMBERS_READ]: members });
 }
 
@@ -1662,157 +1712,13 @@ test("⌘K offers the open task's Chat tab only while the account has Chat on", 
   assert.ok(!rows().some((row) => row.startsWith("Chat")), "Chat off offers no Chat");
 });
 
-/** An issue of Acme's, numbered and titled, standing in the status given. */
-function acmeIssue(number: number, title: string, status: Issue["status"]): Issue {
-  return {
-    id: `3f0e6f5c-7d1a-4f6e-9a55-${String(number).padStart(12, "0")}`,
-    workspaceId: ACME.id,
-    number,
-    title,
-    description: "",
-    status,
-    priority: ISSUE_PRIORITY.NONE,
-    creator: null,
-    archivedAt: null,
-    createdAt: number,
-    updatedAt: number,
-  };
-}
-
-/** A window whose act port lists `issues` for the workspace asked, a rejection standing for a refusal; the workspaces asked for, in order. */
-function issuesAnswer(issues: () => Promise<PortActResult<typeof ACT_KIND.ISSUES_LIST>>): string[] {
-  const asked: string[] = [];
-  fakeActPort({
-    [ACT_KIND.ISSUES_LIST]: (payload) => {
-      asked.push(payload.workspaceId);
-      return issues();
-    },
-  });
-  return asked;
-}
-
-test("with Issues on, ⌘K finds the listed workspace's issues by title or identifier under Issues, and Enter opens the issue's page", async () => {
-  const fix = acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.IN_PROGRESS);
-  const asked = issuesAnswer(() =>
-    Promise.resolve({ issues: [fix, acmeIssue(7, "Billing alerts", ISSUE_STATUS.TODO)] }),
-  );
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const opened: unknown[] = [];
-  const base = tasksControl();
-  const tasks = tasksControl({
-    workspace: ACME,
-    issuesView: { ...base.issuesView, onOpen: (place) => opened.push(place) },
-  });
-  await paletteUnderState(tasks);
-  await settle();
-
-  type("login redir");
-  assert.deepEqual(rows(), ["Fix the login redirect · ACME-12 · In progress"]);
-  const group = document.querySelector('[role="option"]')?.closest("[cmdk-group]");
-  assert.equal(group?.querySelector("[cmdk-group-heading]")?.textContent, "Issues");
-  type("ACME-7");
-  assert.equal(rows()[0], "Billing alerts · ACME-7 · Todo");
-  key({ key: "Enter", code: "Enter" });
-  await settle();
-
-  assert.deepEqual(asked, [ACME.id]);
-  assert.deepEqual(opened, [
-    { kind: ISSUES_PAGE.ISSUE, issueId: acmeIssue(7, "", ISSUE_STATUS.TODO).id },
-  ]);
-});
-
-test("with Issues off, ⌘K draws no Issues filter, lists no issue, and reads none", async () => {
-  const asked = issuesAnswer(() =>
-    Promise.resolve({ issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] }),
-  );
-  handState({});
+test("⌘K draws no Issues filter, with every experiment on, since Luke keeps no issues of its own", async () => {
+  handState(experimentsOn(...Object.values(EXPERIMENT)));
   await paletteUnderState(tasksControl({ workspace: ACME }));
   await settle();
-  type("login redirect");
 
-  assert.ok(!filterOptions().some((option) => option.textContent === "Issues"));
-  assert.deepEqual(rows(), []);
-  assert.deepEqual(asked, []);
-});
-
-test("Issues says the issues are being read until they answer, and a refused read says so with a Retry that reads them again", async () => {
-  let refuse: (reason: Error) => void = () => undefined;
-  const asked = issuesAnswer(
-    () =>
-      new Promise((_resolve, reject) => {
-        refuse = reject;
-      }),
-  );
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  await paletteUnderState(tasksControl({ workspace: ACME }));
-  chooseFilter("Issues");
-  assert.equal(emptyLine(), "Reading the workspace's issues…");
-
-  refuse(new Error("Not here."));
-  await settle();
-  assert.match(emptyLine() ?? "", /The workspace's issues could not be read\./u);
-  const retry = [...document.querySelectorAll("button")].find(
-    (each) => each.textContent === "Retry",
-  );
-  assert.ok(retry, "Retry is offered");
-  act(() => retry.click());
-  assert.equal(asked.length, 2, "Retry reads the issues again");
-});
-
-test("an issue chosen over a peek filling the Issues list puts the peek away before opening the issue's page, so going back shows the list", async () => {
-  issuesAnswer(() =>
-    Promise.resolve({ issues: [acmeIssue(12, "Fix the login redirect", ISSUE_STATUS.TODO)] }),
-  );
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const done: string[] = [];
-  const base = tasksControl();
-  const tasks = tasksControl({
-    workspace: ACME,
-    sidePanel: {
-      ...base.sidePanel,
-      open: true,
-      fullScreen: true,
-      onToggleFullScreen: () => done.push("full screen left"),
-    },
-    issuesView: {
-      ...base.issuesView,
-      open: true,
-      peeked: acmeIssue(7, "", ISSUE_STATUS.TODO).id,
-      onPeek: (issueId) => done.push(`peek ${issueId ?? "put away"}`),
-      onOpen: () => done.push("issue opened"),
-    },
-  });
-  await paletteUnderState(tasks);
-  await settle();
-  type("login redirect");
-  key({ key: "Enter", code: "Enter" });
-  await settle();
-
-  assert.deepEqual(done, ["full screen left", "peek put away", "issue opened"]);
-});
-
-test("with the Issues filter chosen, Issues turning off shows All again, which finds the rest", async () => {
-  issuesAnswer(() => Promise.resolve({ issues: [] }));
-  let deliver: (snapshot: AppStateSnapshot) => void = () => undefined;
-  fakeAppBridge({
-    ...fakeAppBridgeCalls(),
-    requestAppState: () => Promise.resolve(stateWith(experimentsOn(EXPERIMENT.ISSUES), {})),
-    onAppState: (listener: (snapshot: AppStateSnapshot) => void) => {
-      deliver = listener;
-      return () => undefined;
-    },
-  });
-  await paletteUnderState(tasksControl({ workspace: ACME }));
-  chooseFilter("Issues");
-  assert.equal(chosenFilter(), "Issues");
-
-  act(() => deliver(stateWith({}, {})));
-  await settle();
-  type("toggle sidebar");
-
-  assert.equal(chosenFilter(), "All");
-  assert.ok(
-    rows().some((row) => row.startsWith("Toggle sidebar")),
-    "All finds the command",
+  assert.deepEqual(
+    filterOptions().map((option) => option.textContent),
+    ["All", "Tasks", "Agents", "People", "Files", "Actions", "Settings"],
   );
 });

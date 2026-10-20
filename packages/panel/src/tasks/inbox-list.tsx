@@ -57,7 +57,7 @@ import { useCallback, useId, useLayoutEffect, useMemo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark, AutomationCard, automationActor } from "../actor-ref.js";
 import { AttentionMark } from "../attention-mark.js";
 import { useAutomation } from "../automation-directory.js";
-import { useInboxItemDrafted } from "../composer-drafts.js";
+import { useInboxItemDrafted, useInboxItemTicked } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction, type MenuEntry } from "../desktop/action-menu.js";
 import { SidebarResizeEdge } from "../desktop/desktop-sidebar.js";
@@ -241,19 +241,16 @@ const SHOW_TAB_WORDS = [
 ] as const;
 
 /**
- * What the list says where its tab leaves out every item it holds: a title,
- * and the line under it. Everything leaves out only what Whose does.
+ * What the list says where its tab leaves out every item it holds.
+ * Everything leaves out only what Whose does, or an archived task's items.
  */
 const SHOW_EMPTY = {
-  [INBOX_SHOW.NEEDS_YOU]: { title: NEEDS_YOU.NONE, body: NEEDS_YOU.ANSWERED },
-  [INBOX_SHOW.UNREAD]: { title: "Nothing unread", body: "You've read everything" },
-  [INBOX_SHOW.OPEN]: { title: "Nothing open", body: "Every item is answered" },
-  [INBOX_SHOW.ALL]: { title: "Nothing here", body: "Nothing in the Inbox is theirs" },
-  [INBOX_SHOW.ARCHIVED]: {
-    title: "Nothing archived",
-    body: "An archived task's items stand here until it is unarchived",
-  },
-} as const satisfies Record<InboxShow, { title: string; body: string }>;
+  [INBOX_SHOW.NEEDS_YOU]: NEEDS_YOU.NONE,
+  [INBOX_SHOW.UNREAD]: "Nothing unread",
+  [INBOX_SHOW.OPEN]: "Nothing open",
+  [INBOX_SHOW.ALL]: "Nothing here",
+  [INBOX_SHOW.ARCHIVED]: "Nothing archived",
+} as const satisfies Record<InboxShow, string>;
 
 /** What the empty state's press says, by the tab it shows instead. */
 const SHOW_INSTEAD = {
@@ -275,6 +272,9 @@ function insteadOf(show: InboxShow, counts: InboxCounts): keyof typeof SHOW_INST
   if (show !== INBOX_SHOW.ALL && counts[INBOX_SHOW.ALL] > 0) return INBOX_SHOW.ALL;
   return (counts[INBOX_SHOW.ARCHIVED] ?? 0) > 0 ? INBOX_SHOW.ARCHIVED : undefined;
 }
+
+/** What Everything says where Whose, naming someone, leaves out every item. */
+const NOTHING_THEIRS = "Nothing in the Inbox is theirs";
 
 /** What the empty state's press says where it lists everyone's items again, Whose having left out every item. */
 const SHOW_EVERYONES = "Show everyone's";
@@ -392,7 +392,8 @@ export function ItemMark({
 /**
  * One item as a `ListRow` of two lines, as a mail app lists a thread: the
  * agent's mark, the title, and how long ago it changed, then the last word
- * in its thread, muted (`inboxPreview`). One that needs the developer wears
+ * in its thread, muted, led on a thread by what its open ask asks, the
+ * steps its draft ticks counted (`inboxPreview`). One that needs the developer wears
  * the attention mark before its time, and a teammate's item their face
  * there where `face` allows it, the mark of their open item being theirs to
  * wear. The title hangs in the window's pill, since a narrow list cuts it
@@ -466,8 +467,11 @@ export function InboxItemRow({
   const starter = readersItem(item, reader)
     ? undefined
     : personActor(item.startedBy, directory.members, reader, directory.former);
-  const preview = inboxPreview(item, (member) =>
-    actorName(personActor(member, directory.members, reader, directory.former)),
+  const ticked = useInboxItemTicked(item);
+  const preview = inboxPreview(
+    item,
+    (member) => actorName(personActor(member, directory.members, reader, directory.former)),
+    ticked,
   );
   const carried = useMemo(() => inboxMedia(item), [item]);
   useRowMediaAsks(item.id, item.updatedAt, carried, media);
@@ -980,16 +984,17 @@ export function ShowEmpty({
   /** Asks the Inbox for its list, so the item chosen once the rows return does not stand in their place. */
   onList: () => void;
 }): React.JSX.Element {
-  const { title, body } = SHOW_EMPTY[show.show];
+  const whoseNames =
+    whose !== undefined && whose.whose.kind !== INBOX_WHOSE.EVERYONE ? whose : undefined;
+  const line =
+    show.show === INBOX_SHOW.ALL && whoseNames !== undefined
+      ? NOTHING_THEIRS
+      : SHOW_EMPTY[show.show];
   const instead = insteadOf(show.show, counts);
-  const everyone =
-    instead === undefined && whose !== undefined && whose.whose.kind !== INBOX_WHOSE.EVERYONE
-      ? whose
-      : undefined;
+  const everyone = instead === undefined ? whoseNames : undefined;
   return (
     <EmptyState
       icon={<InboxIcon />}
-      title={title}
       action={
         instead !== undefined
           ? {
@@ -1010,7 +1015,7 @@ export function ShowEmpty({
             : undefined
       }
     >
-      {body}
+      {line}
     </EmptyState>
   );
 }

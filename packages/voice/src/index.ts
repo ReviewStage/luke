@@ -8,9 +8,3 @@ export {
   type LiveSessionCreateInput,
   unavailableLiveDiagnostics,
 } from "./live-session-source.js";
-export {
-  type OpenSocket,
-  SOCKET_OPEN_FAULT,
-  type SocketOpening,
-  socketOpened,
-} from "./live-socket.js";

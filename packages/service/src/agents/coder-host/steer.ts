@@ -20,12 +20,18 @@ import {
   type StoreWriter,
 } from "@luke/database/models/writer";
 import { MESSAGE_SENDER } from "@luke/database/storage-vocabulary";
+import { withoutMemberLinks } from "@luke/features/chat-mentions";
 import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@luke/features/coding-agent-wire";
 import { causeKind } from "@luke/runtime/effect";
 import { Clock, Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
+import { MESSAGE_CHANNEL } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
-import { agentWorkspace, workspaceRepository } from "../../github/workspace-repository.js";
+import {
+  agentMember,
+  agentWorkspace,
+  workspaceRepository,
+} from "../../github/workspace-repository.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import {
   HOSTED_REFUSAL,
@@ -38,6 +44,7 @@ import {
   describeUnreachable,
   EVE_SEND_OUTCOME,
   type EveSessions,
+  type EveTypedTurn,
 } from "../brain-host/eve-sessions.js";
 import { mentionedContext, mentionedServers, NO_MENTIONED_READS } from "../mentioned-context.js";
 import { readMentioned } from "../mentioned-reads.js";
@@ -191,7 +198,7 @@ const refusalNow = /* @__PURE__ */ Effect.fnUntraced(function* (
 
 /** Hands the line to an agent of the account's workspace, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
 export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
-  eve: EveSessions,
+  eve: EveSessions<EveTypedTurn>,
   writer: Effect.Effect<StoreWriter>,
   userId: string,
   agent: CodingAgent,
@@ -223,19 +230,24 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
   yield* workspaceRepository(
     workspace.value,
     agent.repository,
+    agentMember(agent),
     task?.ownerId === userId ? userId : undefined,
   );
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) return yield* Effect.fail(yield* unstartedRefusal(agent));
   // What the words mention goes with them: of the task this send read as its sender, and of the agent's workspace.
-  // Note that GitHub's line carries a reviewer's words, which mention nothing on the developer's behalf, so it hands no note of what they mention.
+  // Note that GitHub's line carries a reviewer's words, which mention nothing on the developer's behalf, so it hands no note of what they mention;
+  // and a chat notice's links to people, agents, and Lukes name who said it and whom it addresses, members the agent reads the chat by,
+  // so only what else it mentions is noted.
   const reviewers = line.sender.kind === MESSAGE_SENDER.GITHUB;
+  const pointed =
+    line.metadata?.channel === MESSAGE_CHANNEL.CHAT ? withoutMemberLinks(line.text) : line.text;
   const reads = reviewers
     ? NO_MENTIONED_READS
     : yield* hostedStoreOrUnavailable(
-        readMentioned(userId, line.text, { task: task?.task, workspaceId: agent.organizationId }),
+        readMentioned(userId, pointed, { task: task?.task, workspaceId: agent.organizationId }),
       );
-  const mentioned = reviewers ? undefined : mentionedContext(line.text, task?.task, reads);
+  const mentioned = reviewers ? undefined : mentionedContext(pointed, task?.task, reads);
   // Read before eve is asked, so a refusal settles the turn the session was running and never one begun since.
   const running = yield* runningTurnOf(agent);
   // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.

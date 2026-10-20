@@ -10,7 +10,7 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
 import { DashboardScreen } from "../src/admin/screens/dashboard";
-import type { AdminRead } from "../src/admin/use-admin-read";
+import { ADMIN_READ, type AdminRead } from "../src/admin/use-admin-read";
 
 /**
  * admin-dashboard.test.ts -- the Overview states its sections under their
@@ -129,7 +129,12 @@ function ready(
   value: AdminMetrics,
   refreshFailure: string | undefined = undefined,
 ): AdminRead<AdminMetrics> {
-  return { status: "ready", value, question: "", refreshFailure };
+  return {
+    status: "ready",
+    value,
+    question: { procedure: ADMIN_READ.METRICS, query: {} },
+    refreshFailure,
+  };
 }
 
 let root: Root | undefined;

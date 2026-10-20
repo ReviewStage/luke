@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
   GITHUB_CONNECTION_CALL_FAILURE,
@@ -25,7 +26,11 @@ import {
   type TasklessAgent,
 } from "@luke/features/coding-agent-wire";
 import type { GitHubConnection } from "@luke/features/github-connection-wire";
-import { ISSUE_STATE } from "@luke/features/github-repositories-wire";
+import {
+  type GitHubRepositoryIssuesAnswer,
+  ISSUE_STATE,
+  type RepositoryIssuesAsk,
+} from "@luke/features/github-repositories-wire";
 import type { LinearIssueSummary } from "@luke/features/linear-wire";
 import type { PageLine, PageVersion } from "@luke/features/page-wire";
 import { PICTURE_TYPE, type PictureType } from "@luke/features/picture-wire";
@@ -37,6 +42,12 @@ import {
   type PlanCommentThread,
 } from "@luke/features/plan-comment-wire";
 import type { PlanEditAnswer } from "@luke/features/plan-edit";
+import {
+  TASK_ISSUE_LINK_REFUSAL,
+  TASK_ISSUE_PROVIDER,
+  TASK_ISSUE_RELATION,
+  type TaskIssueLinkView,
+} from "@luke/features/task-issue-wire";
 import {
   TASK_SECTION_WRITE,
   type TaskSection,
@@ -173,6 +184,11 @@ interface FakeService extends TasksClient {
   pullRequests: Record<string, Record<string, Map<number, GitHubRepositoryPullRequestAnswer>>>;
   /** What the service answers for a repository's issues, kept as its pull requests are. */
   issues: Record<string, Record<string, Map<number, GitHubRepositoryIssueAnswer>>>;
+  /** What a repository's issues read answers, by workspace and repository, and each ask it heard. */
+  repositoryIssues: Record<string, Record<string, GitHubRepositoryIssuesAnswer>>;
+  issueAsks: RepositoryIssuesAsk[];
+  /** Each task's linked issues, by task id; a task with none named is none the account reaches. */
+  issueLinks: Record<string, TaskIssueLinkView[]>;
   /** The newest page of the history, for any task; none answers nothing, as a service that did not answer. */
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
@@ -337,6 +353,9 @@ function fakeService(tasks: Task[]): FakeService {
     places: {},
     pullRequests: {},
     issues: {},
+    repositoryIssues: {},
+    issueAsks: [],
+    issueLinks: {},
     history: undefined,
     olderHistory: {},
     revisions: {},
@@ -673,6 +692,56 @@ function fakeService(tasks: Task[]): FakeService {
       Effect.sync(() => service.pullRequests[place.workspaceId]?.[place.repository]?.get(number)),
     readRepositoryIssue: (place, number) =>
       Effect.sync(() => service.issues[place.workspaceId]?.[place.repository]?.get(number)),
+    readRepositoryIssues: (place, ask) =>
+      Effect.sync(() => {
+        service.issueAsks.push(ask);
+        return service.repositoryIssues[place.workspaceId]?.[place.repository];
+      }),
+    readIssueLinks: (taskId) =>
+      Effect.sync(() => {
+        const issues = service.issueLinks[taskId];
+        return issues === undefined ? { failure: TASK_CALL_FAILURE.NOT_FOUND } : { issues };
+      }),
+    // The service links a Linear issue under its own id, and refuses one the task links already.
+    linkIssue: (taskId, issue) =>
+      Effect.sync(() => {
+        const issues = service.issueLinks[taskId];
+        if (issues === undefined) return { failure: TASK_CALL_FAILURE.NOT_FOUND };
+        const externalId =
+          issue.provider === TASK_ISSUE_PROVIDER.LINEAR ? issue.id : `${issue.number}`;
+        if (issues.some((each) => each.externalId === externalId)) {
+          return { refused: TASK_ISSUE_LINK_REFUSAL.LINKED };
+        }
+        const made: TaskIssueLinkView = {
+          id: randomUUID(),
+          provider: issue.provider,
+          externalId,
+          key: externalId,
+          url: `https://linear.app/acme/issue/${externalId}`,
+          title: externalId,
+          relation: issue.relation ?? TASK_ISSUE_RELATION.CLOSES,
+        };
+        issues.push(made);
+        return { issue: made };
+      }),
+    relateIssue: (taskId, linkId, relation) =>
+      Effect.sync(() => {
+        const link = service.issueLinks[taskId]?.find((each) => each.id === linkId);
+        if (link === undefined) return { failure: TASK_CALL_FAILURE.NOT_FOUND };
+        const related = { ...link, relation };
+        service.issueLinks[taskId] = (service.issueLinks[taskId] ?? []).map((each) =>
+          each.id === linkId ? related : each,
+        );
+        return { issue: related };
+      }),
+    unlinkIssue: (taskId, linkId) =>
+      Effect.sync(() => {
+        const issues = service.issueLinks[taskId] ?? [];
+        if (!issues.some((each) => each.id === linkId))
+          return { failure: TASK_CALL_FAILURE.NOT_FOUND };
+        service.issueLinks[taskId] = issues.filter((each) => each.id !== linkId);
+        return { unlinked: true as const };
+      }),
     readBoard: (taskId) => Effect.sync(() => service.boards[taskId]),
     readTranscript: (taskId) => Effect.sync(() => service.transcripts[taskId]),
     readWork: (taskId, before) =>
@@ -913,9 +982,19 @@ interface StandingCall {
   closing?: Effect.Effect<void>;
 }
 
-function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
+function subject(
+  service: FakeService,
+  options: {
+    signedIn?: boolean;
+    call?: StandingCall;
+    /** A view the window's channel throws on, the first time one is told. */
+    breaksOn?: (view: TasksView) => boolean;
+  } = {},
+) {
   return Effect.gen(function* () {
     const told: TasksView[] = [];
+    const reported: string[] = [];
+    let broken = false;
     const waiters: {
       wanted: (view: TasksView) => boolean;
       seen: Deferred.Deferred<TasksView>;
@@ -929,11 +1008,18 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
           if (kind !== GATEWAY_EVENT.TASKS_CHANGED) return;
           const read = readEither(tasksViewSchema)(payload);
           assert.ok(Result.isSuccess(read), "the planning event carries a view");
+          if (!broken && options.breaksOn?.(read.success) === true) {
+            broken = true;
+            throw new Error("the window's channel broke");
+          }
           told.push(read.success);
           for (const waiter of waiters) {
             if (waiter.wanted(read.success))
               Deferred.doneUnsafe(waiter.seen, Effect.succeed(read.success));
           }
+        },
+        report: (message) => {
+          reported.push(message);
         },
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
@@ -966,7 +1052,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
         waiters.push({ wanted, seen });
         return Deferred.await(seen);
       });
-    return { tasks, call, told, last, viewWhere, viewLands, conversations };
+    return { tasks, call, told, reported, last, viewWhere, viewLands, conversations };
   });
 }
 
@@ -1630,6 +1716,40 @@ it.effect(
       assert.ok(line.length > 1, "a TypeScript line is coloured in runs");
       assert.equal(line.map((run) => run.text).join(""), "const answer = 42;");
     }),
+);
+
+it.effect("code whose drawing dies is reported, and code shown after it is still drawn", () =>
+  Effect.gen(function* () {
+    const service = fakeService([task(INVITES, "Teammate invitations", "# Draft", 10)]);
+    service.works[INVITES] = { turns: [] };
+    const { call, tasks, viewLands, reported } = yield* subject(service, {
+      breaksOn: (view) => (view.shownCode ?? []).some((code) => code.callId === "call-1"),
+    });
+    yield* tasks.lifetime;
+    yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
+    const shown = {
+      callId: "call-1",
+      turnId: "turn-1",
+      shownAt: 10,
+      code: {
+        ref: { path: "notes.txt" },
+        repository: "acme/api",
+        firstLine: 1,
+        lineCount: 1,
+        lines: ["plain words"],
+      },
+    };
+
+    const drawn = yield* viewLands((view) =>
+      (view.shownCode ?? []).some((code) => code.callId === "call-2"),
+    );
+    tasks.showCode(INVITES, shown);
+    tasks.showCode(INVITES, { ...shown, callId: "call-2" });
+
+    assert.ok((yield* drawn).shownCode?.some((code) => code.callId === "call-2"));
+    assert.equal(reported.length, 1);
+    assert.match(reported[0] ?? "", /^Drawing code a call showed failed/);
+  }),
 );
 
 it.effect(
@@ -2683,6 +2803,81 @@ it.effect(
       assert.ok(Exit.isFailure(offTheWire), "an issue is numbered from one");
       assert.deepEqual(gated, { failure: TASK_CALL_FAILURE.UNANSWERED });
       assert.equal(open.told.length, 0, "an issue is never told in the view");
+    }),
+);
+
+it.effect(
+  "a repository's issues are read with the number or the words asked, an installation granting none is answered so, a service that did not answer as unanswered, and nothing is told in the view",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.repositoryIssues[ACME.id] = {
+        "acme/relay": { issues: [] },
+        "acme/ledger": {
+          ungranted: { settingsUrl: "https://github.com/settings/installations/1" },
+        },
+      };
+      const { call, told } = yield* subject(service);
+      const asked = (repository: string, more: RepositoryIssuesAsk = {}) =>
+        call(GATEWAY_METHOD.TASKS_GITHUB_ISSUES, { workspaceId: ACME.id, repository, ...more });
+
+      const listed = yield* asked("acme/relay");
+      yield* asked("acme/relay", { query: "invite" });
+      yield* asked("acme/relay", { number: 7 });
+      const ungranted = yield* asked("acme/ledger");
+      const unanswered = yield* asked("acme/gone");
+
+      assert.deepEqual(listed, { issues: [] });
+      assert.deepEqual(ungranted, {
+        ungranted: { settingsUrl: "https://github.com/settings/installations/1" },
+      });
+      assert.deepEqual(unanswered, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(service.issueAsks, [{}, { query: "invite" }, { number: 7 }, {}, {}]);
+      assert.equal(told.length, 0, "issues are never told in the view");
+    }),
+);
+
+it.effect(
+  "a task's linked issues are read, linked, related, and unlinked through the service and answered to the page that asked, a link refused or a task out of reach answered so, nothing told in the view, and nothing asked behind a closed gate",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const taskId = randomUUID();
+      service.issueLinks[taskId] = [];
+      const open = yield* subject(service);
+      const shut = yield* subject(service, { signedIn: false });
+      const linear = { provider: TASK_ISSUE_PROVIDER.LINEAR, id: "ENG-42" };
+
+      const linked = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, { taskId, issue: linear });
+      const twice = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, { taskId, issue: linear });
+      const linkId = service.issueLinks[taskId]?.[0]?.id ?? assert.fail("nothing was linked");
+      const related = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_RELATE, {
+        taskId,
+        linkId,
+        relation: TASK_ISSUE_RELATION.PART_OF,
+      });
+      const read = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, { taskId });
+      const standing = [...(service.issueLinks[taskId] ?? [])];
+      const unlinked = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_UNLINK, { taskId, linkId });
+      const elsewhere = yield* open.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, {
+        taskId: randomUUID(),
+      });
+      const unnamed = yield* Effect.exit(
+        open.call(GATEWAY_METHOD.TASKS_ISSUE_LINK, { taskId, issue: { provider: "jira" } }),
+      );
+      const gated = yield* shut.call(GATEWAY_METHOD.TASKS_ISSUE_LINKS, { taskId });
+
+      assert.deepEqual(linked, { issue: { ...standing[0], relation: TASK_ISSUE_RELATION.CLOSES } });
+      assert.deepEqual(twice, { refused: TASK_ISSUE_LINK_REFUSAL.LINKED });
+      assert.deepEqual(related, { issue: standing[0] });
+      assert.deepEqual(read, { issues: standing });
+      assert.equal(standing[0]?.relation, TASK_ISSUE_RELATION.PART_OF);
+      assert.deepEqual(unlinked, { unlinked: true });
+      assert.deepEqual(service.issueLinks[taskId], []);
+      assert.deepEqual(elsewhere, { failure: TASK_CALL_FAILURE.NOT_FOUND });
+      assert.ok(Exit.isFailure(unnamed), "an issue is named by a provider the task links");
+      assert.deepEqual(gated, { failure: TASK_CALL_FAILURE.UNANSWERED });
+      assert.equal(open.told.length, 0, "a task's links are never told in the view");
     }),
 );
 

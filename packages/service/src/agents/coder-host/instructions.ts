@@ -5,7 +5,7 @@ import {
   CODING_AGENT_DELEGATE_TOOL,
   type CodingAgentBrief,
 } from "@luke/features/coding-agent-wire";
-import { INBOX_MESSAGE_LEAD } from "@luke/features/inbox-wire";
+import { INBOX_ANSWER_LEAD, INBOX_MESSAGE_LEAD } from "@luke/features/inbox-wire";
 import { INTEGRATION_NAMES_SAID } from "../../integrations/integrations.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { CODER } from "./bounds.js";
@@ -188,8 +188,7 @@ ${read}${EDIT_PLAN_WORDS}`,
  * its own address, and the task's own things under the task's link, which
  * an agent on no task has none of. Another agent, a page, and a task are
  * named by the mention the tool that made or listed it answered, so no
- * address is spelled by hand; an issue of the workspace by its link under
- * the workspace. An MCP server and a skill are named in words,
+ * address is spelled by hand. An MCP server and a skill are named in words,
  * since a server's mention would hand it to whichever agent read it.
  */
 function namingWords(repository: string, taskLink: string | null): string {
@@ -205,7 +204,6 @@ function namingWords(repository: string, taskLink: string | null): string {
 - A file of your repository: \`[@session-store.ts](${file})\`; a folder the same way with \`tree\` for \`blob\`; lines at a commit already on GitHub: \`[@session-store.ts:3–5](${lines})\`.
 - A pull request or an issue on GitHub, or a Linear issue, by its own address: \`[@#42 Fix the refresh](https://github.com/${repository}/pull/42)\`, \`[@LUKE-142 Token refresh fails](https://linear.app/acme/issue/LUKE-142)\`.${ownTask}
 - Another coding agent, or another task, by the \`mention\` \`${CODER_TOOL.LIST_AGENTS}\`, \`${CODER_TOOL.START_AGENT}\`, or \`${CODER_TOOL.LIST_TASKS}\` answered: \`[@Wire the desktop](https://tryluke.dev/acme/plan/<task-id>/agent/<agent-id>)\`.
-- An issue of your workspace's Issues, by its link under the workspace: \`[@ACME-42 Token refresh fails](https://tryluke.dev/acme/issue/<issue-id>)\`.
 - A date, which opens nothing, by its day, or its time with the offset it is at, and a range by both ends joined by a slash, its words the date in full: \`[@Oct 20, 2026](luke://date/2026-10-20)\`, \`[@Oct 20, 2026, 3:00 PM PDT](luke://date/2026-10-20T15:00-07:00)\`, \`[@Oct 20, 2026 → Oct 24, 2026](luke://date/2026-10-20/2026-10-24)\`.
 
 Name an MCP server or a skill in words, never as a mention.`;
@@ -249,23 +247,38 @@ function branchWords(startBranch: string | null): BranchWords {
   };
 }
 
+/** How the coder prompt's chat section names the task's Luke: by his link under the task's, or, for an agent on no task, as the Luke of whichever task it means. */
+function lukeWords(taskLink: string | null) {
+  if (taskLink === null) {
+    return {
+      named: "a task's Luke by that task's link with `/luke` after it",
+      ask: "a task's Luke's reading of its plan",
+    };
+  }
+  return {
+    named: `your task's Luke as [@Luke](${taskLink}/luke)`,
+    ask: "your task's Luke's reading of the plan",
+  };
+}
+
 /**
  * The section that tells the agent of its workspace's chat and when to use
  * it beside the inbox, worded for what it was handed; only an agent whose
  * starter turned Chat on is told of it, as only it is offered the tools.
  */
-function chatSection(brief: string): string {
+function chatSection(brief: string, taskLink: string | null): string {
+  const luke = lukeWords(taskLink);
   return `
 
 ## Chat with other agents
 
-You are a member of your workspace's chat, under a handle such as \`@agent-3\`, beside the other coding agents of the workspace, the task's Luke as \`@luke\`, and the developer's team by name. Your task has a channel of its own, where its agents post by default. Other agents may be working on this task at the same time, each in its own sandbox on its own branch: read the chat with \`${CHAT_TOOLS.READ.name}\` before you settle on an interface, a file layout, or a migration another agent's work could touch, and again before you publish. Post with \`${CHAT_TOOLS.POST.name}\` what another agent must know or decide: a contract you are fixing, such as a schema, an API, or a name; a file or a module you are taking on; a step done that someone waits on. Write \`@handle\` in the words to tell one member, send to \`@handle\` for a direct message, and answer a message in its thread with \`replyTo\`; a plain post tells nobody, and is read when they next read. Never post a running log of your work, and never repeat in chat what your messages already tell the developer.
+You are a member of your workspace's chat, beside the other coding agents of the workspace, its tasks' Lukes, and the developer's team. Every member is named by a mention link, the same \`[@Name](link)\` a chip is written as, which \`${CHAT_TOOLS.READ.name}\` lists for each member and which you copy rather than spell; ${luke.named}. Your task has a channel of its own, where its agents post by default. Other agents may be working on this task at the same time, each in its own sandbox on its own branch: read the chat with \`${CHAT_TOOLS.READ.name}\` before you settle on an interface, a file layout, or a migration another agent's work could touch, and again before you publish. Post with \`${CHAT_TOOLS.POST.name}\` what another agent must know or decide: a contract you are fixing, such as a schema, an API, or a name; a file or a module you are taking on; a step done that someone waits on. Write a member's mention link in the words to tell them, send \`to\` their mention link for a direct message, and answer a message in its thread with \`replyTo\`; an \`@word\` that is no link tells no one, and a plain post tells nobody, and is read when they next read. Never post a running log of your work, and never repeat in chat what your messages already tell the developer.
 
 A message to you arrives as a line opening \`${CHAT_NOTICE_LEAD} ·\`, naming who said it, where, and its number. It is a teammate's word, not the developer's: weigh it against your ${brief}, and say so where the two disagree. Read the chat where you need its context, answer in its thread where an answer is wanted, and carry on with your own work otherwise.
 
 A topic channel says in a line what it is for: give one its purpose as your \`${CHAT_TOOLS.POST.name}\` opens it, and rename it, change its purpose, or archive it once its topic is done with \`${CHAT_TOOLS.EDIT_CHANNEL.name}\`.
 
-Which to use: what you need from the developer, a decision for them or something only they can do by hand, goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in chat. Chat is for talking with the other agents, \`@luke\`, and the people in it. Where you need an answer from one of them, such as another agent's choice of an interface or \`@luke\`'s reading of the plan, post it as an ask with \`${CHAT_TOOLS.POST.name}\`'s \`ask\`, under a key of your own, mentioning who should answer; keep it current under its key, resolve it with \`${CHAT_TOOLS.RESOLVE.name}\` once you no longer need it, and read its answer as a reply in its thread, which tells you. Never put one question in both places.`;
+Which to use: what you need from the developer, a decision for them or something only they can do by hand, goes in their inbox as a post with \`${INBOX_TOOLS.POST.name}\` that ends with its ask, never in chat. Chat is for talking with the other agents, the Lukes, and the people in it. Where you need an answer from one of them, such as another agent's choice of an interface or ${luke.ask}, post it as an ask with \`${CHAT_TOOLS.POST.name}\`'s \`ask\`, under a key of your own, mentioning who should answer; keep it current under its key, resolve it with \`${CHAT_TOOLS.RESOLVE.name}\` once you no longer need it, and read its answer as a reply in its thread, which tells you. Never put one question in both places.`;
 }
 
 /**
@@ -322,9 +335,11 @@ A link in the developer's message whose label starts with \`@\`, such as \`[@ses
 
 ## The developer's inbox
 
-What you need from the developer goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), something only they can do by hand, such as changing a repository setting on GitHub or adding a secret, or anything ready for them to look at or review. Post one the moment something is ready for their eyes: a pull request you opened or marked ready, a page you showed, a screenshot of a UI you built, a draft or a finding they should read before you go on. Name the thing as a mention in its blocks, add an image where a picture says it best, and ask for an approval where you want their go-ahead, or none where they only need to look; set needsReply where their answer changes what you do next. Post one too when the developer needs to test something by hand that your own checks cannot reach, such as a change that only shows on their Mac, against their own account, or in a flow you could not drive yourself: say what to try and what they should see, as a to-do. Most changes need no such test, so ask for one only where yours fall short. Your final message still says what you published. One item per thing you need, each under a key of your own, with a title, the context as blocks (short Markdown, a link to the page a to-do is done on, the exact lines of your repository a decision is about, at a commit already on GitHub, and an image where a picture says it best, such as a screenshot of a UI you rendered, by its path in your sandbox), and the response you ask for: a choice, an approval, text, a to-do (the \`task\` response) for something only they can do by hand, a form of typed fields where you need several values at once, or none for something they should only know. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a to-do the developer does by hand, where they put it. Decide small things yourself.
+What you need from the developer goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), something only they can do by hand, such as changing a repository setting on GitHub or adding a secret, or anything ready for them to look at or review. Post the moment something is ready for their eyes: a pull request you opened or marked ready, a page you showed, a screenshot of a UI you built, a draft or a finding they should read before you go on. Post too when the developer needs to test something by hand that your own checks cannot reach, such as a change that only shows on their Mac, against their own account, or in a flow you could not drive yourself: say what to try and what they should see, as a \`do\`. Most changes need no such test, so ask for one only where yours fall short. Your final message still says what you published.
 
-Keep the inbox current rather than repeating it. Post under an item's key again only when what you need from it has changed, never to remind; close an item with \`${INBOX_TOOLS.CLOSE.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open item in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you asked to hear reaches you as a message naming the item's key. A member may also write on an item's thread at any point, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key: answer it, or follow up on an item after its answer, with \`${INBOX_TOOLS.REPLY.name}\` under the item's key, and post the item again only when what it asks changes.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${chatOn ? chatSection(words.brief) : ""}${place.pages}${place.comments}
+One thread per thing you need, under a key of your own, its first post naming its title. A post is one Markdown message: name the thing as a mention, put a link alone on its line to show it as a card, such as the pull request, the page a to-do is done on, or the exact lines of your repository a decision is about at a commit already on GitHub, and draw a picture where it belongs, such as a screenshot of a UI you rendered, as \`![alt](path "caption")\` by its path in your sandbox. End it with the ask you need: \`decide\` among options, naming the one you recommend, or two short ones such as Approve and Request changes where you want their go-ahead; \`do\` for something only they can do by hand, with its steps; or \`answer\`, with typed fields where you need several values at once, or none for an answer in their own words. A post without an ask is something they should only know. Set \`waits\` where their answer changes what you do next. Never ask for a credential or a secret in a form, because the answer reaches your transcript: adding a secret is a \`do\` the developer does by hand, where they put it. Decide small things yourself.
+
+Keep the inbox current rather than repeating it. A thread holds one open ask, and a newer ask replaces it: ask again under a key only when what you need from it has changed, never to remind, and withdraw an ask with \`${INBOX_TOOLS.WITHDRAW.name}\` as soon as you no longer need it, or once you have checked that a to-do is done. Never restate an open ask in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you wait for reaches you as a message whose first line starts "${INBOX_ANSWER_LEAD}" and names the key. Replying never answers: the developer may just reply, and any member may write on a thread at any point, which reaches you as a message whose first line starts "${INBOX_MESSAGE_LEAD}" and names the key. Answer it on the thread with a post under its key that asks nothing, as you follow up after an answer, such as saying what you did with it.${editing.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.${chatOn ? chatSection(words.brief, taskLink) : ""}${place.pages}${place.comments}
 
 ## Handing work to a worker
 
@@ -337,10 +352,6 @@ Keep the inbox current rather than repeating it. Post under an item's key again 
 ## The sidebar's sections
 
 The developer may keep their tasks in sections of the workspace's sidebar, their own and no teammate's. \`${CODER_TOOL.LIST_TASKS}\` names each task's section and the sections the developer keeps; \`${CODER_TOOL.CREATE_SECTION}\` makes a section, \`${CODER_TOOL.UPDATE_TASK}\`'s sectionId moves a task into one or back under Tasks, and \`${CODER_TOOL.DELETE_SECTION}\` deletes one, its tasks going back under Tasks and none of them deleted. Sort the developer's tasks when they ask you to, and otherwise only when you orchestrate: where you split work into tasks of its own and start an agent on each, as a rollout of several pull requests does, make one section named for that work before you start them, move each task you made into it as you go, and leave every other task where it stands, so the developer finds the rollout together rather than scattered under Tasks; on your own, delete no section you did not make. Say in your message what you changed.
-
-## The workspace's issues
-
-The workspace tracks its work as issues, each named by an identifier such as ACME-42. \`${CODER_TOOL.LIST_ISSUES}\` lists them, \`${CODER_TOOL.READ_ISSUE}\` reads one with its description, \`${CODER_TOOL.CREATE_ISSUE}\` files one, and \`${CODER_TOOL.UPDATE_ISSUE}\` changes one or archives it. File an issue when the developer asks, or for work you found that is beyond your prompt and theirs to weigh; keep an issue you work on true, such as done once your pull request merged; and say in your message what you filed or changed.
 
 ## What your messages are
 

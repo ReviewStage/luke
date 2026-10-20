@@ -2,7 +2,6 @@
 
 import assert from "node:assert/strict";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE } from "@luke/settings/settings-anchors";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsView } from "@luke/settings/settings-views";
 import { act, createElement } from "react";
@@ -35,9 +34,7 @@ interface Landing {
 const roots: Root[] = [];
 
 beforeEach(() => {
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: [] }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {

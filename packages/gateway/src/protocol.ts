@@ -58,6 +58,16 @@ export const GATEWAY_METHOD = {
   TASKS_PULL_REQUEST: "tasks.pullRequest",
   /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service as it stands now; answered to the caller, never held in the view. */
   TASKS_ISSUE: "tasks.issue",
+  /** A repository's issues as New task's picker asks for them, read from GitHub through the service as they stand now, or that its installation grants none; answered to the caller, never held in the view. */
+  TASKS_GITHUB_ISSUES: "tasks.githubIssues",
+  /** The issues one task links, each with where it stands now, read live through the service; answered to the caller, never held in the view. */
+  TASKS_ISSUE_LINKS: "tasks.issueLinks",
+  /** One more issue linked to a task on the service, which reads it from its provider first; answered to the caller. */
+  TASKS_ISSUE_LINK: "tasks.issueLink",
+  /** Which keyword a task's pull requests write of one of its links, changed on the service; answered to the caller. */
+  TASKS_ISSUE_RELATE: "tasks.issueRelate",
+  /** One of a task's links let go on the service; answered to the caller. */
+  TASKS_ISSUE_UNLINK: "tasks.issueUnlink",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   TASKS_REVISIONS: "tasks.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
@@ -160,11 +170,6 @@ export const GATEWAY_METHOD = {
   AUTOMATIONS_RUNS: "automations.runs",
   /** A webhook trigger's secret minted again by the host, its hash sent to the service, and the secret answered once to the window that asked (root AGENTS.md's carve-out). */
   AUTOMATIONS_NEW_WEBHOOK_SECRET: "automations.newWebhookSecret",
-  /** A workspace's issues: listed, one read, one filed, and one changed. */
-  ISSUES_LIST: "issues.list",
-  ISSUES_READ: "issues.read",
-  ISSUES_CREATE: "issues.create",
-  ISSUES_CHANGE: "issues.change",
   /** A workspace's Factory world, read whole as it stands now. */
   FACTORY_WORLD: "factory.world",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
@@ -208,7 +213,7 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** One open item of a task's inbox closed without an answer against the revision the panel drew, under the panel's own key; answered as an answer is. */
   CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
-  /** One message of the account's on an item's thread, open or settled, under the panel's own key; the item as it then stands, its thread with the message on it, or why there is no answer. */
+  /** One message of the account's on an item's thread, open or settled, under the panel's own key, carrying the answer to the thread's open ask where the reader attached one; the item as it then stands, its thread with the message on it, or why there is no answer. */
   CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
   /** One item marked read or unread for the account, as the Inbox's dot says it; its read state, or why there is no answer. */
   CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",

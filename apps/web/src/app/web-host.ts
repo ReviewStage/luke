@@ -2,7 +2,7 @@
  * web-host.ts -- the shared host composed in a browser tab: its seams answered by the tab, signed in by the service's cookie, and reached by the panel through the in-process bridge.
  *
  * The host is the desktop's own (`@luke/host`), assembled with no platform
- * concern: no commands or terminal on a Mac and no terminals, so nothing here
+ * concern: no terminals, neither the Mac's own nor an agent's, so nothing here
  * spawns a process or opens a terminal socket. What the desktop's seams read
  * from the machine the tab answers instead: the settings file in the
  * browser's storage, ids from `crypto`, the service at the origin that
@@ -10,32 +10,30 @@
  * which no code here reads or keeps. The voice socket refuses, since the web
  * client runs no voice yet.
  *
- * The panel's acts reach the host's own rows in this process; the few a
- * platform answers itself (a copy, a download, focus, the contact mail,
- * feedback, and Settings' test notification) are the tab's, and every other
- * platform kind is refused in its own words, so the table stays total. A
+ * The panel's acts reach the host's own procedures on the act port in this
+ * process; the few a platform answers itself (a copy, a download, focus, the
+ * contact mail, feedback, and Settings' test notification) are the tab's, and
+ * every other platform kind is refused in its own words, so the table stays
+ * total. A
  * notice is the panel's toast while the tab is shown and the browser's
  * notification while it is hidden (`web-notices.ts`). The composition is a
  * `Layer`, built by the tab's one runtime edge (`web-root.tsx`), whose close
- * is the host's drain; `run` is that runtime's, handed in so no act runs
+ * is the host's drain; `fork` is that runtime's, handed in so no count runs
  * anywhere else.
  */
 
 import { feedbackDelivery } from "@luke/features/feedback";
+import type { LinkPlatform } from "@luke/features/link-open";
 import { highlightSnippet, runModeFor } from "@luke/host";
 import {
   type ActPortDependencies,
   type AgentProceduresDependencies,
+  actPortFor,
   createActPortHandler,
+  type PlatformActProcedures,
   refusedPlatformProcedures,
+  WindowPushes,
 } from "@luke/host/act-port";
-import {
-  createHostActRouter,
-  type HostActDependencies,
-  type PlatformActRows,
-  refusedRows,
-} from "@luke/host/act-router";
-import { ACT_KIND } from "@luke/host/acts";
 import { AgentNoticeDoors } from "@luke/host/agent-notices";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import type { AppBridge } from "@luke/host/bridge";
@@ -48,7 +46,7 @@ import {
   linkNetworkWatch,
   type OperatorClient,
 } from "@luke/host/client";
-import type { ActPortClient } from "@luke/host/contract";
+import { type ActPortClient, CONTACT_MAILTO, WINDOW_SURFACE_ACT_KIND } from "@luke/host/contract";
 import {
   AppIdentity,
   type CookieSessionDoor,
@@ -62,6 +60,7 @@ import {
   hostKernelLayer,
   hostStandingLayer,
   IdSource,
+  PageReturns,
   RunMode,
   reporterLayer,
   ServiceOrigin,
@@ -72,13 +71,18 @@ import {
 } from "@luke/host/effect";
 import { effectServiceLayer } from "@luke/host/service-layer";
 import type { AppPlatform } from "@luke/panel/app-platform";
+import { showToast, TOAST_TONE, withdrawToast } from "@luke/panel/toast";
 import { HOST_CAPABILITY, SETTING_SIDE_EFFECT } from "@luke/settings";
-import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice";
-import { ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
+import { type OpenSocket, SOCKET_OPEN_FAULT } from "@luke/voice/live-socket";
+import { NOTIFICATIONS_STATUS } from "@luke/voice/settings-controls";
+import { Cause, ConfigProvider, Context, Effect, Layer, Path, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
-import packageJson from "../../package.json";
+import { version as appVersion } from "../../package.json";
 import { type ConnectTabs, connectTabs, tabBrowser } from "./connect-tab";
-import { FILES_KEY, localStorageFileSystem } from "./local-storage-file-system";
+import { FILES_KEY, localStorageFileSystem, tabStorage } from "./local-storage-file-system";
+import { type PageLeave, tabLeave } from "./page-leave";
+import { backOnline, followRelease, pageShownAgain } from "./stale-release";
+import { addressHere } from "./web-address";
 import {
   notificationsOffered,
   notificationsStatusNow,
@@ -91,38 +95,17 @@ import { downloadText, openTab, webPlatform } from "./web-platform";
 /** Where the host in the tab keeps its files, inside the browser's storage (`local-storage-file-system.ts`). */
 const STATE_ROOT = "/luke";
 
-/**
- * Where Contact us > Email writes to: the address the site's footer and the
- * desktop's own row name. Held here rather than sent by the panel, so the act
- * can open no other address.
- */
-const CONTACT_MAILTO = "mailto:founders@stagereview.app";
+/** The platform a tab names in app state, where the desktop names Node's `process.platform`. */
+const RUN_PLATFORM = { WEB: "web" } as const;
 
 /** The path feedback is posted to on the tab's own origin, which takes no credential (`server/feedback.mjs`). */
 const FEEDBACK_PATH = "/api/feedback";
 
-/**
- * Every `app:act` kind a platform answers that a browser tab cannot carry
- * yet: the updater, Browser tabs, the microphone, and the system's
- * notification settings, which a page cannot open. The terminals and the
- * Mac's own, the voice, the call window, and the avatar ride the act port,
- * where `refusedPlatformProcedures` refuses them.
- */
-const REFUSED_KINDS = [
-  ACT_KIND.UPDATE_CHECK,
-  ACT_KIND.UPDATE_INSTALL,
-  ACT_KIND.UPDATE_OPEN_RELEASE,
-  ACT_KIND.UPDATE_OPEN_CHANGELOG,
-  ACT_KIND.BROWSER_OPEN,
-  ACT_KIND.BROWSER_NAVIGATE,
-  ACT_KIND.BROWSER_STEP,
-  ACT_KIND.BROWSER_PLACE,
-  ACT_KIND.BROWSER_CAPTURE,
-  ACT_KIND.BROWSER_CLOSE,
-  ACT_KIND.MICROPHONE_REQUEST,
-  ACT_KIND.MICROPHONE_ROUTE,
-  ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS,
-] as const;
+/** What the tab offers while a page holds unsaved work and a newer release is served, and the one press that takes it. */
+const NEW_RELEASE_WORDS = "A new version of Luke is ready";
+const NEW_RELEASE_RELOAD = "Reload";
+/** What the offer is about, so a newer release's offer takes the older one's place. */
+const NEW_RELEASE_SUBJECT = "new-release";
 
 /** The page every act is from: a tab holds one panel and nothing else. */
 type WebSender = Window;
@@ -143,8 +126,12 @@ export class WebHostTag extends Context.Service<WebHostTag, WebHost>()("@luke/we
 export interface WebHostOptions {
   /** The client every service call goes out on: the tab's same-origin fetch, which sends the cookie, or a test's. */
   readonly httpClient: Layer.Layer<HttpClient.HttpClient>;
-  /** Every act's Effect, run on the tab's one runtime. */
-  readonly run: <A>(effect: Effect.Effect<A>) => Promise<A>;
+  /** Forks an Effect nobody awaits, a surface event's count, on the tab's one runtime. */
+  readonly fork: (effect: Effect.Effect<void>) => void;
+  /** The platform the tab runs on, which is offered the Mac app only where it is a Mac; the browser's own word where none is given. */
+  readonly linkPlatform?: LinkPlatform;
+  /** The commit this build is from, which a tab open across a release is reloaded off (`stale-release.ts`); empty or none where the build names none. */
+  readonly release?: string;
 }
 
 /** The web host as built, with the operator its launch starts beside it. */
@@ -166,19 +153,19 @@ const refusedVoiceSocket: OpenSocket = () => Effect.succeed({ fault: SOCKET_OPEN
 
 /**
  * What the cookie session needs of the tab: where it stands, a way to leave
- * for the provider, and each return to it, shown again or focused, on which
- * the session is read again, because another tab may have signed in as
- * someone else.
+ * for the provider, asking first while a page holds unsaved work, and each
+ * return to it, shown again or focused, on which the session is read again,
+ * because another tab may have signed in as someone else.
  */
-function cookieDoor(): CookieSessionDoor {
+function cookieDoor(tab: PageLeave): CookieSessionDoor {
   const shown = Stream.filter(
     Stream.fromEventListener(document, "visibilitychange"),
     () => document.visibilityState === "visible",
   );
   const focused = Stream.fromEventListener(window, "focus");
   return {
-    currentAddress: () => `${location.pathname}${location.search}${location.hash}`,
-    navigate: (url) => Effect.sync(() => location.assign(url)),
+    currentAddress: addressHere,
+    navigate: (url) => Effect.sync(() => tab.leave(() => location.assign(url))),
     revisits: Stream.as(Stream.merge(shown, focused), undefined),
   };
 }
@@ -188,21 +175,20 @@ function cookieDoor(): CookieSessionDoor {
  * keeps, which the browser says as a `storage` event in every tab but the
  * writer's. A cleared storage (`key` null) is a change to them too.
  */
-function filesChangedElsewhere(): Stream.Stream<void> {
+function filesChangedElsewhere(storage: Storage): Stream.Stream<void> {
   const changed = Stream.filter(
     Stream.fromEventListener<StorageEvent>(window, "storage"),
-    (event) =>
-      event.storageArea === localStorage && (event.key === FILES_KEY || event.key === null),
+    (event) => event.storageArea === storage && (event.key === FILES_KEY || event.key === null),
   );
   return Stream.as(changed, undefined);
 }
 
 /** Every seam the host's kernel and assembly stand on, as the tab answers it. */
-function seamLayers() {
+function seamLayers(storage: Storage) {
   return Layer.mergeAll(
     Layer.succeed(StateRoot, STATE_ROOT),
     Layer.succeed(RunMode, runModeFor({ capture: false, fixture: false })),
-    Layer.succeed(AppIdentity, { appVersion: packageJson.version, packaged: true }),
+    Layer.succeed(AppIdentity, { appVersion, packaged: true }),
     // A tab has no environment to read an override from.
     Layer.succeed(Environment, ConfigProvider.fromEnv({ env: {} })),
     Layer.succeed(IdSource, { create: () => crypto.randomUUID() }),
@@ -210,15 +196,48 @@ function seamLayers() {
     Layer.succeed(ShutdownSignal, { notify: undefined }),
     Layer.succeed(ServiceOrigin, location.origin),
     Layer.succeed(VoiceSocket, refusedVoiceSocket),
-    Layer.succeed(SettingsChangedElsewhere, filesChangedElsewhere()),
+    Layer.succeed(SettingsChangedElsewhere, filesChangedElsewhere(storage)),
+    // A phone drops the tab's sockets in the background, so its live follows start again as it returns.
+    Layer.succeed(PageReturns, Stream.merge(pageShownAgain(), backOnline())),
   );
 }
+
+/**
+ * Reloads a tab left open across a release as it comes back to the front,
+ * or, while a page holds unsaved work, offers the reload as a toast that
+ * stands until it is pressed or dismissed; the press still asks before a
+ * page's work is lost. It runs for as long as the host stands.
+ */
+const reloadOnNewRelease = (tab: PageLeave, release: string) => {
+  const reload = () => tab.leave(() => location.reload());
+  return Effect.forkScoped(
+    followRelease({
+      release,
+      origin: location.origin,
+      returns: pageShownAgain(),
+      unsavedWork: tab.holdsUnsavedWork,
+      reload,
+      offerReload: () => {
+        withdrawToast(NEW_RELEASE_SUBJECT);
+        showToast({
+          words: NEW_RELEASE_WORDS,
+          tone: TOAST_TONE.ASK,
+          subject: NEW_RELEASE_SUBJECT,
+          action: { label: NEW_RELEASE_RELOAD, onPress: reload },
+          persists: true,
+        });
+      },
+    }),
+  );
+};
 
 /**
  * Where an agent's end, an inbox item, a failed run, or a chat message is
  * said: the panel's own toast, through the bridge's events once the bridge
  * stands, or the browser's notification while the tab is hidden, and the
- * badge. What the browser answers is written for Settings. The badge comes
+ * badge. What the browser answers is written for Settings, and a browser
+ * that refuses to build a notification takes the tab's offer of them away,
+ * so Settings offers no Notifications page it cannot keep. The badge comes
  * down with the host's scope.
  */
 const noticeDoors = (
@@ -241,51 +260,58 @@ const noticeDoors = (
             state.update({ notifications: { status } });
           }
         },
+        onWithdrawn: () => {
+          const { run } = state.snapshot();
+          state.update({
+            run: {
+              ...run,
+              capabilities: run.capabilities.filter(
+                (capability) => capability !== HOST_CAPABILITY.NOTIFICATIONS,
+              ),
+            },
+            notifications: { status: NOTIFICATIONS_STATUS.OFF },
+          });
+        },
       }),
     ),
     (doors) => Effect.sync(() => doors.close()),
   );
 
-/** The rows the tab answers itself, and every other platform kind refused. */
-function platformRows(
+/**
+ * The platform procedures the tab answers itself: a copy, a download, focus,
+ * the contact mail, Settings' test notification, and feedback. Every other
+ * platform kind is refused in its own words, since a page cannot carry it
+ * yet: the updater, Browser tabs, the microphone, the system's notification
+ * settings, the terminals and the Mac's own, the voice, the call window, and
+ * the avatar.
+ */
+function platformProcedures(
   http: HttpClient.HttpClient,
   doors: WebNoticeDoors,
-): PlatformActRows<WebSender> {
+): PlatformActProcedures<WebSender> {
+  const port = actPortFor<WebSender>();
   const feedback = feedbackDelivery({ url: new URL(FEEDBACK_PATH, location.origin).href });
+  const KIND = WINDOW_SURFACE_ACT_KIND;
   return {
-    ...refusedRows(REFUSED_KINDS),
-    [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => navigator.clipboard.writeText(words),
-    [ACT_KIND.WINDOW_SAVE_FILE]: ({ name, text }) => downloadText({ name, text }),
-    [ACT_KIND.WINDOW_FOCUS_PANEL]: () => window.focus(),
-    [ACT_KIND.CONTACT_EMAIL]: () => location.assign(CONTACT_MAILTO),
-    // Note that this is the one place the tab asks for permission, because a
-    // browser lets a page ask only on a press.
-    [ACT_KIND.NOTIFICATIONS_TEST]: () => doors.postTest(),
-    [ACT_KIND.FEEDBACK_SEND]: ({ submission }) =>
-      Effect.provideService(feedback.deliver(submission), HttpClient.HttpClient, http),
-  };
-}
-
-/** The host's own rows' dependencies, answered for a tab: no voice, no keys, and links opened in a tab of their own, a connect's in the tab its press opened. */
-function hostRowDependencies(
-  operator: OperatorClient,
-  state: AppStateStore,
-  tabs: ConnectTabs,
-): HostActDependencies {
-  const host = operator.host;
-  const nothing = () => undefined;
-  return {
-    tasks: {
-      host,
-      openExternal: async (url) => tabs.open(url),
-      serviceBaseUrl: location.origin,
-      activeTaskId: () => state.snapshot().tasks.activeTaskId,
-      talkAboutTask: nothing,
-      voiceReady: () => false,
-      callStanding: () => false,
-      colourCode: highlightSnippet,
-    },
-    codingAgents: { host },
+    ...refusedPlatformProcedures<WebSender>(),
+    [KIND.WINDOW_COPY_TEXT]: port[KIND.WINDOW_COPY_TEXT].handler(({ input }) =>
+      navigator.clipboard.writeText(input.words),
+    ),
+    [KIND.WINDOW_SAVE_FILE]: port[KIND.WINDOW_SAVE_FILE].handler(({ input }) =>
+      downloadText({ name: input.name, text: input.text }),
+    ),
+    [KIND.WINDOW_FOCUS_PANEL]: port[KIND.WINDOW_FOCUS_PANEL].handler(() => window.focus()),
+    [KIND.CONTACT_EMAIL]: port[KIND.CONTACT_EMAIL].handler(() => location.assign(CONTACT_MAILTO)),
+    // Note that this asks for permission only where the press's own ask
+    // (`askNotificationsPermission`) has not, and joins it where it still waits.
+    [KIND.NOTIFICATIONS_TEST]: port[KIND.NOTIFICATIONS_TEST].handler(() => doors.postTest()),
+    [KIND.FEEDBACK_SEND]: port[KIND.FEEDBACK_SEND].effect(function* ({ input }) {
+      return yield* Effect.provideService(
+        feedback.deliver(input.submission),
+        HttpClient.HttpClient,
+        http,
+      );
+    }),
   };
 }
 
@@ -296,6 +322,7 @@ function hostRowDependencies(
  */
 function portDependencies(
   operator: OperatorClient,
+  state: AppStateStore,
   notices: AgentProceduresDependencies["notices"],
   reporter: string,
   tabs: ConnectTabs,
@@ -309,11 +336,16 @@ function portDependencies(
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    agentInbox: { host },
     agents: { host, notices },
     automations: { host },
     factory: { host },
     integrations: { host },
-    issues: { host },
+    // Note that nothing is pushed on the tab's port: the tab hears the host
+    // through the in-process bridge's own listeners, so its push stream is
+    // never opened and this table stays empty.
+    pushes: new WindowPushes(),
+    taskIssues: { host },
     settings: {
       host,
       reporterOf: (actor) => (actor.sender === window ? reporter : undefined),
@@ -329,6 +361,17 @@ function portDependencies(
       // A tab claims no global key, so no chord is ever held.
       stopChordHolder: () => undefined,
     },
+    // No voice stands in a tab, so a started task opens no call and the microphone's press reaches none.
+    tasks: {
+      host,
+      colourCode: highlightSnippet,
+      openExternal: async (url) => tabs.open(url),
+      serviceBaseUrl: location.origin,
+      activeTaskId: () => state.snapshot().tasks.activeTaskId,
+      talkAboutTask: nothing,
+      voiceReady: () => false,
+      callStanding: () => false,
+    },
     workspaces: { host, openExternal: async (url) => tabs.open(url) },
   };
 }
@@ -341,21 +384,21 @@ function portDependencies(
  * panel's and trusted; the procedures' effects run on the tab's runtime.
  * Both ends close with the host's scope.
  */
-const servedActPort = (dependencies: ActPortDependencies, services: Context.Context<never>) =>
+const servedActPort = (
+  dependencies: ActPortDependencies,
+  procedures: PlatformActProcedures<WebSender>,
+  services: Context.Context<never>,
+) =>
   Effect.acquireRelease(
     Effect.sync(() => {
       const channel = new MessageChannel();
-      // Every platform kind on the port is refused, since a tab carries none of them yet.
-      createActPortHandler(dependencies, refusedPlatformProcedures<WebSender>()).upgrade(
-        channel.port2,
-        {
-          context: () => ({
-            actor: { sender: window, panel: true, voice: false, call: false },
-            trusted: true,
-            "effect/context": services,
-          }),
-        },
-      );
+      createActPortHandler(dependencies, procedures).upgrade(channel.port2, {
+        context: () => ({
+          actor: { sender: window, panel: true, voice: false, call: false },
+          trusted: true,
+          "effect/context": services,
+        }),
+      });
       channel.port2.start();
       return channel;
     }),
@@ -367,7 +410,12 @@ const servedActPort = (dependencies: ActPortDependencies, services: Context.Cont
   ).pipe(Effect.map((channel) => channel.port1));
 
 /** The host standing in the tab, its document, its bridge, and the platform beside it. */
-const composedWeb = (run: WebHostOptions["run"]) =>
+const composedWeb = (
+  fork: WebHostOptions["fork"],
+  tab: PageLeave,
+  linkPlatform: LinkPlatform | undefined,
+  release: string,
+) =>
   Layer.effect(
     ComposedWebTag,
     Effect.gen(function* () {
@@ -379,9 +427,9 @@ const composedWeb = (run: WebHostOptions["run"]) =>
           {
             launch: { profile: RUN_PROFILE.IDLE, captureMode: false, fixtureMode: false },
             runMode: runModeFor({ capture: false, fixture: false }),
-            appVersion: packageJson.version,
+            appVersion,
             packaged: true,
-            platform: "web",
+            platform: RUN_PLATFORM.WEB,
           },
           false,
           // The tab's own offer beside the host's concerns: notifications, where the browser posts them.
@@ -397,7 +445,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
         state.update({ notifications: { status: notificationsStatusNow() } });
       }
       // An address the host opens goes to a connect's waiting tab, or opens as a link.
-      const tabs = connectTabs(tabBrowser(openTab));
+      const tabs = connectTabs(tabBrowser(openTab, tab.leave));
       yield* Effect.acquireRelease(Effect.sync(tabs.listen), (stop) => Effect.sync(stop));
       const operator = yield* createOperatorClient({
         report,
@@ -409,6 +457,7 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       // No voice window and no talk key stand beside the panel.
       operator.link({ sendToVoice: () => undefined, reapplyTalkHotkey: () => undefined });
       yield* linkNetworkWatch({ state, isOnline: () => navigator.onLine });
+      yield* reloadOnNewRelease(tab, release);
 
       // The notices' toasts reach the panel through the bridge, which is built
       // after the notices, so they find it late.
@@ -429,32 +478,33 @@ const composedWeb = (run: WebHostOptions["run"]) =>
       }).pipe(Effect.provideService(AgentNoticeDoors, doors));
 
       const count: AppPlatform["recordSurfaceEvent"] = (name, properties) => {
-        void run(operator.host.recordEvent(name, properties));
-      };
-      const made = yield* createInProcessBridge<WebSender>({
-        sender: window,
-        routerFor: () =>
-          createHostActRouter(
-            hostRowDependencies(operator, state, tabs),
-            platformRows(http, doors),
+        // A count that fails is said on the console, never left as a rejection nobody hears.
+        fork(
+          Effect.catchCause(operator.host.recordEvent(name, properties), (cause) =>
+            Effect.sync(() => report(`A surface event was not counted: ${Cause.pretty(cause)}`)),
           ),
-        run,
+        );
+      };
+      const made = yield* createInProcessBridge({
         state,
         windowFacts: () => ({ fullScreen: document.fullscreenElement !== null }),
-        createId: () => crypto.randomUUID(),
         reports: { notifyReady: () => undefined, recordSurfaceEvent: count },
         report,
       });
       events = made.events;
       const actPort = yield* servedActPort(
-        portDependencies(operator, notices, crypto.randomUUID(), tabs),
+        portDependencies(operator, state, notices, crypto.randomUUID(), tabs),
+        platformProcedures(http, doors),
         services,
       );
       return {
-        bridge: tabs.bridge(made.bridge),
+        bridge: made.bridge,
         actPort,
         actPortClient: tabs.portClient,
-        platform: webPlatform({ recordSurfaceEvent: count }),
+        platform: webPlatform(
+          { recordSurfaceEvent: count, unsavedWork: tab.unsavedWork },
+          linkPlatform,
+        ),
         operator,
       };
     }),
@@ -470,15 +520,19 @@ const composedWeb = (run: WebHostOptions["run"]) =>
 export function composeWeb(
   options: WebHostOptions,
 ): Layer.Layer<WebHostTag | HostTag, DuplicateGatewayMethod> {
-  const { httpClient, run } = options;
+  const { httpClient, fork, linkPlatform, release = "" } = options;
+  // The tab's one way out past the panel's leave guard, which the sign-in, a connect, and the platform share.
+  const tab = tabLeave();
+  // Read once, so the files and the word of another tab's write are the same storage, in memory where the browser blocks it.
+  const storage = tabStorage();
   const assembly = Layer.provide(
     hostAssemblyLayer([]),
     Layer.mergeAll(
-      Layer.provideMerge(hostKernelLayer, seamLayers()),
-      localStorageFileSystem(),
+      Layer.provideMerge(hostKernelLayer, seamLayers(storage)),
+      localStorageFileSystem(storage),
       Path.layer,
       httpClient,
-      Layer.provide(cookieAccountSourceLayer(cookieDoor()), httpClient),
+      Layer.provide(cookieAccountSourceLayer(cookieDoor(tab)), httpClient),
     ),
   );
   const launched = Layer.unwrap(
@@ -495,7 +549,7 @@ export function composeWeb(
     ),
   );
   return launched.pipe(
-    Layer.provideMerge(composedWeb(run)),
+    Layer.provideMerge(composedWeb(fork, tab, linkPlatform, release)),
     Layer.provideMerge(assembly),
     Layer.provide(httpClient),
   );

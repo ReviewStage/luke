@@ -1,18 +1,14 @@
-import type { ActPortHandler } from "@luke/host/act-port";
-import type { ActRouter, ActSender } from "@luke/host/act-router";
-import { type Act, parsedAct } from "@luke/host/acts";
+import type { ActPortHandler, ActSender } from "@luke/host/act-port";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import {
   ACT_PORT,
   BRIDGE,
-  type Bridge,
   type BridgeArgumentsFor,
   type BridgeMethod,
   type BridgeResultFor,
 } from "@luke/host/bridge";
 import { windowAppState } from "@luke/host/client";
-import type { UnparsedWireValue } from "@luke/wire";
-import type { Context, Effect } from "effect";
+import type { Context } from "effect";
 import type { IpcMain, IpcMainEvent, IpcMainInvokeEvent, WebContents } from "electron";
 
 /** Which window a report came from, which is all a report's handler is told. */
@@ -25,17 +21,13 @@ type BridgeHandler<Method extends BridgeMethod> = (
   ...args: BridgeArgumentsFor<Method>
 ) => BridgeResultFor<Method> | Promise<BridgeResultFor<Method>>;
 
-type SubscribeMethod = {
-  [Method in BridgeMethod]: Bridge[Method]["kind"] extends "subscribe" ? Method : never;
-}[BridgeMethod];
-
 /**
- * Every entry a window sends and the router does not answer: what one window
- * reports about itself. Derived rather than listed, so an entry added to the
- * bridge is an entry this registrar demands a handler for, and the only way
- * to add an effect without one is to add an act.
+ * Every entry a window sends: what one window reports about itself. Derived
+ * rather than listed, so an entry added to the bridge is an entry this
+ * registrar demands a handler for, and the only way to add an effect without
+ * one is to add an act.
  */
-type ReportMethod = Exclude<BridgeMethod, SubscribeMethod | "act" | "requestAppState">;
+type ReportMethod = Exclude<BridgeMethod, "requestAppState">;
 
 export type ReportHandlers = { readonly [Method in ReportMethod]: BridgeHandler<Method> };
 
@@ -45,9 +37,6 @@ export interface BridgeHostDependencies {
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
   /** Which of the three surfaces asked, decided by the windows this process opened. */
   senderOf: (sender: WebContents) => ActSender<WebContents>;
-  router: ActRouter<WebContents>;
-  /** Every act's Effect, run on the desktop's own runtime rather than a second one. */
-  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   /** The act port's server, which every window's port is upgraded with. */
   actPort: ActPortHandler<WebContents>;
   /** The desktop runtime's own services, which every act port procedure's effect runs on. */
@@ -62,26 +51,15 @@ type ErasedHandler = (context: BridgeContext, ...args: never[]) => unknown;
 
 /**
  * Every channel the sandboxed renderers reach this process through, attached
- * once and in one place. There are four kinds and no fifth: the one act
- * channel, whose router decides everything; the act port, whose procedures
- * answer the kinds that have moved onto it; the one state read; and the
- * reports, each a window saying something only it knows. A window that loaded
+ * once and in one place. There are three kinds and no fourth: the act port,
+ * whose procedures answer every act and stream what main pushes the window
+ * (`window/window-pushes.ts`); the one state read; and the reports, each a window saying something only it knows. A window that loaded
  * before this ran would meet an unhandled invoke, so it runs between the
  * composition and its start.
  */
 export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
-  const { ipcMain, trustedSender, senderOf, router, run, actPort, services, reports, snapshotFor } =
+  const { ipcMain, trustedSender, senderOf, actPort, services, reports, snapshotFor } =
     dependencies;
-
-  ipcMain.handle(BRIDGE.act.channel, async (event, ...rawArgs) => {
-    // `parsedAct` is this entry's own argument guard, so it is read here for
-    // the act rather than called twice for its verdict and then its value.
-    // SAFETY: an IPC payload is structured-clone data, which is what parsedAct parses.
-    const act: Act | undefined =
-      rawArgs.length === 1 ? parsedAct(rawArgs[0] as UnparsedWireValue) : undefined;
-    if (!trustedSender(event) || !act) throw new Error("Invalid bridge request");
-    return run(router.performAct(act, senderOf(event.sender)));
-  });
 
   // A window's act port, which its preload forwards once per page (oRPC's
   // Electron adapter). Note that every port is upgraded, a frame this build
@@ -114,7 +92,7 @@ export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
     // SAFETY: definition.args validates the erased IPC arguments before this typed handler runs.
     const handler = reports[method] as ErasedHandler;
     // Every report is a send: a window says what only it knows and awaits no
-    // answer, so the two invokes above are the whole of what this process answers.
+    // answer, so the one invoke above is the whole of what this process answers.
     ipcMain.on(definition.channel, (event, ...rawArgs) => {
       if (!trustedSender(event) || !definition.args(rawArgs)) return;
       // SAFETY: the guard above admitted these arguments for this method.

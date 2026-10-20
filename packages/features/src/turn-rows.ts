@@ -54,6 +54,8 @@ export const CALL_KIND = {
   INBOX_CLOSE: "inbox-close",
   INBOX_READ: "inbox-read",
   INBOX_REPLY: "inbox-reply",
+  /** An ask on one of the agent's inbox threads taken back with why (`withdraw_ask`), its row naming the thread's key. */
+  INBOX_WITHDRAW: "inbox-withdraw",
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
@@ -80,9 +82,9 @@ export const CALL_KIND = {
   ARCHIVE_TASK: "archive-task",
   UNARCHIVE_TASK: "unarchive-task",
   UPDATE_TASK: "update-task",
-  /** The workspace's issues listed (`list_issues`). */
+  /** The workspace's issues listed (`list_issues`, retired with Luke's own issues; an older transcript still names it). */
   LIST_ISSUES: "list-issues",
-  /** One issue read (`read_issue`), filed (`create_issue`), or changed (`update_issue`), its row naming it by its identifier and title once answered. */
+  /** One issue read (`read_issue`), filed (`create_issue`), or changed (`update_issue`), retired with `list_issues`, its row naming it by its identifier and title once answered. */
   READ_ISSUE: "read-issue",
   CREATE_ISSUE: "create-issue",
   UPDATE_ISSUE: "update-issue",
@@ -123,6 +125,7 @@ export const CALL_WORDS = {
   [CALL_KIND.INBOX_CLOSE]: { verb: "Closed in your inbox:", code: false },
   [CALL_KIND.INBOX_READ]: { verb: "Read your inbox", code: false },
   [CALL_KIND.INBOX_REPLY]: { verb: "Replied in your inbox:", code: false },
+  [CALL_KIND.INBOX_WITHDRAW]: { verb: "Withdrew an ask in your inbox:", code: false },
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped subagent", code: false },

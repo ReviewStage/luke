@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@luke/credentials/snapshot";
 import type { Task } from "@luke/features/task-wire";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import {
@@ -38,11 +38,10 @@ import { useTaskLooks } from "../tasks/use-task-looks.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
-  ISSUES_PAGE,
   type TasksControl,
 } from "../tasks/use-tasks-tab.js";
 import { Tooltip } from "../tooltip.js";
-import { useExperiment } from "../use-app-state.js";
+import { useCapability, useExperiment } from "../use-app-state.js";
 import { READING_AUTOMATIONS } from "./automation-words.js";
 import { useColumnDock } from "./column-dock.js";
 import { DesktopAgentPage } from "./desktop-agent-page.js";
@@ -87,22 +86,29 @@ const AutomationsPage = lazy(() =>
   })),
 );
 
-/**
- * The Issues page, loaded as a chunk of its own the first time it opens,
- * as the Automations pages are and for the same reason.
- */
-const IssuesPage = lazy(() =>
-  import("./issues-page.js").then((loaded) => ({ default: loaded.IssuesPage })),
+/** The Board, its own chunk, loaded the first time it is opened. */
+const TasksBoard = lazy(() =>
+  import("./tasks-board.js").then((loaded) => ({ default: loaded.TasksBoard })),
 );
 
-/**
- * What stands while the Issues page's chunk loads: its empty frame, and its
- * own way out, so Escape pressed in that frame closes Issues as the list
- * would rather than falling through to the plan behind it.
- */
-function IssuesLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
-  useAppCommand(APP_COMMAND.EXIT_ISSUES, onExit);
-  return <section className="automations-view" aria-label="Issues" />;
+/** What stands while the Board's chunk loads: its frame and title over quiet blocks, and its own way out, so Escape closes the Board rather than reaching the plan behind it. */
+function BoardLoading({ onExit }: { onExit: () => void }): React.JSX.Element {
+  useAppCommand(APP_COMMAND.EXIT_BOARD, onExit);
+  return (
+    <CollectionPage
+      frame={PAGE_FRAME.TOOLBAR}
+      label="Board"
+      toolbar={
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Board</h1>
+          </div>
+        </header>
+      }
+      state={COLLECTION_STATE.LOADING}
+      loadingLabel="Reading tasks"
+    />
+  );
 }
 
 /**
@@ -252,17 +258,6 @@ function usePlaceCommands(
         }
       : undefined,
   );
-  // The Issues page is an experiment on the same terms as Factory.
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
-  useAppCommand(
-    APP_COMMAND.ISSUES,
-    pastGate && tasks.signedIn && issuesOn
-      ? () => {
-          if (tab !== PANEL_TAB.TASKS) onTabChange(PANEL_TAB.TASKS);
-          tasks.issuesView.onOpen();
-        }
-      : undefined,
-  );
   // Factory is an experiment: offered nowhere, ⌘K, its chord, or the menu, while it is off.
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   useAppCommand(
@@ -293,9 +288,11 @@ function usePlaceCommands(
         }
       : undefined,
   );
+  // The page lists an installed app's chords, and stands nowhere else (`pages.tsx`).
+  const desktopApp = useCapability(HOST_CAPABILITY.DESKTOP_APP);
   useAppCommand(
     APP_COMMAND.KEYBOARD_SHORTCUTS,
-    pastGate
+    pastGate && desktopApp
       ? () => {
           // Arriving at Settings lands on Account, so the page is turned
           // after.
@@ -365,7 +362,7 @@ function titleSubject(
     return { signedIn, subject: "Automations", workspace: tasks.workspace };
   }
   if (tasks.chatView.open) return { signedIn, subject: "Chat", workspace: tasks.workspace };
-  if (tasks.issuesView.open) return { signedIn, subject: "Issues", workspace: tasks.workspace };
+  if (tasks.boardView.open) return { signedIn, subject: "Board", workspace: tasks.workspace };
   if (shownTask === undefined) return { signedIn, subject: undefined, workspace: tasks.workspace };
   // Note that a task whose workspace is not read yet is named alone, because the listed one may not be its.
   const workspace = tasks.workspaces.find((each) => each.id === shownTask.workspaceId);
@@ -456,17 +453,13 @@ export function DesktopShell({
   useEffect(() => {
     if (chatShown && !chatOn) closeChat();
   }, [chatShown, chatOn, closeChat]);
-  const issuesOn = useExperiment(EXPERIMENT.ISSUES);
-  const { open: issuesShown, onClose: closeIssues } = tasks.issuesView;
-  useEffect(() => {
-    if (issuesShown && !issuesOn) closeIssues();
-  }, [issuesShown, issuesOn, closeIssues]);
   const { region } = tasks;
   // The folded sidebar's call card stands over the column's foot, clear of its dock.
   useColumnDock(
     shell,
     tasks.sidePanel.fullScreen,
-    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.issuesView.open}:${sidebar.collapsed}`,
+    room === SHELL_ROOM.NARROW,
+    `${tab}:${tasks.page}:${tasks.history.open}:${tasks.inboxView.open}:${tasks.agentView.agentId}:${tasks.personView.userId}:${tasks.factoryView.open}:${tasks.automationsView.open}:${tasks.chatView.open}:${tasks.boardView.open}:${sidebar.collapsed}`,
   );
   // The window's title names what stands in it, the plan only while it is on screen, and its workspace;
   // the Inbox, an agent's or a person's page, Factory, the Automations page, or Chat standing in its place is not the plan.
@@ -477,7 +470,7 @@ export function DesktopShell({
     tasks.factoryView.open ||
     tasks.automationsView.open ||
     tasks.chatView.open ||
-    tasks.issuesView.open;
+    tasks.boardView.open;
   const shownTask =
     tab === PANEL_TAB.TASKS && !standingIn && region.kind === DOCUMENT_REGION.READY
       ? region.task
@@ -584,26 +577,18 @@ export function DesktopShell({
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then. Factory,
   // the Automations page, and Chat stand in the plan's place, so they draw
-  // no panel to toggle; an agent's page draws the agent's own, the Inbox
-  // the chosen item's task's, and the Issues list the issue it peeked.
+  // no panel to toggle; an agent's page draws the agent's own, and the Inbox
+  // the chosen item's task's.
   const inboxOpen = tasks.inboxView.open;
   const pageAgent = tasks.agentView.agentId;
   const pagePerson = tasks.personView.userId;
   const factoryOpen = tasks.factoryView.open && factoryOn;
   const automationsOpen = tasks.automationsView.open;
   const chatOpen = tasks.chatView.open && chatOn;
-  const issuesOpen = tasks.issuesView.open && issuesOn;
+  const boardOpen = tasks.boardView.open;
   const planToggle = tasks.page === TASKS_PAGE.DOCUMENT && !standingIn;
-  // The Issues list draws the panel beside it once an issue has been peeked there, as the Inbox does once an item is chosen.
-  const issuePeeked =
-    issuesOpen &&
-    tasks.issuesView.place.kind === ISSUES_PAGE.LIST &&
-    tasks.issuesView.peeked !== undefined;
   const panelToggle =
-    planToggle ||
-    pageAgent !== undefined ||
-    (inboxOpen && tasks.inboxView.chosen !== undefined) ||
-    issuePeeked;
+    planToggle || pageAgent !== undefined || (inboxOpen && tasks.inboxView.chosen !== undefined);
   const taskDrawn = planToggle && tasks.region.kind === DOCUMENT_REGION.READY;
   // Note that a panel filling the window hides the task's column, call bar
   // and all, so the captions float in its place then.
@@ -611,6 +596,11 @@ export function DesktopShell({
   const captionStrip = (
     <CaptionStrip {...captions} speechHidden={taskDrawn && transcriptStreaming(tasks)} />
   );
+  // A phone's drawer is modal, as a phone's own drawers are: while it stands
+  // over the work, the work is inert, so neither a screen reader nor a
+  // keyboard reaches what the drawer covers, and a press there only puts it
+  // away. Its toggle stays, the way to close it.
+  const drawerOver = room === SHELL_ROOM.NARROW && sidebar.overlay !== SIDEBAR_OVERLAY.CLOSED;
   return (
     <div
       ref={shell}
@@ -632,8 +622,9 @@ export function DesktopShell({
         onSignOut={settings.onSignOut}
         call={sidebar.collapsed ? undefined : call}
         onPressWithin={keepOverlay}
+        room={room}
       />
-      <main className="desktop-main">
+      <main className="desktop-main" inert={drawerOver}>
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
         <MentionedAgents value={mentionedAgents}>
           <ChipCards value={chipCards}>
@@ -667,10 +658,10 @@ export function DesktopShell({
               <PageFind page={FIND_PAGE.FACTORY} active={tasks.shown}>
                 <DesktopFactory tasks={tasks} />
               </PageFind>
-            ) : issuesOpen ? (
-              <PageFind page={FIND_PAGE.ISSUES} active={tasks.shown}>
-                <Suspense fallback={<IssuesLoading onExit={tasks.issuesView.onClose} />}>
-                  <IssuesPage tasks={tasks} />
+            ) : boardOpen ? (
+              <PageFind page={FIND_PAGE.BOARD} active={tasks.shown}>
+                <Suspense fallback={<BoardLoading onExit={tasks.boardView.onClose} />}>
+                  <TasksBoard tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
             ) : automationsOpen ? (
@@ -680,7 +671,7 @@ export function DesktopShell({
                 active={tasks.shown}
               >
                 <Suspense fallback={<AutomationsLoading onExit={tasks.automationsView.onClose} />}>
-                  <AutomationsPage tasks={tasks} />
+                  <AutomationsPage tasks={tasks} room={room} />
                 </Suspense>
               </PageFind>
             ) : (
@@ -721,7 +712,7 @@ export function DesktopShell({
         {sidebar.collapsed ? <OfflineMark /> : null}
       </div>
       {panelToggle ? (
-        <div className="title-bar-controls" data-edge="end">
+        <div className="title-bar-controls" data-edge="end" inert={drawerOver}>
           <SidePanelToggle
             panel={tasks.sidePanel}
             disabled={planToggle && tasks.region.kind !== DOCUMENT_REGION.READY}

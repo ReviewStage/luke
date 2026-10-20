@@ -51,7 +51,6 @@ import {
 } from "@luke/database/models/workspace-store";
 import {
   WORKSPACE_MEMBERS_QUERY,
-  WORKSPACE_PHOTO_BOUNDS,
   WORKSPACE_ROLE,
   type WorkspaceRole,
 } from "@luke/features/workspace-wire";
@@ -65,20 +64,9 @@ import {
   type UserIdResolver,
 } from "../http/http-effect.js";
 import type { StoreFailure } from "../http/store-failure.js";
-import { accountMiddleware, bodyLimit, hosted, sessionMiddleware } from "../orpc/base.js";
+import { accountMiddleware, hosted, sessionMiddleware } from "../orpc/base.js";
 import { answeredWorkspace, managedWorkspace, pluginCallOrRefused } from "./workspace-access.js";
 import { listFormerMembers, listMembers, memberIdOf } from "./workspace-members.js";
-
-/** A workspace's name or id is a few dozen characters, so a body past this is not one. */
-const MAXIMUM_BODY_BYTES = 1_024;
-
-/**
- * A photo's body: its bytes at their bound spelled in base64, four
- * characters to every three bytes, and a name's body beside them for the
- * URL's prefix and the workspace's id. Note that a photo just past the
- * bound still fits, because its refusal is the invalid one the schema says.
- */
-const PHOTO_BODY_BYTES = Math.ceil(WORKSPACE_PHOTO_BOUNDS.MAX_BYTES / 3) * 4 + MAXIMUM_BODY_BYTES;
 
 /** The roles a workspace is handed to: an admin, or an owner a handover cut short already made one. */
 const HEIR_ROLES: ReadonlySet<WorkspaceRole> = new Set([
@@ -162,11 +150,8 @@ const membersNow = (
 
 /** The workspaces resource: the list, a workspace created, and its members read under the OAuth token; every other write under the Mac's session. */
 export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
-  const account = hosted.workspaces
-    .use(accountMiddleware(seams.resolveUserId))
-    .use(bodyLimit(MAXIMUM_BODY_BYTES));
+  const account = hosted.workspaces.use(accountMiddleware(seams.resolveUserId));
   const session = hosted.workspaces.use(sessionMiddleware(seams.resolveSessionUserId));
-  const inSession = session.use(bodyLimit(MAXIMUM_BODY_BYTES));
   return {
     list: account.list.effect(function* ({ context }) {
       yield* pluginWriteOrUnavailable(ensurePersonalWorkspace(context.userId, seams.workspaces));
@@ -190,7 +175,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       // Note that nobody who left says nothing, so an answer is as it was before anyone could leave.
       return former.length === 0 ? { members } : { members, former };
     }),
-    removeMember: inSession.removeMember.effect(function* ({ context, input }) {
+    removeMember: session.removeMember.effect(function* ({ context, input }) {
       const { userId, sessionHeaders: headers } = context;
       const { workspaceId, userId: removed } = input;
       const workspace = yield* answeredWorkspace(userId, workspaceId);
@@ -203,7 +188,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       );
       return yield* membersNow(workspaceId);
     }),
-    changeRole: inSession.changeRole.effect(function* ({ context, input }) {
+    changeRole: session.changeRole.effect(function* ({ context, input }) {
       const { userId, sessionHeaders: headers } = context;
       const { workspaceId, userId: changed, role } = input;
       yield* ownedWorkspace(userId, workspaceId);
@@ -233,7 +218,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
      * already an owner is one such handover cut short, so the old owner
      * trying again finishes it.
      */
-    transfer: inSession.transfer.effect(function* ({ context, input }) {
+    transfer: session.transfer.effect(function* ({ context, input }) {
       const { userId, sessionHeaders: headers } = context;
       const { workspaceId, userId: heir } = input;
       const workspace = yield* ownedWorkspace(userId, workspaceId);
@@ -252,7 +237,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
       yield* giveRole(ownMemberId.value, WORKSPACE_ROLE.ADMIN);
       return yield* membersNow(workspaceId);
     }),
-    leave: inSession.leave.effect(function* ({ context, input }) {
+    leave: session.leave.effect(function* ({ context, input }) {
       const { userId, sessionHeaders: headers } = context;
       const { workspaceId } = input;
       const workspace = yield* answeredWorkspace(userId, workspaceId);
@@ -268,7 +253,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
      * Note that the plugin is handed the name alone, because a slug it was
      * handed would move every link's first step with it.
      */
-    rename: inSession.rename.effect(function* ({ context, input }) {
+    rename: session.rename.effect(function* ({ context, input }) {
       const { userId, sessionHeaders: headers } = context;
       const { workspaceId, name } = input;
       const workspace = yield* managedWorkspace(userId, workspaceId);
@@ -283,10 +268,7 @@ export function workspacesProcedures(seams: WorkspacesProcedureSeams) {
      * because the list's version is a digest of that text and the photo's
      * route decodes it again.
      */
-    setPhoto: session.use(bodyLimit(PHOTO_BODY_BYTES)).setPhoto.effect(function* ({
-      context,
-      input,
-    }) {
+    setPhoto: session.setPhoto.effect(function* ({ context, input }) {
       const { userId, sessionHeaders: headers } = context;
       const { workspaceId, photo } = input;
       const workspace = yield* managedWorkspace(userId, workspaceId);

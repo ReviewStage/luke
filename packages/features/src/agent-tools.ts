@@ -44,11 +44,6 @@ export const AGENT_TOOL = {
   DELETE_SECTION: "delete_section",
   // A task of the workspace renamed, given a repository, pinned, or archived, named for any agent offered `list_tasks`.
   UPDATE_TASK: "update_task",
-  // The workspace's issues, listed, read, filed, and changed, named for any agent offered `list_tasks`.
-  LIST_ISSUES: "list_issues",
-  READ_ISSUE: "read_issue",
-  CREATE_ISSUE: "create_issue",
-  UPDATE_ISSUE: "update_issue",
   // The models an agent may be started on, named for any agent offered `start_agent`.
   LIST_MODELS: "list_models",
   // The public reads, every role's.
@@ -68,9 +63,8 @@ export const AGENT_TOOL = {
   EDIT_PLAN: "edit_plan",
   WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
   POST_TO_INBOX: INBOX_TOOL.POST,
-  CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
+  WITHDRAW_ASK: INBOX_TOOL.WITHDRAW,
   READ_INBOX: INBOX_TOOL.READ,
-  REPLY_INBOX: INBOX_TOOL.REPLY,
   OPEN_PULL_REQUEST: "open_pull_request",
   // The workspace's chat, the planner's and every coding agent's.
   POST_CHAT: CHAT_TOOL.POST,
@@ -122,8 +116,9 @@ export const CONNECTION_TOOL = {
 /**
  * Tools no agent is offered now whose calls a transcript written then still
  * names: eve's provider-run web reads, which coding agents ran before they
- * had the public reads, and the planning model's four tools about the
- * task's coding agents, since named as `AGENT_TOOL`'s agent tools.
+ * had the public reads, the planning model's four tools about the
+ * task's coding agents, since named as `AGENT_TOOL`'s agent tools, and the
+ * four about the workspace's own issues, gone with them.
  */
 export const RETIRED_TOOL = {
   WEB_FETCH: "web_fetch",
@@ -136,4 +131,12 @@ export const RETIRED_TOOL = {
   ARCHIVE_AGENT: "archive_agent",
   UNARCHIVE_AGENT: "unarchive_agent",
   MOVE_TASK: "move_task",
+  // Folded into `post_to_inbox` (a post that asks nothing) and `withdraw_ask`.
+  CLOSE_INBOX_ITEM: "close_inbox_item",
+  REPLY_INBOX: "reply_inbox",
+  // Luke's own issues, removed: a task carries its status and priority now.
+  LIST_ISSUES: "list_issues",
+  READ_ISSUE: "read_issue",
+  CREATE_ISSUE: "create_issue",
+  UPDATE_ISSUE: "update_issue",
 } as const;

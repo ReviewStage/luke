@@ -19,10 +19,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
-import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
-
-/** A pin is a repository's name and a boolean, so a body past this is not one. */
-const MAXIMUM_PIN_BODY_BYTES = 1_024;
+import { accountMiddleware, hosted } from "../orpc/base.js";
 
 export interface RepositoryPinsProcedureSeams {
   resolveUserId: UserIdResolver;
@@ -30,9 +27,7 @@ export interface RepositoryPinsProcedureSeams {
 
 /** The pins resource: the account's pins, and one pinned or unpinned. */
 export function repositoryPinsProcedures(seams: RepositoryPinsProcedureSeams) {
-  const pins = hosted.repositoryPins
-    .use(accountMiddleware(seams.resolveUserId))
-    .use(bodyLimit(MAXIMUM_PIN_BODY_BYTES));
+  const pins = hosted.repositoryPins.use(accountMiddleware(seams.resolveUserId));
   return {
     list: pins.list.effect(function* ({ context }) {
       return { pins: yield* hostedStoreOrUnavailable(listRepositoryPins(context.userId)) };

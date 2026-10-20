@@ -1,5 +1,7 @@
+import { githubRepositoryIssuesAnswerSchema } from "@luke/features/github-repositories-wire";
 import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import {
+  tasksGitHubIssuesParamsSchema,
   tasksLinearIssuesParamsSchema,
   tasksWorkspaceCreateParamsSchema,
   tasksWorkspaceInvitationCancelParamsSchema,
@@ -88,6 +90,11 @@ export const workspaceActsContract = {
   )
     .input(exactInput(tasksLinearIssuesParamsSchema))
     .output(EffectSchema.flip(EffectSchema.Array(linearIssueSummarySchema))),
+  [WORKSPACE_ACT_KIND.WORKSPACE_GITHUB_ISSUES]: actProcedure(
+    "Could not read that repository's issues on this system.",
+  )
+    .input(exactInput(tasksGitHubIssuesParamsSchema))
+    .output(EffectSchema.flip(githubRepositoryIssuesAnswerSchema)),
   [WORKSPACE_ACT_KIND.WORKSPACE_MEMBERS_READ]: actProcedure(
     "Could not read that workspace's members on this system.",
   )

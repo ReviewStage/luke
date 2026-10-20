@@ -84,7 +84,7 @@ import { NO_LOOKS, type TaskLooks } from "./use-task-looks.js";
  * anyone has written, who last did: a member, Luke (the notetaker), or a
  * coding agent, each on their own face hanging their card (`edit-ref.tsx`),
  * whose call it was on where Luke wrote it on one, and how long ago, moved
- * on once a minute, as an issue's page says it under its title. The edit's
+ * on once a minute, as a GitHub issue's page says it under its title. The edit's
  * time opens the plan's version history, where each earlier version is. Each section says the
  * same of the save that last changed it in fewer letters, quietly, while the
  * pointer or the keyboard is on it: the writer's face, whose card names them,
@@ -797,6 +797,7 @@ export function PlanBody({
   reader = NO_READER,
   agents,
   standing: taskStanding,
+  underTitle,
 }: {
   task: Task;
   live: boolean;
@@ -819,6 +820,8 @@ export function PlanBody({
   agents?: EditAgents;
   /** The task's key over its title and its status and priority chips under it; without it, neither is drawn. */
   standing?: TaskStandingDoor;
+  /** What the task's own page draws under its name and byline, ahead of its text, as its linked issues; nothing elsewhere. */
+  underTitle?: React.ReactNode;
 }): React.JSX.Element {
   const { views, behind, jumps } = useTaskChase(task, live, reader);
   const editable = onEdit !== undefined;
@@ -1091,6 +1094,7 @@ export function PlanBody({
                 <TaskStandingChips task={task} onSet={taskStanding.onSet} />
               )}
               <PlanByline task={task} edit={edited} place={place} onShowHistory={onShowHistory} />
+              {underTitle}
               <ChangedLine looks={looks} marks={marks} />
             </>
           ) : null}

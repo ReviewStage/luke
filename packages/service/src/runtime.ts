@@ -81,7 +81,7 @@ export const webServices = Layer.mergeAll(
   FetchHttpClient.layer,
   webSqlClient,
   hostedEnvironment,
-  githubAppFromEnvironment,
+  githubAppFromEnvironment.pipe(Layer.provide(hostedEnvironment)),
   integrationConnectFromEnvironment,
   workspaceLinearConnectFromEnvironment,
   webLogger,

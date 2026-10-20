@@ -6,6 +6,7 @@ import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
+import { CHAT_PLACE } from "@luke/ui/chat-model";
 import { type HistoryAdapter, type HistorySnapshot, memoryHistory } from "@luke/ui/history-adapter";
 import { DOCUMENT_REGION, TASKS_PAGE } from "@luke/ui/tasks-model";
 import * as AtomRegistry from "effect/reactivity/AtomRegistry";
@@ -16,6 +17,8 @@ import { runAppCommand } from "./app-commands.js";
 import { useCopyLink } from "./links-at-hand.js";
 import {
   installWindowHistory,
+  MOUSE_BUTTON,
+  useHistoryMouseButtons,
   useWindowHistory,
   type WindowHistory,
 } from "./navigation-history.js";
@@ -24,8 +27,6 @@ import { SHELL_ROOM } from "./shell-room.js";
 import {
   AUTOMATIONS_PAGE,
   type AutomationsPlace,
-  ISSUES_PAGE,
-  type IssuesPlace,
   type LeaveAsk,
   type TasksControl,
 } from "./tasks/use-tasks-tab.js";
@@ -42,6 +43,9 @@ type HeldPlace = ReturnType<
 
 const TASK_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 const AUTOMATION_ID = "5d1e7a9c-3b2f-4c6d-8e0a-9f1b2c3d4e5a";
+
+/** A channel of Acme's chat. */
+const CHANNEL_ID = "6e2f8b0d-4c3a-4d7e-9f1b-0a2c3d4e5f6b";
 
 const roots: Root[] = [];
 
@@ -137,6 +141,7 @@ function mount(
       room: SHELL_ROOM.WIDE,
       tasks,
     });
+    useHistoryMouseButtons(history, true);
     return null;
   }
   const container = document.createElement("div");
@@ -174,6 +179,7 @@ function onAutomations(
   return tasksControl({
     workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
     automationsView: {
+      ...tasksControl().automationsView,
       open: page !== undefined,
       place: page ?? { kind: AUTOMATIONS_PAGE.LIST },
       onOpen: (place) => opened.push(place),
@@ -196,6 +202,26 @@ test("leaving a plan for the home page is a step Back returns from", () => {
   );
   window.stand(tasksControl());
   assert.equal(window.history().canGoBack, true);
+});
+
+test("a press of the mouse's Back or Forward button takes one step and cancels the browser's own, so a browser tab takes no second step", () => {
+  const window = mount(
+    tasksControl({ page: TASKS_PAGE.DOCUMENT, activeTaskId: TASK_ID, boundFor: TASK_ID }),
+  );
+  window.stand(tasksControl());
+  const press = (button: number) => {
+    const release = new MouseEvent("mouseup", { button, bubbles: true, cancelable: true });
+    act(() => {
+      document.body.dispatchEvent(release);
+    });
+    return release;
+  };
+
+  assert.equal(press(MOUSE_BUTTON.BACK).defaultPrevented, true);
+  assert.equal(window.history().canGoBack, false, "Back took one step, to the plan");
+  assert.equal(press(MOUSE_BUTTON.FORWARD).defaultPrevented, true);
+  assert.equal(window.history().canGoForward, false, "Forward took one step, home again");
+  assert.equal(press(0).defaultPrevented, false, "any other button keeps its own");
 });
 
 test("a step back cancelled at the leave ask leaves the trail where the window stands, so the next step is the same step", () => {
@@ -470,12 +496,13 @@ test("a deleted automation's page is passed over by Back, which returns to the p
   assert.deepEqual(opened, [kept]);
 });
 
-/** The window with Chat standing or not, in the workspace given, each time Chat is asked to open counted in `opened`. */
+/** The window with Chat standing or not, in the workspace given, each time Chat is asked to open, or to open on a place, counted in `opened`. */
 function onChat(open: boolean, opened: string[], workspaceId = "workspace-acme"): TasksControl {
   const base = tasksControl();
+  const ask = () => opened.push(workspaceId);
   return tasksControl({
     workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
-    chatView: { ...base.chatView, open, onOpen: () => opened.push(workspaceId) },
+    chatView: { ...base.chatView, open, onOpen: ask, onShow: ask },
   });
 }
 
@@ -495,61 +522,28 @@ test("Chat is the chat of the workspace it stood in, so Back returns to it in th
   assert.equal(other.history().canGoBack, false, "Chat of another workspace is no step back");
 });
 
-test("the Issues page is its workspace's, so once another is listed Back passes over it", async () => {
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  let reopened = 0;
-  const control = tasksControl();
-  const acme = { id: "workspace-acme", name: "Acme", role: WORKSPACE_ROLE.MEMBER, github: null };
-  const initech = { ...acme, id: "workspace-initech", name: "Initech" };
-  const window = mount(
-    tasksControl({
-      workspace: acme,
-      issuesView: { ...control.issuesView, open: true, onOpen: () => (reopened += 1) },
-    }),
-  );
-  // The account's experiments arrive with the window's state, which the page is reachable by.
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+/** The window with the Board standing or not, in the workspace given, each time the Board is asked to open counted in `opened`. */
+function onBoard(open: boolean, opened: string[], workspaceId = "workspace-acme"): TasksControl {
+  const base = tasksControl();
+  return tasksControl({
+    workspace: { id: workspaceId, name: workspaceId, role: WORKSPACE_ROLE.MEMBER, github: null },
+    boardView: { ...base.boardView, open, onOpen: () => opened.push(workspaceId) },
   });
-  window.stand(
-    tasksControl({
-      workspace: initech,
-      page: TASKS_PAGE.DOCUMENT,
-      activeTaskId: TASK_ID,
-      boundFor: TASK_ID,
-    }),
-  );
+}
 
-  assert.equal(window.history().canGoBack, false);
-  assert.equal(reopened, 0);
-});
+test("the Board is its workspace's tasks, so Back returns to it in that workspace and passes over it once another is listed", async () => {
+  const opened: string[] = [];
+  const same = mount(onBoard(true, opened));
+  await settle();
+  same.stand(onBoard(false, opened));
+  assert.equal(same.history().canGoBack, true);
+  act(() => same.history().onBack());
+  assert.deepEqual(opened, ["workspace-acme"]);
 
-test("an issue's page is a step of its own beside the Issues list, so Back from it opens the list and Forward the issue again", async () => {
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const opened: (IssuesPlace | undefined)[] = [];
-  const control = tasksControl();
-  const standing = (place: IssuesPlace) =>
-    tasksControl({
-      issuesView: {
-        ...control.issuesView,
-        open: true,
-        place,
-        onOpen: (to) => opened.push(to),
-      },
-    });
-  const issue = { kind: ISSUES_PAGE.ISSUE, issueId: "issue-1" } as const;
-  const window = mount(standing({ kind: ISSUES_PAGE.LIST }));
-  // The account's experiments arrive with the window's state, which the page is reachable by.
-  await act(async () => {
-    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
-  });
-  window.stand(standing(issue));
-
-  act(() => window.history().onBack());
-  window.stand(standing({ kind: ISSUES_PAGE.LIST }));
-  act(() => window.history().onForward());
-
-  assert.deepEqual(opened, [{ kind: ISSUES_PAGE.LIST }, issue]);
+  const other = mount(onBoard(true, opened));
+  await settle();
+  other.stand(onBoard(false, opened, "workspace-platform"));
+  assert.equal(other.history().canGoBack, false, "the Board of another workspace is no step back");
 });
 
 const ACME = {
@@ -591,12 +585,14 @@ test("each step's address is the path of the link ⌥⌘C copies there", async (
       ...listed,
       personView: { ...tasksControl().personView, userId: "user-charles", workspaceId: ACME.id },
     }),
+    tasksControl({ ...listed, chatView: { ...tasksControl().chatView, open: true } }),
     tasksControl({
       ...listed,
-      issuesView: {
-        ...tasksControl().issuesView,
+      chatView: {
+        ...tasksControl().chatView,
         open: true,
-        place: { kind: ISSUES_PAGE.ISSUE, issueId: "issue-1" },
+        place: { kind: CHAT_PLACE.CHANNEL, channelId: CHANNEL_ID },
+        listed: false,
       },
     }),
   ];
@@ -623,12 +619,32 @@ test("a new automation's page has no link, so it stands at /app beside the list 
   assert.deepEqual(window.addresses(), ["/workspace-acme/automations", "/app"]);
 });
 
-test("a place with no link stands at /app: the home page, and Chat though a task stands under it", () => {
+test("a place with no link stands at /app: the home page, and the Board though a task stands under it", () => {
   const window = mount(tasksControl({ workspaces: [ACME], workspace: ACME }));
   const task = onTask([ACME]);
-  window.stand({ ...task, chatView: { ...task.chatView, open: true } });
+  window.stand({ ...task, boardView: { ...task.boardView, open: true } });
 
   assert.deepEqual(window.addresses(), ["/app", "/app"]);
+});
+
+test("Chat stands at its workspace's /chat though a task stands under it, and a channel shown in it at /chat/<channelId>, taking Chat's step in place", () => {
+  const window = mount(onTask([ACME]));
+  const task = onTask([ACME]);
+  window.stand({ ...task, chatView: { ...task.chatView, open: true } });
+  window.stand({
+    ...task,
+    chatView: {
+      ...task.chatView,
+      open: true,
+      place: { kind: CHAT_PLACE.CHANNEL, channelId: CHANNEL_ID },
+      listed: false,
+    },
+  });
+
+  assert.deepEqual(window.addresses(), [
+    `/acme/plan/${DOCUMENT_TASK.id}`,
+    `/acme/chat/${CHANNEL_ID}`,
+  ]);
 });
 
 test("with no workspace listed, a place in a workspace has no link, so it stands at /app as Copy link offers nothing", async () => {
@@ -654,14 +670,6 @@ test("with no workspace listed, a place in a workspace has no link, so it stands
     tasksControl({
       ...none,
       personView: { ...tasksControl().personView, userId: "user-charles" },
-    }),
-    tasksControl({
-      ...none,
-      issuesView: {
-        ...tasksControl().issuesView,
-        open: true,
-        place: { kind: ISSUES_PAGE.ISSUE, issueId: "issue-1" },
-      },
     }),
   ];
   const addresses: string[] = [];

@@ -13,6 +13,7 @@ import { composeWeb, WebHostTag } from "../src/app/web-host";
 import {
   fakeService,
   GITHUB_INSTALL,
+  GITHUB_REPOSITORIES,
   NOTION_SIGN_IN,
   WORKSPACE_MEMBER,
 } from "./support/fake-service";
@@ -31,7 +32,9 @@ const standingHost = (service: ReturnType<typeof fakeService>) =>
     const built = yield* Layer.build(
       composeWeb({
         httpClient: service.layer,
-        run: (effect) => Effect.runPromiseWith(services)(effect),
+        fork: (effect) => {
+          Effect.runForkWith(services)(effect);
+        },
       }),
     );
     return Context.get(built, WebHostTag);
@@ -89,22 +92,6 @@ it.effect(
     ),
 );
 
-it.effect("an act that rides the act port reaches the service through the tab's own channel", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
-      installAppBridge(bridge);
-      installActPort(actPort);
-
-      const listed = yield* Effect.promise(() =>
-        askAct(ACT_KIND.ISSUES_LIST, { workspaceId: "workspace-ada" }),
-      );
-
-      assert.deepEqual(listed, { issues: [] });
-    }),
-  ),
-);
-
 it.effect("a workspace act rides the tab's act port to the service and back", () =>
   Effect.scoped(
     Effect.gen(function* () {
@@ -117,6 +104,20 @@ it.effect("a workspace act rides the tab's act port to the service and back", ()
       );
 
       assert.deepEqual(members, [WORKSPACE_MEMBER]);
+    }),
+  ),
+);
+
+it.effect("a task act rides the tab's act port to the service and back", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+      installAppBridge(bridge);
+      installActPort(actPort);
+
+      const listed = yield* Effect.promise(() => askAct(ACT_KIND.TASKS_REPOSITORIES, {}));
+
+      assert.deepEqual(listed, { repositories: GITHUB_REPOSITORIES });
     }),
   ),
 );
@@ -165,8 +166,9 @@ it.effect(
           closed: false,
           opener: app,
           location: { replace: (url: string) => sentTo.push(url) },
+          sessionStorage: { setItem: () => undefined },
         };
-        // SAFETY: the tab's opener is cut, and its `closed` and `location.replace` read, alone, which this holds.
+        // SAFETY: the tab's opener is cut, and its `closed`, `location.replace`, and `sessionStorage.setItem` read, alone, which this holds.
         vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
         const { bridge, actPort, actPortClient } = yield* standingHost(
           fakeService({ signedIn: true }),
@@ -189,8 +191,12 @@ it.effect("a workspace connect on the act port lands in the tab its press opened
   Effect.scoped(
     Effect.gen(function* () {
       const sentTo: string[] = [];
-      const tab = { closed: false, location: { replace: (url: string) => sentTo.push(url) } };
-      // SAFETY: the connect reads a tab's `closed` and `location.replace`, and cuts its opener, alone.
+      const tab = {
+        closed: false,
+        location: { replace: (url: string) => sentTo.push(url) },
+        sessionStorage: { setItem: () => undefined },
+      };
+      // SAFETY: the connect reads a tab's `closed`, `location.replace`, and `sessionStorage.setItem`, and cuts its opener, alone.
       vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
       const { bridge, actPort, actPortClient } = yield* standingHost(
         fakeService({ signedIn: true }),
@@ -205,4 +211,45 @@ it.effect("a workspace connect on the act port lands in the tab its press opened
       assert.deepEqual(sentTo, [GITHUB_INSTALL]);
     }),
   ),
+);
+
+it.effect(
+  "the tab carries a copy and a focus on the act port, and refuses the updater, the microphone, and a Browser tab in their own words",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const copied: string[] = [];
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: { writeText: async (words: string) => void copied.push(words) },
+        });
+        const focused: string[] = [];
+        vi.spyOn(window, "focus").mockImplementation(() => void focused.push("tab"));
+        const { bridge, actPort } = yield* standingHost(fakeService({ signedIn: true }));
+        installAppBridge(bridge);
+        installActPort(actPort);
+
+        yield* Effect.promise(() => askAct(ACT_KIND.WINDOW_COPY_TEXT, { words: "copied" }));
+        yield* Effect.promise(() => askAct(ACT_KIND.WINDOW_FOCUS_PANEL));
+        const refusals = yield* Effect.promise(() =>
+          Promise.all([
+            askAct(ACT_KIND.UPDATE_CHECK).catch((error: Error) => error.message),
+            askAct(ACT_KIND.MICROPHONE_REQUEST).catch((error: Error) => error.message),
+            askAct(ACT_KIND.BROWSER_OPEN, {
+              browserId: "browser-1",
+              address: "https://example.com/",
+            }).catch((error: Error) => error.message),
+          ]),
+        );
+
+        assert.deepEqual(copied, ["copied"]);
+        assert.deepEqual(focused, ["tab"]);
+        assert.deepEqual(refusals, [
+          "Could not check for updates on this system.",
+          "Could not ask for the microphone on this system.",
+          "Could not open that page.",
+        ]);
+        Reflect.deleteProperty(navigator, "clipboard");
+      }),
+    ),
 );

@@ -4,17 +4,22 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { PLAN_ACTOR, type Task } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE, type Workspace } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
+import { ACT_KIND } from "@luke/host/acts";
 import { RUN_PROFILE } from "@luke/host/app-state";
 import {
   ACCOUNT_ACT_KIND,
   AGENT_ACT_KIND,
+  AGENT_INBOX_ACT_KIND,
   AUTOMATION_ACT_KIND,
+  BROWSER_ACT_KIND,
   FACTORY_ACT_KIND,
   INTEGRATION_ACT_KIND,
   SETTINGS_ACT_KIND,
+  TASKS_ACT_KIND,
+  UPDATE_ACT_KIND,
+  WINDOW_SURFACE_ACT_KIND,
 } from "@luke/host/contract";
-import { EXPERIMENT } from "@luke/settings";
+import { EXPERIMENT, HOST_CAPABILITY } from "@luke/settings";
 import { SETTINGS_VIEW } from "@luke/settings/settings-views";
 import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { experimentsOn } from "@luke/settings/testing";
@@ -40,7 +45,12 @@ import { SIDE_PANEL_TAB } from "../tasks/use-side-panel.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { fakeActPortAnswering, fakeAppBridge, refusedOnPort } from "../testing/app-bridge.js";
 import { fakeAppPlatform, QUIET_PANEL } from "../testing/app-platform.js";
-import { DESKTOP_CAPABILITIES, handState, stateWith } from "../testing/app-state.js";
+import {
+  DESKTOP_CAPABILITIES,
+  handCapabilities,
+  handState,
+  stateWith,
+} from "../testing/app-state.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { DOCUMENT_NAME, DOCUMENT_TASK } from "../testing/document-task.js";
 import { tasksControl } from "../testing/tasks-control.js";
@@ -49,7 +59,6 @@ import { SIDEBAR_OVERLAY, type SidebarCollapse } from "./sidebar-collapse.js";
 
 const ignore = () => undefined;
 const accepted = () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
-
 /** A signed-in account's Settings, every press ignored. */
 const SETTINGS: SettingsPanelProps = {
   account: {
@@ -113,9 +122,7 @@ beforeEach(() => {
       removeEventListener: () => undefined,
     }),
   });
-  fakeAppBridge({
-    act: () => Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." }),
-  });
+  fakeAppBridge({});
 });
 
 afterEach(() => {
@@ -547,6 +554,20 @@ test("Factory's sidebar row and its command stand only while the account has its
   assert.equal(runAppCommand(APP_COMMAND.FACTORY), true);
 });
 
+test("⌘/ is offered in the installed app, where Keyboard shortcuts is a page, and not in a browser, where it is none", async () => {
+  handCapabilities(DESKTOP_CAPABILITIES.filter((each) => each !== HOST_CAPABILITY.DESKTOP_APP));
+  mount(false);
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), false);
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  handCapabilities(DESKTOP_CAPABILITIES);
+  mount(false);
+  await settle();
+  assert.equal(runAppCommand(APP_COMMAND.KEYBOARD_SHORTCUTS), true);
+});
+
 test("a press on Factory's row in a floating sidebar puts the sidebar away, as every row's does", async () => {
   handState(experimentsOn(EXPERIMENT.FACTORY));
   const told: SidebarCollapse["overlay"][] = [];
@@ -561,48 +582,12 @@ test("a press on Factory's row in a floating sidebar puts the sidebar away, as e
   assert.deepEqual(told, [SIDEBAR_OVERLAY.CLOSED]);
 });
 
-test("the Issues page's sidebar row and its command stand only while the account has its experiment on, and each opens the page", async () => {
-  let opens = 0;
-  const control = tasksControl();
-  const issuesView = { ...control.issuesView, onOpen: () => (opens += 1) };
-  handState({});
-  const off = mount(false, false, { issuesView });
+test("the sidebar offers no Issues row, with every experiment on, since Luke keeps no issues of its own", async () => {
+  handState(experimentsOn(...Object.values(EXPERIMENT)));
+  const page = mount(false);
   await settle();
-  assert.equal(placeRow(off, "Issues"), undefined);
-  assert.equal(runAppCommand(APP_COMMAND.ISSUES), false);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const on = mount(false, false, { issuesView });
-  await settle();
-  const issues = placeRow(on, "Issues");
-  assert.ok(issues, "the Issues row stands");
-  act(() => issues.click());
-  assert.equal(runAppCommand(APP_COMMAND.ISSUES), true);
-  assert.equal(opens, 2);
-});
-
-test("the side panel's toggle stands over the Issues list once an issue has been peeked there, as over the Inbox once an item is chosen", async () => {
-  const control = tasksControl();
-  const toggles = (container: HTMLElement) =>
-    [...container.querySelectorAll("button")].some((button) =>
-      ["Show panel", "Hide panel"].includes(button.getAttribute("aria-label") ?? ""),
-    );
-  handState(experimentsOn(EXPERIMENT.ISSUES));
-  const unpeeked = mount(false, false, { issuesView: { ...control.issuesView, open: true } });
-  await settle();
-  const before = toggles(unpeeked);
-  act(() => root?.unmount());
-  document.body.innerHTML = "";
-
-  const peeked = mount(false, false, {
-    issuesView: { ...control.issuesView, open: true, peeked: "issue-1" },
-  });
-  await settle();
-
-  assert.equal(before, false, "nothing peeked, no panel to show");
-  assert.equal(toggles(peeked), true);
+  assert.ok(placeRow(page, "Automations"));
+  assert.equal(placeRow(page, "Issues"), undefined);
 });
 
 test("the Automations page's sidebar row and its command stand with no experiment on", async () => {
@@ -616,6 +601,7 @@ test("the Automations page's sidebar row and its command stand with no experimen
 test("while the Automations pages are still loading their frame stands the list as quiet rows, and Escape closes Automations as the list does once it stands", async () => {
   const closed: string[] = [];
   const automationsView = {
+    ...tasksControl().automationsView,
     open: false,
     place: { kind: AUTOMATIONS_PAGE.LIST } as const,
     onOpen: ignore,
@@ -663,6 +649,7 @@ test("while the Automations pages are still loading their frame stands the list 
 test("the Automations page stands in the plan's place, titled for the listed workspace", async () => {
   const closed: string[] = [];
   const automationsView = {
+    ...tasksControl().automationsView,
     open: true,
     place: { kind: AUTOMATIONS_PAGE.LIST } as const,
     onOpen: ignore,
@@ -796,10 +783,15 @@ let sentActs: string[] = [];
 const REFUSED_ON_PORT: readonly string[] = Object.values({
   ...ACCOUNT_ACT_KIND,
   ...AGENT_ACT_KIND,
+  ...AGENT_INBOX_ACT_KIND,
   ...AUTOMATION_ACT_KIND,
+  ...BROWSER_ACT_KIND,
   ...FACTORY_ACT_KIND,
   ...INTEGRATION_ACT_KIND,
   ...SETTINGS_ACT_KIND,
+  ...TASKS_ACT_KIND,
+  ...UPDATE_ACT_KIND,
+  ...WINDOW_SURFACE_ACT_KIND,
 }).filter((kind) => kind !== AGENT_ACT_KIND.CODING_AGENTS_SHOWN);
 
 /**
@@ -814,14 +806,10 @@ async function handBridge(): Promise<void> {
   const bridge = appBridge();
   fakeAppBridge({
     ...bridge,
-    act: (request: { kind: string }) => {
-      sentActs.push(request.kind);
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Not here." });
-    },
   });
   fakeActPortAnswering((request) => {
     sentActs.push(request.kind);
-    // A read of the account's automations, integrations, a Factory world, or its coding agents, and an account or settings act, is refused, as `app:act` refused it before it moved onto the port.
+    // A read of the account's automations, integrations, a Factory world, or its coding agents, their Inbox, or the chat, an account or settings act, a task kind, and the platform's updater, Browser tab, and window acts are refused.
     if (REFUSED_ON_PORT.includes(request.kind)) return Promise.reject(refusedOnPort("Not here."));
     return Promise.resolve(undefined);
   });

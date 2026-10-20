@@ -1,6 +1,14 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
 import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
-import { INBOX_STATUS, type InboxItem, type InboxReply } from "@luke/features/inbox-wire";
+import {
+  INBOX_ASK_STATUS,
+  INBOX_MESSAGE_AUTHOR,
+  INBOX_STATUS,
+  type InboxAnswers,
+  type InboxItem,
+  type InboxMessage,
+  type InboxReply,
+} from "@luke/features/inbox-wire";
 import type { AppInboxTask, AppInboxTasklessItem } from "@luke/host/app-state";
 import { Atom } from "effect/reactivity";
 import { useEffect, useLayoutEffect, useMemo } from "react";
@@ -24,6 +32,14 @@ import { appStateNow } from "../use-app-state.js";
  * reader. A message on an
  * item's thread, once the service took it, is laid the same way over a read
  * that does not hold it yet.
+ *
+ * On a thread from version 5 an answer is a member's reply carrying it, and
+ * a close withdraws the open ask, neither of which moves the item's
+ * revision, so what a read shows is what says it holds the send: a reply
+ * by the message landing on its thread, and an answer or a close by the
+ * ask it settles standing settled there. Until the service answers, the
+ * answer is laid as the thread would hold it, its ask answered and the
+ * reply under it, and a close as its ask withdrawn by the reader.
  *
  * An entry is let go where the service refused it, the item standing again
  * as the reads hold it, or once a read holds the item changed since: at a
@@ -65,6 +81,8 @@ interface Settling {
   readonly sent: symbol;
   readonly taken: boolean;
   readonly mainCaughtUp: boolean;
+  /** The message whose ask an answer or a close settles, on a thread from version 5; none for a reply, or an item before it. */
+  readonly ask?: string | undefined;
 }
 
 /**
@@ -344,19 +362,31 @@ function passedBy(read: InboxItem, entry: Settling): boolean {
   return read.revision > entry.revision || (entry.taken && read.updatedAt > entry.item.updatedAt);
 }
 
-/** Whether a read holds the message the entry stands for: the newest on the service's thread. */
+/** Whether a read holds the message the entry stands for: the newest on the service's thread, its whole thread's from version 5. */
 function holdsMessage(read: InboxItem, entry: Settling): boolean {
-  const newest = entry.item.messages?.at(-1)?.id;
-  return newest === undefined || (read.messages ?? []).some((message) => message.id === newest);
+  const newest = (entry.item.thread ?? entry.item.messages)?.at(-1)?.id;
+  const held = [...(read.thread ?? []), ...(read.messages ?? [])];
+  return newest === undefined || held.some((message) => message.id === newest);
+}
+
+/**
+ * Whether a read holds an answer or a close settled: the ask it settles no
+ * longer open on the read's thread, or, where the thread does not carry
+ * that message, as on an item before version 5, the item no longer open.
+ */
+function holdsSettled(read: InboxItem, entry: Settling): boolean {
+  const asked =
+    entry.ask === undefined ? undefined : read.thread?.find(({ id }) => id === entry.ask);
+  if (asked?.ask === undefined) return read.status !== INBOX_STATUS.OPEN;
+  return asked.ask.status !== INBOX_ASK_STATUS.OPEN;
 }
 
 /** How a read's item stands under an entry: the entry's item where the read is behind it, nothing where it holds the send, and passed where it holds a later change. */
 function overlaid(read: InboxItem, entry: Settling): InboxItem | "passed" | undefined {
   if (passedBy(read, entry)) return "passed";
-  if (entry.kind !== SETTLING.MESSAGE) {
-    return read.status === INBOX_STATUS.OPEN ? entry.item : undefined;
-  }
-  return holdsMessage(read, entry) ? undefined : entry.item;
+  const holds =
+    entry.kind === SETTLING.MESSAGE ? holdsMessage(read, entry) : holdsSettled(read, entry);
+  return holds ? undefined : entry.item;
 }
 
 /** What a read saw as it was drawn: the entries it has passed, and what it saw of the marks. */
@@ -526,32 +556,81 @@ function readerNow(): { readonly userId: string; readonly name: string } | undef
   return { userId: account.id, name: account.name ?? account.email };
 }
 
+/** The thread's open ask's message, by id; none where its thread holds no open ask, as on an item before version 5. */
+function openAskId(item: InboxItem): string | undefined {
+  return item.thread?.findLast((message) => message.ask?.status === INBOX_ASK_STATUS.OPEN)?.id;
+}
+
+/** The thread with the ask on the message given settled as `status` says, and the messages given after it. */
+function settledThread(
+  thread: readonly InboxMessage[],
+  askId: string,
+  status: typeof INBOX_ASK_STATUS.ANSWERED | typeof INBOX_ASK_STATUS.WITHDRAWN,
+  after: readonly InboxMessage[],
+): readonly InboxMessage[] {
+  const settled = thread.map((message) =>
+    message.id === askId && message.ask !== undefined
+      ? { ...message, ask: { ...message.ask, status } }
+      : message,
+  );
+  return [...settled, ...after];
+}
+
 /**
  * The item as the window answered it, before the service says how it
- * stands: answered by the reader, now, and read, as the service answers it.
- * Note that the files the answer carried are not drawn until then, since
- * the service names them.
+ * stands: answered by the reader, now, and read, as the service answers it;
+ * on a thread from version 5, its open ask answered and the reply carrying
+ * the answer after it, under an id of the window's own until the service
+ * names the message. Note that the files the answer carried are not drawn
+ * until then, since the service names them.
  */
-function answeredNow(item: InboxItem, answer: InboxReply, now: number): InboxItem {
+function answeredNow(
+  item: InboxItem,
+  answer: InboxReply,
+  answers: InboxAnswers | undefined,
+  now: number,
+): InboxItem {
   const reader = readerNow();
+  const reply: InboxMessage | undefined =
+    answers === undefined
+      ? undefined
+      : {
+          id: crypto.randomUUID(),
+          author: INBOX_MESSAGE_AUTHOR.MEMBER,
+          ...(reader === undefined ? undefined : { member: reader }),
+          text: answer.note ?? "",
+          answers,
+          createdAt: now,
+        };
+  const thread =
+    item.thread === undefined || reply === undefined || answers === undefined
+      ? undefined
+      : settledThread(item.thread, answers.ask, INBOX_ASK_STATUS.ANSWERED, [reply]);
   return {
     ...item,
     status: INBOX_STATUS.ANSWERED,
     answer,
     ...(reader === undefined ? undefined : { answeredBy: reader }),
+    ...(thread === undefined ? undefined : { thread }),
     settledAt: now,
     updatedAt: Math.max(item.updatedAt, now),
     unread: false,
   };
 }
 
-/** The item as the window closed it without an answer, before the service says how it stands: closed by the reader, now, and read. */
+/** The item as the window closed it without an answer, before the service says how it stands: closed by the reader, now, and read, its thread's open ask withdrawn with no reason. */
 function closedNow(item: InboxItem, now: number): InboxItem {
   const reader = readerNow();
+  const askId = openAskId(item);
+  const thread =
+    item.thread === undefined || askId === undefined
+      ? undefined
+      : settledThread(item.thread, askId, INBOX_ASK_STATUS.WITHDRAWN, []);
   return {
     ...item,
     status: INBOX_STATUS.CLOSED,
     ...(reader === undefined ? undefined : { closedBy: reader }),
+    ...(thread === undefined ? undefined : { thread }),
     settledAt: now,
     updatedAt: Math.max(item.updatedAt, now),
     unread: false,
@@ -560,8 +639,8 @@ function closedNow(item: InboxItem, now: number): InboxItem {
 
 /** How a send is laid, and what the service's word makes of it. */
 export interface InboxSettler {
-  /** Lays an answer on its item at once, as answered by the reader now; the send it stands for. */
-  readonly answer: (item: InboxItem, answer: InboxReply) => symbol;
+  /** Lays an answer on its item at once, as answered by the reader now, the reply carrying it on the thread where `answers` names the ask it answers; the send it stands for. */
+  readonly answer: (item: InboxItem, answer: InboxReply, answers?: InboxAnswers) => symbol;
   /** Lays a close without an answer on its item at once, as closed by the reader now; the send it stands for. */
   readonly close: (item: InboxItem) => symbol;
   /** Lays a message's item as the service answered it, over every read that does not hold it yet. */
@@ -583,11 +662,19 @@ export function useInboxSettler(): InboxSettler {
   const change = useAtomSet(settlingAtom);
   return useMemo(
     () => ({
-      answer: (item, answer) => {
+      answer: (item, answer, answers) => {
         const sent = Symbol("inbox answer");
-        const laid = answeredNow(item, answer, Date.now());
+        const laid = answeredNow(item, answer, answers, Date.now());
+        const ask = answers?.ask ?? openAskId(item);
         change({
-          lay: { kind: SETTLING.ANSWER, item: laid, revision: item.revision, sent, taken: false },
+          lay: {
+            kind: SETTLING.ANSWER,
+            item: laid,
+            revision: item.revision,
+            sent,
+            taken: false,
+            ask,
+          },
         });
         return sent;
       },
@@ -595,7 +682,14 @@ export function useInboxSettler(): InboxSettler {
         const sent = Symbol("inbox close");
         const laid = closedNow(item, Date.now());
         change({
-          lay: { kind: SETTLING.CLOSE, item: laid, revision: item.revision, sent, taken: false },
+          lay: {
+            kind: SETTLING.CLOSE,
+            item: laid,
+            revision: item.revision,
+            sent,
+            taken: false,
+            ask: openAskId(item),
+          },
         });
         return sent;
       },

@@ -3,7 +3,7 @@ import { PRODUCT_SURFACE_EVENT } from "@luke/features/analytics";
 import { INTEGRATION_PROVIDER_LIST } from "@luke/features/integration-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import type { Workspace } from "@luke/features/workspace-wire";
-import { SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
+import { type HostCapability, SETTINGS_VIEW_COUNTED_AS } from "@luke/settings";
 import {
   SETTINGS_PAGE_GROUP,
   SETTINGS_VIEW,
@@ -59,6 +59,7 @@ import { Shortcut } from "../shortcut.js";
 import { commandKeyshortcuts } from "../tooltip.js";
 import { ActionMenu } from "./action-menu.js";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar.js";
+import { useNarrowFocus } from "./narrow-focus.js";
 import type { SidebarCollapse } from "./sidebar-collapse.js";
 import { WorkspaceTile } from "./workspace-tile.js";
 
@@ -127,12 +128,14 @@ function PageBar({ onList }: { onList: (() => void) | undefined }): React.JSX.El
 function GroupHeading({
   group,
   listed,
+  capabilities,
 }: {
   group: SettingsPageGroup;
   listed: Workspace | undefined;
+  capabilities: readonly HostCapability[];
 }): React.JSX.Element {
   if (group !== SETTINGS_PAGE_GROUP.WORKSPACE || listed === undefined) {
-    return <h2 className="section-heading">{settingsGroupHeadingOf(group)}</h2>;
+    return <h2 className="section-heading">{settingsGroupHeadingOf(group, capabilities)}</h2>;
   }
   return (
     <h2 className="section-heading settings-nav-workspace">
@@ -224,8 +227,8 @@ export function DesktopSettings({
   const title = settings.view === SETTINGS_VIEW.WORKSPACE && listed ? listed.name : shown.title;
   const voiceNote = voicePageAttention(settings.microphone);
   const writes = useSettingsWrites();
-  const reset = pageResetControl(settings.view, settings.settings, writes);
   const rows = settingsRowsInput(settings);
+  const reset = pageResetControl(settings.view, settings.settings, writes, rows);
   // Built only while a query stands: an empty field searches nothing.
   const search =
     rows && query !== "" ? searchSettings(settingsSearchEntries(rows), query) : undefined;
@@ -264,6 +267,7 @@ export function DesktopSettings({
   const marked = opened?.page === settings.view ? opened.id : undefined;
   const edge = useSidebarEdge(sidebar);
   const hidden = hiddenColumns(room, step.listed);
+  const screen = useNarrowFocus(room, step.listed);
   const bar = <PageBar onList={room === SHELL_ROOM.NARROW ? step.onList : undefined} />;
   // The page with a search of its own takes Command-F while it shows; a page hidden behind the list does not.
   const pageSearched =
@@ -286,10 +290,10 @@ export function DesktopSettings({
     );
   }
   return (
-    <div className="desktop-settings">
+    <div ref={screen} className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages" hidden={hidden.list}>
         <div className="desktop-drag-strip" />
-        <HistoryButtons history={history} />
+        <HistoryButtons history={history} room={room} />
         <NavItem
           icon={<BackIcon />}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_SETTINGS)}
@@ -317,7 +321,11 @@ export function DesktopSettings({
                 ) : (
                   shownSettingsPageGroups(settings.capabilities).map(({ group, pages }) => (
                     <section key={group} className="settings-nav-group">
-                      <GroupHeading group={group} listed={listed} />
+                      <GroupHeading
+                        group={group}
+                        listed={listed}
+                        capabilities={settings.capabilities}
+                      />
                       <ul>
                         {pages.map((view) => (
                           <SettingsPageRow

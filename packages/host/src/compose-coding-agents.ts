@@ -74,11 +74,12 @@ import {
 } from "@luke/gateway";
 import { unparsedWire } from "@luke/wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, FiberHandle, Result, type Schema, type Scope } from "effect";
+import { Effect, FiberHandle, Option, Result, type Schema, type Scope, Stream } from "effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { followAccountInbox, type LiveClient, openRealtimeClient } from "./account-inbox-follow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
+import { PageReturns } from "./effect/seams.js";
 import type { HostKernel } from "./host-kernel.js";
 import type { RunMode } from "./run-mode.js";
 
@@ -159,8 +160,11 @@ export interface CodingAgentsDependencies {
   kernel: Pick<HostKernel, "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: CodingAgentClient;
-  /** Realtime's client at an address, which the account inbox is followed over; Realtime's own outside a test. */
-  openLive?: (url: string) => LiveClient | PromiseLike<LiveClient>;
+  /** Realtime's client at an address, which the account inbox is followed over, telling `heard` what it reports going wrong; Realtime's own outside a test. */
+  openLive?: (
+    url: string,
+    heard: (trouble: string) => void,
+  ) => LiveClient | PromiseLike<LiveClient>;
 }
 
 export interface CodingAgentsComposer extends Composer {
@@ -175,8 +179,10 @@ export function composeCodingAgents(
 ): Effect.Effect<CodingAgentsComposer, never, Scope.Scope | HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
+    // A shell that cannot tell when its page came back says nothing.
+    const returns = Option.getOrElse(yield* Effect.serviceOption(PageReturns), () => Stream.empty);
     const follower = yield* FiberHandle.make<never>();
-    return composed(dependencies, http, follower);
+    return composed(dependencies, http, follower, returns);
   });
 }
 
@@ -185,6 +191,7 @@ function composed(
   dependencies: CodingAgentsDependencies,
   http: HttpClient.HttpClient,
   follower: FiberHandle.FiberHandle<never>,
+  returns: Stream.Stream<void>,
 ): CodingAgentsComposer {
   const { kernel, account, client } = dependencies;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
@@ -642,6 +649,7 @@ function composed(
             openLive: dependencies.openLive ?? openRealtimeClient,
             now: kernel.now,
             publish: (answer) => kernel.emit(GATEWAY_EVENT.ACCOUNT_INBOX_CHANGED, carried(answer)),
+            returns,
           }),
         ),
         () => ({}),

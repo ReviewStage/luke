@@ -468,7 +468,7 @@ test("a task opened from a tab pinned to the sidebar is open still, so its row w
 /** The workspace New task starts its tasks in. */
 const WORKSPACE = "workspace-personal";
 
-/** New task's words as storage keeps them, in `workspaceId`, and on one of its issues where `issueId` names one. */
+/** New task's words as storage keeps them, in `workspaceId`, and on one of its issues where `issueId` names one, as a build from before Luke kept no issues kept them. */
 function newTaskEntry(workspaceId: string, issueId?: string) {
   return {
     accountId: null,
@@ -541,7 +541,7 @@ test("words left in New task's card mark its sidebar row with the Draft pencil w
   assert.equal(
     await newTaskDrafted(inWorkspace()),
     false,
-    "a card opened on an issue keeps its words for that issue alone",
+    "words an older build kept on one of the workspace's own issues are no draft of the workspace's",
   );
 });
 

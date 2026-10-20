@@ -23,12 +23,6 @@ import {
   UPDATE_AGENT_TOOL,
   UPDATE_TASK_TOOL,
 } from "../coding-agent-tools.js";
-import {
-  CREATE_ISSUE_TOOL,
-  LIST_ISSUES_TOOL,
-  READ_ISSUE_TOOL,
-  UPDATE_ISSUE_TOOL,
-} from "../issue-tools.js";
 import { RUN_ON_MAC_TOOL } from "../mac-command.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../public-research.js";
 import { CREATE_SECTION_TOOL, DELETE_SECTION_TOOL } from "../task-section-tools.js";
@@ -115,17 +109,13 @@ const AUTHORED_TOOLS = {
     description: INBOX_TOOLS.POST.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.POST.inputSchema),
   },
-  [CODER_TOOL.CLOSE_INBOX_ITEM]: {
-    description: INBOX_TOOLS.CLOSE.description,
-    inputSchema: emitJsonSchema(INBOX_TOOLS.CLOSE.inputSchema),
+  [CODER_TOOL.WITHDRAW_ASK]: {
+    description: INBOX_TOOLS.WITHDRAW.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.WITHDRAW.inputSchema),
   },
   [CODER_TOOL.READ_INBOX]: {
     description: INBOX_TOOLS.READ.description,
     inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
-  },
-  [CODER_TOOL.REPLY_INBOX]: {
-    description: INBOX_TOOLS.REPLY.description,
-    inputSchema: emitJsonSchema(INBOX_TOOLS.REPLY.inputSchema),
   },
   [CODER_TOOL.OPEN_PULL_REQUEST]: {
     description: OPEN_PULL_REQUEST_TOOL.description,
@@ -178,22 +168,6 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.UPDATE_TASK]: {
     description: UPDATE_TASK_TOOL.description,
     inputSchema: emitJsonSchema(UPDATE_TASK_TOOL.inputSchema),
-  },
-  [CODER_TOOL.LIST_ISSUES]: {
-    description: LIST_ISSUES_TOOL.description,
-    inputSchema: emitJsonSchema(LIST_ISSUES_TOOL.inputSchema),
-  },
-  [CODER_TOOL.READ_ISSUE]: {
-    description: READ_ISSUE_TOOL.description,
-    inputSchema: emitJsonSchema(READ_ISSUE_TOOL.inputSchema),
-  },
-  [CODER_TOOL.CREATE_ISSUE]: {
-    description: CREATE_ISSUE_TOOL.description,
-    inputSchema: emitJsonSchema(CREATE_ISSUE_TOOL.inputSchema),
-  },
-  [CODER_TOOL.UPDATE_ISSUE]: {
-    description: UPDATE_ISSUE_TOOL.description,
-    inputSchema: emitJsonSchema(UPDATE_ISSUE_TOOL.inputSchema),
   },
   [CODER_TOOL.POST_CHAT]: {
     description: CHAT_TOOLS.POST.description,

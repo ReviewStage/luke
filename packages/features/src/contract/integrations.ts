@@ -31,7 +31,10 @@ import {
   integrationToolsAnswerSchema,
 } from "../integration-wire.js";
 import { HOSTED_SERVICE_PATH } from "../service-paths.js";
-import { exactInput, hostedProcedure } from "./base.js";
+import { bodyCap, exactInput, hostedProcedure } from "./base.js";
+
+/** The most a rename's body may carry, in bytes: one label, well past its own bound. */
+const RENAME_BODY_BYTES = 2_048;
 
 /**
  * Where every provider's connection stands, as a desktop reads the answer:
@@ -127,6 +130,7 @@ export const integrationsContract = {
     .input(accountInput)
     .output(EffectSchema.flip(integrationStatusAnswerSchema)),
   rename: providerPost("rename")
+    .meta(bodyCap(RENAME_BODY_BYTES))
     .input(exactInput(renameInput))
     .output(EffectSchema.flip(integrationAccountAnswerSchema)),
 };

@@ -22,7 +22,7 @@ import {
   type LiveClientEvent,
   type LiveServerEventType,
 } from "@luke/live";
-import { sidebandOverSocket } from "@luke/voice/live-session";
+import { sidebandOverSocket } from "@luke/voice/live-socket";
 import { FakeLiveSocket } from "@luke/voice/testing";
 import { Deferred, Effect, Exit, Option, Schema, Scope, Stream } from "effect";
 import type { MessageStreamEvent } from "eve/client";

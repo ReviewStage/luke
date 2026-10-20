@@ -1,6 +1,6 @@
 import type { StandingSession } from "@luke/database/models/recorded-session";
 import { CONVERSATION_KIND } from "@luke/database/storage-vocabulary";
-import { Duration, Effect, Option } from "effect";
+import { Duration, Effect, Option, Ref } from "effect";
 import type { HttpClient } from "effect/http";
 import { type HostedRefusal, hostedCarriesBearer } from "../http/http-effect.js";
 import {
@@ -41,6 +41,15 @@ const RETIRE_SESSIONS = {
   CONCURRENCY: 4,
   /** eve answers a reset once the session lets go of its inbox, which it waits thirty seconds for at most. */
   TIMEOUT: Duration.seconds(35),
+  /**
+   * How long a delete spends on its retires in all. Note that the whole is
+   * bounded as well as each, because a large account's retires, four at a
+   * time at up to thirty-five seconds apiece, would otherwise outlast the
+   * function, which would end with the sessions retired and the account
+   * still standing. Past this the rest are skipped and logged, as one past
+   * its own timeout is, and the delete goes on.
+   */
+  BUDGET: Duration.seconds(60),
 } as const;
 
 /** How a caller reaches eve under one mount: the delete's own caller's client, typed to retire a session and nothing else, or the refusal that there is none. */
@@ -101,13 +110,32 @@ const retireOne = (
     ),
   );
 
-/** Retires every session named, a few at a time; never fails, whatever eve answered. */
+/**
+ * Retires every session named, a few at a time, for as long as the budget
+ * lasts; never fails, whatever eve answered. A retire still waiting when the
+ * budget ends is interrupted, and it and every one not yet asked are logged
+ * by their count and left to the sandbox sweep, as one eve never answered is.
+ */
 export function retireSessions(
   eveAt: EveAt,
   sessions: readonly StandingSession[],
 ): Effect.Effect<void, never, HttpClient.HttpClient> {
-  return Effect.forEach(sessions, (session) => retireOne(eveAt, session), {
-    concurrency: RETIRE_SESSIONS.CONCURRENCY,
-    discard: true,
+  return Effect.gen(function* () {
+    const settled = yield* Ref.make(0);
+    const all = Effect.forEach(
+      sessions,
+      (session) =>
+        Effect.andThen(
+          retireOne(eveAt, session),
+          Ref.update(settled, (n) => n + 1),
+        ),
+      { concurrency: RETIRE_SESSIONS.CONCURRENCY, discard: true },
+    );
+    const finished = yield* Effect.timeoutOption(all, RETIRE_SESSIONS.BUDGET);
+    if (Option.isSome(finished)) return;
+    const skipped = sessions.length - (yield* Ref.get(settled));
+    yield* Effect.logWarning(
+      `eve did not retire ${skipped} of ${sessions.length} sessions within the delete's budget`,
+    );
   });
 }

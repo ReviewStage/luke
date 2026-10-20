@@ -2,10 +2,8 @@ import assert from "node:assert/strict";
 import { afterEach, it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import { PROVIDER_KEY_PROVIDER } from "@luke/features/provider-key-wire";
-import { createORPCClient, ORPCError } from "@orpc/client";
-import { RPCLink } from "@orpc/client/message-port";
-import { Context, Effect } from "effect";
-import type { ActSender } from "../act-router/router.js";
+import { ORPCError } from "@orpc/client";
+import { Effect } from "effect";
 import {
   ACCOUNT_ASK_ACT_KIND,
   ACT_ERROR,
@@ -16,12 +14,10 @@ import {
 } from "../contract/index.js";
 import {
   type AccountAskProceduresDependencies,
-  type ActPortDependencies,
-  createActPortHandler,
-  type IssueProceduresDependencies,
-  type PlatformActProcedures,
-  type WorkspaceProceduresDependencies,
-} from "./index.js";
+  accountAskProcedures,
+} from "./account-ask-procedures.js";
+import type { ActSender } from "./base.js";
+import { type TestActPort, testActPort } from "./testing.js";
 
 /**
  * The account's own asks, through the act port as a window calls them: only
@@ -100,10 +96,10 @@ const ACTS = [
 
 type HostAsk = AccountAskProceduresDependencies["host"];
 
-const opened: MessagePort[] = [];
+const ports: TestActPort<unknown>[] = [];
 
 afterEach(() => {
-  for (const port of opened.splice(0)) port.close();
+  for (const port of ports.splice(0)) port.close();
 });
 
 /**
@@ -126,40 +122,9 @@ function windowPort(
       });
   // SAFETY: each fake answers what its test hands it; the port's output schema checks it.
   const host = Object.fromEntries(ACTS.map((act) => [act.ask, ask(act.ask)])) as HostAsk;
-  // SAFETY: no issue act is called here, so the issues' host is never reached.
-  const issues = { host: {} } as IssueProceduresDependencies;
-  // SAFETY: no workspace act is called here, so the workspaces' host is never reached.
-  const workspaces = { host: {} } as WorkspaceProceduresDependencies;
-  // SAFETY: no platform act is called here, so no platform procedure is reached.
-  const platform = {} as PlatformActProcedures<unknown>;
-  // SAFETY: no account or settings act is called here, so neither's dependencies are reached.
-  const unreached = { account: {}, settings: {} } as unknown as Pick<
-    ActPortDependencies,
-    "account" | "settings"
-  >;
-  // SAFETY: no agent, automation, factory, or integration act is called here, so their hosts are never reached.
-  const elsewhere = {
-    agents: { host: {}, notices: {} },
-    automations: { host: {} },
-    factory: { host: {} },
-    integrations: { host: {} },
-  } as Pick<ActPortDependencies, "agents" | "automations" | "factory" | "integrations">;
-  const handler = createActPortHandler(
-    { ...unreached, ...elsewhere, accountAsks: { host }, issues, workspaces },
-    platform,
-  );
-  const { port1, port2 } = new MessageChannel();
-  opened.push(port1, port2);
-  handler.upgrade(port1, {
-    context: () => ({
-      actor,
-      trusted: options.trusted ?? true,
-      "effect/context": Context.empty(),
-    }),
-  });
-  port1.start();
-  const client: ActPortClient = createORPCClient(new RPCLink({ port: port2 }));
-  port2.start();
+  const port = testActPort(accountAskProcedures({ host }));
+  ports.push(port);
+  const client = port.as(actor, { trusted: options.trusted ?? true });
   return { client, asked };
 }
 

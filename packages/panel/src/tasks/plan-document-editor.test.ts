@@ -313,6 +313,25 @@ test("a press on a task's checkbox ticks or clears that one item in the saved te
   assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
 });
 
+test("a press on the label around a task's checkbox, which takes a finger's press beside the box, ticks it once and opens no editor", async () => {
+  const body = ["## Steps", "- [ ] Send the invite", ""].join("\n");
+  const { container, sent, render } = mount([{ saved: true }]);
+  render({ ...DOCUMENT_TASK, document: { body, assumptions: [] } });
+  await settle();
+  const label = block(container, "Steps").querySelector<HTMLLabelElement>(".task-list-box");
+  assert.ok(label, "the box stands in its label");
+
+  act(() => label.click());
+  await settle();
+
+  assert.deepEqual(
+    sent.map((request) => request.document),
+    [{ base: body, value: body.replace("- [ ] Send", "- [x] Send") }],
+  );
+  // Note that the check is a boolean, because a failing comparison would print the whole editor's DOM.
+  assert.ok(container.querySelector(".plan-document-editor") === null, "no editor opened");
+});
+
 test("a press while a tick is out sends nothing and goes back, and a box is named by its item's words or its picture's", async () => {
   const body = "## Steps\n- [ ] One\n- [ ] ![Upload screenshot](shot.png)\n";
   const first = Promise.withResolvers<TasksEditAnswer>();

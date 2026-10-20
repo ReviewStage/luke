@@ -38,8 +38,8 @@ export interface HistoryAdapter<State> {
   readonly subscribe: (listener: () => void) => () => void;
 }
 
-/** The most entries an in-memory history holds by default. */
-const HISTORY_LIMIT = 50;
+/** The most entries a history holds by default: the desktop's memory history here and the web's browser history alike. */
+export const HISTORY_LIMIT = 50;
 
 const EMPTY: HistorySnapshot<never> = { entries: [], at: -1 };
 

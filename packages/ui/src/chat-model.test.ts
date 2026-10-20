@@ -10,7 +10,6 @@ import {
   MEMBER_KIND,
 } from "@luke/features/chat-wire";
 import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
-import { MENTION_KIND } from "@luke/features/mention-link";
 import { test } from "vitest";
 import {
   type ChatNames,
@@ -124,10 +123,10 @@ function chatOf(readSeq: number, messages: readonly ChatMessage[]): ChatAnswer {
     self: ME,
     readSeq,
     members: [
-      { id: ME, kind: MEMBER_KIND.HUMAN, handle: "dean", left: false },
-      { id: AGENT, kind: MEMBER_KIND.AGENT, handle: "agent-2", agentId: AGENT_ID, left: false },
-      { id: LUKE, kind: MEMBER_KIND.LUKE, handle: "luke", planId: TASK_ID, left: false },
-      { id: MARIA, kind: MEMBER_KIND.HUMAN, handle: "maria", left: false },
+      { id: ME, kind: MEMBER_KIND.HUMAN, name: "Dean", userId: "user-dean", left: false },
+      { id: AGENT, kind: MEMBER_KIND.AGENT, agentId: AGENT_ID, left: false },
+      { id: LUKE, kind: MEMBER_KIND.LUKE, planId: TASK_ID, left: false },
+      { id: MARIA, kind: MEMBER_KIND.HUMAN, name: "Maria Chen", userId: "user-maria", left: false },
     ],
     channels: [WITH_AGENT, TOPIC, OLD, TASK_CHANNEL, WITH_MARIA, GENERAL],
     messages,
@@ -187,10 +186,10 @@ test("the rail counts For you, lists #general and the topics, then the tasks' ch
     ],
   );
   assert.deepEqual(
-    rail.direct.map((row) => [row.label, row.sub, row.unread]),
+    rail.direct.map((row) => [row.label, row.unread]),
     [
-      ["agent-2", "Invite emails", 1],
-      ["maria", undefined, 0],
+      ["Invite emails", 1],
+      ["Maria Chen", 0],
     ],
   );
 });
@@ -217,8 +216,8 @@ test("a channel read further on its own cursor counts only what came past that, 
   assert.deepEqual(
     rail.direct.map((row) => [row.label, row.unread]),
     [
-      ["agent-2", 1],
-      ["maria", 0],
+      ["Invite emails", 1],
+      ["Maria Chen", 0],
     ],
   );
 });
@@ -257,18 +256,27 @@ test("a channel reads as its roots in the order posted, each with its thread's r
   );
 });
 
-test("a line names an agent by its title, a task's Luke as Luke, the reader by their own name, and anyone else by their handle", () => {
-  const chat = chatOf(0, []);
+test("a line names an agent by its title, a task's Luke as Luke, the reader by their own name, a person by theirs, and one whose agent or account is gone as former", () => {
+  const chat = {
+    ...chatOf(0, []),
+    members: [
+      ...chatOf(0, []).members,
+      { id: "gone-agent", kind: MEMBER_KIND.AGENT, left: true },
+      { id: "gone-person", kind: MEMBER_KIND.HUMAN, left: true },
+    ],
+  };
   assert.deepEqual(
-    [AGENT, LUKE, ME, MARIA].map((id) => {
+    [AGENT, LUKE, ME, MARIA, "gone-agent", "gone-person"].map((id) => {
       const who = chatWho(chat, NAMES, id);
-      return [who.name, who.handle, who.taskName];
+      return [who.name, who.taskName];
     }),
     [
-      ["Invite emails", "agent-2", undefined],
-      ["Luke", "luke", "Teammate invitations"],
-      ["Dean Stratakos", "dean", undefined],
-      ["maria", "maria", undefined],
+      ["Invite emails", undefined],
+      ["Luke", "Teammate invitations"],
+      ["Dean Stratakos", undefined],
+      ["Maria Chen", undefined],
+      ["Former agent", undefined],
+      ["Former member", undefined],
     ],
   );
 });
@@ -287,7 +295,7 @@ test("the reader posts in a standing channel and in a direct message of their ow
   );
   assert.deepEqual(
     [WITH_MARIA, between].map((channel) => channelLabel(chat, NAMES, channel)),
-    ["maria", "agent-2 ↔ maria"],
+    ["Maria Chen", "Invite emails ↔ Maria Chen"],
   );
 });
 
@@ -312,45 +320,51 @@ test("nothing in a direct message between two others waits on the reader, neithe
   );
 });
 
-test("a dictation in the chat listens for every handle still here, each agent's title, and each standing channel's name, once each", () => {
+test("a dictation in the chat listens for every person still here by name, each agent's title, and each standing channel's name, once each", () => {
   const chat = {
     ...chatOf(0, []),
     members: [
       ...chatOf(0, []).members,
-      { id: "gone", kind: MEMBER_KIND.HUMAN, handle: "gone-person", left: true },
+      { id: "gone", kind: MEMBER_KIND.HUMAN, name: "Gone Person", left: true },
     ],
   };
   const words = chatKeywords(chat, NAMES);
   assert.deepEqual(
-    ["dean", "agent-2", "luke", "maria", "Invite emails", "general", "invites", "alpha"].filter(
+    ["Dean", "Maria Chen", "Invite emails", "general", "invites", "alpha"].filter(
       (word) => !words.includes(word),
     ),
     [],
   );
-  assert.equal(words.includes("gone-person"), false, "a member who left is not listened for");
+  assert.equal(words.includes("Gone Person"), false, "a member who left is not listened for");
   assert.equal(words.includes("aardvark"), false, "an archived channel is not");
   assert.equal(new Set(words).size, words.length, "each word once");
 });
 
-test("a person and an agent are offered as the mentions their chips write, an agent on a task under its task, and Luke as his word", () => {
+test("every member is offered by name as the link their chip writes, an agent and a Luke under their task, and none before the workspace is known", () => {
   const chat = {
     ...chatOf(0, []),
     members: chatOf(0, []).members.map((member) =>
-      member.id === AGENT
-        ? { ...member, planId: TASK_ID }
-        : member.id === MARIA
-          ? { ...member, userId: "user-maria" }
-          : member,
+      member.id === AGENT ? { ...member, planId: TASK_ID } : member,
     ),
   };
-  const offered = chatTargets(chat, NAMES).filter((target) => target.sigil === "@");
+  const place = { workspace: "acme", repository: null };
+  const offered = chatTargets(chat, NAMES, place).filter((target) => target.sigil === "@");
   assert.deepEqual(
-    offered.map((target) => [target.name, target.mention]),
+    offered.map((target) => [target.name, target.detail, target.markdown]),
     [
-      ["agent-2", { kind: MENTION_KIND.AGENT, taskId: TASK_ID, agentId: AGENT_ID }],
-      ["luke", undefined],
-      ["maria", { kind: MENTION_KIND.PERSON, userId: "user-maria" }],
+      [
+        "Invite emails",
+        "Teammate invitations",
+        `[@Invite emails](https://tryluke.dev/acme/plan/${TASK_ID}/agent/${AGENT_ID})`,
+      ],
+      ["Luke", "Teammate invitations", `[@Luke](https://tryluke.dev/acme/plan/${TASK_ID}/luke)`],
+      ["Maria Chen", undefined, "[@Maria Chen](https://tryluke.dev/acme/person/user-maria)"],
     ],
+  );
+  assert.deepEqual(
+    chatTargets(chat, NAMES, undefined).filter((target) => target.sigil === "@"),
+    [],
+    "a member is written as a link alone, so none is offered before the workspace is known",
   );
 });
 

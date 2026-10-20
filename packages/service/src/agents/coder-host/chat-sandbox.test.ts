@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { CHAT_BLOCK } from "@luke/features/chat-wire";
-import { INBOX_BLOCK, INBOX_RESPONSE } from "@luke/features/inbox-wire";
 import type { WireRecord } from "@luke/wire";
 import { test } from "vitest";
 import { stampedEveEvent } from "../../testing/eve-events.js";
@@ -40,48 +39,17 @@ test("a chat post opens the sandbox only where it carries a picture, which is re
   );
 });
 
-test("an inbox post opens the sandbox only where an image block names a picture, which is read from a file there", () => {
-  const post = (blocks: WireRecord[]) => ({
+test("an inbox post opens the sandbox only where its body draws a picture from a file there, by a path naming no scheme", () => {
+  const post = (body: string) => ({
     key: "landing",
     title: "Does the landing page read right?",
-    blocks,
-    response: { type: INBOX_RESPONSE.APPROVAL },
+    body,
   });
-  const picture = { type: INBOX_BLOCK.IMAGE, path: "shots/landing.png", alt: "The landing page" };
-  const words = { type: INBOX_BLOCK.MARKDOWN, text: "The hero reads **Plan by voice**." };
-  assert.equal(opensSandbox(requested(CODER_TOOL.POST_TO_INBOX, post([words, picture]))), true);
-  assert.equal(opensSandbox(requested(CODER_TOOL.POST_TO_INBOX, post([words]))), false);
-  assert.equal(
-    opensSandbox(
-      requested(CODER_TOOL.POST_TO_INBOX, {
-        key: "landing",
-        title: "Ship it?",
-        response: { type: INBOX_RESPONSE.APPROVAL },
-      }),
-    ),
-    false,
-  );
-});
-
-test("an inbox reply opens the sandbox only where it shows a picture, which is read from a file there", () => {
-  assert.equal(
-    opensSandbox(
-      requested(CODER_TOOL.REPLY_INBOX, {
-        key: "invite-copy",
-        text: "See.",
-        images: [{ path: "shot.png" }],
-      }),
-    ),
-    true,
-  );
-  assert.equal(
-    opensSandbox(requested(CODER_TOOL.REPLY_INBOX, { key: "invite-copy", text: "Words alone." })),
-    false,
-  );
-  assert.equal(
-    opensSandbox(
-      requested(CODER_TOOL.REPLY_INBOX, { key: "invite-copy", text: "None.", images: [] }),
-    ),
-    false,
-  );
+  const opens = (body: string) => opensSandbox(requested(CODER_TOOL.POST_TO_INBOX, post(body)));
+  assert.equal(opens('The hero:\n\n![The landing page](shots/landing.png "Hero")'), true);
+  assert.equal(opens("![The form](</workspace/repository/shot one.png>)"), true);
+  assert.equal(opens("The hero reads **Plan by voice**."), false);
+  assert.equal(opens("![Kept](https://tryluke.dev/acme/plan/p1/inbox/i1/files/f1)"), false);
+  assert.equal(opens("Write `![alt](shot.png)` for a picture."), false);
+  assert.equal(opens("[a link](shots/landing.png)"), false);
 });

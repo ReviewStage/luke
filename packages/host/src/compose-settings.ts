@@ -82,6 +82,14 @@ interface SettingsLinks {
   readonly endLiveSession: Effect.Effect<void>;
 }
 
+/** The fields a reset keeps, as a call names them: none where absent, and nothing usable where any is not a setting. */
+function keptFields(value: UnparsedWireValue): readonly AppSettingField[] | undefined {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return undefined;
+  const fields = value.filter(isAppSettingField);
+  return fields.length === value.length ? fields : undefined;
+}
+
 export interface SettingsComposer extends Composer {
   readonly store: SettingsStore;
   readonly recordProductEvent: RecordProductEvent;
@@ -103,7 +111,11 @@ export interface SettingsComposer extends Composer {
   reconcileAccountPreferences: () => Effect.Effect<void>;
   /** The account behind the hydrated preferences changed; the next push hydrates again. */
   forgetAccountPreferenceHydration: () => void;
-  /** The count the account actions flush before they end the account they are authenticated with. */
+  /**
+   * Sends the queued counts now: the account actions flush before a sign-out
+   * or deletion ends the account they are authenticated with, and before a
+   * sign-in may take a browser tab away to the provider.
+   */
   flushProductEvents: Effect.Effect<void>;
   link: (links: SettingsLinks) => Effect.Effect<void>;
 }
@@ -180,6 +192,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
       // The kernel's clock, so a count is stamped on the same clock as every other timer here.
       now: kernel.now,
       credential,
+      // Note that a batch first settles on the account the service names, because another tab may have signed in as someone else.
+      confirmAccount: () => confirmAccount(),
       // The day each once-a-day count was last sent, kept in the settings
       // file so a relaunch the same day does not count it again.
       recordedDays: {
@@ -412,8 +426,9 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
      * Each setting's value as its host side effect last carried it, kept
      * apart from the store's held copy: a write re-reads the file, so the
      * held copy may already hold a value another tab chose that no side
-     * effect here has carried yet. Kept only where the file has another
-     * writer (`SettingsChangedElsewhere`), and filled when that watch starts.
+     * effect here has carried yet. Written by every side effect, but read
+     * only where the file has another writer (`SettingsChangedElsewhere`),
+     * whose watch also fills it as it starts.
      */
     const carriedValues = new Map<AppSettingField, string>();
     const carry = (field: AppSettingField, stored: StoredSettings): void => {
@@ -541,8 +556,10 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
           const scope = params.scope;
           if (!isSettingsResetScope(scope))
             return yield* invalid("scope is not one this build knows");
+          const kept = keptFields(params.kept);
+          if (kept === undefined) return yield* invalid("kept must name settings");
           const result = yield* settingsWrite(
-            () => store.resetSettings(scope),
+            () => store.resetSettings(scope, kept),
             (saved) =>
               saved.reason
                 ? Effect.void
@@ -552,6 +569,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("host/composeSettings")
                       const definition = APP_SETTING_SCHEMA[field];
                       if (!("resetScope" in definition) || definition.resetScope !== scope)
                         continue;
+                      if (kept.includes(field)) continue;
                       yield* applyHostSettingSideEffect(field, saved.settings);
                     }
                   }),

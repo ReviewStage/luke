@@ -16,7 +16,7 @@ import { VOICE_RUNTIME_ACT_KIND } from "./kinds.js";
  *
  * Main answers them itself (`apps/desktop/src/main/ipc/voice-runtime.ts`).
  * A window that may not ask one of them is answered nothing rather than
- * refused, as it was on `app:act`.
+ * refused.
  */
 export const voiceRuntimeActsContract = {
   [VOICE_RUNTIME_ACT_KIND.VOICE_COMMAND]: actProcedure(

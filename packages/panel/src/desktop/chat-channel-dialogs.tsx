@@ -147,10 +147,7 @@ export function useChannelDialogs(
               />
             )}
           </FormField>
-          <FormField
-            label="Purpose"
-            description="Shown under its name, and to every agent that reads it."
-          >
+          <FormField label="Purpose" description="Agents that read the channel see it too.">
             {(control) => (
               <TextField
                 field={control}

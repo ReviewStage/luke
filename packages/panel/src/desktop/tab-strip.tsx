@@ -12,11 +12,20 @@ import {
   useMenu,
 } from "@luke/ui";
 import { useClipped } from "@luke/ui/use-clipped";
-import { Children, isValidElement, useLayoutEffect, useRef, useState } from "react";
+import {
+  Children,
+  createContext,
+  isValidElement,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { flushSync } from "react-dom";
 import { useAppCommand } from "../app-commands.js";
 import { Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
+import { ROW_RUN, type RowPlace, withRowMoves } from "./row-moves.js";
 import { type TabMove, useTabDrag } from "./use-tab-drag.js";
 
 /**
@@ -178,6 +187,16 @@ function movedLine(tab: HTMLElement | undefined, to: number, count: number): str
   return `${tab?.textContent ?? "Tab"} moved to position ${to + 1} of ${count}`;
 }
 
+/**
+ * Where a tab of the strip around it stands among the tabs that move, read
+ * from the strip as the tab's menu opens, which moves it one place either
+ * way under a finger (`row-moves.tsx`); none in a strip whose tabs stay
+ * put, or for the tab anchored at its start.
+ */
+const TabPlaceContext = createContext<((tab: HTMLElement) => RowPlace | undefined) | undefined>(
+  undefined,
+);
+
 /** Where a tab's menu hangs when the keyboard asks for it: under the tab, from its start. */
 function underTab(tab: HTMLElement): MenuPlacement {
   const bounds = (tab.closest(".tab") ?? tab).getBoundingClientRect();
@@ -244,6 +263,14 @@ export function TabStrip({
           onMove(from, to);
         };
   const onPointerDown = useTabDrag(move);
+  const placeOf =
+    move === undefined
+      ? undefined
+      : (tab: HTMLElement): RowPlace | undefined => {
+          const tabs = [...(strip.current?.querySelectorAll<HTMLElement>(MOVABLE_TAB) ?? [])];
+          const at = tabs.indexOf(tab);
+          return at < 0 ? undefined : { at, count: tabs.length, onMove: move };
+        };
   // The focused tab one place along, drawn there before focus is put back
   // on it, since moving it in the document can take focus from it.
   const step = (by: number) => {
@@ -317,7 +344,7 @@ export function TabStrip({
           if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
         }}
       >
-        {children}
+        <TabPlaceContext.Provider value={placeOf}>{children}</TabPlaceContext.Provider>
       </div>
     </>
   );
@@ -479,6 +506,7 @@ export function MenuTab({
   groups: MenuAction[][];
 }): React.JSX.Element {
   const menu = useMenu(true);
+  const placeOf = useContext(TabPlaceContext);
   return (
     <>
       <Tab
@@ -495,7 +523,7 @@ export function MenuTab({
         <ActionMenu
           label={`${tab.label} actions`}
           menu={menu.drawn}
-          groups={groups}
+          groups={withRowMoves(groups, placeOf?.(menu.drawn.opener), ROW_RUN.ALONG)}
           onClose={menu.close}
         />
       )}

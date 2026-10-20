@@ -52,7 +52,6 @@ import {
   type TasklessPlace,
   tasklessMentions,
   useMentionAgentsReader,
-  useMentionIssuesReader,
 } from "../tasks/task-mentions.js";
 import { useMinute } from "../tasks/task-time.js";
 import { TOOL_TARGET, type ToolTarget } from "../tasks/tool-call-model.js";
@@ -450,10 +449,11 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
   }, [standIn, choose]);
   // A missing item's pane stands where its item would, so a narrow Inbox shows the notice rather than the list.
   // Note that the window keeps whether the list was asked for, so its history can go back to it.
-  const { listed, onListed } = view;
+  const { listed, onListed, onSingle } = view;
   const columns = useInboxColumns(chosen?.item.id ?? (missing ? asked?.itemId : undefined), true, {
     asked: listed,
     onAsk: onListed,
+    onSingle,
   });
   // A row's press and Next's open their item alike, the keyboard following it.
   const open = (listed: InboxListed) => {
@@ -492,13 +492,10 @@ export function DesktopInbox({ tasks }: { tasks: TasksControl }): React.JSX.Elem
     [tasks.tasks, tasks.archived],
   );
   const readMentionAgents = useMentionAgentsReader(place?.workspaceId, mentionTasks, named.models);
-  const readMentionIssues = useMentionIssuesReader(
-    tasks.workspaces.find((each) => each.id === place?.workspaceId),
-  );
   const mentions =
     place === undefined
       ? undefined
-      : tasklessMentions(place, tasks.onShowMention, readMentionAgents, readMentionIssues);
+      : tasklessMentions(place, tasks.onShowMention, readMentionAgents);
   const onRetry = () => {
     read.onRetry();
     archivedRead.onRetry();

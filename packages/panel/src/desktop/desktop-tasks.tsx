@@ -56,12 +56,12 @@ import { CommentFocusScope } from "../tasks/plan-comments.js";
 import { CHIP_PLACE, RepositoryChip } from "../tasks/repository-chip.js";
 import { SkillFiles } from "../tasks/skill-chip.js";
 import { TaskCall } from "../tasks/task-call.js";
+import { TaskIssueLinks } from "../tasks/task-issue-links.js";
 import {
   mentionablePullRequests,
   TaskMentions,
   type TaskMentionsValue,
   useMentionAgentsReader,
-  useMentionIssuesReader,
 } from "../tasks/task-mentions.js";
 import { taskLinkPlace } from "../tasks/task-menu-items.js";
 import { useMinute } from "../tasks/task-time.js";
@@ -485,10 +485,6 @@ function PlanDocument({
     mentionTasks,
     tasks.agents.models,
   );
-  // The task's workspace's issues an `@` offers, while Issues is on.
-  const readMentionIssues = useMentionIssuesReader(
-    tasks.workspaces.find((each) => each.id === opened?.workspaceId),
-  );
   const openMention = tasks.onShowMention;
   const revealed = tasks.sectionReveal;
   // A file a mention names opens in its tab, its lines at the commit the mention pins them to.
@@ -694,7 +690,6 @@ function PlanDocument({
     }),
     readAgents: readMentionAgents,
     pullRequests: mentionablePullRequests(agents),
-    readIssues: readMentionIssues,
     doors: {
       taskId: task.id,
       place: { workspace, repository: task.repository },
@@ -757,6 +752,16 @@ function PlanDocument({
                 void tasks.onSetTaskStanding(task.id, standing);
               },
         }}
+        underTitle={
+          <TaskIssueLinks
+            taskId={task.id}
+            workspaceId={task.workspaceId}
+            repository={task.repository}
+            archived={archived}
+            linearIn={tasks.newTask.linearIssuesIn}
+            githubIn={tasks.newTask.githubIssuesIn}
+          />
+        }
       />
     </section>
   );
