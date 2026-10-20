@@ -731,3 +731,25 @@ test("on a narrow stage a move back from a new automation's page to one opened f
   assert.deepEqual(window.at().automation?.page, blank, "the blank draft stands");
   assert.equal(window.held.current().at, 2, "the history stands back on it");
 });
+
+test("on a narrow stage Back from an automation with unsaved work to another automation still asks, and stays where it is refused", () => {
+  const window = mount(SHELL_ROOM.NARROW, {
+    ...ON_AUTOMATION,
+    automation: {
+      open: true,
+      runs: false,
+      page: { kind: AUTOMATIONS_PAGE.EDIT, automationId: "automation-2" },
+    },
+  });
+  window.move((held) => ({
+    ...held,
+    automation: { open: true, runs: false, page: AUTOMATION_PAGE },
+  }));
+  assert.equal(window.addresses().length, 2);
+
+  act(() => window.history().onBack());
+  assert.deepEqual(window.at().automation?.page, AUTOMATION_PAGE, "the draft's automation stands");
+  window.moveHistory(-1);
+  assert.deepEqual(window.at().automation?.page, AUTOMATION_PAGE, "and a browser's Back too");
+  assert.equal(window.held.current().at, 1, "the history stands back on it");
+});

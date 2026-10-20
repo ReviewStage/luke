@@ -382,13 +382,6 @@ function nearest(
   return undefined;
 }
 
-/** A way out taken as it is, asking nothing. */
-function unasked<Args extends readonly unknown[]>(
-  leave: (...args: Args) => void,
-): (...args: Args) => void {
-  return leave;
-}
-
 /**
  * Whether two places are one draft's: one page, and for a new automation's
  * page the same suggestion, since one opened from another suggestion starts
@@ -402,8 +395,9 @@ function sameDraftPage(one: Place, other: Place): boolean {
 
 /**
  * How a step to `to` asks: as the window's guard asks, unless it moves only
- * between two panes of the page standing, a narrow room's sub-steps, which
- * leaves no page and so loses nothing written on it.
+ * within the draft standing, between a narrow room's sub-steps or to the
+ * same automation on another run, which leaves no page and so loses nothing
+ * written on it; that way out is taken as it is.
  */
 function asking(
   latest: { readonly place: Place | undefined; readonly guard: LeaveGuard["guard"] },
@@ -411,7 +405,7 @@ function asking(
 ): LeaveGuard["guard"] {
   const { place } = latest;
   return place !== undefined && to !== undefined && sameDraftPage(place, to)
-    ? unasked
+    ? (leave) => leave
     : latest.guard;
 }
 
