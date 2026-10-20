@@ -547,10 +547,12 @@ function callFailure(text: string): Failure {
  * A repository out of reach, said by why with the repository named, and
  * the press that mends it: GitHub connected, or connected again, in
  * Settings; the repository given to Luke on GitHub; another repository
- * chosen; or the task moved to the workspace whose GitHub reaches it. A
- * service that said nothing more says the bare sentence, which Retry
- * answers, and so does an agent with no task wherever the remedy is pressed
- * on the task: only giving the repository to Luke on GitHub is not.
+ * chosen; the task moved to the workspace whose GitHub reaches it; or the
+ * member's own token replaced in Settings › Profile, or authorized on
+ * GitHub for the organization's SAML SSO. A service that said nothing more
+ * says the bare sentence, which Retry answers, and so does an agent with no
+ * task wherever the remedy is pressed on the task: only giving the
+ * repository to Luke on GitHub, and a token's remedies, are not.
  */
 function unreachedFailure(
   unreached: RepositoryUnreached | undefined,
@@ -562,6 +564,19 @@ function unreachedFailure(
       text: `Luke on GitHub doesn't have access to ${unreached.repository}.`,
       repository: unreached.repository,
       settingsUrl: unreached.settingsUrl,
+    };
+  }
+  // A token's remedy is the member's own, in Settings or on GitHub, so it needs no task.
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_INVALID) {
+    return { reason: FAILURE_REASON.GITHUB_TOKEN, text: "Your GitHub token was refused." };
+  }
+  if (unreached?.reason === REPOSITORY_UNREACHED.TOKEN_SSO) {
+    const [organization = unreached.repository] = unreached.repository.split("/");
+    return {
+      reason: FAILURE_REASON.AUTHORIZE_TOKEN,
+      text: `Your GitHub token isn't authorized for ${organization}'s SAML SSO.`,
+      organization,
+      authorizeUrl: unreached.authorizeUrl,
     };
   }
   if (unreached === undefined || taskId === null) {
@@ -605,8 +620,6 @@ function unreachedFailure(
       };
     case REPOSITORY_UNREACHED.NO_TOKEN:
       return callFailure("No GitHub token saved.");
-    case REPOSITORY_UNREACHED.TOKEN_INVALID:
-      return callFailure("Your GitHub token was refused.");
     case REPOSITORY_UNREACHED.TOKEN_NO_ACCESS:
       return callFailure(`Your GitHub token can't access ${repository}.`);
     case REPOSITORY_UNREACHED.TOKEN_CANNOT_PUSH:
