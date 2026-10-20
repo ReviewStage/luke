@@ -260,14 +260,15 @@ it.layer(getTestDB())("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "a decide and an answer wait on their answer unless the post says not, and a do only where it says so",
+    "a decide and an answer are always heard back, even where the post says not to wait, and a do only where it says so",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
         const cases = [
           ["decide", QUEUE.ask, undefined, true],
-          ["decide-quiet", QUEUE.ask, false, false],
+          ["decide-quiet", QUEUE.ask, false, true],
           ["answer", { type: INBOX_ASK.ANSWER }, undefined, true],
+          ["answer-quiet", { type: INBOX_ASK.ANSWER }, false, true],
           ["do", SETTINGS.ask, undefined, false],
           ["do-waits", SETTINGS.ask, true, true],
         ] as const;
