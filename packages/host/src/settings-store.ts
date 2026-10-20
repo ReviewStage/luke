@@ -528,7 +528,6 @@ function defaultPersistedSettings(): PersistedSettings {
   return settledPersistedSettings(decodePersistedSettings({}));
 }
 
-/** A stored file this build cannot read as settings; `reason` is the legacy message. */
 /**
  * Keeping an account was refused because no cipher can seal its tokens: the
  * store was handed none, or the system's encrypted storage is unavailable.
@@ -539,6 +538,7 @@ export class EncryptedStorageUnavailable extends Data.TaggedError("EncryptedStor
   }
 }
 
+/** A stored file this build cannot read as settings; `reason` is the legacy message. */
 class SettingsParseRefusal extends Data.TaggedError("SettingsParseRefusal")<{
   readonly reason: string;
 }> {
