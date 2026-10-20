@@ -3,16 +3,22 @@ import { INBOX_BLOCK } from "@luke/features/inbox-wire";
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import { LONE_LINK, type LoneLink, loneLinkOf } from "@luke/features/lone-link";
 import { LINK_PLACE } from "@luke/features/luke-link";
-import { decodeMention, isBareLink, type Mention, mentionName } from "@luke/features/mention-link";
+import {
+  decodeMention,
+  isBareLink,
+  MENTION_KIND,
+  type Mention,
+  mentionName,
+} from "@luke/features/mention-link";
 import { placeChipLook } from "@luke/features/place-chip-model";
-import { HoverCard, HoverCardHead, LIST_VARIANT, List, ListRow, ProviderMark } from "@luke/ui";
+import { LIST_VARIANT, List, ListRow, ProviderMark } from "@luke/ui";
 import { AppWindowIcon } from "lucide-react";
 import { createContext, type ReactNode, useContext } from "react";
 import { RowHint, RowHintOptions } from "../tooltip.js";
 import { LinesChanged } from "./agent-published.js";
-import { PageChipCard } from "./chip-cards.js";
 import { pullRequestStateWord } from "./coding-agent-model.js";
 import { InboxCodeCard, type InboxCodeDoors } from "./inbox-code-card.js";
+import { MentionChipCard } from "./mention-chip.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { useMentionDoors } from "./task-mentions.js";
 import { useKnownNames } from "./use-known-names.js";
@@ -29,9 +35,11 @@ import { useOpenLink } from "./use-open-link.js";
  * workspace's GitHub App answers them (`use-link-standing.ts`), where it
  * stands where that matters, and its lines added and removed; until it
  * answers, or where it never does, the row says what the address says. A
- * page an agent showed is a row of its tab's glyph and its name, which
- * hangs the page's own card, a preview of it (`page-card.tsx`), where the
- * window holds the page. Either opens what it names as its chip does. Lines
+ * page an agent showed is a row of its tab's glyph and its name. Either
+ * hangs the card its chip hangs (`mention-chip.tsx`): a pull request's its
+ * key, state, size, opener, branches, labels, and counts, and a page's
+ * the page's own card, a preview of it (`page-card.tsx`), where the window
+ * holds the page. Either opens what it names as its chip does. Lines
  * of a file are the card an Inbox code block draws (`inbox-code-card.tsx`),
  * read through the doors the place drawing the words hands
  * (`LoneLinkCards`); where it hands none, the link stays its chip. Any
@@ -130,33 +138,48 @@ function PullRequestRowCard({
   const named = title === undefined ? number : `${number} · ${title}`;
   return (
     <OneRowCard label={CARD_LABEL.PULL_REQUEST} kind={LONE_LINK.PULL_REQUEST}>
-      <ListRow
-        leading={
-          known === undefined ? (
-            <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
-          ) : (
-            <PullRequestMark pullRequest={{ ...known, checks: CHECK_SUMMARY.NONE }} />
-          )
+      <RowHintOptions
+        card={
+          <MentionChipCard
+            mention={mention}
+            target={target}
+            name={writtenWords(target, words) ?? number}
+            doors={doors}
+            standing={standing}
+          />
         }
-        title={named}
-        meta={
-          state === undefined && known?.lines === undefined ? undefined : (
-            <span className="agent-published-meta">
-              {state === undefined ? null : <span>{state}</span>}
-              {known?.lines === undefined ? null : (
-                <LinesChanged additions={known.lines.additions} deletions={known.lines.deletions} />
-              )}
-            </span>
-          )
-        }
-        hint={{ Hint: RowHint, label: named }}
-        onPress={(event) => {
-          // Note that the press stops here, as a chip's does, because a click into a section opens its editor.
-          event.stopPropagation();
-          openLink(target);
-        }}
-        linkHref={target}
-      />
+      >
+        <ListRow
+          leading={
+            known === undefined ? (
+              <ProviderMark provider={INTEGRATION_PROVIDER.GITHUB} />
+            ) : (
+              <PullRequestMark pullRequest={{ ...known, checks: CHECK_SUMMARY.NONE }} />
+            )
+          }
+          title={named}
+          meta={
+            state === undefined && known?.lines === undefined ? undefined : (
+              <span className="agent-published-meta">
+                {state === undefined ? null : <span>{state}</span>}
+                {known?.lines === undefined ? null : (
+                  <LinesChanged
+                    additions={known.lines.additions}
+                    deletions={known.lines.deletions}
+                  />
+                )}
+              </span>
+            )
+          }
+          hint={{ Hint: RowHint, label: named }}
+          onPress={(event) => {
+            // Note that the press stops here, as a chip's does, because a click into a section opens its editor.
+            event.stopPropagation();
+            openLink(target);
+          }}
+          linkHref={target}
+        />
+      </RowHintOptions>
     </OneRowCard>
   );
 }
@@ -171,20 +194,26 @@ function PageRowCard({
   target: string;
   words: string;
 }): React.JSX.Element {
+  const doors = useMentionDoors();
   const openLink = useOpenLink();
   const known = useKnownNames();
   const place = { kind: LINK_PLACE.PAGE, planId: page.taskId, pageId: page.pageId } as const;
   const { name } = placeChipLook(place, writtenWords(target, words), known);
   const glyph = <AppWindowIcon aria-hidden="true" />;
-  const own = (
-    <HoverCard>
-      <HoverCardHead glyph={glyph} name={name} />
-    </HoverCard>
-  );
+  // Note that the page is named from the link as the bar read it, because a page's link the window reads, one ending in a slash or a fragment, may be no mention's.
+  const mention = { kind: MENTION_KIND.PAGE, taskId: page.taskId, pageId: page.pageId } as const;
   return (
     <OneRowCard label={CARD_LABEL.PAGE} kind={LONE_LINK.PAGE}>
       <RowHintOptions
-        card={<PageChipCard taskId={page.taskId} pageId={page.pageId} fallback={own} />}
+        card={
+          <MentionChipCard
+            mention={mention}
+            target={target}
+            name={name}
+            doors={doors}
+            standing={undefined}
+          />
+        }
       >
         <ListRow
           leading={glyph}

@@ -63,10 +63,10 @@ import { useTaskMenu } from "./task-actions.js";
 import { useRowDrag } from "./use-row-drag.js";
 
 /**
- * tasks-board.tsx -- the window's Board: the listed workspace's tasks on a column for each status, in the order work moves through them.
+ * tasks-board.tsx -- the Tasks page's Board: the listed workspace's tasks on a column for each status, in the order work moves through them.
  *
- * It stands in the plan's place beside the sidebar, as Factory does, and its
- * sidebar row is marked while it does. A column is a quiet well headed by
+ * It is one of the Tasks page's two views (`tasks-page.tsx`), which stands
+ * in the plan's place beside the sidebar, as Factory does. A column is a quiet well headed by
  * its status's mark, its name, and how many tasks stand in it, and scrolls
  * its own cards, the most pressing first. A card is raised off the well:
  * its key and its creator's face over its whole name, and at its foot the
@@ -100,9 +100,6 @@ const OPEN_COLUMNS: readonly TaskStatus[] = TASK_STATUS_ORDER.filter(
 const CANCELED_KEY = "luke.boardShowsCanceled";
 
 const storedCanceled = Schema.fromJsonString(Schema.Boolean);
-
-/** What the page is called, on its toolbar and to a screen reader. */
-const BOARD = "Board";
 
 /** What the page is read as while the tasks are. */
 const READING_LINE = "Reading tasks";
@@ -412,19 +409,19 @@ function TaskBoardColumnView({
   );
 }
 
-/** The window's Board, in the plan's place: the listed workspace's tasks by status. */
+/** The Tasks page's Board: the listed workspace's tasks by status. */
 export function TasksBoard({
   tasks,
   room,
-  title = BOARD,
+  title,
   switcher,
 }: {
   tasks: TasksControl;
   room: ShellRoom;
-  /** What the toolbar calls the page: the Board's own name, or the Tasks page's it stands on. */
-  title?: string;
-  /** The Tasks page's List | Board switch, beside the title, where the board is one of its views. */
-  switcher?: ReactNode;
+  /** What the toolbar calls the page: the Tasks page's name. */
+  title: string;
+  /** The Tasks page's List | Board switch, beside the title. */
+  switcher: ReactNode;
 }): React.JSX.Element {
   useAppCommand(APP_COMMAND.EXIT_BOARD, tasks.boardView.onClose);
   const toast = useToast();

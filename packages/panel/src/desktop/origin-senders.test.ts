@@ -2,10 +2,6 @@
 
 import assert from "node:assert/strict";
 import {
-  CODING_AGENT_CALL_FAILURE,
-  type CodingAgentMessagesAnswerView,
-} from "@luke/features/coding-agent-view";
-import {
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentSummary,
@@ -22,7 +18,12 @@ import { SIDE_PANEL_TAB, type SidePanelTab } from "../tasks/use-side-panel.js";
 import { NO_LOOKS } from "../tasks/use-task-looks.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { installScrollIntoView } from "../testing/scroll-into-view.js";
-import { codingAgentsControl, tasksControl, UNPINNED_SUMMARY } from "../testing/tasks-control.js";
+import {
+  codingAgentsControl,
+  pushedTranscripts,
+  tasksControl,
+  UNPINNED_SUMMARY,
+} from "../testing/tasks-control.js";
 import { DesktopTasks } from "./desktop-tasks.js";
 
 /**
@@ -85,8 +86,6 @@ async function mount(input: {
   side?: SidePanelTab | undefined;
 }): Promise<{ container: HTMLElement; chosen: (MainTab | SidePanelTab)[] }> {
   const chosen: (MainTab | SidePanelTab)[] = [];
-  // Note that only the first read answers, because a read past the cursor waits on the service.
-  const read = new Set<string>();
   const control = tasksControl({
     me: input.reader,
     page: TASKS_PAGE.DOCUMENT,
@@ -110,19 +109,14 @@ async function mount(input: {
       agents: [AGENT],
       agentIds: [AGENT.id],
       me: input.reader,
-      readTranscript: ({ callId }): Promise<CodingAgentMessagesAnswerView> => {
-        const key = callId ?? "agent";
-        if (read.has(key)) {
-          return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
-        }
-        read.add(key);
-        return Promise.resolve({
-          messages: callId === undefined ? [BRIEF] : [],
+      transcripts: pushedTranscripts((transcript) => [
+        {
+          messages: transcript.callId === undefined ? [BRIEF] : [],
           cursor: "1:0",
           status: CODING_AGENT_STATUS.COMPLETED,
           title: null,
-        });
-      },
+        },
+      ]),
     }),
   });
   const container = document.body.appendChild(document.createElement("div"));

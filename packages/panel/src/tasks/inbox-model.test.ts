@@ -31,6 +31,7 @@ import {
   firstChoice,
   holderName,
   INBOX_GROUPING,
+  INBOX_LINE,
   INBOX_MEDIA,
   INBOX_MISSING,
   INBOX_SHOW,
@@ -46,11 +47,13 @@ import {
   inboxBoard,
   inboxCommentFiles,
   inboxCounts,
+  inboxLineKind,
   inboxList,
   inboxMedia,
   inboxMissing,
   inboxPreview,
   inboxReply,
+  inboxSettledWords,
   inboxSteps,
   inboxThreadOf,
   inboxThreadSend,
@@ -1525,7 +1528,7 @@ test("an answer's stamp names a pair of buttons' pick in the past where it can a
   });
 });
 
-test("a thread's row previews its latest message, an answer led by its stamp, and a note that asks nothing reads as the agent's words rather than an answer", () => {
+test("a thread's row previews its latest message, an answer led by its answerer and its stamp, and a note that asks nothing reads as the agent's words alone, its tile saying who", () => {
   const asked = asking({
     type: INBOX_ASK.DECIDE,
     options: [{ label: "7 days" }, { label: "14 days" }],
@@ -1539,6 +1542,7 @@ test("a thread's row previews its latest message, an answer led by its stamp, an
   const settled = standing(asked, INBOX_ASK_STATUS.ANSWERED);
   const answered = item({ id: "t1", status: INBOX_STATUS.ANSWERED, thread: [settled, answer] });
   assert.equal(inboxPreview(answered, previewName), "You: Chose 7 days · and say it in the docs");
+  assert.equal(inboxLineKind(answered), INBOX_LINE.SETTLED);
   const wordless = { ...answer, text: "" };
   assert.equal(
     inboxPreview({ ...answered, thread: [settled, wordless] }, previewName),
@@ -1555,48 +1559,57 @@ test("a thread's row previews its latest message, an answer led by its stamp, an
     answeredBy: YOU,
     thread: [note],
   });
-  assert.equal(inboxPreview(settledNote, previewName), "Agent: Shipped #42.");
+  assert.equal(inboxPreview(settledNote, previewName), "Shipped #42.");
+  assert.equal(inboxLineKind(settledNote), INBOX_LINE.SAID);
 });
 
-test("a thread's row leads with what its open ask asks, as the ask's box says it, the steps its draft ticks counted, and with nothing once no ask is open", () => {
+test("a thread's row says the ask itself while one is open: a choice's options, the recommended starred, the steps left and the next as its draft ticks them, or the fields; once none is open, the latest words, the agent's alone", () => {
   const rowOf = (ask: InboxAsk, ticked?: readonly number[]) =>
     inboxPreview(item({ id: "t3", thread: [asking(ask)] }), previewName, ticked);
+  const lineOf = (ask: InboxAsk) => inboxLineKind(item({ id: "t3", thread: [asking(ask)] }));
   const options = [{ label: "7 days" }, { label: "14 days" }, { label: "30 days" }];
-  assert.equal(rowOf({ type: INBOX_ASK.DECIDE, options }), "Pick one · Agent: Which way?");
+  assert.equal(rowOf({ type: INBOX_ASK.DECIDE, options }), "7 days / 14 days / 30 days");
   assert.equal(
-    rowOf({ type: INBOX_ASK.DECIDE, options, multiple: true }),
-    "Pick any · Agent: Which way?",
+    rowOf({ type: INBOX_ASK.DECIDE, options, multiple: true, recommended: "14 days" }),
+    "7 days / 14 days ★ / 30 days",
   );
-  const steps = { type: INBOX_ASK.DO, steps: ["Open it", "Add it", "Redeploy"] } as const;
-  assert.equal(rowOf(steps), "Steps · 0 of 3 · Agent: Which way?");
-  assert.equal(rowOf(steps, [1]), "Steps · 1 of 3 · Agent: Which way?");
-  assert.equal(rowOf({ type: INBOX_ASK.DO, steps: [] }, [0]), "Steps · Agent: Which way?");
+  assert.equal(lineOf({ type: INBOX_ASK.DECIDE, options }), INBOX_LINE.DECIDE);
+  const steps = { type: INBOX_ASK.DO, steps: ["Open **it**", "Add it", "Redeploy"] } as const;
+  assert.equal(rowOf(steps), "3 steps left · Open it");
+  assert.equal(rowOf(steps, [0]), "2 steps left · Add it");
+  assert.equal(rowOf(steps, [0, 2]), "1 step left · Add it");
+  assert.equal(rowOf(steps, [0, 1, 2]), "Every step ticked · Mark done");
+  assert.equal(rowOf({ type: INBOX_ASK.DO, steps: [] }, [0]), "Mark it done");
+  assert.equal(lineOf(steps), INBOX_LINE.DO);
   assert.equal(
-    rowOf({ type: INBOX_ASK.ANSWER, fields: [{ type: INBOX_FIELD.TEXT, label: "Host" }] }),
-    "Fill in · Agent: Which way?",
+    rowOf({
+      type: INBOX_ASK.ANSWER,
+      fields: [
+        { type: INBOX_FIELD.TEXT, label: "Host" },
+        { type: INBOX_FIELD.TEXT, label: "Port" },
+      ],
+    }),
+    "Fill in Host, Port",
   );
-  assert.equal(rowOf({ type: INBOX_ASK.ANSWER }), "Your answer · Agent: Which way?");
+  assert.equal(rowOf({ type: INBOX_ASK.ANSWER }), "Write an answer");
+  assert.equal(lineOf({ type: INBOX_ASK.ANSWER }), INBOX_LINE.ANSWER);
   const reply = message({ text: "Looking now.", createdAt: 2_000, member: CHARLES });
   assert.equal(
     inboxPreview(
       item({ id: "t4", thread: [asking({ type: INBOX_ASK.ANSWER }), reply] }),
       previewName,
     ),
-    "Your answer · Charles Pan: Looking now.",
+    "Write an answer",
     "a reply leaves the ask open, so the row still says it",
   );
   const withdrawn = asking({ type: INBOX_ASK.ANSWER });
-  assert.equal(
-    inboxPreview(
-      item({
-        id: "t5",
-        status: INBOX_STATUS.CLOSED,
-        thread: [standing(withdrawn, INBOX_ASK_STATUS.WITHDRAWN)],
-      }),
-      previewName,
-    ),
-    "Agent: Which way?",
-  );
+  const closed = item({
+    id: "t5",
+    status: INBOX_STATUS.CLOSED,
+    thread: [standing(withdrawn, INBOX_ASK_STATUS.WITHDRAWN)],
+  });
+  assert.equal(inboxPreview(closed, previewName), "Which way?", "the agent's words stand alone");
+  assert.equal(inboxLineKind(closed), INBOX_LINE.SAID);
 });
 
 test("a thread's row media are the pictures its messages' words draw by address and the pages they link to, outside code, in the order written, then their files' pictures, message by message, each once and four at most", () => {
@@ -1720,3 +1733,53 @@ function standing(
   const { ask } = message;
   return ask === undefined ? message : { ...message, ask: { ...ask, status } };
 }
+
+test("a settled item's card says how it ended whatever its row's glyph: an answer even with words after it, an ask taken back and why, a member's close, and an item before threads as its row said it", () => {
+  const asked = asking({
+    type: INBOX_ASK.DECIDE,
+    options: [{ label: "7 days" }, { label: "14 days" }],
+  });
+  const answer = message({
+    text: "",
+    createdAt: 2_000,
+    member: YOU,
+    answers: { ask: asked.id, reply: INBOX_REPLY.CHOSE, choices: ["7 days"] },
+  });
+  const after = message({
+    text: "Thanks, on it.",
+    createdAt: 3_000,
+    author: INBOX_MESSAGE_AUTHOR.AGENT,
+  });
+  const settled = standing(asked, INBOX_ASK_STATUS.ANSWERED);
+  const answered = item({
+    id: "s1",
+    status: INBOX_STATUS.ANSWERED,
+    thread: [settled, answer, after],
+  });
+  assert.equal(inboxSettledWords(answered, previewName), "You: Chose 7 days");
+  assert.equal(
+    inboxLineKind(answered),
+    INBOX_LINE.SAID,
+    "the row's glyph reads only the last message",
+  );
+
+  const takenBack = item({
+    id: "s2",
+    status: INBOX_STATUS.CLOSED,
+    thread: [
+      {
+        ...asked,
+        ask: {
+          type: INBOX_ASK.DECIDE,
+          options: [{ label: "7 days" }, { label: "14 days" }],
+          status: INBOX_ASK_STATUS.WITHDRAWN,
+          withdrawnReason: "The deploy was **canceled**",
+        },
+      },
+    ],
+  });
+  assert.equal(inboxSettledWords(takenBack, previewName), "Withdrawn: The deploy was canceled");
+
+  const open = item({ id: "s3", thread: [asked] });
+  assert.equal(inboxSettledWords(open, previewName), undefined, "an open item has not ended");
+});

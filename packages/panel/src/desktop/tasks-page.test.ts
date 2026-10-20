@@ -25,8 +25,7 @@ import { tasksControl } from "../testing/tasks-control.js";
 import { TasksPage } from "./tasks-page.js";
 
 /**
- * tasks-page.test.ts -- the Tasks page the inbox-first sidebar opens in the
- * Board's place: its List runs the pinned tasks first, then the rest under
+ * tasks-page.test.ts -- the Tasks page the sidebar's Tasks row opens: its List runs the pinned tasks first, then the rest under
  * their status from the work under way, the settled left out until asked;
  * each row says how many Inbox threads of its task wait on the reader; a
  * press opens the task; the switch beside the title shows the Board, and
