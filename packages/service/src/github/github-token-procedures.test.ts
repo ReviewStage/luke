@@ -322,7 +322,10 @@ it.layer(getTestDB())("the GitHub token procedures", (it) => {
           token: null,
           rejected: GITHUB_TOKEN_REJECTION.TOO_MANY_TRIES,
         });
-        assert.equal(checks.length, 10, "the braked save is never sent to GitHub");
+        assert.ok(
+          checks.every((check) => !check.authorization?.includes(TOKEN.GOOD)),
+          "the braked token is never sent to GitHub",
+        );
         assert.ok(!braked.text.includes(TOKEN.GOOD));
         assert.deepEqual(answerOf(yield* ask(owner)), { token: null }, "and nothing was kept");
       }),
