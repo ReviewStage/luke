@@ -214,7 +214,8 @@ export function usePicture(
     });
     return () => {
       standing = false;
-      unpin?.();
+      if (unpin === undefined) trim(undefined);
+      else unpin();
     };
   }, [owner, id, read, generation, drawn]);
   const mine =
