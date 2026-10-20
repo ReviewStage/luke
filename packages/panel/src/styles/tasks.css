@@ -3337,6 +3337,35 @@
   border-top: 1px solid var(--luke-color-border);
 }
 
+/* The member's own pending comment (`pending-comments.tsx`): laid out as
+   any comment of a thread, its Edit and Delete under its words. */
+.pull-request-pending-comment {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--luke-space-6);
+}
+
+/* The Review panel's list of the pending comments, each under its file and lines. */
+.pull-request-pending-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--luke-color-border);
+  border-radius: var(--luke-control-radius);
+  --boxed-inset: var(--luke-space-8);
+}
+
+.pull-request-pending-list > .pull-request-thread-comment:first-child {
+  border-top: 0;
+}
+
+.pull-request-pending-where {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pull-request-thread-actions-row {
   display: flex;
   align-items: center;

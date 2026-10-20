@@ -89,6 +89,8 @@ const ACTION_WORDS = {
   [PULL_REQUEST_ACTION.COMMENT]: "Comment",
   [PULL_REQUEST_ACTION.ADD_REVIEW_COMMENT]: "Comment on lines",
   [PULL_REQUEST_ACTION.DISCARD_REVIEW]: "Discard review",
+  [PULL_REQUEST_ACTION.EDIT_REVIEW_COMMENT]: "Edit pending comment",
+  [PULL_REQUEST_ACTION.DELETE_REVIEW_COMMENT]: "Delete pending comment",
   [PULL_REQUEST_ACTION.CLOSE]: "Close pull request",
   [PULL_REQUEST_ACTION.REOPEN]: "Reopen pull request",
   [PULL_REQUEST_ACTION.EDIT_TITLE]: "Edit title",

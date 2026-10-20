@@ -523,6 +523,53 @@
         "action": {
           "type": "string",
           "enum": [
+            "edit-review-comment"
+          ]
+        },
+        "commentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "body": {
+          "type": "string",
+          "maxLength": 65536
+        }
+      },
+      "required": [
+        "action",
+        "commentId",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "delete-review-comment"
+          ]
+        },
+        "commentId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "action",
+        "commentId"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
             "mark-file-viewed"
           ]
         },

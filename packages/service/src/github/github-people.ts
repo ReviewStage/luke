@@ -49,6 +49,7 @@ import {
   type GitHubReviewOptions,
   type PullRequestPeople,
   pullRequestPeople,
+  type ViewerPendingReview,
 } from "./pull-requests.js";
 
 /** What an agent's changes say of who their pull request names; every key absent where the people could not be read. */
@@ -380,6 +381,36 @@ export const namedOverviewConversation = /* @__PURE__ */ Effect.fn("web/namedOve
     };
   },
 );
+
+/** The member's own pending review as the conversation carries it beside its read. */
+type NamedPendingReview = NonNullable<CodingAgentOverviewConversation["pendingReview"]>;
+
+/**
+ * The member's own pending review as the wire carries it: how many
+ * comments it holds, and each comment with who wrote it named as
+ * `overviewNamer` names them, the member themself; none where they hold
+ * none.
+ */
+export const namedPendingReview = /* @__PURE__ */ Effect.fn("web/namedPendingReview")(function* (
+  agent: { readonly organizationId: string },
+  number: number,
+  read: ViewerPendingReview | null,
+): Effect.fn.Return<NamedPendingReview | null, never, DatabaseServices> {
+  if (read === null) return null;
+  const person = yield* overviewNamer(
+    agent.organizationId,
+    read.drafts.map((draft) => draft.account),
+    `the pending review on pull request ${number}`,
+  );
+  return {
+    comments: read.comments,
+    drafts: read.drafts.map(({ account: held, threadId, ...draft }) => ({
+      ...draft,
+      ...(threadId === undefined ? undefined : { threadId }),
+      by: person(held),
+    })),
+  };
+});
 
 /**
  * What the reviewer and label pickers offer as the wire carries it, each
