@@ -1,6 +1,11 @@
 import { AutomationDirectory } from "../automation-directory.js";
 import { INBOX_COLUMNS, useInboxRowPresses } from "../tasks/inbox-columns.js";
-import { INBOX_LIST_PLACEMENT, InboxList, InboxListNote } from "../tasks/inbox-list.js";
+import {
+  INBOX_LIST_PLACEMENT,
+  INBOX_SCOPES,
+  InboxList,
+  InboxListNote,
+} from "../tasks/inbox-list.js";
 import { anyUnread, type InboxListed, listedItems } from "../tasks/inbox-model.js";
 import { choiceOf, type InboxListing } from "../tasks/use-inbox-listing.js";
 import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
@@ -10,7 +15,7 @@ import type { InboxChoice, TasksControl } from "../tasks/use-tasks-tab.js";
  * the sidebar, under its places and its pins, where its task list stood.
  *
  * It lists what the shell read once (`use-inbox-listing.ts`), under the view
- * the Inbox's own page chooses, its tabs, its view's menu, and its folds
+ * the Inbox's own page chooses, its view's menu and its folds
  * alike, so the two never list apart. A press on a row opens the Inbox on
  * that item in the plan's place, which shows the item alone while the list
  * stands here; the row of the item shown is the sidebar's current row. Where
@@ -66,7 +71,7 @@ export function SidebarInbox({
         head={{
           shown,
           show: choices,
-          counts,
+          scopes: INBOX_SCOPES.WINDOW,
           view: { choices, folds },
           readAll: {
             unread: anyUnread(standing),
