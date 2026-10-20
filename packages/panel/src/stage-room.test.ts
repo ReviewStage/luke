@@ -8,10 +8,11 @@ import { useStageRoom } from "./stage-room.js";
 import { relayout } from "./testing/resize-observer.js";
 
 /**
- * stage-room.test.ts -- the panel's root reads only which lines the stage's
- * width stands past: the room, narrow below 640 until 672, and the sidebar's
- * fold, compact below 1120 until 1160. A stage dragged within a band hands
- * the root the same reading; crossing a line changes it.
+ * stage-room.test.ts -- what the panel's root reads off a stage that has not
+ * measured a width: wide and pinned before it is laid out, and the last
+ * reading once a laid-out stage measures nothing. The lines themselves are
+ * walked through the drawn shell (`desktop/shell-room.test.ts`,
+ * `desktop/sidebar-collapse.test.ts`).
  */
 
 let root: Root | undefined;
@@ -59,39 +60,14 @@ function resizeTo(width: number) {
 }
 
 const WIDE_PINNED = { room: "wide", compact: false };
-const WIDE_COMPACT = { room: "wide", compact: true };
 const NARROW = { room: "narrow", compact: true };
 
-test("a stage not yet laid out reads wide, with the sidebar pinned", () => {
+test("a stage that has not measured a width reads wide, with the sidebar pinned", () => {
   mount(0);
   assert.deepEqual(reading, WIDE_PINNED);
 });
 
-test("the first measure lands before anything is read at the wrong width: a phone's stage reads narrow at once", () => {
-  mount(390);
-  assert.deepEqual(reading, NARROW);
-});
-
-test("dragging the stage within a band hands the root the same reading, and only crossing a line changes it", () => {
-  mount(1280);
-  assert.deepEqual(reading, WIDE_PINNED);
-
-  for (const width of [1279, 1250, 1200, 1121, 1120]) {
-    assert.deepEqual(resizeTo(width), WIDE_PINNED, `${width} is still pinned`);
-  }
-  assert.deepEqual(resizeTo(1119), WIDE_COMPACT, "below 1120 the sidebar folds");
-  for (const width of [1130, 1159, 900, 641, 640]) {
-    assert.deepEqual(resizeTo(width), WIDE_COMPACT, `${width} is still wide and folded`);
-  }
-  assert.deepEqual(resizeTo(639), NARROW, "below 640 the room is narrow");
-  for (const width of [390, 650, 671]) {
-    assert.deepEqual(resizeTo(width), NARROW, `${width} is still narrow`);
-  }
-  assert.deepEqual(resizeTo(672), WIDE_COMPACT, "only at 672 is the room wide again");
-  assert.deepEqual(resizeTo(1160), WIDE_PINNED, "only at 1160 is the sidebar pinned again");
-});
-
-test("a stage that measures nothing keeps the reading it had", () => {
+test("a laid-out stage that then measures a zero width keeps the reading it had", () => {
   mount(390);
   assert.deepEqual(resizeTo(0), NARROW);
 });
