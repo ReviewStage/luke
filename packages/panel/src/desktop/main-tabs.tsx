@@ -11,7 +11,7 @@ import { APP_COMMAND } from "@luke/settings/shortcuts";
 import { INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
 import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/ui/tab-strip-model";
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
 import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -705,8 +705,12 @@ export function MainTabContent({
  * and the page of an agent no plan holds draws it for its agent
  * (`desktop-agent-page.tsx`), so an agent reads, finds, and is written to
  * alike wherever it stands.
+ *
+ * A memo boundary: the task's page drawn again over the same agent and the
+ * same doors, as its column's focus and its side panel's width draw it,
+ * leaves the agent's transcript as it was.
  */
-export function AgentPane({
+export const AgentPane = memo(function AgentPane({
   label,
   tabbed,
   ...content
@@ -726,4 +730,4 @@ export function AgentPane({
       <MainTabContent {...content} />
     </section>
   );
-}
+});

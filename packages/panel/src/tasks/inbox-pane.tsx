@@ -100,7 +100,6 @@ import {
   decidedOf,
   decisionsOf,
   fieldValueOf,
-  formFilled,
   INBOX_HOLDER,
   INBOX_MISSING,
   type InboxDecided,
@@ -232,8 +231,8 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * ends with the ask's box: its kind and where it stands at its head, and
  * while it waits its controls, a `decide`'s numbered options or two small
  * buttons, a `do`'s steps with Mark done and Couldn't do it, an `answer`'s
- * fields with Submit or its Answer; each attaches its answer to the box's
- * reply rather than sending it. Answered, it leaves the agent's message
+ * fields, filled in part or whole, or its Answer; each attaches its answer
+ * to the box's reply rather than sending it. Answered, it leaves the agent's message
  * for the reply that answered it, or says "Answered" alone where that
  * reply is no longer read; replaced, it is struck through; withdrawn, it says why, or who
  * closed the item.
@@ -1682,7 +1681,6 @@ const WITHDRAWN = "Withdrawn";
 const ASK_PRESS = {
   DONE: "Mark done",
   NOT_DONE: "Couldn't do it",
-  SUBMIT: "Submit",
   ANSWER: "Answer",
 } as const;
 
@@ -1718,7 +1716,8 @@ function AskPress({
  * than sending it: a `decide`'s options numbered for the keys, or its two
  * small buttons where it is a yes or no in other words; a `do`'s steps as
  * checkboxes, then Mark done, which ticks every one, and Couldn't do it;
- * an `answer`'s fields, then Submit once the required ones are filled, or
+ * an `answer`'s fields, whose values attach to the reply as they are
+ * filled, with no press, a form filled in part sending what was filled, or
  * its Answer, whose reply's words are the answer.
  */
 function AskControls({
@@ -1802,24 +1801,15 @@ function AskControls({
           />
         </div>
       ) : (
-        <>
-          <div className="inbox-ask-fields">
-            <FormFields
-              form={{ fields: ask.fields }}
-              draft={draft}
-              disabled={disabled}
-              text={(props) => <InboxFormText {...props} doors={doors.text} />}
-              onDraft={onDraft}
-            />
-          </div>
-          <div className="inbox-ask-presses">
-            <AskPress
-              label={ASK_PRESS.SUBMIT}
-              disabled={disabled || !formFilled({ fields: ask.fields }, draft)}
-              onPress={() => press(INBOX_REPLY.SUBMITTED)}
-            />
-          </div>
-        </>
+        <div className="inbox-ask-fields">
+          <FormFields
+            form={{ fields: ask.fields }}
+            draft={draft}
+            disabled={disabled}
+            text={(props) => <InboxFormText {...props} doors={doors.text} />}
+            onDraft={onDraft}
+          />
+        </div>
       );
   }
 }

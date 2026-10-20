@@ -22,7 +22,7 @@
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
-import type { CodingAgent } from "@luke/database/models/coding-agent-store";
+import type { CodingAgent, WithRepository } from "@luke/database/models/coding-agent-store";
 import {
   PULL_REQUEST_WRITE_OUTCOME,
   type PullRequestWriteAnswer,
@@ -55,7 +55,7 @@ type WriteServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
 const SIGN_IN_REQUIRED = { outcome: PULL_REQUEST_WRITE_OUTCOME.SIGN_IN_REQUIRED } as const;
 
 /** The agent's repository confirmed in the workspace's reach, as a read confirms it, or the refusal a read answers. */
-const reached = (userId: string, agent: CodingAgent) =>
+const reached = (userId: string, agent: WithRepository<CodingAgent>) =>
   agentPullRequestReach(userId, agent).pipe(
     Effect.asVoid,
     Effect.catch((failure): Effect.Effect<never, HostedRefusal> => {
@@ -126,7 +126,7 @@ function writtenOf<A>(failure: GitHubWriteFailure): Effect.Effect<MemberWritten<
  */
 export const memberPullRequestWrite = <A>(
   userId: string,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   number: number,
   write: (
     pullRequest: MemberPullRequest,

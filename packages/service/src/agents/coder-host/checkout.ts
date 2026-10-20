@@ -2,6 +2,7 @@ import type { DatabaseServices } from "@luke/database/core/query";
 import {
   type CodingAgent,
   settleCodingAgentAuthor,
+  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
@@ -20,6 +21,7 @@ import {
   agentWorkspace as workspaceOfAgent,
 } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
   type CheckoutIdentity,
   cloneRepository,
@@ -77,6 +79,9 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * checked out as a turn ends is the one its pull request is on, whatever
  * branches it cut, switched, or deleted on the way, and the session's
  * turn-end hook writes it on the agent's row through the host.
+ *
+ * An agent with no repository has none of this: no clone, no token, and no
+ * identity, only an empty working folder where the checkout would stand.
  */
 
 /** Why the checkout or a mint ran nothing, in the host's own words. */
@@ -115,7 +120,7 @@ function identityOf(user: GitHubUser): CheckoutIdentity {
  */
 const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<CodingAgentAuthor, StoreFailure, CheckoutServices> {
   // Note that the run's origin outlives its automation, whose id goes null once it is deleted.
   if (agent.automationId !== null || agent.automationOrigin !== null) {
@@ -147,7 +152,7 @@ const readAuthor = /* @__PURE__ */ Effect.fn("web/agentReadAuthor")(function* (
  */
 const agentAuthor = /* @__PURE__ */ Effect.fn("web/agentAuthor")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<CodingAgentAuthor, StoreFailure, CheckoutServices> {
   if (agent.author !== null) return agent.author;
   const read = yield* readAuthor(target, agent);
@@ -165,7 +170,7 @@ const agentAuthor = /* @__PURE__ */ Effect.fn("web/agentAuthor")(function* (
  */
 export const agentCoAuthor = /* @__PURE__ */ Effect.fn("web/agentCoAuthor")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<string | undefined, never, CheckoutServices> {
   const app = yield* GitHubApp;
   return yield* Effect.gen(function* () {
@@ -201,7 +206,7 @@ export const agentCoAuthor = /* @__PURE__ */ Effect.fn("web/agentCoAuthor")(func
  */
 export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
 ): Effect.fn.Return<boolean, never, CheckoutServices> {
   const app = yield* GitHubApp;
   return yield* Effect.gen(function* () {
@@ -228,7 +233,7 @@ export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(
 export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentRepositoryToken")(
   function* (
     target: ConversationTarget,
-    agent: CodingAgent,
+    agent: WithRepository<CodingAgent>,
   ): Effect.fn.Return<
     {
       readonly token: Redacted.Redacted;
@@ -269,7 +274,7 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
  */
 const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(function* (
   target: ConversationTarget,
-  agent: CodingAgent,
+  agent: WithRepository<CodingAgent>,
   author: CodingAgentAuthor,
   credential: RepositoryCredential,
 ): Effect.fn.Return<CheckoutIdentity, CheckoutRefused, CheckoutServices> {
@@ -302,7 +307,7 @@ const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(func
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
     target: ConversationTarget,
-    agent: CodingAgent,
+    agent: WithRepository<CodingAgent>,
     sandbox: RepositorySandbox,
   ): Effect.fn.Return<RepositoryCredential, CheckoutRefused | StoreFailure, CheckoutServices> {
     const minted = yield* agentRepositoryToken(target, agent);
@@ -324,6 +329,31 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
     return { token: minted.token, fullName: minted.fullName, access: minted.access };
   },
 );
+
+/** The command that makes the working folder where a checkout would stand; one already there is left as it is. */
+const MAKE_WORKING_FOLDER = `mkdir -p ${CODER.CHECKOUT_PATH}`;
+
+/**
+ * The empty folder an agent with no repository works in, made where a
+ * checkout would stand, so its shell and its file reads start there as an
+ * agent's with a repository do (`shell.ts`, `files.ts`); refused where the
+ * sandbox is gone or the folder could not be made. Nothing is cloned and no
+ * credential is set at the firewall.
+ */
+export const openWorkingFolder = /* @__PURE__ */ Effect.fn("web/openWorkingFolder")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<void, CheckoutRefused> {
+  const made = yield* runInSandbox(
+    sandbox,
+    { command: MAKE_WORKING_FOLDER, workingDirectory: REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE },
+    REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
+  ).pipe(Effect.mapError((refused) => new CheckoutRefused({ reason: refused.reason })));
+  if (made.exitCode !== 0) {
+    return yield* new CheckoutRefused({
+      reason: `\`${MAKE_WORKING_FOLDER}\` exited ${made.exitCode}`,
+    });
+  }
+});
 
 /**
  * The branch checked out in the agent's sandbox now, or null where the

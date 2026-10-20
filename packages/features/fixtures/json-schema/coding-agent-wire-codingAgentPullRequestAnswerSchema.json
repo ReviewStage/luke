@@ -2,7 +2,14 @@
   "type": "object",
   "properties": {
     "repository": {
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "branch": {
       "anyOf": [

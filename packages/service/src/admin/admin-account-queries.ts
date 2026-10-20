@@ -138,7 +138,7 @@ const AgentRowSchema = Schema.Struct({
   id: Schema.String,
   conversationId: Schema.String,
   createdAt: InstantColumnSchema,
-  repository: Schema.String,
+  repository: Schema.NullOr(Schema.String),
   model: Schema.String,
   effort: Schema.String,
   contextWindow: Schema.Literals(Object.values(CONTEXT_WINDOW)),

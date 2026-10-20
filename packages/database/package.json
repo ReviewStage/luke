@@ -56,6 +56,7 @@
     "./models/voice-writer": "./src/models/voice-writer.js",
     "./models/workspace-seams": "./src/models/workspace-seams.js",
     "./models/workspace-store": "./src/models/workspace-store.js",
+    "./models/workspace-token-repository-store": "./src/models/workspace-token-repository-store.js",
     "./models/writer": "./src/models/writer.js",
     "./schemas": "./src/schemas/index.js",
     "./schemas/_helpers": "./src/schemas/_helpers.js",

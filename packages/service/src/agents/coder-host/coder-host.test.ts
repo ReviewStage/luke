@@ -14,6 +14,7 @@ import {
   archiveCodingAgent,
   type CodingAgentBriefText,
   createCodingAgent,
+  hasRepository,
   latestTurnsOf,
   readCodingAgent,
 } from "@luke/database/models/coding-agent-store";
@@ -52,6 +53,7 @@ import { Clock, Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import { Base64 } from "effect/encoding";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
+import type { SandboxNetworkPolicy } from "eve/sandbox";
 import {
   ACTION_RESULT_STATUS,
   MESSAGE_AUTHOR,
@@ -67,8 +69,9 @@ import { modelCatalogOf, type OfferedModel } from "../../providers/model-catalog
 import { PICTURE_LOOK_STATUS } from "../../tasks/picture-look.js";
 import { stampedEveEvent } from "../../testing/eve-events.js";
 import { githubReaching, openGithubUser } from "../../testing/github-app-fake.js";
-import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_REFUSAL, BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { memoryRelayState } from "../brain-host/relay.js";
+import type { RepositorySandbox } from "../repository-shell.js";
 import { CODER_REFUSAL } from "./bounds.js";
 import { CHAT_DIGEST_HEADING, CHAT_TOOL_REFUSAL } from "./chat.js";
 import { type CoderHost, coderHost } from "./host.js";
@@ -79,7 +82,7 @@ import { PLAN_EDIT_REFUSAL } from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { codingAgentStatusOf } from "./status.js";
 import { titleCodingAgent } from "./title.js";
-import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
+import { CODER_TOOL, CODER_TOOL_SET, repositoryToolsOf } from "./tool-set.js";
 import { CURSOR_START, transcriptPast } from "./transcript.js";
 
 /**
@@ -193,6 +196,7 @@ const unclaimedAgent = (
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
+    assert.ok(hasRepository(agent));
     const target: ConversationTarget = { userId, conversationId: agent.conversationId };
     return { userId, agent, target, auth: ownSeat(userId, agent.conversationId) };
   });
@@ -436,6 +440,154 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
             .pipe(Effect.provide(modelCatalogOf(CATALOG))),
           Result.fail(CODER_REFUSAL.NO_AGENT),
         );
+      }),
+  );
+
+  it.effect(
+    "an agent with no repository runs: its sandbox opens on an empty working folder with nothing at the firewall, its session tells of no checkout or pull request, and it is offered none of the repository's tools",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const userId = yield* openGithubUser();
+        const task = yield* startTask(userId, { name: "Talk it over" });
+        const { agent } = Option.getOrThrow(
+          yield* createCodingAgent(userId, {
+            taskId: task.id,
+            idempotencyKey: "start-blank",
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            planSnapshot: null,
+            prompt: null,
+            repository: null,
+          }),
+        );
+        const sessionId = mintSession();
+        const auth = ownSeat(userId, agent.conversationId);
+        const starting = yield* host.admitStarting(auth, sessionId);
+        assert.ok(Result.isSuccess(starting));
+        yield* host.sessionStarted(starting.success, sessionId);
+        const admitted = yield* host.admit(auth, sessionId);
+        assert.ok(Result.isSuccess(admitted));
+        const found = yield* host.agent(admitted.success);
+        assert.ok(Result.isSuccess(found));
+        // A sandbox writing down each command it ran, in the directory it ran it in, and each firewall policy set.
+        const ran: string[] = [];
+        const policies: SandboxNetworkPolicy[] = [];
+        const sandbox: RepositorySandbox = {
+          run: (run) => {
+            ran.push(`${run.workingDirectory ?? ""}: ${run.command}`);
+            return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+          },
+          setNetworkPolicy: (policy) => {
+            policies.push(policy);
+            return Promise.resolve();
+          },
+        };
+
+        const credential = yield* host
+          .checkOut(admitted.success, sandbox)
+          .pipe(Effect.provide(reachingRelay()));
+        const renewed = yield* host
+          .repositoryCredential(admitted.success)
+          .pipe(Effect.provide(reachingRelay()));
+        const prompt = yield* composedPrompt(host, admitted.success, found.success);
+        const skills = yield* host
+          .skills(admitted.success, found.success)
+          .pipe(Effect.provide(reachingRelay()));
+        const model = yield* host
+          .model(admitted.success, undefined, "turn-fixture")
+          .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+
+        assert.equal(credential, undefined);
+        assert.equal(renewed, undefined);
+        assert.deepEqual(ran, ["/workspace: mkdir -p /workspace/repository"]);
+        assert.deepEqual(policies, []);
+        assert.deepEqual(skills, []);
+        assert.ok(Result.isSuccess(model));
+        assert.match(prompt.text, /You work in no repository/u);
+        for (const absent of [
+          "## The checkout",
+          CODER_TOOL.OPEN_PULL_REQUEST,
+          CODER_TOOL.APPLY_PATCH,
+          CODER_TOOL.WRITE_FILE,
+          "Co-authored-by",
+          "gh pr checks",
+        ]) {
+          assert.ok(!prompt.text.includes(absent), absent);
+        }
+        assert.deepEqual([...repositoryToolsOf(found.success)], []);
+        assert.deepEqual(
+          yield* host
+            .openPullRequest(
+              admitted.success,
+              unparsedWire({ head: "luke/x", title: "x", body: "" }),
+            )
+            .pipe(Effect.provide(reachingRelay())),
+          { status: ACTION_RESULT_STATUS.REJECTED, reason: CODER_REFUSAL.NO_REPOSITORY },
+        );
+      }),
+  );
+
+  it.effect(
+    "an agent with a repository is offered its pull request and the tools that write into its checkout",
+    () =>
+      Effect.gen(function* () {
+        const { agent } = yield* unclaimedAgent();
+        assert.deepEqual(
+          [...repositoryToolsOf(agent)].sort(),
+          [CODER_TOOL.APPLY_PATCH, CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.WRITE_FILE].sort(),
+        );
+      }),
+  );
+
+  it.effect(
+    "a session opened afresh after the agent's last one retired claims the conversation, the retired one is refused, and the fresh one is seeded with what was said, the line it opens with left out",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        for (const event of codingTurn("turn_0", "turn.completed")) {
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          yield* host.relay(event, admitted, session as never, state, {});
+        }
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "Now send the invitation from the settings page.",
+            clientKey: "after-retirement",
+            sender: { kind: MESSAGE_SENDER.MEMBER, userId },
+          },
+          Effect.succeed(true),
+        );
+
+        const fresh = mintSession();
+        const starting = yield* host.admitStarting(auth, fresh);
+        assert.ok(Result.isSuccess(starting));
+        const seed = yield* host.seed(starting.success);
+        assert.equal(yield* host.sessionStarted(starting.success, fresh), true);
+
+        assert.deepEqual(
+          yield* host.admit(auth, sessionId),
+          Result.fail(BRAIN_HOST_REFUSAL.NOT_CURRENT_SESSION),
+        );
+        assert.ok(Result.isSuccess(yield* host.admit(auth, fresh)));
+        assert.ok(seed !== undefined);
+        assert.match(seed, /Invite a teammate by email/u);
+        assert.match(seed, /The guide is read; the plan fits the code\./u);
+        assert.ok(!seed.includes("settings page"), seed);
+      }),
+  );
+
+  it.effect(
+    "an agent's first session, over a conversation with nothing said, is seeded with nothing",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { starting } = yield* openAgent(host);
+        assert.equal(yield* host.seed(starting), undefined);
       }),
   );
 

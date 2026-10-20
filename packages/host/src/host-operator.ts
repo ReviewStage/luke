@@ -100,6 +100,9 @@ import {
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
   dictationTranscribeAnswerViewSchema,
+  type GitHubTokenAnswerView,
+  type GitHubTokenSaveParams,
+  githubTokenAnswerViewSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
   type PlanTemplateRevisionParams,
@@ -230,6 +233,9 @@ import {
   type TasksWorkspacePhotoParams,
   type TasksWorkspacePhotoSetParams,
   type TasksWorkspaceRenameParams,
+  type TasksWorkspaceTokenRepositoriesAnswer,
+  type TasksWorkspaceTokenRepositoriesParams,
+  type TasksWorkspaceTokenRepositorySetParams,
   type TasksWorkspaceTransferParams,
   type TasksWriteSectionParams,
   tasksCommentAnswerSchema,
@@ -265,6 +271,7 @@ import {
   tasksWorkspaceLeaveAnswerSchema,
   tasksWorkspaceMembersAnswerSchema,
   tasksWorkspacePhotoAnswerSchema,
+  tasksWorkspaceTokenRepositoriesAnswerSchema,
 } from "@luke/features/tasks-view";
 import {
   type TerminalCreatedActAnswer,
@@ -314,6 +321,7 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
+import type { AppAccessSlice } from "./app-state.js";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -330,6 +338,8 @@ export interface HostBootstrap {
   settings: AppSettings;
   account: AccountSnapshot;
   sessionReplay: { permitted: boolean; accountId?: string };
+  /** What the signed-in account may open in the app, as the host last read it. */
+  access: AppAccessSlice;
   voiceAvailable: boolean;
   agentTraceEnabled: boolean;
 }
@@ -521,6 +531,14 @@ export interface HostOperator {
   workspaceMembers(params: TasksWorkspaceMembersParams): Effect.Effect<TasksWorkspaceMembersAnswer>;
   /** One workspace's photo, its bytes in base64 under its media type; or why there is none. */
   workspacePhoto(params: TasksWorkspacePhotoParams): Effect.Effect<TasksWorkspacePhotoAnswer>;
+  /** The repositories members added to a workspace on their own GitHub tokens; or why there are none. */
+  workspaceTokenRepositories(
+    params: TasksWorkspaceTokenRepositoriesParams,
+  ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
+  /** A repository added to a workspace on the account's own GitHub token, or removed from it; the workspace's token repositories as they then stand, or why nothing changed. */
+  workspaceTokenRepositorySet(
+    params: TasksWorkspaceTokenRepositorySetParams,
+  ): Effect.Effect<TasksWorkspaceTokenRepositoriesAnswer>;
   /** One member removed from a workspace; the members who remain, or why none was removed. */
   workspaceMemberRemove(
     params: TasksWorkspaceMemberRemoveParams,
@@ -649,6 +667,12 @@ export interface HostOperator {
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider's key removed; the keys as they then stand. */
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** The member's own GitHub token as its login, hint, and status; or why there is none. */
+  githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
+  /** The member's GitHub token saved, carried once; the token as it then stands, or why nothing was kept. */
+  githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
+  /** The member's GitHub token removed; none then stands. */
+  githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
   /** The account's plan template and whether it wrote it; or why there is none. */
   planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
   /** The template kept verbatim, or the default again for null; the template as kept, or why it is unchanged. */
@@ -715,6 +739,7 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
+  onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
   onTasksChanged(listener: (view: TasksView) => void): () => void;
@@ -1490,6 +1515,22 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.WORKSPACES_PHOTO, { workspaceId: params.workspaceId }),
         workspaceAnswer(tasksWorkspacePhotoAnswerSchema),
       ),
+    workspaceTokenRepositories: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES, {
+          workspaceId: params.workspaceId,
+        }),
+        workspaceAnswer(tasksWorkspaceTokenRepositoriesAnswerSchema),
+      ),
+    workspaceTokenRepositorySet: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET, {
+          workspaceId: params.workspaceId,
+          repository: params.repository,
+          added: params.added,
+        }),
+        workspaceAnswer(tasksWorkspaceTokenRepositoriesAnswerSchema),
+      ),
     workspaceMemberRemove: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE, {
@@ -1870,6 +1911,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, { provider: params.provider }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
       ),
+    githubTokenRead: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.GITHUB_TOKEN_READ),
+        codingAgentAnswer(githubTokenAnswerViewSchema),
+      ),
+    githubTokenSave: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: params.token }),
+        codingAgentAnswer(githubTokenAnswerViewSchema),
+      ),
+    githubTokenRemove: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE),
+        codingAgentAnswer(githubTokenAnswerViewSchema),
+      ),
     planTemplateRead: () =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLAN_TEMPLATE_READ),
@@ -2034,6 +2090,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.ACCOUNT_CHANGED,
         (payload) => (isRecord(payload) ? answered<AccountSnapshot>(payload) : undefined),
+        listener,
+      ),
+    onAccountAccessChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.ACCOUNT_ACCESS_CHANGED,
+        (payload): AppAccessSlice | undefined =>
+          isRecord(payload) && isWireBoolean(payload.admin) ? { admin: payload.admin } : undefined,
         listener,
       ),
     onVoiceLiveSessionChanged: (listener) =>

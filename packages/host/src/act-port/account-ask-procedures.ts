@@ -1,6 +1,8 @@
 import type {
   DictationTranscribeAnswerView,
   DictationTranscribeParams,
+  GitHubTokenAnswerView,
+  GitHubTokenSaveParams,
   PlanTemplateAnswerView,
   PlanTemplateRevisionAnswerView,
   PlanTemplateRevisionParams,
@@ -30,6 +32,9 @@ export interface AccountAskProceduresDependencies {
     providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+    githubTokenRead(): Effect.Effect<GitHubTokenAnswerView>;
+    githubTokenSave(params: GitHubTokenSaveParams): Effect.Effect<GitHubTokenAnswerView>;
+    githubTokenRemove(): Effect.Effect<GitHubTokenAnswerView>;
     planTemplateRead(): Effect.Effect<PlanTemplateAnswerView>;
     planTemplateWrite(params: PlanTemplateWriteParams): Effect.Effect<PlanTemplateAnswerView>;
     planTemplateRevisions(
@@ -70,6 +75,24 @@ export function accountAskProcedures(dependencies: AccountAskProceduresDependenc
     ].effect(function* ({ input, context, errors }) {
       yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
       return yield* host.providerKeyRemove(input);
+    }),
+    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_READ]: actPort[
+      ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_READ
+    ].effect(function* ({ context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.githubTokenRead();
+    }),
+    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_SAVE]: actPort[
+      ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_SAVE
+    ].effect(function* ({ input, context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.githubTokenSave(input);
+    }),
+    [ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_REMOVE]: actPort[
+      ACCOUNT_ASK_ACT_KIND.GITHUB_TOKEN_REMOVE
+    ].effect(function* ({ context, errors }) {
+      yield* refuseUnlessPanel(context.actor, () => errors.REFUSED());
+      return yield* host.githubTokenRemove();
     }),
     [ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ]: actPort[
       ACCOUNT_ASK_ACT_KIND.PLAN_TEMPLATE_READ

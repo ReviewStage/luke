@@ -15,11 +15,11 @@ import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { TURN_ORIGIN, TURN_STATUS } from "@luke/wire";
 import { Effect, Option, Result, Stream } from "effect";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
-  type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import {
   GITHUB_APP_WITH_TOKENS,
@@ -65,7 +65,7 @@ interface PullRequestOnGitHub {
 /** eve's coding-agent service as the deployment reaches it for each account, writing down every message sent. */
 function fakeEve() {
   const sent: EveMessage[] = [];
-  const sessions: EveSessions = {
+  const sessions: AgentSessions = {
     open: () =>
       Effect.succeed({ outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: `wrun_${randomUUID()}` }),
     send: (sessionId, message) =>
@@ -139,14 +139,21 @@ function githubHolding(pull: PullRequestOnGitHub) {
     }
     return undefined;
   };
-  return { layer: githubReaching([], GITHUB_APP_WITH_TOKENS, {}, script).layer, answered };
+  const reaching = githubReaching([], GITHUB_APP_WITH_TOKENS, {}, script);
+  return { layer: reaching.layer, answered, sent: reaching.sent };
 }
 
-/** A member's agent on their own token, on a branch of its own with an open pull request numbered for the test, its session opened, its last turn run over the window given. */
-const openTokenAgent = (turn: { readonly startedAt: number; readonly settledAt: number }) =>
+/** A member's agent on their own token, on a branch of its own with an open pull request numbered for the test, its session opened, its last turn run over the window given; in the repository given, the relay's where none is. */
+const openTokenAgent = (
+  turn: { readonly startedAt: number; readonly settledAt: number },
+  repository: string | null = RELAY_FULL_NAME,
+) =>
   Effect.gen(function* () {
     const owner = yield* openTokenMember();
-    const task = yield* startTask(owner, { name: "Invitations", repository: RELAY_FULL_NAME });
+    const task = yield* startTask(owner, {
+      name: "Invitations",
+      ...(repository === null ? undefined : { repository }),
+    });
     const started = yield* createCodingAgent(owner, {
       taskId: task.id,
       idempotencyKey: randomUUID(),
@@ -154,7 +161,7 @@ const openTokenAgent = (turn: { readonly startedAt: number; readonly settledAt: 
       effort: "high",
       planSnapshot: "# Invitations\n",
       prompt: null,
-      repository: RELAY_FULL_NAME,
+      repository,
       githubAccess: GITHUB_ACCESS.TOKEN,
     });
     const { agent } = Option.getOrThrow(started);
@@ -200,7 +207,7 @@ const openTokenAgent = (turn: { readonly startedAt: number; readonly settledAt: 
 /** One sweep at the instant given, over the GitHub and eve given. */
 const sweepAt = (
   at: number,
-  github: ReturnType<typeof githubHolding>,
+  github: Pick<ReturnType<typeof githubHolding>, "layer">,
   eve: ReturnType<typeof fakeEve>,
 ) =>
   sweepTokenPullRequests(eve.eveFor, GITHUB_FIXTURE_TOKEN_RING, new Date(at)).pipe(
@@ -297,6 +304,25 @@ it.layer(getTestDB())("the poll of a token agent's pull request", (it) => {
         assert.equal(texts.length, 1);
         assert.ok(texts[0]?.includes("Also cover the revoked seat."));
         assert.ok(!texts[0]?.includes("Pushed the fix."));
+      }),
+  );
+
+  it.effect(
+    "an agent with no repository is polled for nothing: GitHub is asked nothing and the agent told nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { pull } = yield* openTokenAgent(IDLE, null);
+        const github = githubHolding(pull);
+        pull.reviews = [review(11, "octocat", "Cover the expired invitation too.")];
+
+        yield* sweepAt(MADE_AT + MINUTE, github, eve);
+
+        assert.deepEqual(
+          github.sent.filter((sent) => sent.url.includes(`/pulls/${pull.number}`)),
+          [],
+        );
+        assert.deepEqual(eve.sent, []);
       }),
   );
 

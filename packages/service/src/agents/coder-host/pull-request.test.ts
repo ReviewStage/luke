@@ -3,9 +3,11 @@ import { it } from "@effect/vitest";
 import {
   type CodingAgent,
   createCodingAgent,
+  hasRepository,
   readCodingAgent,
   settleCodingAgentAuthor,
   updateCodingAgentBranch,
+  type WithRepository,
 } from "@luke/database/models/coding-agent-store";
 import { getTestDB, startTask } from "@luke/database/testing";
 import { CODING_AGENT_AUTHOR, type CodingAgentAuthor } from "@luke/features/coding-agent-wire";
@@ -99,6 +101,7 @@ const openAgent = (
     const { agent } = Option.getOrThrow(started);
     if (author !== null) yield* settleCodingAgentAuthor(userId, agent.id, author);
     const settled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+    assert.ok(hasRepository(settled));
     return {
       installation,
       agent: settled,
@@ -108,7 +111,10 @@ const openAgent = (
 
 /** Opens the agent's pull request against the GitHub given. */
 const open = (
-  opened: { readonly installation: InstallationFixture; readonly agent: CodingAgent },
+  opened: {
+    readonly installation: InstallationFixture;
+    readonly agent: WithRepository<CodingAgent>;
+  },
   target: { readonly userId: string; readonly conversationId: string },
   answer: Opening,
   input: WireBoundaryInput = INPUT,
@@ -138,8 +144,10 @@ const openTokenAgent = Effect.gen(function* () {
   });
   const { agent } = Option.getOrThrow(started);
   yield* settleCodingAgentAuthor(userId, agent.id, CODING_AGENT_AUTHOR.TOKEN);
+  const settled = Option.getOrThrow(yield* readCodingAgent(userId, agent.id));
+  assert.ok(hasRepository(settled));
   return {
-    agent: Option.getOrThrow(yield* readCodingAgent(userId, agent.id)),
+    agent: settled,
     target: { userId, conversationId: agent.conversationId },
   };
 });
@@ -147,7 +155,7 @@ const openTokenAgent = Effect.gen(function* () {
 /** Opens a token agent's pull request against a GitHub where the member's token may push to the repository and no installation reaches it. */
 const openOnToken = (
   opened: {
-    readonly agent: CodingAgent;
+    readonly agent: WithRepository<CodingAgent>;
     readonly target: { userId: string; conversationId: string };
   },
   answer: Opening,

@@ -470,6 +470,8 @@ function fakeService(tasks: Task[]): FakeService {
     },
     // The service's workspaces as a table the test edits, each write moving it as the store does.
     workspaces: {
+      tokenRepositories: () => Effect.succeed(UNANSWERED_WORKSPACE),
+      setTokenRepository: () => Effect.succeed(UNANSWERED_WORKSPACE),
       list: () =>
         Effect.gen(function* () {
           service.reads.push("workspaces");
@@ -3306,6 +3308,15 @@ function fakeBoardRealtime() {
   };
 }
 
+/** Every step the board's follow has to take, taken. */
+const boardSettled = Effect.repeat(
+  Effect.andThen(
+    Effect.yieldNow,
+    Effect.promise(() => Promise.resolve()),
+  ),
+  { times: 20 },
+);
+
 it.effect(
   "the open task's board is read again as its followed mark moves, not for a delivery that left it, and a follow that stops is sealed again",
   () =>
@@ -3326,7 +3337,7 @@ it.effect(
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
       assert.deepEqual(last()?.board, { elements: [], appliedDrawing: 0 });
-      yield* TestClock.adjust(Duration.millis(1));
+      yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), ["board-0"]);
 
       // The first delivery reads the board again, since the open read may have missed a drawing.
@@ -3350,10 +3361,11 @@ it.effect(
       ]);
       yield* moved;
 
-      // A follow that stops is sealed again a moment later.
+      // A follow Realtime stops is polled, and subscribed again on the next resubscribe.
       service.boardSeals[INVITES] = sealedBoard(1);
       realtime.fail("board-0");
-      yield* TestClock.adjust(Duration.seconds(2));
+      yield* TestClock.adjust(Duration.seconds(15));
+      yield* boardSettled;
       assert.deepEqual(realtime.subscribed(), ["board-1"]);
 
       // Leaving the task lets the subscription go.
@@ -3374,7 +3386,7 @@ it.effect(
       const { call, tasks } = yield* subject(service, { openLive: () => realtime.client });
       yield* tasks.lifetime;
       yield* call(GATEWAY_METHOD.TASKS_OPEN, { taskId: INVITES });
-      yield* TestClock.adjust(Duration.millis(1));
+      yield* boardSettled;
       realtime.deliver("board-0", []);
       assert.deepEqual(realtime.subscribed(), ["board-0"]);
 

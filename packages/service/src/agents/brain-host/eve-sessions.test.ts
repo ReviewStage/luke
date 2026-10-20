@@ -4,11 +4,11 @@ import { fakeHttpClientLayer } from "@luke/wire/testing";
 import { Effect, Redacted, Stream } from "effect";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "./bounds.js";
 import {
+  type AgentSessions,
   EVE_MOUNT,
   EVE_SEND_OUTCOME,
   type EveCaller,
   type EveMount,
-  type EveSessions,
   eveSessions,
 } from "./eve-sessions.js";
 
@@ -76,7 +76,7 @@ function answeringEach(
     if (answer === undefined) throw new Error("fixture: connection refused");
     return new Response(JSON.stringify(answer.body), { status: answer.status });
   });
-  const sessions: Effect.Effect<EveSessions> = Effect.provide(
+  const sessions: Effect.Effect<AgentSessions> = Effect.provide(
     eveSessions({
       origin: ORIGIN,
       caller: options.caller ?? CALLER,
@@ -180,7 +180,7 @@ function streaming(status: number, lines: readonly string[]) {
     });
     return new Response(lines.join("\n"), { status });
   });
-  const sessions: Effect.Effect<EveSessions> = Effect.provide(
+  const sessions: Effect.Effect<AgentSessions> = Effect.provide(
     eveSessions({ origin: ORIGIN, caller: CALLER, mount: EVE_MOUNT.TASKS }),
     client,
   );

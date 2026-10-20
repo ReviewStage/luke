@@ -217,8 +217,12 @@ function credentialIsOld(record: SandboxRecord, now: number): boolean {
   return setAt !== undefined && now - setAt >= Duration.toMillis(CODER.GITHUB_TOKEN_REFRESH);
 }
 
-/** What the image is prepared with, once per build, on the snapshot every session starts from. */
-async function prepareImage(sandbox: SandboxSession): Promise<void> {
+/**
+ * What the image is prepared with, once per build, on the snapshot every
+ * session starts from; exported so `tools/codex-probe` builds its sandbox
+ * from the same image.
+ */
+export async function prepareImage(sandbox: SandboxSession): Promise<void> {
   await installCodeTooling(sandbox);
   const prepared = await sandbox.run({ command: PREPARE_SCRIPT });
   if (prepared.exitCode !== 0) {

@@ -20,6 +20,8 @@ export const EXPERIMENT = {
   VIDEO_CALLS: "video-calls",
   /** Sections of your own in the sidebar, each a title and an icon, that tasks are dragged into. */
   SECTIONS: "sections",
+  /** The sidebar as the Inbox: its threads under their tasks, and the task list on a Tasks page beside the Board. */
+  INBOX_FIRST: "inbox-first",
 } as const;
 
 export type Experiment = (typeof EXPERIMENT)[keyof typeof EXPERIMENT];
@@ -43,6 +45,15 @@ export interface ExperimentEntry {
  * there is no status to drift and every experiment is off until turned on.
  */
 export const EXPERIMENTS = [
+  {
+    key: EXPERIMENT.INBOX_FIRST,
+    name: "Inbox-first sidebar",
+    detail:
+      "The sidebar lists your Inbox's threads under their tasks, and your tasks move to a " +
+      "Tasks page with a List and a Board.",
+    owner: "Dean",
+    since: "2026-10-20",
+  },
   {
     key: EXPERIMENT.CODE_REVIEW,
     name: "Code review",

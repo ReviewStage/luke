@@ -1331,7 +1331,7 @@ test("a waiting choice of several is a checkbox list whose box counts the picks 
   assert.deepEqual(answeredPicks(page), ["Email", "Pager"], "Enter let no pick go");
 });
 
-test("Enter anywhere in a form, in a short number field or its text field's composer, sends it once its required fields are filled, and before that takes the keyboard to the first one left empty, the box's foot naming it; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
+test("Enter anywhere in a form, in a short number field or its text field's composer, sends what is filled, a required field left empty absent from it, and with nothing filled takes the keyboard to the first required one, the box's foot naming it; Shift+Enter in a text field is a new line, and an @ there picks a mention written in as its link", async () => {
   inboxes.set(INVITES.id, [
     {
       ...EXPIRY,
@@ -1365,17 +1365,6 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
   assert.equal(document.activeElement, segment(segmentedGroup(pane, "Severity"), "Low"));
   assert.equal(quietWords(pane), "Fill in Severity");
 
-  act(() => segment(segmentedGroup(pane, "Severity"), "High").click());
-  keyOn(segment(segmentedGroup(pane, "Severity"), "High"), "Enter");
-  await settle();
-  assert.deepEqual(sent, [], "Enter on the pill sends nothing yet");
-  assert.equal(document.activeElement, composerEditor(field("Reason")));
-  assert.equal(quietWords(pane), "Fill in Reason");
-  assert.equal(
-    segment(segmentedGroup(pane, "Severity"), "High").getAttribute("aria-checked"),
-    "true",
-  );
-
   typeInComposer(field("Reason"), "Spiked twice\nSee @roll");
   await settle();
   pressInComposer(field("Reason"), "Enter");
@@ -1394,7 +1383,6 @@ test("Enter anywhere in a form, in a short number field or its text field's comp
       {
         reply: INBOX_REPLY.SUBMITTED,
         values: [
-          { label: "Severity", value: "High" },
           { label: "Reason", value: `Spiked twice\nSee ${file}` },
           { label: "Page on-call", value: false },
         ],
@@ -2002,17 +1990,21 @@ test("an archived agent is still named by its name, its card saying it was archi
   assert.deepEqual(asked.shownAgents, [[BILLING.id, AGENT.id]]);
 });
 
-test("an item's mark in the list hangs its agent's card where its plan's row names the agent, a press on the card choosing nothing, and a press on the mark chooses the item, as a press anywhere on its row does", async () => {
+test("an item's row hangs its agent's card beside it, as a sidebar task's row hangs its task's, its tile hanging none of its own; a press on the card chooses nothing, and a press on the row chooses the item", async () => {
   const { page, asked } = mount();
   await settle();
   const row = rowNamed(page, "How is a failed email retried?");
-  const mark = row.querySelector<HTMLElement>("[data-agent-ref]");
-  assert.ok(mark, "the row's mark is the agent's reference");
-  assert.ok(wearsAgentTile(mark), "the row's mark is the agent's tile");
+  assert.equal(row.querySelector("[data-agent-ref]"), null, "the tile hangs no card of its own");
+  assert.ok(wearsAgentTile(row), "the row wears the agent's tile");
   act(() => {
-    mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
+  assert.match(
+    wordsOf(document.querySelector(".luke-tooltip-card [data-tab-card]")) ?? "",
+    /Billing usage alerts · Answered/u,
+    "the card's foot names the item's task and where the item stands",
+  );
   // A press on the card, as one selecting its words makes, leaves the row unchosen and the card standing.
   const card = document.querySelector<HTMLElement>(".luke-tooltip-card [data-tab-card]");
   act(() => {
@@ -2021,32 +2013,26 @@ test("an item's mark in the list hangs its agent's card where its plan's row nam
   });
   assert.equal(row.getAttribute("aria-current"), null);
   assert.deepEqual(standingCard(), ["Alerts", "Working…"]);
-  act(() => mark.click());
+  act(() => row.click());
   assert.equal(row.getAttribute("aria-current"), "page");
   assert.deepEqual(asked.shownAgents, [], "the press stays in the Inbox");
   const other = rowNamed(page, "Expire after 7 days?");
-  assert.equal(
-    other.querySelector("[data-agent-ref]"),
-    null,
-    "a plan whose row names no agent leaves the mark bare",
-  );
-  assert.ok(wearsAgentTile(other), "a bare mark is still an agent's tile");
+  assert.ok(wearsAgentTile(other), "a row whose plan names no agent still wears an agent's tile");
 });
 
-test("an item's mark hangs a card naming the teammate who started its agent, as the plan's row names them, and no starter on the reader's own agent", async () => {
+test("an item's row hangs a card naming the teammate who started its agent, as the plan's row names them, and no starter on the reader's own agent", async () => {
   const CHARLES = { userId: "user-charles", name: "Charles Pan" };
-  /** The words of the card the row's mark hangs, the task's row naming its agent as started by `starter`. */
-  const markCard = async (starter: typeof CHARLES): Promise<string | null | undefined> => {
+  /** The words of the card the row hangs, the task's row naming its agent as started by `starter`. */
+  const rowCard = async (starter: typeof CHARLES): Promise<string | null | undefined> => {
     const { page } = mount();
     await settle();
     const line = BILLING.agents?.agents[0];
     assert.ok(line && BILLING.agents, "the plan's row names its agent");
     const agents = { ...BILLING.agents, agents: [{ ...line, startedBy: starter }] };
     act(() => setTasks([{ ...BILLING, agents }, INVITES]));
-    const mark = rowNamed(page, "How is a failed email retried?").querySelector("[data-agent-ref]");
-    assert.ok(mark, "the row's mark is the agent's reference");
+    const row = rowNamed(page, "How is a failed email retried?");
     act(() => {
-      mark.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+      row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
     });
     const words = wordsOf(document.querySelector(".luke-tooltip-card [data-tab-card]"));
     act(() => root?.unmount());
@@ -2055,9 +2041,9 @@ test("an item's mark hangs a card naming the teammate who started its agent, as 
     return words;
   };
 
-  assert.match((await markCard(CHARLES)) ?? "", /Started by Charles Pan/u);
-  const own = await markCard(READER);
-  assert.match(own ?? "", /Alerts/u, "the reader's own agent still hangs its card");
+  assert.match((await rowCard(CHARLES)) ?? "", /Started by Charles Pan/u);
+  const own = await rowCard(READER);
+  assert.match(own ?? "", /Alerts/u, "the reader's own agent's row still hangs its card");
   assert.doesNotMatch(own ?? "", /Started by/u);
 });
 
@@ -2164,6 +2150,14 @@ test("an archived task's items stand on the Archived tab alone, counted there an
   await settle();
   assert.deepEqual(listed(page), ["# Invites", "▸ Expire after 7 days?"]);
   assert.deepEqual(subjectOf(page), ["Expire after 7 days?"]);
+  act(() => {
+    rowNamed(page, "Expire after 7 days?").dispatchEvent(
+      new MouseEvent("pointerover", { bubbles: true }),
+    );
+  });
+  const rowCard = wordsOf(document.querySelector(".luke-tooltip-card [data-inbox-row-card]")) ?? "";
+  assert.match(rowCard, /Archived with its task/u, "the row's card says it waits on nobody");
+  assert.doesNotMatch(rowCard, /Waiting/u);
   const pane =
     page.querySelector<HTMLElement>(".inbox-view-items:not([hidden])") ??
     assert.fail("the item is shown beside the list");
@@ -3837,8 +3831,7 @@ test("an automation's group wears its clock tile and hangs its card, as its crum
     "a group of agents wears the Factory's glyph, as the sidebar's row of every agent does",
   );
 
-  const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
-  assert.ok(mark, "the planless agent's row hangs its card");
+  const mark = rowNamed(page, "Quarantine the flaky test?");
   assert.ok(wearsAgentTile(mark), "the planless agent's row wears its tile");
   assert.match(
     hoveredCard(mark, "[data-tab-card]") ?? "",
@@ -3995,9 +3988,8 @@ test("an untitled agent an automation started goes by its automation's name in t
   const { page } = mount([waitingTaskless(QUARANTINE)]);
   await settle();
 
-  const mark = rowNamed(page, "Quarantine the flaky test?").querySelector("[data-agent-ref]");
-  assert.ok(mark, "the planless agent's row hangs its card");
-  assert.match(hoveredCard(mark, "[data-tab-card]") ?? "", /^Nightly flake sweep/u);
+  const row = rowNamed(page, "Quarantine the flaky test?");
+  assert.match(hoveredCard(row, "[data-tab-card]") ?? "", /^Nightly flake sweep/u);
 });
 
 test("an item's row offers Copy link on a right-click, copying the item's link under the task that holds it", async () => {
@@ -6134,6 +6126,49 @@ test("an approve-or-request-changes ask is two small buttons: the one pressed is
   const reply = pane.querySelector(".inbox-thread > li:last-child") ?? assert.fail("the reply");
   assert.deepEqual(cardStanding(reply), ["Requested changes", "back"]);
   assert.deepEqual(askBoxes(pane), [["answered", "Pick oneRequested changes"]]);
+});
+
+test("a form's fields attach to the reply as they are filled, with no Submit, and a form filled in part sends what was filled, a required field left empty absent from it", async () => {
+  const shown = threadItem([
+    askingMessage({
+      type: INBOX_ASK.ANSWER,
+      fields: [
+        { type: INBOX_FIELD.TEXT, label: "Reason", required: true },
+        { type: INBOX_FIELD.SELECT, label: "Severity", required: true, options: ["Low", "High"] },
+      ],
+    }),
+  ]);
+  const pane = await mountThread(shown);
+  const sent = heldMessages(repliedOn(shown, "e1b2c3d4-0000-4000-8000-000000000013"));
+  assert.deepEqual(
+    [...pane.querySelectorAll(".inbox-ask button")].map((button) => button.textContent),
+    ["Low", "High"],
+    "the ask's box holds its fields and no Submit",
+  );
+  assert.equal(sendWords(pane), "Reply");
+
+  const reason =
+    [...pane.querySelectorAll<HTMLElement>("[data-inbox-field]")].find(
+      (each) => each.dataset.inboxFieldLabel === "Reason",
+    ) ?? assert.fail("no Reason field");
+  typeInComposer(reason, "Spiked twice");
+  await settle();
+  assert.equal(sendWords(pane), "Send 1 field");
+  act(() =>
+    pane.querySelector<HTMLButtonElement>('form.inbox-answer button[type="submit"]')?.click(),
+  );
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ answers }) => answers),
+    [
+      {
+        ask: ASKING_ID,
+        reply: INBOX_REPLY.SUBMITTED,
+        values: [{ label: "Reason", value: "Spiked twice" }],
+      },
+    ],
+  );
 });
 
 test("a to-do's steps are ticked in its box, Mark done needs none ticked and ticks every one, and Mark done sent carries every step; one naming no step stands its item's title as its one step", async () => {

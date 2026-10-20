@@ -326,8 +326,11 @@ function pullRequestOf(published: StoredPullRequest): FactoryPullRequest {
 function busiestRepository(agents: readonly ReadAgent[]): string | undefined {
   const tally = new Map<string, { name: string; count: number; latest: number }>();
   for (const { held, line } of agents) {
-    const key = held.agent.repository.toLowerCase();
-    const standing = tally.get(key) ?? { name: held.agent.repository, count: 0, latest: 0 };
+    const { repository } = held.agent;
+    // An agent with no repository counts towards none.
+    if (repository === null) continue;
+    const key = repository.toLowerCase();
+    const standing = tally.get(key) ?? { name: repository, count: 0, latest: 0 };
     tally.set(key, {
       name: standing.name,
       count: standing.count + 1,
@@ -518,7 +521,7 @@ export const readFactoryWorld = /* @__PURE__ */ Effect.fn("web/readFactoryWorld"
   const { token, repository: reached } = chosen.value;
   const repository = { fullName: reached.fullName, defaultBranch: reached.defaultBranch };
   const onRepository = read.filter(
-    ({ held }) => held.agent.repository.toLowerCase() === reached.fullName.toLowerCase(),
+    ({ held }) => held.agent.repository?.toLowerCase() === reached.fullName.toLowerCase(),
   );
   const zones = yield* readZones(token, repository);
   const planned = yield* readPlanned(organizationId, onRepository, zones);

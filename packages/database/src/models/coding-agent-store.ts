@@ -168,7 +168,8 @@ export interface CodingAgent {
   readonly planSnapshot: string | null;
   /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
   readonly prompt: string | null;
-  readonly repository: string;
+  /** The GitHub repository the agent works in, as `owner/name`; null for an agent with none, which does no repository work. */
+  readonly repository: string | null;
   /** The branch checked out in the sandbox as the last turn ended; null before one ends or where the checkout stood detached. */
   readonly branch: string | null;
   /** The branch the agent's checkout is cloned at, as its starter named it; null for the repository's default branch. */
@@ -226,10 +227,23 @@ export {
   turnUsagesOf,
 };
 
-/** What a Start hands the agent as its first message: the plan's text as it stands now, or the developer's prompt in its place. */
+/** An agent, or a line of one, that works in a repository: every agent that does repository work, its checkout, its pull request, and its reach on GitHub, is one. */
+export type WithRepository<A extends { readonly repository: string | null }> = A & {
+  readonly repository: string;
+};
+
+/** Whether the agent works in a repository; one with none does no repository work. */
+export function hasRepository<A extends { readonly repository: string | null }>(
+  agent: A,
+): agent is WithRepository<A> {
+  return agent.repository !== null;
+}
+
+/** What a Start hands the agent as its first message: the plan's text as it stands now, the developer's prompt in its place, or nothing for an agent started blank, whose first words come later. */
 export type CodingAgentBriefText =
   | { readonly planSnapshot: string; readonly prompt: null }
-  | { readonly planSnapshot: null; readonly prompt: string };
+  | { readonly planSnapshot: null; readonly prompt: string }
+  | { readonly planSnapshot: null; readonly prompt: null };
 
 /**
  * Where a Start puts the agent: on a task, whose workspace it joins and
@@ -261,7 +275,8 @@ export type NewCodingAgent = CodingAgentPlace & {
   readonly effort: string;
   /** The model's whole window, the long one, where the Start names none. */
   readonly contextWindow?: ContextWindow | undefined;
-  readonly repository: string;
+  /** The repository the agent works in; null for one with none. */
+  readonly repository: string | null;
   /** The branch the agent's checkout is cloned at; none for the repository's default branch. */
   readonly startBranch?: string | undefined;
   /** The MCP servers the draft switched off before it started; none where the Start names none. */
@@ -415,7 +430,7 @@ const CodingAgentRowSchema = Schema.Struct({
   contextWindow: contextWindowSchema,
   planSnapshot: Schema.NullOr(Schema.String),
   prompt: Schema.NullOr(Schema.String),
-  repository: Schema.String,
+  repository: Schema.NullOr(Schema.String),
   branch: Schema.NullOr(Schema.String),
   startBranch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
@@ -551,7 +566,7 @@ const insertAgent = SqlSchema.findOne({
     contextWindow: contextWindowSchema,
     planSnapshot: Schema.NullOr(Schema.String),
     prompt: Schema.NullOr(Schema.String),
-    repository: Schema.String,
+    repository: Schema.NullOr(Schema.String),
     startBranch: Schema.NullOr(Schema.String),
     disabledServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
     mentionedServers: Schema.NullOr(Schema.Array(integrationConnectionNameSchema)),
@@ -578,7 +593,7 @@ const insertAgent = SqlSchema.findOne({
           planSnapshot: write.planSnapshot,
           prompt: write.prompt,
           repository: write.repository,
-          repositories: [write.repository],
+          repositories: write.repository === null ? [] : [write.repository],
           startBranch: write.startBranch,
           disabledServers: write.disabledServers,
           mentionedServers: write.mentionedServers,

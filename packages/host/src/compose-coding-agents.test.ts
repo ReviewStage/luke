@@ -15,6 +15,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@luke/features/coding-agent-wire";
 import { GITHUB_IMAGE_TYPE } from "@luke/features/github-image";
+import { GITHUB_TOKEN_REJECTION } from "@luke/features/github-token-wire";
 import {
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
@@ -175,6 +176,7 @@ const OVERVIEW = {
 
 /** A synthetic key, as Settings carries it once; nothing below may answer it back. */
 const PROVIDER_KEY = "sk-ant-api03-synthetic-0000000000000000wxyz";
+const GITHUB_TOKEN = "synthetic-classic-token-0000000000wxyz";
 
 /** What the service answers of a kept key: never the key. */
 const KEPT: ProviderKeySummary = {
@@ -395,6 +397,21 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`remove:${removal.provider}`);
         return { keys: [] };
+      }),
+    readGitHubToken: () =>
+      Effect.sync(() => {
+        asked.push("token");
+        return { token: null };
+      }),
+    saveGitHubToken: (save) =>
+      Effect.sync(() => {
+        asked.push(`save-token:${save.token === GITHUB_TOKEN ? "the token" : "another"}`);
+        return { token: null, rejected: GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE };
+      }),
+    removeGitHubToken: () =>
+      Effect.sync(() => {
+        asked.push("remove-token");
+        return { token: null };
       }),
     readPlanTemplate: () =>
       Effect.sync(() => {
@@ -950,5 +967,27 @@ it.effect(
         `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
         `remove:${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
       ]);
+    }),
+);
+
+it.effect(
+  "a GitHub token passes through to the service once and is never answered back, and a save the schema refuses is refused in words that hold no token",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+
+      const read = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_READ);
+      const saved = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: GITHUB_TOKEN });
+      const removed = yield* call(GATEWAY_METHOD.GITHUB_TOKEN_REMOVE);
+      const refused = yield* Effect.flip(
+        call(GATEWAY_METHOD.GITHUB_TOKEN_SAVE, { token: `${GITHUB_TOKEN} spaced` }),
+      );
+
+      assert.deepEqual(read, { token: null });
+      assert.deepEqual(saved, { token: null, rejected: GITHUB_TOKEN_REJECTION.NO_REPO_SCOPE });
+      assert.deepEqual(removed, { token: null });
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.ok(!JSON.stringify(refused).includes(GITHUB_TOKEN));
+      assert.deepEqual(asked, ["token", "save-token:the token", "remove-token"]);
     }),
 );

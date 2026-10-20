@@ -5,6 +5,7 @@ import {
   type PointerEventHandler,
   type ReactElement,
   type ReactNode,
+  type Ref,
   useCallback,
   useState,
 } from "react";
@@ -29,6 +30,11 @@ import {
  * the pointer and the keyboard. A round one is a pill drawn and a disc
  * folded. Drawn, its words name it and it raises
  * nothing, since a hint repeating the words beside it says nothing.
+ *
+ * A button that opens a popup says so (`aria-haspopup`, `aria-expanded`,
+ * `aria-controls`) and hands its owner the button (`ref`), which the popup
+ * hands the focus back to; one whose name says more than its words, a count
+ * its glyph wears, is named by `name`, which holds its words.
  *
  * What is drawn here is the button, and whether its words are folded. The
  * hint, when it shows and goes, is the app's (`hint`): it is handed the
@@ -75,6 +81,16 @@ function useFolded(): [(box: HTMLElement | null) => (() => void) | undefined, bo
   return [measured, folded];
 }
 
+/** What a folding button may say beyond its words: a fuller name, the popup it opens, and the button itself for its owner. */
+interface FoldingButtonDoors {
+  /** Its accessible name where it says more than its words, which it holds (“Review, 2 pending comments”). */
+  name?: string | undefined;
+  "aria-haspopup"?: "menu" | "listbox" | "dialog" | undefined;
+  "aria-expanded"?: boolean | undefined;
+  "aria-controls"?: string | undefined;
+  ref?: Ref<HTMLButtonElement> | undefined;
+}
+
 /**
  * The button's box, measured for its fold. Note that what a hint hands the
  * box lands on the button inside it, because the button is what takes the
@@ -91,9 +107,11 @@ function FoldingBox({
   busy,
   disabled,
   onClick,
+  doors,
   ...hinted
 }: FoldingHintProps & {
   measured: (box: HTMLElement | null) => (() => void) | undefined;
+  doors: FoldingButtonDoors;
   label: string;
   icon: ReactNode;
   variant: ButtonVariant;
@@ -107,12 +125,17 @@ function FoldingBox({
   return (
     <span ref={measured} className="luke-folding-button">
       <Button
+        ref={doors.ref}
         icon={icon}
         variant={variant}
         shape={shape ?? BUTTON_SHAPE.SQUARE}
         size={size}
         disabled={disabled}
         onClick={onClick}
+        label={doors.name}
+        aria-haspopup={doors["aria-haspopup"]}
+        aria-expanded={doors["aria-expanded"]}
+        aria-controls={doors["aria-controls"]}
         {...busyProps}
         {...hinted}
       >
@@ -133,7 +156,8 @@ export function FoldingButton({
   disabled,
   onClick,
   hint: Hint,
-}: {
+  ...doors
+}: FoldingButtonDoors & {
   /** Its words, and so its name, folded or not. */
   label: string;
   icon: ReactNode;
@@ -161,6 +185,7 @@ export function FoldingButton({
       busy={busy}
       disabled={disabled}
       onClick={onClick}
+      doors={doors}
     />
   );
   return Hint === undefined ? box : <Hint label={folded ? label : undefined}>{box}</Hint>;

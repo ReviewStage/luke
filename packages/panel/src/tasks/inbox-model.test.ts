@@ -65,6 +65,7 @@ import {
   tasklessGroups,
   withChoice,
   withDecision,
+  withoutAnswer,
   withStep,
   withValue,
 } from "./inbox-model.js";
@@ -174,7 +175,7 @@ test("the picks are the answer in the order pressed, and a choice of one takes n
   );
 });
 
-test("a form is answered by its fields in the form's own order whatever order they were filled in, a blank text left out, a required one holding the answer back, a switch left alone sent as no, and a field's value replacing the one before it", () => {
+test("a form is answered by its fields in the form's own order whatever order they were filled in, a blank text left out, a required one holding back a form given nothing, a switch left alone sent as no, and a field's value replacing the one before it", () => {
   assert.equal(inboxReply(SMTP, EMPTY_INBOX_DRAFT), undefined, "Host is required");
   let draft = withValue(EMPTY_INBOX_DRAFT, "Host", "  ");
   assert.equal(inboxReply(SMTP, draft), undefined, "blank is not filled");
@@ -214,7 +215,74 @@ test("a form is answered by its fields in the form's own order whatever order th
   });
 });
 
-test("what an answer lacks is said by what it asks: a choice its pick, unless the developer's own words or files answer it, a form its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
+test("a form filled in part sends what was filled, a required field left empty absent from its values, as does one given only the developer's words or files; one given nothing, a switch left alone filling nothing, sends nothing", () => {
+  const settings = item({
+    id: "settings",
+    response: {
+      type: INBOX_RESPONSE.FORM,
+      fields: [
+        { type: INBOX_FIELD.TEXT, label: "Host", required: true },
+        { type: INBOX_FIELD.NUMBER, label: "Port", required: true },
+        { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate" },
+      ],
+    },
+  });
+  assert.equal(inboxReply(settings, EMPTY_INBOX_DRAFT), undefined);
+  assert.equal(inboxReply(settings, withValue(EMPTY_INBOX_DRAFT, "Host", "  ")), undefined);
+  assert.deepEqual(inboxReply(settings, withValue(EMPTY_INBOX_DRAFT, "Port", 587)), {
+    reply: INBOX_REPLY.SUBMITTED,
+    values: [
+      { label: "Port", value: 587 },
+      { label: "Verify certificate", value: false },
+    ],
+  });
+  assert.deepEqual(inboxReply(settings, { ...EMPTY_INBOX_DRAFT, note: "Ask ops for it." }), {
+    reply: INBOX_REPLY.SUBMITTED,
+    values: [{ label: "Verify certificate", value: false }],
+    note: "Ask ops for it.",
+  });
+  const files = [{ name: "smtp.txt", mediaType: "text/plain", data: btoa("host\n") }] as const;
+  assert.equal(
+    inboxReply(settings, { ...EMPTY_INBOX_DRAFT, attachments: files })?.reply,
+    INBOX_REPLY.SUBMITTED,
+  );
+});
+
+test("a thread's form attaches its values to the reply as they are filled, with no press, a required field left empty absent from them; a reply with nothing filled stays plain, a switch left alone filling nothing, and taking the answer off empties the fields", () => {
+  const form = [
+    asking({
+      type: INBOX_ASK.ANSWER,
+      fields: [
+        { type: INBOX_FIELD.TEXT, label: "Host", required: true },
+        { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate", required: true },
+      ],
+    }),
+  ];
+  assert.equal(inboxThreadSend(form, EMPTY_INBOX_DRAFT), undefined, "nothing filled sends nothing");
+  assert.deepEqual(
+    inboxThreadSend(form, { ...EMPTY_INBOX_DRAFT, note: "Which host?" }),
+    { text: "Which host?", attachments: [] },
+    "words alone are a plain reply, keeping the ask open",
+  );
+  const partial = withValue(EMPTY_INBOX_DRAFT, "Verify certificate", true);
+  const sent = inboxThreadSend(form, { ...partial, note: "No host yet." });
+  assert.deepEqual(sent, {
+    text: "No host yet.",
+    attachments: [],
+    answers: {
+      ask: ASKING_ID,
+      reply: INBOX_REPLY.SUBMITTED,
+      values: [{ label: "Verify certificate", value: true }],
+    },
+  });
+  assert.equal(
+    attachedStamp(sent?.answers ?? assert.fail("no answer"), form[0]?.ask).words,
+    "Send 1 field",
+  );
+  assert.equal(inboxThreadSend(form, withoutAnswer(partial)), undefined);
+});
+
+test("what an answer lacks is said by what it asks: a choice its pick, unless the developer's own words or files answer it, a form given nothing its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
   assert.deepEqual(inboxMissing(QUEUE, EMPTY_INBOX_DRAFT), {
     kind: INBOX_MISSING.OPTION,
     line: "Pick an option",
@@ -240,16 +308,21 @@ test("what an answer lacks is said by what it asks: a choice its pick, unless th
       ],
     },
   });
-  assert.deepEqual(inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "Dean")), {
+  assert.deepEqual(inboxMissing(rollout, EMPTY_INBOX_DRAFT), {
     kind: INBOX_MISSING.FIELD,
     label: "Effort",
     line: "Fill in Effort",
   });
-  const effort = withValue(EMPTY_INBOX_DRAFT, "Effort", "high");
   assert.deepEqual(
-    inboxMissing(rollout, withValue(effort, "Reviewer", "  ")),
-    { kind: INBOX_MISSING.FIELD, label: "Reviewer", line: "Fill in Reviewer" },
+    inboxMissing(rollout, withValue(EMPTY_INBOX_DRAFT, "Reviewer", "  ")),
+    { kind: INBOX_MISSING.FIELD, label: "Effort", line: "Fill in Effort" },
     "blank words fill nothing",
+  );
+  const effort = withValue(EMPTY_INBOX_DRAFT, "Effort", "high");
+  assert.equal(
+    inboxMissing(rollout, effort),
+    undefined,
+    "a form filled in part lacks nothing, sending what was filled",
   );
   assert.equal(
     inboxMissing(rollout, withValue(effort, "Reviewer", "Dean")),

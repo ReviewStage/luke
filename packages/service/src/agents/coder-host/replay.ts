@@ -821,8 +821,8 @@ const editedAfter = (source: CodingAgent, cutSeq: number, rest: Parts) =>
   });
 
 /** Whether two repositories are one, as GitHub names them whatever their case. */
-function sameRepository(one: string, other: string | null): boolean {
-  return other !== null && one.toLowerCase() === other.toLowerCase();
+function sameRepository(one: string | null, other: string | null): boolean {
+  return one !== null && other !== null && one.toLowerCase() === other.toLowerCase();
 }
 
 /**

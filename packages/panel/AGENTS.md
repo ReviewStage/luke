@@ -18,11 +18,13 @@ importing a package for one string constant resolves its whole export graph,
 ## One state channel in, one act channel out
 
 State arrives on `app:state` alone, read through `use-app-state.ts` and never
-subscribed to twice. Read it with `useAppState`, or `appStateNow` for a callback
-that cannot wait a render — never the registry directly, so a hook and a callback
-cannot disagree. The channels beside it carry events rather than state: a one-shot
-to a named receiver a late subscriber must not receive, or a reading that expires
-before the next version could carry it.
+subscribed to twice. Read it with `useAppSlice` and the narrowest slice a surface
+draws from (`APP_SLICE`, or an atom over one), so a patch to one slice draws only
+its readers; `useAppState` only where the whole document is handed on; or
+`appStateNow` for a callback that cannot wait a render — never the registry
+directly, so a hook and a callback cannot disagree. The channels beside it carry
+events rather than state: a one-shot to a named receiver a late subscriber must
+not receive, or a reading that expires before the next version could carry it.
 
 The runtime beside that registry is **the bundle's one Effect edge**. Work that is
 a fiber of its own runs under the services it was built over, read through

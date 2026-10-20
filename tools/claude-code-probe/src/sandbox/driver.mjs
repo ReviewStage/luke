@@ -8,6 +8,7 @@
 // line of JSON, and the account the CLI is signed in as once the session has
 // started, which the probe sanitizes before anything is kept.
 
+import { EventEmitter, on } from "node:events";
 import { createInterface } from "node:readline";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 
@@ -24,21 +25,17 @@ const config = JSON.parse(first.value);
 const env = { ...process.env, [config.tokenVariable]: config.token };
 config.token = undefined;
 
-let session;
+// Note that stdin is read by a loop of its own rather than inside the prompt
+// stream, so a stop reaches interrupt() while a turn runs (a foreground
+// command included) whether or not the SDK is asking for the next prompt.
+const inbox = new EventEmitter();
+const messages = on(inbox, "message");
 
 async function* prompts() {
-  for (;;) {
-    const next = await lines.next();
-    if (next.done) return;
-    const line = JSON.parse(next.value);
-    if (line.type === "end") return;
-    if (line.type === "stop") {
-      await session.interrupt();
-      continue;
-    }
+  for await (const [text] of messages) {
     yield {
       type: "user",
-      message: { role: "user", content: line.text },
+      message: { role: "user", content: text },
       parent_tool_use_id: null,
       origin: { kind: "human" },
     };
@@ -47,7 +44,23 @@ async function* prompts() {
 
 const options = { ...config.options, cwd: config.cwd, model: config.model, env };
 if (config.resume !== undefined) options.resume = config.resume;
-session = query({ prompt: prompts(), options });
+const session = query({ prompt: prompts(), options });
+
+async function readCommands() {
+  for (;;) {
+    const next = await lines.next();
+    if (next.done) break;
+    const line = JSON.parse(next.value);
+    if (line.type === "end") break;
+    if (line.type === "stop") await session.interrupt();
+    else inbox.emit("message", line.text);
+  }
+  await messages.return();
+}
+
+readCommands().catch((error) => {
+  emit({ type: "luke_probe_error", message: String(error?.message ?? error) });
+});
 
 try {
   let askedAccount = false;

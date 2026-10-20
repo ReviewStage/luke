@@ -38,7 +38,10 @@ import { task } from "./task.js";
  * is the exact plan text the agent was handed, kept whole because the plan
  * keeps being edited after, or where the developer started it on a prompt of
  * their own, the snapshot is null and the prompt is what it was handed, so
- * exactly one of the two stands; the repository is `owner/name`; the branch
+ * at most one of the two stands, and neither for an agent started blank,
+ * whose first words come later, such as a call's spoken opening; the
+ * repository is `owner/name`, null for an agent with none, such as one on a
+ * task with no repository, which does no repository work; the branch
  * is the one checked out in the agent's sandbox as its last turn ended,
  * which is where its pull request is looked up, and null until a turn ends
  * or where the checkout stood detached or on its start branch; the start branch is the one its
@@ -214,13 +217,13 @@ export const codingAgent = pgTable(
       .$type<ContextWindow>()
       .notNull()
       .default(CONTEXT_WINDOW.LONG),
-    /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead. */
+    /** The plan's document exactly as the agent was given it; null for an agent handed a prompt instead, or started blank. */
     planSnapshot: text("plan_snapshot"),
-    /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */
+    /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan, or started blank. */
     prompt: text("prompt"),
-    /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`. */
-    repository: text("repository").notNull(),
-    /** Every repository the agent works in, `owner/name` each, the first where it starts; one until full multi-repo. */
+    /** The GitHub repository the agent works in, as `owner/name`: the first of `repositories`; null for an agent with none. */
+    repository: text("repository"),
+    /** Every repository the agent works in, `owner/name` each, the first where it starts; empty for an agent with none. */
     repositories: jsonb("repositories").$type<readonly string[]>().notNull().default([]),
     /** The branch checked out in the sandbox as the last turn ended; null before one ends or on a detached HEAD. */
     branch: text("branch"),

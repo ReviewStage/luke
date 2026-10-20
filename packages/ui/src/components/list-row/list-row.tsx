@@ -219,6 +219,22 @@ function plainWords(words: ReactNode): string | undefined {
   return typeof words === "string" ? words : undefined;
 }
 
+/**
+ * Writes how wide a row's acts stand onto the row (`--luke-list-row-acts`),
+ * kept as they change, so a row whose metadata stands on the title's line
+ * cuts its title where the acts begin while they are shown, as a row whose
+ * metadata stands at its middle gives them their own room.
+ */
+function holdActsRoom(element: HTMLElement | null): (() => void) | undefined {
+  const row = element?.closest<HTMLElement>(".luke-list-row");
+  if (element === null || row === null || row === undefined) return undefined;
+  const measure = () => row.style.setProperty("--luke-list-row-acts", `${element.offsetWidth}px`);
+  measure();
+  const resized = new ResizeObserver(measure);
+  resized.observe(element);
+  return () => resized.disconnect();
+}
+
 /** The act of a row that offers no swipe. */
 const NO_ACT = (): void => undefined;
 
@@ -352,6 +368,11 @@ export function ListRow({
     [descriptionMeasured, describedDense],
   );
   const [leadMeasured, leadClipped] = useClipped(lead?.label);
+  // On the title's line the acts stand over the line's end rather than beside it, so the row learns how wide they are to keep the title clear of them.
+  const actsRoom =
+    actionsAt === LIST_ROW_ACTIONS.HOVER && metaAt === LIST_ROW_META.TITLE && said(actions)
+      ? holdActsRoom
+      : undefined;
   const heading = (
     <span ref={titleMeasured} className="luke-list-row-title" data-overflow={String(titleClipped)}>
       {title}
@@ -438,7 +459,11 @@ export function ListRow({
       ) : (
         <hint.Hint label={hint.label}>{press}</hint.Hint>
       )}
-      {said(actions) ? <div className="luke-list-row-actions">{actions}</div> : null}
+      {said(actions) ? (
+        <div ref={actsRoom} className="luke-list-row-actions">
+          {actions}
+        </div>
+      ) : null}
     </>
   );
   const { view, item } = swiped;

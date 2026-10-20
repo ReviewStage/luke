@@ -16,7 +16,7 @@ import {
 } from "@luke/ui";
 import { useDisclosure } from "@luke/ui/use-disclosure";
 import { ListXIcon, PlayIcon, ScrollTextIcon, TerminalIcon } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useCopyToast } from "../copy-feedback.js";
 import { type MenuRow, SearchableMenu } from "../searchable-menu.js";
@@ -494,5 +494,9 @@ export function useTabViews(): TabViews {
   const onWorkerHeld = useCallback((callId: string, transcript: HeldTranscript) => {
     setHeld((was) => ({ ...was, workers: new Map(was.workers).set(callId, transcript) }));
   }, []);
-  return { held, standings, onAgentHeld, onWorkerHeld, onWorkerStatus };
+  // The same views across draws while nothing held moves, so the panes they are handed to hold.
+  return useMemo(
+    () => ({ held, standings, onAgentHeld, onWorkerHeld, onWorkerStatus }),
+    [held, standings, onAgentHeld, onWorkerHeld, onWorkerStatus],
+  );
 }

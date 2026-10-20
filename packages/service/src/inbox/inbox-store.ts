@@ -1251,7 +1251,8 @@ const findTasklessWaitingItems = SqlSchema.findAll({
           automation,
           and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
         )
-        .where(tasklessWaiting(userId))
+        // Note that the repository stands where a task would, so an agent with neither has no place here yet.
+        .where(and(tasklessWaiting(userId), isNotNull(codingAgent.repository)))
         .orderBy(...LATEST_FIRST),
     ),
 });
@@ -1404,7 +1405,8 @@ export function accountInboxLiveStatements(
       automation,
       and(eq(automation.id, codingAgent.automationId), automationReadableBy(userId)),
     )
-    .where(tasklessWaiting(userId));
+    // An agent with neither a task nor a repository has no place here yet, as in the read above.
+    .where(and(tasklessWaiting(userId), isNotNull(codingAgent.repository)));
   const plans = queryBuilder
     .select({
       ...liveSelection({ planId: inboxItem.taskId }),

@@ -8,6 +8,7 @@ import type {
 } from "../voice-vocabulary.js";
 import { timestamptz } from "./_helpers.js";
 import { user } from "./auth.js";
+import { codingAgent } from "./coding-agent.js";
 
 /**
  * Voice, stored the way a call platform stores a call: one row per live
@@ -70,6 +71,12 @@ export const voiceSessions = pgTable(
      * ended: with the task's delete, or the sweep after it (`soft-delete.ts`).
      */
     taskId: uuid("task_id"),
+    /**
+     * The agent the call speaks into, whose conversation its turns are
+     * written to; null for a session opened before calls named their agent,
+     * and once that agent is deleted, since the call's record outlives it.
+     */
+    agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
     liveSessionId: text("live_session_id").notNull().unique(),
     delegationMode: text("delegation_mode").$type<VoiceDelegationMode>().notNull(),
     startedAt: timestamptz("started_at").notNull().defaultNow(),
@@ -95,6 +102,8 @@ export const voiceSessions = pgTable(
   },
   (table) => [
     index("voice_sessions_by_owner").on(table.userId, table.liveSessionId),
+    // An agent's calls are read by the agent's id, and its delete sets each one's null.
+    index("voice_sessions_agent").on(table.agentId),
     index("voice_sessions_detached")
       .on(table.detachedAt)
       .where(sql`${table.closedAt} is null and ${table.detachedAt} is not null`),

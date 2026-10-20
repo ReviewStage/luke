@@ -53,10 +53,10 @@ import {
 import type * as HttpClient from "effect/http/HttpClient";
 import { SqlClient } from "effect/sql";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_RESET_OUTCOME,
   EVE_SEND_OUTCOME,
-  type EveSessions,
 } from "../agents/brain-host/eve-sessions.js";
 import { requestUserId } from "../auth/bearer.js";
 import { BRAIN_REQUEST_FAILURE } from "../core.js";
@@ -142,7 +142,7 @@ const standing = (bearers: ReadonlyMap<string, string>) =>
     const opened: string[] = [];
     /** Who opened each session, in order: the request's bearer, or the deployment acting for an account. */
     const openedAs: string[] = [];
-    const sessionsAs = (caller: string): EveSessions => ({
+    const sessionsAs = (caller: string): AgentSessions => ({
       open: (message) =>
         Effect.sync(() => {
           opened.push(message.conversationId);

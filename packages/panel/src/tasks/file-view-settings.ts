@@ -20,11 +20,12 @@
  */
 
 import { APP_SETTING_DEFAULTS, type AppSettingField, type AppSettingValue } from "@luke/settings";
-import { type AppSettingsView, appSettingsView } from "@luke/settings/wire";
+import type { AppSettingsView } from "@luke/settings/wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
+import * as Atom from "effect/reactivity/Atom";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { useAct } from "../act.js";
-import { useAppState } from "../use-app-state.js";
+import { APP_SETTINGS_VIEW, useAppSlice } from "../use-app-state.js";
 
 /** The settings code and diffs are drawn by, by their fields in the settings schema. */
 type FileViewField = Extract<
@@ -83,6 +84,22 @@ function settingsOf(view: AppSettingsView | undefined): FileViewSettings {
   };
 }
 
+/** Whether two readings draw code and diffs alike, each field a value. */
+function sameFileView(held: FileViewSettings, next: FileViewSettings): boolean {
+  const nextValues = new Map(Object.entries(next));
+  return Object.entries(held).every(([field, value]) => nextValues.get(field) === value);
+}
+
+/**
+ * The settings as the document holds them, read once per change to the
+ * settings for every File tab and diff, which tells them only when one of
+ * their own fields moves, so a write to another setting draws none of them.
+ */
+const storedFileViewAtom: Atom.Atom<FileViewSettings> = Atom.withEquality(
+  Atom.map(APP_SETTINGS_VIEW, settingsOf),
+  sameFileView,
+);
+
 /** The settings code and diffs are drawn by, and the door that writes one for every window, answering the write's own answer. */
 export interface FileViewSettingsControl {
   readonly settings: FileViewSettings;
@@ -132,16 +149,10 @@ function without(
 }
 
 export function useFileViewSettings(): FileViewSettingsControl {
-  const stored = useAppState()?.settings;
+  const stored = useAppSlice(storedFileViewAtom);
   const { updateSetting } = useAct();
   const out = useSyncExternalStore(subscribePending, pendingNow);
-  const settings = useMemo(
-    () => ({
-      ...settingsOf(stored === undefined ? undefined : appSettingsView(stored)),
-      ...out,
-    }),
-    [stored, out],
-  );
+  const settings = useMemo(() => ({ ...stored, ...out }), [stored, out]);
   const change = useCallback(
     <Field extends FileViewField>(field: Field, value: AppSettingValue<Field>) => {
       writesAsked += 1;

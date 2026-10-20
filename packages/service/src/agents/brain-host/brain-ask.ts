@@ -28,10 +28,10 @@ import { ASK_ORIGIN, type AskOrigin, TURN_STATUS, type TurnStatus } from "../../
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
 import {
+  type AgentSessions,
   EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
   EVE_SEND_OUTCOME,
-  type EveSessions,
 } from "./eve-sessions.js";
 
 /**
@@ -178,7 +178,7 @@ export interface AskInput<Origin extends AskOrigin = AskOrigin> {
  */
 export interface AskSeams<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly asks: AskRecord;
-  readonly eve: EveSessions<Turn>;
+  readonly eve: AgentSessions<Turn>;
 }
 
 /**
@@ -340,7 +340,7 @@ export type StopOutcome = Result.Result<StopAnswer, StopRefused>;
 interface StopSeams extends AskStandingReads {
   readonly asks: Pick<AskRecord, "named" | "cancelRequested">;
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
-  readonly eve: Pick<EveSessions, "cancel">;
+  readonly eve: Pick<AgentSessions, "cancel">;
 }
 
 /** A turn as a Stop answers it: its status, and the stamp it carries where one stands. */

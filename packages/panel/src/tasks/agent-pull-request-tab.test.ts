@@ -1578,6 +1578,13 @@ test("the Conversation scrolls in a box whose fade begins beneath a band, each s
     "Hide resolved0",
     "Hide bots0",
   ]);
+  for (const chip of sectionHead(tab, "Conversation").querySelectorAll<HTMLElement>(
+    ".pull-request-section-end button",
+  )) {
+    // Drawn as the tasks board's view filter in its toolbar: a filter chip at the control's size, never a reaction's compact pill.
+    assert.equal(chip.dataset.look, "filter");
+    assert.equal(chip.dataset.size, undefined, `${chip.textContent} stands at the control's size`);
+  }
   assert.equal(sectionHead(tab, "Description").querySelector(".pull-request-section-end"), null);
   assert.equal(tab.querySelector(".pull-request-filters"), null, "no row of filters stands");
 });
@@ -2896,6 +2903,124 @@ test("a pull request with no labels spends no line on them: its label picker sta
   assert.equal(list.textContent, "bug");
   assert.equal(people().lastElementChild, list, "they close the line of people");
   assert.deepEqual(pickers(), ["Edit reviewers", "Edit labels"]);
+});
+
+it.effect(
+  "each branch is a chip that copies its name: a button the keyboard reaches, named for what it copies, its glyph saying Copied for a moment once the clipboard took it",
+  () =>
+    Effect.gen(function* () {
+      const registry = registryOn(yield* Clock.Clock);
+      const copied: string[] = [];
+      fakeAppPlatform({ ...DESKTOP_LINKS, ...copyingInto(copied) });
+      const tab = yield* Effect.promise(() =>
+        draw(controlAnswering(), PULL_REQUEST_VIEW.CONVERSATION, registry),
+      );
+      const branches =
+        tab.querySelector<HTMLElement>(".pull-request-header .pull-request-branches") ??
+        assert.fail("the branches stand");
+      const chips = [...branches.querySelectorAll<HTMLButtonElement>("button")];
+      const head = chips[1] ?? assert.fail("the head's chip stands");
+      const glyph = () => head.querySelector(".copy-glyph")?.getAttribute("data-state");
+
+      assert.deepEqual(
+        chips.map((chip) => [
+          chip.getAttribute("aria-label"),
+          chip.type,
+          chip.disabled,
+          chip.tabIndex,
+        ]),
+        [
+          ["Copy branch main", "button", false, 0],
+          ["Copy branch luke/expiry-job", "button", false, 0],
+        ],
+      );
+
+      yield* Effect.promise(async () => {
+        await act(async () => head.click());
+        await settle();
+      });
+      assert.deepEqual(copied, ["luke/expiry-job"]);
+      assert.equal(glyph(), "copied");
+      assert.equal(head.querySelector('[role="status"]')?.textContent, "Copied");
+      assert.equal(
+        head.getAttribute("aria-label"),
+        "Copy branch luke/expiry-job",
+        "its name stays",
+      );
+
+      yield* TestClock.adjust("2 seconds");
+      yield* Effect.promise(settle);
+      assert.equal(glyph(), "idle", "the check goes after its moment");
+
+      yield* Effect.promise(async () => {
+        await act(async () => chips[0]?.click());
+        await settle();
+      });
+      assert.deepEqual(copied, ["luke/expiry-job", "main"]);
+      act(() => root?.unmount());
+      root = undefined;
+      registry.dispose();
+    }),
+);
+
+test("the number keeps to the title's last word, the space before it inside the end that never wraps, so it never stands alone on a line", async () => {
+  const tab = await draw(controlAnswering());
+  const title =
+    tab.querySelector<HTMLElement>(".pull-request-header .pull-request-title") ??
+    assert.fail("the title stands");
+  const end = title.querySelector(".pull-request-title-end") ?? assert.fail("its end stands");
+
+  assert.equal(
+    title.firstChild?.textContent,
+    "Expire invitations",
+    "no space the line may break at",
+  );
+  assert.equal(end.textContent, " #42");
+  assert.equal(title.textContent, "Expire invitations #42");
+});
+
+test("who opened it reads as one phrase with when: opened a while ago, or, once merged, opened · merged a while ago", async () => {
+  const opened = (tab: HTMLElement) => {
+    const line =
+      tab.querySelector(".pull-request-header .pull-request-opened") ??
+      assert.fail("who opened it stands");
+    const times = [...line.querySelectorAll("time")];
+    return [
+      line.querySelector("[data-actor-ref] .luke-inline-ref-label")?.textContent,
+      line.querySelector(".pull-request-quiet")?.textContent,
+      times.map((time) => time.getAttribute("datetime")),
+    ];
+  };
+  const open = await draw(controlAnswering());
+  const [who, said, at] = opened(open);
+  assert.equal(who, "luke-agent");
+  assert.match(String(said), /^opened \S/u);
+  assert.deepEqual(at, [new Date(1_000).toISOString()], "when it was opened");
+  act(() => root?.unmount());
+  document.body.innerHTML = "";
+
+  const merged = await draw(
+    controlAnswering(
+      {
+        pullRequest: () =>
+          Promise.resolve({
+            pullRequest: {
+              ...PULL_REQUEST,
+              state: PULL_REQUEST_STATE.MERGED,
+              mergedAt: 5_000,
+            },
+          }),
+      },
+      PULL_REQUEST_STATE.MERGED,
+    ),
+  );
+  const [, mergedSaid, mergedAt] = opened(merged);
+  assert.match(String(mergedSaid), /^opened · merged \S/u);
+  assert.deepEqual(
+    mergedAt,
+    [new Date(5_000).toISOString()],
+    "when it merged, the moment that matters",
+  );
 });
 
 test("its reviewers stand compactly, three faces and a count of the rest: where each stands, a change asked for outlasting a new ask, its author left out, and Apps' bots last; those asked stand asked until the reviews land", async () => {

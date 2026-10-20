@@ -767,9 +767,9 @@ ul.actor-stack {
   box-shadow: none;
 }
 
-/* A pile whose faces wear badges stands them apart, so each badge reads clear of the next face. */
-.actor-stack:has(.actor-stack-badge) > .actor-stack-face {
-  margin-left: var(--luke-space-4);
+/* A pile whose faces wear badges stands them apart, its count too, so each badge reads clear of what comes next. */
+.actor-stack:has(.actor-stack-badge) > :is(.actor-stack-face, .actor-stack-more) {
+  margin-left: var(--luke-space-6);
 }
 
 .actor-stack:has(.actor-stack-badge) > .actor-stack-face:first-child {
@@ -797,11 +797,11 @@ ul.actor-stack {
 .actor-stack-badge {
   position: absolute;
   z-index: 1;
-  right: -3px;
-  bottom: -3px;
+  right: -4px;
+  bottom: -4px;
   display: grid;
-  width: 10px;
-  height: 10px;
+  width: 13px;
+  height: 13px;
   place-items: center;
   border-radius: 50%;
   background: var(--actor-stack-ground, var(--luke-color-ground));
@@ -2468,17 +2468,17 @@ ul.actor-stack {
   }
 }
 
-/* Narrower, the controls close up, their discs touching edge to edge, and
-   the working dots go, the line's own words saying Luke works, so Luke's
-   command keeps their room. */
+/* Narrower, the controls close up to the card head's own step, so the call
+   card's mutes and End call stand under its Video on and its way back, each
+   apart from the next, and the working dots go, the line's own words saying
+   Luke works, so Luke's command keeps their room. */
 @container call-bar (max-width: 279px) {
   .call-backend > .thinking-dots {
     display: none;
   }
 
-  .call-controls,
-  .call-mutes {
-    gap: 0;
+  .call-controls {
+    gap: var(--luke-space-4);
   }
 }
 
@@ -8318,4 +8318,54 @@ button.tasks-board-card-press:focus-visible::after {
 
 .desktop-shell[data-room="narrow"] .tasks-board-column-scroll {
   flex: 1 1 auto;
+}
+
+/* The Tasks page (`tasks-page.tsx`), while the inbox-first sidebar is on: its
+   List | Board switch stands beside its title, and the List runs its groups
+   down the page, each headed as a Board's column is, its rows the page's
+   own `ListRow`s led by the task's priority, key, and status. */
+.desktop-toolbar-heading:has(.luke-choice-bar) {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-space-12);
+}
+
+.tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--luke-space-16);
+  padding-bottom: var(--luke-space-24);
+}
+
+.tasks-list-head {
+  display: flex;
+  align-items: center;
+  gap: var(--luke-icon-gap);
+  min-height: var(--luke-control-height);
+  margin: 0;
+  padding: 0 var(--row-inset);
+  border-bottom: 1px solid var(--luke-color-border);
+  color: var(--luke-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.tasks-list-head > svg,
+.tasks-list-head > .luke-task-mark {
+  flex: none;
+  width: var(--luke-control-icon);
+  height: var(--luke-control-icon);
+}
+
+.tasks-list-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--luke-space-8);
+}
+
+.tasks-list-key {
+  min-width: 7ch;
+  color: var(--luke-color-text-subtle);
+  font-family: var(--luke-font-mono);
+  font-size: var(--luke-type-caption-size);
+  font-variant-numeric: tabular-nums;
 }

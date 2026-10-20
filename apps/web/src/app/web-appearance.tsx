@@ -15,8 +15,7 @@
  * dark from its first frame rather than light until the state is read.
  */
 
-import { useAppState } from "@luke/panel/use-app-state";
-import { appSettingsView } from "@luke/settings/wire";
+import { APP_SETTINGS_VIEW, useAppSlice } from "@luke/panel/use-app-state";
 import type { Theme } from "@luke/ui";
 import { wearTheme } from "@luke/ui/appearance";
 import { useLayoutEffect } from "react";
@@ -43,8 +42,7 @@ function wearAccountTheme(theme: Theme, root = document.documentElement): () => 
 
 /** Draws nothing: wears the account's Theme setting on the tab's root for as long as the app is drawn. */
 export function WebAppearance(): null {
-  const settings = useAppState()?.settings;
-  const theme = settings === undefined ? undefined : appSettingsView(settings).theme;
+  const theme = useAppSlice(APP_SETTINGS_VIEW)?.theme;
   useLayoutEffect(() => (theme === undefined ? undefined : wearAccountTheme(theme)), [theme]);
   return null;
 }

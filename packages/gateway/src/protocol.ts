@@ -114,6 +114,10 @@ export const GATEWAY_METHOD = {
   WORKSPACES_MEMBERS: "workspaces.members",
   /** One workspace's photo, read from the service now as its bytes in base64; answered to the caller, never held in the view. */
   WORKSPACES_PHOTO: "workspaces.photo",
+  /** The repositories members added to one workspace on their own GitHub tokens, read from the service now; answered to the caller, never held in the view. */
+  WORKSPACES_TOKEN_REPOSITORIES: "workspaces.tokenRepositories",
+  /** A repository added to a workspace on the account's own GitHub token, or removed from it, on the service; answered to the caller with the workspace's token repositories as they then stand. */
+  WORKSPACES_TOKEN_REPOSITORY_SET: "workspaces.tokenRepositorySet",
   /** One member removed from a workspace on the service, answered with the members who remain; the view's workspaces are read again. */
   WORKSPACES_MEMBER_REMOVE: "workspaces.memberRemove",
   /** Another member made an admin or an admin a member on the service by the owner, answered with the members as they then stand; the view's workspaces are read again. */
@@ -202,6 +206,12 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   /** One provider's key removed on the service; the keys as they then stand. */
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** The member's own GitHub token, read from the service now as its login, hint, and status; never the token. */
+  GITHUB_TOKEN_READ: "githubToken.read",
+  /** The member's GitHub token saved on the service, carried once in the params; the token as it then stands, or why nothing was kept. */
+  GITHUB_TOKEN_SAVE: "githubToken.save",
+  /** The member's GitHub token removed on the service; none then stands. */
+  GITHUB_TOKEN_REMOVE: "githubToken.remove",
   /** The Markdown the account's new tasks start from, read from the service now: its own, or the default while it keeps none. */
   PLAN_TEMPLATE_READ: "planTemplate.read",
   /** The account's plan template kept verbatim on the service, or the default again for null; the template as kept, or why it is unchanged. */
@@ -569,6 +579,8 @@ export const GATEWAY_EVENT = {
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",
   ACCOUNT_CHANGED: "account.changed",
+  /** What the signed-in account may open in the app (whether it is an admin), whenever a read or the account moved it. */
+  ACCOUNT_ACCESS_CHANGED: "accountAccess.changed",
   VOICE_LIVE_SESSION_CHANGED: "voiceLiveSession.changed",
   SESSION_REPLAY_CHANGED: "sessionReplay.changed",
   /** The panel's tasks, active task, and document, whole, whenever a read moved them. */

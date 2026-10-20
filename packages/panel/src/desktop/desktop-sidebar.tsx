@@ -26,6 +26,7 @@ import {
   NAV_COUNT_TONE,
   NAV_CURRENT,
   NavItem,
+  NavItemLink,
   PinIcon,
   PlusIcon,
   ProviderMark,
@@ -75,13 +76,16 @@ import {
   FolderPlusIcon,
   HouseIcon,
   InboxIcon,
+  ListTodoIcon,
   MessagesSquareIcon,
+  ShieldUserIcon,
   SquareKanbanIcon,
   ZapIcon,
 } from "lucide-react";
-import { useRef } from "react";
+import { memo, useRef } from "react";
 import { ACTOR_SIZE, ActorMark } from "../actor-ref.js";
 import { runAppCommand, useAppCommand } from "../app-commands.js";
+import { appPlatform } from "../app-platform.js";
 import { type CallCardInput, ColumnFoot } from "../call/call-card.js";
 import { useCoarsePointer } from "../coarse-pointer.js";
 import { useNewTaskDrafted } from "../composer-drafts.js";
@@ -102,7 +106,7 @@ import { inColumn, type PinnedTab } from "../tasks/use-side-panel.js";
 import { useUnreadTasks } from "../tasks/use-task-looks.js";
 import { AUTOMATIONS_PAGE, type TasksControl } from "../tasks/use-tasks-tab.js";
 import { commandKeyshortcuts, Tooltip } from "../tooltip.js";
-import { useExperiment } from "../use-app-state.js";
+import { useAdminAccess, useExperiment } from "../use-app-state.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
@@ -1128,24 +1132,30 @@ function SidebarFactoryRow({
  * The Board's row, under the Inbox's: the board's columns, and its name. A
  * press opens the listed workspace's tasks by status (`tasks-board.tsx`),
  * and the row is the place shown while it stands. It is always offered.
+ * While the account has the inbox-first sidebar on, the same place is the
+ * Tasks page (`tasks-page.tsx`), which holds the Board as one of its views,
+ * and the row is named and drawn for it.
  */
 function SidebarBoardRow({
   current,
   disabled,
+  tasksPage,
   onOpen,
 }: {
   current: boolean;
   disabled: boolean;
+  /** Whether the place is the Tasks page rather than the Board alone. */
+  tasksPage: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
   return (
     <NavItem
-      icon={<SquareKanbanIcon />}
+      icon={tasksPage ? <ListTodoIcon /> : <SquareKanbanIcon />}
       current={current ? NAV_CURRENT.PAGE : undefined}
       disabled={disabled}
       onClick={onOpen}
     >
-      Board
+      {tasksPage ? "Tasks" : "Board"}
     </NavItem>
   );
 }
@@ -1180,6 +1190,40 @@ function SidebarAutomationsRow({
       onClick={onOpen}
     >
       Automations
+    </NavItem>
+  );
+}
+
+/**
+ * The admin dashboard's row, after Automations' and drawn as it is, for an
+ * admin alone: a non-admin is drawn nothing, not a row held back. It is no
+ * place of the window's, so it is never the place shown. A browser tab links
+ * to the dashboard on its own origin, in a tab of its own; the Mac app's
+ * press opens it in the default browser, where the developer's session is,
+ * rather than a Browser tab, whose cookies are its own. Note that the row is
+ * a convenience: the service's own gate decides every read the dashboard
+ * makes.
+ */
+function SidebarAdminRow({
+  onChosen,
+}: {
+  onChosen: (go: () => void) => () => void;
+}): React.JSX.Element | null {
+  const admin = useAdminAccess();
+  if (!admin) return null;
+  const way = appPlatform().adminDashboard();
+  return "href" in way ? (
+    <NavItemLink
+      href={way.href}
+      icon={<ShieldUserIcon />}
+      newTab
+      onClick={onChosen(() => undefined)}
+    >
+      Admin
+    </NavItemLink>
+  ) : (
+    <NavItem icon={<ShieldUserIcon />} onClick={onChosen(way.open)}>
+      Admin
     </NavItem>
   );
 }
@@ -1377,6 +1421,7 @@ function SidebarColumn({
   const chatOn = useChatOn();
   const factoryOn = useExperiment(EXPERIMENT.FACTORY);
   const sectionsOn = useExperiment(EXPERIMENT.SECTIONS);
+  const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
   const settledWaiting = useSettledWaiting(tasks.listed.inbox, tasks.inboxTaskless);
   // A press in the list is always about tasks, so it brings the Tasks tab
   // forward from Settings as well as choosing.
@@ -1665,7 +1710,12 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openInbox)}
         />
-        <SidebarBoardRow current={inBoard} disabled={!tasks.signedIn} onOpen={chosen(openBoard)} />
+        <SidebarBoardRow
+          current={inBoard}
+          disabled={!tasks.signedIn}
+          tasksPage={inboxFirst}
+          onOpen={chosen(openBoard)}
+        />
         {/* Chat's row stands while the account has it on wherever there is a chat to read: a signed-in run, or a fixture's staged one. */}
         {chatOn && tasks.signedIn && tasks.chatView.available ? (
           <SidebarChatRow
@@ -1687,6 +1737,7 @@ function SidebarColumn({
           disabled={!tasks.signedIn}
           onOpen={chosen(openAutomations)}
         />
+        <SidebarAdminRow onChosen={chosen} />
       </div>
       <hr className="sidebar-rule" />
     </>
@@ -1882,8 +1933,14 @@ function SidebarColumn({
  * face on a row, a creator's group's header, and the order of those groups
  * by the names their headers say. Its links are written under that
  * workspace, which is every row's.
+ *
+ * A memo boundary: the shell drawn again over the same tasks, history, and
+ * fold, as a setting that moves draws it, leaves the sidebar and every row
+ * of it as they were.
  */
-export function DesktopSidebar(props: DesktopSidebarProps): React.JSX.Element {
+export const DesktopSidebar = memo(function DesktopSidebar(
+  props: DesktopSidebarProps,
+): React.JSX.Element {
   const { workspace } = props.tasks;
   return (
     <LinkWorkspaceProvider value={workspace?.slug ?? workspace?.id}>
@@ -1892,4 +1949,4 @@ export function DesktopSidebar(props: DesktopSidebarProps): React.JSX.Element {
       </MemberDirectory>
     </LinkWorkspaceProvider>
   );
-}
+});

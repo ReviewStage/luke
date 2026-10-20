@@ -65,6 +65,7 @@ import {
   type TasksWorkspaceLeaveAnswer,
   type TasksWorkspaceMembersAnswer,
   type TasksWorkspacePhotoAnswer,
+  type TasksWorkspaceTokenRepositoriesAnswer,
   type TaskWorkTurn,
   tasksArchiveParamsSchema,
   tasksBoardSaveParamsSchema,
@@ -109,6 +110,8 @@ import {
   tasksWorkspacePhotoParamsSchema,
   tasksWorkspacePhotoSetParamsSchema,
   tasksWorkspaceRenameParamsSchema,
+  tasksWorkspaceTokenRepositoriesParamsSchema,
+  tasksWorkspaceTokenRepositorySetParamsSchema,
   tasksWorkspaceTransferParamsSchema,
   tasksWriteSectionParamsSchema,
 } from "@luke/features/tasks-view";
@@ -438,6 +441,8 @@ export type TasksClient = Pick<
     | "people"
     | "photo"
     | "removeMember"
+    | "tokenRepositories"
+    | "setTokenRepository"
     | "changeRole"
     | "transfer"
     | "leave"
@@ -1113,10 +1118,19 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
    */
   function followBoard(taskId: string) {
     const following = () => gate() && view.activeTaskId === taskId;
-    const seal = () =>
-      Effect.map(served(client.boardLive(taskId)), (sealed) =>
+    const seal = (poll = false) =>
+      Effect.map(served(client.boardLive(taskId, poll)), (sealed) =>
         sealed.ok ? sealed.answer : { failure: sealed.failure },
       );
+    // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing or polling it.
+    const sealedFor = (poll: boolean) =>
+      following()
+        ? Effect.map(seal(poll), (renewed) =>
+            "failure" in renewed && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
+              ? { ...renewed, gone: true }
+              : renewed,
+          )
+        : Effect.succeed({ failure: BOARD_FOLLOW_ENDED, gone: true });
     /** One seal followed until it stops: whether it delivered, or why it never did. */
     const attempt = Effect.gen(function* () {
       if (!following()) return yield* Effect.fail(BOARD_FOLLOW_ENDED);
@@ -1125,15 +1139,8 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
       let delivered = false;
       const moves = boardMoves(
         {
-          // A task the account no longer reaches, or one no longer open, stops the follow rather than renewing it.
-          seal: () =>
-            following()
-              ? Effect.map(seal(), (renewed) =>
-                  "failure" in renewed && renewed.failure === TASK_CALL_FAILURE.NOT_FOUND
-                    ? { ...renewed, gone: true }
-                    : renewed,
-                )
-              : Effect.succeed({ failure: BOARD_FOLLOW_ENDED, gone: true }),
+          seal: () => sealedFor(false),
+          poll: () => sealedFor(true),
           openLive: dependencies.openLive ?? openRealtimeClient,
           now: kernel.now,
         },
@@ -2204,6 +2211,38 @@ export const composeTasks = /* @__PURE__ */ Effect.fn("host/composeTasks")(funct
         const photo = yield* served(client.workspaces.photo(read.success.workspaceId));
         return carried<TasksWorkspacePhotoAnswer>(
           photo.ok ? photo.answer : { failure: photo.failure },
+        );
+      }),
+    // A workspace's token repositories, and each change of them, are
+    // answered to the page that asked and held nowhere, as the members are:
+    // they move no task and no workspace the view holds.
+    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORIES]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksWorkspaceTokenRepositoriesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("reading a workspace's token repositories names the workspace");
+        }
+        if (!gate()) return carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED);
+        const listed = yield* served(client.workspaces.tokenRepositories(read.success.workspaceId));
+        return carried<TasksWorkspaceTokenRepositoriesAnswer>(
+          listed.ok ? { repositories: listed.answer } : { failure: listed.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_TOKEN_REPOSITORY_SET]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(tasksWorkspaceTokenRepositorySetParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid(
+            "adding or removing a token repository names the workspace, the repository, and which",
+          );
+        }
+        if (!gate()) return carried<TasksWorkspaceTokenRepositoriesAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, repository, added } = read.success;
+        const changed = yield* served(
+          client.workspaces.setTokenRepository(workspaceId, repository, added),
+        );
+        return carried<TasksWorkspaceTokenRepositoriesAnswer>(
+          changed.ok ? { repositories: changed.answer } : { failure: changed.failure },
         );
       }),
     [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: (params) =>

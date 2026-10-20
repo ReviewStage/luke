@@ -52,6 +52,8 @@ import {
   type CodingAgentWorkspaceListParams,
   type DictationTranscribeAnswerView,
   type DictationTranscribeParams,
+  type GitHubTokenAnswerView,
+  type GitHubTokenSaveParams,
   githubImageTypeSchema,
   type PlanTemplateAnswerView,
   type PlanTemplateRevisionAnswerView,
@@ -82,6 +84,7 @@ import {
 } from "./coding-agent-wire.js";
 import type { CodingAgentChangeRequest } from "./contract/agents.js";
 import { dictationRequestSchema } from "./dictation-wire.js";
+import { githubTokenSaveRequestSchema } from "./github-token-wire.js";
 import {
   askHosted,
   HOSTED_DEADLINE,
@@ -519,6 +522,29 @@ export class HostedCodingAgentClient {
       askHosted(this.#hosted.dictation.transcribe, admitted, HOSTED_DEADLINE.HELD),
       {},
     );
+  }
+
+  /** The member's own GitHub token, as what tells it apart; never the token. */
+  readGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.githubToken.read, undefined), {});
+  }
+
+  /**
+   * The member's GitHub token saved, answering it as it then stands and,
+   * where the service kept nothing, why; a token the service would refuse
+   * by shape is refused here without traveling at all.
+   */
+  saveGitHubToken(
+    params: GitHubTokenSaveParams,
+  ): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(githubTokenSaveRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return hostedAnswer(askHosted(this.#hosted.githubToken.save, admitted), {});
+  }
+
+  /** The member's GitHub token removed, answering none. */
+  removeGitHubToken(): Effect.Effect<GitHubTokenAnswerView, never, HttpClient.HttpClient> {
+    return hostedAnswer(askHosted(this.#hosted.githubToken.remove, undefined), {});
   }
 
   /** One task's agents with their status, in the order they were started, the archived ones among them, each flagged, where `includeArchived` asks. */

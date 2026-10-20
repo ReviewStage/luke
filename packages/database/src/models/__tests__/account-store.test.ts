@@ -14,6 +14,7 @@ import {
   accountExperimentOn,
   chatEnabledFor,
   readAccountPreferences,
+  readAccountRole,
   writeAccountPreferences,
 } from "../account-store.js";
 
@@ -26,7 +27,8 @@ import {
  * choice is a part of its own on the same terms: written alone, it moves no
  * instant, and the shared part's write leaves it standing. So is the
  * chapters model, which reads as Haiku until the account chooses and for a
- * stored value no build lists any more.
+ * stored value no build lists any more. The role is read off the account's
+ * own row and no other's.
  *
  * Synthetic accounts throughout.
  */
@@ -188,6 +190,32 @@ it.layer(getTestDB())("the account store's chapters model", (it) => {
         .where(eq(accountPreference.userId, userId));
 
       assert.equal((yield* readAccountPreferences(userId))?.chaptersModel, CHAPTERS_MODEL.HAIKU);
+    }),
+  );
+});
+
+it.layer(getTestDB())("the account store's role", (it) => {
+  it.effect("reads the role on the account's own row, and no other account's", () =>
+    Effect.gen(function* () {
+      const admin = yield* openAccount;
+      const member = yield* openAccount;
+      const db = yield* Database;
+      yield* db.update(user).set({ role: "admin" }).where(eq(user.id, admin));
+
+      assert.equal(yield* readAccountRole(admin), "admin");
+      // A new account holds the column's default, whatever another account was granted.
+      assert.equal(yield* readAccountRole(member), "user");
+    }),
+  );
+
+  it.effect("reads nothing where the row holds no role, or there is no such account", () =>
+    Effect.gen(function* () {
+      const userId = yield* openAccount;
+      const db = yield* Database;
+      yield* db.update(user).set({ role: null }).where(eq(user.id, userId));
+
+      assert.equal(yield* readAccountRole(userId), undefined);
+      assert.equal(yield* readAccountRole(`user-${randomUUID()}`), undefined);
     }),
   );
 });
