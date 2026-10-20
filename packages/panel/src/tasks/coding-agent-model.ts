@@ -379,6 +379,7 @@ const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY]:
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED]: "This task is archived. Unarchive it first.",
+  [CODING_AGENT_CALL_FAILURE.NOT_PERMITTED]: "Only the member who started this agent can do this.",
 } as const;
 
 /** What a Start from an agent whose session has ended says. */
@@ -484,6 +485,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -630,6 +632,7 @@ function startFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -663,6 +666,7 @@ export function messageFailureWords(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED:
+    case CODING_AGENT_CALL_FAILURE.NOT_PERMITTED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }

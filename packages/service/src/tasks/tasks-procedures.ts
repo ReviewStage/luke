@@ -103,6 +103,7 @@ import { listTasklessAgents, withTaskAgents } from "../agents/task-agents.js";
 import { TASK_LIST_ARCHIVED, unparsedWire, wireUuidSchema } from "../core.js";
 import { recordServerEvent, SERVER_EVENT, SERVER_TASK_SOURCE } from "../events/server-events.js";
 import type { GitHubApp } from "../github/github-app.js";
+import { refreshRepositoryReads } from "../github/repository-reads.js";
 import { workspaceRepository } from "../github/workspace-repository.js";
 import {
   HOSTED_REFUSAL,
@@ -411,9 +412,15 @@ export function tasksProcedures(seams: TasksProcedureSeams) {
   const writer: Effect.Effect<StoreWriter> = storeWriter({ tools: CODER_TOOL_SET });
   const plans = hosted.plans.use(accountMiddleware(seams.resolveUserId));
   return {
-    /** The account's plans, and beside them the agents with no plan in its workspaces. */
+    /**
+     * The account's plans, and beside them the agents with no plan in its
+     * workspaces; a teammate's plan or agent on their own GitHub token among
+     * them where the account's own token reads its repository, asked of
+     * GitHub first where the answer kept is older than the hour.
+     */
     list: plans.list.effect(function* ({ input, context }) {
       const includeArchived = input.archived === TASK_LIST_ARCHIVED.INCLUDE;
+      yield* refreshRepositoryReads(context.userId);
       const tasks = yield* hostedStoreOrUnavailable(
         Effect.flatMap(listTasks(context.userId, { includeArchived }), (listed) =>
           withTaskAgents(context.userId, listed),

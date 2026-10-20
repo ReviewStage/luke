@@ -104,6 +104,8 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_RETIRED: "agent-retired",
   /** The task is archived, so no agent starts on it and none of its agents is sent a message until it is brought back. */
   TASK_ARCHIVED: "plan-archived",
+  /** The agent runs on its starter's own GitHub token, so only its starter messages it or starts an agent from it. */
+  NOT_PERMITTED: "not-permitted",
 } as const;
 
 export type CodingAgentCallFailure =

@@ -176,6 +176,7 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED,
+  [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
 } satisfies NamedRefusals;
 
 /** The refusals a call that names one row can answer with. */
@@ -189,7 +190,7 @@ const ARCHIVE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
 } satisfies NamedRefusals;
 
-/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its task archived, and the repository the turn's checkout no longer reaches. */
+/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its task archived, the repository the turn's checkout no longer reaches, and an agent on its starter's own GitHub token the caller did not start. */
 const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
@@ -198,6 +199,7 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
   [HOSTED_API_ERROR.GITHUB_UNANSWERED]: CODING_AGENT_CALL_FAILURE.GITHUB_UNANSWERED,
   [HOSTED_API_ERROR.TASK_ARCHIVED]: CODING_AGENT_CALL_FAILURE.TASK_ARCHIVED,
+  [HOSTED_API_ERROR.NOT_PERMITTED]: CODING_AGENT_CALL_FAILURE.NOT_PERMITTED,
 } satisfies NamedRefusals;
 
 /** The refusals an answer to the inbox can answer with: a message's own, since an answer the agent needs to hear reaches it as one. */

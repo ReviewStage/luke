@@ -545,6 +545,23 @@ export interface GitHubAppService {
     HttpClient.HttpClient | DatabaseServices
   >;
   /**
+   * Whether the member's own token reads the repository, as GitHub answers
+   * `GET /repos/{owner}/{repo}` on it
+   * (https://docs.github.com/en/rest/repos/repos#get-a-repository): a 2xx
+   * reads it, and the 403 and 404 that page lists do not. None where the
+   * member keeps no token GitHub accepts, where GitHub refused the token
+   * (401), which marks it invalid, and where GitHub answered anything else,
+   * which says neither.
+   */
+  readonly memberRepositoryReadable: (
+    member: string,
+    fullName: string,
+  ) => Effect.Effect<
+    Option.Option<boolean>,
+    GitHubWorkspaceReadFailure,
+    HttpClient.HttpClient | DatabaseServices
+  >;
+  /**
    * One repository by `owner/name`, spelled as GitHub spells it, where the
    * workspace's installation reaches it, and else where the member's own
    * token does (`member`, none for an automation), with which of the two;
@@ -1758,6 +1775,21 @@ function githubAppService(
           const listed = yield* readBody(response, Schema.Array(TokenRepositorySchema));
           const pushed = listed.filter((one) => one.permissions?.push === true);
           return Option.some(pushed.map(repositoryOf));
+        }).pipe(Effect.scoped),
+      memberRepositoryReadable: (member, fullName) =>
+        Effect.gen(function* () {
+          const held = yield* memberToken(member);
+          if (Result.isFailure(held)) return Option.none<boolean>();
+          const response = yield* send(githubRead(repositoryPath(fullName), held.success.token));
+          if (response.status === GITHUB_HTTP_STATUS.UNAUTHORIZED) {
+            yield* held.success.markInvalid;
+            return Option.none<boolean>();
+          }
+          if (response.status >= 200 && response.status < 300) return Option.some(true);
+          const refused =
+            response.status === GITHUB_HTTP_STATUS.FORBIDDEN ||
+            response.status === GITHUB_HTTP_STATUS.NOT_FOUND;
+          return refused ? Option.some(false) : Option.none<boolean>();
         }).pipe(Effect.scoped),
       repositoryReach: (organizationId, fullName, member) =>
         Effect.map(

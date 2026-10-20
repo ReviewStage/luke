@@ -5,11 +5,18 @@
  * transcript, its controls, and its terminals alike, so who may reach an
  * agent is decided once. An id that is no UUID names no row, and another
  * workspace's agent reads as none at all.
+ *
+ * An agent that runs on its starter's own GitHub token is reached by the
+ * members who see it (`@luke/database/models/workspace-store`), but steered,
+ * given a shell, or started from by its starter alone (`controlsAgent`),
+ * since all of that acts on GitHub as them.
  */
 
 import type { DatabaseServices } from "@luke/database/core/query";
 import { type CodingAgent, readCodingAgent } from "@luke/database/models/coding-agent-store";
+import { readAccountNames } from "@luke/database/models/workspace-store";
 import type { ConversationTarget } from "@luke/database/models/writer";
+import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
 import { readEither } from "@luke/wire/effect";
 import { Effect, Option, Result } from "effect";
 import { unparsedWire, wireUuidSchema } from "../core.js";
@@ -19,6 +26,7 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "../http/http-effect.js";
+import type { StoreFailure } from "../http/store-failure.js";
 
 /** What resolves a request's bearer to the account it answers for. */
 export interface AccountResolving {
@@ -27,6 +35,9 @@ export interface AccountResolving {
 
 /** The query name a rewrite moves the path's agent id into. */
 const AGENT_ID_QUERY = "id";
+
+/** Who an owner-only refusal names where the starter's account is gone. */
+const UNNAMED_STARTER = "the member who started it";
 
 /** An agent reached, the account that reached it, and its conversation targeted under the member who started it, whom it belongs to. */
 export interface ReachedAgent {
@@ -99,3 +110,25 @@ export const reachedAgentById = /* @__PURE__ */ Effect.fnUntraced(function* (
     target: { userId: agent.value.userId, conversationId: agent.value.conversationId },
   };
 });
+
+/**
+ * Whether the account may message the agent, open or use a shell in its
+ * sandbox, or start an agent from it: any member who reaches it, but only
+ * its starter for one that runs on the starter's own GitHub token.
+ */
+export function controlsAgent(
+  userId: string,
+  agent: Pick<CodingAgent, "userId" | "githubAccess">,
+): boolean {
+  return agent.githubAccess !== GITHUB_ACCESS.TOKEN || agent.userId === userId;
+}
+
+/** The name of the member who alone controls the agent, as a refusal says it: their name now, or who they were where their account is gone. */
+export function agentStarterName(
+  agent: Pick<CodingAgent, "userId">,
+): Effect.Effect<string, StoreFailure, DatabaseServices> {
+  return Effect.map(
+    readAccountNames([agent.userId]),
+    (names) => names.get(agent.userId) ?? UNNAMED_STARTER,
+  );
+}
