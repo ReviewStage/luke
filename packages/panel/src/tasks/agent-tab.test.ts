@@ -795,14 +795,15 @@ test("a line a chat notice wrote draws as a card from its sender, naming the cha
   assert.ok(card, "the notice draws as a card");
   assert.equal(card.dataset.messageId, "notice", "a link to the line finds its card");
   assert.equal(container.querySelector(".is-user"), null);
-  assert.equal(card.querySelector(".chat-notice-from")?.textContent, "@agent-2");
+  // The sender is named as Chat names them, by who they are rather than by the notice's handle.
+  assert.equal(card.querySelector(".chat-notice-from")?.textContent, "Invite emails");
   assert.match(
     card.querySelector(".chat-notice-place")?.textContent ?? "",
     /^in #teammate-invitations · m 43 · /u,
   );
   assert.match(
     card.querySelector(".chat-notice-words")?.textContent ?? "",
-    /^@agent-1 are you changing memberships columns\?/u,
+    /^Add teammate invitations are you changing memberships columns\?/u,
   );
   const open = [...card.querySelectorAll("button")].find(
     (each) => each.textContent === "Open in Chat",
