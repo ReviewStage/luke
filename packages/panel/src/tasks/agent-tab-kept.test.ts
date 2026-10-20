@@ -18,7 +18,7 @@ import { fakeAppBridge } from "../testing/app-bridge.js";
 import { onRegistry } from "../testing/copy-feedback.js";
 import { codingAgentsControl } from "../testing/tasks-control.js";
 import { NOTHING_HELD } from "./agent-ref.js";
-import { AgentTab, type TranscriptCards } from "./agent-tab.js";
+import { AgentTab, type BriefTask, type TranscriptCards } from "./agent-tab.js";
 import { TOOL_TARGET } from "./tool-call-model.js";
 
 /**
@@ -72,6 +72,13 @@ const AGENT = listed(AGENT_ID, "Planning stack");
 function tool(tool: string, callId: string, input: WireRecord, output: WireRecord): WireRecord {
   return { type: `tool-${tool}`, toolCallId: callId, state: "output-available", input, output };
 }
+
+/** The plan the agent was handed, which its transcript opens on as the task's card. */
+const PLAN: CodingAgentMessage = {
+  id: "plan",
+  role: MESSAGE_ROLE.USER,
+  parts: [{ type: "text", text: "Wire the retry audit." }],
+};
 
 /** The agent's first turn, finished: a message to another agent, one refused, and a worker it started. */
 const EARLIER: CodingAgentMessage = {
@@ -183,7 +190,7 @@ function runningTab() {
     if (first) {
       first = false;
       return Promise.resolve(
-        page([EARLIER, newest("Reading.")], CODING_AGENT_STATUS.RUNNING, "1:1"),
+        page([PLAN, EARLIER, newest("Reading.")], CODING_AGENT_STATUS.RUNNING, "1:1"),
       );
     }
     return new Promise((resolve) => {
@@ -198,13 +205,14 @@ function runningTab() {
       agents: [AGENT, listed("agent-7", otherTitle)],
       readTranscript,
     });
-  const cardsOf = (control: ReturnType<typeof controlOf>) =>
+  const cardsOf = (control: ReturnType<typeof controlOf>, task?: BriefTask) =>
     taskCards({
       agents: control,
       workRows: [],
       held: NOTHING_HELD,
       chosen: () => false,
       shownCode: [],
+      task,
     }).agent(AGENT_ID);
   const draw = (control: ReturnType<typeof controlOf>, cards: TranscriptCards) => {
     root?.render(
@@ -318,4 +326,32 @@ test("a message a page did not touch hangs the card the window hands now, and it
     /Reading the retry audit\./u,
   );
   assert.notEqual(cardOn(row(DELEGATE_CALL))[1], working);
+});
+
+test("a task renamed while its agent's tab stands names the plan's sender anew, hanging the task's new card", async () => {
+  const tab = runningTab();
+  const control = tab.controlOf("Invoice export");
+  const task = (name: string): BriefTask => ({
+    name,
+    card: createElement("span", { "data-task-card-probe": "" }, `${name}, its card`),
+  });
+  act(() => tab.draw(control, tab.cardsOf(control, task("First draft"))));
+  await tab.settle();
+  const sender = () => {
+    const ref = tab.container.querySelector<HTMLElement>(".agent-origin [data-task-ref]");
+    assert.ok(ref, "the plan's card names its task");
+    return ref;
+  };
+  const cardOf = (ref: HTMLElement) => {
+    document.documentElement.dataset.keyboard = "true";
+    act(() => ref.blur());
+    act(() => ref.focus());
+    return document.querySelector(".luke-tooltip-card [data-task-card-probe]")?.textContent;
+  };
+  assert.match(sender().textContent ?? "", /First draft/u);
+  assert.equal(cardOf(sender()), "First draft, its card");
+
+  act(() => tab.draw(control, tab.cardsOf(control, task("Final draft"))));
+  assert.match(sender().textContent ?? "", /Final draft/u);
+  assert.equal(cardOf(sender()), "Final draft, its card");
 });
