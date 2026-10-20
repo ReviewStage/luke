@@ -2591,12 +2591,12 @@ test("while a merge's change is out its press stands busy, and where GitHub refu
   );
 });
 
-test("Review stands at the end of the tabs' row while the pull request is open or a draft, and nowhere once it is closed or merged", async () => {
+test("Review stands at the end of the tabs' row however the pull request stands, open, a draft, closed, or merged, as GitHub takes a review of each", async () => {
   const states = [
     [PULL_REQUEST_STATE.OPEN, true],
     [PULL_REQUEST_STATE.DRAFT, true],
-    [PULL_REQUEST_STATE.CLOSED, false],
-    [PULL_REQUEST_STATE.MERGED, false],
+    [PULL_REQUEST_STATE.CLOSED, true],
+    [PULL_REQUEST_STATE.MERGED, true],
   ] as const;
   for (const [state, offered] of states) {
     const tab = await draw(
@@ -2710,7 +2710,7 @@ test("Review opens a panel whose choice and words are submitted for the agent as
   );
 });
 
-test("a review GitHub refuses says so in GitHub's own words inside the panel, never over the header, and the words written stand for another try; a merged pull request offers no Review", async () => {
+test("a review GitHub refuses says so in GitHub's own words inside the panel, never over the header, and the words written stand for another try", async () => {
   changeAnswer = {
     outcome: PULL_REQUEST_WRITE_OUTCOME.REFUSED,
     words: "Review Can not approve your own pull request",
@@ -2727,16 +2727,32 @@ test("a review GitHub refuses says so in GitHub's own words inside the panel, ne
   );
   assert.equal(tab.querySelector(".pull-request-write-note"), null);
   assert.equal(panel.querySelector("textarea")?.value, "LGTM");
-  act(() => root?.unmount());
-  root = undefined;
+});
 
+test("a merged pull request still takes a review, sent for the agent as one on an open one is, and keeps its comment box, as GitHub does", async () => {
   const merged = await draw(
-    controlAnswering({
-      pullRequest: () =>
-        Promise.resolve({ pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED } }),
-    }),
+    controlAnswering(
+      {
+        pullRequest: () =>
+          Promise.resolve({
+            pullRequest: { ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED, mergedAt: 5_000 },
+          }),
+      },
+      PULL_REQUEST_STATE.MERGED,
+    ),
   );
-  assert.equal(buttonWith(merged, /^Review$/u), undefined);
+  assert.ok(merged.querySelector(".pull-request-comment-box"), "its comment box stands");
+  const panel = openReview(merged);
+  writeReview(panel, "Late, but LGTM");
+  await submitReview(panel, "Approve");
+  assert.deepEqual(changes.at(-1), [
+    AGENT.id,
+    {
+      action: PULL_REQUEST_ACTION.SUBMIT_REVIEW,
+      event: REVIEW_EVENT.APPROVE,
+      body: "Late, but LGTM",
+    },
+  ]);
 });
 
 test("a press outside the review panel closes it, its words kept, and one on a short window opens it on the side with more room, bounded to that room", async () => {
