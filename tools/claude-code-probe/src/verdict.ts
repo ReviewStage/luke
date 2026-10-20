@@ -28,6 +28,7 @@ import {
   sessionInit,
   toolCalls,
   toolResultTexts,
+  turnResults,
 } from "./stream.js";
 
 export const CHECK = {
@@ -129,6 +130,18 @@ function agentLeakReport(messages: readonly WireValue[]): LeakReport | undefined
   return undefined;
 }
 
+/**
+ * Whether the turn that said its closing words ended well: some message
+ * says them, and a result after it reports no error. Note that the words
+ * alone are not enough, because a turn can say them and still fail.
+ */
+function endedWell(messages: readonly WireValue[], words: string): boolean {
+  const said = messages.findIndex((message) => assistantText([message]).includes(words));
+  if (said === -1) return false;
+  const after = turnResults(messages.slice(said + 1))[0];
+  return after !== undefined && !after.is_error;
+}
+
 function sandboxRunConditions(seen: ProbeObservations): readonly Condition[] {
   const init = sessionInit(seen.firstLaunch);
   const account = accountReading(seen.firstLaunch);
@@ -183,7 +196,7 @@ function sandboxRunConditions(seen: ProbeObservations): readonly Condition[] {
     condition(
       CHECK.PLAN,
       "the turn pushed its branch",
-      seen.branchPushed && assistantText(seen.firstLaunch).includes(TURN_DONE.FIRST),
+      seen.branchPushed && endedWell(seen.firstLaunch, TURN_DONE.FIRST),
       `branch luke-probe/${seen.nonce} ${seen.branchPushed ? "is" : "is not"} on GitHub`,
     ),
     condition(
@@ -205,7 +218,7 @@ function sandboxRunConditions(seen: ProbeObservations): readonly Condition[] {
       resumedInit !== undefined &&
         resumedInit.session_id === init?.session_id &&
         assistantText(seen.resumedLaunch).includes(fileName) &&
-        assistantText(seen.resumedLaunch).includes(TURN_DONE.RESUMED),
+        endedWell(seen.resumedLaunch, TURN_DONE.RESUMED),
       resumedInit === undefined
         ? "the relaunch did not start"
         : `resumed ${resumedInit.session_id === init?.session_id ? "the same" : "another"} session`,

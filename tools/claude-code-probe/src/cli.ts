@@ -57,6 +57,7 @@ import {
   DRIVER_COMMAND,
   DRIVER_EVENT,
   DROP_CAPABILITIES,
+  isRepositoryName,
   PINS,
   PROBE_ENV,
   PROBE_FILES,
@@ -700,6 +701,12 @@ function printVerdict(conditions: readonly Condition[]) {
 
 const main = Effect.gen(function* () {
   const settings: Settings = yield* settingsConfig;
+  if (!isRepositoryName(settings.repository)) {
+    return yield* new ProbeStepFailed({
+      step: "read the settings",
+      detail: `${PROBE_ENV.REPOSITORY} must name one repository as owner/name`,
+    });
+  }
   const scrub = scrubberOf(settings);
   const recording: Recording = {
     nonce: randomBytes(6).toString("hex"),
