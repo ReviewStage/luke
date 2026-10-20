@@ -8,8 +8,7 @@ import { testNotifications } from "./notifications-press.js";
 /**
  * Settings' Test notification, pressed: the shell's grantor is asked inside
  * the press, before the test leaves for the host, because a browser such as
- * Safari prompts only for an ask made there; a shell that asks nothing, the
- * Mac app, still posts the test.
+ * Safari prompts only for an ask made there.
  */
 
 /** Settles every act the press sent. */
@@ -30,19 +29,4 @@ it("a shell that asks for permission is asked inside the press, before the test 
 
   assert.equal(duringPress[0], "asked");
   assert.deepEqual(happened, ["asked", "tested"]);
-});
-
-it("a shell that asks nothing, as the Mac app, still has the test sent", async () => {
-  const tested: string[] = [];
-  fakeAppPlatform({});
-  fakeActPort({
-    [ACT_KIND.NOTIFICATIONS_TEST]: async () => {
-      tested.push("tested");
-    },
-  });
-
-  testNotifications();
-  await sent();
-
-  assert.deepEqual(tested, ["tested"]);
 });

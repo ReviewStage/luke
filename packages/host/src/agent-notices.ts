@@ -151,15 +151,42 @@ const ENDED_WORD = {
   [CODING_AGENT_STATUS.FAILED]: "failed",
 } as const;
 
-/** The notification as the OS posts it: what it says, and what its click does. */
+/** What kind of event a notice tells of. */
+export const NOTICE_KIND = {
+  AGENT_END: "agent-end",
+  INBOX_ITEM: "inbox-item",
+  FAILED_RUN: "failed-run",
+  CHAT_MESSAGE: "chat-message",
+  TEST: "test",
+} as const;
+
+/**
+ * The event a notice tells of, by the identifiers that name it: the same in
+ * every window that hears it, and different for every other event,
+ * whatever the words, so a browser's tabs can show it once
+ * (`apps/web/src/app/web-notices.ts`).
+ */
+export type NoticeSubject =
+  | {
+      readonly kind: typeof NOTICE_KIND.AGENT_END;
+      readonly agentId: string;
+      /** The turn that ended; null where the agent ended before its first turn was read. */
+      readonly turnId: string | null;
+      readonly status: CodingAgentStatus;
+    }
+  | {
+      readonly kind: typeof NOTICE_KIND.INBOX_ITEM;
+      readonly itemId: string;
+      readonly revision: number;
+    }
+  | { readonly kind: typeof NOTICE_KIND.FAILED_RUN; readonly runId: string }
+  | { readonly kind: typeof NOTICE_KIND.CHAT_MESSAGE; readonly messageId: string }
+  /** Settings' test, one press of it: each press is an event of its own. */
+  | { readonly kind: typeof NOTICE_KIND.TEST; readonly pressId: string };
+
+/** The notification as the OS posts it: the event it tells of, what it says, and what its click does. */
 export interface AgentNotice {
-  /**
-   * What the notice tells of: an agent's turn, an inbox item at its
-   * revision, a run, or a chat message. The same in every window that
-   * hears it, and different for every other event, whatever the words, so
-   * a browser's tabs can show it once (`apps/web/src/app/web-notices.ts`).
-   */
-  id: string;
+  subject: NoticeSubject;
   title: string;
   body: string;
   onClick: () => void;
@@ -733,7 +760,12 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (dependencies.notifying()) {
         doors.post({
           ...text,
-          id: `agent:${end.agentId}:${end.agent.turnId ?? ""}:${end.agent.status}`,
+          subject: {
+            kind: NOTICE_KIND.AGENT_END,
+            agentId: end.agentId,
+            turnId: end.agent.turnId,
+            status: end.agent.status,
+          },
           onClick: () => open(place),
         });
       }
@@ -781,7 +813,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         const text = tasklessNoticeText(item, models);
         doors.post({
           ...text,
-          id: `inbox:${item.id}:${item.revision}`,
+          subject: { kind: NOTICE_KIND.INBOX_ITEM, itemId: item.id, revision: item.revision },
           onClick: () =>
             dependencies.openTasklessItem({
               agentId: item.agentId,
@@ -802,7 +834,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       }
       if (dependencies.notifying()) {
         doors.post({
-          id: `run:${run.id}`,
+          subject: { kind: NOTICE_KIND.FAILED_RUN, runId: run.id },
           title: run.automationName,
           body: words,
           onClick: () => dependencies.openFailedRun(place),
@@ -830,7 +862,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (dependencies.notifying()) {
         doors.post({
           ...text,
-          id: `chat:${entry.messageId}`,
+          subject: { kind: NOTICE_KIND.CHAT_MESSAGE, messageId: entry.messageId },
           onClick: () => dependencies.openChat(entry.workspaceId),
         });
       }
@@ -852,7 +884,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (dependencies.notifying()) {
         doors.post({
           ...text,
-          id: `inbox:${item.id}:${item.revision}`,
+          subject: { kind: NOTICE_KIND.INBOX_ITEM, itemId: item.id, revision: item.revision },
           onClick: () => dependencies.openInbox(item.planId),
         });
       }

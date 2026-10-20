@@ -1,16 +1,17 @@
-import type {
-  AgentEndToast,
-  AgentNoticeDoorsSurface,
-  ChatMessageToast,
-  FailedRunToast,
-  InboxItemToast,
+import { randomUUID } from "node:crypto";
+import {
+  type AgentEndToast,
+  type AgentNoticeDoorsSurface,
+  type ChatMessageToast,
+  type FailedRunToast,
+  type InboxItemToast,
+  NOTICE_KIND,
 } from "@luke/host/agent-notices";
 import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/settings-controls";
 import { app, Notification } from "electron";
 
 /** What the notification Settings' test posts says. */
 const TEST_NOTICE = {
-  id: "test",
   title: "Luke notifications are on",
   body: "",
 } as const;
@@ -75,7 +76,12 @@ export function electronNoticeDoors(dependencies: {
   };
   return {
     post,
-    postTest: (onClick) => post({ ...TEST_NOTICE, onClick }),
+    postTest: (onClick) =>
+      post({
+        ...TEST_NOTICE,
+        subject: { kind: NOTICE_KIND.TEST, pressId: randomUUID() },
+        onClick,
+      }),
     toast: toPanels,
     toastInbox: inboxToPanels,
     toastFailedRun: failedRunToPanels,

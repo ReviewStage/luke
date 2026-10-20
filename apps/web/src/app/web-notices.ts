@@ -30,7 +30,7 @@
  * none, and nothing throws back into the notices that posted it.
  *
  * Every tab of the site hears the same notices, so a notification is tagged
- * by the event it tells of (`AgentNotice.id`), never by its words, which
+ * by the event it tells of (`AgentNotice.subject`), never by its words, which
  * two events may share, and the browser shows one for every hidden tab that posts
  * it rather than one each.
  *
@@ -40,7 +40,11 @@
  * kept there as the panel names the tab again.
  */
 
-import type { AgentNotice, AgentNoticeDoorsSurface } from "@luke/host/agent-notices";
+import {
+  type AgentNotice,
+  type AgentNoticeDoorsSurface,
+  NOTICE_KIND,
+} from "@luke/host/agent-notices";
 import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/settings-controls";
 
 /** What Settings' test notification says. */
@@ -98,9 +102,14 @@ export interface WebNoticeDoors extends AgentNoticeDoorsSurface {
 /** The ask for permission still waiting on the developer, which a second ask joins rather than makes again. */
 let asking: Promise<void> | undefined;
 
-/** The tag a notice's notification carries: what it tells of, the same in every tab that posts it and no other event's. */
-function tagOf(notice: Pick<AgentNotice, "id">): string {
-  return `${TAG_PREFIX}:${notice.id}`;
+/**
+ * The tag a notice's notification carries: the event it tells of, the same
+ * in every tab that posts it and no other event's. Note that this is the
+ * one place the subject becomes a string, because a browser takes a tag as
+ * nothing else.
+ */
+function tagOf(notice: Pick<AgentNotice, "subject">): string {
+  return JSON.stringify([TAG_PREFIX, notice.subject]);
 }
 
 /**
@@ -291,7 +300,11 @@ export function webNoticeDoors(dependencies: {
       onAnswered(notificationsStatusNow());
       if (Notification.permission !== PERMISSION.GRANTED) return;
       // Each press is its own event, so a test still on screen is joined by the next rather than quietly replaced.
-      posted({ ...TEST_NOTICE, id: `test:${crypto.randomUUID()}`, onClick: () => undefined });
+      posted({
+        ...TEST_NOTICE,
+        subject: { kind: NOTICE_KIND.TEST, pressId: crypto.randomUUID() },
+        onClick: () => undefined,
+      });
     },
     badge: badge.set,
     close: () => {

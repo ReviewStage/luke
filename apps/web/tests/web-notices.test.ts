@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { CODING_AGENT_STATUS } from "@luke/features/coding-agent-wire";
 import { ACT_KIND } from "@luke/host/acts";
+import { NOTICE_KIND } from "@luke/host/agent-notices";
 import { askAct } from "@luke/panel/act";
 import { installActPort } from "@luke/panel/app-bridge";
 import { HOST_CAPABILITY } from "@luke/settings";
@@ -19,6 +21,15 @@ import { fakeService } from "./support/fake-service";
  * the tab's title. The browser's `Notification` and the tab's visibility
  * are the operating system's, so both are faked at that boundary.
  */
+
+/** Two agents' ends, the events the notices posted here tell of. */
+const AGENT_ONE = {
+  kind: NOTICE_KIND.AGENT_END,
+  agentId: "agent-1",
+  turnId: "turn-1",
+  status: CODING_AGENT_STATUS.COMPLETED,
+} as const;
+const AGENT_TWO = { ...AGENT_ONE, agentId: "agent-2" } as const;
 
 /** A notification as the fake browser was asked to show it. */
 interface ShownNotification {
@@ -202,7 +213,7 @@ test("a notice while the tab is hidden shows the browser's notification, in the 
   visibility = "hidden";
 
   doors.post({
-    id: "agent:1",
+    subject: AGENT_ONE,
     title: "Billing export",
     body: "Opus finished",
     onClick: () => undefined,
@@ -222,7 +233,7 @@ test("a click on the notification opens the place it names", () => {
   const opened: string[] = [];
 
   doors.post({
-    id: "agent:1",
+    subject: AGENT_ONE,
     title: "Billing export",
     body: "Opus finished",
     onClick: () => opened.push("agent-1"),
@@ -238,7 +249,7 @@ test("a notice is never a reason to ask for permission: one posted before it was
   visibility = "hidden";
 
   doors.post({
-    id: "agent:1",
+    subject: AGENT_ONE,
     title: "Billing export",
     body: "Opus finished",
     onClick: () => undefined,
@@ -340,7 +351,7 @@ test("a notice posted after the permission was granted in the browser's own sett
   visibility = "hidden";
 
   doors.post({
-    id: "agent:1",
+    subject: AGENT_ONE,
     title: "Billing export",
     body: "Opus finished",
     onClick: () => undefined,
@@ -356,13 +367,13 @@ test("a browser that refuses to build a notification throws nothing back, and wi
   visibility = "hidden";
 
   doors.post({
-    id: "agent:1",
+    subject: AGENT_ONE,
     title: "Billing export",
     body: "Opus finished",
     onClick: () => undefined,
   });
   doors.post({
-    id: "agent:2",
+    subject: AGENT_TWO,
     title: "Billing export",
     body: "Sonnet finished",
     onClick: () => undefined,
@@ -405,9 +416,12 @@ test("the same notice posted by every hidden tab of the site shows once, and ano
   visibility = "hidden";
   const words = { title: "Release", body: "Opus: Approve deploy?", onClick: () => undefined };
 
-  first.doors.post({ ...words, id: "inbox:item-a:1" });
-  second.doors.post({ ...words, id: "inbox:item-a:1" });
-  first.doors.post({ ...words, id: "inbox:item-b:1" });
+  const itemA = { kind: NOTICE_KIND.INBOX_ITEM, itemId: "item-a", revision: 1 } as const;
+  const itemB = { kind: NOTICE_KIND.INBOX_ITEM, itemId: "item-b", revision: 1 } as const;
+
+  first.doors.post({ ...words, subject: itemA });
+  second.doors.post({ ...words, subject: { ...itemA } });
+  first.doors.post({ ...words, subject: itemB });
 
   assert.equal(browser.onScreen.size, 2);
 });
