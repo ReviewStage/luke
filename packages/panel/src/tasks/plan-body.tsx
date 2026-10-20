@@ -861,6 +861,8 @@ const DocumentUnit = memo(function DocumentUnit({
 
 /** How the plan's sections at rest change a date written in them: the plan's text, where a section's words stand in it, and the save of the text written anew. */
 interface PlanDates {
+  /** The task the page draws now, which a page handed another task without remounting changes. */
+  readonly taskId: () => string;
   /** The plan's text as it stands. */
   readonly text: () => string;
   /** Where a section's words start in the text, while they stand as drawn; none mid-chase or while the editor is open. */
@@ -887,14 +889,16 @@ function SectionDates({
   const open = useWordsDatePicker();
   const door = useMemo<WordsDates | undefined>(() => {
     if (open === undefined || dates === undefined) return undefined;
-    const plan = wordsDatesDoor(open, dates.text, dates.write);
     return {
       pick: (written, chip) => {
         // Note that the chip's link is placed in its section's words, which start where the section does in the plan's text.
         const from = dates.from(section);
         if (from === undefined) return;
         const at = { from: from + written.at.from, to: from + written.at.to };
-        plan.pick({ ...written, at }, chip);
+        // Note that the date is written only into the plan it was picked on, so a page handed another task while the picker stands writes nothing.
+        const picked = dates.taskId();
+        const text = () => (dates.taskId() === picked ? dates.text() : undefined);
+        wordsDatesDoor(open, text, dates.write).pick({ ...written, at }, chip);
       },
     };
   }, [open, dates, section]);
@@ -1162,12 +1166,13 @@ export const PlanBody = memo(function PlanBody({
   const latestTick = useRef(tick);
   latestTick.current = tick;
   // A date changed from the plan at rest is written over the text as it then stands, read as the picker closes.
-  const latestDates = useRef({ cut, views, body: task.document.body, onEdit });
-  latestDates.current = { cut, views, body: task.document.body, onEdit };
+  const latestDates = useRef({ cut, views, id: task.id, body: task.document.body, onEdit });
+  latestDates.current = { cut, views, id: task.id, body: task.document.body, onEdit };
   const planDates = useMemo<PlanDates | undefined>(
     () =>
       editable
         ? {
+            taskId: () => latestDates.current.id,
             text: () => latestDates.current.body,
             from: (section) => {
               const { cut: now, views: drawn } = latestDates.current;

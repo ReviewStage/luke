@@ -587,6 +587,21 @@ test("words written above a date while its picker is open leave the date changed
   );
 });
 
+test("a page handed another task while a date's picker stands writes nothing into that task", async () => {
+  const { container, saves, draw } = drawnAtRest();
+  const other: Task = { ...TASK, id: "7d1f9cbf-1e9e-4e75-86cb-68d809e97201", name: "Another plan" };
+
+  act(() => chipAtRest(container).click());
+  await act(async () => undefined);
+  const dialog = picker(container);
+  assert.ok(dialog);
+  draw(other);
+  pickDay(dialog, "Saturday, October 24, 2026");
+  await pressKey(dialog, "Escape");
+
+  assert.deepEqual(saves, []);
+});
+
 test("a date chip in a plan that takes no change opens no picker", () => {
   const { container } = drawnAtRest(TASK, false);
 
