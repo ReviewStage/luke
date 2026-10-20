@@ -46,6 +46,7 @@ import { useAppCommand } from "../app-commands.js";
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
 import { DraftMark } from "../draft-mark.js";
+import { FadingWords } from "../fading-words.js";
 import { useMemberDirectory } from "../member-directory.js";
 import { EditedBy, type EditPlace, useEditReader } from "../tasks/edit-ref.js";
 import { lastEditOf } from "../tasks/plan-body.js";
@@ -597,7 +598,7 @@ export function SidebarTask({
             rename.editing ? null : (
               <span className="sidebar-task-time">
                 {repository === undefined ? null : (
-                  <span className="sidebar-task-repository">{repository}</span>
+                  <FadingWords className="sidebar-task-repository" words={repository} />
                 )}
                 {creator === undefined ? null : (
                   <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />

@@ -20,6 +20,7 @@ import { orderTasks, TASK_ORDER, taskTime } from "@luke/ui/task-list-model";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ACTOR_SIZE, ActorMark, CreatorHeard } from "../actor-ref.js";
+import { FadingWords } from "../fading-words.js";
 import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import { RepositoryPicture } from "../repository-picture.js";
 import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
@@ -165,7 +166,7 @@ export function RecentRow({
       title={task.name}
       meta={
         <span className="home-row-meta">
-          <span className="home-row-context">{task.repository ?? "No repository"}</span>
+          <FadingWords className="home-row-context" words={task.repository ?? "No repository"} />
           {creator === undefined ? null : <CreatorHeard actor={creator} />}
           {creator === undefined ? null : <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />}
           <TaskStatusMark task={task} />

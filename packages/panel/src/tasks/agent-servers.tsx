@@ -67,6 +67,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { FadingWords } from "../fading-words.js";
 import { useIntegrationGrant } from "../integration-grant.js";
 import type { IntegrationStatuses } from "../integration-statuses.js";
 import {
@@ -648,9 +649,9 @@ function ServersPopover({
       index: pickIndex(row, tool),
       row,
       title: (
-        <span className="integration-tool-id">
+        <FadingWords className="integration-tool-id" words={tool.name}>
           <Highlighted text={tool.name} tokens={searchTokens(query)} />
-        </span>
+        </FadingWords>
       ),
       meta: row.name,
       onPress: () => open(row, query),
