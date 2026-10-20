@@ -64,13 +64,13 @@ import { TaskStatusMark as TaskWorkMark } from "./task-card.js";
 import { TasksBoard } from "./tasks-board.js";
 
 /**
- * tasks-page.tsx -- the window's Tasks page, while the account has the inbox-first sidebar on: the listed workspace's tasks as a List or as the Board, chosen by a switch beside its title.
+ * tasks-page.tsx -- the window's Tasks page: the listed workspace's tasks as a List or as the Board, chosen by a switch beside its title.
  *
- * With the experiment on, the sidebar is the Inbox, and the task list it
- * held stands here instead, in the plan's place, where the Board stood: the
- * Board's own sidebar row opens it, named Tasks, and its way out is the
- * Board's (`EXIT_BOARD`), so Back, Escape, and the window's history go on
- * treating it as the Board's place. Which view it shows is kept on this Mac.
+ * It stands in the plan's place, opened by the sidebar's Tasks row, and its
+ * way out is `EXIT_BOARD`, so Back, Escape, and the window's history treat it
+ * as the place the Board alone once was. With the inbox-first sidebar on,
+ * the sidebar lists the Inbox and this page is where the task list stands.
+ * Which view it shows is kept on this Mac.
  *
  * The List runs the pinned tasks first, then each of the account's sections
  * while it keeps them, then the rest under their status, the work under way

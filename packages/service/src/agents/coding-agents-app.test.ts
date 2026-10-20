@@ -4211,6 +4211,31 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "a task's archive naming an assignee who is no member is refused before any of its agents is stopped",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, task, ask } = yield* startedAgent(eve, { running: true });
+
+        const refused = yield* ask(
+          request(TASK(task.id), owner, {
+            method: "PATCH",
+            body: { archived: true, assigneeId: other },
+          }),
+        );
+
+        assert.deepEqual(
+          refused,
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(eve.cancelled, [], "no agent's turn was stopped");
+        const standing = Option.getOrUndefined(yield* readTask(owner, task.id))?.task;
+        // The agent's Start by hand assigned its starter, which the refused change leaves standing.
+        assert.deepEqual([standing?.archivedAt, standing?.assignee?.userId], [undefined, owner]);
+      }),
+  );
+
+  it.effect(
     "a member's Archive of a teammate's agent records the member on it, which its summary names, and an Unarchive clears it",
     () =>
       Effect.gen(function* () {

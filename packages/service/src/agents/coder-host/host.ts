@@ -28,7 +28,6 @@ import { EMPTY_BOARD } from "@luke/features/board-wire";
 import { CHAT_TOOL, MEMBER_KIND } from "@luke/features/chat-wire";
 import { CODING_AGENT_BRIEF, CONTEXT_WINDOW } from "@luke/features/coding-agent-wire";
 import { GITHUB_ACCESS } from "@luke/features/github-repositories-wire";
-import { INBOX_TOOL } from "@luke/features/inbox-wire";
 import { encodeMention, MENTION_KIND } from "@luke/features/mention-link";
 import type { ModelChoice } from "@luke/features/models-wire";
 import { PAGE_SHOWER } from "@luke/features/page-wire";
@@ -166,14 +165,8 @@ import {
 import { contextWindowOf } from "./context.js";
 import { agentStepOf } from "./context-estimate.js";
 import { type DelegationAsk, delegationChoice, recordDelegation } from "./delegation.js";
-import {
-  INBOX_REFUSAL,
-  type InboxToolResult,
-  inboxRejected,
-  postToInbox,
-  readOwnInbox,
-  withdrawAsk,
-} from "./inbox.js";
+import type { InboxToolResult } from "./inbox.js";
+import { type InboxCall, runAgentInbox } from "./inbox-door.js";
 import type { InboxSandboxDoor } from "./inbox-image.js";
 import { coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
@@ -566,17 +559,7 @@ function boardRejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
 }
 
-/** One call of the agent's inbox tools, by the tool's name and the input eve held to its schema; a post carries the door to the session's sandbox, where its pictures are read. */
-export type InboxCall =
-  | {
-      readonly tool: typeof INBOX_TOOL.POST;
-      readonly input: UnparsedWireValue;
-      readonly sandbox: InboxSandboxDoor;
-    }
-  | {
-      readonly tool: typeof INBOX_TOOL.WITHDRAW | typeof INBOX_TOOL.READ;
-      readonly input: UnparsedWireValue;
-    };
+export type { InboxCall } from "./inbox-door.js";
 
 /** One call of the agent's tools about the workspace's coding agents, by the tool's name, the input eve held to its schema, and eve's id for the call. */
 export interface AgentToolCall {
@@ -1188,24 +1171,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
       ),
 
-    inbox: (admitted, call) =>
-      Effect.gen(function* () {
-        const found = yield* agentOf(admitted);
-        if (Result.isFailure(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
-        const { id: agentId, taskId } = found.success;
-        const agent = { userId: admitted.target.userId, taskId, agentId };
-        switch (call.tool) {
-          case INBOX_TOOL.POST:
-            return yield* postToInbox(agent, call.input, call.sandbox);
-          case INBOX_TOOL.WITHDRAW:
-            return yield* withdrawAsk(agent, call.input);
-          case INBOX_TOOL.READ:
-            return yield* readOwnInbox(agent);
-        }
-      }).pipe(
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() => Effect.succeed(inboxRejected(INBOX_REFUSAL.UNAVAILABLE))),
-      ),
+    inbox: (admitted, call) => runAgentInbox(admitted, call),
 
     lookAtPicture: (admitted, input) =>
       Effect.gen(function* () {

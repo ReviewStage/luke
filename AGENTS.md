@@ -9,7 +9,7 @@ developer talks a task through with Luke, who writes its plan down as they go.
 | --- | --- |
 | `./scripts/bootstrap.sh` | Install pinned workspace dependencies |
 | `pnpm check:affected` | The portable checks for what changed since `origin/main`, replayed from cache where they already passed; optional before a push, since CI runs every check |
-| `./scripts/check.sh` | Every portable repository, type, test, and build check: before a release, for a broad refactor, or on request |
+| `./scripts/check.sh` | Every portable repository, migration, lint, type, and test check: before a release, for a broad refactor, or on request |
 | `./scripts/run.sh` | Launch against live sessions, replacing the running plain instance (`--fixture smoke`, `--keep-running`, `--no-trace`); `--instance <name>` runs a named one beside it, with its own profile, and `--preview` is one named for its Preview |
 | `./scripts/evidence.sh` | Write the fixture PNG under `artifacts/` |
 | `pnpm release:macos` | Local signed, notarized, verified DMG, zip, and update manifest |
@@ -148,7 +148,8 @@ testing guide, and the rules below agree with it. Its `bunx vitest` is
   exempt one by extension, because a test body is its own edge
   (`tools/anti-slop/shared/effect-edges.ts`), so review is the check.
 - Goldens change only under `LUKE_UPDATE_FIXTURES=1` through the shared
-  helpers, with the diff explained in the PR.
+  helpers, with the diff explained in the PR. A JSON Schema golden is kept
+  only for a schema a model is shown as a tool's input.
 - Never loosen or skip a test to go green: no `.only`, `.skip`, `.todo`, or
   `it.flakyTest`, which no lint rule refuses either. Fix or delete a flaky
   test. A test that breaks on a refactor because it checks internal

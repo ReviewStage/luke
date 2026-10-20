@@ -55,6 +55,15 @@ export const task = pgTable(
     status: text("status").$type<TaskStatus>().notNull().default(TASK_STATUS.TODO),
     /** How much the task matters (`TASK_PRIORITY`); none until someone weighs it. */
     priority: text("priority").$type<TaskPriority>().notNull().default(TASK_PRIORITY.NONE),
+    /**
+     * The member the task is assigned to, who is on it now, apart from the
+     * account that started it (`user_id`, its creator); a member of the
+     * task's workspace as it was written, and null for a task no one is on.
+     * Deleting that account, or that member leaving the workspace (the
+     * `task_assignee_leaves_with_member` trigger on `member`), lets the task
+     * go unassigned rather than taking it with them.
+     */
+    assigneeId: text("assignee_id").references(() => user.id, { onDelete: "set null" }),
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
       .$type<readonly PlanAgentEdit[]>()
@@ -121,6 +130,8 @@ export const task = pgTable(
     index("task_workspace_issue").on(table.issueId),
     // The key names one task of its workspace, and a new task takes the next number.
     uniqueIndex("task_organization_number").on(table.organizationId, table.number),
+    // A workspace's tasks assigned to one member, and that member leaving letting each of them go.
+    index("task_organization_assignee").on(table.organizationId, table.assigneeId),
   ],
 );
 

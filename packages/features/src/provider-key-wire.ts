@@ -109,7 +109,7 @@ const providerSchema = EffectSchema.Literals(Object.values(PROVIDER_KEY_PROVIDER
 export const providerKeyKindSchema = EffectSchema.Literals(Object.values(PROVIDER_KEY_KIND));
 
 /** What the account sees of one stored key: never the key, only what tells it apart. */
-export const providerKeySummarySchema = EffectSchema.Struct({
+const providerKeySummarySchema = EffectSchema.Struct({
   provider: providerSchema,
   /** The key's own prefix and its last four characters, as `sk-ant-…abcd`. */
   hint: EffectSchema.String,
@@ -123,7 +123,7 @@ export const providerKeySummarySchema = EffectSchema.Struct({
 export type ProviderKeySummary = typeof providerKeySummarySchema.Type;
 
 /** What the account sees of one stored subscription credential: never the credential, only what tells it apart. */
-export const subscriptionKeySummarySchema = EffectSchema.Struct({
+const subscriptionKeySummarySchema = EffectSchema.Struct({
   ...providerKeySummarySchema.fields,
   kind: providerKeyKindSchema,
 });

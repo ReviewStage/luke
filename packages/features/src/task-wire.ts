@@ -119,8 +119,18 @@ export const taskStatusSchema = EffectSchema.Literals(Object.values(TASK_STATUS)
 
 export const taskPrioritySchema = EffectSchema.Literals(Object.values(TASK_PRIORITY));
 
+/**
+ * The member a task is assigned to, by their account's id, as a start or a
+ * change names them: a member of the task's workspace, which the service
+ * confirms before it keeps them.
+ */
+export const taskAssigneeIdSchema = EffectSchema.String.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(200),
+);
+
 /** A task's number in its workspace, counted from one; its key is the workspace's prefix and this (`workspace-key.ts`). */
-export const taskNumberSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+const taskNumberSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
@@ -136,7 +146,7 @@ export const workspaceIdSchema = EffectSchema.String.check(
   EffectSchema.isMaxLength(TASK_BOUNDS.MAX_WORKSPACE_ID_CHARS),
 );
 
-export const planAssumptionSchema = EffectSchema.Struct({
+const planAssumptionSchema = EffectSchema.Struct({
   /** The assumption as one plain sentence. */
   text: trimmedText(TASK_BOUNDS.MAX_ASSUMPTION_CHARS),
 });
@@ -185,7 +195,7 @@ const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchem
  * desktop's own Start params name it by: the `task` an agent Start's body
  * spells it as is a released desktop's, which never sends this.
  */
-export const taskAgentStartSchema = EffectSchema.Struct({
+const taskAgentStartSchema = EffectSchema.Struct({
   idempotencyKey: codingAgentStartRequestFields.idempotencyKey,
   model: codingAgentStartRequestFields.model,
   effort: codingAgentStartRequestFields.effort,
@@ -237,7 +247,8 @@ function issuesNamedOnce(request: {
  * starts the task with none. A brief beside `planning: false` or an `agent`
  * is kept rather than refused, and goes unread until a call is opened on the
  * task, since that start opens none. A task starts to do and unweighed
- * unless `status` and `priority` say otherwise.
+ * unless `status` and `priority` say otherwise, and assigned to no one
+ * unless `assigneeId` names a member of its workspace.
  */
 export const taskCreateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(
@@ -258,6 +269,7 @@ export const taskCreateRequestSchema = EffectSchema.Struct({
   ),
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
+  assigneeId: EffectSchema.optionalKey(taskAssigneeIdSchema),
 }).check(EffectSchema.makeFilter(agentStartsUnplanned), EffectSchema.makeFilter(issuesNamedOnce));
 
 export type TaskCreateRequest = typeof taskCreateRequestSchema.Type;
@@ -279,6 +291,7 @@ function updateNamesAChange(update: {
   workspaceId?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  assigneeId?: string | null;
 }): boolean {
   return Object.keys(update).length > 0;
 }
@@ -293,10 +306,11 @@ function positionIsPinned(update: { pinned?: boolean; pinPosition?: string }): b
  * where its pin stands in the sidebar's Pinned section (`pin-order.ts`),
  * which comes only with `pinned: true` and pins a plan not yet pinned,
  * whether it is archived, the workspace it moves to, where it stands, how
- * much it matters, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
- * workspace before it is kept, and null clears it. A move is the task's
+ * much it matters, who it is assigned to, or any of them at once. A rename is one of these; a repository is confirmed reachable by the
+ * workspace before it is kept, and null clears it. An assignee is confirmed a
+ * member of the task's workspace before it is kept, and null clears it. A move is the task's
  * owner's alone, into a workspace they are a member of whose GitHub reaches
- * the task's repository.
+ * the task's repository, and lets its assignee go where they are no member there.
  */
 export const taskUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(TASK_BOUNDS.MAX_NAME_CHARS)),
@@ -307,12 +321,13 @@ export const taskUpdateRequestSchema = EffectSchema.Struct({
   workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   status: EffectSchema.optionalKey(taskStatusSchema),
   priority: EffectSchema.optionalKey(taskPrioritySchema),
+  assigneeId: EffectSchema.optionalKey(EffectSchema.NullOr(taskAssigneeIdSchema)),
 }).check(EffectSchema.makeFilter(updateNamesAChange), EffectSchema.makeFilter(positionIsPinned));
 
 export type TaskUpdateRequest = typeof taskUpdateRequestSchema.Type;
 
-/** What a change of where a task stands names: its status, its priority, or both. */
-export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority">;
+/** What a change of where a task stands names: its status, its priority, who it is assigned to (null for no one), or any of them. */
+export type TaskStanding = Pick<TaskUpdateRequest, "status" | "priority" | "assigneeId">;
 
 /**
  * A repository the account pinned in the sidebar, and the instant it was
@@ -400,6 +415,12 @@ const taskSummaryFields = {
   priority: EffectSchema.optionalKey(taskPrioritySchema),
   /** The task's number in its workspace, which its key is drawn from with the workspace's prefix; absent from a service before tasks had one. */
   number: EffectSchema.optionalKey(taskNumberSchema),
+  /**
+   * The member the task is assigned to, by id and the name their account
+   * holds now; absent while no one is, and from a service before tasks could
+   * be assigned.
+   */
+  assignee: EffectSchema.optionalKey(memberRefSchema),
 };
 
 /** How much of a task's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
@@ -411,7 +432,7 @@ export const TASK_AGENTS_BOUNDS = {
 } as const;
 
 /** One of a task's coding agents as its row names it: what it is called and runs on, where it stands, since when, and who started it. */
-export const taskAgentLineSchema = EffectSchema.Struct({
+const taskAgentLineSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   /** The agent's title; null where it has none, when it is named by its model. */
   title: EffectSchema.NullOr(EffectSchema.String),
@@ -437,7 +458,7 @@ export const taskAgentLineSchema = EffectSchema.Struct({
 export type TaskAgentLine = typeof taskAgentLineSchema.Type;
 
 /** A pull request one of a task's agents opened, as GitHub last answered the service: where it stands and its size. */
-export const taskPullRequestLineSchema = EffectSchema.Struct({
+const taskPullRequestLineSchema = EffectSchema.Struct({
   number: countedNumber,
   title: EffectSchema.String,
   state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
@@ -459,7 +480,7 @@ export type TaskPullRequestLine = typeof taskPullRequestLineSchema.Type;
  * number. A pull request is as the service last read it from GitHub, so
  * it may trail GitHub by as long as nothing has asked.
  */
-export const taskAgentsSummarySchema = EffectSchema.Struct({
+const taskAgentsSummarySchema = EffectSchema.Struct({
   total: countedNumber,
   /** The agents starting or running now. */
   working: countedNumber,
@@ -497,7 +518,7 @@ export type TaskSummary = typeof taskSummarySchema.Type;
 const MAX_AGENT_EDITS = 50;
 
 /** One save a coding agent made on the task, as the window reads it: the agent, how it is named now, and when. */
-export const agentEditLineSchema = EffectSchema.Struct({
+const agentEditLineSchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
   /** The agent as its row names it now: its title where it has one, else its model. */
   label: trimmedText(TASK_BOUNDS.MAX_NAME_CHARS),
@@ -531,7 +552,7 @@ export const planEditorSchema = memberRefSchema;
 export type PlanEditor = typeof planEditorSchema.Type;
 
 /** The newest revision of a plan, as its "Edited by" line reads it. */
-export const planLastEditSchema = EffectSchema.Struct({
+const planLastEditSchema = EffectSchema.Struct({
   actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
   /** The member who wrote it; absent for a coding agent's, for one nobody can be named for, and from a service before writers were kept. */
   by: EffectSchema.optionalKey(planEditorSchema),
@@ -612,7 +633,7 @@ export const taskAnswerSchema = EffectSchema.Struct({ plan: taskSchema });
  * Note that it carries no `unreached`, because the start confirmed the
  * repository reachable as it made the task.
  */
-export const taskAgentRefusalSchema = EffectSchema.Struct({ error: EffectSchema.String });
+const taskAgentRefusalSchema = EffectSchema.Struct({ error: EffectSchema.String });
 
 export type TaskAgentRefusal = typeof taskAgentRefusalSchema.Type;
 
@@ -875,7 +896,7 @@ export type TaskFileRequest = typeof taskFileRequestSchema.Type;
  * many lines the whole file has, and the lines, each cut as `show_code`
  * cuts it. A window past the file's end carries no lines.
  */
-export const taskFileWindowSchema = EffectSchema.Struct({
+const taskFileWindowSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: githubRepositoryFullNameSchema,
   branch: EffectSchema.String,
@@ -944,7 +965,7 @@ export const taskTreeRequestSchema = EffectSchema.Struct({
 export type TaskTreeRequest = typeof taskTreeRequestSchema.Type;
 
 /** One entry of a folder: its name within the folder, its path from the folder in a recursive listing, and whether it is a folder or a file. */
-export const taskTreeEntrySchema = EffectSchema.Struct({
+const taskTreeEntrySchema = EffectSchema.Struct({
   name: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
     EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS),
@@ -990,7 +1011,7 @@ export const TASK_SKILL_BOUNDS = {
 } as const;
 
 /** One skill of the task's repository a developer may choose by name: the name its folder carries, the description a model routes on, and its `SKILL.md`, named from the repository's root, which the File tab opens. */
-export const taskSkillSchema = EffectSchema.Struct({
+const taskSkillSchema = EffectSchema.Struct({
   name: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
     EffectSchema.isMaxLength(TASK_SKILL_BOUNDS.MAX_NAME_CHARS),
