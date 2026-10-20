@@ -1,6 +1,6 @@
 import { DisclosureChevron, useDisclosureState } from "@luke/ui";
 import { MessageSquareIcon } from "lucide-react";
-import type { AnimationEvent, ReactNode } from "react";
+import type { AnimationEvent, MouseEvent, ReactNode } from "react";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
 import { Tooltip } from "../tooltip.js";
 
@@ -76,6 +76,13 @@ function FoldedCount({ count }: { count: number }): React.JSX.Element | null {
   );
 }
 
+/** A press on a control in the head's name, a writer's page, kept for that control rather than folding the card. */
+function keptOnControl(event: MouseEvent<HTMLElement>): void {
+  if (!(event.target instanceof Element) || event.target.closest("button, a") === null) return;
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 /** Where a card was landed on, by a link or a jump: its element, and its ring while the landing stands. */
 export interface AnnotationLanding {
   readonly ref: (card: HTMLElement | null) => void;
@@ -142,7 +149,11 @@ export function AnnotationCard({
         <FoldSummary className="annotation-card-head">
           <DisclosureChevron />
           <span className="annotation-card-face">{face}</span>
-          <span className="annotation-card-name">{name}</span>
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: the name only keeps a press on its own control, a writer's page, from folding the card; the control inside is what is pressed. */}
+          {/* biome-ignore lint/a11y/useKeyWithClickEvents: a key on the control inside reaches it as a click, which is kept the same way. */}
+          <span className="annotation-card-name" onClick={keptOnControl}>
+            {name}
+          </span>
           {time === undefined ? null : <span className="annotation-card-time">{time}</span>}
           {states.map((state) => (
             <StateChip key={state.word} state={state} />

@@ -3826,6 +3826,13 @@ test("the pointer resting on a review thread in Files changed lights the lines i
     );
   });
   assert.equal(litFrom(), 3, "back on the chip, the chip's lines light again");
+  // The keyboard in a thread the chip shows lights that thread's lines, not the chip's.
+  document.documentElement.dataset.keyboard = "true";
+  act(() => {
+    shown.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  });
+  delete document.documentElement.dataset.keyboard;
+  assert.equal(litFrom(), 12, "the focused thread lights its own lines");
 });
 
 test("a review thread on its line in Files changed is replied on and resolved from under its comments, as in the Conversation", async () => {

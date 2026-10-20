@@ -444,8 +444,12 @@ function ThreadLines({
       className="diff-thread-lines"
       onMouseEnter={() => hover(hoverKey, group, lines, true)}
       onMouseLeave={() => hover(hoverKey, group, lines, false)}
-      onFocus={() => {
-        // Note that only the keyboard's focus lights them, as a hint shows on it, so a card a link lands on and focuses lights nothing it did not ask for.
+      onFocus={(event) => {
+        // Note that only the keyboard's focus lights them, as a hint shows on it, so a card a link lands on and focuses lights nothing it did not ask for;
+        // and only the threads nearest the focus, since a minimized chip's threads stand inside the chip's own.
+        const nearest =
+          event.target instanceof Element ? event.target.closest(".diff-thread-lines") : null;
+        if (nearest !== event.currentTarget) return;
         if (document.documentElement.dataset.keyboard === "true")
           hover(hoverKey, group, lines, true);
       }}

@@ -35,6 +35,8 @@ const FIRST = "Can we use the constant in the resend copy too?";
 const REPLY = "Yes, in the copy PR.";
 
 const roots: Root[] = [];
+/** The presses the head's name took. */
+const pressed: string[] = [];
 let laid: HTMLStyleElement | undefined;
 
 afterEach(() => {
@@ -42,6 +44,7 @@ afterEach(() => {
   laid?.remove();
   laid = undefined;
   document.body.replaceChildren();
+  pressed.length = 0;
 });
 
 /** A card of two comments, its fold its own, starting as `open` says, inside a box as wide as given. */
@@ -52,7 +55,11 @@ function Card({ startsOpen }: { startsOpen: boolean }): ReactNode {
     open,
     onOpenChange: setOpen,
     face: createElement("span", { className: "face" }, "C"),
-    name: "charlespan",
+    name: createElement(
+      "button",
+      { type: "button", onClick: () => pressed.push("name") },
+      "charlespan",
+    ),
     time: createElement("span", { className: "annotation-card-time" }, "2h"),
     states: [{ word: "Outdated", tone: ANNOTATION_TONE.NEUTRAL }],
     count: 2,
@@ -169,4 +176,18 @@ test("a narrow card drops the age, draws a state as a dot that still says its wo
   assert.equal(getComputedStyle(word()).position, "absolute", "its word is drawn nowhere");
   assert.equal(word().textContent, "Outdated", "and still names it");
   assert.equal(getComputedStyle(countWord()).position, "absolute", "the count drops its word");
+});
+
+test("a press on the writer's name opens what the name opens, and leaves the card as it stood", () => {
+  const container = draw(true);
+  const name = container.querySelector<HTMLElement>(".annotation-card-name button");
+  act(() => name?.click());
+  assert.deepEqual(pressed, ["name"]);
+  assert.equal(container.querySelector("summary")?.getAttribute("aria-expanded"), "true");
+  act(() => container.querySelector<HTMLElement>(".annotation-card-time")?.click());
+  assert.equal(
+    container.querySelector("summary")?.getAttribute("aria-expanded"),
+    "false",
+    "anywhere else on the head folds it",
+  );
 });
