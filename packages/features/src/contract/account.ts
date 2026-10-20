@@ -1,8 +1,8 @@
 /**
  * account.ts -- the signed-in account's own reads and writes (`account-wire.ts`, `plan-document-template.ts`, `provider-key-wire.ts`), as procedures.
  *
- * Its deletion, its preferences snapshot, its plan template with the
- * template's history, and its own provider keys, each on the path and
+ * Its deletion, its preferences snapshot, its access, its plan template with
+ * the template's history, and its own provider keys, each on the path and
  * method it has always answered on. A revision's number travels in the
  * path, and a page of the history names the revision it is read before in
  * the query, each as the text a URL carries, read as a revision number;
@@ -19,6 +19,7 @@ import { HTTP_METHOD } from "@luke/wire";
 import { openapi } from "@orpc/openapi";
 import { Schema as EffectSchema } from "effect";
 import {
+  accountAccessAnswerSchema,
   accountDeleteAnswerSchema,
   accountPreferencesAnswerSchema,
   accountPreferencesWriteSchema,
@@ -66,6 +67,9 @@ export const accountContract = {
     .meta(openapi({ method: HTTP_METHOD.PUT, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES }))
     .input(accountPreferencesWriteSchema)
     .output(EffectSchema.flip(accountPreferencesAnswerSchema)),
+  access: hostedProcedure
+    .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_ACCESS }))
+    .output(EffectSchema.flip(accountAccessAnswerSchema)),
   planTemplate: hostedProcedure
     .meta(openapi({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PLAN_TEMPLATE }))
     .output(EffectSchema.flip(planTemplateAnswerSchema)),

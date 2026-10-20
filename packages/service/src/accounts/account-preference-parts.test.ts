@@ -5,6 +5,7 @@ import { Database } from "@luke/database/core/query";
 import {
   deleteAccount,
   readAccountPreferences,
+  readAccountRole,
   readPlanTemplate,
   restorePlanTemplate,
   writeAccountPreferences,
@@ -97,6 +98,7 @@ const openAccounts = Effect.gen(function* () {
     standingSessions: () => Effect.die(new Error("this suite deletes no account")),
     deleteUser: deleteAccount,
     readPreferences: readAccountPreferences,
+    readRole: readAccountRole,
     anthropicFastAccess,
     writePreferences: writeAccountPreferences,
     readPlanTemplate,

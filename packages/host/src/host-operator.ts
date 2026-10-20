@@ -317,6 +317,7 @@ import {
 import { readEither } from "@luke/wire/effect";
 import { Clock, Effect, type Schema as EffectSchema, ErrorReporter, Option, Result } from "effect";
 import { Base64 } from "effect/encoding";
+import type { AppAccessSlice } from "./app-state.js";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -333,6 +334,8 @@ export interface HostBootstrap {
   settings: AppSettings;
   account: AccountSnapshot;
   sessionReplay: { permitted: boolean; accountId?: string };
+  /** What the signed-in account may open in the app, as the host last read it. */
+  access: AppAccessSlice;
   voiceAvailable: boolean;
   agentTraceEnabled: boolean;
 }
@@ -724,6 +727,7 @@ export interface HostOperator {
   ): Effect.Effect<CodingAgentInboxAttachmentView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
+  onAccountAccessChanged(listener: (access: AppAccessSlice) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
   onTasksChanged(listener: (view: TasksView) => void): () => void;
@@ -2058,6 +2062,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       on(
         GATEWAY_EVENT.ACCOUNT_CHANGED,
         (payload) => (isRecord(payload) ? answered<AccountSnapshot>(payload) : undefined),
+        listener,
+      ),
+    onAccountAccessChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.ACCOUNT_ACCESS_CHANGED,
+        (payload): AppAccessSlice | undefined =>
+          isRecord(payload) && isWireBoolean(payload.admin) ? { admin: payload.admin } : undefined,
         listener,
       ),
     onVoiceLiveSessionChanged: (listener) =>
