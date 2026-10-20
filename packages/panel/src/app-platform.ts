@@ -26,7 +26,7 @@ import type { NotificationsGrantor } from "@luke/voice/settings-controls";
  * press (`open`), where the shell opens it outside the window, as the Mac
  * app does in the default browser, where the developer's session is.
  */
-export type AdminDashboardWay = { readonly href: string } | { readonly open: () => void };
+type AdminDashboardWay = { readonly href: string } | { readonly open: () => void };
 
 /** The capabilities a window's shell answers, each as the panel asks for it. */
 export interface AppPlatform {
