@@ -1254,6 +1254,9 @@ const ITEM_ROW = {
   answeredBy: null,
   answeredByName: null,
   closedReason: null,
+  closedBy: null,
+  closedByName: null,
+  openAskMessageId: null,
   settledAt: null,
 };
 

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { posix } from "node:path";
-import { isDeepStrictEqual } from "node:util";
 import {
   LIVE_COUNT,
   type LiveStatement,
@@ -48,6 +47,7 @@ import {
 } from "@luke/features/coding-agent-wire";
 import { type InboxItemPlace, inboxAttachmentAddress } from "@luke/features/inbox-attachment-link";
 import {
+  askStillAsked,
   INBOX_APPROVAL_OPTION,
   INBOX_ASK,
   INBOX_ASK_STATUS,
@@ -60,25 +60,26 @@ import {
   INBOX_WIRE_VERSION,
   type InboxAnswers,
   type InboxAsk,
+  type InboxAskStanding,
   type InboxBlock,
   type InboxImageType,
   type InboxItem,
   type InboxMessage,
   type InboxPost,
   type InboxPostBlock,
-  type InboxReadAsk,
   type InboxReply,
   type InboxResponse,
   inboxAnswersRefusal,
   inboxAnswersSchema,
   inboxAskResponse,
-  inboxAskSchema,
   inboxBlockSchema,
   inboxReadAskSchema,
   inboxReplyAnswers,
   inboxReplySchema,
   inboxResponseAsk,
   inboxResponseSchema,
+  knownAsk,
+  standingAsk,
 } from "@luke/features/inbox-wire";
 import { LINK_PLACE } from "@luke/features/luke-link";
 import { insideCode } from "@luke/features/mention-link";
@@ -415,62 +416,8 @@ const MessageRowSchema = Schema.Struct({
 
 type MessageRow = typeof MessageRowSchema.Type;
 
-/** Where an item stands, as each ask of its thread is read against it. */
-interface AskStanding {
-  readonly status: InboxItem["status"];
-  readonly response: InboxResponse;
-  readonly openAskMessageId: string | null;
-  readonly closedReason: string | null;
-}
-
-/**
- * Whether the item's response still stands for the ask: the ask a response
- * maps to is the ask itself, a to-do any `do` ask, whose steps its blocks
- * carry. A post from before version 5 rewrites the response and not the
- * thread, so an ask it posted over stands for it no longer.
- */
-function askStandsFor(response: InboxResponse, ask: InboxAsk): boolean {
-  const asked = inboxResponseAsk(response);
-  if (asked === undefined || asked.type !== ask.type) return false;
-  return asked.type === INBOX_ASK.DO || isDeepStrictEqual(asked, ask);
-}
-
-/** Whether the ask held open is still the one the item asks: an ask of a type a newer deployment wrote is taken at its word. */
-function askStillAsked(response: InboxResponse, ask: InboxReadAsk): boolean {
-  const known = knownAsk(ask);
-  return known === undefined || askStandsFor(response, known);
-}
-
-/**
- * An ask as a read carries it: as it was kept, unless it was kept open and
- * the item no longer holds it open, which a deployment from before version
- * 5 leaves by closing the item without a word to the ask; then withdrawn
- * with the item's reason where the item closed on it, answered where the
- * item was answered on it, and replaced where the item holds another or,
- * posted over from before version 5, asks something else.
- * Note that an ask withdrawn with no reason is a member's close without an
- * answer, the item's `closedBy` naming the member while the close stands,
- * because an agent's close always says why: a reader tells the two closes
- * apart by the reason alone, as it tells a closed item's.
- */
-function standingAsk(ask: InboxReadAsk, messageId: string, item: AskStanding): InboxReadAsk {
-  if (ask.status !== INBOX_ASK_STATUS.OPEN) return ask;
-  const replaced = { ...ask, status: INBOX_ASK_STATUS.REPLACED };
-  if (messageId !== item.openAskMessageId) return replaced;
-  switch (item.status) {
-    case INBOX_STATUS.OPEN:
-      return askStillAsked(item.response, ask) ? ask : replaced;
-    case INBOX_STATUS.ANSWERED:
-      return { ...ask, status: INBOX_ASK_STATUS.ANSWERED };
-    case INBOX_STATUS.CLOSED:
-      return item.closedReason === null
-        ? { ...ask, status: INBOX_ASK_STATUS.WITHDRAWN }
-        : { ...ask, status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnReason: item.closedReason };
-  }
-}
-
 /** A message as the wire carries it: the member named where their account stands, no files where it carried none, and its ask as it stands on the item. */
-function storedMessage(row: MessageRow, item: AskStanding): InboxMessage {
+function storedMessage(row: MessageRow, item: InboxAskStanding): InboxMessage {
   return {
     id: row.id,
     author: row.author,
@@ -1441,7 +1388,8 @@ const sibling = alias(inboxMessage, "sibling");
  * rather than leaving the reader a moment holding neither. The order is the
  * reader's to keep, since Realtime keeps none.
  *
- * Note that each item's thread, its latest `MAX_MESSAGES_READ` messages, and
+ * Note that each item's thread, the messages either of a read's threads
+ * draws (`messagesOf`'s `LATEST_PLAIN_MESSAGES` and `THREAD_MESSAGES`), and
  * the files its answer and its messages carried are statements of their own,
  * which the reader joins to the items, rather than lists the item's row
  * aggregates, because `jsonb_agg` and `jsonb_build_object` are only stable
@@ -1459,18 +1407,41 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
     or(eq(inboxItem.status, INBOX_STATUS.OPEN), inArray(inboxItem.id, latestSettled)),
   );
   const itemIds = queryBuilder.select({ id: inboxItem.id }).from(inboxItem).where(read);
+  const ofItem = eq(sibling.itemId, qualified(inboxMessage, inboxMessage.itemId));
+  const latestOf = (plain: boolean) =>
+    queryBuilder
+      .select({ id: sibling.id })
+      .from(sibling)
+      .where(plain ? and(ofItem, isNull(sibling.ask), isNull(sibling.answers)) : ofItem)
+      .orderBy(desc(sibling.createdAt), desc(sibling.id))
+      .limit(INBOX_BOUNDS.MAX_MESSAGES_READ);
+  const first = queryBuilder
+    .select({ id: sibling.id })
+    .from(sibling)
+    .where(ofItem)
+    .orderBy(sibling.createdAt, sibling.id)
+    .limit(1);
+  // The messages either thread draws: the latest of all and of those that neither ask nor answer, the first, and the one whose ask is held open.
   const latestMessage = and(
     inArray(inboxMessage.itemId, itemIds),
-    inArray(
-      MESSAGE.id,
-      queryBuilder
-        .select({ id: sibling.id })
-        .from(sibling)
-        .where(eq(sibling.itemId, qualified(inboxMessage, inboxMessage.itemId)))
-        .orderBy(desc(sibling.createdAt), desc(sibling.id))
-        .limit(INBOX_BOUNDS.MAX_MESSAGES_READ),
+    or(
+      inArray(MESSAGE.id, latestOf(false)),
+      inArray(MESSAGE.id, latestOf(true)),
+      inArray(MESSAGE.id, first),
+      inArray(
+        MESSAGE.id,
+        queryBuilder.select({ id: inboxItem.openAskMessageId }).from(inboxItem).where(read),
+      ),
     ),
   );
+  // The message that answered an item's ask, under the answer's key, whose files are the answer's.
+  const answering = queryBuilder
+    .select({ id: inboxMessage.id })
+    .from(inboxMessage)
+    .innerJoin(inboxItem, eq(inboxItem.id, inboxMessage.itemId))
+    .where(
+      and(read, eq(inboxMessage.clientKey, inboxItem.answerKey), isNotNull(inboxMessage.answers)),
+    );
   const items = liveStatementOf(
     queryBuilder
       .select(
@@ -1492,6 +1463,9 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
             answeredBy: inboxItem.answeredBy,
             answeredByName: INBOX_ITEM_COLUMNS.answeredByName,
             closedReason: inboxItem.closedReason,
+            closedBy: inboxItem.closedBy,
+            closedByName: INBOX_ITEM_COLUMNS.closedByName,
+            openAskMessageId: inboxItem.openAskMessageId,
             unread: unreadFor(scope.userId),
           },
           {
@@ -1516,6 +1490,8 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
             userId: MESSAGE.userId,
             name: sql`(select "name" from ${user} where ${user.id} = ${MESSAGE.userId})`,
             text: MESSAGE.text,
+            ask: MESSAGE.ask,
+            answers: MESSAGE.answers,
           },
           { createdAt: MESSAGE.createdAt },
         ),
@@ -1528,7 +1504,7 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
       .select(
         liveSelection({
           attachmentId: attachment.id,
-          answerOf: sql`case when ${attachment.kind} = ${INBOX_ATTACHMENT_KIND.ANSWER} then ${attachment.inboxItemId} end`,
+          answerOf: sql`case when ${attachment.kind} = ${INBOX_ATTACHMENT_KIND.ANSWER} or ${attachment.inboxMessageId} in (${answering}) then ${attachment.inboxItemId} end`,
           messageId: attachment.inboxMessageId,
           name: attachment.name,
           mediaType: attachment.contentType,
@@ -1546,6 +1522,7 @@ function scopeLiveStatements(scope: InboxScope): Option.Option<ScopeInboxLiveSta
             attachment.inboxMessageId,
             queryBuilder.select({ id: MESSAGE.id }).from(inboxMessage).where(latestMessage),
           ),
+          inArray(attachment.inboxMessageId, answering),
         ),
       ),
   );
@@ -2712,12 +2689,6 @@ export function withdrawInboxClose(
 /** A file's base64 as the bytes it spells; the wire held it to standard padded base64 already. */
 function bytesOf(file: CodingAgentAttachment): Uint8Array {
   return new Uint8Array(Buffer.from(file.data, "base64"));
-}
-
-/** An ask as a message keeps it without where it stands, where this build knows its type; nothing for a type a newer deployment wrote. */
-function knownAsk(ask: InboxReadAsk): InboxAsk | undefined {
-  const { status: _status, withdrawnReason: _reason, ...kept } = ask;
-  return Schema.is(inboxAskSchema)(kept) ? kept : undefined;
 }
 
 /** A note bounded as an answer's note on the item, which a desktop before version 5 reads it as; words past the bound end in an ellipsis. */

@@ -1,5 +1,5 @@
 import { isWireBoolean, isWireNumber, isWireString } from "@luke/wire";
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, Equal } from "effect";
 import {
   CODING_AGENT_ATTACHMENT_TYPE,
   CODING_AGENT_BOUNDS,
@@ -1265,5 +1265,69 @@ export function inboxReplyAnswers(
       return { ask, reply: reply.reply };
     case INBOX_REPLY.ACKNOWLEDGED:
       return undefined;
+  }
+}
+
+/** An ask as a message keeps it without where it stands, where this build knows its type; nothing for a type a newer deployment wrote. */
+export function knownAsk(ask: InboxReadAsk): InboxAsk | undefined {
+  const { status: _status, withdrawnReason: _reason, ...kept } = ask;
+  return EffectSchema.is(inboxAskSchema)(kept) ? kept : undefined;
+}
+
+/**
+ * Whether the item's response still stands for the ask: the ask a response
+ * maps to is the ask itself, a to-do any `do` ask, whose steps its blocks
+ * carry. A post from before version 5 rewrites the response and not the
+ * thread, so an ask it posted over stands for it no longer.
+ */
+function askStandsFor(response: InboxResponse, ask: InboxAsk): boolean {
+  const asked = inboxResponseAsk(response);
+  if (asked === undefined || asked.type !== ask.type) return false;
+  return asked.type === INBOX_ASK.DO || Equal.equals(asked, ask);
+}
+
+/** Whether the ask held open is still the one the item asks: an ask, or a response, of a type a newer deployment wrote is taken at its word. */
+export function askStillAsked(response: InboxReadResponse, ask: InboxReadAsk): boolean {
+  const known = knownAsk(ask);
+  return known === undefined || !knownResponse(response) || askStandsFor(response, known);
+}
+
+/** Where an item stands, as each ask of its thread is read against it. */
+export interface InboxAskStanding {
+  readonly status: InboxStatus;
+  readonly response: InboxReadResponse;
+  readonly openAskMessageId: string | null;
+  readonly closedReason: string | null;
+}
+
+/**
+ * An ask as a read carries it: as it was kept, unless it was kept open and
+ * the item no longer holds it open, which a deployment from before version
+ * 5 leaves by closing the item without a word to the ask; then withdrawn
+ * with the item's reason where the item closed on it, answered where the
+ * item was answered on it, and replaced where the item holds another or,
+ * posted over from before version 5, asks something else.
+ * Note that an ask withdrawn with no reason is a member's close without an
+ * answer, the item's `closedBy` naming the member while the close stands,
+ * because an agent's close always says why: a reader tells the two closes
+ * apart by the reason alone, as it tells a closed item's.
+ */
+export function standingAsk(
+  ask: InboxReadAsk,
+  messageId: string,
+  item: InboxAskStanding,
+): InboxReadAsk {
+  if (ask.status !== INBOX_ASK_STATUS.OPEN) return ask;
+  const replaced = { ...ask, status: INBOX_ASK_STATUS.REPLACED };
+  if (messageId !== item.openAskMessageId) return replaced;
+  switch (item.status) {
+    case INBOX_STATUS.OPEN:
+      return askStillAsked(item.response, ask) ? ask : replaced;
+    case INBOX_STATUS.ANSWERED:
+      return { ...ask, status: INBOX_ASK_STATUS.ANSWERED };
+    case INBOX_STATUS.CLOSED:
+      return item.closedReason === null
+        ? { ...ask, status: INBOX_ASK_STATUS.WITHDRAWN }
+        : { ...ask, status: INBOX_ASK_STATUS.WITHDRAWN, withdrawnReason: item.closedReason };
   }
 }
