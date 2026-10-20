@@ -21,7 +21,6 @@ import type { AppInboxTasklessItem } from "@luke/host/app-state";
 import { test } from "vitest";
 import {
   ANSWER_TONE,
-  attachedStamp,
   awaitsNod,
   CODE_READ,
   codeNotice,
@@ -67,7 +66,6 @@ import {
   tasklessGroups,
   withChoice,
   withDecision,
-  withoutAnswer,
   withStep,
   withValue,
 } from "./inbox-model.js";
@@ -250,7 +248,7 @@ test("a form filled in part sends what was filled, a required field left empty a
   );
 });
 
-test("a thread's form attaches its values to the reply as they are filled, with no press, a required field left empty absent from them; a reply with nothing filled stays plain, a switch left alone filling nothing, and taking the answer off empties the fields", () => {
+test("a thread's form attaches its values to the reply as they are filled, with no press, a required field left empty absent from them; a reply with nothing filled stays plain, a switch left alone filling nothing", () => {
   const form = [
     asking({
       type: INBOX_ASK.ANSWER,
@@ -277,11 +275,6 @@ test("a thread's form attaches its values to the reply as they are filled, with 
       values: [{ label: "Verify certificate", value: true }],
     },
   });
-  assert.equal(
-    attachedStamp(sent?.answers ?? assert.fail("no answer"), form[0]?.ask).words,
-    "Send 1 field",
-  );
-  assert.equal(inboxThreadSend(form, withoutAnswer(partial)), undefined);
 });
 
 test("what an answer lacks is said by what it asks: a choice its pick, unless the developer's own words or files answer it, a form given nothing its first required field left empty in the form's order, and words their words; nothing once it lacks nothing", () => {
@@ -1521,12 +1514,7 @@ test("an answer's stamp names a pair of buttons' pick in the past where it can a
     tone: ANSWER_TONE.BACK,
     words: "Requested changes",
   });
-  assert.deepEqual(attachedStamp(chose("Request changes"), pair), {
-    tone: ANSWER_TONE.BACK,
-    words: "Request changes",
-  });
   assert.equal(sentStamp(chose("7 days"), undefined).words, "Chose 7 days");
-  assert.equal(attachedStamp(chose("7 days"), undefined).words, 'Choose "7 days"');
 
   const todo = asking({ type: INBOX_ASK.DO, steps: ["One", "Two", "Three"] }).ask;
   const done = { ask: ASKING_ID, reply: INBOX_REPLY.DONE, steps: [0, 1, 2] };
@@ -1535,7 +1523,6 @@ test("an answer's stamp names a pair of buttons' pick in the past where it can a
     tone: ANSWER_TONE.BACK,
     words: "Couldn't do it 1/3",
   });
-  assert.equal(attachedStamp(done, todo).words, "Mark done");
 });
 
 test("a thread's row previews its latest message, an answer led by its stamp, and a note that asks nothing reads as the agent's words rather than an answer", () => {
