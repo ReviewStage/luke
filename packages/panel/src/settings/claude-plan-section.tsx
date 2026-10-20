@@ -251,10 +251,12 @@ export function ClaudePlanSection({ signedIn }: { signedIn: boolean }): React.JS
                           save();
                         }}
                         // Escape in the field closes the editor and nothing behind it: the
-                        // window's own Escape would leave Settings. A composition's Escape is the IME's.
+                        // window's own Escape would leave Settings. A composition's Escape is the IME's,
+                        // which Safari reports with `isComposing` already false and code 229 still.
                         onKeyDown={(event) => {
                           if (event.target !== field.current) return;
-                          if (event.key !== "Escape" || event.nativeEvent.isComposing) return;
+                          if (event.key !== "Escape") return;
+                          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
                           event.preventDefault();
                           event.stopPropagation();
                           cancel();

@@ -207,6 +207,26 @@ test("a token refused by shape says why under the field and leaves it as pasted"
   assert.equal(group.querySelector("input")?.value, TOKEN);
 });
 
+test("Escape in the field closes it, but not while an input method is composing", async () => {
+  const page = await mount();
+  await press(claudeGroup(page) ?? page, "Add token");
+  const field = await paste(claudeGroup(page) ?? page, TOKEN);
+  // Safari's composition Escape: `isComposing` already false, code 229 still.
+  const composingEscape = new KeyboardEvent("keydown", { key: "Escape", bubbles: true });
+  Object.defineProperty(composingEscape, "keyCode", { value: 229 });
+  act(() => {
+    field.dispatchEvent(composingEscape);
+  });
+  await settle();
+  assert.equal(claudeGroup(page)?.querySelector("input")?.value, TOKEN, "the paste stands");
+
+  act(() => {
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+  assert.equal(claudeGroup(page)?.querySelector("input"), null, "a plain Escape closes it");
+});
+
 test("Disconnect asks first and removes the setup-token by its kind", async () => {
   held = { keys: [], subscriptions: [CONNECTED] };
   const page = await mount();
