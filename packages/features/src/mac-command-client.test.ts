@@ -1,7 +1,9 @@
 /**
  * mac-command-client.test.ts -- the Mac's side of the commands its account's agents queue, as the Mac observes it.
  *
- * The held read answers the commands the service claimed for this Mac, and
+ * The held read names the kinds this Mac runs and answers the commands the
+ * service claimed for it, a command of a kind this build does not know
+ * read as its id and kind alone rather than spoiling the read, and it
  * outlasts the service's hold before it gives up as nothing; a result is
  * posted as the service reads it, and is taken or not.
  *
@@ -20,13 +22,20 @@ import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
 import { HostedMacCommandClient } from "./mac-command-client.js";
-import type { MacCommand, MacCommandResult } from "./mac-command-wire.js";
+import { MAC_COMMAND_KIND, type MacCommand, type MacCommandResult } from "./mac-command-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const BASE_URL = "https://luke.test";
 const COMMAND_ID = "11111111-1111-4111-8111-111111111111";
 
-const COMMAND: MacCommand = { id: COMMAND_ID, command: "git status", timeoutSeconds: 60 };
+const COMMAND: MacCommand = {
+  id: COMMAND_ID,
+  kind: MAC_COMMAND_KIND.SHELL,
+  command: "git status",
+  timeoutSeconds: 60,
+};
+
+const NEWER_ID = "22222222-2222-4222-8222-222222222222";
 
 const RESULT: MacCommandResult = {
   exitCode: 0,
@@ -54,16 +63,19 @@ function untilAsked(requests: readonly RecordedRequest[]): Effect.Effect<void> {
   });
 }
 
-it.effect("a held read answers the commands the service claimed for this Mac", () =>
+it.effect("a held read names this Mac's kinds and answers the commands claimed for it", () =>
   Effect.gen(function* () {
+    const newer = { id: NEWER_ID, kind: "hologram", timeoutSeconds: 60, beam: true };
     const api = fakeCloudApi({
-      "GET /api/mac-commands": { answer: () => ({ commands: [COMMAND] }) },
+      "GET /api/mac-commands": { answer: () => ({ commands: [COMMAND, newer] }) },
     });
 
-    const waiting = yield* Effect.provide(client().waiting(), api.layer);
+    const kinds = [MAC_COMMAND_KIND.SHELL, MAC_COMMAND_KIND.BROWSER];
+    const waiting = yield* Effect.provide(client().waiting(kinds), api.layer);
 
-    assert.deepEqual(waiting, [COMMAND]);
+    assert.deepEqual(waiting, [COMMAND, { id: NEWER_ID, kind: "hologram" }]);
     assert.deepEqual(api.credentials(), ["token-1"]);
+    assert.equal(api.requests()[0]?.searchParams.get("kinds"), "shell,browser");
   }),
 );
 
@@ -71,7 +83,9 @@ it.effect("a held read outlasts the service's hold, then gives up as nothing", (
   Effect.gen(function* () {
     const silent = recordingHttpClient(() => new Promise<Response>(() => undefined));
 
-    const read = yield* Effect.forkChild(Effect.provide(client().waiting(), silent.layer));
+    const read = yield* Effect.forkChild(
+      Effect.provide(client().waiting([MAC_COMMAND_KIND.SHELL]), silent.layer),
+    );
     yield* untilAsked(silent.requests);
     yield* TestClock.adjust("34 seconds");
     assert.equal(read.pollUnsafe(), undefined, "still held short of its deadline");
