@@ -216,8 +216,8 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  *
  * An item from version 5 is drawn as its thread instead (`inbox-model.ts`'s
  * `inboxThreadOf`): under its title alone, every message, oldest first,
- * each a Markdown document by its writer's face, an agent's tagged so, drawn with the item's own
- * pictures, pairs, and lone-link cards, and its files. A member's answer
+ * each a Markdown document by its writer's face and name, drawn with the
+ * item's own pictures, pairs, and lone-link cards, and its files. A member's answer
  * leads with its stamp (`inbox-stamp.tsx`). An agent's message that asks
  * ends with the ask's box: its kind and where it stands at its head, and
  * while it waits its controls, a `decide`'s numbered options or two small
@@ -1566,9 +1566,6 @@ const ANSWERED = "Answered";
 /** What an ask's box says of one its agent took back, before why. */
 const WITHDRAWN = "Withdrawn";
 
-/** The tag a message of the agent's wears after its name. */
-const AGENT_TAG = "agent";
-
 /** What the presses closing an open ask say. */
 const ASK_PRESS = {
   DONE: "Mark done",
@@ -1901,7 +1898,6 @@ function ThreadMessage({
           <CommentName>
             {fromAgent ? <AgentName by={by} nameOnly /> : <ActorRef actor={member} nameOnly />}
           </CommentName>
-          {fromAgent ? <span className="inbox-comment-tag">{AGENT_TAG}</span> : null}
           <span className="inbox-comment-when">
             <RelativeTime className={THREAD_TIME_CLASS} at={message.createdAt} now={now} />
           </span>
