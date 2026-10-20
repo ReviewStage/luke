@@ -64,6 +64,7 @@ import { useAct } from "../act.js";
 import { useAppCommand } from "../app-commands.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
+import { DraftMark } from "../draft-mark.js";
 import { FindScope } from "../find-in-tab.js";
 import { drawnVisibly, focusSeek } from "../focus-seek.js";
 import { panelTabPlace } from "../links-at-hand.js";
@@ -656,6 +657,8 @@ function stripTabs(input: {
   taskId: string;
   /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
   inboxWaiting: number;
+  /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
+  inboxDrafted: boolean;
 }): DrawnTab[] {
   const { panel, unread, agents, subagents, files, changes, pages, terminals, shown, held } = input;
   const { repository, copied, readWorker, onOpenAgent, shownAgent, taskId } = input;
@@ -670,13 +673,17 @@ function stripTabs(input: {
   });
   // The Inbox counts what waits on the developer after its name, dimmed as a
   // model's effort is after the model's, so an item posted while the
-  // developer reads elsewhere is seen from any tab.
-  const { inboxWaiting } = input;
+  // developer reads elsewhere is seen from any tab, and wears the Draft
+  // pencil at its end while a card's answer waits unsent and another tab is
+  // chosen (`draft-mark.tsx`).
+  const { inboxWaiting, inboxDrafted } = input;
   const fixed = panel.tabs.map((tab) => ({
     tab,
     look: look(tab, {
       ...tabLook({ kind: TAB_KIND.PANEL, tab }),
       detail: tab === SIDE_PANEL_TAB.INBOX && inboxWaiting > 0 ? String(inboxWaiting) : undefined,
+      endMark:
+        tab === SIDE_PANEL_TAB.INBOX && inboxDrafted && !chosen(tab) ? <DraftMark /> : undefined,
     }),
     close: () => panel.onClose(tab),
   }));
@@ -859,6 +866,7 @@ function PanelTabs({
   onOpenAgent,
   shownAgent,
   inboxWaiting,
+  inboxDrafted,
 }: {
   panel: SidePanelControl;
   holder: SidePanelHolder;
@@ -900,6 +908,8 @@ function PanelTabs({
   shownAgent: string | undefined;
   /** How many of the task's inbox items wait on the developer, which its Inbox tab counts. */
   inboxWaiting: number;
+  /** Whether a card of the task's Inbox holds a draft, which its tab marks while another is chosen. */
+  inboxDrafted: boolean;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const kinds = stripTabs({
@@ -922,6 +932,7 @@ function PanelTabs({
     shownAgent,
     taskId,
     inboxWaiting,
+    inboxDrafted,
   });
   const strip = inTaskOrder(kinds, panel.order, (entry) => entry.tab);
   const copyLink = useCopyLinkItem();
@@ -1881,8 +1892,10 @@ export function SidePanel({
   banner?: React.ReactNode;
   /** The plan's document, which its Plan tab shows; none beside anything but a task's page. */
   plan?: React.ReactNode;
-  /** The task's Inbox, which its Inbox tab shows, and how many of its items wait on the developer, which the tab counts; none beside anything but a task's page. */
-  inbox?: { readonly body: React.ReactNode; readonly waiting: number } | undefined;
+  /** The task's Inbox, which its Inbox tab shows, how many of its items wait on the developer, which the tab counts, and whether a card holds a draft, which the tab marks; none beside anything but a task's page. */
+  inbox?:
+    | { readonly body: React.ReactNode; readonly waiting: number; readonly drafted: boolean }
+    | undefined;
 }): React.JSX.Element {
   // The one slot the bar keeps for the chosen tab's ⋯, drawn there from the tab (`strip-tabs.tsx`).
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
@@ -2060,6 +2073,7 @@ export function SidePanel({
           onOpenAgent={(agent) => onOpenTarget({ kind: TOOL_TARGET.AGENT, agent })}
           shownAgent={shownAgent}
           inboxWaiting={inbox?.waiting ?? 0}
+          inboxDrafted={inbox?.drafted ?? false}
         />
       }
       actions={<span ref={setActionsSlot} className="toolbar-tab-actions" />}

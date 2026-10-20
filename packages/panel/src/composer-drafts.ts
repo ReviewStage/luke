@@ -404,6 +404,20 @@ const draftedAtom = Atom.withEquality(
   Equal.equals,
 );
 
+/**
+ * The started agents a draft waits in, read off every draft, compared by
+ * its contents as `draftedAtom` is, so a tab marking one draws again only
+ * as a draft comes or goes.
+ */
+const draftedAgentsAtom = Atom.withEquality(
+  Atom.make((get): readonly string[] =>
+    get(draftsAtom).flatMap(({ place }) =>
+      place.kind === DRAFT_PLACE.AGENT ? [place.agentId] : [],
+    ),
+  ),
+  Equal.equals,
+);
+
 /** One box's draft and the presses that change it. */
 export interface DraftControl {
   readonly draft: Draft;
@@ -524,6 +538,11 @@ export function useDraftWriter(): DraftWriter {
 /** Whether a plan holds a draft: one of its agents', its draft agent's, or an inbox card's. */
 export function usePlanDrafted(taskId: string): boolean {
   return useAtomValue(draftedAtom, (tasks) => tasks.includes(taskId));
+}
+
+/** The started agents whose boxes hold a draft, which their tabs mark with the pencil (`draft-mark.tsx`). */
+export function useDraftedAgents(): readonly string[] {
+  return useAtomValue(draftedAgentsAtom);
 }
 
 /**

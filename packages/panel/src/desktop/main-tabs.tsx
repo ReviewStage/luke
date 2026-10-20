@@ -13,7 +13,9 @@ import { inTaskOrder, isDraftTab, type StripTab, sameTab, tabKey } from "@luke/u
 import { type InlineRename, useInlineRename } from "@luke/ui/use-inline-rename";
 import { useEffect, useRef } from "react";
 import { useAppCommand } from "../app-commands.js";
+import { useDraftedAgents } from "../composer-drafts.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
+import { DraftMark } from "../draft-mark.js";
 import { RetryButton } from "../retry-button.js";
 import { SpinnerRegion } from "../spinner.js";
 import { agentCardReading } from "../tasks/agent-ref.js";
@@ -90,7 +92,9 @@ import { TabStrip } from "./tab-strip.js";
  * until shown. The draft's tab,
  * named New coding agent as the "+" row that opens it is, stands after the
  * agents until its first message starts the agent, and closing it lets the
- * draft go. Every tab wears its kind's look (`tab-look.tsx`).
+ * draft go. Every tab wears its kind's look (`tab-look.tsx`), and an
+ * agent's or the draft's, while its box holds words and another tab is
+ * chosen, the Draft pencil at its end (`draft-mark.tsx`).
  *
  * The "+" after the last tab drops the shared searchable menu: the Call,
  * which chooses its tab or opens it again where it was closed, the task's
@@ -238,9 +242,10 @@ interface DrawnTab {
  * The agents' tabs and the draft's, in the order started, each closing
  * through `main`. An agent's transcript is read whole from the service for a
  * copy, since its tab holds it only while shown, and its card previews its
- * latest step from what its tab last held (`heldLatest`). No tab wears the
- * Draft pencil, which marks only a task other than the one open
- * (`draft-mark.tsx`).
+ * latest step from what its tab last held (`heldLatest`). An agent's tab,
+ * and the draft's, wears the Draft pencil at its end while its box holds
+ * words and another tab is chosen (`draft-mark.tsx`); an agent's failure
+ * says more, so it keeps its failed mark in the pencil's place.
  */
 function agentTabs(input: {
   main: MainTabsControl;
@@ -248,8 +253,10 @@ function agentTabs(input: {
   unread: readonly StripTab[];
   views: TabViews;
   copied: TranscriptCopier;
+  /** The started agents whose boxes hold a draft (`useDraftedAgents`). */
+  drafted: readonly string[];
 }): DrawnTab[] {
-  const { main, agents, unread, views, copied } = input;
+  const { main, agents, unread, views, copied, drafted } = input;
   const chosen = (tab: MainTab) => sameTab(tab, main.tab);
   const models = agents.models ?? [];
   const look = (tab: MainTab, drawn: Omit<TabLook, "selected" | "onSelect">) => ({
@@ -270,12 +277,13 @@ function agentTabs(input: {
       agents.chatOn,
     );
     const readCard = agentCardReading(agent, label, views.held, chosen(tab), agents);
+    const draftMark = drafted.includes(agent.id) && !chosen(tab) ? <DraftMark /> : undefined;
     return {
       tab,
       agent,
       look: look(tab, {
         ...tabLook({ kind: TAB_KIND.AGENT, name: label, agent }),
-        endMark: agentEndMark(agent, false),
+        endMark: agentEndMark(agent, false) ?? draftMark,
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
       close: () => main.onClose(tab),
@@ -283,13 +291,22 @@ function agentTabs(input: {
     };
   });
   const draft = agents.draft?.id;
+  const draftHolds =
+    agents.draft !== undefined &&
+    (agents.draft.prompt !== "" || agents.draft.attachments.length > 0);
   const drafts =
     draft === undefined
       ? []
       : [
           {
             tab: { draft },
-            look: look({ draft }, tabLook({ kind: TAB_KIND.DRAFT })),
+            look: look(
+              { draft },
+              {
+                ...tabLook({ kind: TAB_KIND.DRAFT }),
+                endMark: draftHolds && !chosen({ draft }) ? <DraftMark /> : undefined,
+              },
+            ),
             close: () => {
               main.onClose({ draft });
               agents.onDiscardDraft(draft);
@@ -438,6 +455,7 @@ export function MainTabStrip({
   chat: boolean;
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
+  const drafted = useDraftedAgents();
   const pinnedOf = (tab: ColumnPinnableTab) =>
     pins.pinned.some((pin) => pin.task === task.id && sameTab(pin.tab, tab));
   const chatTab: DrawnTab[] = main.tabs.includes(MAIN_TAB.CHAT)
@@ -456,7 +474,7 @@ export function MainTabStrip({
   // The agents', the draft's, and Chat's tabs in the column's order,
   // which the developer's moves and their opening set (`use-main-tabs.ts`).
   const own = inTaskOrder(
-    [...agentTabs({ main, agents, unread, views, copied }), ...chatTab],
+    [...agentTabs({ main, agents, unread, views, copied, drafted }), ...chatTab],
     main.tabs,
     (entry) => entry.tab,
   );
