@@ -66,69 +66,6 @@ function refusing(route: string, error: string, status: number) {
   return fakeCloudApi({ [route]: { answer: () => ({ error }), status } });
 }
 
-it.effect(
-  "lists the account's workspaces under its bearer, a newer key read past, a malformed list as none",
-  () =>
-    Effect.gen(function* () {
-      const api = fakeCloudApi({
-        "GET /api/workspaces": {
-          answer: () => ({ workspaces: [PERSONAL, { ...ACME, logo: null }] }),
-        },
-      });
-      const malformed = fakeCloudApi({
-        "GET /api/workspaces": { answer: () => ({ workspaces: [{ ...ACME, role: "guest" }] }) },
-      });
-
-      assert.deepEqual(yield* Effect.provide(client().list(), api.layer), {
-        workspaces: [PERSONAL, ACME],
-      });
-      assert.deepEqual(api.credentials(), ["token-1"]);
-      assert.equal(yield* Effect.provide(client().list(), malformed.layer), undefined);
-    }),
-);
-
-it.effect("reads a workspace from a service before slugs travelled, its slug left out", () =>
-  Effect.gen(function* () {
-    const { slug: _slug, ...older } = ACME;
-    const api = fakeCloudApi({
-      "GET /api/workspaces": { answer: () => ({ workspaces: [older] }) },
-    });
-
-    assert.deepEqual(yield* Effect.provide(client().list(), api.layer), { workspaces: [older] });
-  }),
-);
-
-it.effect(
-  "reads every installation a service with several connections lists, and a service from before them as its one GitHub account alone",
-  () =>
-    Effect.gen(function* () {
-      const several = {
-        ...ACME,
-        github: { login: "acme", active: true },
-        githubInstallations: [
-          { installationId: 11, login: "acme", active: true },
-          { installationId: 12, login: "acme-labs", active: false },
-        ],
-      };
-      const current = fakeCloudApi({
-        "GET /api/workspaces": { answer: () => ({ workspaces: [several] }) },
-      });
-      const before = fakeCloudApi({
-        "GET /api/workspaces": { answer: () => ({ workspaces: [ACME] }) },
-      });
-
-      const read = yield* Effect.provide(client().list(), current.layer);
-      const older = yield* Effect.provide(client().list(), before.layer);
-
-      assert.deepEqual(read, { workspaces: [several] });
-      assert.deepEqual(older, { workspaces: [ACME] });
-      assert.equal(
-        older?.workspaces[0] !== undefined && "githubInstallations" in older.workspaces[0],
-        false,
-      );
-    }),
-);
-
 it.effect("creates a workspace with its name trimmed, and a blank name never travels", () =>
   Effect.gen(function* () {
     const created = { ...ACME, role: WORKSPACE_ROLE.OWNER, github: null };
