@@ -26,6 +26,7 @@ export default defineConfig({
       "apps/catalog",
       "tools/claude-code-probe",
       "tools/codex-probe",
+      "packages/agent-runner",
     ],
   },
 });
