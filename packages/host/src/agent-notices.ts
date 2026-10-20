@@ -111,7 +111,7 @@ import type { ChatShown } from "./contract/agents.js";
  * mention of the developer's, each announced once as it first waits, by
  * the same doors and gates, nowhere while the window is focused on its
  * Chat, and counted in the Dock's badge beside the items. A chat
- * announcement says who and why, "@agent-2 messaged you", under the task of
+ * announcement says who and why, "Invite emails messaged you", under the task of
  * the channel it stands in, and nothing of what was said. Another account, or nobody,
  * ends the read held for the last, and lets go of its items, its counts,
  * and its badge before anything of the next is read. A read that did not
@@ -449,7 +449,7 @@ function chatNoticeText(
 ): Pick<AgentNotice, "title" | "body"> {
   return {
     title: taskName ?? CHAT_NOTICE_TITLE,
-    body: `@${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
+    body: `${entry.from} ${CHAT_NOTICE_WORDS[entry.reason]}`,
   };
 }
 

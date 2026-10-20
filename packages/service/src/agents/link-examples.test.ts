@@ -74,6 +74,25 @@ test("a coding agent is shown to name each kind as a mention Luke draws as its c
   }
 });
 
+test("a coding agent with Chat on is shown its task's Luke as the link Luke draws as his chip, and an agent on no task is shown no link of a Luke's", () => {
+  const chatOf = (taskLink: string | null) => {
+    const words = coderInstructions(
+      REPOSITORY,
+      CODING_AGENT_BRIEF.PLAN,
+      true,
+      taskLink,
+      undefined,
+      true,
+    );
+    const from = words.indexOf("## Chat with other agents");
+    return words.slice(from, words.indexOf("\n## ", from + 1));
+  };
+  const onTask = chatOf(TASK_ADDRESS);
+  assert.deepEqual(drawnAs(onTask), [MENTION_KIND.LUKE]);
+  assert.ok(onTask.includes(`[@Luke](${TASK_ADDRESS}/luke)`));
+  assert.deepEqual(drawnAs(chatOf(null)), []);
+});
+
 test("the inbox's post tool and the plan's edit tool show a file's link Luke draws as its chip", () => {
   assert.deepEqual(drawnAs(INBOX_TOOLS.POST.description), [MENTION_KIND.FILE]);
   assert.deepEqual(drawnAs(EDIT_PLAN_TOOL.description), [MENTION_KIND.FILE]);

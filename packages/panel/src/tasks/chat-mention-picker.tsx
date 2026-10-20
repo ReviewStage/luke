@@ -62,7 +62,7 @@ export function useChatMentionPicker({
 }: {
   /** What an `@` or `#` word may name. */
   targets: readonly ChatTarget[];
-  /** Writes the one chosen over the word typed: its chip, or its word (`@luke`, `#general`); a date as its chip. */
+  /** Writes the one chosen over the word typed: its chip, or a channel's word (`#general`); a date as its chip. */
   onChoose: (target: ChatTarget) => void;
 }): ChatMentionPicker {
   const id = useId();

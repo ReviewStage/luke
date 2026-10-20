@@ -177,7 +177,7 @@ test("a chat notice of the same words as a line still on its way never reads tha
   };
   const notice: CodingAgentMessage = {
     ...developer("m-notice", "Stop."),
-    metadata: { author: "human", channel: "chat", chat_seq: 9, from: "maria" },
+    metadata: { author: "human", channel: "chat", chat_seq: 9, from: "Maria Chen" },
   };
   assert.deepEqual(unreadSentLines([line], [plan, notice]).lines, [line]);
   const typed: CodingAgentMessage = {
