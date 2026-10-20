@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { ownFailedRunsLiveStatement } from "@luke/database/models/automation-store";
 import { getTestDB, mutableFunctionsOf } from "@luke/database/testing";
-import { Effect, Option } from "effect";
+import { ConfigProvider, Effect, Layer, Option } from "effect";
 import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
+import { LiveSealing, liveSealingFromEnvironment, REALTIME_ENVIRONMENT } from "./realtime.js";
 
 /**
  * Every statement the live endpoints seal calls only functions Postgres
@@ -12,6 +13,13 @@ import { accountInboxLiveStatements } from "../inbox/inbox-store.js";
  */
 
 const USER_ID = "user-live-statements";
+
+/** A deployment's Realtime over a synthetic secret in the shape its SDK reads, so no credential is written down. */
+const SEALING_ENVIRONMENT = {
+  DATABASE_URL: "postgresql://luke:synthetic@db.example/neondb?sslmode=require",
+  [REALTIME_ENVIRONMENT.URL]: "wss://realtime.example/v1",
+  [REALTIME_ENVIRONMENT.SECRET]: `nrt_live_1${Buffer.alloc(32).toString("base64url")}`,
+};
 
 /** Every live statement the endpoints seal, by the part it answers. */
 function liveStatements() {
@@ -36,6 +44,38 @@ it.layer(getTestDB())("the live statements", (it) => {
         );
         assert.deepEqual(
           mutable.filter(([, called]) => called.length > 0),
+          [],
+        );
+      }),
+  );
+
+  it.effect(
+    "every statement a live endpoint seals is a Drizzle select Realtime's Drizzle adapter seals, each key the name Postgres answers it under",
+    () =>
+      Effect.gen(function* () {
+        const sealing = yield* Effect.gen(function* () {
+          return yield* LiveSealing;
+        }).pipe(
+          Effect.provide(
+            liveSealingFromEnvironment.pipe(
+              Layer.provide(ConfigProvider.layer(ConfigProvider.fromUnknown(SEALING_ENVIRONMENT))),
+            ),
+          ),
+        );
+        assert.ok(Option.isSome(sealing));
+        const { seal } = sealing.value;
+        const refused = yield* Effect.forEach(
+          Object.entries(liveStatements()),
+          ([part, statement]): Effect.Effect<string | undefined> =>
+            statement.query === undefined
+              ? Effect.succeed(`${part}: no Drizzle select`)
+              : Effect.match(seal(statement), {
+                  onFailure: () => `${part}: refused`,
+                  onSuccess: () => undefined,
+                }),
+        );
+        assert.deepEqual(
+          refused.filter((entry) => entry !== undefined),
           [],
         );
       }),

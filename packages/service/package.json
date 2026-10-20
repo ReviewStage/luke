@@ -262,6 +262,7 @@
     "@luke/voice": "workspace:*",
     "@luke/wire": "workspace:*",
     "@neon/realtime": "0.1.1",
+    "@neon/realtime-drizzle": "0.1.0",
     "@orpc/contract": "catalog:",
     "@orpc/experimental-effect": "catalog:",
     "@orpc/openapi": "catalog:",
