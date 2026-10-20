@@ -24,7 +24,12 @@ import { SqlClient } from "effect/sql";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
 import { CODER_TOOL_SET } from "../coder-host/tool-set.js";
 import { runnerTokenDigest } from "../luke-mcp/bearer.js";
-import { RUNNER_EVENTS_PATH, runnerEventsApp } from "./runner-events-app.js";
+import {
+  RUNNER_EVENTS_PATH,
+  type RunnerEnded,
+  type RunnerEventsOptions,
+  runnerEventsApp,
+} from "./runner-events-app.js";
 
 /**
  * The events route, answered by its group the way a function answers it,
@@ -42,30 +47,36 @@ const SESSION = "00000000-0000-4000-8000-000000000001";
 const NONCE = "a1b2c3d4e5f6";
 
 /** The route's group over the test's database, as a fetch. */
-const standing = Effect.gen(function* () {
-  const services = Layer.mergeAll(
-    Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
-    Layer.succeed(Database, yield* Database),
-    Layer.succeed(Clock.Clock, yield* Clock.Clock),
-  );
-  const web = HttpRouter.toWebHandler(runnerEventsApp().pipe(HttpRouter.provideRequest(services)), {
-    disableLogger: true,
+const standingWith = (options: RunnerEventsOptions) =>
+  Effect.gen(function* () {
+    const services = Layer.mergeAll(
+      Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
+      Layer.succeed(Database, yield* Database),
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+    );
+    const web = HttpRouter.toWebHandler(
+      runnerEventsApp(options).pipe(HttpRouter.provideRequest(services)),
+      {
+        disableLogger: true,
+      },
+    );
+    yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
+    return (bearer: string | undefined, events: readonly RunnerEvent[]) =>
+      Effect.promise(async () => {
+        const headers = new Headers({ "content-type": "application/json" });
+        if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
+        const response = await web.handler(
+          new Request(`${ORIGIN}${RUNNER_EVENTS_PATH}`, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ events }),
+          }),
+        );
+        return { status: response.status, body: await response.json() };
+      });
   });
-  yield* Effect.addFinalizer(() => Effect.promise(() => web.dispose()));
-  return (bearer: string | undefined, events: readonly RunnerEvent[]) =>
-    Effect.promise(async () => {
-      const headers = new Headers({ "content-type": "application/json" });
-      if (bearer !== undefined) headers.set("authorization", `Bearer ${bearer}`);
-      const response = await web.handler(
-        new Request(`${ORIGIN}${RUNNER_EVENTS_PATH}`, {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ events }),
-        }),
-      );
-      return { status: response.status, body: await response.json() };
-    });
-});
+
+const standing = standingWith({});
 
 /** A Claude Code agent on a task, a runner's bearer recorded for it, and the developer's line awaiting its turn. */
 const agentWithBearer = Effect.gen(function* () {
@@ -133,7 +144,7 @@ function workflowTurn(lineId: string): readonly RunnerEvent[] {
   });
   const messagesOfTurn = [
     { type: RUNNER_EVENT.ACCEPTED, uuid: lineId },
-    { type: "system", subtype: "init", session_id: SESSION, ...envelope },
+    { type: "system", subtype: "init", ...envelope },
     toolUse("toolu_Write", "Write", { file_path: `luke-probe/${NONCE}.txt`, content: NONCE }),
     toolResult("toolu_Write", "File created"),
     toolUse("toolu_inbox", "mcp__luke__read_inbox", {}),
@@ -313,10 +324,13 @@ it.layer(getTestDB())("the runner events route", (it) => {
   );
 
   it.effect(
-    "a subagent's work folds under its Agent call, and a stopped launch ends its turn cancelled",
+    "a subagent's work folds under its Agent call, and a stopped launch ends its turn cancelled and is told once",
     () =>
       Effect.gen(function* () {
-        const post = yield* standing;
+        const told: RunnerEnded[] = [];
+        const post = yield* standingWith({
+          ended: (ended) => Effect.sync(() => void told.push(ended)),
+        });
         const agent = yield* agentWithBearer;
         const inside = { parent_tool_use_id: "toolu_agent", session_id: SESSION };
         const top = { parent_tool_use_id: null, session_id: SESSION };
@@ -379,8 +393,13 @@ it.layer(getTestDB())("the runner events route", (it) => {
         );
 
         yield* post(agent.bearer, events);
+        yield* post(agent.bearer, events);
         const { rows, turns: ended } = yield* transcriptOf(agent.target.conversationId);
 
+        assert.deepEqual(
+          told.map((end) => [end.target, end.sequence]),
+          [[agent.target, events.length - 1]],
+        );
         assert.deepEqual(rows.at(-1)?.parts.map(drawn), [
           ["step-start"],
           ["text", "Asking a helper."],

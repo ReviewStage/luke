@@ -1,3 +1,4 @@
+import { RUNNER_EVENT } from "@luke/agent-runner/protocol";
 import type { DatabaseServices } from "@luke/database/core/query";
 import {
   readCodingAgentOfConversation,
@@ -13,7 +14,7 @@ import {
   type StoreWriter,
   storeWriter,
 } from "@luke/database/models/writer";
-import { Clock, Effect, Layer, Option, Result, Schema } from "effect";
+import { Clock, Effect, Layer, Option, Predicate, Result, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/http";
 import { type BrainRunEvent, TURN_ORIGIN } from "../../core.js";
 import { HOSTED_HTTP_STATUS } from "../../http/http.js";
@@ -104,6 +105,34 @@ interface Applying {
 interface Applied {
   readonly applied: number;
   readonly sequence: number | null;
+}
+
+/** A launch's end the batch applied: the conversation, the session it ran under, and the number of its END event. */
+export interface RunnerEnded {
+  readonly target: ConversationTarget;
+  readonly sessionId: string | undefined;
+  readonly sequence: number;
+}
+
+/** What the route reads a batch with and tells of a launch's end. */
+export interface RunnerEventsOptions {
+  /** How the conversation's harness's messages are read; Claude Code's where left out. */
+  readonly read?: NativeReader;
+  /**
+   * Told once a batch that holds a launch's END has landed, after its
+   * transaction: the sandbox's own lifecycle (P08's `runnerEnded`), which
+   * stops nothing for a launch since replaced. Nothing where left out.
+   */
+  readonly ended?: (ended: RunnerEnded) => Effect.Effect<void, never, DatabaseServices>;
+}
+
+/** The numbers of the events that end a launch, by the runner's own END. */
+function endsOf(batch: RunnerEventBatch, after: number | null): readonly number[] {
+  return unapplied(batch, after).flatMap(({ sequence, message }) =>
+    Predicate.isObject(message) && "type" in message && message.type === RUNNER_EVENT.END
+      ? [sequence]
+      : [],
+  );
 }
 
 const registered = (name: string): boolean => Object.hasOwn(CODER_TOOL_SET, name);
@@ -215,7 +244,10 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
     for (const said of reports) yield* Effect.logWarning(`runner-events: ${said}`);
     yield* landWrites(applying, writes, now);
     const last = events.at(-1)?.sequence;
-    const result: Applied = { applied: events.length, sequence: last ?? held.sequence };
+    const result = {
+      applied: { applied: events.length, sequence: last ?? held.sequence } satisfies Applied,
+      ends: endsOf(batch, held.sequence),
+    };
     return last === undefined
       ? { result }
       : { result, saved: { sequence: last, projection: state } };
@@ -225,6 +257,7 @@ function applyBatch(applying: Applying, batch: RunnerEventBatch, held: NativePro
 /** POST: one batch of a runner's events, admitted by its bearer and applied once. */
 const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint")(function* (
   read: NativeReader,
+  ended: RunnerEventsOptions["ended"],
 ): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
@@ -261,15 +294,19 @@ const runnerEventsEndpoint = /* @__PURE__ */ Effect.fn("web/runnerEventsEndpoint
   );
   // Note that a conversation cleared since the bearer was read takes nothing more.
   if (Option.isNone(applied)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, applied.value);
+  if (ended !== undefined) {
+    for (const sequence of applied.value.ends) {
+      yield* ended({ target, sessionId: admitted.value.runtimeSessionId, sequence });
+    }
+  }
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, applied.value.applied);
 });
 
-/** The group: the one events path, read as Claude Code's, and the hosted vocabulary's own refusal for any other. */
-export function runnerEventsApp(
-  read: NativeReader = claudeCodeMoments,
-): WebRoutes<DatabaseServices> {
+/** The group: the one events path, read as Claude Code's unless told otherwise, and the hosted vocabulary's own refusal for any other. */
+export function runnerEventsApp(options: RunnerEventsOptions = {}): WebRoutes<DatabaseServices> {
+  const endpoint = runnerEventsEndpoint(options.read ?? claudeCodeMoments, options.ended);
   return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, RUNNER_EVENTS_PATH, hostedRefusing(runnerEventsEndpoint(read))),
+    HttpRouter.add(ANY_METHOD, RUNNER_EVENTS_PATH, hostedRefusing(endpoint)),
     hostedNotFoundRoute,
   );
 }

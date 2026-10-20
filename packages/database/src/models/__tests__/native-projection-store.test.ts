@@ -8,7 +8,7 @@ import { user } from "../../schemas/auth.js";
 import { conversations } from "../../schemas/storage.js";
 import { CONVERSATION_KIND } from "../../storage-vocabulary.js";
 import { getTestDB } from "../../testing/index.js";
-import { withNativeProjection } from "../native-projection-store.js";
+import { readNativeSequence, withNativeProjection } from "../native-projection-store.js";
 
 /**
  * Where a native harness's projection keeps its place, over a real dialect:
@@ -42,8 +42,10 @@ it.layer(getTestDB())("the native projection's place", (it) => {
         Effect.succeed({ result: undefined, saved: { sequence: 3, projection: { turn: "t1" } } }),
       );
       const after = yield* readBack(target);
+      const sequence = yield* readNativeSequence(target);
 
       assert.deepEqual(Option.getOrThrow(before), { sequence: null, projection: null });
+      assert.deepEqual(sequence, Option.some(3));
       assert.deepEqual(Option.getOrThrow(after), { sequence: 3, projection: { turn: "t1" } });
     }),
   );
@@ -97,8 +99,13 @@ it.layer(getTestDB())("the native projection's place", (it) => {
       );
       const gone = yield* withNativeProjection(cleared, apply);
       const untouched = yield* readBack(target);
+      const strangers = yield* readNativeSequence({
+        userId: stranger.userId,
+        conversationId: target.conversationId,
+      });
 
       assert.deepEqual([Option.isNone(crossed), Option.isNone(gone), ran], [true, true, 0]);
+      assert.equal(Option.isNone(strangers), true);
       assert.equal(Option.getOrThrow(untouched).sequence, null);
     }),
   );

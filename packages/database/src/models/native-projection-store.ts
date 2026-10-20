@@ -54,6 +54,24 @@ const lockProjectionRow = SqlSchema.findOneOption({
     ),
 });
 
+const findProjectionSequence = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({ sequence: Schema.NullOr(Schema.Number) }),
+  execute: ({ userId, conversationId }) =>
+    Database.use((db) =>
+      db
+        .select({ sequence: conversations.nativeSequence })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.id, conversationId),
+            eq(conversations.userId, userId),
+            isNull(conversations.deletedAt),
+          ),
+        ),
+    ),
+});
+
 const saveProjectionRow = SqlSchema.void({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -96,4 +114,17 @@ export function withNativeProjection<A, E, R>(
     return Option.some(applied.result);
   });
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(locked));
+}
+
+/**
+ * The number of the last event the conversation applied, which a relaunch
+ * numbers its events after; nothing before the first, or for a conversation
+ * the account does not hold or that was cleared.
+ */
+export function readNativeSequence(
+  target: ConversationTarget,
+): Effect.Effect<Option.Option<number>, NativeProjectionFailure, DatabaseServices> {
+  return Effect.map(findProjectionSequence(target), (row) =>
+    Option.flatMap(row, ({ sequence }) => Option.fromNullishOr(sequence)),
+  );
 }
