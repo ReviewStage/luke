@@ -633,8 +633,8 @@ export type InboxAsk = typeof inboxAskSchema.Type;
  * thread's key, its title, which a first post under the key names, the
  * agent's message as one Markdown body, its pictures by their paths in the
  * agent's sandbox, the ask it may end with, and whether the agent waits to
- * hear the answer. The model is shown this schema and eve holds the call
- * to it.
+ * hear a `do` done; an answer to any other ask is always heard. The model
+ * is shown this schema and eve holds the call to it.
  */
 export const inboxThreadPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
