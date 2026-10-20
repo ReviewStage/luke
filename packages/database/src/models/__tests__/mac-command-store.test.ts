@@ -6,7 +6,7 @@ import { Clock, Effect, Option } from "effect";
 import { SqlClient } from "effect/sql";
 import { Database } from "../../core/query.js";
 import { user } from "../../schemas/auth.js";
-import { getTestDB } from "../../testing/index.js";
+import { getTestDB, mutableFunctionsOf } from "../../testing/index.js";
 import {
   claimMacCommands,
   macCommandResult,
@@ -121,6 +121,21 @@ it.layer(getTestDB())("the Mac command store", (it) => {
         assert.deepEqual(yield* rows(other), []);
         yield* claimMacCommands(owner, since);
         assert.deepEqual(yield* rows(owner), []);
+      }),
+  );
+
+  it.effect(
+    "the statements Realtime wakes a call and the Mac's held read on call only immutable functions, as Realtime requires",
+    () =>
+      Effect.gen(function* () {
+        const userId = `user-${randomUUID()}`;
+        const statements = [
+          Option.getOrThrow(macCommandsWaitingLiveStatement(userId)),
+          Option.getOrThrow(macCommandSettledLiveStatement(userId, randomUUID())),
+        ];
+        for (const statement of statements) {
+          assert.deepEqual(yield* mutableFunctionsOf(statement), [], statement.sql);
+        }
       }),
   );
 });
