@@ -10,7 +10,9 @@ import {
 import type { RealtimeLogEntry } from "@neon/realtime/client";
 import {
   Cause,
+  Clock,
   Data,
+  Deferred,
   Duration,
   Effect,
   ErrorReporter,
@@ -49,6 +51,16 @@ import {
  * Realtime's client last reported going wrong for the subscription standing,
  * by its diagnostic's name and code alone (`troubleOf`), which tells those
  * two apart.
+ *
+ * Where the shell says when its page came back (`returns`: shown again, or
+ * back online), a follow whose subscriptions had been live and dropped,
+ * that waits out `LIVE_RESTART`, or that has been connecting past
+ * `CONNECT_GRACE` without ever going live, is started again at once rather
+ * than after Realtime's own backoff, since a phone drops a page's socket
+ * while it is in the background. A follow whose every part is live is left
+ * alone, and so is one just begun connecting, which a second return must
+ * not tear down; a return within `RETURNS_TAKEN_EVERY` of one that started
+ * the follow again is taken as the same.
  */
 
 /** How long before a sealed statement expires it is renewed, as Neon's own bindings renew it. */
@@ -57,6 +69,12 @@ const RENEW_EARLY = Duration.seconds(10);
 const RENEW_RETRY = Duration.seconds(1);
 /** How long after a seal went unanswered, or a subscription stopped for good, it is asked again. */
 const LIVE_RESTART = Duration.seconds(5);
+
+/** How soon after a return started the follow again a later one is taken as the same, as a restore from the back-forward cache says `pageshow` and `visibilitychange` at once. */
+const RETURNS_TAKEN_EVERY = Duration.seconds(1);
+
+/** How long a follow may still be connecting, never yet live, before a return takes it as stalled, as one begun offline is. */
+const CONNECT_GRACE = Duration.seconds(5);
 
 /** How long a follow may go without its first answer before it is reported, once. */
 const FIRST_ANSWER_BOUND = Duration.seconds(30);
@@ -87,6 +105,24 @@ const ADMISSION_RETRIED = "subscription_retry_scheduled";
 
 /** A code as Realtime's protocol and client spell one; anything else beside a diagnostic is left unsaid. */
 const TROUBLE_CODE = /^[a-z][a-z0-9_]{0,63}$/u;
+
+/** The parts the account inbox is followed in, one sealed statement each. */
+const LIVE_PART = {
+  ITEMS: "items",
+  TASKLESS: "planless",
+  PLANS: "plans",
+  AUTOMATIONS: "automations",
+  FAILED_RUNS: "failedRuns",
+  CHAT_ASKS: "chatAsks",
+  CHAT_NOTICES: "chatNotices",
+} as const;
+
+type Part = (typeof LIVE_PART)[keyof typeof LIVE_PART];
+
+const PARTS: readonly Part[] = Object.values(LIVE_PART);
+
+/** What Realtime calls a subscription that is caught up and following. */
+const LIVE_STATUS = "live";
 
 /** One part's subscription, the slice of Realtime's client this reads. */
 interface LiveSubscription {
@@ -153,6 +189,8 @@ export interface AccountInboxFollowDependencies {
   readonly now: () => number;
   /** The answer, each time it changes. */
   readonly publish: (answer: AccountInboxAnswer) => void;
+  /** Each time the page the host runs in came back, where the shell can tell; nothing where it cannot. */
+  readonly returns: Stream.Stream<void>;
 }
 
 /** The earliest any of the answer's sealed statements expires, in epoch milliseconds. */
@@ -188,6 +226,7 @@ function liveAnswers(
   dependencies: AccountInboxFollowDependencies,
   first: AccountInboxLiveAnswer,
   heard: TroubleHeard,
+  answering: (every: boolean) => void,
 ): Stream.Stream<AccountInboxAnswer, LiveBroken> {
   return Stream.callback<AccountInboxAnswer, LiveBroken>((queue) =>
     Effect.gen(function* () {
@@ -199,6 +238,8 @@ function liveAnswers(
         (opened) => Effect.sync(() => opened.close()),
       );
       const rows: PartRows = {};
+      // The parts whose subscription Realtime last said is live.
+      const live = new Set<Part>();
       const broken = (reason: string) =>
         Queue.failCauseUnsafe(queue, Cause.fail(new LiveBroken({ reason })));
       const changed = () => {
@@ -208,13 +249,16 @@ function liveAnswers(
       };
       /** One part followed: its rows decoded as they arrive and kept under its key. */
       const follow = <Row, Encoded>(
-        query: SealedLiveQueryWire,
+        part: Part,
         schema: Schema.Codec<Row, Encoded>,
         keep: (decoded: readonly Row[]) => void,
       ): LiveSubscription => {
-        const subscription = client.subscribe(query);
+        const subscription = client.subscribe(first.queries[part]);
         const decode = Schema.decodeUnknownOption(Schema.Array(schema));
         subscription.onChange((snapshot) => {
+          if (snapshot.status === LIVE_STATUS) live.add(part);
+          else live.delete(part);
+          answering(live.size === PARTS.length);
           if (snapshot.status === "error") {
             broken("the subscription stopped");
             return;
@@ -234,42 +278,34 @@ function liveAnswers(
       const subscriptions = yield* Effect.acquireRelease(
         Effect.try({
           try: () => ({
-            items: follow(first.queries.items, accountInboxLiveRowSchemas.items, (read) => {
+            items: follow(LIVE_PART.ITEMS, accountInboxLiveRowSchemas.items, (read) => {
               rows.items = read;
             }),
-            planless: follow(
-              first.queries.planless,
-              accountInboxLiveRowSchemas.planless,
-              (read) => {
-                rows.planless = read;
-              },
-            ),
-            plans: follow(first.queries.plans, accountInboxLiveRowSchemas.plans, (read) => {
+            planless: follow(LIVE_PART.TASKLESS, accountInboxLiveRowSchemas.planless, (read) => {
+              rows.planless = read;
+            }),
+            plans: follow(LIVE_PART.PLANS, accountInboxLiveRowSchemas.plans, (read) => {
               rows.plans = read;
             }),
             automations: follow(
-              first.queries.automations,
+              LIVE_PART.AUTOMATIONS,
               accountInboxLiveRowSchemas.automations,
               (read) => {
                 rows.automations = read;
               },
             ),
             failedRuns: follow(
-              first.queries.failedRuns,
+              LIVE_PART.FAILED_RUNS,
               accountInboxLiveRowSchemas.failedRuns,
               (read) => {
                 rows.failedRuns = read;
               },
             ),
-            chatAsks: follow(
-              first.queries.chatAsks,
-              accountInboxLiveRowSchemas.chatAsks,
-              (read) => {
-                rows.chatAsks = read;
-              },
-            ),
+            chatAsks: follow(LIVE_PART.CHAT_ASKS, accountInboxLiveRowSchemas.chatAsks, (read) => {
+              rows.chatAsks = read;
+            }),
             chatNotices: follow(
-              first.queries.chatNotices,
+              LIVE_PART.CHAT_NOTICES,
               accountInboxLiveRowSchemas.chatNotices,
               (read) => {
                 rows.chatNotices = read;
@@ -307,15 +343,7 @@ function liveAnswers(
         }
         const renewed = next;
         yield* Effect.forEach(
-          [
-            "items",
-            "planless",
-            "plans",
-            "automations",
-            "failedRuns",
-            "chatAsks",
-            "chatNotices",
-          ] as const,
+          PARTS,
           (part) =>
             Effect.tryPromise({
               try: () => subscriptions[part].renew(renewed.queries[part]),
@@ -363,22 +391,44 @@ export function followAccountInbox(
       }),
     );
     let watching = yield* watchdog;
-    const attempt = Effect.gen(function* () {
-      // Note that a follow that answered and then stopped is watched afresh from its restart,
-      // because otherwise one that dies after its first answer would go silent for good.
-      if (answered) {
-        answered = false;
-        yield* Fiber.interrupt(watching);
-        watching = yield* watchdog;
-      }
+    // Whether this attempt's every part has been live, whether a return should start it again
+    // (it dropped since, or waits to start again), when it began, when a return last woke it, and
+    // what a return wakes.
+    let beenLive = false;
+    let restartable = false;
+    let startedAt = yield* Clock.currentTimeMillis;
+    let wokenAt = Number.NEGATIVE_INFINITY;
+    let wake = yield* Deferred.make<void>();
+    const returned = Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      // Note that only a return that woke the follow holds the next back, so a return that found it live hides no drop after it.
+      if (now - wokenAt < Duration.toMillis(RETURNS_TAKEN_EVERY)) return;
+      const stalled = !beenLive && now - startedAt >= Duration.toMillis(CONNECT_GRACE);
+      if (!restartable && !stalled) return;
+      wokenAt = now;
+      yield* Deferred.succeed(wake, undefined);
+    });
+    yield* Effect.forkChild(Stream.runForEach(dependencies.returns, () => returned));
+    /** Waits out the pause before the next attempt, which a return may cut short. */
+    const pause = Effect.andThen(
+      Effect.sync(() => {
+        restartable = true;
+      }),
+      Effect.sleep(LIVE_RESTART),
+    );
+    const work = Effect.gen(function* () {
       const sealed = yield* dependencies.live();
       if ("failure" in sealed) {
         stopped = `the service sealed nothing (${sealed.failure})`;
-        return yield* Effect.sleep(LIVE_RESTART);
+        return yield* pause;
       }
       stopped = NOT_DELIVERED;
       trouble = undefined;
-      yield* Stream.runForEach(liveAnswers(dependencies, sealed, heard), (answer) =>
+      const answers = liveAnswers(dependencies, sealed, heard, (every) => {
+        if (every) beenLive = true;
+        restartable = beenLive && !every;
+      });
+      yield* Stream.runForEach(answers, (answer) =>
         Effect.sync(() => {
           answered = true;
           dependencies.publish(answer);
@@ -389,10 +439,25 @@ export function followAccountInbox(
             Effect.sync(() => {
               stopped = failure.reason;
             }),
-            Effect.sleep(LIVE_RESTART),
+            pause,
           ),
         ),
       );
+    });
+    const attempt = Effect.gen(function* () {
+      // Note that a follow that answered and then stopped is watched afresh from its restart,
+      // because otherwise one that dies after its first answer would go silent for good.
+      if (answered) {
+        answered = false;
+        yield* Fiber.interrupt(watching);
+        watching = yield* watchdog;
+      }
+      beenLive = false;
+      restartable = false;
+      startedAt = yield* Clock.currentTimeMillis;
+      wake = yield* Deferred.make<void>();
+      // A return to a follow that dropped, or waits, ends the attempt, and its wait, at once.
+      yield* Effect.race(work, Deferred.await(wake));
     });
     return yield* Effect.forever(attempt);
   });

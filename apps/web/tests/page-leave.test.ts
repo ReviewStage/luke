@@ -94,3 +94,14 @@ test("a page the back-forward cache brings back holds its unsaved work back agai
 
   expect(holdsBack(page)).toBe(true);
 });
+
+test("the tab says it holds unsaved work only while an ask stands", () => {
+  const tab = pageLeave(new EventTarget());
+  expect(tab.holdsUnsavedWork()).toBe(false);
+
+  tab.unsavedWork(() => undefined);
+  expect(tab.holdsUnsavedWork()).toBe(true);
+
+  tab.unsavedWork(undefined);
+  expect(tab.holdsUnsavedWork()).toBe(false);
+});
