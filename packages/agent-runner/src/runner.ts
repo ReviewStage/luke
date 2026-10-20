@@ -193,8 +193,11 @@ const takeLine = Effect.fn("agent-runner/takeLine")(function* (launch: Launch, t
   switch (value.type) {
     case INPUT_LINE.MESSAGE: {
       const running = yield* Ref.getAndSet(launch.turnRunning, true);
-      const uuid = randomUUID();
+      // SAFETY: a line's uuid is checked against the UUID pattern as the line is read.
+      const uuid = (value.uuid as UUID | undefined) ?? randomUUID();
       yield* Ref.update(launch.unanswered, (sent) => new Set(sent).add(uuid));
+      // Posted ahead of the hand-off, so it is numbered before anything the CLI says of the message.
+      yield* launch.sink.emit({ type: RUNNER_EVENT.ACCEPTED, uuid });
       yield* Queue.offer(launch.prompts, userMessage(uuid, value.content, running));
       return;
     }
