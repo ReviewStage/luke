@@ -25,7 +25,7 @@ import {
   type DiffLook,
   type DiffSelection,
   type DiffTextSelection,
-  GAP_LINES,
+  GAP_CONTROL_ATTRIBUTE,
   sameLines,
   sameListSelection,
   sameLook,
@@ -96,41 +96,25 @@ export interface DiffListFlash {
   readonly range: DiffLineRange;
 }
 
-/** What a gap's arrow says it does: the next lines of a long gap, the whole of a short one, or every line of the gap. */
-const GAP_WORDS = {
-  MORE: `Show ${GAP_LINES} more lines`,
-  ALL_CHORD: "\u21e7-click for all",
-  THESE: "Show these lines",
-  EVERY: "Show all these lines",
-} as const;
-
-/** The hint over a gap's arrow under the pointer: the arrow, and what it says. */
+/** The hint over a gap's control under the pointer or the keyboard's focus: the control, and what it opens. */
 interface GapHint {
   readonly anchor: HTMLElement;
   readonly label: string;
-  readonly chord: string | undefined;
 }
 
 /**
- * The hint for the arrow of a gap the pointer arrived on, inside a file's
- * shadow root, where the pointer's path leads; none for anything else. A
- * long gap draws an arrow for the next lines and keeps Expand all beside
- * it, which ⇧ does too; a short one opens whole.
+ * The hint for the control of a gap the pointer or the focus arrived on,
+ * inside a file's shadow root, where the event's path leads: its words,
+ * which open the whole gap, or an arrow, which opens the next lines; each
+ * named by the bundle for what it opens. None for anything else.
  */
 function gapHintOf(path: readonly EventTarget[]): GapHint | undefined {
   const anchor = path.find(
     (target): target is HTMLElement =>
-      target instanceof HTMLElement && target.hasAttribute("data-expand-button"),
+      target instanceof HTMLElement && target.hasAttribute(GAP_CONTROL_ATTRIBUTE),
   );
-  if (anchor === undefined) return undefined;
-  if (anchor.hasAttribute("data-expand-all-button")) {
-    return { anchor, label: GAP_WORDS.EVERY, chord: undefined };
-  }
-  const long =
-    anchor.closest("[data-separator-wrapper]")?.querySelector("[data-expand-all-button]") != null;
-  return long
-    ? { anchor, label: GAP_WORDS.MORE, chord: GAP_WORDS.ALL_CHORD }
-    : { anchor, label: GAP_WORDS.THESE, chord: undefined };
+  const label = anchor?.getAttribute("aria-label");
+  return anchor === undefined || label == null ? undefined : { anchor, label };
 }
 
 /** What the floating Comment press says it does. */
@@ -279,9 +263,13 @@ export function PierreDiffList({
   flash?: DiffListFlash | undefined;
 }): React.JSX.Element {
   const loaded = useAtomValue(useSideBundles().diffView);
-  // The hint over the gap arrow under the pointer, which Pierre draws in a shadow root no hint of the window's own reaches.
+  // The hint over the gap control under the pointer or the focus, which Pierre draws in a shadow root no hint of the window's own reaches.
   const [hint, setHint] = useState<GapHint | undefined>(undefined);
   const hintId = useId();
+  const hang = useCallback((event: Event) => {
+    const next = gapHintOf(event.composedPath());
+    setHint((was) => (was?.anchor === next?.anchor ? was : next));
+  }, []);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const host = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLDivElement | null>(null);
@@ -391,6 +379,21 @@ export function PierreDiffList({
     else mounted.revealLine(reveal.path, reveal.at.side, reveal.at.line);
   });
 
+  // The keyboard's focus on a gap's control hangs its hint, and a key pressed lets it go, since a control pressed is drawn anew, or gone with its gap; the focus hangs it again on the one drawn anew.
+  useEffect(() => {
+    const element = box.current;
+    if (element === null) return undefined;
+    const letGo = () => setHint(undefined);
+    element.addEventListener("focusin", hang);
+    element.addEventListener("focusout", letGo);
+    element.addEventListener("keydown", letGo);
+    return () => {
+      element.removeEventListener("focusin", hang);
+      element.removeEventListener("focusout", letGo);
+      element.removeEventListener("keydown", letGo);
+    };
+  }, [hang]);
+
   // Note that lines are lit as a reveal waits, for their file drawn open; a file drawn as its notes alone has no lines to light, so its header is scrolled to.
   const flashed = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -427,10 +430,7 @@ export function PierreDiffList({
       ref={holdBox}
       className="diff-view diff-list"
       data-diff-layout={look.layout}
-      onPointerOver={(event) => {
-        const next = gapHintOf(event.nativeEvent.composedPath());
-        setHint((was) => (was?.anchor === next?.anchor ? was : next));
-      }}
+      onPointerOver={(event) => hang(event.nativeEvent)}
       onPointerLeave={() => setHint(undefined)}
       onPointerDown={() => setHint(undefined)}
     >
@@ -460,17 +460,7 @@ export function PierreDiffList({
         </div>
       )}
       {hint === undefined ? null : (
-        <TooltipPill
-          id={hintId}
-          anchor={hint.anchor}
-          instant={false}
-          label={hint.label}
-          shortcut={
-            hint.chord === undefined ? undefined : (
-              <span className="tooltip-chord">{hint.chord}</span>
-            )
-          }
-        />
+        <TooltipPill id={hintId} anchor={hint.anchor} instant={false} label={hint.label} />
       )}
       {entries.map((entry) => (
         <Fragment key={entry.path}>

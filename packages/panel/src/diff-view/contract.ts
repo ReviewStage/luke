@@ -198,6 +198,22 @@ export interface DiffListProps {
 /** How many unchanged lines one press of a gap's arrow opens, as GitHub's diff opens them. */
 export const GAP_LINES = 20;
 
+/**
+ * The attribute the bundle marks each control of a gap between a file's
+ * hunks with, saying which it is: the gap's words, which open the whole
+ * gap, or an arrow, which opens the next lines its way. Each names what it
+ * opens (`aria-label`), which the view hangs over it as its hint.
+ */
+export const GAP_CONTROL_ATTRIBUTE = "data-gap-control";
+
+/** Which control of a gap an element is (`GAP_CONTROL_ATTRIBUTE`). */
+export const GAP_CONTROL = {
+  /** The gap's words, opening all of it. */
+  ALL: "all",
+  /** An arrow, opening the next lines its way, or all of a short gap. */
+  MORE: "more",
+} as const;
+
 /** Whether two runs of line numbers are the same lines in the same order. */
 export function sameLines(a: readonly number[], b: readonly number[]): boolean {
   return a.length === b.length && a.every((line, at) => line === b[at]);
