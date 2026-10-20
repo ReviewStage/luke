@@ -266,7 +266,9 @@ export function loopbackConsent<Grant extends object>(
     // The digest suspends, so it is taken here, after the cancel door is armed
     // and before the withdrawn read below: a press given while it ran is read.
     const challenge = yield* Effect.result(codeChallenge(codeVerifier));
-    if (Result.isFailure(challenge)) return { reason: SHARED_REASON.CHALLENGE };
+    if (Result.isFailure(challenge)) {
+      return { reason: withdrawn ? LOOPBACK_CONSENT_CANCELLED : SHARED_REASON.CHALLENGE };
+    }
 
     // A press on Cancel given while the port was binding is read back here,
     // and the scheduler is handed a turn before it is: a bound port resumes
