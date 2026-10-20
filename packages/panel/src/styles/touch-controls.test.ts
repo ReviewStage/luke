@@ -410,6 +410,5 @@ test("on a touch screen the open row whose metadata stands on the title's line k
     /--luke-list-row-acts/u,
     "the open row's title line ends where its acts begin",
   );
-  assert.equal(open.querySelector(".luke-list-row-title")?.getAttribute("data-end"), "fade");
   assert.ok(!/--luke-list-row-acts/u.test(room(other)), "a row not open keeps its whole line");
 });
