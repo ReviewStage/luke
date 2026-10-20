@@ -1,3 +1,11 @@
+/**
+ * window-surface.ts -- what a window asks of the system it is drawn on: the microphone, the notifications, a mail, focus, a copy, a save, and feedback, as procedures.
+ *
+ * Main answers them itself (`apps/desktop/src/main/ipc/window-surface.ts`),
+ * since each reaches Electron or the Mac; a browser tab answers the ones a
+ * page can carry and refuses the rest (`apps/web/src/app/web-host.ts`).
+ */
+
 import { type FeedbackSubmission, feedbackSubmission } from "@luke/features/feedback";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
@@ -10,14 +18,6 @@ import type { UnparsedWireValue } from "@luke/wire";
 import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { WINDOW_SURFACE_ACT_KIND } from "./kinds.js";
-
-/**
- * window-surface.ts -- what a window asks of the system it is drawn on: the microphone, the notifications, a mail, focus, a copy, a save, and feedback, as procedures.
- *
- * Main answers them itself (`apps/desktop/src/main/ipc/window-surface.ts`),
- * since each reaches Electron or the Mac; a browser tab answers the ones a
- * page can carry and refuses the rest (`apps/web/src/app/web-host.ts`).
- */
 
 /**
  * The longest text a File tab copies or saves of its file: the service

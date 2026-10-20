@@ -1,14 +1,14 @@
-import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
-import { Schema as EffectSchema } from "effect";
-import { actProcedure, exactInput } from "./base.js";
-import { UPDATE_ACT_KIND } from "./kinds.js";
-
 /**
  * updates.ts -- the updater as a window reaches it: a check, the install, and the releases page and changelog opened, as procedures.
  *
  * Main answers them itself (`apps/desktop/src/main/ipc/update-acts.ts`),
  * since the updater is Electron's; a browser tab refuses every one.
  */
+
+import { UPDATE_STATUS, type UpdateSnapshot } from "@luke/settings/update";
+import { Schema as EffectSchema } from "effect";
+import { actProcedure, exactInput } from "./base.js";
+import { UPDATE_ACT_KIND } from "./kinds.js";
 
 /** What every state of the updater carries. */
 const standing = {

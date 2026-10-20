@@ -1,10 +1,3 @@
-import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
-import type { ActSender } from "@luke/host/act-router";
-import { BROWSER_ACT_KIND } from "@luke/host/contract";
-import { Effect } from "effect";
-import type { WebContents } from "electron";
-import type { BrowserViews } from "../window/browser-views";
-
 /**
  * browser-acts.ts -- the Browser tab's acts as main carries them: each handed to the panel's views, from a panel alone and only while the experiment is on.
  *
@@ -14,6 +7,13 @@ import type { BrowserViews } from "../window/browser-views";
  * view, and so is one naming a view the asking panel never opened: the ids
  * are each panel's own, so one panel's tab can reach no other's page.
  */
+
+import { actPortFor, type PlatformActProcedures } from "@luke/host/act-port";
+import type { ActSender } from "@luke/host/act-router";
+import { BROWSER_ACT_KIND } from "@luke/host/contract";
+import { Effect } from "effect";
+import type { WebContents } from "electron";
+import type { BrowserViews } from "../window/browser-views";
 
 type BrowserActKind = (typeof BROWSER_ACT_KIND)[keyof typeof BROWSER_ACT_KIND];
 

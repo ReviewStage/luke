@@ -1,3 +1,10 @@
+/**
+ * browser.ts -- a Browser tab's view as the panel reaches it: opened, sent on, stepped, placed, caught as a still, and closed, as procedures.
+ *
+ * Main answers them itself (`apps/desktop/src/main/ipc/browser-acts.ts`),
+ * since the views hang over its windows; a browser tab refuses every one.
+ */
+
 import {
   browserAddressParamsSchema,
   browserPageSchema,
@@ -9,12 +16,6 @@ import { Schema as EffectSchema } from "effect";
 import { actProcedure, exactInput } from "./base.js";
 import { BROWSER_ACT_KIND } from "./kinds.js";
 
-/**
- * browser.ts -- a Browser tab's view as the panel reaches it: opened, sent on, stepped, placed, caught as a still, and closed, as procedures.
- *
- * Main answers them itself (`apps/desktop/src/main/ipc/browser-acts.ts`),
- * since the views hang over its windows; a browser tab refuses every one.
- */
 export const browserActsContract = {
   [BROWSER_ACT_KIND.BROWSER_OPEN]: actProcedure("Could not open that page.")
     .input(exactInput(browserAddressParamsSchema))
