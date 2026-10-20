@@ -18,7 +18,7 @@ import { Tooltip } from "./tooltip.js";
  * mouse's click opens nothing; a link's tap still goes where it leads, and
  * a long press opens its card instead, its release pressing nothing; and a
  * control whose long press opens its menu keeps it for the menu. A tap on a
- * control inside hinted words is the control's alone, a finger's scroll
+ * control inside hinted words is the control's alone, and its hold opens the hint, a finger's scroll
  * opens nothing, and a tap spent on a hint shows no message's actions.
  */
 
@@ -266,7 +266,7 @@ test("a control whose long press opens its context menu shows no hint for the ho
   assert.equal(cardStands(), false);
 });
 
-test("a tap on a control inside hinted words works the control alone, and opens no hint", () => {
+test("a tap on a control inside hinted words works the control alone, and a long press on it opens the hint and presses nothing", () => {
   const chosen: string[] = [];
   const page = mount(
     createElement(Tooltip, {
@@ -287,6 +287,10 @@ test("a tap on a control inside hinted words works the control alone, and opens 
 
   assert.deepEqual(chosen, ["Part of"]);
   assert.equal(document.querySelector(".luke-tooltip") === null, true, "no hint stands");
+
+  assert.equal(longPress(page.querySelector("button") ?? assert.fail("the choice")), false);
+  assert.equal(document.querySelector(".luke-tooltip")?.textContent, "Relation");
+  assert.deepEqual(chosen, ["Part of"], "the hold chose nothing");
 });
 
 test("a finger that scrolls from a link, which the browser takes over, opens no card however long it stays down", () => {

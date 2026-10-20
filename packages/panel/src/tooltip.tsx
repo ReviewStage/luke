@@ -519,7 +519,10 @@ export function Tooltip({
       hide();
       const control = event.currentTarget;
       if (!fingerPress.current || shownAtPress.current || label === undefined) return;
-      if (control.closest(OWN_CONTROL) === null || control.closest(LONG_PRESS_MENU) !== null) {
+      // Note that the press may land on a control inside the hint's words, a
+      // choice bar the hint names, whose hold opens the hint as its own would.
+      const pressed = event.target instanceof Element ? event.target : control;
+      if (pressed.closest(OWN_CONTROL) === null || pressed.closest(LONG_PRESS_MENU) !== null) {
         return;
       }
       hold.start(event, () => show(control, true));
