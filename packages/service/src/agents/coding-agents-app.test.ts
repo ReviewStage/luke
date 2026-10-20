@@ -535,6 +535,7 @@ const NO_KEYS: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 /** What the endpoints counted, across the file; a test reads its own account's. */

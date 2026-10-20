@@ -72,6 +72,7 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
+  nativeAgentAccounts: [],
 };
 
 /** The catalog a coding-agent choice is checked against: the default model and one other. */
