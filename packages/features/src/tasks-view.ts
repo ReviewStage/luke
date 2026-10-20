@@ -795,8 +795,6 @@ export type TasksPullRequestAnswer = typeof tasksPullRequestAnswerSchema.Type;
 /** The pull request as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksPullRequestSchema = EffectSchema.NullOr(githubPullRequestSummarySchema);
 
-export type TasksPullRequest = typeof tasksPullRequestSchema.Type;
-
 /** One issue of a repository, as a link to it asks the host for it: the workspace whose installation reaches the repository, the repository, and the issue's number. */
 export const tasksIssueParamsSchema = EffectSchema.Struct({
   ...repositoryPlaceFields,
@@ -815,8 +813,6 @@ export type TasksIssueAnswer = typeof tasksIssueAnswerSchema.Type;
 
 /** The issue as a link that asked draws it, once the service answered: its number, title, page, and state, or null where there is none to draw. */
 export const tasksIssueSchema = EffectSchema.NullOr(githubIssueSummarySchema);
-
-export type TasksIssue = typeof tasksIssueSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the task, and the revision the page is read before where it is an older page. */
 export const tasksRevisionsParamsSchema = EffectSchema.Struct({

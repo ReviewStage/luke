@@ -210,7 +210,11 @@ export const SETTINGS_ACT_KIND = {
  * saved, conflicted with what Luke wrote meanwhile, or failed. Beside them,
  * a page of GitHub's or the web's opened in the browser, the account's own
  * GitHub connected or disconnected, a call about the open task, and its
- * whiteboard saved.
+ * whiteboard saved. And what one task holds, read as its tabs draw it: its
+ * earlier work and conversation, a call's messages, its repository's files,
+ * folders, skills, pull requests, and issues, a fenced block coloured, its
+ * plan's history, pages, pictures, and comments, and a task given its
+ * status and priority.
  */
 export const TASKS_ACT_KIND = {
   TASKS_REFRESH: "tasks.refresh",
@@ -245,6 +249,48 @@ export const TASKS_ACT_KIND = {
   TASKS_TALK: "tasks.talk",
   /** The open task's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   TASKS_BOARD_SAVE: "tasks.boardSave",
+  /** A task given its status and priority on the service; answers whether it saved. */
+  TASKS_SET_STANDING: "tasks.setStanding",
+  /** The Work tab scrolled back to its oldest turn: the open task's page of work before it, read from the service; the view arrives on the document. */
+  TASKS_WORK_EARLIER: "tasks.workEarlier",
+  /** The Call tab scrolled back to its oldest turn: the open task's page of conversation before it, read from the service; the view arrives on the document. */
+  TASKS_CONVERSATION_EARLIER: "tasks.conversationEarlier",
+  /** One page of a task's conversation, or a brain worker's under the call that started it, held open by the service while it runs; answered to the tab, never on the document. */
+  TASKS_MESSAGES: "tasks.messages",
+  /** A File tab's window of a file of the open task's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
+  TASKS_FILE: "tasks.file",
+  /** A File tab's tree listing one folder of the open task's repository, read from GitHub through the service; answered to the tree, never on the document. */
+  TASKS_TREE: "tasks.tree",
+  /** The skills a developer may choose of a task's repository, read from GitHub through the service; answered to the asker, never on the document. */
+  TASKS_SKILLS: "tasks.skills",
+  /** One pull request of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
+  TASKS_PULL_REQUEST: "tasks.pullRequest",
+  /** One issue of a repository a workspace's installation reaches, by its number, read from GitHub through the service for a link to it to draw its title and state; null where there is none to draw; answered to the asker, never on the document. */
+  TASKS_ISSUE: "tasks.issue",
+  /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
+  TASKS_COLOUR_CODE: "tasks.colourCode",
+  /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
+  TASKS_REVISIONS: "tasks.revisions",
+  /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
+  TASKS_REVISION: "tasks.revision",
+  /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
+  TASKS_RESTORE: "tasks.restore",
+  /** A page tab's source of one version of one of the plan's pages, read from the service as its frame's is and coloured by main as HTML; answered to the tab, never on the document. */
+  TASKS_PAGE_SOURCE: "tasks.pageSource",
+  /** One plan's pages, each by its newest version, read from the service for the Inbox's panel beside an item of that plan; answered to the view, never on the document. */
+  TASKS_PAGES: "tasks.pages",
+  /** One picture of the open plan as its bytes in base64, read from the service for the document drawing it; answered to the view, never on the document. */
+  TASKS_PICTURE_READ: "tasks.pictureRead",
+  /** A picture pasted, dropped, or chosen into the open plan's editor, kept on the service; answered with the id the text then names it by. */
+  TASKS_PICTURE_KEEP: "tasks.pictureKeep",
+  /**
+   * The open plan's comment threads: read past a cursor (held open by the
+   * service while nothing changed), one started on words of the plan, and
+   * one thing done to one thread. The window holds what it draws.
+   */
+  TASKS_COMMENTS: "tasks.comments",
+  TASKS_COMMENT_START: "tasks.commentStart",
+  TASKS_COMMENT_ACT: "tasks.commentAct",
 } as const;
 
 /**

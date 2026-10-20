@@ -14,7 +14,7 @@ import { MENTION_KIND, mentionMarkdown } from "@luke/features/mention-link";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@luke/features/models-wire";
 import { TASK_STATUS, TASK_TREE_ENTRY, type TaskStatus } from "@luke/features/task-wire";
 import { WORKSPACE_ROLE } from "@luke/features/workspace-wire";
-import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "@luke/host/acts";
+import { ACT_KIND, ACT_OUTCOME_STATUS } from "@luke/host/acts";
 import { EXPERIMENT } from "@luke/settings";
 import { SETTINGS_SECTION, SETTINGS_VIEW, type SettingsLink } from "@luke/settings/settings-views";
 import type { LinearIssuesAsk } from "@luke/ui/tasks-model";
@@ -24,7 +24,13 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, test, vi } from "vitest";
 import { OpenSettingsProvider } from "../open-settings.js";
-import { fakeActPort, fakeAppBridge } from "../testing/app-bridge.js";
+import {
+  type AnyAct,
+  type AnyActOutcome,
+  fakeActPort,
+  fakeActs,
+  fakeAppBridge,
+} from "../testing/app-bridge.js";
 import { DESKTOP_LINKS, fakeAppPlatform } from "../testing/app-platform.js";
 import { handState } from "../testing/app-state.js";
 import {
@@ -408,9 +414,9 @@ test("Shift+Return is a new line, and the agent is handed both lines", async () 
 });
 
 test("once a repository is chosen, an @ offers its files, read through the workspace, and the row chosen is drawn as its chip and handed to the agent as its link", async () => {
-  const told: Act[] = [];
-  fakeAppBridge({
-    act: (request: Act) => {
+  const told: AnyAct[] = [];
+  fakeActs({
+    act: (request: AnyAct): Promise<AnyActOutcome> => {
       told.push(request);
       return Promise.resolve(
         request.kind === ACT_KIND.TASKS_TREE
@@ -574,29 +580,20 @@ test("a skill chosen from the / list is its chip, which opens its SKILL.md in th
       onGitHub.push(url);
       return Promise.resolve();
     },
-  });
-  fakeAppBridge({
-    act: (request: Act) =>
-      Promise.resolve(
-        request.kind === ACT_KIND.TASKS_SKILLS
-          ? {
-              status: ACT_OUTCOME_STATUS.DONE,
-              value: {
-                skills: {
-                  repository: "acme/web",
-                  branch: "main",
-                  skills: [
-                    {
-                      name: "release",
-                      description: "Cut a release.",
-                      path: ".agents/skills/release/SKILL.md",
-                    },
-                  ],
-                },
-              },
-            }
-          : { status: ACT_OUTCOME_STATUS.UNKNOWN_ACT },
-      ),
+    [ACT_KIND.TASKS_SKILLS]: () =>
+      Promise.resolve({
+        skills: {
+          repository: "acme/web",
+          branch: "main",
+          skills: [
+            {
+              name: "release",
+              description: "Cut a release.",
+              path: ".agents/skills/release/SKILL.md",
+            },
+          ],
+        },
+      }),
   });
   const container = document.createElement("div");
   document.body.append(container);
