@@ -28,6 +28,7 @@ import {
   CHAPTERS_SHOWN,
   chapterMarks,
   chapterPaths,
+  chaptersModelLabel,
   chaptersShown,
   chapterThreadCount,
   chapterViewed,
@@ -325,4 +326,10 @@ test("stepping through chapters holds at either end", () => {
   assert.equal(steppedChapter(0, -1, 3), 0);
   assert.equal(steppedChapter(1, 1, 3), 2);
   assert.equal(steppedChapter(2, 1, 3), 2);
+});
+
+test("the model that told the chapters reads as its label where Settings offers it, else as its id", () => {
+  assert.equal(chaptersModelLabel("claude-haiku-5-5"), "Haiku 5.5");
+  assert.equal(chaptersModelLabel("claude-3-opus"), "claude-3-opus");
+  assert.equal(chaptersModelLabel("toString"), "toString");
 });

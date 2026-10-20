@@ -1,3 +1,4 @@
+import { CHAPTERS_MODEL_LABEL } from "@luke/features/chapters-model-choice";
 import type { CodingAgentChangedFile, ReviewThread } from "@luke/features/coding-agent-wire";
 import { patchHunks } from "@luke/features/diff-hunks";
 import {
@@ -74,9 +75,17 @@ export type ChaptersShown =
   | {
       readonly kind: typeof CHAPTERS_SHOWN.READY;
       readonly chapters: readonly Chapter[];
+      /** The provider's id of the model that told them. */
+      readonly model: string;
       readonly stale: boolean;
       readonly generatable: boolean;
     };
+
+/** The model that told the chapters as the view names it: its label where Settings offers it, else the id as stored. */
+export function chaptersModelLabel(model: string): string {
+  const labels: Readonly<Record<string, string>> = CHAPTERS_MODEL_LABEL;
+  return Object.hasOwn(labels, model) ? (labels[model] ?? model) : model;
+}
 
 /** Whether chapters were made for a head the pull request has since moved on from. */
 function chaptersStale(pullRequest: Pick<Answer, "headSha" | "chapters">): boolean {
@@ -129,6 +138,7 @@ export function chaptersShown(
       return {
         kind: CHAPTERS_SHOWN.READY,
         chapters: orderedChapters(chapters.chapters),
+        model: chapters.model,
         stale: chaptersStale(pullRequest),
         generatable,
       };

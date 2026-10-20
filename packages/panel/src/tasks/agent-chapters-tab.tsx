@@ -34,6 +34,7 @@ import {
   SkeletonRegion,
   TEXT_BUTTON_TONE,
   TEXT_ELEMENT,
+  TEXT_TONE,
   TEXT_VARIANT,
   Text,
   TextButton,
@@ -67,6 +68,7 @@ import {
   type ChaptersShown,
   chapterMarks,
   chapterPaths,
+  chaptersModelLabel,
   chaptersShown,
   chapterThreadCount,
   chapterViewed,
@@ -152,6 +154,8 @@ const CHAPTERS_WORDS = {
   NO_FILES: "None of this chapter's changes are in the pull request now.",
   STALE_DIFF:
     "These chapters were made before the newest commits. Regenerate to see their changes.",
+  /** Which model told the chapters, as quiet meta text above them. */
+  madeBy: (model: string) => `Made by ${model}`,
   STALE: "New commits since these chapters",
   WHAT_TO_REVIEW: "What to review",
   VIEWED: "Viewed",
@@ -488,6 +492,7 @@ function ChaptersReading({
   repository,
   tree,
   chapters,
+  model,
   stale,
   generatable,
   read,
@@ -502,6 +507,8 @@ function ChaptersReading({
   repository: string | null;
   tree: TreeShown;
   chapters: readonly Chapter[];
+  /** The provider's id of the model that told the chapters. */
+  model: string;
   stale: boolean;
   generatable: boolean;
   read: ChaptersRead;
@@ -620,6 +627,11 @@ function ChaptersReading({
           ) : null}
         </div>
       ) : null}
+      <p className="chapters-made-by">
+        <Text as={TEXT_ELEMENT.SPAN} variant={TEXT_VARIANT.CAPTION} tone={TEXT_TONE.SUBTLE}>
+          {CHAPTERS_WORDS.madeBy(chaptersModelLabel(model))}
+        </Text>
+      </p>
       <div className="chapters-body">
         {slide.drawn || over ? (
           <ChapterRail
@@ -891,6 +903,7 @@ export function AgentChaptersTab({
       repository={repository}
       tree={tree}
       chapters={state.chapters}
+      model={state.model}
       stale={state.stale}
       generatable={state.generatable}
       read={chapters}
