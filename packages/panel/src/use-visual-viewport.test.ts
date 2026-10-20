@@ -308,3 +308,63 @@ test("the focus leaving the field lets the stage down at once, ahead of WebKit m
   act(() => viewport.change({ height: 480 }, "resize"));
   assert.equal(readOverBody("--luke-keyboard-inset"), "320px");
 });
+
+/** A column 700 tall holding more than it shows, in the body, measured as a laid-out page measures it. */
+function scrollingColumn(): HTMLElement {
+  const column = document.body.appendChild(document.createElement("div"));
+  column.style.overflowY = "auto";
+  Object.defineProperty(column, "scrollHeight", { configurable: true, value: 2000 });
+  Object.defineProperty(column, "clientHeight", { configurable: true, value: 700 });
+  column.getBoundingClientRect = () => DOMRect.fromRect({ y: 0, height: 700, width: 390 });
+  return column;
+}
+
+/** A field in `column`, `down` from the window's top, 20 tall. */
+function fieldAt(column: HTMLElement, tag: "textarea" | "input", down: number): HTMLElement {
+  const field = column.appendChild(document.createElement(tag));
+  field.getBoundingClientRect = () => DOMRect.fromRect({ y: down, height: 20, width: 390 });
+  return field;
+}
+
+test("a field focused under a keyboard already up has its caret scrolled into view, as the pan that would have shown it is undone", () => {
+  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
+  standViewport(viewport);
+  undoesPan(viewport);
+  const column = scrollingColumn();
+  const first = fieldAt(column, "input", 200);
+  const second = fieldAt(column, "input", 650);
+  mount();
+  first.focus();
+  act(() => viewport.change({ height: 480, offsetTop: 320 }, "resize"));
+  assert.equal(column.scrollTop, 0, "the first field stands above the keyboard");
+
+  act(() => second.focus());
+
+  assert.equal(column.scrollTop, 650 + 20 + 24 - 480);
+});
+
+test("a box focused while words stand selected elsewhere on the page is kept above the keyboard by its own place, not theirs", () => {
+  const viewport = new FakeVisualViewport(ENGINE.WEBKIT);
+  standViewport(viewport);
+  undoesPan(viewport);
+  const column = scrollingColumn();
+  const words = column.appendChild(document.createElement("p"));
+  words.textContent = "Words selected on the page.";
+  const field = fieldAt(column, "textarea", 650);
+  // The words selected stand 150 down the window, as a laid-out page draws them.
+  Object.defineProperty(Range.prototype, "getBoundingClientRect", {
+    configurable: true,
+    value: () => DOMRect.fromRect({ y: 150, height: 20, width: 200 }),
+  });
+  try {
+    mount();
+    field.focus();
+    window.getSelection()?.selectAllChildren(words);
+
+    act(() => viewport.change({ height: 480, offsetTop: 320 }, "resize"));
+
+    assert.equal(column.scrollTop, 650 + 20 + 24 - 480);
+  } finally {
+    Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+  }
+});

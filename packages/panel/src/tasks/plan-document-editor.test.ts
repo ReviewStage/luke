@@ -701,3 +701,28 @@ test("an editor closing with its caret on no words scrolls nothing", async () =>
 
   assert.equal(scroller.scrollTop, 500);
 });
+
+test("words left by an editor closed as another plan opens move nothing in it", async () => {
+  const { container, render } = mount();
+  act(() => block(container, "Goal").click());
+  const scroller = scrollerOf(container);
+  scroller.scrollTop = 500;
+  caretOn = {
+    section: 1,
+    text: "Invites land by email.",
+    occurrence: 0,
+    offset: 3,
+    code: false,
+    top: 300,
+  };
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    DOMRect.fromRect({ x: 0, y: 57, width: 300, height: 20 }),
+  );
+
+  // Another plan with the same words opens in its place.
+  render({ ...DOCUMENT_TASK, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" });
+  await settle();
+
+  assert.ok(container.querySelector(".plan-document-editor") === null, "the editor closed");
+  assert.equal(scroller.scrollTop, 500);
+});

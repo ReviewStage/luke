@@ -75,11 +75,21 @@ function scrollerOf(element: Element): HTMLElement | undefined {
   return undefined;
 }
 
-/** Where the caret of the focused field stands in the window: the selection's box, or the field's own where the selection draws none. */
-function caretBox(field: Element): DOMRect {
+/**
+ * Where the caret of the focused field stands in the window: the selection's
+ * box where it stands in the field's own words, or the field's box. Note that
+ * a box or an area keeps its caret apart from the page's selection, which may
+ * still stand on words selected elsewhere.
+ */
+function caretBox(field: HTMLElement): DOMRect {
   const selection = window.getSelection();
   const range =
-    selection !== null && selection.rangeCount > 0 ? selection.getRangeAt(0) : undefined;
+    field.isContentEditable && selection !== null && selection.rangeCount > 0
+      ? selection.getRangeAt(0)
+      : undefined;
+  if (range === undefined || !field.contains(range.startContainer)) {
+    return field.getBoundingClientRect();
+  }
   // Note that a range's box is read as possibly missing, since a page with no layout, as a test's is, draws none.
   const measured: Partial<Pick<Range, "getBoundingClientRect">> | undefined = range;
   const box = measured?.getBoundingClientRect?.();
@@ -136,6 +146,8 @@ export function useVisualViewport(): void {
      * slide, the room it left standing empty.
      */
     let going = false;
+    /** Where the stage ends in the window, as last measured: the keyboard's top while it is up. */
+    let foot = window.innerHeight;
     const write = () => {
       let layout: number;
       let bottom: number;
@@ -163,6 +175,7 @@ export function useVisualViewport(): void {
       root.setProperty(KEYBOARD_INSET, `${inset}px`);
       // A keyboard that rose, or grew, over the focused field keeps its caret in view.
       if (inset > covered) caretAboveKeyboard(bottom);
+      foot = bottom;
       covered = inset;
     };
     // Focus leaving every typed field lets the keyboard go at once; a field taking it measures the keyboard again.
@@ -175,6 +188,8 @@ export function useVisualViewport(): void {
       if (!typedField(event.target)) return;
       going = false;
       write();
+      // A field focused under a keyboard already up keeps its caret in view too, as the pan that would have shown it is undone.
+      if (covered > 0) caretAboveKeyboard(foot);
     };
     write();
     viewport.addEventListener("resize", write);

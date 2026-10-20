@@ -195,15 +195,22 @@ function drawnWordsTop(body: HTMLElement, words: PlacedWords): number | undefine
  * closing editor leaves its words (`PlanDocumentEditor`'s `closedOn`).
  */
 export function useWordsKeptOnClose(
+  taskId: string,
   open: boolean,
   body: React.RefObject<HTMLElement | null>,
   scroller: React.RefObject<HTMLElement | null>,
 ): React.RefObject<PlacedWords | undefined> {
   const closedOn = useRef<PlacedWords | undefined>(undefined);
+  // The task the editor opened on, so words left by one closed as another opens move nothing.
+  const openedOn = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
+    if (open) {
+      openedOn.current = taskId;
+      return;
+    }
     const words = closedOn.current;
-    if (open || words === undefined) return;
     closedOn.current = undefined;
+    if (words === undefined || openedOn.current !== taskId) return;
     const top = body.current === null ? undefined : drawnWordsTop(body.current, words);
     if (top !== undefined && scroller.current !== null)
       scroller.current.scrollTop += top - words.top;
