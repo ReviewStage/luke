@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { ConfigProvider, Effect, Layer, Redacted } from "effect";
 import { test } from "vitest";
+import { BRAIN_HOST_ENVIRONMENT } from "./agents/brain-host/bounds.js";
 import {
   HostedEnvironment,
   type HostedEnvironmentValues,
@@ -50,4 +51,19 @@ test("a secret that is set travels sealed and trimmed, and its value is the one 
   assert.equal(Redacted.value(environment.posthogPersonalApiKey), "phx-personal-key");
   assert.ok(environment.cronSecret);
   assert.equal(Redacted.value(environment.cronSecret), "cron-secret-1");
+});
+
+test("the deployment's secret at eve's door is read from its own variable and never from the cron's", async () => {
+  const cronAlone = await environmentOver({
+    [CRON_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
+    [BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: undefined,
+  });
+  assert.equal(cronAlone.eveDeploymentSecret, undefined);
+  const both = await environmentOver({
+    [CRON_ENVIRONMENT.CRON_SECRET]: "cron-secret-1",
+    [BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET]: " eve-deployment-secret-1 ",
+  });
+  assert.ok(both.cronSecret && both.eveDeploymentSecret);
+  assert.equal(Redacted.value(both.cronSecret), "cron-secret-1");
+  assert.equal(Redacted.value(both.eveDeploymentSecret), "eve-deployment-secret-1");
 });

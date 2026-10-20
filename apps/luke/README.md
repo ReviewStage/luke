@@ -31,6 +31,11 @@ variables and `BETTER_AUTH_SECRET`, as the web functions do:
 and mints its token through `GitHubApp`, which the shared layer builds from
 them (`@luke/service/runtime`, `githubAppFromEnvironment`). The session secret
 is what the account's user token is sealed under.
+`EVE_DEPLOYMENT_SECRET` is the secret its door admits the deployment acting
+for an account under, and the one it sends when it acts for one itself, as
+the `dev` service's door and every web function calling eve do. It is never
+`CRON_SECRET`, the scheduler's bearer: without it the door admits no
+deployment request, and nothing falls back to the cron's.
 
 ## Evals
 

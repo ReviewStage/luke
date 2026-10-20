@@ -134,7 +134,7 @@ import { CODER_TOOL, CODER_TOOL_SET } from "./tool-set.js";
  */
 
 const NOW = 1_800_000_000_000;
-const CRON_SECRET = "cron-secret-1";
+const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const EVE_ORIGIN = "https://luke.test";
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -197,7 +197,7 @@ function hostOf(acting: boolean, summaryModel?: SummaryModelOf): CoderHost {
       reachesSession: () => Promise.resolve(false),
       reachesConversation: () => Promise.resolve(false),
     },
-    deploymentSecret: () => (acting ? Redacted.make(CRON_SECRET) : undefined),
+    deploymentSecret: () => (acting ? Redacted.make(DEPLOYMENT_SECRET) : undefined),
     eveOrigin: () => (acting ? EVE_ORIGIN : undefined),
     keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
     fastRefused: async () => undefined,
@@ -718,7 +718,7 @@ test("message_agent reaches a teammate's agent on another plan as the deployment
   assert.equal(eve.sent.length, 1);
   const [request] = eve.sent;
   assert.equal(request?.path, `/eve/coder/v1/session/${teammates.sessionId}`);
-  assert.equal(request?.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
+  assert.equal(request?.headers.get("authorization"), `Bearer ${DEPLOYMENT_SECRET}`);
   assert.equal(request?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), caller.userId);
   assert.equal(request?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), teammates.conversationId);
   // The words open with the sending agent, named and by the id it is answered by, then its own.

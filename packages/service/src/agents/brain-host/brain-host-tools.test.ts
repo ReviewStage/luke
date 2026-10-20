@@ -131,7 +131,7 @@ const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 
 /** The installation ids handed out so far: one installation stands for one workspace, so each task's workspace connects its own. */
 let installationsConnected = 0;
-const CRON_SECRET = "cron-secret-1";
+const DEPLOYMENT_SECRET = "eve-deployment-secret-1";
 const EVE_ORIGIN = "https://luke.test";
 const INSTRUCTION = "Also add tests for the expiry.";
 const TASK = "Rename the invite email's subject to say who sent it.";
@@ -344,7 +344,7 @@ test("a message to the plan's agent steers its session as the deployment acting 
   const eve = await fakeCoderEve(task.workspaceId);
   const acting = brainHost({
     ...seams,
-    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    deploymentSecret: () => Redacted.make(DEPLOYMENT_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
   const call = await callerOn(acting, task, eve.services);
@@ -364,7 +364,7 @@ test("a message to the plan's agent steers its session as the deployment acting 
   assert.equal(eve.sent.length, 1);
   const [request] = eve.sent;
   assert.equal(request?.path, `/eve/coder/v1/session/${agent.sessionId}`);
-  assert.equal(request?.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
+  assert.equal(request?.headers.get("authorization"), `Bearer ${DEPLOYMENT_SECRET}`);
   assert.equal(request?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), userId);
   assert.equal(request?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), agent.conversationId);
   assert.equal(request?.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
@@ -410,7 +410,7 @@ test("a member speaking in the plan conversation a teammate opened messages the 
   const eve = await fakeCoderEve(task.workspaceId);
   const acting = brainHost({
     ...seams,
-    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    deploymentSecret: () => Redacted.make(DEPLOYMENT_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
   const call = await callerOn(acting, task, eve.services, [], member);
@@ -437,7 +437,7 @@ test("Luke makes a task for the member speaking, in the call's task's workspace 
   const eve = await fakeCoderEve(task.workspaceId);
   const acting = brainHost({
     ...seams,
-    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    deploymentSecret: () => Redacted.make(DEPLOYMENT_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
   const call = await callerOn(acting, task, eve.services, CATALOG, member);
@@ -483,7 +483,7 @@ test("Luke's agent tools reach every agent of the task's workspace: a list names
   const eve = await fakeCoderEve(task.workspaceId);
   const acting = brainHost({
     ...seams,
-    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    deploymentSecret: () => Redacted.make(DEPLOYMENT_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
   const call = await callerOn(acting, task, eve.services, CATALOG);
@@ -583,7 +583,7 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   const eve = await fakeCoderEve(task.workspaceId);
   const acting = brainHost({
     ...seams,
-    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    deploymentSecret: () => Redacted.make(DEPLOYMENT_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
   const call = await callerOn(acting, task, eve.services, CATALOG);
@@ -606,7 +606,7 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   assert.equal(eve.sent.length, 1);
   const [opening] = eve.sent;
   assert.equal(opening?.path, "/eve/coder/v1/session");
-  assert.equal(opening?.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
+  assert.equal(opening?.headers.get("authorization"), `Bearer ${DEPLOYMENT_SECRET}`);
   assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), userId);
   assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), stored.conversationId);
   assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
@@ -665,7 +665,7 @@ test("Luke's one start carries what the developer said beyond the plan: the note
   const eve = await fakeCoderEve(task.workspaceId);
   const acting = brainHost({
     ...seams,
-    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    deploymentSecret: () => Redacted.make(DEPLOYMENT_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
   const call = await callerOn(acting, task, eve.services, CATALOG);
@@ -894,7 +894,7 @@ test("Luke's direct message to the plan's agent is told by a notice steered into
   const eve = await fakeCoderEve(task.workspaceId);
   const acting = brainHost({
     ...seams,
-    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    deploymentSecret: () => Redacted.make(DEPLOYMENT_SECRET),
     eveOrigin: () => EVE_ORIGIN,
   });
   const call = await callerOn(acting, task, eve.services);

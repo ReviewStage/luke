@@ -841,8 +841,9 @@ the issue's owners on a high-priority issue.
 
 Enable the WebSockets feature on the Vercel team, make sure Fluid compute is
 on for the project, and set `OPENAI_API_KEY`; `LUKE_LIVE_MODEL` optionally pins
-the model. The exchange also needs `CRON_SECRET`, the deployment's secret at
-eve's door, and without it every session is refused as unavailable; eve's
+the model. The exchange also needs `EVE_DEPLOYMENT_SECRET`, the deployment's
+own secret at eve's door and never the cron's `CRON_SECRET`, and without it
+every session is refused as unavailable; eve's
 origin is the deployment's own unless `LUKE_EVE_ORIGIN` names another. Luke's
 avatar needs `KEYFRAME_API_KEY` and `LUKE_KEYFRAME_PERSONA_ID` as well; without
 either, a call asking for video goes on as voice. No

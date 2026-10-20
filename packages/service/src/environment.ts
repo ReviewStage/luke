@@ -1,5 +1,6 @@
 import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@luke/database/models/provider-key-seal";
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
+import { BRAIN_HOST_ENVIRONMENT } from "./agents/brain-host/bounds.js";
 import { GITHUB_APP_ENVIRONMENT } from "./auth/auth-deployment.js";
 import { text } from "./core.js";
 import { CRON_ENVIRONMENT } from "./maintenance/maintenance-bounds.js";
@@ -30,8 +31,10 @@ export interface HostedEnvironmentValues {
   readonly posthogProjectApiKey: Redacted.Redacted | undefined;
   /** A deployment-configured ingestion host; the shared default otherwise. */
   readonly posthogIngestHost: string | undefined;
-  /** Vercel's own bearer on every scheduled call, and the deployment's at eve's door; absent refuses every sweep and every delegation. */
+  /** Vercel's own bearer on every scheduled call, and nothing else's; absent refuses every sweep. */
   readonly cronSecret: Redacted.Redacted | undefined;
+  /** The deployment's own bearer at eve's door, sent by every caller acting for an account and admitted by both eve services; absent refuses every delegation. */
+  readonly eveDeploymentSecret: Redacted.Redacted | undefined;
   /** The secret GitHub signs the Luke GitHub App's webhook deliveries with; absent refuses every delivery. */
   readonly githubWebhookSecret: Redacted.Redacted | undefined;
   /** The versioned keys an account's own provider keys are sealed under (`provider-key-seal.ts`); absent refuses every save and leaves every agent on Luke's keys. */
@@ -82,6 +85,7 @@ export const hostedEnvironment = Layer.effect(
       posthogProjectApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PROJECT_API_KEY)),
       posthogIngestHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.HOST)),
       cronSecret: Config.option(Config.Redacted(CRON_ENVIRONMENT.CRON_SECRET)),
+      eveDeploymentSecret: Config.option(Config.Redacted(BRAIN_HOST_ENVIRONMENT.DEPLOYMENT_SECRET)),
       githubWebhookSecret: Config.option(Config.Redacted(GITHUB_APP_ENVIRONMENT.WEBHOOK_SECRET)),
       providerKeyEncryptionKeys: Config.option(
         Config.Redacted(PROVIDER_KEY_ENCRYPTION_ENVIRONMENT.KEYS),
@@ -96,6 +100,7 @@ export const hostedEnvironment = Layer.effect(
       posthogProjectApiKey: presentRedacted(read.posthogProjectApiKey),
       posthogIngestHost: present(read.posthogIngestHost),
       cronSecret: presentRedacted(read.cronSecret),
+      eveDeploymentSecret: presentRedacted(read.eveDeploymentSecret),
       githubWebhookSecret: presentRedacted(read.githubWebhookSecret),
       providerKeyEncryptionKeys: presentRedacted(read.providerKeyEncryptionKeys),
     }),

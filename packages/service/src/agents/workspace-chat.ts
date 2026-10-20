@@ -167,7 +167,7 @@ const eveAsStarter = /* @__PURE__ */ Effect.fnUntraced(function* (
   HttpClient.HttpClient | HostedEnvironment
 > {
   if (seams.eveAs !== undefined) return seams.eveAs;
-  const secret = (yield* HostedEnvironment).cronSecret;
+  const secret = (yield* HostedEnvironment).eveDeploymentSecret;
   const origin = seams.eveOrigin();
   if (secret === undefined || origin === undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);

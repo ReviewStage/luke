@@ -40,10 +40,11 @@ import { type EveReach, eveFor } from "./stop.js";
  * the deployment acting for the account the route resolved, which each door
  * admits only on that account's own sessions and conversations. Nothing the
  * request itself names, its cookie or an account header, reaches eve; a
- * deployment that holds no secret, or names no eve, reaches it for no
- * cookie at all. A typed ask of Luke, which a comment mentioning him hands
- * over, is admitted at the brain's door either way, as the account's own
- * principal, so eve steers and folds it the same whichever carried it.
+ * deployment that holds no secret of its own for eve (the cron's is not
+ * one), or names no eve, reaches it for no cookie at all. A typed ask of
+ * Luke, which a comment mentioning him hands over, is admitted at the
+ * brain's door either way, as the account's own principal, so eve steers
+ * and folds it the same whichever carried it.
  *
  * eve answers at a fake HTTP boundary that hands each request to the
  * channel's door over a store in which each account reaches its own session
@@ -52,7 +53,10 @@ import { type EveReach, eveFor } from "./stop.js";
  */
 
 const ORIGIN = "https://luke.test";
-const SECRET = "cron-secret-1";
+/** The deployment's own secret at eve's door, the one both doors below admit. */
+const SECRET = "eve-deployment-secret-1";
+/** The cron's bearer, which the deployment holds beside it and no door admits. */
+const CRON_SECRET = "cron-secret-1";
 const ACCOUNT = "user-a";
 const OTHER = "user-b";
 const BEARER = "Bearer token-a";
@@ -72,13 +76,15 @@ const NO_KEYS: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
 
 const WITH_SECRET = Layer.succeed(HostedEnvironment, {
   ...NO_KEYS,
-  cronSecret: Redacted.make(SECRET),
+  cronSecret: Redacted.make(CRON_SECRET),
+  eveDeploymentSecret: Redacted.make(SECRET),
 });
 
 /** A store in which each account reaches its own session and conversation alone. */
@@ -405,7 +411,7 @@ it.effect(
 );
 
 it.effect(
-  "a cookie's request reaches eve for no account where the deployment holds no secret, keeps no environment, or names no eve, and asks eve nothing",
+  "a cookie's request reaches eve for no account where the deployment holds no secret, holds the cron's alone, keeps no environment, or names no eve, and asks eve nothing",
   () =>
     Effect.gen(function* () {
       const eve = eveOverHttp();
@@ -418,14 +424,31 @@ it.effect(
       const noSecret = yield* refused(REACH).pipe(
         Effect.provide(Layer.merge(eve.layer, Layer.succeed(HostedEnvironment, NO_KEYS))),
       );
+      // The cron's bearer is never the deployment's at eve's door, so holding it alone reaches nothing.
+      const cronOnly = yield* refused(REACH).pipe(
+        Effect.provide(
+          Layer.merge(
+            eve.layer,
+            Layer.succeed(HostedEnvironment, {
+              ...NO_KEYS,
+              cronSecret: Redacted.make(CRON_SECRET),
+            }),
+          ),
+        ),
+      );
       const noEnvironment = yield* refused(REACH).pipe(Effect.provide(eve.layer));
       const noEve = yield* refused({ eveOrigin: () => undefined }).pipe(
         Effect.provide(Layer.merge(eve.layer, WITH_SECRET)),
       );
 
       assert.deepEqual(
-        [noSecret, noEnvironment, noEve],
-        [HOSTED_REFUSAL.UNAVAILABLE, HOSTED_REFUSAL.UNAVAILABLE, HOSTED_REFUSAL.UNAVAILABLE],
+        [noSecret, cronOnly, noEnvironment, noEve],
+        [
+          HOSTED_REFUSAL.UNAVAILABLE,
+          HOSTED_REFUSAL.UNAVAILABLE,
+          HOSTED_REFUSAL.UNAVAILABLE,
+          HOSTED_REFUSAL.UNAVAILABLE,
+        ],
       );
       assert.deepEqual(eve.received, []);
     }),

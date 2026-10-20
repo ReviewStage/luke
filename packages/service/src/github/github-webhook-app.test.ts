@@ -126,6 +126,7 @@ function environment(secret: string | undefined): HostedEnvironmentValues {
     posthogProjectApiKey: undefined,
     posthogIngestHost: undefined,
     cronSecret: undefined,
+    eveDeploymentSecret: undefined,
     githubWebhookSecret: secret === undefined ? undefined : Redacted.make(secret),
     providerKeyEncryptionKeys: undefined,
   };

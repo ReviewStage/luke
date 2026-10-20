@@ -157,7 +157,7 @@ export type DeploymentTurnTable = Readonly<
 
 /** The deployment acting for an account: which secret admits it, which turns a message under it may open or follow up, and whose identity it presents for all but a typed message, which presents the account's. */
 export interface DeploymentActor {
-  /** The deployment's own secret, sealed; nothing while the environment names none, which admits no request. */
+  /** The deployment's own secret (`EVE_DEPLOYMENT_SECRET`, never the cron's `CRON_SECRET`), sealed; nothing while the environment names none, which admits no request. */
   readonly secret: Redacted.Redacted | undefined;
   readonly admits: DeploymentTurnTable;
   readonly presents: DeploymentPresence;

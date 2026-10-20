@@ -22,6 +22,7 @@ const NO_ENVIRONMENT: HostedEnvironmentValues = {
   posthogProjectApiKey: undefined,
   posthogIngestHost: undefined,
   cronSecret: undefined,
+  eveDeploymentSecret: undefined,
   githubWebhookSecret: undefined,
   providerKeyEncryptionKeys: undefined,
 };
