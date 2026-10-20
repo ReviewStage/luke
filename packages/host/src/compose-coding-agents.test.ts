@@ -451,7 +451,13 @@ function fakeService() {
     messageInbox: (itemId, request) =>
       Effect.sync(() => {
         const files = (request.attachments ?? []).map((file) => file.name).join(",");
-        asked.push(`inbox-message:${itemId}:${request.text}:${files}:${request.clientKey}`);
+        const answer =
+          request.answers === undefined
+            ? ""
+            : `:answers ${request.answers.ask} ${request.answers.reply} ${(request.answers.choices ?? []).join(",")}`;
+        asked.push(
+          `inbox-message:${itemId}:${request.text}:${files}:${request.clientKey}${answer}`,
+        );
         return {
           item: {
             ...ITEM,
@@ -868,6 +874,12 @@ it.effect("each method asks the service once and answers what it said, whole", (
         },
       },
     );
+    yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_MESSAGE, {
+      itemId: ITEM.id,
+      text: "Ship it.",
+      clientKey: "message-2",
+      answers: { ask: MESSAGE_ID, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] },
+    });
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_READ_STATE, { itemId: ITEM.id, unread: true }),
       { id: ITEM.id, unread: true },
@@ -942,6 +954,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `close:${ITEM.id}:2:close-1`,
       `inbox-message:${ITEM.id}:Also page on-call.:pager.txt:message-1`,
+      `inbox-message:${ITEM.id}:Ship it.::message-2:answers ${MESSAGE_ID} chose Ship it`,
       `inbox-unread:${ITEM.id}`,
       `inbox-read:${ITEM.id}`,
       `inbox-read-all:${WORKSPACE_ID}`,

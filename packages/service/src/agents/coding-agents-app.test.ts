@@ -135,15 +135,19 @@ import {
 } from "@luke/features/coding-agent-wire";
 import {
   INBOX_ANSWER_LEAD,
+  INBOX_ASK,
+  INBOX_ASK_STATUS,
   INBOX_BLOCK,
   INBOX_CLOSE_LEAD,
   INBOX_CURSOR_START,
   INBOX_IMAGE_TYPE,
+  INBOX_MESSAGE_AUTHOR,
   INBOX_MESSAGE_LEAD,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
   type InboxImageBlock,
+  type InboxItem,
   type InboxPost,
   inboxAnsweredSchema,
   inboxAnswerSchema,
@@ -216,6 +220,7 @@ import {
   closeInboxItem,
   type InboxImage,
   postInboxItem,
+  postInboxThread,
 } from "../inbox/inbox-store.js";
 import { hostedFetch } from "../orpc/handler.js";
 import { modelCatalogOf, type OfferedModel } from "../providers/model-catalog.js";
@@ -5487,6 +5492,223 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
         assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
         const kept = (yield* read()).items.find((item) => item.id === asked.success.id);
         assert.equal(kept?.messages, undefined);
+      }),
+  );
+
+  /** A thread that ends with an ask to decide, as the tool from version 5 posts one, waiting to hear the answer back. */
+  const DEPLOY = {
+    key: "deploy-window",
+    title: "Ship the billing fix tonight?",
+    body: "The fix is green on staging.",
+    ask: { type: INBOX_ASK.DECIDE, options: [{ label: "Ship it" }, { label: "Wait" }] },
+  } as const;
+
+  /** The thread posted for the inbox's agent under the key given, and the message whose ask stands open on it. */
+  const postAsk = (
+    inbox: {
+      readonly owner: string;
+      readonly task: { readonly id: string };
+      readonly agent: { readonly id: string };
+    },
+    key = DEPLOY.key,
+  ) =>
+    Effect.gen(function* () {
+      const posted = yield* postInboxThread(
+        { userId: inbox.owner, taskId: inbox.task.id, agentId: inbox.agent.id },
+        { ...DEPLOY, key },
+      );
+      assert.ok(Result.isSuccess(posted));
+      const asking = posted.success.thread?.find(
+        (each) => each.ask?.status === INBOX_ASK_STATUS.OPEN,
+      );
+      assert.ok(asking);
+      // A message on the thread comes a moment after the post, so the thread reads in the order written.
+      yield* TestClock.adjust(Duration.seconds(1));
+      return { item: posted.success, askId: asking.id };
+    });
+
+  /** The thread's messages as the reader sees them: who wrote each, its words, where its ask stands, and the answer it carries. */
+  const threadOf = (item: InboxItem | undefined) =>
+    (item?.thread ?? []).map((each) => [each.author, each.text, each.ask?.status, each.answers]);
+
+  it.effect(
+    "a reply that answers the open ask settles it as one message carrying the answer and the words and reaches the agent under the answer's lead; sent again under its key it is taken and heard once, and a second answer is refused",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const inbox = yield* openInbox(eve);
+        const { item, askId } = yield* postAsk(inbox);
+        const before = eve.sent.length;
+        const answers = { ask: askId, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] };
+        const body = {
+          text: "Ship it, and watch the error rate.",
+          clientKey: randomUUID(),
+          answers,
+        };
+
+        const sent = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* inbox.message(item.id, body),
+        );
+
+        assert.equal(sent.item.status, INBOX_STATUS.ANSWERED);
+        assert.deepEqual(threadOf(sent.item), [
+          [INBOX_MESSAGE_AUTHOR.AGENT, DEPLOY.body, INBOX_ASK_STATUS.ANSWERED, undefined],
+          [INBOX_MESSAGE_AUTHOR.MEMBER, body.text, undefined, answers],
+        ]);
+        const handed = eve.sent.slice(before).map((each) => JSON.stringify(each.message.message));
+        assert.equal(handed.length, 1, "the answer reaches the agent once");
+        assert.ok(handed[0]?.includes(`${INBOX_ANSWER_LEAD} on \\"${DEPLOY.title}\\"`));
+        assert.ok(handed[0]?.includes(`Chose \\"Ship it\\".`), "it says what they picked");
+        assert.ok(handed[0]?.includes(body.text), "it carries the words");
+
+        const again = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* inbox.message(item.id, body),
+        );
+        assert.deepEqual(threadOf(again.item), threadOf(sent.item), "a resend writes nothing");
+        assert.equal(eve.sent.length, before + 1, "and reaches the agent once");
+        assert.equal(countedFor(inbox.owner, SERVER_EVENT.INBOX_ANSWER_SEND), 1);
+
+        assert.deepEqual(
+          yield* inbox.message(item.id, {
+            text: "Actually, wait.",
+            clientKey: randomUUID(),
+            answers: { ...answers, choices: ["Wait"] },
+          }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          "an ask answered already takes no second answer",
+        );
+        assert.equal(eve.sent.length, before + 1);
+      }),
+  );
+
+  it.effect(
+    "an answer the open ask does not take, or one naming another message, is refused and leaves the ask open; a plain reply while it stands open leaves it open and reaches the agent as an Inbox message",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const inbox = yield* openInbox(eve);
+        const { item, askId } = yield* postAsk(inbox);
+        const before = eve.sent.length;
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        const answering = (answers: WireBoundaryInput) =>
+          inbox.message(item.id, { text: "", clientKey: randomUUID(), answers });
+
+        assert.deepEqual(
+          yield* answering({ ask: askId, reply: INBOX_REPLY.CHOSE, choices: ["Tomorrow"] }),
+          invalid,
+          "a pick the ask does not offer",
+        );
+        assert.deepEqual(
+          yield* answering({ ask: askId, reply: INBOX_REPLY.DONE }),
+          invalid,
+          "an answer a decide does not take",
+        );
+        assert.deepEqual(
+          yield* answering({ ask: randomUUID(), reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] }),
+          invalid,
+          "an answer to another message",
+        );
+        assert.deepEqual(
+          yield* inbox.message(item.id, { text: "", clientKey: randomUUID() }),
+          invalid,
+          "a plain reply still needs words or files",
+        );
+
+        const words = "What's the rollback plan?";
+        const replied = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* inbox.message(item.id, { text: words, clientKey: randomUUID() }),
+        );
+        assert.equal(replied.item.status, INBOX_STATUS.OPEN);
+        assert.deepEqual(threadOf(replied.item), [
+          [INBOX_MESSAGE_AUTHOR.AGENT, DEPLOY.body, INBOX_ASK_STATUS.OPEN, undefined],
+          [INBOX_MESSAGE_AUTHOR.MEMBER, words, undefined, undefined],
+        ]);
+        const handed = eve.sent.slice(before).map((each) => JSON.stringify(each.message.message));
+        assert.equal(handed.length, 1, "only the plain reply reached the agent");
+        assert.ok(handed[0]?.includes(`${INBOX_MESSAGE_LEAD} on`), "it reads as an Inbox message");
+        assert.ok(handed[0]?.includes(words));
+      }),
+  );
+
+  it.effect(
+    "a bare answer by reply to an ask that asks nothing back is kept for the agent to read, and a typed one reaches it",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const inbox = yield* openInbox(eve);
+        const owned = { userId: inbox.owner, taskId: inbox.task.id, agentId: inbox.agent.id };
+        const todo = (key: string) =>
+          Effect.map(
+            postInboxThread(owned, {
+              key,
+              title: "Turn on the agent-mail flag in staging",
+              body: "It sits under Settings, Flags.",
+              ask: { type: INBOX_ASK.DO, steps: ["Open Flags", "Turn on agent-mail"] },
+              needsReply: false,
+            }),
+            (posted) => {
+              assert.ok(Result.isSuccess(posted));
+              const asking = posted.success.thread?.find((each) => each.ask !== undefined);
+              assert.ok(asking);
+              return { id: posted.success.id, ask: asking.id };
+            },
+          );
+        const bare = yield* todo("flag-bare");
+        const typed = yield* todo("flag-typed");
+        const before = eve.sent.length;
+        const done = (ask: string) => ({ ask, reply: INBOX_REPLY.DONE, steps: [0, 1] });
+
+        const kept = readAnswer(
+          inboxMessagedSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* inbox.message(bare.id, {
+            text: "",
+            clientKey: randomUUID(),
+            answers: done(bare.ask),
+          }),
+        );
+        assert.equal(kept.item.status, INBOX_STATUS.ANSWERED);
+        assert.equal(eve.sent.length, before, "a bare Mark done messages nobody");
+
+        yield* inbox.message(typed.id, {
+          text: "Done, and on preview too.",
+          clientKey: randomUUID(),
+          answers: done(typed.ask),
+        });
+        assert.equal(eve.sent.length, before + 1, "words reach the agent");
+        const handed = JSON.stringify(eve.sent.at(-1)?.message.message);
+        assert.ok(handed.includes(`${INBOX_ANSWER_LEAD} on`), "it reads as an Inbox answer");
+        assert.ok(handed.includes("Done, and on preview too."));
+      }),
+  );
+
+  it.effect(
+    "an answer by reply the agent's session did not take is taken back: the ask stands open again, the thread holds no answer, and nothing is counted",
+    () =>
+      Effect.gen(function* () {
+        const inbox = yield* openInbox(fakeEve({ sends: EVE_SEND_OUTCOME.FAILED }));
+        const { item, askId } = yield* postAsk(inbox);
+
+        const sent = yield* inbox.message(item.id, {
+          text: "Ship it.",
+          clientKey: randomUUID(),
+          answers: { ask: askId, reply: INBOX_REPLY.CHOSE, choices: ["Ship it"] },
+        });
+
+        assert.equal(sent.status, HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE);
+        const kept = (yield* inbox.read()).items.find((each) => each.id === item.id);
+        assert.equal(kept?.status, INBOX_STATUS.OPEN);
+        assert.equal(kept?.answer, undefined);
+        assert.deepEqual(threadOf(kept), [
+          [INBOX_MESSAGE_AUTHOR.AGENT, DEPLOY.body, INBOX_ASK_STATUS.OPEN, undefined],
+        ]);
+        assert.equal(countedFor(inbox.owner, SERVER_EVENT.INBOX_ANSWER_SEND), 0);
       }),
   );
 
