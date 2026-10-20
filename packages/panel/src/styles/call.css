@@ -101,6 +101,24 @@ html.call-window #root {
   transition: translate var(--duration-fast) var(--spring-fast);
 }
 
+/* On a phone the card is fixed to the page rather than the stage, so it
+   keeps off the notch's side and the home indicator itself, as the stage
+   does; it still rises clear of the dock above. */
+.desktop-shell[data-room="narrow"] > .call-card[data-surface="floating"] {
+  bottom: calc(
+    var(--luke-space-16) +
+    max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px))
+  );
+  left: calc(var(--luke-space-16) + env(safe-area-inset-left, 0px));
+  max-width: calc(
+    100vw -
+    2 *
+    var(--luke-space-16) -
+    env(safe-area-inset-left, 0px) -
+    env(safe-area-inset-right, 0px)
+  );
+}
+
 /* The transcript under the card keeps its last line in sight above it: the
    plan column's, or the side panel's while the panel fills the window. */
 .desktop-shell:has(> .call-card[data-surface="floating"])

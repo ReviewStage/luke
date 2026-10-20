@@ -8,13 +8,19 @@
  * rearranges by it the line it reads: the room (`shell-room.ts`) and the
  * sidebar's fold (`sidebar-collapse.ts`).
  *
+ * The room is written on the document's root too, as `data-luke-room`, for
+ * the layers the panel portals out of the stage, a dialog and the toasts,
+ * which stand outside the shell's own `data-room` and must answer the same
+ * room rather than a breakpoint of their own.
+ *
  * Only those lines are state, never the width itself: the root holds the
  * whole shell, so a width in its state would draw the shell again at every
  * pixel of a window being dragged, where only crossing a line changes what
  * is drawn.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
+import { coarsePointerNow } from "./coarse-pointer.js";
 import { compactStage } from "./desktop/sidebar-collapse.js";
 import { narrowStage, SHELL_ROOM, type ShellRoom } from "./shell-room.js";
 
@@ -25,6 +31,9 @@ interface StageLines {
   /** Whether the stage is too narrow to pin the sidebar (`sidebar-collapse.ts`). */
   readonly compact: boolean;
 }
+
+/** The attribute the document's root wears the room in, for what is portalled out of the stage. */
+const ROOM_ATTRIBUTE = "data-luke-room";
 
 /** A stage not yet measured: wide, with the sidebar pinned as its choice says. */
 const UNMEASURED: StageLines = { narrow: false, compact: false };
@@ -40,7 +49,8 @@ export interface StageRoom {
 }
 
 /**
- * The room the stage's width gives, measured as it resizes. Each line keeps
+ * The room the stage's size gives, measured as it resizes: its width, and on
+ * a finger's device its height (`shell-room.ts`). Each line keeps
  * its own band, so the way it is crossed decides where it flips. A resize
  * that crosses no line hands back the lines it had, so nothing reading them
  * is drawn again, and a stage that measures nothing, as one not yet laid
@@ -53,10 +63,11 @@ export function useStageRoom(): StageRoom {
   const ref = useCallback((element: HTMLElement | null) => {
     if (element === null) return undefined;
     const measure = () => {
-      const width = element.getBoundingClientRect().width;
+      const { width, height } = element.getBoundingClientRect();
       if (width <= 0) return;
+      const coarse = coarsePointerNow();
       setLines((was) => {
-        const narrow = narrowStage(width, was.narrow);
+        const narrow = narrowStage({ width, height, coarse }, was.narrow);
         const compact = compactStage(width, was.compact);
         return narrow === was.narrow && compact === was.compact ? was : { narrow, compact };
       });
@@ -66,9 +77,15 @@ export function useStageRoom(): StageRoom {
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+  const room = lines.narrow ? SHELL_ROOM.NARROW : SHELL_ROOM.WIDE;
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute(ROOM_ATTRIBUTE, room);
+    return () => root.removeAttribute(ROOM_ATTRIBUTE);
+  }, [room]);
   return {
     ref,
-    room: lines.narrow ? SHELL_ROOM.NARROW : SHELL_ROOM.WIDE,
+    room,
     compact: lines.compact,
   };
 }

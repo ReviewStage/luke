@@ -1,11 +1,15 @@
 /**
- * column-dock.ts -- how tall the dock at the foot of a column stands, said where the folded sidebar's call card, which floats over that foot, reads it.
+ * column-dock.ts -- how tall the dock at the foot of a column stands, said where what floats over that foot reads it: the folded sidebar's call card, and on a phone the toasts and the captions.
  */
 
 import { type RefObject, useLayoutEffect } from "react";
 
-/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, and a task's call bar, whichever stand. */
-const DOCKED = ".agent-todos-dock, .agent-published-dock, .agent-composer, .desktop-call-bar";
+/** What docks at a column's foot: an agent's to-do list, pull request row, and composer, Luke's chat composer, and a task's call bar, whichever stand. */
+const DOCKED =
+  ".agent-todos-dock, .agent-published-dock, .agent-composer, .chat-composer, .desktop-call-bar";
+
+/** The length the dock's height is written in. */
+const COLUMN_DOCK = "--column-dock";
 
 /** The card that floats over the column while the sidebar is folded. */
 const FLOATING_CARD = '.call-card[data-surface="floating"]';
@@ -21,10 +25,12 @@ function dockHeight(column: Element): number {
 }
 
 /**
- * Keeps two lengths on the shell for the folded sidebar's call card: the
- * dock of the column it stands over (`--column-dock`), which it stands just
- * above, and its own height (`--floating-card`), which the transcript under
- * it keeps clear. The column is the task's, or an agent's page standing in
+ * Keeps two lengths for the folded sidebar's call card: the dock of the
+ * column it stands over (`--column-dock`), which it stands just above, and
+ * its own height (`--floating-card`), which the transcript under it keeps
+ * clear. The dock is written on the document's root, because the toasts,
+ * which a phone stands above it too, are portalled out of the shell; the
+ * card's height on the shell. The column is the task's, or an agent's page standing in
  * its place, or the side panel while it fills the window. One ResizeObserver follows the column, its docked parts, and
  * the card; a MutationObserver re-reads when the column or a part arrives
  * or goes, a task's column once it has loaded, a to-do list appearing over
@@ -40,6 +46,7 @@ export function useColumnDock(
   useLayoutEffect(() => {
     const host = shell.current;
     if (host === null) return;
+    const root = host.ownerDocument.documentElement;
     // Found afresh on every change under the shell, because a task still
     // loading draws its column only once its document lands.
     const columnSelector = panelFull ? ".side-panel" : ".desktop-task-main, .agent-page";
@@ -47,8 +54,8 @@ export function useColumnDock(
     const sized = new ResizeObserver(() => write());
     function write(): void {
       if (host === null) return;
-      if (column === null) host.style.removeProperty("--column-dock");
-      else host.style.setProperty("--column-dock", `${dockHeight(column)}px`);
+      if (column === null) root.style.removeProperty(COLUMN_DOCK);
+      else root.style.setProperty(COLUMN_DOCK, `${dockHeight(column)}px`);
       const card = host.querySelector(FLOATING_CARD);
       if (card === null) host.style.removeProperty("--floating-card");
       else host.style.setProperty("--floating-card", `${card.getBoundingClientRect().height}px`);
@@ -74,7 +81,7 @@ export function useColumnDock(
     return () => {
       sized.disconnect();
       arrived.disconnect();
-      host.style.removeProperty("--column-dock");
+      root.style.removeProperty(COLUMN_DOCK);
       host.style.removeProperty("--floating-card");
     };
   }, [shell, panelFull, key]);

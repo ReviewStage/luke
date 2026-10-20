@@ -2602,6 +2602,17 @@ ul.actor-stack {
   width: var(--caption-width);
 }
 
+/* On a phone they float just above whatever docks at the column's foot, a
+   composer first of all (`column-dock.ts`), rather than over it, and span the
+   screen less a step at each side. However tall the dock grows, they never
+   rise past the middle of what is seen. The stage already keeps off the
+   notch and the home indicator. */
+.desktop-shell[data-room="narrow"] > .voice-caption {
+  bottom: calc(min(var(--column-dock, 0px), var(--luke-stage-height) / 2) + var(--luke-space-12));
+  left: 50%;
+  width: calc(100% - 2 * var(--luke-space-16));
+}
+
 /* The call bar's own row, laid out as a voice composer's controls are: at
    rest one start pill in its middle; in a call the call's two lines at its
    left and its controls at its right. Its height holds whichever it draws,
@@ -7586,23 +7597,21 @@ polygon.factory-campus-edge[data-edge="selected"] {
   margin-left: auto;
 }
 
-/* The dialog portals out of the shell, so its narrow room is the dimmed
-   window's own (`luke-dialog-room`, `@luke/ui`'s dialog.css): on a phone,
-   its field stops growing at the same share of what is seen as a box's in
-   the shell does, so Start stays in the card above the keyboard. */
-@container luke-dialog-room (max-width: 639px) {
-  .new-task .agent-composer-field {
-    --agent-composer-field-lines: calc(
-      8 *
-      var(--luke-type-body-leading) +
-      var(--agent-composer-field-block)
-    );
-    --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
-  }
+/* The dialog portals out of the shell, so it reads the shell's room off the
+   document's root (`stage-room.ts`): on a phone, its field stops growing at
+   the same share of what is seen as a box's in the shell does, so Start stays
+   in the card above the keyboard. */
+[data-luke-room="narrow"] .new-task .agent-composer-field {
+  --agent-composer-field-lines: calc(
+    8 *
+    var(--luke-type-body-leading) +
+    var(--agent-composer-field-block)
+  );
+  --agent-composer-field-cap: calc(var(--luke-stage-height) * 0.3);
+}
 
-  .new-task .new-task-composer .agent-composer-input {
-    max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
-  }
+[data-luke-room="narrow"] .new-task .new-task-composer .agent-composer-input {
+  max-height: min(var(--agent-composer-field-lines), var(--agent-composer-field-cap));
 }
 
 /* A card too narrow for its placeholder on one line, as on a phone, wraps
@@ -7767,6 +7776,31 @@ polygon.factory-campus-edge[data-edge="selected"] {
   bottom: calc(var(--luke-space-16) + var(--luke-keyboard-inset));
   width: min(340px, calc(100vw - 2 * var(--luke-space-16)));
   pointer-events: none;
+}
+
+/* On a phone the stack stands just above whatever docks at the column's
+   foot, a composer first of all (`column-dock.ts`), rather than over it,
+   never past the middle of what is seen, and keeps off the notch and the
+   home indicator, since it is fixed to the page rather than the stage. The
+   room is the document root's, because the stack is portalled out of the
+   shell (`stage-room.ts`). */
+[data-luke-room="narrow"] .toast-stack {
+  right: calc(var(--luke-space-8) + env(safe-area-inset-right, 0px));
+  bottom: calc(
+    max(var(--luke-keyboard-inset), env(safe-area-inset-bottom, 0px)) +
+    min(var(--column-dock, 0px), var(--luke-stage-height) / 2) +
+    var(--luke-space-8)
+  );
+  width: min(
+    340px,
+    calc(
+      100vw -
+      2 *
+      var(--luke-space-8) -
+      env(safe-area-inset-left, 0px) -
+      env(safe-area-inset-right, 0px)
+    )
+  );
 }
 
 .toast-stack > ol {

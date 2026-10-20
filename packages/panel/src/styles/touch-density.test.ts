@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { BUTTON_SIZE, IconButton } from "@luke/ui";
+import { BUTTON_SIZE, IconButton, INLINE_EDIT_LOOK, InlineEdit } from "@luke/ui";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, test } from "vitest";
@@ -248,5 +248,50 @@ test("with a mouse no small target or resize edge takes a press past what it dra
   layFor(false, { "data-luke-profile": "desktop" });
   for (const [name, target] of [...smallTargets(), ...closes(), ...resizeEdges()]) {
     assert.equal(hitArea(target), undefined, `${name} draws no hit area`);
+  }
+});
+
+/** iOS zooms the page into a field whose words are smaller than this, in pixels, the moment it is focused. */
+const NO_ZOOM = 16;
+
+/** The fields a finger renames or types in, each drawn over 14px words as the panel's rows are, by what the developer calls it. */
+function fields(): ReadonlyMap<string, HTMLInputElement> {
+  const inline = (look: (typeof INLINE_EDIT_LOOK)[keyof typeof INLINE_EDIT_LOOK]) => {
+    const container = drawn(
+      createElement(InlineEdit, {
+        value: "Plan",
+        label: "Rename",
+        editing: true,
+        look,
+        onEnd: () => undefined,
+      }),
+    );
+    container.style.fontSize = "14px";
+    return container.querySelector("input") ?? assert.fail("the field is drawn");
+  };
+  const address = drawn(createElement("input", { type: "url" }), "browser-view-address");
+  return new Map([
+    ["a tab's rename", inline(INLINE_EDIT_LOOK.WELL)],
+    ["a workspace's or an integration's rename", inline(INLINE_EDIT_LOOK.INPUT)],
+    ["a list row's rename", inline(INLINE_EDIT_LOOK.FIELD)],
+    [
+      "a Browser tab's address",
+      address.querySelector("input") ?? assert.fail("the address is drawn"),
+    ],
+  ]);
+}
+
+test("on a touch screen every field takes at least 16px words, so focusing it never zooms the page", () => {
+  layFor(true, { "data-luke-profile": "web", "data-luke-density": "compact" });
+  for (const [name, field] of fields()) {
+    const size = leastPixels(getComputedStyle(field).fontSize) ?? 0;
+    assert.ok(size >= NO_ZOOM, `${name} is ${size}px`);
+  }
+});
+
+test("with a mouse a field keeps the type it stands in", () => {
+  layFor(false, { "data-luke-profile": "desktop" });
+  for (const [name, field] of fields()) {
+    assert.doesNotMatch(getComputedStyle(field).fontSize, /16px/, `${name} keeps its size`);
   }
 });

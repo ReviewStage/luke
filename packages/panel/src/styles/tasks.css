@@ -1650,6 +1650,14 @@
   transition: border-color var(--duration-hover) ease;
 }
 
+/* A finger's field takes 16px words, or iOS zooms the page into it the
+   moment it is focused. */
+@media (pointer: coarse) {
+  .browser-view-address input {
+    font-size: 16px;
+  }
+}
+
 .browser-view-address input::placeholder {
   color: var(--luke-color-text-subtle);
 }
