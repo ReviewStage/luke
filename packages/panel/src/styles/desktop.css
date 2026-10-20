@@ -7261,7 +7261,8 @@ polygon.factory-campus-edge[data-edge="selected"] {
 }
 
 /* New task's composer (`new-task-composer.tsx`) at the top of the page's
-   content, the card as wide as the content, the sections a little under it. */
+   content, its head row and card as the dialog draws them, as wide as the
+   content, the sections a little under it. */
 .home-composer {
   margin-bottom: var(--luke-space-32);
 }
