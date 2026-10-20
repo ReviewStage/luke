@@ -1,3 +1,4 @@
+import { ACCOUNT_STATUS } from "@luke/credentials/snapshot";
 import { dictationKeywords } from "@luke/features/dictation-keywords";
 import {
   fieldValueWords,
@@ -62,7 +63,14 @@ import {
   TextField,
   useMenu,
 } from "@luke/ui";
-import { type Actor, actorName } from "@luke/ui/actor-model";
+import {
+  ACTOR_KIND,
+  type Actor,
+  accountActor,
+  actorName,
+  memberActor,
+  SOMEONE_REASON,
+} from "@luke/ui/actor-model";
 import { isWireString } from "@luke/wire";
 import { CheckIcon, CircleSlashIcon, ClockIcon, FactoryIcon, Undo2Icon } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from "react";
@@ -71,9 +79,9 @@ import { useAutomation } from "../automation-directory.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
 import { ActionMenu, type MenuAction } from "../desktop/action-menu.js";
 import { useMemberDirectory, usePerson } from "../member-directory.js";
-import { SHELL_ROOM } from "../shell-room.js";
 import { TextLink } from "../text-link.js";
 import { Tooltip } from "../tooltip.js";
+import { APP_SLICE, useAppSlice } from "../use-app-state.js";
 import {
   AgentActorRef,
   AgentCard,
@@ -166,8 +174,10 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * under the account (`use-plan-inbox.ts`) as a plan's or a transcript's
  * picture is (`picture-block.tsx`), up to the pane's width and no taller
  * than theirs, and opened larger over the window by a press, in the viewer
- * an attached file opens in (`attachment-viewer.tsx`). What the item asks for closes the
- * message: a choice's options, one perhaps recommended, a radio list where
+ * an attached file opens in (`attachment-viewer.tsx`). While the item
+ * waits, the agent's message ends with a marker saying whom it waits on,
+ * and what it asks for stands at the top of the reader's draft reply, the
+ * thread's last comment, over the note: a choice's options, one perhaps recommended, a radio list where
  * it takes one and a checkbox list where it takes several, each numbered
  * for the key that picks it from anywhere in the Inbox but a field; an
  * approval's two cards, Approve and Decline, picked as a choice of two is,
@@ -179,10 +189,10 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * and a text field the composer's own field with its mentions and skills
  * (`inbox-form-text.tsx`); nothing for words or a note. Enter on an option or in a field sends the answer as
  * the box's Send does, and never presses the option, Space and the arrow
- * keys being an option's own. While the item
- * waits, the agent composer's box, its card and its field, with its `@`
- * mentions, its skills, and its microphone (`inbox-answer-box.tsx`), is
- * docked under the thread for the note, and every item is sent by its one
+ * keys being an option's own. The draft reply is the reader's face, "You"
+ * and "draft", over the agent composer's box, its card and its field, with
+ * its `@` mentions, its skills, and its microphone (`inbox-answer-box.tsx`),
+ * flowing at the thread's end rather than docked under it, and every item is sent by its one
  * Send, a note's reading "Got it" until a word is written. A card whose
  * agent need not hear back says whether its answer will message the agent:
  * a bare answer does not, and a typed note does. Once the item is
@@ -201,10 +211,11 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * point, stand among these comments in the order they were written, each
  * by its writer's face and name, its words and then its files drawn as an
  * answer's are; a thread read cut to its latest says the earlier ones are
- * in the agent's tab. The box stays docked on a settled item too, where it
- * writes a message on the thread rather than an answer, the next item that
- * needs the developer offered over it, and the reader's own message is
- * scrolled into view inside the board as it lands. A block or a response of a type
+ * in the agent's tab. The draft reply ends a settled item's thread too,
+ * where it writes a message on the thread rather than an answer, the next
+ * item that needs the developer docked under the board, and the reader's
+ * own message is scrolled into view inside the board as it lands, the
+ * draft under it. A block or a response of a type
  * this build does not know, one a newer service wrote, is drawn as a line
  * naming a newer Luke, so the rest still reads. The pane's bar is its
  * path, task › agent, each crumb drawn as its tab in the task's column,
@@ -232,11 +243,12 @@ import type { TaskInboxControl } from "./use-task-inbox.js";
  * at its head and its controls under it as the answer left them,
  * read-only; where the thread read no longer carries the ask, it leads
  * with its stamp (`inbox-stamp.tsx`) and its values listed. An agent's message that asks
- * ends with the ask's box: its kind and where it stands at its head, and
- * while it waits its controls, a `decide`'s numbered options or two small
- * buttons, a `do`'s steps with Mark done and Couldn't do it, an `answer`'s
- * fields, filled in part or whole, or its Answer; each attaches its answer
- * to the box's reply rather than sending it. Answered, it leaves the agent's message
+ * ends, while the ask waits, with its marker alone, its controls standing
+ * in the draft reply over the note: a `decide`'s numbered options or two
+ * small buttons, a `do`'s steps with Mark done and Couldn't do it, an
+ * `answer`'s fields, filled in part or whole, or its Answer; each attaches
+ * its answer to the reply rather than sending it, and a press pressed
+ * again takes it off. Answered, it leaves the agent's message
  * for the reply that answered it, or says "Answered" alone where that
  * reply is no longer read; replaced, it is struck through; withdrawn, it says why, or who
  * closed the item.
@@ -568,8 +580,9 @@ function AnsweredText({
  * field is, "Optional" after the name of one that may be left empty: a
  * text field the caller's own or `@luke/ui`'s, a number a short field, a
  * select its options as pills that wrap, the one the agent recommends
- * wearing its badge, an optional one's pick taken back by pressing it
- * again, and a yes or no a checkbox beside its name. Read-only, each
+ * wearing its badge, its pick taken back by pressing it again, since a
+ * field left empty, required or not, is sent without it, and a yes or no a
+ * checkbox beside its name. Read-only, each
  * control stands as the answer filled it, which nothing changes.
  */
 function InboxFormField({
@@ -650,7 +663,7 @@ function InboxFormField({
             }))}
             value={(field.options ?? []).filter((option) => option === value)}
             look={CHOICE_LOOK.PILL}
-            clearable={field.required !== true}
+            clearable
             disabled={disabled}
             readOnly={readOnly}
             onChange={(picked) => set(picked[0])}
@@ -783,6 +796,11 @@ const FILLED_RESPONSES: ReadonlySet<string> = new Set([
   INBOX_RESPONSE.FORM,
 ]);
 
+/** Whether an item's response has controls of its own, which an open one draws in the draft reply. */
+function drawsControls(item: InboxItem): boolean {
+  return knownResponse(item.response) && FILLED_RESPONSES.has(item.response.type);
+}
+
 /** Whether a settled item's question draws its controls filled in with its answer: one answered, whose answer its read carries, of a response with controls. */
 function drawsAnswered(item: InboxItem): boolean {
   return (
@@ -814,7 +832,6 @@ function SettledResponse({ item }: { item: InboxItem }): React.JSX.Element | nul
 function AnsweredResponse({ item }: { item: InboxItem }): React.JSX.Element | null {
   if (!drawsAnswered(item) || item.answer === undefined) return null;
   return (
-    // Note that it is no `inbox-response`, which the pane stands over the box as the question an open item waits on.
     <div data-inbox-answered="">
       <ResponseControls
         item={item}
@@ -888,7 +905,10 @@ function focusMissing(pane: HTMLElement | null, missing: InboxMissing): void {
     return;
   }
   if (missing.kind === INBOX_MISSING.WORDS) {
-    pane.querySelector<HTMLElement>('.inbox-answer [contenteditable="true"]')?.focus();
+    // Note that the note's field is the one outside the question's own, whose text fields stand over it in the box.
+    [...pane.querySelectorAll<HTMLElement>('.inbox-answer [contenteditable="true"]')]
+      .find((editor) => editor.closest(".inbox-draft-ask") === null)
+      ?.focus();
     return;
   }
   const field = [...pane.querySelectorAll<HTMLElement>("[data-inbox-field]")].find(
@@ -1079,13 +1099,14 @@ function Offered({ item }: { item: InboxItem }): React.JSX.Element | null {
   );
 }
 
-/** Which message of the thread a comment is: the agent's question, the developer's answer, the agent taking the item back, a member closing it without an answer, or a message on the thread. */
+/** Which message of the thread a comment is: the agent's question, the developer's answer, the agent taking the item back, a member closing it without an answer, a message on the thread, or the reader's draft reply at its end. */
 const COMMENT = {
   ASKED: "asked",
   ANSWERED: "answered",
   WITHDRAWN: "withdrawn",
   CLOSED: "closed",
   MESSAGE: "message",
+  DRAFT: "draft",
 } as const;
 
 type CommentKind = (typeof COMMENT)[keyof typeof COMMENT];
@@ -1126,6 +1147,56 @@ function Comment({
 /** A comment's writer by name, which hangs their card and opens their page or tab. */
 function CommentName({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <span className="inbox-comment-name">{children}</span>;
+}
+
+/** What the draft reply's head says: the reader, and that it is not sent yet. */
+const DRAFT_HEAD = {
+  YOU: "You",
+  DRAFT: "draft",
+} as const;
+
+/** The reader as the window draws them: as the workspace's members list them, else as their account signs in, else by their id alone. */
+function useReader(readerId: string | undefined): Actor {
+  const account = useAppSlice(APP_SLICE.ACCOUNT);
+  const { members } = useMemberDirectory();
+  const member = members?.find((each) => each.userId === readerId);
+  if (member !== undefined) return memberActor(member, readerId);
+  if (account?.status === ACCOUNT_STATUS.SIGNED_IN) return accountActor(account);
+  // Note that a reader known by their id alone is still drawn as a person, by the words the head names them with.
+  if (readerId !== undefined) {
+    return { kind: ACTOR_KIND.PERSON, userId: readerId, name: DRAFT_HEAD.YOU, you: true };
+  }
+  return { kind: ACTOR_KIND.SOMEONE, reason: SOMEONE_REASON.UNNAMED };
+}
+
+/**
+ * The reader's reply not yet sent, as the thread's last comment, drawn as
+ * a member's is: their face, "You" and "draft" in its head, and the box
+ * under it, so what is sent drops into the thread in its place and the
+ * box stands at the end again, as an issue's thread is written on.
+ */
+function DraftReply({
+  readerId,
+  children,
+}: {
+  readerId: string | undefined;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  const reader = useReader(readerId);
+  return (
+    <Comment
+      kind={COMMENT.DRAFT}
+      face={reader}
+      head={
+        <>
+          <CommentName>{DRAFT_HEAD.YOU}</CommentName>
+          <span className="inbox-comment-when">{DRAFT_HEAD.DRAFT}</span>
+        </>
+      }
+    >
+      {children}
+    </Comment>
+  );
 }
 
 /**
@@ -1578,12 +1649,23 @@ function SettledComments({
   );
 }
 
+/** The reader's draft reply at the thread's end, where the box stands. */
+function draftReplyOf(scroller: HTMLElement): Element | null {
+  return scroller.querySelector('[data-inbox-comment="draft"]');
+}
+
+/** How far the scroller's foot stands in from its edge: its scroll padding, which clears the fade over it. */
+function footPadding(scroller: HTMLElement): number {
+  return Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom) || 0;
+}
+
 /**
  * Scrolls the board to a message of the reader's own the moment it lands
  * on the thread, inside the board's own scroller, since the pane may still
- * be sliding in (`AGENTS.md`'s panel motion): far enough that its foot
- * stands above the box, and no further than its head. A message another
- * wrote, or another item opened, scrolls nothing.
+ * be sliding in (`AGENTS.md`'s panel motion): far enough that the draft
+ * reply under it, the box written in again, stands whole over the board's
+ * foot, and no further than the message's head. A message another wrote,
+ * or another item opened, scrolls nothing.
  */
 function useScrollToOwnMessage(
   board: React.RefObject<HTMLDivElement | null>,
@@ -1605,27 +1687,18 @@ function useScrollToOwnMessage(
     const comment = scroller.querySelector(`[data-message-id="${CSS.escape(last.id)}"]`);
     if (comment === null) return;
     const room = scroller.getBoundingClientRect();
-    const box = comment.getBoundingClientRect();
-    const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom) || 0;
-    const under = box.bottom - (room.bottom - padding);
-    if (under > 0) scroller.scrollTop += Math.min(under, box.top - room.top);
+    const head = comment.getBoundingClientRect().top;
+    const foot = (draftReplyOf(scroller) ?? comment).getBoundingClientRect().bottom;
+    const under = foot - (room.bottom - footPadding(scroller));
+    if (under > 0) scroller.scrollTop += Math.min(under, head - room.top);
   }, [board, item.id, last, own]);
 }
 
-/** The question an open item waits on in its thread: a thread's open ask's box, or an older item's answer controls. */
-function openQuestion(scroller: HTMLElement): Element | null {
-  return (
-    scroller.querySelector(".inbox-ask-body")?.closest(".inbox-ask") ??
-    scroller.querySelector(".inbox-response")
-  );
-}
-
-/** Scrolls `scroller` so `question` stands just over its foot, the box docked under it, or its top in view where it is taller than the room. */
-function standOverFoot(scroller: HTMLElement, question: Element): void {
+/** Scrolls `scroller` so `reply` stands just over its foot, the end of the thread, or its top in view where it is taller than the room. */
+function standOverFoot(scroller: HTMLElement, reply: Element): void {
   const room = scroller.getBoundingClientRect();
-  const box = question.getBoundingClientRect();
-  const padding = Number.parseFloat(getComputedStyle(scroller).scrollPaddingBottom) || 0;
-  const under = box.bottom - (room.bottom - padding);
+  const box = reply.getBoundingClientRect();
+  const under = box.bottom - (room.bottom - footPadding(scroller));
   if (under !== 0) scroller.scrollTop += Math.min(under, box.top - room.top);
 }
 
@@ -1634,28 +1707,22 @@ const READER_MOVES = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 
 /**
  * Opens each item at its thread's top, rather than where the last item was
- * scrolled, as the pane stands for every item in turn. A narrow room leaves
- * the thread little room over the box docked under it, so there an item
- * waiting on an answer opens on its question instead, standing just over the
- * box, where its options would otherwise wait out of sight under it; and
- * while what stands above the question still lands, a picture read late, it
- * is stood there again, until the reader moves the thread themselves.
+ * scrolled, as the pane stands for every item in turn; but an item whose
+ * question waits on an answer opens at the thread's end instead, on the
+ * draft reply that holds the question's controls, standing just over the
+ * board's foot, where they would otherwise wait out of sight. While what
+ * stands above it still lands, a picture read late, it is stood there
+ * again, until the reader moves the thread themselves.
  */
-function useOpenOnAsk(
-  board: React.RefObject<HTMLDivElement | null>,
-  pane: React.RefObject<HTMLElement | null>,
-  itemId: string,
-): void {
+function useOpenOnAsk(board: React.RefObject<HTMLDivElement | null>, itemId: string): void {
   useLayoutEffect(() => {
     const scroller = board.current;
     if (scroller === null) return undefined;
     scroller.scrollTop = 0;
-    const narrow =
-      pane.current?.closest(".desktop-shell")?.getAttribute("data-room") === SHELL_ROOM.NARROW;
-    if (!narrow || openQuestion(scroller) === null) return undefined;
+    if (scroller.querySelector("[data-inbox-draft-ask]") === null) return undefined;
     const stand = () => {
-      const question = openQuestion(scroller);
-      if (question !== null) standOverFoot(scroller, question);
+      const reply = draftReplyOf(scroller);
+      if (reply !== null) standOverFoot(scroller, reply);
     };
     stand();
     const content = scroller.querySelector(".inbox-board");
@@ -1667,7 +1734,7 @@ function useOpenOnAsk(
     };
     for (const move of READER_MOVES) scroller.addEventListener(move, letGo, { passive: true });
     return letGo;
-  }, [board, pane, itemId]);
+  }, [board, itemId]);
 }
 
 /** What an ask's box says where its type is one this build does not know. */
@@ -1722,20 +1789,28 @@ interface AskDoors {
   readonly onDraft: (draft: InboxDraft) => void;
 }
 
-/** A press closing an open ask, which attaches its answer to the reply. */
+/** A press closing an open ask, which attaches its answer to the reply while pressed, and takes it off pressed again. */
 function AskPress({
   label,
   variant = BUTTON_VARIANT.OUTLINE,
+  pressed,
   disabled,
   onPress,
 }: {
   label: string;
   variant?: typeof BUTTON_VARIANT.OUTLINE | typeof BUTTON_VARIANT.QUIET;
+  pressed: boolean;
   disabled: boolean;
   onPress: () => void;
 }): React.JSX.Element {
   return (
-    <Button variant={variant} size={BUTTON_SIZE.COMPACT} disabled={disabled} onClick={onPress}>
+    <Button
+      variant={variant}
+      size={BUTTON_SIZE.COMPACT}
+      pressed={pressed}
+      disabled={disabled}
+      onClick={onPress}
+    >
       {label}
     </Button>
   );
@@ -1743,8 +1818,9 @@ function AskPress({
 
 /**
  * An open ask's controls, each attaching its answer to the reply rather
- * than sending it: a `decide`'s options numbered for the keys, or its two
- * small buttons where it is a yes or no in other words; a `do`'s steps as
+ * than sending it, and each press taking it off again: a `decide`'s options
+ * numbered for the keys, or its two small buttons where it is a yes or no
+ * in other words; a `do`'s steps as
  * checkboxes, then Mark done, which ticks every one, and Couldn't do it;
  * an `answer`'s fields, whose values attach to the reply as they are
  * filled, with no press, a form filled in part sending what was filled, or
@@ -1761,19 +1837,24 @@ function AskControls({
   doors: AskDoors;
 }): React.JSX.Element {
   const { draft, disabled, onDraft } = doors;
-  const press = (reply: InboxReplyKind) => onDraft({ ...draft, press: reply });
+  const press = (reply: InboxReplyKind) =>
+    onDraft({ ...draft, press: draft.press === reply ? undefined : reply });
   switch (ask.type) {
     case INBOX_ASK.DECIDE:
       return decideButtons(ask) ? (
         <div className="inbox-ask-presses" data-inbox-options="">
-          {ask.options.map((option) => (
-            <AskPress
-              key={option.label}
-              label={option.label}
-              disabled={disabled}
-              onPress={() => onDraft({ ...draft, choices: [option.label] })}
-            />
-          ))}
+          {ask.options.map((option) => {
+            const picked = draft.choices.includes(option.label);
+            return (
+              <AskPress
+                key={option.label}
+                label={option.label}
+                pressed={picked}
+                disabled={disabled}
+                onPress={() => onDraft({ ...draft, choices: picked ? [] : [option.label] })}
+              />
+            );
+          })}
         </div>
       ) : (
         <div className="inbox-ask-options">
@@ -1808,12 +1889,14 @@ function AskControls({
           <div className="inbox-ask-presses">
             <AskPress
               label={ASK_PRESS.DONE}
+              pressed={draft.press === INBOX_REPLY.DONE}
               disabled={disabled}
               onPress={() => press(INBOX_REPLY.DONE)}
             />
             <AskPress
               label={ASK_PRESS.NOT_DONE}
               variant={BUTTON_VARIANT.QUIET}
+              pressed={draft.press === INBOX_REPLY.NOT_DONE}
               disabled={disabled}
               onPress={() => press(INBOX_REPLY.NOT_DONE)}
             />
@@ -1826,6 +1909,7 @@ function AskControls({
         <div className="inbox-ask-presses">
           <AskPress
             label={ASK_PRESS.ANSWER}
+            pressed={draft.press === INBOX_REPLY.ANSWERED}
             disabled={disabled}
             onPress={() => press(INBOX_REPLY.ANSWERED)}
           />
@@ -2026,23 +2110,44 @@ function WithdrawnLine({
 }
 
 /**
- * The box closing a message that asks: a card whose head says what it asks
- * and where it stands, "Waiting on you" while it waits, its controls under
- * it; once answered, nothing, the card standing at the head of the reply
- * that answered it (`AnsweredCard`), or, for an ask of words alone, which
- * draws no card, a small "Answered" marker (`AnsweredMarker`); a card
- * saying "Answered" alone where the thread read no longer carries that
- * reply; a replaced ask
- * struck through and marked so; a withdrawn one with why, or who closed the
- * item; and an ask this build does not know a line naming a newer Luke.
+ * The small pill that ends the agent's message while what it asks waits:
+ * whom it waits on, "Waiting on you", after a dot in the attention ink
+ * where it waits on the reader and the muted ink where it waits on a
+ * teammate. Its controls stand in the reader's draft reply at the
+ * thread's end (`DraftReply`), not here.
+ */
+function AskMarker({ on }: { on: InboxItem["startedBy"] }): React.JSX.Element {
+  const starter = usePerson(on);
+  const waiting =
+    on === undefined ? WAITING_ON_YOU : `Waiting on ${actorName(starter, { sentence: true })}`;
+  return (
+    <span
+      className="inbox-ask-marker"
+      data-inbox-marker=""
+      data-inbox-waiting={on === undefined ? "you" : "teammate"}
+    >
+      {waiting}
+    </span>
+  );
+}
+
+/**
+ * The box closing a message that asks: while it waits, a marker alone
+ * saying whom it waits on (`AskMarker`), its controls standing in
+ * the draft reply; once answered, nothing, the card standing at the head
+ * of the reply that answered it (`AnsweredCard`), or, for an ask of words
+ * alone, which draws no card, a small "Answered" marker (`AnsweredMarker`);
+ * a card saying
+ * "Answered" alone where the thread read no longer carries that reply; a
+ * replaced ask's card struck through and marked so; a withdrawn one's with
+ * why, or who closed the item; and an ask this build does not know a card
+ * naming a newer Luke.
  */
 function AskBox({
   item,
   message,
   ask,
   thread,
-  doors,
-  pane,
   waitingOn,
 }: {
   item: InboxItem;
@@ -2051,9 +2156,6 @@ function AskBox({
   thread: readonly InboxMessage[];
   /** The teammate the ask waits on while open; none where it waits on the reader. */
   waitingOn: InboxItem["startedBy"];
-  /** What the open ask's controls press, where it is open; none for a settled one. */
-  doors: AskDoors | undefined;
-  pane: React.RefObject<HTMLElement | null>;
 }): React.JSX.Element | null {
   if (!knownAsk(ask)) {
     return (
@@ -2065,26 +2167,17 @@ function AskBox({
       </div>
     );
   }
-  const open = ask.status === INBOX_ASK_STATUS.OPEN;
+  if (ask.status === INBOX_ASK_STATUS.OPEN) {
+    return <AskMarker on={waitingOn} />;
+  }
   // The card goes with the reply that answered it, wherever the thread read still carries that reply.
   const answered = ask.status === INBOX_ASK_STATUS.ANSWERED;
   if (answered && answerOf(thread, message.id)?.answers !== undefined) {
     // An answer of words alone draws no card, so its marker says here that it was answered.
     return ask.type === INBOX_ASK.ANSWER && ask.fields === undefined ? <AnsweredMarker /> : null;
   }
-  const drafted = open ? doors?.draft : undefined;
-  const head = askHeadWords(
-    ask,
-    drafted === undefined
-      ? undefined
-      : ask.type === INBOX_ASK.DO
-        ? shownTicks(ask, drafted)
-        : (drafted.steps ?? []),
-  );
   const standing = (() => {
     switch (ask.status) {
-      case INBOX_ASK_STATUS.OPEN:
-        return <Waiting on={waitingOn} />;
       case INBOX_ASK_STATUS.ANSWERED:
         return <span className="inbox-ask-standing">{ANSWERED}</span>;
       case INBOX_ASK_STATUS.REPLACED:
@@ -2096,15 +2189,39 @@ function AskBox({
   return (
     <div className="inbox-ask" data-inbox-ask={ask.status}>
       <div className="inbox-ask-head">
-        <span className="inbox-ask-kind">{head}</span>
+        <span className="inbox-ask-kind">{askHeadWords(ask, undefined)}</span>
         {standing}
       </div>
-      {open && doors !== undefined ? (
-        // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the reply.
-        <div className="inbox-ask-body" onKeyDown={(event) => onResponseKey(pane, event)}>
-          <AskControls ask={ask} title={cardTitle(item.title)} doors={doors} />
-        </div>
-      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The open question's controls at the top of the draft reply's card, over
+ * the note, with no head of their own, since the agent's message says what
+ * it asks: an Enter on an option or in a field sends the card. Where the
+ * item is put away with its task, they stand in the agent's message
+ * instead, as a card of their own whose controls take nothing.
+ */
+function DraftQuestion({
+  held,
+  pane,
+  children,
+}: {
+  /** Whether it stands in the agent's message as a card of its own, taking nothing, its item put away with its task. */
+  held: boolean;
+  pane: React.RefObject<HTMLElement | null>;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the card.
+    <div
+      className="inbox-draft-ask"
+      data-inbox-draft-ask={held ? undefined : ""}
+      data-held={held ? "" : undefined}
+      onKeyDown={(event) => onResponseKey(pane, event)}
+    >
+      {children}
     </div>
   );
 }
@@ -2129,7 +2246,8 @@ const NO_TEXT_LABELS: ReadonlySet<string> = new Set();
  * its stamp and its values listed; then its words, the agent's drawn as its
  * question's are and a member's as a sent message's, and the files it
  * carried after them, a picture its words draw standing there alone;
- * an agent's message that asks ends with its ask's box, until it is answered.
+ * an agent's message that asks ends with its ask's box, a marker alone
+ * while it waits, until it is answered.
  */
 function ThreadMessage({
   item,
@@ -2138,9 +2256,8 @@ function ThreadMessage({
   by,
   now,
   control,
-  doors,
-  pane,
   waitingOn,
+  held,
 }: {
   item: InboxItem;
   message: InboxMessage;
@@ -2148,9 +2265,9 @@ function ThreadMessage({
   by: ItemAgent;
   now: number;
   control: TaskInboxControl;
-  doors: AskDoors | undefined;
-  pane: React.RefObject<HTMLElement | null>;
   waitingOn: InboxItem["startedBy"];
+  /** The open ask's controls, taking nothing, where the item is put away with its task and no draft stands to hold them. */
+  held: React.ReactNode;
 }): React.JSX.Element {
   const member = usePerson(message.member);
   const fromAgent = message.author === INBOX_MESSAGE_AUTHOR.AGENT;
@@ -2209,11 +2326,10 @@ function ThreadMessage({
           message={message}
           ask={message.ask}
           thread={thread}
-          doors={message.ask.status === INBOX_ASK_STATUS.OPEN ? doors : undefined}
-          pane={pane}
           waitingOn={waitingOn}
         />
       )}
+      {held}
     </Comment>
   );
 }
@@ -2466,7 +2582,7 @@ export function InboxPane({
   const now = useMinute();
   const board = useRef<HTMLDivElement>(null);
   const pane = useRef<HTMLElement>(null);
-  useOpenOnAsk(board, pane, item.id);
+  useOpenOnAsk(board, item.id);
   const directory = useMemberDirectory();
   const readerId = directory.readerId ?? agents.me;
   useScrollToOwnMessage(board, item, readerId);
@@ -2501,6 +2617,55 @@ export function InboxPane({
   // Note that the item's words are read under its own workspace, its plan's or its agent's, never the one the Inbox lists, which may not be the item's.
   const workspaceId = itemWorkspaceId(holder, item.agentId);
   const cardDoors = useMemo(() => ({ code: doors.code }), [doors.code]);
+  const onDraft = (next: InboxDraft) => control.onDraft(item, next);
+  // The open question's controls stand in the draft reply, over its note: a thread's open ask's, or an older item's response's.
+  const asking = thread === undefined ? undefined : openAskOf(thread);
+  const openAsk = asking !== undefined && knownAsk(asking.ask) ? asking.ask : undefined;
+  // Note that a note asks nothing back but a nod, so it waits on no one's answer and wears no marker.
+  const marked = knownResponse(item.response) && item.response.type !== INBOX_RESPONSE.NONE;
+  // Note that an item put away with its task draws its question in the agent's message instead, taking nothing, since no draft stands to hold it.
+  const question =
+    thread === undefined ? (
+      open && drawsControls(item) ? (
+        <DraftQuestion held={archived} pane={pane}>
+          <ResponseControls
+            item={item}
+            draft={draft}
+            disabled={!answerable}
+            text={formText}
+            onDraft={onDraft}
+          />
+        </DraftQuestion>
+      ) : undefined
+    ) : openAsk === undefined ? undefined : (
+      <DraftQuestion held={archived} pane={pane}>
+        <AskControls
+          ask={openAsk}
+          title={cardTitle(item.title)}
+          doors={{ draft, disabled: !answerable, text: formText, onDraft }}
+        />
+      </DraftQuestion>
+    );
+  // The box stands at the thread's end as the reader's draft reply, unless the item is put away with its task.
+  const draftReply = archived ? null : (
+    <AnswerMentions value={mentions}>
+      <DraftReply readerId={readerId}>
+        <InboxAnswerBox
+          item={item}
+          control={control}
+          agent={by.subject.agent}
+          agentName={by.subject.name}
+          thread={thread}
+          controls={question}
+          skills={agents.readSkills}
+          keywords={answerKeywords(holder, item)}
+          replyScope={board}
+          onMissing={(missing) => focusMissing(pane.current, missing)}
+          onUnarchiveAgent={() => agents.onArchive(item.agentId, false)}
+        />
+      </DraftReply>
+    </AnswerMentions>
+  );
   return (
     <section
       ref={pane}
@@ -2560,28 +2725,15 @@ export function InboxPane({
                           }
                         >
                           <Blocks item={item} openLink={doors.openLink} code={doors.code} />
-                          {open ? (
-                            // biome-ignore lint/a11y/noStaticElementInteractions: the keys it hears come from the options and fields inside it, whose Enter sends the answer.
-                            <div
-                              className="inbox-response"
-                              onKeyDown={(event) => onResponseKey(pane, event)}
-                            >
-                              {/* A form's text field takes the box's mentions, so it offers what the box's `@` does. */}
-                              <AnswerMentions value={mentions}>
-                                <ResponseControls
-                                  item={item}
-                                  draft={draft}
-                                  disabled={!answerable}
-                                  text={formText}
-                                  onDraft={(next) => control.onDraft(item, next)}
-                                />
-                              </AnswerMentions>
-                            </div>
-                          ) : (
+                          {!open ? (
                             <SettledResponse item={item} />
-                          )}
+                          ) : marked ? (
+                            <AskMarker on={waitingOn} />
+                          ) : null}
+                          {archived ? question : null}
                         </Comment>
                         <ThreadAfter item={item} by={by} now={now} control={control} />
+                        {draftReply}
                       </ol>
                     </>
                   ) : (
@@ -2598,14 +2750,12 @@ export function InboxPane({
                                 by={by}
                                 now={now}
                                 control={control}
-                                doors={{
-                                  draft,
-                                  disabled: !answerable,
-                                  text: formText,
-                                  onDraft: (next) => control.onDraft(item, next),
-                                }}
-                                pane={pane}
                                 waitingOn={waitingOn}
+                                held={
+                                  archived && asking?.message.id === message.id
+                                    ? question
+                                    : undefined
+                                }
                               />
                               {/* The first message always stands, so the line saying earlier ones are cut follows it. */}
                               {at === 0 && thread.length >= INBOX_BOUNDS.MAX_MESSAGES_READ ? (
@@ -2613,6 +2763,7 @@ export function InboxPane({
                               ) : null}
                             </Fragment>
                           ))}
+                          {draftReply}
                         </ol>
                       </AnswerMentions>
                     </>
@@ -2626,26 +2777,9 @@ export function InboxPane({
           </div>
         </ScrollArea>
         {open || archived || next === undefined ? null : <InboxNextUp next={next} />}
-        {archived ? (
-          doors.onUnarchive === undefined ? null : (
-            <ArchivedComposerNote onUnarchive={doors.onUnarchive} words={ARCHIVED_ITEM_NOTE} />
-          )
-        ) : (
-          <AnswerMentions value={mentions}>
-            <InboxAnswerBox
-              item={item}
-              control={control}
-              agent={by.subject.agent}
-              agentName={by.subject.name}
-              thread={thread}
-              skills={agents.readSkills}
-              keywords={answerKeywords(holder, item)}
-              replyScope={board}
-              onMissing={(missing) => focusMissing(pane.current, missing)}
-              onUnarchiveAgent={() => agents.onArchive(item.agentId, false)}
-            />
-          </AnswerMentions>
-        )}
+        {archived && doors.onUnarchive !== undefined ? (
+          <ArchivedComposerNote onUnarchive={doors.onUnarchive} words={ARCHIVED_ITEM_NOTE} />
+        ) : null}
       </div>
     </section>
   );

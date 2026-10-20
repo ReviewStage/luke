@@ -742,11 +742,6 @@ export function askNumberedPick(
   return option === undefined ? undefined : withChoice(ask, draft, option.label);
 }
 
-/** The draft with its attached answer taken off: the pick let go, a form's fields emptied, or the press. */
-export function withoutAnswer(draft: InboxDraft): InboxDraft {
-  return { ...draft, choices: [], values: [], press: undefined };
-}
-
 /** What a reply sends on a thread: its words, its files, and the answer to the open ask it carries, if any. */
 export interface InboxThreadSend {
   readonly text: string;
@@ -843,18 +838,6 @@ const SENT_WORDS = {
   [INBOX_REPLY.ACKNOWLEDGED]: "acknowledged",
 } as const satisfies Record<InboxReplyKind, string>;
 
-/** What each press attached to a reply says, and what the send it renames reads. */
-const PRESS_WORDS = {
-  [INBOX_REPLY.CHOSE]: "Choose",
-  [INBOX_REPLY.APPROVED]: "Approve",
-  [INBOX_REPLY.DECLINED]: "Decline",
-  [INBOX_REPLY.ANSWERED]: "Answer",
-  [INBOX_REPLY.DONE]: "Mark done",
-  [INBOX_REPLY.NOT_DONE]: "Couldn't do it",
-  [INBOX_REPLY.SUBMITTED]: "Send",
-  [INBOX_REPLY.ACKNOWLEDGED]: "Got it",
-} as const satisfies Record<InboxReplyKind, string>;
-
 /**
  * What a sent answer's stamp says on the thread, in the past: "Approved",
  * "Requested changes", "Chose 7 days", "Done 3/3", "Couldn't do it 1/3",
@@ -878,30 +861,6 @@ export function sentStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined):
     }
   })();
   return { tone, words };
-}
-
-/**
- * What an attached answer's stamp says over the box, and what the send it
- * renames reads: the button pressed, "Approve" or "Request changes", the
- * options picked, `Choose "7 days"`, a form's values counted, "Send 2
- * fields", or the press, "Mark done".
- */
-export function attachedStamp(answers: InboxAnswers, ask: InboxReadAsk | undefined): AnswerStamp {
-  const tone = toneOf(answers, ask);
-  const pick = buttonPick(answers, ask);
-  if (pick !== undefined) return { tone, words: pick.label };
-  if (answers.reply === INBOX_REPLY.CHOSE) {
-    const picked = (answers.choices ?? []).map((choice) => `"${choice}"`).join(", ");
-    return { tone, words: `${PRESS_WORDS[INBOX_REPLY.CHOSE]} ${picked}` };
-  }
-  if (answers.reply === INBOX_REPLY.SUBMITTED) {
-    const count = answers.values?.length ?? 0;
-    return {
-      tone,
-      words: `${PRESS_WORDS[INBOX_REPLY.SUBMITTED]} ${count} ${count === 1 ? "field" : "fields"}`,
-    };
-  }
-  return { tone, words: PRESS_WORDS[answers.reply] };
 }
 
 /** The message that answers an ask, where the thread read carries it. */
