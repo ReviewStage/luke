@@ -14,12 +14,14 @@ import {
   agentTranscriptLiveAnswerSchema,
   LIVE_POLL,
   LIVE_POLL_URL,
+  liveDigestOf,
   taskBoardLiveAnswerSchema,
   taskBoardLiveRowsSchema,
 } from "@luke/features/live-wire";
 import type { WireBoundaryInput } from "@luke/wire";
-import { Effect, Layer, Option, Schema } from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, Option, Schema } from "effect";
 import { SqlClient } from "effect/sql";
+import { TestClock } from "effect/testing";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import { hostedAnswer } from "../testing/hosted-route.js";
 import { liveProcedures } from "./live-procedures.js";
@@ -147,6 +149,8 @@ const askBoard = (options: {
   readonly bearer: string;
   readonly taskId?: string;
   readonly poll?: boolean;
+  /** The digest the reader last saw, which holds the poll until the rows move past it. */
+  readonly after?: string;
   readonly sealing: Option.Option<LiveSealer>;
 }) =>
   Effect.gen(function* () {
@@ -154,6 +158,8 @@ const askBoard = (options: {
       Layer.succeed(LiveSealing, options.sealing),
       Layer.succeed(SqlClient.SqlClient, yield* SqlClient.SqlClient),
       Layer.succeed(Database, yield* Database),
+      // The test's own clock, so a held poll is moved by `TestClock` rather than waited out.
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
     );
     const procedures = liveProcedures({
       resolveUserId: () => Effect.succeed(Option.some(options.bearer)),
@@ -161,6 +167,7 @@ const askBoard = (options: {
     const url = new URL(options.taskId === undefined ? LIVE_INBOX : "/api/live/task-board", ORIGIN);
     if (options.taskId !== undefined) url.searchParams.set("id", options.taskId);
     if (options.poll === true) url.searchParams.set(LIVE_POLL.QUERY, LIVE_POLL.ON);
+    if (options.after !== undefined) url.searchParams.set(LIVE_POLL.AFTER, options.after);
     const response = yield* hostedAnswer(
       { live: procedures },
       services,
@@ -373,6 +380,42 @@ it.layer(getTestDB())("an agent transcript's live read", (it) => {
           }),
           { status: HOSTED_HTTP_STATUS.NOT_FOUND, body: { error: HOSTED_API_ERROR.NOT_FOUND } },
         );
+      }),
+  );
+
+  it.effect(
+    "a poll past the digest the reader saw is held: answered within a beat of a change, and unchanged, with no rows, at the hold's end",
+    () =>
+      Effect.gen(function* () {
+        const dana = yield* openUser;
+        const started = yield* startTask(dana, { name: "Teammate invitations" });
+        const poll = (after: string) =>
+          askBoard({ bearer: dana, taskId: started.id, poll: true, after, sealing: Option.none() });
+        const first = yield* askBoard({ bearer: dana, taskId: started.id, sealing: Option.none() });
+        const seen = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(first.body);
+        const digest = liveDigestOf(seen.queries);
+        assert.ok(digest !== undefined);
+
+        const unchanged = yield* Effect.forkChild(poll(digest));
+        yield* TestClock.adjust(Duration.seconds(25));
+        const held = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(
+          (yield* Fiber.join(unchanged)).body,
+        );
+        assert.equal(held.queries.board.rows, undefined, "unchanged carries no rows");
+        assert.equal(liveDigestOf(held.queries), digest);
+
+        const moved = yield* Effect.forkChild(poll(digest));
+        yield* TestClock.adjust(Duration.seconds(3));
+        yield* writeDrawing(dana, started.id, BOX);
+        yield* TestClock.adjust(Duration.seconds(1));
+        const answer = Schema.decodeUnknownSync(taskBoardLiveAnswerSchema)(
+          (yield* Fiber.join(moved)).body,
+        );
+        assert.deepEqual(
+          Schema.decodeUnknownSync(taskBoardLiveRowsSchema)({ board: answer.queries.board.rows }),
+          { board: [{ taskId: started.id, drawingNumber: 1, appliedDrawing: 0, imaged: false }] },
+        );
+        assert.notEqual(liveDigestOf(answer.queries), digest);
       }),
   );
 });
