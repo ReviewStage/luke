@@ -509,3 +509,13 @@ test("two tests pressed together in a browser that refuses to build one leave no
   assert.ok(heard.withdrawn);
   assert.equal(heard.status, NOTIFICATIONS_STATUS.OFF);
 });
+
+test("a second test pressed while the first is on screen shows beside it", async () => {
+  browser = fakeNotifications({ permission: "granted" });
+  const { doors } = doorsAnswering();
+
+  await doors.postTest();
+  await doors.postTest();
+
+  assert.equal(browser.onScreen.size, 2);
+});

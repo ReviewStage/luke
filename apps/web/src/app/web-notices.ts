@@ -45,7 +45,6 @@ import { NOTIFICATIONS_STATUS, type NotificationsStatus } from "@luke/voice/sett
 
 /** What Settings' test notification says. */
 const TEST_NOTICE = {
-  id: "test",
   title: "Luke notifications are on",
   body: "",
 } as const;
@@ -291,7 +290,8 @@ export function webNoticeDoors(dependencies: {
       if (!offered()) return;
       onAnswered(notificationsStatusNow());
       if (Notification.permission !== PERMISSION.GRANTED) return;
-      posted({ ...TEST_NOTICE, onClick: () => undefined });
+      // Each press is its own event, so a test still on screen is joined by the next rather than quietly replaced.
+      posted({ ...TEST_NOTICE, id: `test:${crypto.randomUUID()}`, onClick: () => undefined });
     },
     badge: badge.set,
     close: () => {
