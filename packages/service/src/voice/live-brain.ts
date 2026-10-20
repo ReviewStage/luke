@@ -83,7 +83,7 @@ import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
  * itself — `acceptAsk` — and the store, so a spoken ask is admitted,
  * recorded, and handed to eve under the eve client the composition built for
  * the account. A turn's events are `projectTurnEvents` over the turn row and
- * its journal, read again each time the task conversation's mark moves over
+ * its journal, read again each time the task conversation's mark or its workers move over
  * Neon Realtime (`lookedUntil` on `taskConversationLiveStatements`, which
  * the exchange hands in), until the turn ends or the follow bound is
  * reached. The mark is a wake and nothing more: what is told is read from
@@ -407,7 +407,7 @@ export interface HostedLiveBrainOptions {
   /** The writer a cancelled run's turn is stamped through, as every Stop stamps it. */
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
   readonly report: (message: string) => void;
-  /** The statements a followed turn's record is read again on as they move over Neon Realtime: the task conversation's mark (`taskConversationLiveStatements`). */
+  /** The statements a followed turn's record is read again on as they move over Neon Realtime: the task conversation's mark and its running workers (`taskConversationLiveStatements`). */
   readonly live: readonly LiveStatement[];
   /** The follow's own bounds, narrowed by a test so the bound is reached inside a test. */
   readonly bounds?: Partial<FollowBounds>;

@@ -200,7 +200,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     accountId,
     conversation,
     timeZone: options.timeZone,
-    live: Option.match(live, { onNone: () => [], onSome: ({ mark }) => [mark] }),
+    live: Option.match(live, { onNone: () => [], onSome: ({ mark, workers }) => [mark, workers] }),
     asks: {
       asks: askRecord(),
       eve: options.eve,
