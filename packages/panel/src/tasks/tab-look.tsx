@@ -1,7 +1,9 @@
 import type { CodingAgentPullRequest, CodingAgentStatus } from "@luke/features/coding-agent-wire";
 import type { ModelProvider } from "@luke/features/models-wire";
-import { AgentPlaceholderIcon, CallIcon, DocumentIcon, PlusIcon } from "@luke/ui";
+import type { TaskStatus } from "@luke/features/task-wire";
+import { AgentPlaceholderIcon, CallIcon, DocumentIcon, PlusIcon, TaskStatusMark } from "@luke/ui";
 import { pullRequestLabelOf, TAB_WORDS } from "@luke/ui/tab-strip-model";
+import { DOCUMENT_REGION } from "@luke/ui/tasks-model";
 import {
   AppWindowIcon,
   BotIcon,
@@ -16,7 +18,8 @@ import { GLYPH_STATE, type GlyphState, StateGlyph, stateEndMark } from "../state
 import { agentGlyphState, providerOf } from "./coding-agent-model.js";
 import { fileLook } from "./file-ref.js";
 import { PullRequestMark, type PullRequestMarked } from "./pull-request-mark.js";
-import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel.js";
+import { type FixedSidePanelTab, SIDE_PANEL_TAB, SIDE_PANEL_TAB_KIND } from "./use-side-panel.js";
+import type { TasksControl } from "./use-tasks-tab.js";
 
 /**
  * tab-look.tsx -- how each kind of tab looks wherever it is drawn: its glyph and its name on its tab in either strip, its pin in the sidebar, its row in either "+" menu and the task's summary, and its row in ⌘K.
@@ -26,7 +29,9 @@ import { type FixedSidePanelTab, SIDE_PANEL_TAB_KIND } from "./use-side-panel.js
  * name wherever it is offered. A coding agent and a subagent wear their
  * harness's mark wearing where they stand (`AgentGlyph`, `SubagentGlyph`)
  * in every one of those places, the "+" menus' rows included: a row is
- * offered beside a strip that may not hold its tab. Each place adds what
+ * offered beside a strip that may not hold its tab. A task wears its
+ * status's mark (`PlanGlyph`), and so does its Plan tab, which is named
+ * for the task wherever the place knows it. Each place adds what
  * only it says beside the look: a tab's card and end mark, a row's detail
  * and section, ⌘K's task name.
  */
@@ -63,10 +68,21 @@ interface AgentStanding {
   readonly status?: CodingAgentStatus | undefined;
 }
 
+/** A task as its tab or its row names it: its name, and its status where the place knows it. */
+export interface PlanStanding {
+  readonly name: string;
+  readonly status: TaskStatus | undefined;
+}
+
 /** What a place knows of the thing a tab shows, by its kind. */
 export type TabSubject =
-  | { readonly kind: typeof TAB_KIND.PANEL; readonly tab: FixedSidePanelTab }
-  | { readonly kind: typeof TAB_KIND.PLAN; readonly name: string }
+  | {
+      readonly kind: typeof TAB_KIND.PANEL;
+      readonly tab: FixedSidePanelTab;
+      /** The task the panel stands beside, whose name and status its Plan tab wears; none where the place does not know it, and the tab says Plan. */
+      readonly plan?: PlanStanding | undefined;
+    }
+  | ({ readonly kind: typeof TAB_KIND.PLAN } & PlanStanding)
   | { readonly kind: typeof TAB_KIND.CALL }
   | { readonly kind: typeof TAB_KIND.INBOX }
   | { readonly kind: typeof TAB_KIND.CHAT }
@@ -109,6 +125,29 @@ export type TabSubject =
 export interface KindLook {
   readonly icon: React.JSX.Element;
   readonly label: string;
+}
+
+/**
+ * A task's glyph wherever a task is named: its status's mark
+ * (`TaskStatusMark`), or the document where its status is not known, as a
+ * task the window does not list.
+ */
+export function PlanGlyph({ status }: { status: TaskStatus | undefined }) {
+  return status === undefined ? <DocumentIcon /> : <TaskStatusMark status={status} />;
+}
+
+/**
+ * The open task as its Plan tab wears it: its name, and its status as the
+ * task list holds it, which a status set from the sidebar moves first; none
+ * while no task is open.
+ */
+export function openPlanStanding(
+  tasks: Pick<TasksControl, "region" | "tasks" | "archived">,
+): PlanStanding | undefined {
+  if (tasks.region.kind !== DOCUMENT_REGION.READY) return undefined;
+  const { task } = tasks.region;
+  const listed = [...tasks.tasks, ...tasks.archived].find((each) => each.id === task.id) ?? task;
+  return { name: task.name, status: listed.status };
 }
 
 /**
@@ -165,11 +204,15 @@ export function agentEndMark(
 export function tabLook(subject: TabSubject): KindLook {
   switch (subject.kind) {
     case TAB_KIND.PANEL: {
-      const { label, icon: Icon } = SIDE_PANEL_TAB_KIND[subject.tab];
+      const { tab, plan } = subject;
+      if (tab === SIDE_PANEL_TAB.PLAN && plan !== undefined) {
+        return { icon: <PlanGlyph status={plan.status} />, label: plan.name };
+      }
+      const { label, icon: Icon } = SIDE_PANEL_TAB_KIND[tab];
       return { icon: <Icon />, label };
     }
     case TAB_KIND.PLAN:
-      return { icon: <DocumentIcon />, label: subject.name };
+      return { icon: <PlanGlyph status={subject.status} />, label: subject.name };
     case TAB_KIND.CALL:
       return { icon: <CallIcon />, label: TAB_WORDS.CALL };
     case TAB_KIND.INBOX:

@@ -82,9 +82,9 @@ import { MentionedAgentCard, ReadAgentModel } from "./mentioned-agent-card.js";
 import { OpenedNote, PullRequestCardNotes } from "./pull-request-card-notes.js";
 import { PullRequestMark } from "./pull-request-mark.js";
 import { ServerCard } from "./server-card.js";
-import { AgentMark } from "./tab-look.js";
+import { AgentMark, PlanGlyph } from "./tab-look.js";
 import { useMinute } from "./task-time.js";
-import { useKnownNames } from "./use-known-names.js";
+import { useKnownNames, useTaskStatus } from "./use-known-names.js";
 import {
   type ChipWhere,
   type LinkStanding,
@@ -341,6 +341,7 @@ function MentionGlyph({
   known: KnownNames;
   standing?: LinkStanding | undefined;
 }): React.JSX.Element {
+  const taskStatus = useTaskStatus(mention.kind === MENTION_KIND.TASK ? mention.taskId : undefined);
   // A pull request its provider answered for wears its own mark for where it stands, as everywhere the window draws one.
   if (standing?.pullRequest !== undefined) {
     return (
@@ -353,7 +354,7 @@ function MentionGlyph({
     case MENTION_KIND.SECTION:
       return <HashIcon aria-hidden="true" />;
     case MENTION_KIND.TASK:
-      return <DocumentIcon />;
+      return <PlanGlyph status={taskStatus} />;
     case MENTION_KIND.FILE:
       return <FileTypeIcon name={fileName(mention.path)} />;
     case MENTION_KIND.FOLDER:
@@ -779,9 +780,12 @@ function PlaceGlyph({
   workspace: string;
   known: KnownNames;
 }): React.JSX.Element {
+  const planned = place.kind === LINK_PLACE.TASK || place.kind === LINK_PLACE.VERSION;
+  const taskStatus = useTaskStatus(planned ? place.planId : undefined);
   switch (place.kind) {
     case LINK_PLACE.TASK:
     case LINK_PLACE.VERSION:
+      return <PlanGlyph status={taskStatus} />;
     case LINK_PLACE.TURN:
       return <DocumentIcon />;
     case LINK_PLACE.SECTION:

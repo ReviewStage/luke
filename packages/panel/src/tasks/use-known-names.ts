@@ -1,5 +1,6 @@
 import { useAtomValue } from "@effect/atom-react/Hooks";
 import type { KnownNames } from "@luke/features/place-chip-model";
+import type { TaskStatus } from "@luke/features/task-wire";
 import type { AppStateSnapshot } from "@luke/host/app-state";
 import * as Atom from "effect/reactivity/Atom";
 import { useMemo } from "react";
@@ -70,6 +71,27 @@ const heldNamesAtom: Atom.Atom<KnownNames> = Atom.map(namedSlicesAtom, ({ planni
   );
   return { tasks, agents, agentModels, pages, inboxItems, people: NO_PEOPLE, automations };
 });
+
+/** Each listed task's status, by its id, built once per delivery that moved the tasks or the Inbox, as the names are. */
+const heldStatusesAtom: Atom.Atom<ReadonlyMap<string, TaskStatus>> = Atom.map(
+  namedSlicesAtom,
+  ({ planning }) =>
+    new Map(
+      (planning?.tasks ?? []).flatMap((task) =>
+        task.status === undefined ? [] : [[task.id, task.status] as const],
+      ),
+    ),
+);
+
+/**
+ * The status of the task `taskId` names, as the window's task list holds it,
+ * which a chip or a row naming the task wears as its mark (`PlanGlyph`);
+ * none for a task the window does not list, or none asked for.
+ */
+export function useTaskStatus(taskId: string | undefined): TaskStatus | undefined {
+  const statuses = useAtomValue(heldStatusesAtom);
+  return taskId === undefined ? undefined : statuses.get(taskId);
+}
 
 /**
  * The names the window holds, the automation `automationId` names among them
