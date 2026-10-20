@@ -2306,7 +2306,11 @@ function PullRequestTabBody({
                   <div className="pull-request-title-row">
                     <HeaderTitle title={title} writes={writes} />
                     {held === undefined ? null : (
-                      <PullRequestStateMenu pullRequest={held} writes={writes} />
+                      <PullRequestStateMenu
+                        pullRequest={held}
+                        queued={overview?.merging?.queued}
+                        writes={writes}
+                      />
                     )}
                     <div className="pull-request-title-actions">
                       {overview === undefined ? null : (

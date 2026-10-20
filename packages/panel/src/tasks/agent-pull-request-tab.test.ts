@@ -2422,14 +2422,7 @@ test("the merge control is a chip saying what holds the merge up, GitHub's sente
         queued: { position: 3 },
         autoMerge: { method: null },
       }),
-      {
-        chip: "Queued #3",
-        tone: "working",
-        sentence: "#3 in the merge queue. GitHub is still checking whether it merges",
-        press: "Remove from queue",
-        look: "outline",
-        chevron: false,
-      },
+      { ...none, press: "Remove from queue", look: "outline", chevron: false },
     ],
     [
       "auto-merge on",
@@ -3480,6 +3473,33 @@ test("an open pull request's pill offers Close and a closed one's Reopen, each a
     [AGENT.id, { action: PULL_REQUEST_ACTION.CLOSE }],
     [AGENT.id, { action: PULL_REQUEST_ACTION.REOPEN }],
   ]);
+});
+
+test("an open pull request GitHub holds in its merge queue says Queued and its place in the pill, in the attention tone, its menu offering Close and never Convert to draft; the merge control draws no chip, only Remove from queue", async () => {
+  const tab = await draw(
+    merging(MERGE_STATE.CLEAN, {
+      queue: true,
+      queued: { position: 2 },
+      autoMerge: { method: null },
+    }),
+  );
+  const pill = pillOf(tab) ?? assert.fail("the pill stands");
+  assert.deepEqual(
+    [standing(tab), pill.getAttribute("data-tone"), pill.getAttribute("aria-label")],
+    ["Queued #2", "attention", "Pull request Queued #2"],
+  );
+  assert.deepEqual(offered(tab), ["Close pull request"]);
+  assert.equal(mergeControl(tab)?.querySelector(".merge-chip"), null, "no chip says it again");
+  assert.deepEqual(
+    mergePresses(tab).map((each) => each.textContent),
+    ["Remove from queue"],
+  );
+  act(() => root?.unmount());
+  root = undefined;
+
+  const open = await draw(merging(MERGE_STATE.CLEAN));
+  assert.equal(standing(open), "Open", "out of the queue the pill says where it stands");
+  assert.deepEqual(offered(open), ["Convert to draft", "Close pull request"]);
 });
 
 /** The title's field, opened by its pencil. */

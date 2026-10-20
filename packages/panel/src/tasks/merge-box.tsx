@@ -51,12 +51,13 @@ import type { PullRequestWrites } from "./pull-request-writes.js";
  * The chip is a status badge at the pill's size, in the tone of where the
  * merge stands, its glyph and its word: Checking, Conflicts, Behind,
  * Review required, Changes requested, Checks failing, Checks running,
- * Blocked, Ready, Queued #N, Auto-merge on. Its hint, and a reader, have
+ * Blocked, Ready, Auto-merge on. Its hint, and a reader, have
  * GitHub's fuller sentence ("A required review is missing"). It stands only
  * where it says what the press does not: a pull request ready to merge
- * shows the press alone, and a draft nothing, its pill saying Draft. A
- * narrow header draws the chip's glyph alone, its word still read. Luke's
- * pill says no Queued, so a queued pull request's chip does.
+ * shows the press alone, a draft nothing, its pill saying Draft, and one in
+ * the merge queue only Remove from queue, its pill saying Queued and its
+ * place, as stage-cli's does. A narrow header draws the chip's glyph alone,
+ * its word still read.
  *
  * The press is the one thing that may be done from where the pull request
  * stands (`mergeActionOf`), each a change the service makes on GitHub as
@@ -272,17 +273,14 @@ function blockedChip(merging: PullRequestMerging | undefined): ChipFace {
 /**
  * The chip for where the pull request stands and what the press offers, or
  * none where it would only say what the press or the pill already does: a
- * merge ready and offered, or a draft.
+ * merge ready and offered, a draft, or one in the merge queue.
  */
 function chipOf(
   pullRequest: CodingAgentOverviewPullRequest,
   action: MergeAction | undefined,
 ): ChipFace | undefined {
   const { merge, merging } = pullRequest;
-  const queued = merging?.queued ?? null;
-  if (queued !== null) {
-    return chip(`Queued #${queued.position}`, BADGE_TONE.WORKING, CHIP_GLYPHS.WAITING);
-  }
+  if ((merging?.queued ?? null) !== null) return undefined;
   if ((merging?.autoMerge ?? null) !== null) {
     return chip("Auto-merge on", BADGE_TONE.WORKING, CHIP_GLYPHS.WAITING);
   }
