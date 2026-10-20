@@ -444,6 +444,8 @@ test("with Chat off the instructions are main's own, byte for byte, and with it 
     assert.equal(off.taskless, before.taskless, brief);
     const on = coderInstructions("Acme/Relay", brief, true, TASK_LINK, undefined, true);
     assert.ok(on.includes("## Chat with other agents"), brief);
+    // Chat's word on the inbox keeps the exception for an agent another coding agent started.
+    assert.ok(on.includes("or, where another coding agent started you, to that agent"), brief);
     const section = on.slice(on.indexOf("\n\n## Chat with other agents"));
     const end = section.indexOf("\n\n## ", 2);
     assert.equal(on.replace(section.slice(0, end), ""), before.onTask, brief);

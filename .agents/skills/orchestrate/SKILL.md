@@ -21,8 +21,8 @@ Use the column for the host you are in:
 
 | Action | Conductor | Luke |
 | --- | --- | --- |
-| Ask the user | `AskUserQuestion` | `post_to_inbox` with a `decide` or `answer` ask, which waits for the reply |
-| Tell the user | Your reply | `post_to_inbox` without an ask, and your reply |
+| Ask the user | `AskUserQuestion` | `post_to_inbox` with a `decide` or `answer` ask, which waits for the reply; where another coding agent started you, `message_agent` to it instead |
+| Tell the user | Your reply | `post_to_inbox` without an ask, and your reply; where another coding agent started you, `message_agent` to it instead |
 | Valid model ids | `conductor model` | `list_models` |
 | Your id, for reports | `echo "$CONDUCTOR_SESSION_ID"` | Nothing to record: a started agent is told your id |
 | Start a worker | `conductor workspace create` (below) | `start_agent` on your own task (no `taskId`, or the rollout task's id where you work on none), with `title` set to the PR title, the brief as `prompt`, plus `model` and `effort` (below) |
@@ -97,7 +97,12 @@ reaches the user. Keep the user's inbox to what needs them: one item per held
 PR asking for its go, a question or a to-do only they can settle, relayed
 under its own thread, and the final report (Step 4). Never pass a worker's
 routine milestones (opened, fix pushed, CI green, merged) on to the user; the
-final report covers them.
+final report covers them. A worker's picture cannot travel in a message: the
+worker shows it in its own transcript, and your inbox item mentions the
+worker for the user to open it there. Where another coding agent started you,
+the inbox is that agent's, not yours: everything above that would reach the
+user goes to that agent instead, as the table's "Ask the user" and "Tell the
+user" rows say for it.
 
 ## Step 1: Kick off each worker
 
