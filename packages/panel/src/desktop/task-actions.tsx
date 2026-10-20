@@ -27,7 +27,13 @@ import {
   useConfirmDialog,
   useMenu,
 } from "@luke/ui";
-import { accountActor, creatorActor, teammateCreator } from "@luke/ui/actor-model";
+import {
+  type Actor,
+  accountActor,
+  creatorActor,
+  personActor,
+  teammateCreator,
+} from "@luke/ui/actor-model";
 import { confirmAsked } from "@luke/ui/confirm-state";
 import {
   archiveAsks,
@@ -40,7 +46,7 @@ import { useInlineRename } from "@luke/ui/use-inline-rename";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@luke/wire";
 import { FolderInputIcon } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
-import { ACTOR_SIZE, ActorMark, ActorRef, CreatorHeard } from "../actor-ref.js";
+import { ACTOR_SIZE, ActorMark, ActorRef, AssigneeHeard, CreatorHeard } from "../actor-ref.js";
 import { useAppCommand } from "../app-commands.js";
 import { usePlanDrafted } from "../composer-drafts.js";
 import { useCopyToast } from "../copy-feedback.js";
@@ -495,6 +501,33 @@ export function TaskActions({
   );
 }
 
+/** The face a task's row wears, and whether it is its assignee's rather than its creator's. */
+interface RowFace {
+  readonly actor: Actor;
+  readonly assigned: boolean;
+}
+
+/**
+ * Who a task's row names by face: the member it is assigned to where that
+ * is someone other than the reader, nobody where it is the reader, and on a
+ * task no one is assigned to, whoever else created it (`teammateCreator`).
+ */
+function rowFaceOf(
+  task: TaskSummary,
+  reader: ReturnType<typeof useMemberDirectory>,
+): RowFace | undefined {
+  const { assignee } = task;
+  if (assignee === undefined) {
+    const creator = teammateCreator(task, reader);
+    return creator === undefined ? undefined : { actor: creator, assigned: false };
+  }
+  if (assignee.userId === reader.readerId) return undefined;
+  return {
+    actor: personActor(assignee, reader.members, reader.readerId, reader.former),
+    assigned: true,
+  };
+}
+
 /**
  * A task in the sidebar, pinned, listed, or archived alike: led by its
  * status's mark (`task-marks.tsx`), where its service gives it one; its name, in the
@@ -503,10 +536,12 @@ export function TaskActions({
  * another workspace, an agent at work, or a pull request (`task-card.tsx`),
  * the first named in the row's card, before that a pencil while a draft
  * waits in one of its boxes and it is not the plan open, whose boxes show
- * their own words (`draft-mark.tsx`), and before that, on a task
- * someone else created, its creator's face (`teammateCreator`), read against
- * the members of the directory around the list; the reader's own tasks wear
- * none. Its repository's name, muted, where the list hands one (in one run),
+ * their own words (`draft-mark.tsx`), and before that the face of who
+ * is on it (`rowFaceOf`): its assignee's, where someone other than the
+ * reader is assigned, or, on a task no one is assigned to, the face of
+ * whoever else created it (`teammateCreator`), each read against the members
+ * of the directory around the list; a task assigned to the reader, and the
+ * reader's own task no one is on, wear none. Its repository's name, muted, where the list hands one (in one run),
  * and no face where its group is its creator's. Its time is the one the
  * list's order chooses. Pin
  * and Archive stand in place of all of it while the row is hovered or
@@ -542,7 +577,7 @@ export function SidebarTask({
   at?: number;
   /** The repository's name the row says, muted before its time, where the list hands one. */
   repository?: string | undefined;
-  /** Whether a teammate's task wears its creator's face, which a group by creator says instead. */
+  /** Whether the row wears a person's face (`rowFaceOf`), which a group by creator, or a filter by person, says instead. */
   face?: boolean;
   onOpen: () => void;
 }): React.JSX.Element {
@@ -552,8 +587,8 @@ export function SidebarTask({
     drawn: true,
     unread,
   });
-  const teammate = teammateCreator(task, useMemberDirectory());
-  const creator = face ? teammate : undefined;
+  const person = rowFaceOf(task, useMemberDirectory());
+  const worn = face ? person : undefined;
   const drafted = usePlanDrafted(task.id) && !open;
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
@@ -597,7 +632,11 @@ export function SidebarTask({
               <>
                 {task.name}
                 {unread ? <span className="visually-hidden">(unread)</span> : null}
-                {creator === undefined ? null : <CreatorHeard actor={creator} />}
+                {worn === undefined ? null : worn.assigned ? (
+                  <AssigneeHeard actor={worn.actor} />
+                ) : (
+                  <CreatorHeard actor={worn.actor} />
+                )}
               </>
             )
           }
@@ -608,8 +647,8 @@ export function SidebarTask({
                 {repository === undefined ? null : (
                   <FadingWords className="sidebar-task-repository" words={repository} />
                 )}
-                {creator === undefined ? null : (
-                  <ActorMark actor={creator} size={ACTOR_SIZE.MARK} />
+                {worn === undefined ? null : (
+                  <ActorMark actor={worn.actor} size={ACTOR_SIZE.MARK} />
                 )}
                 {drafted ? <DraftMark /> : null}
                 <TaskStatusMark task={task} stranded={strandedHome(tasks, task)} />

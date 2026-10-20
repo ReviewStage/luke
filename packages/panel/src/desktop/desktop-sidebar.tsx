@@ -58,6 +58,7 @@ import {
   type TaskRow,
   taskRow,
   taskRowRepository,
+  taskRowsAssignedTo,
   taskRowsCreatedBy,
   taskRowsInStatuses,
   taskRowTime,
@@ -814,6 +815,20 @@ function CreatorSection({
   );
 }
 
+/** What the list says where its filters leave nothing: by who the tasks are assigned to where it names one, else by who created them. */
+function emptyFilterWords(
+  createdBy: string | undefined,
+  assignedTo: string | undefined,
+  readerId: string | undefined,
+): string {
+  if (assignedTo !== undefined) {
+    return assignedTo === readerId
+      ? "Nothing assigned to you here."
+      : "Nothing assigned to them here.";
+  }
+  return createdBy === readerId ? "None of your tasks here." : "None of their tasks here.";
+}
+
 /** Who created a row, as its creator's face and name are read: a task's creator and owner, or whoever started the agent. */
 function creatorOf(row: TaskRow): Pick<TaskSummary, "createdBy" | "ownerId"> {
   if (row.kind === TASK_ROW.TASK) return row.task;
@@ -1485,6 +1500,7 @@ function SidebarColumn({
   const { memberCount } = tasks.workspace ?? {};
   const shared = memberCount === undefined ? (reader.members?.length ?? 0) > 1 : memberCount > 1;
   const createdBy = shared ? taskView.view.createdBy : undefined;
+  const assignedTo = shared ? taskView.view.assignedTo : undefined;
   const archive = useArchivedView(tasks.workspace?.id, sidebar.staged);
   useTaskViewCommands({
     offered: tasks.signedIn && tasks.workspace !== undefined,
@@ -1597,7 +1613,7 @@ function SidebarColumn({
       tasks.unreadTabs.some((tab) => isAgentTab(tab) && tab.agent === agentId),
     now,
     order: taskView.view.order,
-    faces: createdBy === undefined,
+    faces: createdBy === undefined && assignedTo === undefined,
     archived: archive.shown,
     inSight: overlay.inSight,
     dropOut: sectionsShown ? dropRow : undefined,
@@ -1632,7 +1648,7 @@ function SidebarColumn({
     ? listedAgents.archived
     : listedAgents.standing.filter((agent) => agent.pinnedAt === undefined);
   const unpinned = [...unpinnedTasks.map(taskRow), ...unpinnedAgents.map(agentRow)];
-  const rows = taskRowsCreatedBy(unpinned, createdBy);
+  const rows = taskRowsAssignedTo(taskRowsCreatedBy(unpinned, createdBy), assignedTo);
   // The status filter thins the tasks listed, never the archived ones, which are all settled out of the way.
   const sectionRows = sectioned.sections.flatMap((drawn) => drawn.tasks.map(taskRow));
   const hidden = archive.shown ? [] : hiddenStatuses([...sectionRows, ...rows], statuses);
@@ -1850,32 +1866,34 @@ function SidebarColumn({
                         control={taskView}
                         shared={shared}
                         archive={archive}
-                        filtered={createdBy !== undefined || archive.shown}
+                        filtered={
+                          createdBy !== undefined || assignedTo !== undefined || archive.shown
+                        }
                       />
                     </SidebarSectionHead>
                   ) : null}
                   {tasks.signedIn ? (
                     <ViewChips
                       createdBy={createdBy}
+                      assignedTo={assignedTo}
                       tasks={unpinnedTasks}
                       onClearCreatedBy={() => taskView.onCreatedBy(undefined)}
+                      onClearAssignedTo={() => taskView.onAssignedTo(undefined)}
                       archive={archive}
                     />
                   ) : null}
                   {archive.shown && unpinned.length === 0 && tasks.listRead && !tasks.listFailed ? (
                     <p className="sidebar-note">No archived tasks.</p>
                   ) : null}
-                  {createdBy !== undefined &&
+                  {(createdBy !== undefined || assignedTo !== undefined) &&
                   rows.length === 0 &&
                   !unlisted &&
                   !(archive.shown && unpinned.length === 0) &&
                   tasks.listRead &&
                   !tasks.listFailed ? (
                     <p className="sidebar-note">
-                      {createdBy === tasks.me
-                        ? "None of your tasks here."
-                        : "None of their tasks here."}{" "}
-                      <Button onClick={() => taskView.onCreatedBy(undefined)}>Show all</Button>
+                      {emptyFilterWords(createdBy, assignedTo, tasks.me)}{" "}
+                      <Button onClick={taskView.onEveryone}>Show all</Button>
                     </p>
                   ) : null}
                   {tasks.listFailed ? (
