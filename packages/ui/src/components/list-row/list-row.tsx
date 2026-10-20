@@ -16,6 +16,7 @@ import {
 import { cssCustomProperties } from "../../css.js";
 import { ChevronRightIcon } from "../../face/glyphs.js";
 import { useClipped } from "../../use-clipped.js";
+import { useLinkAddress } from "../menu/link-address.js";
 import { type ContextMenuProps, withContextMenu } from "../menu/menu.js";
 import { useRowSwipe } from "./use-row-swipe.js";
 
@@ -274,6 +275,7 @@ export function ListRow({
   actions,
   actionsAt = LIST_ROW_ACTIONS.ALWAYS,
   onPress,
+  linkHref,
   current,
   unread,
   hint,
@@ -310,6 +312,8 @@ export function ListRow({
   actionsAt?: ListRowActions;
   /** What pressing the row does, handed the press, whose modifiers it may read; a row without one is not a control. */
   onPress?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+  /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
+  linkHref?: string | undefined;
   /** How the row is the one open now, drawn and announced as current; nothing where it is not. */
   current?: ListRowCurrent | undefined;
   /** Whether what the row stands for has not been seen, its title in the heavier weight. */
@@ -344,6 +348,15 @@ export function ListRow({
   swipe?: ListRowSwipe | undefined;
 }): React.JSX.Element {
   const swiped = useRowSwipe(swipe?.label, swipe?.onAct ?? NO_ACT);
+  // The press hands the row's ref its element, and the link menu the address it opens.
+  const linkAddress = useLinkAddress(linkHref);
+  const pressRef = useCallback(
+    (element: HTMLButtonElement | null) => {
+      ref?.(element);
+      linkAddress(element);
+    },
+    [ref, linkAddress],
+  );
   const [titleMeasured, titleClipped] = useClipped(plainWords(title));
   useEffect(() => {
     onTitleClipped?.(titleClipped);
@@ -434,7 +447,7 @@ export function ListRow({
   );
   const press = onPress ? (
     <button
-      ref={ref}
+      ref={pressRef}
       type="button"
       className="luke-list-row-main"
       aria-current={current}

@@ -160,3 +160,20 @@ test("in a side panel of any width the header and its row of tabs span the panel
     }
   }
 }, 30_000);
+
+test("a branch chip too narrow even for its name's kept end gives that end way from its start, so its last characters stand", () => {
+  laid?.remove();
+  laid = layContainersAt({ "pull-request-header": 312 });
+  document.body.innerHTML = [
+    '<span class="luke-chip-name" data-mono="true" data-cut="middle">',
+    '<span class="luke-chip-name-start">luke/pull-request-header-menu-</span>',
+    '<span class="luke-chip-name-end">and-pill</span></span>',
+  ].join("");
+  const end = getComputedStyle(
+    document.querySelector(".luke-chip-name-end") ?? assert.fail("the kept end stands"),
+  );
+  assert.deepEqual(
+    { overflow: end.overflow, justify: end.justifyContent, max: end.maxWidth },
+    { overflow: "hidden", justify: "flex-end", max: "100%" },
+  );
+}, 30_000);

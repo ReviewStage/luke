@@ -7,6 +7,13 @@
         "anthropic",
         "openai"
       ]
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "api_key",
+        "claude_setup_token"
+      ]
     }
   },
   "required": [

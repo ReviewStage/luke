@@ -21,6 +21,7 @@ import {
   agentWorkspace as workspaceOfAgent,
 } from "../../github/workspace-repository.js";
 import type { StoreFailure } from "../../http/store-failure.js";
+import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
 import {
   type CheckoutIdentity,
   cloneRepository,
@@ -78,6 +79,9 @@ import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * checked out as a turn ends is the one its pull request is on, whatever
  * branches it cut, switched, or deleted on the way, and the session's
  * turn-end hook writes it on the agent's row through the host.
+ *
+ * An agent with no repository has none of this: no clone, no token, and no
+ * identity, only an empty working folder where the checkout would stand.
  */
 
 /** Why the checkout or a mint ran nothing, in the host's own words. */
@@ -325,6 +329,31 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
     return { token: minted.token, fullName: minted.fullName, access: minted.access };
   },
 );
+
+/** The command that makes the working folder where a checkout would stand; one already there is left as it is. */
+const MAKE_WORKING_FOLDER = `mkdir -p ${CODER.CHECKOUT_PATH}`;
+
+/**
+ * The empty folder an agent with no repository works in, made where a
+ * checkout would stand, so its shell and its file reads start there as an
+ * agent's with a repository do (`shell.ts`, `files.ts`); refused where the
+ * sandbox is gone or the folder could not be made. Nothing is cloned and no
+ * credential is set at the firewall.
+ */
+export const openWorkingFolder = /* @__PURE__ */ Effect.fn("web/openWorkingFolder")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<void, CheckoutRefused> {
+  const made = yield* runInSandbox(
+    sandbox,
+    { command: MAKE_WORKING_FOLDER, workingDirectory: REPOSITORY_SANDBOX_CONTRACT.PATH.WORKSPACE },
+    REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
+  ).pipe(Effect.mapError((refused) => new CheckoutRefused({ reason: refused.reason })));
+  if (made.exitCode !== 0) {
+    return yield* new CheckoutRefused({
+      reason: `\`${MAKE_WORKING_FOLDER}\` exited ${made.exitCode}`,
+    });
+  }
+});
 
 /**
  * The branch checked out in the agent's sandbox now, or null where the

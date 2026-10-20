@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useLinkAddress } from "../menu/link-address.js";
 import { ClippedLine, ONE_LINE_ELEMENT, ONE_LINE_END } from "../one-line/clipped-line.js";
 
 /**
@@ -126,6 +127,7 @@ export function HoverCardRow({
   label,
   end,
   onPress,
+  linkHref,
 }: {
   look?: HoverCardRowLook;
   glyph: ReactNode;
@@ -134,7 +136,10 @@ export function HoverCardRow({
   end?: ReactNode;
   /** Opens what the row names; a row without it is text. */
   onPress?: (() => void) | undefined;
+  /** The address its press opens, where it opens one, which a right-click offers as a link's (`useLinkAddress`). */
+  linkHref?: string | undefined;
 }): React.JSX.Element {
+  const linkAddress = useLinkAddress(linkHref);
   const row = (
     <>
       <span className="luke-hover-card-row-glyph">{glyph}</span>
@@ -153,7 +158,13 @@ export function HoverCardRow({
       {row}
     </span>
   ) : (
-    <button type="button" className="luke-hover-card-row" data-look={look} onClick={onPress}>
+    <button
+      type="button"
+      className="luke-hover-card-row"
+      data-look={look}
+      ref={linkAddress}
+      onClick={onPress}
+    >
       {row}
     </button>
   );

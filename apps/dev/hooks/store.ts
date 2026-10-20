@@ -132,7 +132,7 @@ async function withdrawCredential(ctx: HookContext): Promise<void> {
   );
 }
 
-/** A fresh credential set at the firewall, in place of the aged or lapsed one; a renewal that fails is logged and the next step tries again. */
+/** A fresh credential set at the firewall, in place of the aged or lapsed one; a renewal that fails is logged and the next step tries again, and an agent with no repository mints none and sets nothing. */
 async function renewCredential(
   ctx: HookContext,
   record: ReturnType<typeof pinnedState<SandboxRecord>>,

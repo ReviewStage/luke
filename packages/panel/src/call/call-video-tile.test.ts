@@ -158,7 +158,9 @@ test("the avatar's voice is let go of once its track is", () => {
   assert.equal(playing(audio), undefined);
 });
 
-test("Video off over the tile is a round button, so no square fill stands inside its round ground", () => {
-  const { container } = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO }));
-  assert.equal(button(container, CALL_VIDEO_LABEL.VIDEO_OFF)?.dataset.shape, BUTTON_SHAPE.ROUND);
+test("the video toggle is round whichever way it flips, as the call's own controls are", () => {
+  const live = mountRoot(tile({ status: AVATAR_STATUS.LIVE, video: VIDEO })).container;
+  assert.equal(button(live, CALL_VIDEO_LABEL.VIDEO_OFF)?.dataset.shape, BUTTON_SHAPE.ROUND);
+  const off = mountRoot(tile({ status: AVATAR_STATUS.OFF })).container;
+  assert.equal(button(off, CALL_VIDEO_LABEL.VIDEO_ON)?.dataset.shape, BUTTON_SHAPE.ROUND);
 });

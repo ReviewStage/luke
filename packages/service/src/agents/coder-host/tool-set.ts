@@ -118,6 +118,27 @@ export function taskToolsOf(agent: Pick<CodingAgent, "taskId">): ReadonlySet<Tas
   return new Set([CODER_TOOL.EDIT_PLAN, CODER_TOOL.SHOW_PAGE, ...COMMENT_TASK_TOOLS]);
 }
 
+/** The tools only an agent working in a repository is offered: the pull request the service opens for it, and the two that write into its checkout. */
+export type RepositoryTool =
+  | typeof CODER_TOOL.OPEN_PULL_REQUEST
+  | typeof CODER_TOOL.WRITE_FILE
+  | typeof CODER_TOOL.APPLY_PATCH;
+
+/**
+ * The repository's tools an agent is offered: all of them for one working
+ * in a repository, and none for one with no repository, whose sandbox holds
+ * no checkout to write into and which has no branch to open a pull request
+ * from. Note that its shell and its reads stay, in the empty working folder
+ * its sandbox opens with (`checkout.ts`'s `openWorkingFolder`), and that the
+ * instructions leave out the same words (`instructions.ts`).
+ */
+export function repositoryToolsOf(
+  agent: Pick<CodingAgent, "repository">,
+): ReadonlySet<RepositoryTool> {
+  if (agent.repository === null) return new Set();
+  return new Set([CODER_TOOL.OPEN_PULL_REQUEST, CODER_TOOL.WRITE_FILE, CODER_TOOL.APPLY_PATCH]);
+}
+
 /**
  * The tools a coding agent's transcript may name that no agent is offered
  * now: eve's provider-run web reads, which coding agents ran before they had

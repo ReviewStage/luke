@@ -17,6 +17,10 @@ export const FAILURE_REASON = {
   CHOOSE_REPOSITORY: "choose-repository",
   /** The repository's owner is connected to another workspace of the account's: the task moves there. */
   MOVE_TASK: "move-plan",
+  /** GitHub refused the member's own token: Settings › Profile replaces it. */
+  GITHUB_TOKEN: "github-token",
+  /** The member's own token is not authorized for an organization's SAML SSO: GitHub's own page authorizes it. */
+  AUTHORIZE_TOKEN: "authorize-token",
   OTHER: "other",
 } as const;
 
@@ -55,7 +59,18 @@ export type Failure =
       readonly workspace: { readonly id: string; readonly name: string };
     }
   | {
-      readonly reason: typeof FAILURE_REASON.API_KEY | typeof FAILURE_REASON.OTHER;
+      readonly reason: typeof FAILURE_REASON.AUTHORIZE_TOKEN;
+      readonly text: string;
+      /** The organization whose SAML SSO the token is authorized for, which the press names. */
+      readonly organization: string;
+      /** GitHub's page that authorizes the token, from its `X-GitHub-SSO` header. */
+      readonly authorizeUrl: string;
+    }
+  | {
+      readonly reason:
+        | typeof FAILURE_REASON.API_KEY
+        | typeof FAILURE_REASON.GITHUB_TOKEN
+        | typeof FAILURE_REASON.OTHER;
       readonly text: string;
     };
 
@@ -76,6 +91,10 @@ export function remedyLabel(failure: Failure): string | undefined {
       return "Choose a repository";
     case FAILURE_REASON.MOVE_TASK:
       return `Move task to ${failure.workspace.name}`;
+    case FAILURE_REASON.GITHUB_TOKEN:
+      return "Update GitHub token";
+    case FAILURE_REASON.AUTHORIZE_TOKEN:
+      return `Authorize token for ${failure.organization}`;
     case FAILURE_REASON.OTHER:
       return undefined;
   }
@@ -90,6 +109,8 @@ export function retriesBesideRemedy(failure: Failure): boolean {
   return (
     failure.reason === FAILURE_REASON.CONNECT_GITHUB ||
     failure.reason === FAILURE_REASON.RECONNECT_GITHUB ||
-    failure.reason === FAILURE_REASON.ADD_REPOSITORY
+    failure.reason === FAILURE_REASON.ADD_REPOSITORY ||
+    failure.reason === FAILURE_REASON.GITHUB_TOKEN ||
+    failure.reason === FAILURE_REASON.AUTHORIZE_TOKEN
   );
 }

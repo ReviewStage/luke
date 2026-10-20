@@ -194,8 +194,10 @@ export interface InboxAgent {
 
 /** Why a post was not written. */
 export const INBOX_POST_REFUSAL = {
-  /** The agent holds as many open items as it may; it closes one first. */
+  /** The agent holds as many open asks as it may; it closes one first. */
   TOO_MANY_OPEN: "too-many-open",
+  /** The agent holds as many notices the developer has yet to acknowledge as it may. */
+  TOO_MANY_NOTICES: "too-many-notices",
   /** The agent is no longer the account's. */
   NO_AGENT: "no-agent",
   /** The post names no title and opens a thread under a key with no item, which needs one. */
@@ -324,6 +326,16 @@ function messagesOf(source: SQL): SQL<unknown> {
 
 /** Whether the item is settled: answered, or closed by its agent. */
 const SETTLED = sql`${inboxItem.status} <> ${INBOX_STATUS.OPEN}`;
+
+/**
+ * Whether the item is a notice: a post that asked nothing, which waits on
+ * the developer's nod alone while it stands open and holds no ask, so it
+ * takes no place among the agent's open asks and no withdrawal finds it.
+ */
+const NOTICE = sql`${inboxItem.response} ->> 'type' = ${INBOX_RESPONSE.NONE}`;
+
+/** Whether the item holds an ask open: open, and no notice. */
+const ASKING = sql<boolean>`(${inboxItem.status} = ${INBOX_STATUS.OPEN} and not (${NOTICE}))`;
 
 const ITEM_TABLE = sql.identifier(getTableName(inboxItem));
 const ITEM_UPDATED_AT = sql`${ITEM_TABLE}.${sql.identifier(inboxItem.updatedAt.name)}`;
@@ -615,7 +627,7 @@ const lockAgent = SqlSchema.findOneOption({
     ),
 });
 
-/** How many items the agent holds open under a key other than the one given. */
+/** How many asks the agent holds open under a key other than the one given; a notice holds none. */
 const countOpenBesides = SqlSchema.findOne({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
   Result: Schema.Struct({ open: Schema.Number }),
@@ -628,7 +640,28 @@ const countOpenBesides = SqlSchema.findOne({
           and(
             eq(inboxItem.userId, userId),
             eq(inboxItem.agentId, agentId),
+            ASKING,
+            ne(inboxItem.key, key),
+          ),
+        ),
+    ),
+});
+
+/** How many notices the agent holds open, waiting on the developer's nod, under a key other than the one given. */
+const countNoticesBesides = SqlSchema.findOne({
+  Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
+  Result: Schema.Struct({ open: Schema.Number }),
+  execute: ({ userId, agentId, key }) =>
+    Database.use((db) =>
+      db
+        .select({ open: sql<number>`count(*)::int` })
+        .from(inboxItem)
+        .where(
+          and(
+            eq(inboxItem.userId, userId),
+            eq(inboxItem.agentId, agentId),
             eq(inboxItem.status, INBOX_STATUS.OPEN),
+            NOTICE,
             ne(inboxItem.key, key),
           ),
         ),
@@ -993,7 +1026,7 @@ const upsertItem = SqlSchema.findOne({
   },
 });
 
-/** The agent's open item under the key closed with why, its revision moved on and no ask held open; its id, or nothing where the agent has no open item under it. */
+/** The agent's item under the key that holds an ask open closed with why, its revision moved on and no ask held open; its id, or nothing where the agent has no such item under it, a notice among them. */
 const closeItem = SqlSchema.findOneOption({
   Request: Schema.Struct({
     ...AgentKeySchema.fields,
@@ -1020,7 +1053,7 @@ const closeItem = SqlSchema.findOneOption({
             eq(inboxItem.userId, userId),
             eq(inboxItem.agentId, agentId),
             eq(inboxItem.key, key),
-            eq(inboxItem.status, INBOX_STATUS.OPEN),
+            ASKING,
           ),
         )
         .returning({ id: inboxItem.id }),
@@ -1690,6 +1723,45 @@ const answerItem = SqlSchema.findOneOption({
     ),
 });
 
+/**
+ * The notice settled by a member's message on its thread, as their Got it
+ * settles it: answered with the nod under the message's own key, so a
+ * hand-off that fails takes both back (`withdrawInboxMessage`); nothing
+ * where the item is no open notice at the revision the member was shown,
+ * so a reply to what came before never settles a notice posted since.
+ */
+const acknowledgeNotice = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    itemId: Schema.String,
+    revision: Schema.Number,
+    answerKey: Schema.String,
+    now: Schema.Date,
+  }),
+  execute: ({ userId, itemId, revision, answerKey, now }) =>
+    Database.use((db) =>
+      db
+        .update(inboxItem)
+        .set({
+          status: INBOX_STATUS.ANSWERED,
+          answer: { reply: INBOX_REPLY.ACKNOWLEDGED },
+          answerKey,
+          answeredBy: userId,
+          settledAt: now,
+          updatedAt: now,
+          openAskMessageId: null,
+        })
+        .where(
+          and(
+            eq(inboxItem.id, itemId),
+            eq(inboxItem.revision, revision),
+            eq(inboxItem.status, INBOX_STATUS.OPEN),
+            NOTICE,
+          ),
+        ),
+    ),
+});
+
 /** The item as the reader named reads it, by its id alone, where the caller has just written it, so a missing row is a broken contract. */
 function itemAsWritten(readerId: string, itemId: string): InboxStoreEffect<InboxItem> {
   return findItemOf({ readerId, itemId }).pipe(
@@ -1956,19 +2028,20 @@ function picturesByPath(pictures: readonly InboxBodyPicture[]): PicturesByPath {
 
 /**
  * The columns a post writes on the item. An ask opens the item, the view
- * standing for it; a post that asks nothing waits on nobody, so the item
- * stands to a desktop before version 5 as a note already settled, with no
+ * standing for it; a post that asks nothing opens it as a notice, waiting
+ * on the developer's nod alone, which the agent never hears, so a desktop
+ * before version 5 draws it as a note to answer with Got it, with no
  * blocks, since its message, which such a desktop draws, carries its words.
  */
-function postColumns(view: PostView, ask: InboxAsk | undefined, now: Date) {
+function postColumns(view: PostView, ask: InboxAsk | undefined) {
   if (ask !== undefined) return { ...view, status: INBOX_STATUS.OPEN, settledAt: null };
   return {
     title: view.title,
     blocks: [],
     response: { type: INBOX_RESPONSE.NONE },
     needsReply: false,
-    status: INBOX_STATUS.ANSWERED,
-    settledAt: now,
+    status: INBOX_STATUS.OPEN,
+    settledAt: null,
   } as const;
 }
 
@@ -1992,7 +2065,7 @@ function keepPost(
       ...agent,
       organizationId,
       key: post.key,
-      ...postColumns(post.view, post.ask, now),
+      ...postColumns(post.view, post.ask),
       now,
     }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));
     const ask = post.ask === undefined ? null : { ...post.ask, status: INBOX_ASK_STATUS.OPEN };
@@ -2033,13 +2106,37 @@ function keepPost(
   });
 }
 
-/** The agent's open items besides the key's against the bound: whether one more may stand open. */
+/** The agent's open asks besides the key's against the bound: whether one more may stand open. */
 function roomToAsk(agent: InboxAgent, key: string): InboxStoreEffect<boolean> {
   return countOpenBesides({ ...agent, key }).pipe(
     // A count that returned no row is the database breaking its own contract, not an outcome.
     Effect.catchTag("NoSuchElementError", Effect.die),
     Effect.map(({ open }) => open < INBOX_BOUNDS.MAX_OPEN_PER_AGENT),
   );
+}
+
+/** The agent's open notices besides the key's against the same bound: whether one more may wait on the developer's nod. */
+function roomToNotify(agent: InboxAgent, key: string): InboxStoreEffect<boolean> {
+  return countNoticesBesides({ ...agent, key }).pipe(
+    // A count that returned no row is the database breaking its own contract, not an outcome.
+    Effect.catchTag("NoSuchElementError", Effect.die),
+    Effect.map(({ open }) => open < INBOX_BOUNDS.MAX_OPEN_PER_AGENT),
+  );
+}
+
+/** Whether the post finds room under its bound: an ask among the open asks, a notice among the open notices. */
+function roomToPost(
+  agent: InboxAgent,
+  key: string,
+  ask: InboxAsk | undefined,
+): InboxStoreEffect<Result.Result<void, InboxPostRefusal>> {
+  return ask === undefined
+    ? Effect.map(roomToNotify(agent, key), (room) =>
+        room ? Result.void : Result.fail(INBOX_POST_REFUSAL.TOO_MANY_NOTICES),
+      )
+    : Effect.map(roomToAsk(agent, key), (room) =>
+        room ? Result.void : Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN),
+      );
 }
 
 /** A file's own name from the path the agent named it by in its sandbox. */
@@ -2052,8 +2149,9 @@ function fileName(path: string): string {
  * item under its key, or the one standing under it written again, as
  * `keepPost` writes one. The message's words are the blocks in order, and
  * its ask is the one the response stands for; an acknowledgement asks
- * nothing, so its item waits on nobody. Refused where the agent would hold
- * more open items than the bound, or is no longer the account's. The
+ * nothing, so its item is a notice, which holds no ask. Refused where the
+ * agent would hold more open asks, or more open notices, than the bound, or
+ * is no longer the account's. The
  * pictures are the post's image blocks' bytes in the blocks' own order, one
  * each, read by the caller; each is kept as a file of the post's message
  * under an id minted here, which its block names. Note that the post's own
@@ -2070,10 +2168,9 @@ export function postInboxItem(
         const locked = yield* lockAgent(agent);
         if (Option.isNone(locked)) return Result.fail(INBOX_POST_REFUSAL.NO_AGENT);
         const ask = inboxResponseAsk(post.response);
-        // A post that asks nothing waits on nobody, so it takes no place among the open items.
-        if (ask !== undefined && !(yield* roomToAsk(agent, post.key))) {
-          return Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN);
-        }
+        // A post that asks nothing is a notice, which takes its place among the open notices rather than the open asks.
+        const room = yield* roomToPost(agent, post.key, ask);
+        if (Result.isFailure(room)) return Result.fail(room.failure);
         const now = yield* DateTime.nowAsDate;
         const posted = post.blocks ?? [];
         const names = posted.flatMap((block) =>
@@ -2145,10 +2242,12 @@ function followUp(
  * written as `keepPost` writes one, its view the words as blocks, each
  * picture standing alone on its line an image block, and the response
  * nearest its ask; it is refused where the agent would hold more open
- * items than the bound. A post that asks nothing is a message on the
- * thread of the item standing under its key, as the agent's reply is,
- * which moves nothing of the item but its last change; under a key with
- * no item it opens a thread that waits on nobody. A post naming no title
+ * asks than the bound, and a notice where it would hold more open notices
+ * than the same bound. A post that asks nothing on a thread whose ask
+ * still stands open is a message on it, as the agent's reply is, which
+ * moves nothing of the item but its last change; on any other thread, or
+ * under a key with no item, it is written as `keepPost` writes one, the
+ * item a notice waiting on the developer's nod again. A post naming no title
  * keeps the standing item's, read under the same lock; refused where no
  * item stands under the key, which a first post opens and must name. Refused
  * where the agent is no longer the account's.
@@ -2164,16 +2263,15 @@ export function postInboxThread(
         const locked = yield* lockAgent(agent);
         if (Option.isNone(locked)) return Result.fail(INBOX_POST_REFUSAL.NO_AGENT);
         const standing = yield* findAgentItem({ ...agent, key: post.key });
-        if (post.ask === undefined && Option.isSome(standing)) {
+        if (post.ask === undefined && Option.isSome(standing) && standing.value.asking) {
           return Result.succeed(
             yield* followUp(agent, locked.value, standing.value.id, post, pictures),
           );
         }
         const title = post.title ?? Option.getOrUndefined(standing)?.title;
         if (title === undefined) return Result.fail(INBOX_POST_REFUSAL.NO_TITLE);
-        if (post.ask !== undefined && !(yield* roomToAsk(agent, post.key))) {
-          return Result.fail(INBOX_POST_REFUSAL.TOO_MANY_OPEN);
-        }
+        const room = yield* roomToPost(agent, post.key, post.ask);
+        if (Result.isFailure(room)) return Result.fail(room.failure);
         const now = yield* DateTime.nowAsDate;
         const { kept, idOf } = yield* Effect.sync(() => picturesByPath(pictures));
         const view = {
@@ -2902,6 +3000,8 @@ type InboxMessageWriter =
       readonly author: typeof INBOX_MESSAGE_AUTHOR.MEMBER;
       readonly userId: string;
       readonly clientKey: string;
+      /** The revision of the notice the member was shown, which their message settles; absent where it settles none. */
+      readonly revision?: number | undefined;
     }
   | { readonly author: typeof INBOX_MESSAGE_AUTHOR.AGENT };
 
@@ -3005,7 +3105,8 @@ function sameMessage(
  * The message written on the item's thread, the item standing open or
  * settled, with the files it carried in the order given, and the item's
  * last change moved to now, all in one write: the item's status, answer,
- * and revision are left as they stand. A member's message sent again under
+ * and revision are left as they stand, but that a member's message naming
+ * the revision of the notice it answers settles it as their nod does. A member's message sent again under
  * its key is the one already written, which writes nothing and moves
  * nothing; another message under a key already taken, by another member or
  * with other words or files, is refused as the key reused, so the thread
@@ -3050,8 +3151,15 @@ function writeInboxMessage(
             }),
           );
           yield* touchItem({ itemId, now });
-          // A member's own message leaves the item read for them, and unread for every other member.
-          if (member !== undefined) yield* upsertRead({ userId: member.userId, itemId });
+          if (member !== undefined) {
+            // A member's own message leaves the item read for them, and unread for every other member.
+            yield* upsertRead({ userId: member.userId, itemId });
+            // Their words on the notice they were shown are their nod to it, as Got it is.
+            const { userId, clientKey: answerKey, revision } = member;
+            if (revision !== undefined) {
+              yield* acknowledgeNotice({ userId, itemId, revision, answerKey, now });
+            }
+          }
         }
         const outcome = Option.isSome(written)
           ? INBOX_MESSAGE_OUTCOME.WRITTEN
@@ -3090,15 +3198,18 @@ export function postInboxMessage(
     readonly text: string;
     readonly clientKey: string;
     readonly files?: readonly CodingAgentAttachment[] | undefined;
+    /** The revision of the notice the member was shown, which the message settles where it still stands there. */
+    readonly revision?: number | undefined;
   },
 ): InboxStoreEffect<Option.Option<InboxMessageWritten>> {
+  const { clientKey, revision } = message;
   return Effect.flatMap(findItem({ userId, itemId }), (found) =>
     Option.isNone(found)
       ? Effect.succeed(Option.none())
       : writeInboxMessage(
           userId,
           itemId,
-          { author: INBOX_MESSAGE_AUTHOR.MEMBER, userId, clientKey: message.clientKey },
+          { author: INBOX_MESSAGE_AUTHOR.MEMBER, userId, clientKey, revision },
           message.text,
           (message.files ?? []).map((file) => ({
             name: file.name,
@@ -3109,14 +3220,14 @@ export function postInboxMessage(
   );
 }
 
-/** The agent's own item under the key, as its tools name one, where the member who started the agent is still a member of the item's workspace. */
+/** The agent's own item under the key, as its tools name one, and whether it holds an ask open, where the member who started the agent is still a member of the item's workspace. */
 const findAgentItem = SqlSchema.findOneOption({
   Request: Schema.Struct({ ...AgentKeySchema.fields, key: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, title: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, title: Schema.String, asking: Schema.Boolean }),
   execute: ({ userId, agentId, key }) =>
     Database.use((db) =>
       db
-        .select({ id: inboxItem.id, title: inboxItem.title })
+        .select({ id: inboxItem.id, title: inboxItem.title, asking: ASKING })
         .from(inboxItem)
         .where(
           and(
@@ -3163,15 +3274,23 @@ export function replyInboxItem(
  * thread, its files with it, where the account still reaches the item: what
  * a hand-off to the agent that failed leaves, so the thread never shows a
  * message the agent was not told. The item's last change stays where the
- * message moved it.
+ * message moved it, and a notice the message settled waits on the
+ * developer's nod again.
  */
 export function withdrawInboxMessage(
   userId: string,
   itemId: string,
   clientKey: string,
 ): InboxStoreEffect<void> {
-  return Effect.flatMap(findItem({ userId, itemId }), (found) =>
-    Option.isNone(found) ? Effect.void : deleteMessage({ itemId, clientKey }),
+  const withdrawn = Effect.gen(function* () {
+    const now = yield* DateTime.nowAsDate;
+    yield* withdrawAnswer({ userId, itemId, answerKey: clientKey, openAsk: null, now });
+    yield* deleteMessage({ itemId, clientKey });
+  });
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    Effect.flatMap(findItem({ userId, itemId }), (found) =>
+      Option.isNone(found) ? Effect.void : client.withTransaction(withdrawn),
+    ),
   );
 }
 

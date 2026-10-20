@@ -1,5 +1,5 @@
 /**
- * provider-keys-procedures.ts -- the account's own Anthropic and OpenAI API keys: read what they are, save one, remove one.
+ * provider-keys-procedures.ts -- the account's own Anthropic and OpenAI API keys and subscription credentials: read what they are, save one, remove one.
  *
  * `GET /api/account/provider-keys` answers the account's keys as hints and
  * statuses; `PUT` saves one, first asking the provider whether it accepts
@@ -9,6 +9,16 @@
  * stand and none carries a key: the one body that holds a key is the
  * `PUT`'s own, it is sealed the moment it is read, and neither it nor what
  * the provider said of it is logged.
+ *
+ * A request may name a kind (`provider-key-wire.ts`'s `PROVIDER_KEY_KIND`);
+ * one that names none is an API key's, as every desktop before kinds sends.
+ * A subscription credential, a Claude setup-token, is braked and sealed as
+ * a key is but never sent to its provider: it is kept unverified, and a
+ * credential spelled as no credential of its kind is refused as invalid.
+ * Until a provider's API key and subscription may stand side by side, a
+ * save of one kind where the provider holds the other is refused and
+ * replaces nothing. The answer's `keys` are API keys alone, and the
+ * subscriptions stand apart beside them.
  *
  * A key that the deployment's ring can no longer open answers unreadable
  * rather than as its stored status, so the account is told to replace it.
@@ -37,11 +47,16 @@ import {
   saveProviderKey,
 } from "@luke/database/models/provider-key-store";
 import {
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_REJECTION,
   PROVIDER_KEY_STATUS,
+  type ProviderKeyKind,
+  type ProviderKeyProvider,
   type ProviderKeyRejection,
   type ProviderKeySummary,
+  SUBSCRIPTION_KIND_PROVIDER,
+  type SubscriptionKeySummary,
 } from "@luke/features/provider-key-wire";
 import { middlewareGen } from "@orpc/experimental-effect";
 import { DateTime, Duration, Effect, Redacted, Result } from "effect";
@@ -86,12 +101,24 @@ const keyRingMiddleware = middlewareGen<HostedContext, { readonly ring: KeyRing 
   return yield* next({ context: { ring: ring.success } });
 });
 
-/** The account's keys as it is shown them, each one the ring cannot open answered unreadable. */
-const summariesOf = /* @__PURE__ */ Effect.fnUntraced(function* (userId: string, ring: KeyRing) {
-  const rows = yield* hostedStoreOrUnavailable(listProviderKeyRows(userId));
+/** The kinds a subscription credential is, every kind but the API key. */
+const SUBSCRIPTION_KINDS = Object.values(PROVIDER_KEY_KIND).filter(
+  (kind) => kind !== PROVIDER_KEY_KIND.API_KEY,
+);
+
+/** Every Claude setup-token's own prefix, an OAuth token's, which no API key carries. */
+const CLAUDE_SETUP_TOKEN_PREFIX = "sk-ant-oat";
+
+/** The account's credentials of one kind as it is shown them, each one the ring cannot open answered unreadable. */
+const summariesOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  kind: ProviderKeyKind,
+  ring: KeyRing,
+) {
+  const rows = yield* hostedStoreOrUnavailable(listProviderKeyRows(userId, kind));
   return rows.map((row): ProviderKeySummary => {
     const readable = Result.isSuccess(
-      openProviderKey(ring, { userId, provider: row.provider }, row),
+      openProviderKey(ring, { userId, provider: row.provider, kind }, row),
     );
     return {
       provider: row.provider,
@@ -108,9 +135,46 @@ const keysAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   ring: KeyRing,
   rejected?: ProviderKeyRejection,
 ) {
-  const keys = yield* summariesOf(userId, ring);
-  return { keys, ...(rejected === undefined ? undefined : { rejected }) };
+  const keys = yield* summariesOf(userId, PROVIDER_KEY_KIND.API_KEY, ring);
+  const subscriptions: SubscriptionKeySummary[] = [];
+  for (const kind of SUBSCRIPTION_KINDS) {
+    for (const summary of yield* summariesOf(userId, kind, ring)) {
+      subscriptions.push({ ...summary, kind });
+    }
+  }
+  return {
+    keys,
+    ...(subscriptions.length === 0 ? undefined : { subscriptions }),
+    ...(rejected === undefined ? undefined : { rejected }),
+  };
 });
+
+/** Whether the account holds a subscription credential of any kind for the provider. */
+const subscriptionHeld = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  provider: ProviderKeyProvider,
+) {
+  for (const kind of SUBSCRIPTION_KINDS) {
+    const rows = yield* hostedStoreOrUnavailable(listProviderKeyRows(userId, kind));
+    if (rows.some((row) => row.provider === provider)) return true;
+  }
+  return false;
+});
+
+/** Whether a subscription credential is saved for the provider its kind belongs to and spelled as one of its kind; nothing is asked of the provider. */
+function subscriptionShapeOf(
+  provider: ProviderKeyProvider,
+  kind: Exclude<ProviderKeyKind, typeof PROVIDER_KEY_KIND.API_KEY>,
+  key: Redacted.Redacted<string>,
+): ProviderKeyRejection | undefined {
+  if (SUBSCRIPTION_KIND_PROVIDER[kind] !== provider) return PROVIDER_KEY_REJECTION.WRONG_PROVIDER;
+  switch (kind) {
+    case PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN:
+      return Redacted.value(key).startsWith(CLAUDE_SETUP_TOKEN_PREFIX)
+        ? undefined
+        : PROVIDER_KEY_REJECTION.INVALID;
+  }
+}
 
 /** The provider keys' three procedures, braked per instance, each to a signed-in caller on a deployment that holds a ring. */
 export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
@@ -126,9 +190,26 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
       const { userId, ring } = context;
       // Note that a refusal's wording is never logged or answered, because it may quote the key.
       const { provider } = input;
+      const kind = input.kind ?? PROVIDER_KEY_KIND.API_KEY;
       const key = Redacted.make(input.key);
       if (!(yield* brake.check(userId))) {
         return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.TOO_MANY_TRIES);
+      }
+      if (kind !== PROVIDER_KEY_KIND.API_KEY) {
+        const refused = subscriptionShapeOf(provider, kind, key);
+        if (refused !== undefined) return yield* keysAnswer(userId, ring, refused);
+        const now = yield* DateTime.nowAsDate;
+        const sealed = sealProviderKey(ring, { userId, provider, kind }, key);
+        const kept = yield* hostedStoreOrUnavailable(
+          saveProviderKey(userId, provider, kind, sealed, providerKeyHint(key), null, now),
+        );
+        return kept
+          ? yield* keysAnswer(userId, ring)
+          : yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
+      }
+      // A key the store would refuse beside a subscription is refused before the provider is asked, so the checks bill nothing for it; the save's own condition still guards a subscription saved meanwhile.
+      if (yield* subscriptionHeld(userId, provider)) {
+        return yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
       }
       // An Anthropic key is asked about fast mode beside the check, which the catalog offers by; OpenAI has none Luke runs.
       const [checked, fastAccess] = yield* Effect.all(
@@ -141,17 +222,30 @@ export function providerKeysProcedures(seams: ProviderKeysProcedureSeams) {
         { concurrency: "unbounded" },
       );
       if (checked !== PROVIDER_KEY_CHECK.ACCEPTED) return yield* keysAnswer(userId, ring, checked);
-      const sealed = sealProviderKey(ring, { userId, provider }, key);
+      const sealed = sealProviderKey(ring, { userId, provider, kind }, key);
       const now = yield* DateTime.nowAsDate;
-      yield* hostedStoreOrUnavailable(
-        saveProviderKey(userId, provider, sealed, providerKeyHint(key), fastAccess ?? null, now),
+      const kept = yield* hostedStoreOrUnavailable(
+        saveProviderKey(
+          userId,
+          provider,
+          kind,
+          sealed,
+          providerKeyHint(key),
+          fastAccess ?? null,
+          now,
+        ),
       );
-      return yield* keysAnswer(userId, ring);
+      return kept
+        ? yield* keysAnswer(userId, ring)
+        : yield* keysAnswer(userId, ring, PROVIDER_KEY_REJECTION.OTHER_KIND_HELD);
     }),
 
-    /** One provider's key removed, by the provider the query names. */
+    /** One provider's credential removed, by the provider and the kind the query names; an API key where it names none. */
     removeProviderKey: keyed.removeProviderKey.effect(function* ({ context, input }) {
-      yield* hostedStoreOrUnavailable(removeProviderKey(context.userId, input.query.provider));
+      const kind = input.query.kind ?? PROVIDER_KEY_KIND.API_KEY;
+      yield* hostedStoreOrUnavailable(
+        removeProviderKey(context.userId, input.query.provider, kind),
+      );
       return yield* keysAnswer(context.userId, context.ring);
     }),
   };

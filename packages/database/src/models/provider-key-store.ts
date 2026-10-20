@@ -1,8 +1,10 @@
 import {
   FAST_ACCESS,
   type FastAccess,
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
+  type ProviderKeyKind,
   type ProviderKeyProvider,
   type ProviderKeyStatus,
 } from "@luke/features/provider-key-wire";
@@ -25,7 +27,11 @@ import type { TaskStoreEffect } from "./task-store.js";
  * environment holds. A save replaces the provider's row whole, as a new
  * key added now and verified now, since a key is saved only once its
  * provider accepted it, with whether its organization may run fast mode as
- * the save's own fast request found it. A status is written against the sealed key a step
+ * the save's own fast request found it. A subscription credential is a row
+ * of its own kind, saved unverified, since no provider is asked about it
+ * before an agent runs on it. Until the primary key moves onto the kind, a
+ * provider holds one row of either kind, and a save never replaces a row of
+ * the other kind. A status is written against the sealed key a step
  * ran on, so a step on a key since replaced marks nothing of its successor.
  */
 
@@ -33,8 +39,11 @@ const ProviderSchema = Schema.Literals(Object.values(PROVIDER_KEY_PROVIDER));
 
 const FastAccessSchema = Schema.Literals(Object.values(FAST_ACCESS));
 
+const KindSchema = Schema.Literals(Object.values(PROVIDER_KEY_KIND));
+
 const SealedRowSchema = Schema.Struct({
   provider: ProviderSchema,
+  kind: KindSchema,
   keyVersion: Schema.Int,
   sealedDataKey: Schema.String,
   sealedKey: Schema.String,
@@ -55,8 +64,11 @@ export type OwnedProviderKeyRow = typeof OwnedRowSchema.Type;
 
 const KeySchema = Schema.Struct({ userId: Schema.String, provider: ProviderSchema });
 
+const KindKeySchema = Schema.Struct({ ...KeySchema.fields, kind: KindSchema });
+
 const ROW_COLUMNS = {
   provider: accountProviderKey.provider,
+  kind: accountProviderKey.kind,
   keyVersion: accountProviderKey.keyVersion,
   sealedDataKey: accountProviderKey.sealedDataKey,
   sealedKey: accountProviderKey.sealedKey,
@@ -68,14 +80,16 @@ const ROW_COLUMNS = {
 } as const;
 
 const findRows = SqlSchema.findAll({
-  Request: Schema.String,
+  Request: Schema.Struct({ userId: Schema.String, kind: KindSchema }),
   Result: SealedRowSchema,
-  execute: (userId) =>
+  execute: (read) =>
     Database.use((db) =>
       db
         .select(ROW_COLUMNS)
         .from(accountProviderKey)
-        .where(eq(accountProviderKey.userId, userId))
+        .where(
+          and(eq(accountProviderKey.userId, read.userId), eq(accountProviderKey.kind, read.kind)),
+        )
         .orderBy(asc(accountProviderKey.provider)),
     ),
 });
@@ -92,9 +106,10 @@ const findEveryRow = SqlSchema.findAll({
     ),
 });
 
-const upsertRow = SqlSchema.void({
+/** The row written where the provider holds none or one of the same kind; nothing where it holds the other kind. */
+const upsertRow = SqlSchema.findAll({
   Request: Schema.Struct({
-    ...KeySchema.fields,
+    ...KindKeySchema.fields,
     keyVersion: Schema.Int,
     sealedDataKey: Schema.String,
     sealedKey: Schema.String,
@@ -102,13 +117,18 @@ const upsertRow = SqlSchema.void({
     fastAccess: Schema.NullOr(FastAccessSchema),
     now: Schema.Date,
   }),
+  Result: Schema.Struct({ provider: ProviderSchema }),
   execute: (write) => {
     const row = {
       keyVersion: write.keyVersion,
       sealedDataKey: write.sealedDataKey,
       sealedKey: write.sealedKey,
       hint: write.hint,
-      status: PROVIDER_KEY_STATUS.VERIFIED,
+      // An API key is kept only once its provider accepted it; a subscription credential is kept unasked.
+      status:
+        write.kind === PROVIDER_KEY_KIND.API_KEY
+          ? PROVIDER_KEY_STATUS.VERIFIED
+          : PROVIDER_KEY_STATUS.UNVERIFIED,
       statusAt: write.now,
       fastAccess: write.fastAccess,
       createdAt: write.now,
@@ -116,17 +136,19 @@ const upsertRow = SqlSchema.void({
     return Database.use((db) =>
       db
         .insert(accountProviderKey)
-        .values({ userId: write.userId, provider: write.provider, ...row })
+        .values({ userId: write.userId, provider: write.provider, kind: write.kind, ...row })
         .onConflictDoUpdate({
           target: [accountProviderKey.userId, accountProviderKey.provider],
           set: row,
-        }),
+          setWhere: eq(accountProviderKey.kind, write.kind),
+        })
+        .returning({ provider: accountProviderKey.provider }),
     );
   },
 });
 
 const deleteRow = SqlSchema.void({
-  Request: KeySchema,
+  Request: KindKeySchema,
   execute: (key) =>
     Database.use((db) =>
       db
@@ -135,6 +157,7 @@ const deleteRow = SqlSchema.void({
           and(
             eq(accountProviderKey.userId, key.userId),
             eq(accountProviderKey.provider, key.provider),
+            eq(accountProviderKey.kind, key.kind),
           ),
         ),
     ),
@@ -210,29 +233,43 @@ const rewrapRow = SqlSchema.findAll({
     ),
 });
 
-/** The account's stored keys, sealed, in the providers' order. */
-export function listProviderKeyRows(userId: string): TaskStoreEffect<readonly ProviderKeyRow[]> {
-  return findRows(userId);
+/** The account's stored keys of one kind, sealed, in the providers' order. */
+export function listProviderKeyRows(
+  userId: string,
+  kind: ProviderKeyKind,
+): TaskStoreEffect<readonly ProviderKeyRow[]> {
+  return findRows({ userId, kind });
 }
 
-/** Keeps the provider's key for the account, replacing the one it held, as added and verified now, with its fast access where the save found it. */
+/**
+ * Keeps the provider's credential of this kind for the account, replacing
+ * the one of the kind it held, as added now: an API key verified, a
+ * subscription credential unverified, with its fast access where the save
+ * found it. Answers whether it kept it: not where the provider holds the
+ * other kind, which it leaves as it is.
+ */
 export function saveProviderKey(
   userId: string,
   provider: ProviderKeyProvider,
+  kind: ProviderKeyKind,
   sealed: SealedProviderKey,
   hint: string,
   fastAccess: FastAccess | null,
   now: Date,
-): TaskStoreEffect<void> {
-  return upsertRow({ userId, provider, ...sealed, hint, fastAccess, now });
+): TaskStoreEffect<boolean> {
+  return Effect.map(
+    upsertRow({ userId, provider, kind, ...sealed, hint, fastAccess, now }),
+    (kept) => kept.length > 0,
+  );
 }
 
-/** Removes the provider's key from the account; removing one it does not hold moves nothing. */
+/** Removes the provider's credential of this kind from the account; removing one it does not hold moves nothing. */
 export function removeProviderKey(
   userId: string,
   provider: ProviderKeyProvider,
+  kind: ProviderKeyKind,
 ): TaskStoreEffect<void> {
-  return deleteRow({ userId, provider });
+  return deleteRow({ userId, provider, kind });
 }
 
 /** Writes how the provider last answered the key a step ran on, where the row still holds that key. */

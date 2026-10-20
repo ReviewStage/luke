@@ -16,7 +16,12 @@ import { accountProviderKey } from "@luke/database/schemas/account-provider-key"
 import { user } from "@luke/database/schemas/auth";
 import { githubPersonalToken } from "@luke/database/schemas/github-personal-token";
 import { getTestDB } from "@luke/database/testing";
-import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@luke/features/provider-key-wire";
+import {
+  PROVIDER_KEY_KIND,
+  PROVIDER_KEY_PROVIDER,
+  type ProviderKeyKind,
+  type ProviderKeyProvider,
+} from "@luke/features/provider-key-wire";
 import { Effect, Redacted, Result } from "effect";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
@@ -29,7 +34,8 @@ import {
  * The rotation's rewrap over a real dialect: every stored key wrapped under
  * an older version is moved onto the current one and opens under a ring
  * that no longer holds the old, a key already current or one the ring
- * cannot open is left as it was, and a second pass moves nothing.
+ * cannot open is left as it was, and a second pass moves nothing. A
+ * subscription credential moves as a key does and opens only as its kind.
  *
  * A member's GitHub token, sealed under the same ring, moves in the same pass.
  *
@@ -49,21 +55,32 @@ function ring(value: string): KeyRing {
   return parsed.success;
 }
 
-const storeKey = (keys: KeyRing, userId: string, provider: ProviderKeyProvider, key: string) =>
+const storeKey = (
+  keys: KeyRing,
+  userId: string,
+  provider: ProviderKeyProvider,
+  key: string,
+  kind: ProviderKeyKind = PROVIDER_KEY_KIND.API_KEY,
+) =>
   saveProviderKey(
     userId,
     provider,
-    sealProviderKey(keys, { userId, provider }, Redacted.make(key)),
+    kind,
+    sealProviderKey(keys, { userId, provider, kind }, Redacted.make(key)),
     "sk-…test",
     null,
     new Date(0),
   );
 
-/** Each of the account's keys opened under the ring, or unreadable. */
-const openedUnder = (keys: KeyRing, userId: string) =>
-  Effect.map(listProviderKeyRows(userId), (rows) =>
+/** Each of the account's credentials of the kind opened under the ring, or unreadable. */
+const openedUnder = (
+  keys: KeyRing,
+  userId: string,
+  kind: ProviderKeyKind = PROVIDER_KEY_KIND.API_KEY,
+) =>
+  Effect.map(listProviderKeyRows(userId, kind), (rows) =>
     rows.map((row) => {
-      const opened = openProviderKey(keys, { userId, provider: row.provider }, row);
+      const opened = openProviderKey(keys, { userId, provider: row.provider, kind }, row);
       return [
         row.provider,
         row.keyVersion,
@@ -81,8 +98,12 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         // A pass walks every account's rows, so each case starts from none.
         yield* db.delete(accountProviderKey);
         yield* db.delete(githubPersonalToken);
-        const [first, second] = [`user-${randomUUID()}`, `user-${randomUUID()}`];
-        for (const id of [first, second]) {
+        const [first, second, subscriber] = [
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+          `user-${randomUUID()}`,
+        ];
+        for (const id of [first, second, subscriber]) {
           yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
         }
         yield* storeKey(
@@ -104,6 +125,13 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
           PROVIDER_KEY_PROVIDER.ANTHROPIC,
           "sk-ant-second-stray",
         );
+        yield* storeKey(
+          ring(KEK.ONE),
+          subscriber,
+          PROVIDER_KEY_PROVIDER.ANTHROPIC,
+          "sk-ant-oat01-subscriber-setup-token",
+          PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN,
+        );
         yield* saveGitHubToken(
           second,
           sealGitHubToken(ring(KEK.ONE), second, Redacted.make("second-github-token")),
@@ -121,8 +149,8 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
         const again = yield* rewrapProviderKeys(rotating);
         const rotated = ring(KEK.TWO);
 
-        assert.deepEqual(pass, { moved: 3, current: 1, changed: 0, unreadable: 1 });
-        assert.deepEqual(again, { moved: 0, current: 4, changed: 0, unreadable: 1 });
+        assert.deepEqual(pass, { moved: 4, current: 1, changed: 0, unreadable: 1 });
+        assert.deepEqual(again, { moved: 0, current: 5, changed: 0, unreadable: 1 });
         assert.deepEqual(yield* openedUnder(rotated, first), [
           [PROVIDER_KEY_PROVIDER.ANTHROPIC, 2, "sk-ant-first-anthropic"],
           [PROVIDER_KEY_PROVIDER.OPENAI, 2, "sk-proj-first-openai"],
@@ -131,6 +159,10 @@ it.layer(getTestDB())("the provider key rewrap", (it) => {
           [PROVIDER_KEY_PROVIDER.ANTHROPIC, 3, "unreadable"],
           [PROVIDER_KEY_PROVIDER.OPENAI, 2, "sk-proj-second-openai"],
         ]);
+        assert.deepEqual(
+          yield* openedUnder(rotated, subscriber, PROVIDER_KEY_KIND.CLAUDE_SETUP_TOKEN),
+          [[PROVIDER_KEY_PROVIDER.ANTHROPIC, 2, "sk-ant-oat01-subscriber-setup-token"]],
+        );
         const token = yield* readGitHubTokenRow(second);
         assert.equal(token?.keyVersion, 2);
         const openedToken = token && openGitHubToken(rotated, second, token);

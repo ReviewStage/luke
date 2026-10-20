@@ -8,12 +8,16 @@
  * every command names its session exactly (`=`), since tmux would otherwise
  * take a prefix of one for another. Every command is a script Luke writes,
  * and what a developer typed reaches it only as a positional argument, never
- * spliced into its text. Each script first installs tmux where the sandbox
- * was prepared before its image carried it, so an older agent's sandbox
- * opens shells too. The sandbox's own tmux settings, written as its image is
- * prepared or as tmux is installed, keep tmux out of sight: no status line,
- * no mouse, and its output scrolling into the terminal's own scrollback
- * (`agent-runtime/sandbox.ts`).
+ * spliced into its text. tmux and its settings come with the image
+ * (`agent-runtime/sandbox.ts`), and nothing here installs them, since a
+ * Terminal's shell holds no sudo: the settings keep tmux out of sight, with
+ * no status line, no mouse, and its output scrolling into the terminal's own
+ * scrollback. Every command runs with every capability dropped
+ * (`sandbox-capabilities.ts`), the command that starts tmux's server among
+ * them, so the server, on a socket of its own (`TMUX.SOCKET`), and every
+ * shell it starts hold none: a shell cannot
+ * read another process's environment, a file its mode keeps from the
+ * sandbox's user, or reach root through sudo.
  *
  * tmux prints a control character in a format's value as `_`, so a list
  * cannot separate its fields with one; each free-text field is read on its
@@ -25,6 +29,7 @@ import { readEither } from "@luke/wire/effect";
 import { Result } from "effect";
 import { unparsedWire, wireUuidSchema } from "../../core.js";
 import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-sandbox-contract.js";
+import { WITHOUT_CAPABILITIES } from "../sandbox-capabilities.js";
 import type { CommandAsk, CommandRun } from "../vercel-sandbox-api.js";
 
 export const TMUX = {
@@ -34,6 +39,14 @@ export const TMUX = {
   TITLE_OPTION: "@luke_title",
   /** Where a new shell stands: the agent's checkout. */
   START_DIRECTORY: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
+  /**
+   * The socket every command names its server by. Note that it is a name of
+   * its own rather than tmux's default, because a server started on the
+   * default before shells dropped their capabilities still holds them and
+   * would start each new shell with them; this one is only ever started
+   * without, and the old one ends as its sandbox next stops.
+   */
+  SOCKET: "luke-unprivileged",
 } as const;
 
 /**
@@ -56,7 +69,7 @@ const TMUX_SETTINGS: readonly string[] = [
   "set-environment -g HISTFILE /dev/null",
 ];
 
-/** `sudo` where the sandbox's user is not root, so an install and the settings file reach the system. */
+/** `sudo` where the sandbox's user is not root, so an install and the settings file reach the system as the image is prepared. */
 const SUDO_LINE = 'SUDO=""; [ "$(id -u)" = 0 ] || SUDO="sudo -n"';
 
 /** Installs tmux with the system's own package manager, `$SUDO` as `SUDO_LINE` set it. */
@@ -76,15 +89,6 @@ export const PREPARE_TMUX: readonly string[] = [
   "tmux -V",
 ];
 
-/** What every command runs first: tmux and its settings, where a sandbox prepared before its image carried tmux has neither. */
-const ENSURE_TMUX = [
-  "if ! command -v tmux >/dev/null 2>&1; then",
-  `  ${SUDO_LINE}`,
-  `  ${INSTALL_TMUX} >&2 || exit 1`,
-  `  ${CONFIGURE_TMUX}`,
-  "fi",
-].join("\n");
-
 /** The foreground commands that are a shell at its prompt, so nothing else runs there. */
 const SHELLS: ReadonlySet<string> = new Set(["bash", "zsh", "sh", "dash", "fish"]);
 
@@ -95,7 +99,6 @@ const SHELLS: ReadonlySet<string> = new Set(["bash", "zsh", "sh", "dash", "fish"
  * failure exits nonzero.
  */
 const LIST_SCRIPT = [
-  ENSURE_TMUX,
   "listed=$(tmux list-sessions -F '#{session_name} #{session_created}' 2>&1) || {",
   '  case "$listed" in *"no server running"*|*"rror connecting to"*) exit 0 ;; esac',
   `  printf '%s\\n' "$listed" >&2`,
@@ -132,14 +135,27 @@ function optionTargetOf(terminalId: string): string {
   return `${targetOf(terminalId)}:`;
 }
 
-/** A script run with its arguments as positional parameters, so none of them is ever read as shell text. */
+/**
+ * A script run with every capability dropped, its arguments as positional
+ * parameters, so none of them is ever read as shell text.
+ */
 function script(text: string, args: readonly string[] = []): CommandAsk {
-  return { command: "sh", args: ["-c", text, "sh", ...args] };
+  return {
+    command: WITHOUT_CAPABILITIES.COMMAND,
+    args: [
+      ...WITHOUT_CAPABILITIES.ARGS,
+      "sh",
+      "-c",
+      `tmux() { command tmux -L ${TMUX.SOCKET} "$@"; }\n${text}`,
+      "sh",
+      ...args,
+    ],
+  };
 }
 
-/** One tmux command, once tmux is there. */
+/** One tmux command, in place of the script's shell. */
 function tmux(args: readonly string[]): CommandAsk {
-  return script(`${ENSURE_TMUX}\nexec tmux "$@"`, args);
+  return script(`exec tmux -L ${TMUX.SOCKET} "$@"`, args);
 }
 
 /** Lists the tab's sessions, in the lines `terminalsOf` reads. */
@@ -162,15 +178,14 @@ export function attachTerminal(terminalId: string): CommandAsk {
   return tmux(["attach-session", "-t", targetOf(terminalId)]);
 }
 
-/** How the shell check exits where tmux ran and holds no such session: apart from tmux's own 1, which a failed install also exits with. */
+/** How the shell check exits where tmux ran and holds no such session: apart from tmux's own 1, and the 127 of a `setpriv` that could not drop the capabilities or a tmux missing. */
 export const TMUX_EXIT = { NO_SESSION: 3 } as const;
 
 /** Whether a shell stands: exit 0 where its session does, `TMUX_EXIT.NO_SESSION` where tmux holds none by that name, and anything else where tmux could not be asked. */
 export function holdsTerminal(terminalId: string): CommandAsk {
-  return script(
-    `${ENSURE_TMUX}\ntmux has-session -t "$1" 2>/dev/null || exit ${TMUX_EXIT.NO_SESSION}`,
-    [targetOf(terminalId)],
-  );
+  return script(`tmux has-session -t "$1" 2>/dev/null || exit ${TMUX_EXIT.NO_SESSION}`, [
+    targetOf(terminalId),
+  ]);
 }
 
 /** Names a shell anew. */

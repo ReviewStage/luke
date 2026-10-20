@@ -14,6 +14,7 @@ import {
   COUNT_TONE,
   DocumentIcon,
   EmptyState,
+  ErrorState,
   HOVER_CARD_ROW_LOOK,
   HoverCard,
   HoverCardHead,
@@ -75,6 +76,7 @@ import {
   useInboxListWidth,
 } from "../desktop/folded-groups.js";
 import { SidebarGroupHeader } from "../desktop/sidebar-group-header.js";
+import { SidebarSectionHead } from "../desktop/sidebar-task-view.js";
 import { EDGE_SIDE, useResizableEdge } from "../desktop/use-resizable-edge.js";
 import { DraftMark } from "../draft-mark.js";
 import { FadingWords } from "../fading-words.js";
@@ -1214,34 +1216,92 @@ function ListHead({
   head,
   ids,
   readerId,
+  placement,
 }: {
   head: InboxListHead;
   ids: ShowTabIds;
   readerId: string | undefined;
+  placement: InboxListPlacement;
 }): React.JSX.Element {
   const { shown, show, view, counts } = head;
+  const options =
+    view === undefined ? null : (
+      <ViewOptions
+        shown={shown}
+        choices={view.choices}
+        readerId={readerId}
+        readAll={head.readAll}
+      />
+    );
   return (
     <>
-      <header className="desktop-toolbar inbox-tasks-bar">
-        <div className="desktop-toolbar-heading">
-          <h1 className="desktop-toolbar-title">Inbox</h1>
-        </div>
-        <div className="desktop-toolbar-actions">
-          {view === undefined ? null : (
-            <ViewOptions
-              shown={shown}
-              choices={view.choices}
-              readerId={readerId}
-              readAll={head.readAll}
-            />
-          )}
-        </div>
-      </header>
+      {/* In the sidebar the list is headed as the sidebar's own sections are, under its places, rather than as a page. */}
+      {placement === INBOX_LIST_PLACEMENT.SIDEBAR ? (
+        <SidebarSectionHead name="Inbox">{options}</SidebarSectionHead>
+      ) : (
+        <header className="desktop-toolbar inbox-tasks-bar">
+          <div className="desktop-toolbar-heading">
+            <h1 className="desktop-toolbar-title">Inbox</h1>
+          </div>
+          <div className="desktop-toolbar-actions">{options}</div>
+        </header>
+      )}
       <ShowTabs show={show} counts={counts} ids={ids} />
       {view === undefined ? null : <WhoseChip whose={view.choices} readerId={readerId} />}
     </>
   );
 }
+
+/** What the list says where a task's read did not answer. */
+const NOT_READ = "Some items could not be read.";
+
+/** What stands under the list's rows: a read that did not answer, placeholder rows while nothing is read, the tab's empty state where it leaves out every item, or the empty line, the Inbox's empty state where the list stands alone. */
+export function InboxListNote({
+  failed,
+  reading,
+  empty,
+  alone,
+  filteredOut,
+  counts,
+  onList,
+  onRetry,
+}: {
+  failed: boolean;
+  reading: boolean;
+  empty: boolean;
+  /** Whether the list stands alone, the Inbox too narrow for the pane beside it. */
+  alone: boolean;
+  /** The tab shown and whose items, where they leave out every item the Inbox holds, for its empty state to show another. */
+  filteredOut: InboxViewChoices | undefined;
+  /** How many items each tab lists, for the empty state to offer one that lists something. */
+  counts: InboxCounts;
+  /** Asks for the list, so the tab its empty state shows leaves it standing. */
+  onList: () => void;
+  onRetry: () => void;
+}): React.JSX.Element | null {
+  if (failed) {
+    return (
+      <div className="sidebar-note">
+        <ErrorState onRetry={onRetry}>{NOT_READ}</ErrorState>
+      </div>
+    );
+  }
+  if (!empty) return null;
+  if (reading) return <InboxListSkeleton />;
+  if (filteredOut !== undefined)
+    return <ShowEmpty show={filteredOut} counts={counts} whose={filteredOut} onList={onList} />;
+  // Note that the list standing alone is the whole Inbox, so it says so as the hidden pane would.
+  if (alone) return <EmptyState icon={<InboxIcon />}>{NEEDS_YOU.NONE}</EmptyState>;
+  return <p className="sidebar-note">{NEEDS_YOU.NONE}</p>;
+}
+
+/** Where a list of the window's Inbox stands: a column of its own on the Inbox's page, or the sidebar, which the inbox-first sidebar makes it. */
+export const INBOX_LIST_PLACEMENT = {
+  PAGE: "page",
+  SIDEBAR: "sidebar",
+} as const;
+
+export type InboxListPlacement = (typeof INBOX_LIST_PLACEMENT)[keyof typeof INBOX_LIST_PLACEMENT];
 
 /** What the list's head offers: its tabs on every Inbox, and on the window's how it groups its items and which plans are folded. */
 export interface InboxListHead {
@@ -1310,6 +1370,7 @@ export function InboxList({
   readerId,
   columns,
   rows,
+  placement = INBOX_LIST_PLACEMENT.PAGE,
   onChoose,
   onMark,
   onClose,
@@ -1328,6 +1389,8 @@ export function InboxList({
   columns: InboxColumnsShown;
   /** Where each row's press is kept, by the item it opens. */
   rows: InboxRowPresses;
+  /** Where the list stands: its own column on the Inbox's page, or the sidebar, which scrolls it with the rest and draws the chosen item's open beside it. */
+  placement?: InboxListPlacement;
   onChoose: (listed: InboxListed) => void;
   /** Marks an item read or unread from its row; none where the rows offer no mark. */
   onMark?: ((listed: InboxListed, unread: boolean) => void) | undefined;
@@ -1354,13 +1417,14 @@ export function InboxList({
   });
   const panel = useId();
   const tabs = useId();
+  const sidebar = placement === INBOX_LIST_PLACEMENT.SIDEBAR;
   // Note that a row names its task wherever no task's header stands over it, and a teammate's face wherever no person's does.
   const row = (listed: InboxListed) => (
     <InboxItemRow
       key={listed.item.id}
       listed={listed}
       chosen={listed.item.id === chosen}
-      open={listed.item.id === chosen && columns === INBOX_COLUMNS.BOTH}
+      open={listed.item.id === chosen && (sidebar || columns === INBOX_COLUMNS.BOTH)}
       now={now}
       models={models}
       readerId={readerId}
@@ -1404,53 +1468,64 @@ export function InboxList({
       </div>
     );
   };
+  const body = (
+    <div className="inbox-tasks-body">
+      {view.grouping === INBOX_GROUPING.NONE ? (
+        <ul className="sidebar-tasks">{view.items.map(row)}</ul>
+      ) : view.grouping === INBOX_GROUPING.PERSON ? (
+        view.groups.map(personSection)
+      ) : view.grouping === INBOX_GROUPING.STATUS ? (
+        view.groups.map(statusSection)
+      ) : (
+        view.groups.map(({ holder, items }) => {
+          const key = holderKey(holder);
+          const folded = head.view?.folds.folded(key) ?? false;
+          return (
+            <div key={key} className="sidebar-repository">
+              <HolderHeader
+                holder={holder}
+                folded={folded}
+                count={needingYou(items.map((item) => ({ holder, item })))}
+                onToggle={() => head.view?.folds.toggle(key)}
+              />
+              {folded ? null : (
+                <ul className="sidebar-tasks">{items.map((item) => row({ holder, item }))}</ul>
+              )}
+            </div>
+          );
+        })
+      )}
+      {note}
+    </div>
+  );
+  // Note that in the sidebar the list scrolls with the sidebar's own scroller, under its pins, and takes the sidebar's width.
   return (
     <nav
       ref={rowFocus.ref}
       className="inbox-tasks"
+      data-placement={placement}
       aria-label="Inbox items"
-      hidden={columns === INBOX_COLUMNS.ITEM}
+      hidden={!sidebar && columns === INBOX_COLUMNS.ITEM}
       onFocus={rowFocus.onFocus}
       onBlur={rowFocus.onBlur}
-      style={{ width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
+      style={sidebar ? undefined : { width: drawnWidth(width, columns !== INBOX_COLUMNS.BOTH) }}
     >
-      <ListHead head={head} ids={{ tabs, panel }} readerId={readerId} />
-      <ScrollArea
-        id={panel}
-        role="tabpanel"
-        aria-labelledby={showTabId(tabs, head.show.show)}
-        fade={SCROLL_FADE.START}
-      >
-        <div className="inbox-tasks-body">
-          {view.grouping === INBOX_GROUPING.NONE ? (
-            <ul className="sidebar-tasks">{view.items.map(row)}</ul>
-          ) : view.grouping === INBOX_GROUPING.PERSON ? (
-            view.groups.map(personSection)
-          ) : view.grouping === INBOX_GROUPING.STATUS ? (
-            view.groups.map(statusSection)
-          ) : (
-            view.groups.map(({ holder, items }) => {
-              const key = holderKey(holder);
-              const folded = head.view?.folds.folded(key) ?? false;
-              return (
-                <div key={key} className="sidebar-repository">
-                  <HolderHeader
-                    holder={holder}
-                    folded={folded}
-                    count={needingYou(items.map((item) => ({ holder, item })))}
-                    onToggle={() => head.view?.folds.toggle(key)}
-                  />
-                  {folded ? null : (
-                    <ul className="sidebar-tasks">{items.map((item) => row({ holder, item }))}</ul>
-                  )}
-                </div>
-              );
-            })
-          )}
-          {note}
+      <ListHead head={head} ids={{ tabs, panel }} readerId={readerId} placement={placement} />
+      {sidebar ? (
+        <div id={panel} role="tabpanel" aria-labelledby={showTabId(tabs, head.show.show)}>
+          {body}
         </div>
-      </ScrollArea>
-      {columns === INBOX_COLUMNS.BOTH ? <SidebarResizeEdge edge={edge} /> : null}
+      ) : (
+        <ScrollArea
+          id={panel}
+          role="tabpanel"
+          aria-labelledby={showTabId(tabs, head.show.show)}
+          fade={SCROLL_FADE.START}
+        >
+          {body}
+        </ScrollArea>
+      )}
+      {!sidebar && columns === INBOX_COLUMNS.BOTH ? <SidebarResizeEdge edge={edge} /> : null}
     </nav>
   );
 }

@@ -9,6 +9,7 @@ import {
   createCodingAgent,
   fillCodingAgentTitle,
   hasRepository,
+  latestTurnsOf,
   lineSendersOf,
   readCodingAgent,
   takeCodingAgentMentionedServers,
@@ -71,6 +72,7 @@ import {
   sessionKey,
   TOOL_CALL_SETTLEMENT,
   TURN_ORIGIN,
+  TURN_STATUS,
   type WireRecord,
 } from "../../core.js";
 import { recordingProductAnalytics, SERVER_EVENT } from "../../events/server-events.js";
@@ -2139,63 +2141,68 @@ async function standingAsRead(
   ];
 }
 
-test("an agent whose session eve no longer runs reads as running until a message to it is refused as ended for good, then as failed for its session's end, which archive_agent archives and stop_agent answers as idle", async () => {
-  const { workspaceId, plans: tasks, agents } = await openWorkspaces();
+/** The turn of the agent's conversation newest now: its status, and why where it failed. */
+async function newestTurnOf(agent: StartedAgent): Promise<readonly unknown[]> {
+  const turns = await database.run(latestTurnsOf(agent.userId, [agent.conversationId]));
+  const newest = turns.get(agent.conversationId);
+  return [newest?.id, newest?.status, newest?.failure ?? undefined];
+}
+
+/** The openings eve was asked for, each as the conversation it names and the words it carries. */
+function openingsOf(
+  eve: Awaited<ReturnType<typeof fakeCoderEve>>,
+): readonly (readonly [string | null, string | null, string])[] {
+  return eve.sent
+    .filter((sent) => sent.path === "/eve/coder/v1/session")
+    .map(
+      (sent) =>
+        [
+          sent.headers.get(BRAIN_HOST_HEADER.CONVERSATION),
+          sent.headers.get(BRAIN_HOST_HEADER.TURN),
+          JSON.stringify(JSON.parse(sent.body).message),
+        ] as const,
+    );
+}
+
+test("a message to an agent whose session eve no longer runs opens a fresh session over its conversation rather than being refused, and settles the turn the ended session was running as failed for its session's end, once", async () => {
+  const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId, [], undefined, "no_active_turn", true);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
-  await turnOn(agents.teammates, false);
+  const turnId = await turnOn(agents.teammates, false);
 
-  assert.deepEqual(await standingAsRead(call, agents.teammates.id), [
-    CODING_AGENT_STATUS.RUNNING,
-    undefined,
-    CODING_AGENT_STATUS.RUNNING,
-    undefined,
+  const sent = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE });
+
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+  const opened = openingsOf(eve);
+  assert.equal(opened.length, 1);
+  assert.deepEqual(opened[0]?.slice(0, 2), [
+    agents.teammates.conversationId,
+    BRAIN_HOST_TURN.TYPED,
   ]);
-  assert.deepEqual(
-    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.RETIRED },
-  );
-  const failed = [
-    CODING_AGENT_STATUS.FAILED,
-    CODING_AGENT_FAILURE.SESSION_ENDED,
-    CODING_AGENT_STATUS.FAILED,
-    CODING_AGENT_FAILURE.SESSION_ENDED,
-  ];
-  assert.deepEqual(await standingAsRead(call, agents.teammates.id), failed);
-  assert.deepEqual(
-    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }, "call-2"),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.RETIRED },
-  );
-  assert.deepEqual(
-    await standingAsRead(call, agents.teammates.id),
-    failed,
-    "a second refusal settles nothing again",
-  );
+  assert.match(String(opened[0]?.[2]), new RegExp(NOTE, "u"));
+  const settled = [turnId, TURN_STATUS.FAILED, BRAIN_REQUEST_FAILURE.SESSION_ENDED];
+  assert.deepEqual(await newestTurnOf(agents.teammates), settled);
 
-  assert.deepEqual(await call(CODER_TOOL.STOP_AGENT, { agentId: agents.teammates.id }, "call-3"), {
-    status: ACTION_RESULT_STATUS.ACCEPTED,
-    agent: {
-      id: agents.teammates.id,
-      title: OPUS,
-      task: { id: tasks.billing, name: "Billing", archived: false },
-      onYourTask: false,
-      status: CODING_AGENT_STATUS.FAILED,
-    },
-    stopped: false,
-  });
+  const again = await call(
+    CODER_TOOL.MESSAGE_AGENT,
+    { agentId: agents.teammates.id, text: NOTE },
+    "call-2",
+  );
+  assert.equal(again.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(again));
+  const followUps = eve.sent
+    .map((each) => each.path)
+    .filter((path) => path.startsWith("/eve/coder/v1/session/"));
+  assert.equal(followUps.length, 2);
+  assert.notEqual(
+    followUps[1],
+    followUps[0],
+    "the second message goes to the fresh session, which claimed the record",
+  );
   assert.deepEqual(
-    eve.sent.filter((sent) => sent.path.endsWith("/cancel")),
-    [],
-    "an idle agent's Stop asks eve nothing",
+    await newestTurnOf(agents.teammates),
+    settled,
+    "a second message settles nothing again",
   );
-  const archived = await call(
-    CODER_TOOL.UPDATE_AGENT,
-    { agentId: agents.teammates.id, archived: true, reason: "Its session ended." },
-    "call-4",
-  );
-  assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
-  const read = await database.run(readCodingAgent(agents.teammates.userId, agents.teammates.id));
-  assert.notEqual(Option.getOrThrow(read).archivedAt, null);
 });
 
 /** A turn of the agent's that eve began and that failed on its model call, as eve ends one. */
@@ -2273,49 +2280,17 @@ test("list_agents and read_agent say why each failed agent failed: a turn failed
   );
 });
 
-test("a message eve took that no turn received before the session ended keeps the agent from reading as running once a later message is refused as ended for good", async () => {
-  const { workspaceId, agents } = await openWorkspaces();
-  const eve = await fakeCoderEve(workspaceId);
-  const call = await peerCaller(hostOf(true), agents.caller, eve.services);
-  await turnOn(agents.teammates, false);
-  const taken = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE });
-  assert.equal(taken.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(taken));
-  eve.retire();
-
-  assert.deepEqual(
-    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }, "call-2"),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.RETIRED },
-  );
-  assert.deepEqual(await standingAsRead(call, agents.teammates.id), [
-    CODING_AGENT_STATUS.FAILED,
-    CODING_AGENT_FAILURE.SESSION_ENDED,
-    CODING_AGENT_STATUS.FAILED,
-    CODING_AGENT_FAILURE.SESSION_ENDED,
-  ]);
-  const archived = await call(
-    CODER_TOOL.UPDATE_AGENT,
-    { agentId: agents.teammates.id, archived: true },
-    "call-3",
-  );
-  assert.equal(archived.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(archived));
-});
-
-test("a message refused as ended for good leaves an agent whose turn had already ended as that turn ended", async () => {
+test("a message to an agent whose turn had already ended before its session did opens a fresh session and leaves that turn as it ended", async () => {
   const { workspaceId, agents } = await openWorkspaces();
   const eve = await fakeCoderEve(workspaceId, [], undefined, "accepted", true);
   const call = await peerCaller(hostOf(true), agents.caller, eve.services);
-  await turnOn(agents.teammates, true);
+  const turnId = await turnOn(agents.teammates, true);
 
-  assert.deepEqual(
-    await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE }),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.RETIRED },
-  );
-  assert.deepEqual(await standingAsRead(call, agents.teammates.id), [
-    CODING_AGENT_STATUS.COMPLETED,
-    undefined,
-    CODING_AGENT_STATUS.COMPLETED,
-    undefined,
-  ]);
+  const sent = await call(CODER_TOOL.MESSAGE_AGENT, { agentId: agents.teammates.id, text: NOTE });
+
+  assert.equal(sent.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(sent));
+  assert.equal(openingsOf(eve).length, 1);
+  assert.deepEqual(await newestTurnOf(agents.teammates), [turnId, TURN_STATUS.SETTLED, undefined]);
 });
 
 /** The coder channel's handlers of a session's end, each handing the session to the host given as eve's channel adapter would. */

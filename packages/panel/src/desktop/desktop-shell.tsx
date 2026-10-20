@@ -37,6 +37,7 @@ import { useChatOn } from "../tasks/chat-gate.js";
 import { ChipCards, type TaskFocus, WorkspaceDirectory } from "../tasks/chip-cards.js";
 import { MentionedAgents } from "../tasks/mentioned-agent-card.js";
 import { NewTaskDialog } from "../tasks/new-task-dialog.js";
+import { useInboxListing } from "../tasks/use-inbox-listing.js";
 import { MAIN_TAB } from "../tasks/use-main-tabs.js";
 import { useTaskLooks } from "../tasks/use-task-looks.js";
 import {
@@ -580,6 +581,9 @@ export function DesktopShell({
       : undefined;
   // With the inbox-first sidebar on, the Board's place is the Tasks page, which holds the Board as one of its views.
   const inboxFirst = useExperiment(EXPERIMENT.INBOX_FIRST);
+  // With the inbox-first sidebar on, the Inbox is read once here, the sidebar listing it and the Inbox's page showing its chosen item; off, it reads nothing.
+  const inboxListing = useInboxListing(tasks, inboxFirst && tasks.signedIn);
+  const sharedListing = inboxFirst && tasks.signedIn ? inboxListing : undefined;
   useWindowTitle(titleSubject(tab, tasks, shownTask, inboxFirst));
   // The plan is looked at the moment it is on screen, whichever of its column's tabs is chosen.
   const looks = useTaskLooks(shownTask, tasks.me);
@@ -746,6 +750,7 @@ export function DesktopShell({
         call={sidebar.collapsed ? undefined : call}
         onPressWithin={keepOverlay}
         room={room}
+        inboxListing={sharedListing}
       />
       <main className="desktop-main" inert={drawerOver}>
         {/* A chip of an agent off its task's page names its model and its starter as the agent's tab does. */}
@@ -758,7 +763,7 @@ export function DesktopShell({
                 accountName={account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined}
               />
             ) : inboxOpen ? (
-              <DesktopInbox tasks={tasks} />
+              <DesktopInbox tasks={tasks} listing={sharedListing} />
             ) : pageAgent !== undefined ? (
               // Keyed by the agent, so another agent's page is a page of its own, holding nothing of the last.
               <DesktopAgentPage key={pageAgent} tasks={tasks} agentId={pageAgent} />

@@ -280,7 +280,7 @@ function agentSandboxOver(api: VercelSandboxApi): AgentSandboxService {
         if (held.exitCode === TMUX_EXIT.NO_SESSION) {
           return { state: SANDBOX_STATE.RUNNING, gone: true } as const;
         }
-        // A tmux that could not be installed or asked is an outage the tab may retry, never a shell gone.
+        // A tmux that could not be started or asked is an outage the tab may retry, never a shell gone.
         if (held.exitCode !== 0) return yield* Effect.fail(new SandboxUnavailable({}));
         // The running session's own PTY, never the sandbox's: a mint on the sandbox would resume it.
         const shell = yield* api.openInteractive(running);

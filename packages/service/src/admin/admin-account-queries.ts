@@ -36,6 +36,7 @@ import { CONTEXT_WINDOW, PULL_REQUEST_STATE } from "@luke/features/coding-agent-
 import { INTEGRATION_PROVIDER } from "@luke/features/integration-wire";
 import {
   FAST_ACCESS,
+  PROVIDER_KEY_KIND,
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
 } from "@luke/features/provider-key-wire";
@@ -330,7 +331,13 @@ const findProviderKeys = SqlSchema.findAll({
           fastAccess: accountProviderKey.fastAccess,
         })
         .from(accountProviderKey)
-        .where(eq(accountProviderKey.userId, userId))
+        .where(
+          and(
+            eq(accountProviderKey.userId, userId),
+            // Its API keys alone; a subscription credential is no key the account's steps spend on.
+            eq(accountProviderKey.kind, PROVIDER_KEY_KIND.API_KEY),
+          ),
+        )
         .orderBy(asc(accountProviderKey.provider)),
     ),
 });
