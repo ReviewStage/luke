@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@luke/credentials/snapshot";
+import { CODING_AGENT_CALL_FAILURE } from "@luke/features/coding-agent-view";
 import {
   GITHUB_TOKEN_REJECTION,
   GITHUB_TOKEN_STATUS,
@@ -43,6 +44,8 @@ let stored: GitHubTokenSummary | null = null;
 let sent: { kind: PortActKind; payload: unknown }[] = [];
 /** Why the service keeps nothing of the next save, where it refuses one. */
 let refuseSave: GitHubTokenRejection | undefined;
+/** How many of the next reads go unanswered. */
+let unansweredReads = 0;
 
 const roots: Root[] = [];
 
@@ -51,9 +54,14 @@ beforeEach(() => {
   stored = null;
   sent = [];
   refuseSave = undefined;
+  unansweredReads = 0;
   fakeActPort({
     [ACT_KIND.GITHUB_TOKEN_READ]: (payload) => {
       sent.push({ kind: ACT_KIND.GITHUB_TOKEN_READ, payload });
+      if (unansweredReads > 0) {
+        unansweredReads -= 1;
+        return Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      }
       return Promise.resolve({ token: stored });
     },
     [ACT_KIND.GITHUB_TOKEN_SAVE]: (payload) => {
@@ -82,7 +90,7 @@ async function settle(): Promise<void> {
 }
 
 /** Profile's account section, its token row read, with the dialog opened by the row's one button. */
-async function mountAndOpen(): Promise<void> {
+async function mountAndOpen(open = true): Promise<void> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -103,6 +111,7 @@ async function mountAndOpen(): Promise<void> {
     ),
   );
   await settle();
+  if (!open) return;
   act(() => button(stored === null ? "Add" : "Manage").click());
   await settle();
 }
@@ -175,4 +184,17 @@ test("a refused save says why in a short label and keeps the field", async () =>
 
   assert.equal(document.querySelector('[role="alert"]')?.textContent, "Not a classic token");
   assert.ok(tokenField(), "the field stands as pasted");
+});
+
+test("a read that went unanswered offers Try again in place of Add, which reads the token again", async () => {
+  unansweredReads = 1;
+  await mountAndOpen(false);
+  assert.equal(
+    [...document.querySelectorAll("button")].some((each) => each.textContent === "Add"),
+    false,
+  );
+
+  act(() => button("Try again").click());
+  await settle();
+  button("Add");
 });
