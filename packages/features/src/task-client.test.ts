@@ -1,15 +1,26 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, recordedRoutes } from "@luke/wire/testing";
-import { Effect } from "effect";
+import {
+  fakeCloudApi,
+  type JsonValue,
+  recordedRoutes,
+  recordingHttpClient,
+} from "@luke/wire/testing";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { accountBearer } from "./account-call.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import { CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import { PLAN_ATTACHMENT_REFUSAL } from "./plan-attachment-wire.js";
 import { REPOSITORY_UNREACHED } from "./repository-reach-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 import { HostedTaskClient } from "./task-client.js";
-import { TASK_BOUNDS } from "./task-wire.js";
-import { PLAN_COMMENT_CALL_FAILURE, TASK_CALL_FAILURE } from "./tasks-view.js";
+import { TASK_BOUNDS, TASK_FILE_REFUSAL } from "./task-wire.js";
+import {
+  PICTURE_KEEP_FAILURE,
+  PLAN_COMMENT_CALL_FAILURE,
+  TASK_CALL_FAILURE,
+} from "./tasks-view.js";
 
 const TASK_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
@@ -282,4 +293,120 @@ it.effect("the list asks for the archived plans too, and a revision is asked by 
       `GET /api/plans/${TASK_ID}/revisions/3`,
     ]);
   }),
+);
+
+it.effect(
+  "a File tab's window is asked at the plan's own path, its file's path a query, and a tree's folder the same; an answer that never came is nothing",
+  () =>
+    Effect.gen(function* () {
+      const file = {
+        file: {
+          path: "src/a b+c.ts",
+          repository: "Acme/Relay",
+          branch: "main",
+          firstLine: 2,
+          lineCount: 4,
+          lines: ["two"],
+        },
+      };
+      const api = fakeCloudApi({
+        [`GET /api/plans/${TASK_ID}/file`]: { answer: () => file },
+        [`GET /api/plans/${TASK_ID}/tree`]: {
+          answer: () => ({ refusal: TASK_FILE_REFUSAL.NO_REPOSITORY }),
+        },
+      });
+      const sha = "0123456789abcdef0123456789abcdef01234567";
+
+      const read = yield* Effect.provide(
+        client().readFile(TASK_ID, { path: "src/a b+c.ts", firstLine: 2, lastLine: 3 }),
+        api.layer,
+      );
+      yield* Effect.provide(
+        client().readFile(TASK_ID, {
+          path: "src/a b+c.ts",
+          firstLine: 1,
+          lastLine: 1,
+          raw: true,
+          ref: sha,
+        }),
+        api.layer,
+      );
+      const folder = yield* Effect.provide(
+        client().readTree(TASK_ID, { path: "", recursive: true }),
+        api.layer,
+      );
+      api.fail();
+      const failed = yield* Effect.provide(
+        client().readFile(TASK_ID, { path: "src/a b+c.ts", firstLine: 2, lastLine: 3 }),
+        api.layer,
+      );
+
+      assert.deepEqual(read, file);
+      assert.deepEqual(folder, { refusal: TASK_FILE_REFUSAL.NO_REPOSITORY });
+      assert.equal(failed, undefined);
+      assert.deepEqual(recordedRoutes(api.requests()), [
+        `GET /api/plans/${TASK_ID}/file?first=2&last=3&path=src/a b+c.ts`,
+        `GET /api/plans/${TASK_ID}/file?first=1&last=1&path=src/a b+c.ts&raw=1&ref=${sha}`,
+        `GET /api/plans/${TASK_ID}/tree?recursive=1`,
+        `GET /api/plans/${TASK_ID}/file?first=2&last=3&path=src/a b+c.ts`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a picture kept answers its id, a plan at its bound answers too many, and one the account may not write answers not found",
+  () =>
+    Effect.gen(function* () {
+      const picture = "data:image/png;base64,iVBORw0KGgo=";
+      const keptId = "3c1f0e2a-7b6d-4e5f-9a8b-0c1d2e3f4a5b";
+      const keep = (status: number, answer: () => JsonValue) =>
+        Effect.provide(
+          client().keepPicture(TASK_ID, picture),
+          fakeCloudApi({ [`POST /api/plans/${TASK_ID}/attachments`]: { answer, status } }).layer,
+        );
+      const api = fakeCloudApi({
+        [`POST /api/plans/${TASK_ID}/attachments`]: { answer: () => ({ id: keptId }), status: 201 },
+      });
+
+      assert.deepEqual(yield* Effect.provide(client().keepPicture(TASK_ID, picture), api.layer), {
+        id: keptId,
+      });
+      assert.deepEqual(yield* keep(200, () => ({ refused: PLAN_ATTACHMENT_REFUSAL.TOO_MANY })), {
+        failure: PICTURE_KEEP_FAILURE.TOO_MANY,
+      });
+      assert.deepEqual(yield* keep(404, () => ({ error: HOSTED_API_ERROR.NOT_FOUND })), {
+        failure: TASK_CALL_FAILURE.NOT_FOUND,
+      });
+      assert.deepEqual(yield* keep(503, () => ({ error: HOSTED_API_ERROR.UNAVAILABLE })), {
+        failure: PICTURE_KEEP_FAILURE.UNANSWERED,
+      });
+      assert.deepEqual(
+        api.requests().map((request) => request.body),
+        [JSON.stringify({ picture })],
+      );
+    }),
+);
+
+it.effect(
+  "a comments read is asked under the held deadline: it outlasts the usual one and is unanswered past the hold",
+  () =>
+    Effect.gen(function* () {
+      const silent = recordingHttpClient(() => new Promise<Response>(() => undefined));
+
+      const held = yield* Effect.forkChild(
+        Effect.provide(client().comments(TASK_ID, "0"), silent.layer),
+      );
+      while (silent.requests.length === 0) yield* Effect.yieldNow;
+      yield* TestClock.adjust("34 seconds");
+      assert.equal(held.pollUnsafe(), undefined, "still held past the usual deadline");
+      yield* TestClock.adjust("1 second");
+
+      assert.deepEqual(yield* Fiber.join(held), {
+        failure: PLAN_COMMENT_CALL_FAILURE.UNANSWERED,
+      });
+      assert.equal(
+        silent.requests[0]?.url,
+        `https://tryluke.dev/api/plans/${TASK_ID}/comments?after=0`,
+      );
+    }),
 );

@@ -10,6 +10,10 @@ import {
   accountAskProcedures,
 } from "./account-ask-procedures.js";
 import { type AccountProceduresDependencies, accountProcedures } from "./account-procedures.js";
+import {
+  type AgentInboxProceduresDependencies,
+  agentInboxProcedures,
+} from "./agent-inbox-procedures.js";
 import { type AgentProceduresDependencies, agentProcedures } from "./agents-procedures.js";
 import {
   type AutomationProceduresDependencies,
@@ -87,6 +91,7 @@ export function refusedPlatformProcedures<Sender>(): PlatformActProcedures<Sende
 export interface ActPortDependencies {
   readonly account: AccountProceduresDependencies;
   readonly accountAsks: AccountAskProceduresDependencies;
+  readonly agentInbox: AgentInboxProceduresDependencies;
   readonly agents: AgentProceduresDependencies;
   readonly automations: AutomationProceduresDependencies;
   readonly factory: FactoryProceduresDependencies;
@@ -115,6 +120,7 @@ export function createActPortHandler<Sender>(
     ...platformProcedures,
     ...accountProcedures(dependencies.account),
     ...accountAskProcedures(dependencies.accountAsks),
+    ...agentInboxProcedures(dependencies.agentInbox),
     ...agentProcedures(dependencies.agents),
     ...automationProcedures(dependencies.automations),
     ...factoryProcedures(dependencies.factory),

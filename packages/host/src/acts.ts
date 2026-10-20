@@ -7,42 +7,14 @@ import {
   browserViewParamsSchema,
 } from "@luke/features/browser-acts";
 import {
-  type CodingAgentChatAnswerView,
-  type CodingAgentChatWriteAnswerView,
-  type CodingAgentInboxAnsweredView,
-  type CodingAgentInboxAnswerView,
-  type CodingAgentInboxAttachmentView,
-  type CodingAgentInboxMessagedView,
-  type CodingAgentInboxReadAllView,
-  type CodingAgentInboxReadStateView,
   type CodingAgentMessagesAnswerView,
-  codingAgentAgentInboxParamsSchema,
-  codingAgentChatAnswerViewSchema,
-  codingAgentChatAttachmentParamsSchema,
-  codingAgentChatParamsSchema,
-  codingAgentChatPostParamsSchema,
-  codingAgentChatWriteAnswerViewSchema,
-  codingAgentInboxAnsweredViewSchema,
-  codingAgentInboxAnswerParamsSchema,
-  codingAgentInboxAnswerViewSchema,
-  codingAgentInboxAttachmentParamsSchema,
-  codingAgentInboxAttachmentViewSchema,
-  codingAgentInboxCloseParamsSchema,
-  codingAgentInboxMessagedViewSchema,
-  codingAgentInboxMessageParamsSchema,
-  codingAgentInboxParamsSchema,
-  codingAgentInboxReadAllViewSchema,
-  codingAgentInboxReadStateParamsSchema,
-  codingAgentInboxReadStateViewSchema,
   codingAgentMessagesAnswerViewSchema,
-  codingAgentPictureParamsSchema,
 } from "@luke/features/coding-agent-view";
 import {
   type FeedbackResult,
   type FeedbackSubmission,
   feedbackSubmission,
 } from "@luke/features/feedback";
-import { inboxReadAllRequestSchema } from "@luke/features/inbox-wire";
 import { linearIssueSummarySchema } from "@luke/features/linear-wire";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@luke/features/plan-markdown";
 import {
@@ -180,26 +152,6 @@ export const ACT_KIND = {
   TASKS_COMMENT_START: "tasks.commentStart",
   TASKS_COMMENT_ACT: "tasks.commentAct",
   /**
-   * The task's inbox of what its coding agents need of the developer: read
-   * past a cursor (held open by the service while nothing changed), and one
-   * item answered against the revision the panel drew, under the panel's own
-   * key. The window holds what it draws; nothing here does.
-   */
-  CODING_AGENTS_INBOX: "codingAgents.inbox",
-  CODING_AGENTS_AGENT_INBOX: "codingAgents.agentInbox",
-  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
-  /** One open item closed without an answer against the revision the panel drew, under the panel's own key. */
-  CODING_AGENTS_INBOX_CLOSE: "codingAgents.inboxClose",
-  /** A message on one item's thread, open or settled, under the panel's own key; it never answers the item. */
-  CODING_AGENTS_INBOX_MESSAGE: "codingAgents.inboxMessage",
-  /** One item marked read or unread for the account; it changes neither what the item asks nor whether it waits. */
-  CODING_AGENTS_INBOX_READ_STATE: "codingAgents.inboxReadState",
-  /** Every item of the account's Inbox marked read, in one workspace or in all; the dots alone. */
-  CODING_AGENTS_INBOX_READ_ALL: "codingAgents.inboxReadAll",
-  /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
-  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
-  CODING_AGENTS_PICTURE: "codingAgents.picture",
-  /**
    * A Browser tab's view, which main owns over the panel that asked
    * (`browser-views.ts`): opened on an address and answered how its page
    * stands, sent to another, stepped back, forward, reloaded or stopped,
@@ -214,15 +166,6 @@ export const ACT_KIND = {
   BROWSER_PLACE: "browser.place",
   BROWSER_CAPTURE: "browser.capture",
   BROWSER_CLOSE: "browser.close",
-  /**
-   * The workspace's chat: read past a cursor (held open by the service
-   * while nothing moved), and written to as the account's own member, a
-   * post, an answer to an ask, a resolve, or how far it has read. The
-   * window holds what it draws; nothing here does.
-   */
-  CODING_AGENTS_CHAT: "codingAgents.chat",
-  CODING_AGENTS_CHAT_POST: "codingAgents.chatPost",
-  CODING_AGENTS_CHAT_ATTACHMENT: "codingAgents.chatAttachment",
   MICROPHONE_REQUEST: "microphone.request",
   /**
    * Where the developer's voice would be captured from, read afresh: the act
@@ -579,63 +522,6 @@ export const ACT = {
     ),
     refusal: "Could not read that task's conversation on this system.",
   },
-  [ACT_KIND.CODING_AGENTS_INBOX]: {
-    payload: actSchema(codingAgentInboxParamsSchema),
-    result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
-    refusal: "Could not read the task's inbox on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_AGENT_INBOX]: {
-    payload: actSchema(codingAgentAgentInboxParamsSchema),
-    result: wireResult<CodingAgentInboxAnswerView>(isReadable(codingAgentInboxAnswerViewSchema)),
-    refusal: "Could not read the agent's inbox on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: {
-    payload: actSchema(codingAgentInboxAnswerParamsSchema),
-    result: wireResult<CodingAgentInboxAnsweredView>(
-      isReadable(codingAgentInboxAnsweredViewSchema),
-    ),
-    refusal: "Could not answer the inbox item on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_INBOX_CLOSE]: {
-    payload: actSchema(codingAgentInboxCloseParamsSchema),
-    result: wireResult<CodingAgentInboxAnsweredView>(
-      isReadable(codingAgentInboxAnsweredViewSchema),
-    ),
-    refusal: "Could not close the inbox item on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_INBOX_MESSAGE]: {
-    payload: actSchema(codingAgentInboxMessageParamsSchema),
-    result: wireResult<CodingAgentInboxMessagedView>(
-      isReadable(codingAgentInboxMessagedViewSchema),
-    ),
-    refusal: "Could not send the message on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_INBOX_READ_STATE]: {
-    payload: actSchema(codingAgentInboxReadStateParamsSchema),
-    result: wireResult<CodingAgentInboxReadStateView>(
-      isReadable(codingAgentInboxReadStateViewSchema),
-    ),
-    refusal: "Could not mark the inbox item on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_INBOX_READ_ALL]: {
-    payload: actSchema(inboxReadAllRequestSchema),
-    result: wireResult<CodingAgentInboxReadAllView>(isReadable(codingAgentInboxReadAllViewSchema)),
-    refusal: "Could not mark the inbox read on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: {
-    payload: actSchema(codingAgentInboxAttachmentParamsSchema),
-    result: wireResult<CodingAgentInboxAttachmentView>(
-      isReadable(codingAgentInboxAttachmentViewSchema),
-    ),
-    refusal: "Could not read the inbox item's image on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_PICTURE]: {
-    payload: actSchema(codingAgentPictureParamsSchema),
-    result: wireResult<CodingAgentInboxAttachmentView>(
-      isReadable(codingAgentInboxAttachmentViewSchema),
-    ),
-    refusal: "Could not read the agent's picture on this system.",
-  },
   [ACT_KIND.BROWSER_OPEN]: {
     payload: actSchema(browserAddressParamsSchema),
     result: wireResult<BrowserPage>(isReadable(browserPageSchema)),
@@ -666,25 +552,6 @@ export const ACT = {
     payload: actSchema(browserViewParamsSchema),
     result: answersNothing,
     refusal: "Could not close the page.",
-  },
-  [ACT_KIND.CODING_AGENTS_CHAT]: {
-    payload: actSchema(codingAgentChatParamsSchema),
-    result: wireResult<CodingAgentChatAnswerView>(isReadable(codingAgentChatAnswerViewSchema)),
-    refusal: "Could not read the workspace's chat on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_CHAT_POST]: {
-    payload: actSchema(codingAgentChatPostParamsSchema),
-    result: wireResult<CodingAgentChatWriteAnswerView>(
-      isReadable(codingAgentChatWriteAnswerViewSchema),
-    ),
-    refusal: "Could not write to the workspace's chat on this system.",
-  },
-  [ACT_KIND.CODING_AGENTS_CHAT_ATTACHMENT]: {
-    payload: actSchema(codingAgentChatAttachmentParamsSchema),
-    result: wireResult<CodingAgentInboxAttachmentView>(
-      isReadable(codingAgentInboxAttachmentViewSchema),
-    ),
-    refusal: "Could not read the chat message's picture on this system.",
   },
   [ACT_KIND.MICROPHONE_REQUEST]: {
     payload: noPayload,

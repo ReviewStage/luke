@@ -274,7 +274,7 @@ export function ToolOutput({ block, errorText }: ToolOutputProps): ReactNode {
       {clipped.hiddenLines > 0 ? (
         <p className="tool-more">
           <TextButton onClick={() => setWhole(true)}>
-            Show more ({clipped.hiddenLines} more lines)
+            Show {clipped.hiddenLines} more {clipped.hiddenLines === 1 ? "line" : "lines"}
           </TextButton>
         </p>
       ) : null}

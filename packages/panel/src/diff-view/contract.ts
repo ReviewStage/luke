@@ -133,6 +133,14 @@ export interface DiffListFile {
   readonly expandable: boolean;
   /** The file's whole text before and after, where it is drawn whole, every unchanged line among its changes; none draws its hunks. */
   readonly whole?: DiffFileTexts | undefined;
+  /**
+   * Lines of the new side between the file's hunks that a note waits to
+   * stand under, a review thread's, in ascending order: the view is told
+   * which of them the file draws each time that changes
+   * (`DiffListProps.onDrawn`), as a gap is opened over one. None asks for
+   * none.
+   */
+  readonly hidden?: readonly number[] | undefined;
 }
 
 /** Lines lit in one file of a list: the file, by its path, and the lines. */
@@ -179,10 +187,21 @@ export interface DiffListProps {
   readonly onSelectText?: ((selected: DiffTextSelection | undefined) => void) | undefined;
   /** Reads a file's whole text on both sides, the first time the lines between its hunks are asked for; none offers no such lines. */
   readonly readTexts?: ((path: string) => Promise<DiffFileTexts | undefined>) | undefined;
+  /**
+   * Told which of a file's hidden lines (`DiffListFile.hidden`) it draws
+   * now, in ascending order, each time that changes: a gap opened over one,
+   * or closed again where the file's patch is read anew.
+   */
+  readonly onDrawn?: ((path: string, lines: readonly number[]) => void) | undefined;
 }
 
 /** How many unchanged lines one press of a gap's arrow opens, as GitHub's diff opens them. */
 export const GAP_LINES = 20;
+
+/** Whether two runs of line numbers are the same lines in the same order. */
+export function sameLines(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((line, at) => line === b[at]);
+}
 
 /** A changed file's whole text before and after, which the lines between its hunks are drawn from; none where it could not be read whole. */
 export interface DiffFileTexts {

@@ -175,7 +175,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const router = createHostActRouter<WebContents>(
     {
       tasks: { host: operator.host, colourCode: highlightSnippet },
-      codingAgents: { host: operator.host },
     },
     platformRows,
   );
@@ -231,6 +230,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           resumeSessionReplay: operator.resumeSessionReplay,
         },
         accountAsks: { host: operator.host },
+        agentInbox: { host: operator.host },
         agents: { host: operator.host, notices },
         automations: { host: operator.host },
         factory: { host: operator.host },

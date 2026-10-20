@@ -271,7 +271,6 @@ function hostRowDependencies(operator: OperatorClient): HostActDependencies {
   const host = operator.host;
   return {
     tasks: { host, colourCode: highlightSnippet },
-    codingAgents: { host },
   };
 }
 
@@ -296,6 +295,7 @@ function portDependencies(
       resumeSessionReplay: operator.resumeSessionReplay,
     },
     accountAsks: { host },
+    agentInbox: { host },
     agents: { host, notices },
     automations: { host },
     factory: { host },

@@ -13,7 +13,9 @@ import { githubContract } from "./github.js";
 import { integrationsContract } from "./integrations.js";
 import { messagesContract } from "./messages.js";
 import { modelsContract } from "./models.js";
+import { planCommentsContract } from "./plan-comments.js";
 import { repositoryPinsContract } from "./repository-pins.js";
+import { taskFilesContract } from "./task-files.js";
 import { taskSectionsContract } from "./task-sections.js";
 import { tasksContract } from "./tasks.js";
 import { workspaceGithubContract } from "./workspace-github.js";
@@ -35,8 +37,10 @@ export const hostedContract = {
   integrations: integrationsContract,
   messages: messagesContract,
   models: modelsContract,
+  planComments: planCommentsContract,
   plans: tasksContract,
   repositoryPins: repositoryPinsContract,
+  taskFiles: taskFilesContract,
   taskSections: taskSectionsContract,
   workspaceGithub: workspaceGithubContract,
   workspaceInvitations: workspaceInvitationsContract,

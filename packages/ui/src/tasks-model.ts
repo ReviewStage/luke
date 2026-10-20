@@ -284,7 +284,7 @@ export function repositoryOwnerPictureUrl(repository: string): string {
 }
 
 /** What the New task dialog says when the service answered no task. */
-const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
+const START_FAILED_NOTE = "Luke's service did not answer. Try again.";
 
 /** What a call that named a repository says when the service refused it, by its reason. */
 const REPOSITORY_FAILURE_NOTES = {

@@ -385,7 +385,7 @@ const SHARED_FAILURE_NOTE = {
 const START_RETIRED = "This agent has ended. Start a new one.";
 
 /** What a message to an agent whose session has ended says where only the words are drawn, as an Inbox answer's are. */
-export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one to carry on.";
+export const MESSAGE_RETIRED = "This agent has ended. Continue in a new one.";
 
 /** What the agent's own box says once a message closed it on an ended agent, beside the press that continues it in a new one (`ContinueAgent`), which says the rest. */
 const BOX_RETIRED = "This agent has ended.";

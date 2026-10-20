@@ -90,6 +90,7 @@ import { MemberDirectory, useMemberDirectory } from "../member-directory.js";
 import type { NavigationHistory } from "../navigation-history.js";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs.js";
 import { RepositoryPicture } from "../repository-picture.js";
+import { SHELL_ROOM, type ShellRoom } from "../shell-room.js";
 import { Shortcut } from "../shortcut.js";
 import { GLYPH_STATE, stateEndMark } from "../state-glyph.js";
 import { useChatOn } from "../tasks/chat-gate.js";
@@ -1232,6 +1233,8 @@ interface DesktopSidebarProps {
   call: CallCardInput | undefined;
   /** Hears every press in the sidebar, which a press outside it would put away while it floats. */
   onPressWithin: () => void;
+  /** The room the panel's stage gives; narrow, the sidebar is a phone's drawer, whose page rows scroll away with its tasks. Wide where left out. */
+  room?: ShellRoom | undefined;
 }
 
 /**
@@ -1318,8 +1321,10 @@ function SidebarColumn({
   onSignOut,
   call,
   onPressWithin,
+  room = SHELL_ROOM.WIDE,
 }: DesktopSidebarProps): React.JSX.Element {
   const onTasks = tab === PANEL_TAB.TASKS;
+  const narrow = room === SHELL_ROOM.NARROW;
   const overlay = useFloatingSidebar(sidebar);
   // The window's Inbox, an agent's page, Factory, the Automations page, Chat, and the Board stand in the task's place, so while one does no task is the place shown.
   const inInbox = onTasks && tasks.inboxView.open;
@@ -1602,26 +1607,11 @@ function SidebarColumn({
   useAppCommand(APP_COMMAND.PREVIOUS_TASK, listed && at > 0 ? () => step(-1) : undefined);
   useAppCommand(APP_COMMAND.NEXT_TASK, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
-  return (
-    <aside
-      ref={overlay.ref}
-      className="desktop-sidebar"
-      data-row-drop-scope=""
-      inert={!overlay.inSight}
-      onPointerDown={onPressWithin}
-      onPointerLeave={overlay.onPointerLeave}
-      onKeyDown={overlay.onKeyDown}
-    >
-      <div className="desktop-drag-strip" />
-      <HistoryButtons history={history} />
-      {/* The workspace heads the sidebar once one is read, as everything under it is that
-          workspace's; Luke's own head stands until then. */}
-      {tasks.signedIn && tasks.workspace !== undefined ? (
-        <WorkspaceSwitcher tasks={tasks} inSight={overlay.inSight} />
-      ) : (
-        <LukeIdentity />
-      )}
-
+  // The pages' rows, then the rule under them. Beside the work they stand
+  // put over the tasks' scroller; in a phone's drawer they scroll away with
+  // the tasks, so the tasks are not left a strip under them.
+  const places = (
+    <>
       <div className="sidebar-places">
         <NewTaskButton
           tasks={tasks}
@@ -1630,7 +1620,7 @@ function SidebarColumn({
           onNewTask={chosen(newTask)}
         />
         {/* Search is a second door to the command palette, drawn as New task
-          is, since it heads the list the same way. */}
+            is, since it heads the list the same way. */}
         <NavItem
           icon={<SearchIcon />}
           aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
@@ -1670,14 +1660,41 @@ function SidebarColumn({
         />
       </div>
       <hr className="sidebar-rule" />
+    </>
+  );
+  return (
+    <aside
+      ref={overlay.ref}
+      className="desktop-sidebar"
+      data-row-drop-scope=""
+      inert={!overlay.inSight}
+      onPointerDown={onPressWithin}
+      onPointerLeave={overlay.onPointerLeave}
+      onKeyDown={overlay.onKeyDown}
+    >
+      <div className="desktop-drag-strip" />
+      <HistoryButtons history={history} />
+      {/* The workspace heads the sidebar once one is read, as everything under it is that
+          workspace's; Luke's own head stands until then. */}
+      {tasks.signedIn && tasks.workspace !== undefined ? (
+        <WorkspaceSwitcher tasks={tasks} inSight={overlay.inSight} />
+      ) : (
+        <LukeIdentity />
+      )}
+
+      {narrow ? null : places}
 
       {/* One scroller for both sections, so the pinned tasks scroll away
-          with the rest rather than holding half the column. */}
+          with the rest rather than holding half the column; in a phone's
+          drawer the pages' rows ride it too. */}
       <div className="sidebar-section">
         <ScrollArea fade={SCROLL_FADE.BOTH}>
           <div className="sidebar-section-body">
-            {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin. */}
-            {tasks.signedIn && (pinnedSection.length > 0 || sectionsShown) && !archive.shown ? (
+            {narrow ? places : null}
+            {/* While the account keeps sections Pinned stands empty too, a place to drop the first pin, beside the work: a phone, which drags no row, draws it only once it holds one. */}
+            {tasks.signedIn &&
+            (pinnedSection.length > 0 || (sectionsShown && !narrow)) &&
+            !archive.shown ? (
               <PinnedSection
                 rows={pinnedSection}
                 folds={folds}

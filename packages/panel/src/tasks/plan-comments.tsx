@@ -557,7 +557,13 @@ function MentionCommentText({
       chip={() => null}
       mentions={{
         onTrigger: picker.onTrigger,
-        chip: (mention) => <MentionNodeChip mention={mention} doors={mentions.doors} />,
+        chip: (mention, node) => (
+          <MentionNodeChip
+            mention={mention}
+            doors={mentions.doors}
+            edit={{ node, pickDate: picker.pickDate }}
+          />
+        ),
         pasted: (words) =>
           pastedMentionNode(words, mentions.doors.place, {
             known,

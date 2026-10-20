@@ -19,36 +19,23 @@ import {
   type PlanCommentAsked,
   type PlanCommentsAnswer,
   type PlanCommentThread,
-  planCommentActionRequestSchema,
-  planCommentStartRequestSchema,
-  planCommentsCursorSchema,
+  type PlanCommentThreadAnswer,
 } from "@luke/features/plan-comment-wire";
 import { TASK_BOUNDS } from "@luke/features/task-wire";
 import { readEither } from "@luke/wire/effect";
-import { Effect, Layer, Option, Result } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  type HttpServerResponse,
-} from "effect/http";
+import { Effect, Option, Result } from "effect";
 import { CODER } from "../agents/coder-host/bounds.js";
 import { unparsedWire, wireUuidSchema } from "../core.js";
-import type { GitHubApp } from "../github/github-app.js";
 import { cursorOf, heldUntilMoved } from "../http/held-read.js";
 import { HOSTED_HTTP_STATUS } from "../http/http.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,
-  hostedJsonResponse,
-  hostedNotFoundRoute,
-  hostedRefusing,
   hostedStoreOrUnavailable,
-  readJsonBodyEffect,
   type UserIdResolver,
 } from "../http/http-effect.js";
 import { logStoreFailure, type StoreFailure } from "../http/store-failure.js";
-import { ANY_METHOD, type WebRoutes } from "../route.js";
+import { accountMiddleware, bodyLimit, hosted } from "../orpc/base.js";
 import {
   askableAgent,
   type CommentAskSeams,
@@ -58,7 +45,7 @@ import {
 } from "./comment-ask.js";
 
 /**
- * plan-comments-app.ts -- a plan's comment threads for the desktop: read them as they change, start one, and answer, edit, resolve, reopen, or delete one.
+ * plan-comments-procedures.ts -- a plan's comment threads for the desktop: read them as they change, start one, and answer, edit, resolve, reopen, or delete one.
  *
  * `GET /api/plans/{id}/comments` reads every thread of the plan, held while
  * nothing moved since the cursor `after` names (`http/held-read.ts`), as the
@@ -71,25 +58,11 @@ import {
  * or an archived one for a write, answers as not found, and a thread the plan
  * does not hold as not found too. A member's comment that mentions Luke or
  * one of the task's agents with \`@\` hands each the thread (\`mentionsHandedOver\`).
+ *
+ * The read stays a long-held JSON answer: the hold is the route's own,
+ * `heldUntilMoved` under the coding agents' hold, and nothing the handler
+ * adds times it out first.
  */
-
-const PLAN_COMMENTS_PATH = {
-  /** GET reads the plan's threads past the cursor `after` names; POST starts one. The rewrite moves the path's id into the `id` query. */
-  COMMENTS: "/api/plans/comments",
-  /** POST does one thing to one thread; the rewrite moves the path's ids into the `id` and `thread` queries. */
-  THREAD: "/api/plans/comment-thread",
-} as const;
-
-const HTTP_METHOD = {
-  GET: "GET",
-  POST: "POST",
-} as const;
-
-const QUERY = {
-  TASK: "id",
-  THREAD: "thread",
-  AFTER: "after",
-} as const;
 
 /** A start carries the plan's text its anchor is measured in, every character escaped, beside a comment and a quote at their bounds. */
 const MAXIMUM_START_BODY_BYTES =
@@ -102,49 +75,16 @@ const MAXIMUM_START_BODY_BYTES =
 /** An action is a comment at its bound and an id or a key, every character escaped. */
 const MAXIMUM_ACTION_BODY_BYTES = PLAN_COMMENT_BOUNDS.MAX_WORDS_CHARS * 6 + 1_024;
 
-export interface PlanCommentsAppSeams extends CommentAskSeams {
+export interface PlanCommentsProcedureSeams extends CommentAskSeams {
   resolveUserId: UserIdResolver;
 }
 
-/** What the routes may require of the function that stands them: the store, and the network and GitHub a hand-over to a coding agent reaches. */
-export type PlanCommentsAppServices = DatabaseServices | HttpClient.HttpClient | GitHubApp;
-
-type PlanCommentsServices = PlanCommentsAppServices | HttpServerRequest.HttpServerRequest;
-
-/** The bearer's account, or the invalid-token refusal. */
-const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsAppSeams,
-  request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
-  const account = yield* seams.resolveUserId(request);
-  if (Option.isNone(account)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-  return account.value;
-});
-
-/** The one id the path named under `query`; two are refused, and one that is not a UUID names no row. */
+/** The id a path named; one that is not a UUID names no row. */
 const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-  query: string,
+  id: string,
 ): Effect.fn.Return<string, HostedRefusal> {
-  const ids = new URL(request.url).searchParams.getAll(query);
-  const [id] = ids;
-  if (id === undefined || ids.length !== 1)
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const read = readEither(wireUuidSchema)(unparsedWire(id));
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return read.success;
-});
-
-/** The cursor a read names, the start where it names none. */
-const cursorQueryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
-  request: Request,
-): Effect.fn.Return<string, HostedRefusal> {
-  const named = new URL(request.url).searchParams.getAll(QUERY.AFTER);
-  const [after] = named;
-  if (after === undefined) return PLAN_COMMENTS_CURSOR_START;
-  const read = readEither(planCommentsCursorSchema)(unparsedWire(after));
-  if (named.length !== 1 || Result.isFailure(read))
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return read.success;
 });
 
@@ -165,77 +105,13 @@ function planCommentsPast(
   );
 }
 
-/** A write's outcome as the route answers it: the thread, its deletion, or a refusal in band; a plan or thread not reached as not found. */
+/** A write's outcome as the procedure answers it: the thread, its deletion, or a refusal in band; a plan or thread not reached as not found. */
 const outcomeAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   outcome: PlanCommentOutcome,
-  created: boolean,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal> {
+): Effect.fn.Return<PlanCommentThreadAnswer, HostedRefusal> {
   if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE)
     return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const status =
-    created && "thread" in outcome.answer ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK;
-  return hostedJsonResponse(status, outcome.answer);
-});
-
-/** GET reads the plan's threads, held past the reader's cursor; POST starts one with its first comment. */
-const commentsEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentsEndpoint")(function* (
-  seams: PlanCommentsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlanCommentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  if (incoming.method === HTTP_METHOD.GET) {
-    const taskId = yield* idOf(request, QUERY.TASK);
-    const userId = yield* resolvedUserId(seams, request);
-    const after = yield* cursorQueryOf(request);
-    const read = yield* hostedStoreOrUnavailable(planCommentsPast(userId, taskId, after));
-    if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, read.value);
-  }
-  if (incoming.method !== HTTP_METHOD.POST)
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  const taskId = yield* idOf(request, QUERY.TASK);
-  const userId = yield* resolvedUserId(seams, request);
-  const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
-  const start = readEither(planCommentStartRequestSchema)(body);
-  if (Result.isFailure(start)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId } as const;
-  const outcome = yield* hostedStoreOrUnavailable(
-    startPlanCommentThread(writer, taskId, start.success),
-  );
-  return yield* commentAnswer(seams, request, outcome, true, {
-    userId,
-    taskId,
-    words: start.success.words,
-    clientKey: start.success.clientKey,
-  });
-});
-
-/** POST does one thing to one thread of the plan, as the member the bearer is. */
-const threadEndpoint = /* @__PURE__ */ Effect.fn("web/planCommentThreadEndpoint")(function* (
-  seams: PlanCommentsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlanCommentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.POST)
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const taskId = yield* idOf(request, QUERY.TASK);
-  const threadId = yield* idOf(request, QUERY.THREAD);
-  const userId = yield* resolvedUserId(seams, request);
-  const body = yield* readJsonBodyEffect(MAXIMUM_ACTION_BODY_BYTES);
-  const action = readEither(planCommentActionRequestSchema)(body);
-  if (Result.isFailure(action)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId } as const;
-  const outcome = yield* hostedStoreOrUnavailable(
-    actOnPlanCommentThread(writer, taskId, threadId, action.success),
-  );
-  if (action.success.action !== PLAN_COMMENT_ACTION.REPLY)
-    return yield* outcomeAnswer(outcome, false);
-  return yield* commentAnswer(seams, request, outcome, false, {
-    userId,
-    taskId,
-    words: action.success.words,
-    clientKey: action.success.clientKey,
-  });
+  return outcome.answer;
 });
 
 /** A member's comment, as its mentions are read from it and handed over under its key. */
@@ -255,16 +131,14 @@ interface MentioningComment {
  * it, whose words, not the new ones, say whom it asks.
  */
 const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsAppSeams,
+  seams: PlanCommentsProcedureSeams,
   request: Request,
   outcome: PlanCommentOutcome,
-  created: boolean,
   comment: MentioningComment,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlanCommentsServices> {
-  if (outcome.status !== PLAN_COMMENT_OUTCOME.DONE || !("thread" in outcome.answer)) {
-    return yield* outcomeAnswer(outcome, created);
-  }
-  const { thread } = outcome.answer;
+) {
+  const answer = yield* outcomeAnswer(outcome);
+  if (!("thread" in answer)) return answer;
+  const { thread } = answer;
   const unsent = thread.entries.some(
     (entry) =>
       entry.kind === PLAN_COMMENT_ENTRY.COMMENT &&
@@ -273,11 +147,7 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   )
     ? yield* mentionsHandedOver(seams, request, thread, comment)
     : [];
-  if (unsent.length === 0) return yield* outcomeAnswer(outcome, created);
-  return hostedJsonResponse(created ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK, {
-    thread,
-    unsent,
-  });
+  return unsent.length === 0 ? answer : { thread, unsent };
 });
 
 /**
@@ -290,7 +160,7 @@ const commentAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
  * take it.
  */
 const mentionsHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsAppSeams,
+  seams: PlanCommentsProcedureSeams,
   request: Request,
   thread: PlanCommentThread,
   comment: MentioningComment,
@@ -359,7 +229,7 @@ function mentionKey(clientKey: string, to: PlanCommentAsked): string {
  * the thread never says someone was asked who was not.
  */
 const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
-  seams: PlanCommentsAppSeams,
+  seams: PlanCommentsProcedureSeams,
   request: Request,
   input: {
     readonly userId: string;
@@ -393,15 +263,53 @@ const askHandedOver = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** The group: the comment paths, and the hosted vocabulary's own refusal for any other. */
-export function planCommentsApp(seams: PlanCommentsAppSeams): WebRoutes<PlanCommentsAppServices> {
-  return Layer.mergeAll(
-    HttpRouter.add(
-      ANY_METHOD,
-      PLAN_COMMENTS_PATH.COMMENTS,
-      hostedRefusing(commentsEndpoint(seams)),
-    ),
-    HttpRouter.add(ANY_METHOD, PLAN_COMMENTS_PATH.THREAD, hostedRefusing(threadEndpoint(seams))),
-    hostedNotFoundRoute,
-  );
+/** The plan comments resource: its held read, a start, and one thing done to a thread, each to a signed-in member. */
+export function planCommentsProcedures(seams: PlanCommentsProcedureSeams) {
+  const member = hosted.planComments.use(accountMiddleware(seams.resolveUserId));
+  const starting = member.use(bodyLimit(MAXIMUM_START_BODY_BYTES));
+  const acting = member.use(bodyLimit(MAXIMUM_ACTION_BODY_BYTES));
+  return {
+    read: member.read.effect(function* ({ input, context }) {
+      const taskId = yield* idOf(input.id);
+      const read = yield* hostedStoreOrUnavailable(
+        planCommentsPast(context.userId, taskId, input.after ?? PLAN_COMMENTS_CURSOR_START),
+      );
+      if (Option.isNone(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return read.value;
+    }),
+    start: starting.start.effect(function* ({ input, context }) {
+      const start = input.body;
+      const taskId = yield* idOf(input.params.id);
+      const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: context.userId } as const;
+      const outcome = yield* hostedStoreOrUnavailable(
+        startPlanCommentThread(writer, taskId, start),
+      );
+      const body = yield* commentAnswer(seams, context.request, outcome, {
+        userId: context.userId,
+        taskId,
+        words: start.words,
+        clientKey: start.clientKey,
+      });
+      return {
+        status: "thread" in body ? HOSTED_HTTP_STATUS.CREATED : HOSTED_HTTP_STATUS.OK,
+        body,
+      };
+    }),
+    act: acting.act.effect(function* ({ input, context }) {
+      const action = input.body;
+      const taskId = yield* idOf(input.params.id);
+      const threadId = yield* idOf(input.params.thread);
+      const writer = { actor: PLAN_COMMENT_ACTOR.MEMBER, userId: context.userId } as const;
+      const outcome = yield* hostedStoreOrUnavailable(
+        actOnPlanCommentThread(writer, taskId, threadId, action),
+      );
+      if (action.action !== PLAN_COMMENT_ACTION.REPLY) return yield* outcomeAnswer(outcome);
+      return yield* commentAnswer(seams, context.request, outcome, {
+        userId: context.userId,
+        taskId,
+        words: action.words,
+        clientKey: action.clientKey,
+      });
+    }),
+  };
 }
