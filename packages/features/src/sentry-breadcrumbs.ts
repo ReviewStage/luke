@@ -91,15 +91,8 @@ const SCHEME_SEPARATOR = "://";
 const SCHEME_CHARACTER = /^[a-z0-9+.-]$/i;
 const SCHEME_START = /^[a-z]$/i;
 
-/**
- * Where an absolute URL starts inside a word of a span's name, as in
- * `url=https://…`, or -1. Note that the scheme is read back from its `://`
- * one character at a time rather than searched for with a pattern, because a
- * pattern searched across a long word is retried from every offset.
- */
-function urlStart(word: string): number {
-  const separatorAt = word.indexOf(SCHEME_SEPARATOR);
-  if (separatorAt === -1) return -1;
+/** Where the scheme ending at the `://` at `separatorAt` starts, or -1 where no scheme ends there. */
+function schemeStart(word: string, separatorAt: number): number {
   let at = separatorAt;
   while (at > 0 && SCHEME_CHARACTER.test(word.charAt(at - 1))) at--;
   while (at < separatorAt && !SCHEME_START.test(word.charAt(at))) at++;
@@ -107,16 +100,35 @@ function urlStart(word: string): number {
 }
 
 /**
- * A word of a span's name as it may be sent: from where an absolute URL
- * starts in it, or the whole of a path from the root, scrubbed as an
- * attribute's address is. Note that other words are kept, because a name
+ * Where each absolute URL starts inside a word of a span's name, as in
+ * `url=https://…`, in order. Note that each scheme is read back from its
+ * `://` one character at a time rather than searched for with a pattern,
+ * because a pattern searched across a long word is retried from every
+ * offset; a read stops at the `/` before it, so the word is read once.
+ */
+function urlStarts(word: string): number[] {
+  const starts: number[] = [];
+  let separatorAt = word.indexOf(SCHEME_SEPARATOR);
+  while (separatorAt !== -1) {
+    const start = schemeStart(word, separatorAt);
+    if (start !== -1) starts.push(start);
+    separatorAt = word.indexOf(SCHEME_SEPARATOR, separatorAt + SCHEME_SEPARATOR.length);
+  }
+  return starts;
+}
+
+/**
+ * A word of a span's name as it may be sent: each absolute URL in it, up to
+ * where the next starts, or the whole of a path from the root, scrubbed as
+ * an attribute's address is. Note that other words are kept, because a name
  * also holds words such as an element's selector (`button#send`), whose `#`
  * is no fragment.
  */
 function scrubbedWord(word: string): string {
-  const urlAt = urlStart(word);
-  if (urlAt !== -1) return `${word.slice(0, urlAt)}${scrubbedUrl(word.slice(urlAt))}`;
-  return word.startsWith("/") ? scrubbedUrl(word) : word;
+  const starts = urlStarts(word);
+  if (starts.length === 0) return word.startsWith("/") ? scrubbedUrl(word) : word;
+  const urls = starts.map((start, index) => scrubbedUrl(word.slice(start, starts[index + 1])));
+  return `${word.slice(0, starts[0])}${urls.join("")}`;
 }
 
 /**

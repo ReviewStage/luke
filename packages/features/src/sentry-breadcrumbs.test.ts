@@ -259,11 +259,23 @@ test("an address in a span's name is scrubbed, and other words of the name are k
       { name: "proxy url=https://fixture-user:fixture-pass@luke.example.test/x" },
       () => {},
     );
+    Sentry.startSpan(
+      { name: "relay =://x&next=https://fixture-user:fixture-pass@luke.example.test/y" },
+      () => {},
+    );
+    Sentry.startSpan(
+      {
+        name: "relay a=https://x.example.test&b=https://fixture-user:fixture-pass@luke.example.test/z",
+      },
+      () => {},
+    );
     Sentry.startSpan({ name: "ui.click button#send" }, () => {});
   });
   assert.deepEqual(spans.map((span) => span.name).sort(), [
     "GET https://luke.example.test/oauth/callback?code=[redacted]&sig=[redacted]",
     "proxy url=https://[redacted]@luke.example.test/x",
+    "relay =://x&next=https://[redacted]@luke.example.test/y",
+    "relay a=https://x.example.test&b=https://[redacted]@luke.example.test/z",
     "ui.click button#send",
   ]);
 });
