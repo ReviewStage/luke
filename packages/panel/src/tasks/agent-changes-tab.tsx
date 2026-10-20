@@ -419,8 +419,9 @@ type ThreadHover = (
 
 /**
  * Review threads on their line, one or a minimized chip's, which light the
- * lines they are on while the pointer rests on them, as stage-cli's threads
- * do; drawn as they are where nothing lights them.
+ * lines they are on while the pointer rests on them or the keyboard is in
+ * them, as stage-cli's threads do; drawn as they are where nothing lights
+ * them.
  */
 function ThreadLines({
   hoverKey,
@@ -438,11 +439,21 @@ function ThreadLines({
 }): React.JSX.Element {
   if (hover === undefined) return <>{children}</>;
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the pointer resting on a thread only lights the lines it is on; nothing is pressed.
+    // biome-ignore lint/a11y/noStaticElementInteractions: the pointer resting on a thread, or the keyboard in it, only lights the lines it is on; nothing is pressed.
     <div
       className="diff-thread-lines"
       onMouseEnter={() => hover(hoverKey, group, lines, true)}
       onMouseLeave={() => hover(hoverKey, group, lines, false)}
+      onFocus={() => {
+        // Note that only the keyboard's focus lights them, as a hint shows on it, so a card a link lands on and focuses lights nothing it did not ask for.
+        if (document.documentElement.dataset.keyboard === "true")
+          hover(hoverKey, group, lines, true);
+      }}
+      onBlur={(event) => {
+        // Note that the focus moving within the thread keeps its lines lit.
+        if (!event.currentTarget.contains(event.relatedTarget))
+          hover(hoverKey, group, lines, false);
+      }}
     >
       {children}
     </div>

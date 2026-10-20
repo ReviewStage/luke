@@ -38,7 +38,6 @@ import {
   AVATAR_SHAPE,
   AVATAR_SIZE,
   Avatar,
-  Badge,
   CHIP_LOOK,
   CHOICE_BAR_FOLD,
   CHOICE_BAR_LOOK,
@@ -72,6 +71,7 @@ import {
   TextButton,
   useMenu,
 } from "@luke/ui";
+import { actorName } from "@luke/ui/actor-model";
 import { PICTURE_STATE, usePicture } from "@luke/ui/picture-cache";
 import {
   BookOpenIcon,
@@ -102,6 +102,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ACTOR_SIZE, ActorMark, ActorRef } from "../actor-ref.js";
 import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold.js";
 import { appPlatform } from "../app-platform.js";
 import { useCopyLinkItem } from "../copy-link-item.js";
@@ -120,6 +121,13 @@ import {
   useAgentRead,
   useChangesReads,
 } from "./agent-changes-tab.js";
+import {
+  ANNOTATION_TONE,
+  AnnotationCard,
+  AnnotationComment,
+  AnnotationComments,
+  type AnnotationState,
+} from "./annotation-card.js";
 import { threadPreview } from "./changes-model.js";
 import { type ChaptersRead, chaptersCount, useChaptersRead } from "./chapters-read.js";
 import { scrollerOf } from "./code-pane.js";
@@ -155,7 +163,13 @@ import {
 } from "./pull-request-comment-box.js";
 import { PullRequestLabels } from "./pull-request-labels.js";
 import { PullRequestNumberProvider, pullRequestOfTab } from "./pull-request-number.js";
-import { HeaderReviewers, OpenedLine, PersonRef, ReviewStanding } from "./pull-request-people.js";
+import {
+  HeaderReviewers,
+  OpenedLine,
+  PersonRef,
+  ReviewStanding,
+  useNamer,
+} from "./pull-request-people.js";
 import {
   LabelPicker,
   ReviewerPicker,
@@ -244,11 +258,12 @@ import { useWorkingNow, workingTime } from "./working-time.js";
  * each over its own hunks in Files changed's list, counted once they are
  * ready; and Files changed (`AgentChangesTab`), its own bar and
  * tree, counted by the lines it adds and removes. A review carries the
- * threads on lines it started, each headed by its file and lines over the
- * end of the hunk it was made on, drawn as Files changed draws a diff with
- * its own lines lit (`file-diff.tsx`), then its comments; one resolved or
- * outdated by a later push is folded closed under its head, which says
- * which, until opened. The description and every comment wear their
+ * threads on lines it started, each on the card every annotation on code
+ * stands on (`annotation-card.tsx`): its file and lines in the strip over
+ * its head, then the end of the hunk it was made on, drawn as Files changed
+ * draws a diff with its own lines lit (`file-diff.tsx`), and its comments;
+ * one resolved or outdated by a later push is folded closed under its head,
+ * which says which, until opened. The description and every comment wear their
  * reactions under their words, as GitHub draws them
  * (`pull-request-reactions.tsx`). A thread's file and lines take it to
  * Files changed, and its ⋯ to the other view or its link copied, each
@@ -304,6 +319,9 @@ const PULL_REQUEST_WORDS = {
   commentCount: (count: number) => `${count} ${count === 1 ? "comment" : "comments"}`,
   RESOLVED: "Resolved",
   OUTDATED: "Outdated",
+  /** What a review thread's card is called, and who it is by. */
+  THREAD: "Review thread",
+  BY: "by",
   /** What the Files changed tab's count says after the lines left to review. */
   LEFT: "left",
   /** What the Files changed tab's hint says of every line the pull request changes. */
@@ -319,14 +337,6 @@ function threadLines(
   const start = thread.line === null ? thread.originalStartLine : thread.startLine;
   if (line === null) return undefined;
   return start === null || start === line ? `line ${line}` : `lines ${start}–${line}`;
-}
-
-/** What a review thread's head says of it: that it was resolved, and that a later push outdated it. */
-function threadLabels(thread: ReviewThread): readonly string[] {
-  return [
-    ...(thread.resolved ? [PULL_REQUEST_WORDS.RESOLVED] : []),
-    ...(thread.outdated ? [PULL_REQUEST_WORDS.OUTDATED] : []),
-  ];
 }
 
 /** A read that threw rather than answered, drawn as any other failed read. */
@@ -875,12 +885,105 @@ function ThreadMenu({
   );
 }
 
+/** A review thread's lines as its strip names them, GitHub's way: `L12–13`, or the one line; none for a thread on the whole file. */
+function lineSpan(
+  thread: Pick<ReviewThread, "line" | "startLine" | "originalLine" | "originalStartLine">,
+): string | undefined {
+  const line = thread.line ?? thread.originalLine;
+  const start = thread.line === null ? thread.originalStartLine : thread.startLine;
+  if (line === null) return undefined;
+  return start === null || start === line ? `L${line}` : `L${start}–${line}`;
+}
+
+/** The states a review thread's head wears: resolved, outdated by a later push, and pending, the member's own not yet submitted. */
+function threadStates(thread: ReviewThread, pending: boolean): readonly AnnotationState[] {
+  return [
+    ...(thread.resolved
+      ? [{ word: PULL_REQUEST_WORDS.RESOLVED, tone: ANNOTATION_TONE.COMPLETE }]
+      : []),
+    ...(thread.outdated
+      ? [{ word: PULL_REQUEST_WORDS.OUTDATED, tone: ANNOTATION_TONE.NEUTRAL }]
+      : []),
+    ...(pending ? [{ word: PENDING_WORDS.PENDING, tone: ANNOTATION_TONE.ATTENTION }] : []),
+  ];
+}
+
 /**
- * One review thread: its file and lines at its head, with whether it was
- * resolved or a later push outdated it, which folds it closed until opened;
- * then the lines it is on, as Files changed draws a diff, its own lines lit
- * (`threadPreview`), and its comments, oldest first, as the conversation
- * draws an entry, with the replies a read left on GitHub counted after them.
+ * The strip over a thread card whose place does not say where it is: its
+ * file's path, cut in the middle so its file's name stands, and its lines,
+ * which take the thread to them in Files changed where it can be found
+ * there; the lines alone for a thread above a diff, whose file is the one
+ * it stands in.
+ */
+function ThreadWhere({
+  path,
+  lines,
+  onPress,
+}: {
+  path: string | undefined;
+  lines: string | undefined;
+  onPress: (() => void) | undefined;
+}): React.JSX.Element {
+  const cut = path === undefined ? -1 : path.lastIndexOf("/");
+  const words = (
+    <span className="annotation-where">
+      {path === undefined ? null : (
+        <>
+          <span className="annotation-where-folder">
+            <bdi>{path.slice(0, cut + 1)}</bdi>
+          </span>
+          <span className="annotation-where-file">
+            <bdi>{path.slice(cut + 1)}</bdi>
+          </span>
+        </>
+      )}
+      {lines === undefined ? null : <span className="annotation-where-lines">{lines}</span>}
+    </span>
+  );
+  const named = [path, lines].filter((part) => part !== undefined).join(" ");
+  if (onPress === undefined) return <Tooltip label={named}>{words}</Tooltip>;
+  return (
+    <Tooltip label={THREAD_REVEAL_WORDS.VIEW_FILES}>
+      <TextButton
+        tone={TEXT_BUTTON_TONE.QUIET}
+        aria-label={`${THREAD_REVEAL_WORDS.VIEW_FILES}: ${named}`}
+        onClick={onPress}
+      >
+        {words}
+      </TextButton>
+    </Tooltip>
+  );
+}
+
+/** What a review thread's card heads it with: who wrote its first comment, when, the states it is in, and how many comments it holds. */
+function useThreadHead(thread: ReviewThread, now: number, pending: boolean) {
+  const name = useNamer();
+  const first = thread.comments[0];
+  const writer = first === undefined ? undefined : name(first.by);
+  return {
+    label:
+      writer === undefined
+        ? PULL_REQUEST_WORDS.THREAD
+        : `${PULL_REQUEST_WORDS.THREAD} ${PULL_REQUEST_WORDS.BY} ${actorName(writer)}`,
+    face: writer === undefined ? null : <ActorMark actor={writer} size={ACTOR_SIZE.ROW} />,
+    name: writer === undefined ? null : <ActorRef actor={writer} nameOnly />,
+    time:
+      first === undefined ? undefined : (
+        <RelativeTime className="annotation-card-time" at={first.at} now={now} />
+      ),
+    states: threadStates(thread, pending),
+    count: thread.comments.length + thread.more,
+  };
+}
+
+/**
+ * One review thread in the Conversation, on the shared card
+ * (`annotation-card.tsx`): its file and lines in the strip over its head,
+ * which take it to them in Files changed; its head, folded closed while it
+ * was resolved or a later push outdated it, until opened; then the lines it
+ * is on, as Files changed draws a diff, its own lines lit
+ * (`threadPreview`), and its comments, oldest first, with the replies a
+ * read left on GitHub counted after them, and Reply and Resolve at its foot.
  */
 function ThreadCard({
   thread,
@@ -894,56 +997,28 @@ function ThreadCard({
   // A preview is a hunk's end in a card, drawn unified with its lines tinted whole, as stage-cli draws one.
   const look = { ...useDiffLook(false), inlineDiff: INLINE_DIFF.NONE };
   const preview = threadPreview(thread);
-  const lines = threadLines(thread);
-  const labels = threadLabels(thread);
-  const landed = useLandedThread(thread, labels.length === 0);
+  const pending = usePendingThread(thread);
+  const head = useThreadHead(thread, now, pending);
+  const landed = useLandedThread(thread, !thread.resolved && !thread.outdated);
   const toFiles = useThreadJump(thread, PULL_REQUEST_THREAD_VIEW.FILES);
-  const where = (
-    <>
-      <span className="pull-request-thread-path">
-        <bdi>{thread.path}</bdi>
-      </span>
-      {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
-    </>
-  );
   return (
-    <li
-      ref={landed.ref}
-      className="pull-request-thread"
-      data-search-landed={landed.ringed ? "" : undefined}
-      onAnimationEnd={landed.onAnimationEnd}
-    >
-      <Fold open={landed.open} onOpenChange={landed.onOpenChange}>
-        <FoldSummary className="pull-request-thread-head">
-          <DisclosureChevron />
-          {/* The file and lines take the thread to them in Files changed, where it can be found there. */}
-          <Tooltip label={toFiles === undefined ? thread.path : THREAD_REVEAL_WORDS.VIEW_FILES}>
-            {toFiles === undefined ? (
-              <span className="pull-request-thread-where">{where}</span>
-            ) : (
-              <TextButton
-                tone={TEXT_BUTTON_TONE.QUIET}
-                aria-label={`${THREAD_REVEAL_WORDS.VIEW_FILES}: ${thread.path}${lines === undefined ? "" : ` ${lines}`}`}
-                onClick={(event) => {
-                  keptInHead(event);
-                  toFiles();
-                }}
-              >
-                <span className="pull-request-thread-where">{where}</span>
-              </TextButton>
-            )}
-          </Tooltip>
-          {labels.map((label) => (
-            <Badge key={label}>{label}</Badge>
-          ))}
+    <li className="pull-request-thread-slot">
+      <AnnotationCard
+        {...head}
+        className="pull-request-thread"
+        open={landed.open}
+        onOpenChange={landed.onOpenChange}
+        landing={landed}
+        where={<ThreadWhere path={thread.path} lines={lineSpan(thread)} onPress={toFiles} />}
+        menu={
           <ThreadMenu
             thread={thread}
             here={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
             there={PULL_REQUEST_THREAD_VIEW.FILES}
           />
-        </FoldSummary>
-        <FoldBody>
-          {preview === undefined ? null : (
+        }
+        lead={
+          preview === undefined ? undefined : (
             <PierreDiff
               patch={preview.patch}
               look={look}
@@ -951,47 +1026,61 @@ function ThreadCard({
               excerpt
               className="diff-view pull-request-thread-lines"
             />
-          )}
-          <ThreadComments thread={thread} now={now} picture={picture} />
-        </FoldBody>
-      </Fold>
+          )
+        }
+        footer={<ThreadActions thread={thread} />}
+      >
+        <ThreadComments thread={thread} now={now} picture={picture} />
+      </AnnotationCard>
     </li>
   );
 }
 
-/** One comment of a review thread: who and when, their words, and the reactions it wears; one of the member's own pending comments as such (`pending-comments.tsx`). */
+/**
+ * One comment of a review thread on its card: the first one's words alone,
+ * since the card's head names who and when; a reply's face, who and when
+ * beside it, Pending where it is the member's own, then its words. Under
+ * the words, the reactions it wears; one of the member's pending comments
+ * with Edit and Delete there instead (`pending-comments.tsx`).
+ */
 function ThreadComment({
   comment,
   now,
   picture,
-  marked,
+  first,
 }: {
   comment: ReviewThread["comments"][number];
   now: number;
   picture: GitHubPictureDrawer;
-  /** Whether a pending comment wears its own Pending mark; not the one a pending thread starts, whose head wears it. */
-  marked: boolean;
+  /** Whether it is the comment the card's head names. */
+  first: boolean;
 }): React.JSX.Element {
   const draft = usePendingComment(comment.url);
-  const head = (
-    <>
-      <PersonRef person={comment.by} />
-      <RelativeTime className="changes-comment-time" at={comment.at} now={now} />
-    </>
-  );
+  const writer = useNamer()(comment.by);
   const words = <EntryWords entry={comment} picture={picture} />;
+  const reply = first
+    ? undefined
+    : {
+        face: <ActorMark actor={writer} size={ACTOR_SIZE.ROW} />,
+        meta: (
+          <>
+            <ActorRef actor={writer} nameOnly />
+            <RelativeTime className="annotation-card-time" at={comment.at} now={now} />
+            {draft === undefined ? null : <PendingBadge />}
+          </>
+        ),
+      };
   return (
-    <li className="pull-request-thread-comment">
+    <AnnotationComment reply={reply} className="pull-request-thread-comment">
       {draft === undefined ? (
         <>
-          <span className="changes-comment-head">{head}</span>
           {words}
           <Reactions reactions={comment.reactions} subject={comment.subject} />
         </>
       ) : (
-        <PendingComment draft={draft} head={head} words={words} marked={marked} />
+        <PendingComment draft={draft} words={words} marked={false} />
       )}
-    </li>
+    </AnnotationComment>
   );
 }
 
@@ -1031,7 +1120,7 @@ function PendingList({
   );
 }
 
-/** A review thread's comments, oldest first, as the conversation draws an entry, with the replies a read left on GitHub counted after them, then its Reply and Resolve (`pull-request-thread-actions.tsx`), wherever the thread is drawn. */
+/** A review thread's comments, oldest first, on its card, with the replies a read left on GitHub counted after them, wherever the thread is drawn. */
 function ThreadComments({
   thread,
   now,
@@ -1042,40 +1131,40 @@ function ThreadComments({
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
   const openLink = useOpenLink();
-  // A thread a pending comment starts wears Pending in its head, so its first comment does not again.
-  const startsPending = usePendingThread(thread);
   const last = thread.comments.at(-1);
   return (
     <>
-      <ol className="pull-request-thread-comments">
+      <AnnotationComments>
         {thread.comments.map((comment, at) => (
           <ThreadComment
             key={comment.url}
             comment={comment}
             now={now}
             picture={picture}
-            marked={!(startsPending && at === 0)}
+            first={at === 0}
           />
         ))}
-      </ol>
+      </AnnotationComments>
       {thread.more === 0 || last === undefined ? null : (
-        <p className="pull-request-more pull-request-thread-more">
+        <p className="pull-request-more annotation-card-more">
           <TextButton tone={TEXT_BUTTON_TONE.LINK} onClick={() => openLink(last.url)}>
             {PULL_REQUEST_WORDS.moreReplies(thread.more)}
           </TextButton>
         </p>
       )}
-      <ThreadActions thread={thread} />
     </>
   );
 }
 
 /**
  * A review thread drawn on its line in Files changed, as GitHub's own diff
- * draws one: whether it was resolved or a later push outdated it, at its
- * head, which folds it closed until opened; then its comments. An outdated
- * one, whose line is gone, names the line it was made on. Minimize inline
- * comments draws a line's threads as a chip instead (`minimized-threads.tsx`).
+ * draws one, on the shared card (`annotation-card.tsx`): its head, folded
+ * closed while it was resolved or a later push outdated it, until opened;
+ * then its comments, and Reply and Resolve at its foot. Its line and the
+ * lines it lights say where it is, so it names none; one above the diff,
+ * whose line is gone, names the line it was made on in the strip over its
+ * head. Minimize inline comments draws a line's threads as a chip instead
+ * (`minimized-threads.tsx`).
  */
 function InlineThread({
   thread,
@@ -1089,46 +1178,36 @@ function InlineThread({
   now: number;
   picture: GitHubPictureDrawer;
 }): React.JSX.Element {
-  const labels = threadLabels(thread);
-  const lines = place === THREAD_PLACE.ABOVE ? threadLines(thread) : undefined;
-  const first = thread.comments[0];
-  const landed = useLandedThread(thread, labels.length === 0);
   // A thread the member's pending comment starts is theirs alone until they submit it, with no page to link or jump to.
   const pending = usePendingThread(thread);
+  const head = useThreadHead(thread, now, pending);
+  const landed = useLandedThread(thread, !thread.resolved && !thread.outdated);
+  const lines = place === THREAD_PLACE.ABOVE ? lineSpan(thread) : undefined;
   return (
-    <div
-      ref={landed.ref}
+    <AnnotationCard
+      {...head}
       className="diff-inline-thread"
-      data-search-landed={landed.ringed ? "" : undefined}
-      onAnimationEnd={landed.onAnimationEnd}
+      open={landed.open}
+      onOpenChange={landed.onOpenChange}
+      landing={landed}
+      where={
+        lines === undefined ? undefined : (
+          <ThreadWhere path={undefined} lines={lines} onPress={undefined} />
+        )
+      }
+      menu={
+        pending ? null : (
+          <ThreadMenu
+            thread={thread}
+            here={PULL_REQUEST_THREAD_VIEW.FILES}
+            there={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
+          />
+        )
+      }
+      footer={<ThreadActions thread={thread} />}
     >
-      <Fold open={landed.open} onOpenChange={landed.onOpenChange}>
-        <FoldSummary className="pull-request-thread-head">
-          <DisclosureChevron />
-          {first === undefined ? null : <PersonRef person={first.by} />}
-          {lines === undefined ? null : <span className="pull-request-quiet">{lines}</span>}
-          {labels.map((label) => (
-            <span key={label} className="pull-request-thread-label">
-              {label}
-            </span>
-          ))}
-          {pending ? <PendingBadge /> : null}
-          <span className="pull-request-quiet">
-            {PULL_REQUEST_WORDS.commentCount(thread.comments.length + thread.more)}
-          </span>
-          {pending ? null : (
-            <ThreadMenu
-              thread={thread}
-              here={PULL_REQUEST_THREAD_VIEW.FILES}
-              there={PULL_REQUEST_THREAD_VIEW.CONVERSATION}
-            />
-          )}
-        </FoldSummary>
-        <FoldBody>
-          <ThreadComments thread={thread} now={now} picture={picture} />
-        </FoldBody>
-      </Fold>
-    </div>
+      <ThreadComments thread={thread} now={now} picture={picture} />
+    </AnnotationCard>
   );
 }
 
