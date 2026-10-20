@@ -33,6 +33,7 @@ import type { TasksControl } from "../tasks/use-tasks-tab.js";
 import { RowHint, RowHintOptions, Tooltip } from "../tooltip.js";
 import { ActionMenu, type MenuAction } from "./action-menu.js";
 import { agentTranscriptRead } from "./main-tabs.js";
+import { useRowPlace, withRowMoves } from "./row-moves.js";
 import { type TranscriptCopier, useTranscriptCopier } from "./strip-tabs.js";
 import { PullRequestLine, RepositoryDetail } from "./task-card.js";
 
@@ -280,6 +281,7 @@ export function SidebarPinnedTab({
 }): React.JSX.Element {
   const copied = useTranscriptCopier();
   const menu = useMenu(tasks.shown && inSight);
+  const place = useRowPlace();
   const row = useRef<HTMLElement | null>(null);
   const item = useRef<HTMLElement | null>(null);
   // Note that the row's item is its press's parent, which its card counts as its control.
@@ -350,7 +352,7 @@ export function SidebarPinnedTab({
         <ActionMenu
           label={`${pin.label} actions`}
           menu={menu.drawn}
-          groups={pinActionGroups(pin, tasks, copied)}
+          groups={withRowMoves(pinActionGroups(pin, tasks, copied), place)}
           onClose={menu.close}
         />
       )}

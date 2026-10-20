@@ -108,6 +108,7 @@ import { useFailedRunsMark } from "./failed-runs.js";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups.js";
 import { type HoverPane, useHoverPane } from "./hover-pane.js";
 import { LukeIdentity } from "./luke-identity.js";
+import { RowPlaced } from "./row-moves.js";
 import { SidebarAgent } from "./sidebar-agent.js";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse.js";
 import { SidebarFoot } from "./sidebar-foot.js";
@@ -468,18 +469,20 @@ function PinnedRows({
   /** Hears a row let go over a section or Tasks, while the account keeps sections; none while it does not. */
   onDropOut: ((row: PinnedRow, zone: string, at: number) => void) | undefined;
 }): React.JSX.Element {
-  const drag = useRowDrag(
-    movable ? (from, to) => movePinned(rows, from, to, context.tasks) : undefined,
-    {
-      onDropOut:
-        onDropOut === undefined
-          ? undefined
-          : (from, zone, at) => {
-              const row = rows[from];
-              if (row !== undefined) onDropOut(row, zone, at);
-            },
-    },
-  );
+  const move = movable
+    ? (from: number, to: number) => movePinned(rows, from, to, context.tasks)
+    : undefined;
+  const drag = useRowDrag(move, {
+    onDropOut:
+      onDropOut === undefined
+        ? undefined
+        : (from, zone, at) => {
+            const row = rows[from];
+            if (row !== undefined) onDropOut(row, zone, at);
+          },
+  });
+  const placeOf = (at: number) =>
+    move === undefined ? undefined : { at, count: rows.length, onMove: move };
   return (
     // An open Pinned keeps an order a row carried in lands at a place in; a folded one draws only some of its rows, so a drop lands on top.
     <ul
@@ -487,46 +490,49 @@ function PinnedRows({
       data-row-drop-rows={onDropOut !== undefined && movable ? "" : undefined}
       onPointerDown={drag}
     >
-      {rows.map((row) => {
+      {rows.map((row, at) => {
         if (row.kind === TASK_ROW.AGENT) {
           const { agent } = row;
           return (
-            <SidebarAgent
-              key={agent.id}
-              agent={agent}
-              current={context.currentRow(agentRow(agent))}
-              unread={context.unseenAgent(agent.id)}
-              now={context.now}
-              at={agent.activityAt}
-              shown={context.tasks.shown && context.inSight}
-              onOpen={() => context.onOpenAgent(agent.id)}
-              onPin={pinOf(context.tasks, agent)}
-            />
+            <RowPlaced key={agent.id} place={placeOf(at)}>
+              <SidebarAgent
+                agent={agent}
+                current={context.currentRow(agentRow(agent))}
+                unread={context.unseenAgent(agent.id)}
+                now={context.now}
+                at={agent.activityAt}
+                shown={context.tasks.shown && context.inSight}
+                onOpen={() => context.onOpenAgent(agent.id)}
+                onPin={pinOf(context.tasks, agent)}
+              />
+            </RowPlaced>
           );
         }
         const { task, pin } = row;
-        return pin === undefined ? (
-          <SidebarTask
-            key={task.id}
-            tasks={context.tasks}
-            task={task}
-            current={context.marked(task.id, undefined)}
-            open={context.current(task.id)}
-            unread={context.unread(task)}
-            now={context.now}
-            onOpen={() => context.onOpen(task.id)}
-          />
-        ) : (
-          <SidebarPinnedTab
-            key={String(pin.at)}
-            tasks={context.tasks}
-            pin={pin}
-            task={task}
-            current={context.marked(task.id, pin)}
-            inSight={context.inSight}
-            onOpen={() => onOpenTab(pin)}
-            onOpenTask={() => context.onOpen(task.id)}
-          />
+        return (
+          <RowPlaced key={pin === undefined ? task.id : String(pin.at)} place={placeOf(at)}>
+            {pin === undefined ? (
+              <SidebarTask
+                tasks={context.tasks}
+                task={task}
+                current={context.marked(task.id, undefined)}
+                open={context.current(task.id)}
+                unread={context.unread(task)}
+                now={context.now}
+                onOpen={() => context.onOpen(task.id)}
+              />
+            ) : (
+              <SidebarPinnedTab
+                tasks={context.tasks}
+                pin={pin}
+                task={task}
+                current={context.marked(task.id, pin)}
+                inSight={context.inSight}
+                onOpen={() => onOpenTab(pin)}
+                onOpenTask={() => context.onOpen(task.id)}
+              />
+            )}
+          </RowPlaced>
         );
       })}
     </ul>
